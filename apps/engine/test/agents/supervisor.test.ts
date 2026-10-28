@@ -43,8 +43,8 @@ type Broker = NonNullable<SupervisorOptions['accounts']>;
 function createBroker(lease: Broker['lease']): Broker {
   return {
     lease,
-    readWeeklyPercent: () => Promise.resolve(null),
-    readProviderWeeklyPercent: () => Promise.resolve(null),
+    readWeeklyReading: () => Promise.resolve(null),
+    readProviderWeeklyReading: () => Promise.resolve(null),
     readFastMode: () => Promise.resolve('available'),
   };
 }
@@ -894,9 +894,21 @@ describe('hand-overs', () => {
       'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.'
     );
     expect(await git(path, 'log', '-1', '--format=%s')).toBe('fix: the tab scroll');
-    expect(await call('complete_fix', { summary: 'Fixed.' })).toContain(
-      'Handed over: the human reads it in the chat as your reply.'
-    );
+    const change = {
+      action: 'add',
+      label: 'Scroll',
+      command: 'bun test test/scroll.test.ts',
+      reason: 'New file.',
+    };
+    expect(
+      await call('complete_fix', { summary: 'Fixed.', checks: ['c1'], check_changes: [change] })
+    ).toContain('Handed over: the human reads it in the chat as your reply.');
+    expect(dispatched.find((command) => command.type === 'agent.complete_fix')).toMatchObject({
+      checks: ['c1'],
+      checkChanges: [
+        { action: 'add', id: null, label: 'Scroll', command: 'bun test test/scroll.test.ts', phases: null },
+      ],
+    });
     expect(
       await call('report_review', {
         summary: 'Read the change.',
@@ -921,7 +933,7 @@ describe('hand-overs', () => {
         approach: 'Write them.',
         files: [],
         out_of_scope: [],
-        verification: ['The checks pass.'],
+        verification: [{ label: 'Both files', command: 'test -f a.txt -a -f b.txt', phases: [1, 2] }],
         questions: [],
       })
     ).toContain('Handed over: the human reads it in the chat as your reply.');
@@ -2115,7 +2127,7 @@ describe('accounts', () => {
     };
   }
 
-  test('a run on an account is charged the share of the weekly window the account used meanwhile', async () => {
+  test('a run on an account sends the weekly readings from when it started and ended, the end read fresh', async () => {
     const sessions = createSessions();
     const { broker } = leases({ id: 'acc-work', email: 'work@example.com', configDir: '/accounts/work' });
     const { supervisor, dispatched } = setup(
@@ -2126,7 +2138,11 @@ describe('accounts', () => {
       },
       {
         startSession: sessions.startSession,
-        accounts: { ...broker, readWeeklyPercent: (_, force) => Promise.resolve(force ? 23.5 : 20) },
+        accounts: {
+          ...broker,
+          readWeeklyReading: (_, force) =>
+            Promise.resolve({ percent: force ? 23 : 20, at: force ? 2_000 : 1_000, resetsAt: 9_000 }),
+        },
       }
     );
     const running = supervisor.execute('run-1');
@@ -2138,11 +2154,14 @@ describe('accounts', () => {
     expect(dispatched.find((command) => command.type === 'run.meter')).toMatchObject({
       type: 'run.meter',
       runId: 'run-1',
-      weeklyPercent: 3.5,
+      readings: [
+        { percent: 20, at: 1_000, resetsAt: 9_000 },
+        { percent: 23, at: 2_000, resetsAt: 9_000 },
+      ],
     });
   });
 
-  test('a weekly reading that fails leaves a finished run completed and charges it nothing', async () => {
+  test('a weekly reading that fails leaves a finished run completed and sends no readings', async () => {
     const sessions = createSessions();
     const { broker } = leases({ id: 'acc-work', email: 'work@example.com', configDir: '/accounts/work' });
     const { supervisor, dispatched } = setup(
@@ -2153,7 +2172,7 @@ describe('accounts', () => {
       },
       {
         startSession: sessions.startSession,
-        accounts: { ...broker, readWeeklyPercent: () => Promise.reject(new Error('usage is down')) },
+        accounts: { ...broker, readWeeklyReading: () => Promise.reject(new Error('usage is down')) },
       }
     );
     const running = supervisor.execute('run-1');
@@ -2162,7 +2181,7 @@ describe('accounts', () => {
       usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
     });
     await running;
-    expect(dispatched.find((command) => command.type === 'run.meter')).not.toHaveProperty('weeklyPercent');
+    expect(dispatched.find((command) => command.type === 'run.meter')).not.toHaveProperty('readings');
     expect(dispatched.find((command) => command.type === 'run.end')).toMatchObject({ outcome: 'completed' });
   });
 

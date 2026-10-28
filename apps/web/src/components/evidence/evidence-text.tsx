@@ -50,7 +50,7 @@ function RunList({ runs }: { runs: EvidenceRun[] }) {
   );
 }
 
-function OutputToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export function OutputToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
     <Button
       variant='secondary'

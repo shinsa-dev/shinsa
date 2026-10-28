@@ -73,7 +73,7 @@ Shinsa.app/Contents/
 
 ### Who talks to the engine
 
-- **Locally, on the loopback port** (`127.0.0.1:5180`, `port` in `config.json`), as before, behind the request
+- **Locally, on the loopback port** (`127.0.0.1:7446`, `port` in `config.json`), as before, behind the request
   guard (`docs/engine.md` → Who can change Shinsa: loopback Host only, same-site Origin, JSON bodies), so a website in
   your browser cannot reach it. A Unix socket (mode 600, no port at all) stays the stricter option; it is left for
   when the remote tunnel lands, since the tunnel's connector needs the same change.

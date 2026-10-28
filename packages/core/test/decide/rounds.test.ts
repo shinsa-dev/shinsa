@@ -406,6 +406,74 @@ describe('feedback, new work and work that belongs elsewhere', () => {
   });
 });
 
+describe('changing the queue of rounds', () => {
+  test('a waiting round takes a new request and a title from its first line, and the same request changes nothing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    newIdea(harness, taskId, 'Add dark mode');
+    harness.send({
+      type: 'round.update',
+      taskId,
+      number: 2,
+      request: '  Add a light theme\nAnd a toggle.  ',
+    });
+    const task = harness.task(taskId);
+    expect(resolveTaskRounds(task)[1]).toMatchObject({
+      status: 'waiting',
+      request: 'Add a light theme\nAnd a toggle.',
+      title: 'Add a light theme',
+    });
+    expect(task.activity.at(-1)).toMatchObject({
+      actor: 'you',
+      kind: 'round',
+      text: 'Changed queued round 2: Add a light theme',
+    });
+    expect(
+      harness.send({ type: 'round.update', taskId, number: 2, request: 'Add a light theme\nAnd a toggle.' })
+        .events
+    ).toEqual([]);
+    expect(() => harness.send({ type: 'round.update', taskId, number: 2, request: '   ' })).toThrow(
+      'Write a message first.'
+    );
+  });
+
+  test('removing a waiting round moves the rounds after it up, and the next one still starts at rest', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    newIdea(harness, taskId, 'First idea');
+    newIdea(harness, taskId, 'Second idea');
+    newIdea(harness, taskId, 'Third idea');
+    harness.send({ type: 'round.remove', taskId, number: 3 });
+    const task = harness.task(taskId);
+    expect(resolveTaskRounds(task).map((round) => [round.number, round.request])).toEqual([
+      [1, task.request],
+      [2, 'First idea'],
+      [3, 'Third idea'],
+    ]);
+    expect(task.activity.at(-1)).toMatchObject({
+      text: 'Removed queued round 3: Second idea',
+      detail: 'Second idea',
+    });
+    harness.send({ type: 'round.remove', taskId, number: 2 });
+    shipAndMerge(harness, taskId);
+    expect(resolveCurrentRound(harness.task(taskId))).toMatchObject({ number: 2, request: 'Third idea' });
+  });
+
+  test('a round that started, one that does not exist and a finished task refuse the change', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(() => harness.send({ type: 'round.remove', taskId, number: 1 })).toThrow(
+      'Round 1 has already started, so it can no longer be changed or removed.'
+    );
+    expect(() => harness.send({ type: 'round.update', taskId, number: 4, request: 'x' })).toThrow(
+      'This task has no round 4.'
+    );
+    newIdea(harness, taskId, 'Later');
+    harness.send({ type: 'task.cancel', taskId });
+    expect(() => harness.send({ type: 'round.remove', taskId, number: 2 })).toThrow('This task is finished.');
+  });
+});
+
 describe('how a round ships', () => {
   test('a waiting round switches between onto the pull request and stacked, and repeats change nothing', () => {
     const harness = createHarness();
@@ -715,7 +783,7 @@ describe('what each round keeps', () => {
       approach: '',
       files: [],
       outOfScope: [],
-      verification: ['A screenshot.'],
+      verification: [{ label: 'Panel tests', command: 'bun test src/panel', phases: [1] }],
       questions: [],
       evidence: ['screenshot'],
     });
@@ -752,7 +820,7 @@ describe('what each round keeps', () => {
       approach: '',
       files: [],
       outOfScope: [],
-      verification: ['A screenshot.'],
+      verification: [{ label: 'Panel tests', command: 'bun test src/panel', phases: [1] }],
       questions: [],
       evidence: ['screenshot'],
     });
@@ -920,6 +988,8 @@ describe('replaying rounds', () => {
       },
       { type: 'round.started' as const, taskId: 'gone', number: 2, branch: null, base: null, onto: null },
       { type: 'round.shipping_changed' as const, taskId: 'gone', number: 2, shipping: 'stacked' as const },
+      { type: 'round.updated' as const, taskId: 'gone', number: 2, request: 'x', title: 'x' },
+      { type: 'round.removed' as const, taskId: 'gone', number: 2 },
     ]) {
       expect(replayEventLog([{ ...event, seq: 1, at: 1 }]).state.tasks).toEqual(state.tasks);
     }

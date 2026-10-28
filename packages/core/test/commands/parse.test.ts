@@ -192,6 +192,14 @@ describe('parseUserCommand', () => {
         { type: 'round.ship', taskId: 't1', number: 2, shipping: 'stacked' },
       ],
       [
+        { type: 'round.update', taskId: 't1', number: 2, request: 'Add search' },
+        { type: 'round.update', taskId: 't1', number: 2, request: 'Add search' },
+      ],
+      [
+        { type: 'round.remove', taskId: 't1', number: 2 },
+        { type: 'round.remove', taskId: 't1', number: 2 },
+      ],
+      [
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
       ],
@@ -318,7 +326,7 @@ describe('parseUserCommand', () => {
       ],
       [
         { type: 'gate.answer', gateId: 'g1', decision: 'maybe' },
-        'decision must be one of approve, revise, reject, reply, waive.',
+        'decision must be one of approve, revise, reject, reply.',
       ],
     ];
     for (const [input, message] of refused) {
@@ -401,11 +409,13 @@ describe('parseUserCommand for the process commands', () => {
       type: 'settings.change',
       patch: { taskBudgetUsd: null },
     });
-    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { checksWaived: true } })).toEqual({
-      type: 'repo.update',
-      repoId: 'r',
-      patch: { checksWaived: true },
-    });
+    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { workspace: 'worktrees' } })).toEqual(
+      {
+        type: 'repo.update',
+        repoId: 'r',
+        patch: { workspace: 'worktrees' },
+      }
+    );
     expect(
       parseUserCommand({
         type: 'repo.update',

@@ -1,5 +1,7 @@
-import type { Evidence } from '@shinsa/core';
+import type { Evidence, Task } from '@shinsa/core';
 import { type EvidenceLayout, resolveEvidenceListLayout } from '@/lib/evidence/layout.ts';
+import { type ChecksView, resolveChecksView } from '@/lib/tasks/checks.ts';
+import { createSampleTask } from './samples.ts';
 
 const SAMPLES = '/samples/evidence';
 
@@ -15,12 +17,7 @@ src/ui/tab-group.test.tsx:
 Ran 2 tests across 1 file. [182.00ms]`;
 
 const CHECKS = `$ bun run lint
-Passed.
-Checked 214 files in 412ms. No fixes applied.
-
-$ bun run check-types
-Passed.
-Tasks:    6 successful, 6 total`;
+Checked 214 files in 412ms. No fixes applied.`;
 
 const NOTE = `Contrast on the dark settings page, measured on \`#18191b\`. The tokens are in [src/client/theme.css](shinsa://file/src/client/theme.css#L14-L16).
 
@@ -81,19 +78,29 @@ const PIECES: Omit<Evidence, 'taskId' | 'attachedAt'>[] = [
     uri: `${SAMPLES}/settings-dark-after.png`,
   },
   {
-    id: 'tab-group-tests',
-    runId: null,
+    id: 'tab-group-link',
+    runId: 'sample-run',
     kind: 'test',
-    title: 'bun test src/ui/tab-group.test.tsx',
-    uri: `${SAMPLES}/tab-group-tests.txt`,
+    title: 'Tab group tests',
+    detail: 'Covers centring the active tab and keeping every tab at its width.',
+    uri: 'shinsa://check/c1',
+    checkId: 'c1',
   },
   {
-    id: 'checks',
+    id: 'tab-group-output',
     runId: null,
     kind: 'check',
-    title: 'Checks run by Shinsa: all 2 passed',
-    detail: "Shinsa ran these in the task's worktree after the agent's work.",
+    title: 'Tab group tests',
+    uri: `${SAMPLES}/tab-group-tests.txt`,
+    checkId: 'c1',
+  },
+  {
+    id: 'lint-output',
+    runId: null,
+    kind: 'check',
+    title: 'bun run lint',
     uri: `${SAMPLES}/checks.txt`,
+    checkId: 'r1',
   },
   {
     id: 'contrast',
@@ -111,10 +118,52 @@ const PIECES: Omit<Evidence, 'taskId' | 'attachedAt'>[] = [
   },
 ];
 
+const EVIDENCE = PIECES.map((piece, at) => ({ ...piece, taskId: 'sample', attachedAt: at }));
+
+const TASK: Task = createSampleTask(0, {
+  id: 'sample',
+  title: 'Centre the active tab',
+  repoId: 'sample-repo',
+  checks: [
+    {
+      id: 'c1',
+      label: 'Tab group tests',
+      command: 'bun test src/ui/tab-group.test.tsx',
+      phases: [1],
+      source: 'plan',
+    },
+  ],
+  checkResults: [
+    {
+      id: 'c1',
+      label: 'Tab group tests',
+      command: 'bun test src/ui/tab-group.test.tsx',
+      outcome: 'pass',
+      detail: '2 pass',
+    },
+    { id: 'r1', label: 'bun run lint', command: 'bun run lint', outcome: 'pass', detail: null },
+  ],
+});
+
+export const SAMPLE_EVIDENCE_CHECKS: ChecksView | null = resolveChecksView(
+  {
+    repos: {
+      'sample-repo': {
+        id: 'sample-repo',
+        name: 'tabs',
+        path: '/Users/you/Developer/tabs',
+        defaultBranch: 'main',
+        remote: null,
+        projectId: null,
+        checkCommands: ['bun run lint'],
+      },
+    },
+    evidence: Object.fromEntries(EVIDENCE.map((piece) => [piece.id, piece])),
+  },
+  TASK
+);
+
 export const SAMPLE_EVIDENCE_LAYOUT: EvidenceLayout = {
-  ...resolveEvidenceListLayout(
-    PIECES.map((piece, at) => ({ ...piece, taskId: 'sample', attachedAt: at })),
-    {}
-  ),
+  ...resolveEvidenceListLayout(EVIDENCE, {}),
   folder: '/Users/you/.config/shinsa/data/evidence/sample/round-1',
 };

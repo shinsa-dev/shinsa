@@ -14,12 +14,16 @@ describe('findTaskTarget', () => {
       <a id="link" data-task="t-2">SW-2</a>
       <div id="plain"><span id="inside">Nothing</span></div>
       <button id="bare"><span id="label">No task</span></button>`;
-    expect(findTaskTarget(document.getElementById('title'))).toBe('t-1');
-    expect(findTaskTarget(document.getElementById('link'))).toBe('t-2');
-    expect(findTaskTarget(document.getElementById('inside'))).toBeNull();
-    expect(findTaskTarget(document.getElementById('label'))).toBeNull();
-    expect(findTaskTarget(null)).toBeNull();
-    expect(findTaskTarget(window)).toBeNull();
+    try {
+      expect(findTaskTarget(document.getElementById('title'))).toBe('t-1');
+      expect(findTaskTarget(document.getElementById('link'))).toBe('t-2');
+      expect(findTaskTarget(document.getElementById('inside'))).toBeNull();
+      expect(findTaskTarget(document.getElementById('label'))).toBeNull();
+      expect(findTaskTarget(null)).toBeNull();
+      expect(findTaskTarget(window)).toBeNull();
+    } finally {
+      document.body.replaceChildren();
+    }
   });
 });
 

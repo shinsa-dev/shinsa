@@ -43,7 +43,9 @@ src/
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
-│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
+│                        source), flavor.ts (FLAVOR: Shinsa or Shinsa Canary, baked in by build-engine.ts from
+│                        SHINSA_FLAVOR as SHINSA_BUILD_FLAVOR; it picks the data folder, port, job label and link
+│                        scheme), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
 │                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
@@ -54,8 +56,10 @@ src/
 │                        plugins, services, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
-├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
-│                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
+├── config/              paths.ts (where ~/.config/shinsa, or ~/.config/shinsa-canary for Shinsa Canary, config.json and data/ are), file.ts (config.json: read
+│                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json, the port
+│                        defaulting to the flavor's: 7446, 7447 for Shinsa Canary; package.json's dev and start
+│                        scripts pin 5180 so a checkout never meets the Mac app's engine; every SHINSA_*
 │                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (instance/service.ts) and the
 │                        SHINSA_BUILD_* a compiled engine carries (instance/bundle.ts); prepareDataDir)
 ├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
@@ -123,9 +127,11 @@ src/
 │   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process.ts), the hand-overs
 │   │                    of each task shape: answer, report_diagnosis, submit_report, report_outcome, reshape_task
 │   │                    (shapes.ts), delegation and couriers (orchestration.ts), schedules (schedules.ts). The plan
-│   │                    parameters in `propose_plan` (verification, impact, evidence, checks, approval) and the
-│   │                    steps `reshape_task` offers are generated from core's VERIFICATION_RULES, PROTOCOL_LIMITS,
-│   │                    PLAN_EVIDENCE_KINDS and STEP_SCHEMA, never hand-written
+│   │                    parameters in `propose_plan` (verification as checks, impact, evidence, approval), the
+│   │                    `check_changes` of `complete_phase` and `complete_fix`, the `checks` of `complete_fix`, a
+│   │                    linked check on `attach_evidence` (`check`) and the steps `reshape_task` offers are generated
+│   │                    from core's VERIFICATION_RULES, PROTOCOL_LIMITS, PLAN_EVIDENCE_KINDS and STEP_SCHEMA, never
+│   │                    hand-written
 │   ├── transcripts/     Per-run JSONL transcripts, live listeners with each entry's position, tailing a file another
 │   │                    writer appends to, reading only the bytes appended since; the entries of followed and
 │   │                    recently read runs stay in memory
@@ -179,18 +185,30 @@ src/
 │                        time, stacked on another task's branch when its commit needs that branch's lines, taken out
 │                        of its stack before it is unapplied, never pushed while a commit on it is conflicted:
 │                        ConflictedBranchError), but.ts (the
-│                        `but` runner, isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
+│                        `but` runner, readButVersion, needsButSetup for 0.22, isGitButlerReady,
+│                        isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
 │                        data/workspaces/), lock.ts (WorkspaceLock), index.ts (Workspaces.resolve, the setup check's
 │                        describeWorkspaceProblem, listWorkspaceSupport for GET /api/repos/workspaces)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
-├── checks/              The repository's check commands, then the plan's own `checks`, each run the same way
-│                        (`sh -c` in the worktree, one timeout, the result named by its command; a repeat runs once);
-│                        evidence.ts writes their output as Shinsa's own `check` evidence, leaving out output an agent
-│                        already attached (docs/engine.md → Evidence)
-├── test-coverage/       Changed-line coverage after passing checks: detect.ts (resolveCoveragePlan: the command Auto
-│                        detects from the repository's files, writing into a temporary folder), index.ts
-│                        (measureTaskCoverage: run it like a check, read the report, diff against the task's base (in a
+├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
+│                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
+│                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after
+│                        CHECK_TIMEOUT_MS (15 minutes); a command named twice runs once (index.ts: runChecks). A
+│                        failure re-runs its failing test files alone once (reruns.ts; all pass: `passed_alone`), then
+│                        runs on the task's base commit in a kept detached checkout, cached per base commit and command
+│                        (base.ts: BaseCheckouts, compareWithBase), comparing the failures themselves (failures.ts:
+│                        listCheckFailures reads failing tests by file and name, or tsc, Biome, ESLint, Prettier and
+│                        path:line diagnostics by file, code and message, never the line; resolveFailureDiff,
+│                        describeFailureDiff): none new is `fails_on_base`, not blocking; new ones block, named first;
+│                        output it cannot read, or a failing file or a path in the command missing on the base, is
+│                        never compared); evidence.ts writes each check's output
+│                        as one piece of Shinsa's `check` evidence with its id (serializeCheckOutput)
+│                        (docs/engine.md → Checks)
+├── test-coverage/       Changed-line coverage, once before review, from the tests among the task's checks: detect.ts
+│                        (resolveCoverageRun: a test check's command run again with its runner's coverage report in a
+│                        temporary folder; resolveCoverageDetection for Settings), index.ts
+│                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base (in a
 │                        GitButler workspace only the task's branch and the files the ledger says it owns), and
 │                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
@@ -218,7 +236,8 @@ src/
 │                        message is accepted into the task's inbox at once (message.receive) and inbox.ts
 │                        (MessageInbox) classifies and routes it after, one task at a time and in order:
 │                        everything waiting in a task's inbox is classified together against the task as it is
-│                        then and routed as one (message.route with messageIds), a classifier that does not
+│                        then and routed as one (message.route with messageIds; not classified at a gate that
+│                        takes words, needsMessageKind), a classifier that does not
 │                        answer within 30 s routes it unclassified, and a route that breaks is dropped with a
 │                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
@@ -239,7 +258,7 @@ src/
 │                        services: add, update, remove, start, stop, restart, a run per task, closing a task's
 │                        runs, resume after a restart);
 │                        pty.ts also reads the program in front of a shell (readForegroundProgram)
-└── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
+└── http/                server.ts (Bun.serve; a taken port names itself and config.json's `port`), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
                          page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),
                          static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the
@@ -289,7 +308,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
   (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are
-  `shinsa settings set` naming one of core's `HUMAN_ONLY_SETTINGS` and `shinsa repos update` changing the checks;
+  `shinsa settings set` naming one of core's `HUMAN_ONLY_SETTINGS` and `shinsa repos update` changing the
+  repository's check commands, workspace or coverage;
   which decisions those are is `docs/engine.md` → Who can change Shinsa. Core refuses them on your behalf as well. There are no keys, codes or cookies and no per-caller routes;
   never add one, since an agent's shell reads whatever the user can.
 - **Nothing reaches git or gh as an option.** Branch names pass `assertRefName` (no leading `-`, no `..`), fetches put
@@ -301,6 +321,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `agents/providers/claude/guard.ts`. The rules themselves are in
   `agents/policy.ts`, so every provider enforces the same ones; a run is read-only by core's `isReadOnlyRun` (a
   read-only role, or the task's agent while it plans), which reaches the provider as `AgentSessionInput.readOnly`.
+- **No browser an agent starts opens a window.** Every stdio MCP server a run or a health check starts, and the
+  `claude` and `codex` processes themselves, get `HEADLESS_BROWSER_ENV` (`extensions/definitions.ts`:
+  `PLAYWRIGHT_MCP_HEADLESS=true`, which `@playwright/mcp` reads; without it the server is headed on a Mac).
 - **One session per task, two kinds of access.** The task's agent plans, builds every phase, fixes, runs the
   operation and answers, investigates or researches in later rounds as separate runs on one resumed session, so its
   access changes between turns without changing its prompt-cache prefix (`docs/engine.md` → Caching): Claude keeps
@@ -316,7 +339,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
-  pipeline needs a worktree and for check commands only when it builds (`runtime/effects.ts`); a worktree reused
+  pipeline needs a worktree, and never for check commands (`runtime/effects.ts`); a worktree reused
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
@@ -338,7 +361,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. Evidence is checked by core's `validateEvidence` (`storeEvidence`): exactly one of a path (absolute or relative
-  to the worktree, at most 200 MB), an http or https URL, or text.
+  to the worktree, at most 200 MB), an http or https URL, or text; a test or check takes only a check id and is
+  dispatched as `agent.attach_check`, with nothing stored.
 - **Code reads are pinned and confined** (`http/code.ts`, `docs/engine.md` → The Code tab's reads): only the task's
   registered repository, a ref is a full commit id the repository has or `working`, paths are relative with no `.`
   or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `resolveInside`, and
@@ -386,7 +410,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   in `test/helpers/fish`, off the `PATH`, that `FAKE_FISH_SILENT` fails and `FAKE_FISH_LOG` records);
   `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` and a `but` that runs the real GitButler CLI
   with its own `HOME` (`FAKE_BUT_HOME`, so tests never touch your GitButler projects; `FAKE_BUT_MISSING` makes it
-  missing; the GitButler tests need `but` installed) (every config's `eunoe.command`,
+  missing and `FAKE_BUT_VERSION` makes `but --version` report that version; the GitButler tests need `but` 0.22 or
+  newer installed, and set a repository up with `startGitButler`, which runs `but setup` only for 0.22) (every
+  config's `eunoe.command`,
   `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last
   parameters (`startSession`, `providers`, `triage`, `resolveLogin`, `ask`, `runQuery`, `launch`, `discover`,

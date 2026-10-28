@@ -206,8 +206,11 @@ function describeShinsaMessage(
   switch (name) {
     case 'ask':
       return plain('IconBubbleQuestion', 'Asked you:', readString(args, 'question'));
-    case 'attach_evidence':
+    case 'attach_evidence': {
+      const check = readString(args, 'check');
+      if (check) return plain('IconTestTube', 'Linked the check as evidence:', check);
       return plain('IconPaperclip1', 'Attached evidence:', readString(args, 'title'));
+    }
     case 'find_tasks': {
       const query = readString(args, 'query');
       return plain('IconMagnifyingGlass', query ? 'Looked up tasks:' : 'Looked up tasks', query);

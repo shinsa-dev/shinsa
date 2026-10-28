@@ -1,7 +1,7 @@
 import { type Repo, resolveRoundBase, type Task } from '@shinsa/core';
 import { assertRefName } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
-import { GIT_NETWORK_TIMEOUT_MS, resolveFreeBranch, resolveStartPoint } from '../git/worktree.ts';
+import { resolveFreeBranch, resolveStartPoint } from '../git/worktree.ts';
 import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 import { isGitButlerWorkspace } from './but.ts';
@@ -84,7 +84,7 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
     await runCommandOrThrow(
       ['git', 'push', '--quiet', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],
       repo.path,
-      { timeoutMs: GIT_NETWORK_TIMEOUT_MS, signal }
+      { timeoutMs: null, signal }
     );
     return runCommandOrThrow(['git', 'rev-parse', `refs/heads/${branch}`], repo.path);
   }

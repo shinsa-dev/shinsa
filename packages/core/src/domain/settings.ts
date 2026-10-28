@@ -73,7 +73,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'delegationLimit',
 ] as const satisfies readonly (keyof Settings)[];
 
-export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'checksWaived', 'workspace', 'coverage'] as const;
+export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
 
 const DEFAULT_MODEL = 'opus';
 

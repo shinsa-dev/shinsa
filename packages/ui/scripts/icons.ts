@@ -87,10 +87,26 @@ const CHEVRON_SCALE: Record<string, number> = {
   Medium: 0.9333,
 };
 
-/** The enlargement a chevron gets, or null for any other icon. */
-function selectChevronScale(name: string): number | null {
-  const size = name.match(/^IconChevron[A-Za-z]*?(Small|Medium)$/)?.[1];
-  return size ? (CHEVRON_SCALE[size] as number) : null;
+/**
+ * A cross is the same kind of glyph as a chevron and sits beside one (and
+ * beside the pen in the queue), but Central draws it smaller still: a `Small`
+ * cross spans 8 x 8 units, a `Medium` one 11 x 11. Every cross is drawn to the
+ * chevron's length on both axes, 11.2 units, so its ink box (13.2 units with
+ * the round caps, 7.7px at 14px) is as wide and as tall as a chevron's long
+ * side, and `Icon` draws it in the chevron's 14px box. The stroke is divided by
+ * the scale like a chevron's.
+ */
+const CROSS_SCALE: Record<string, number> = {
+  Small: 1.4,
+  Medium: 1.0182,
+};
+
+/** The enlargement a chevron or a cross gets, or null for any other icon. */
+function selectGlyphScale(name: string): number | null {
+  const chevron = name.match(/^IconChevron[A-Za-z]*?(Small|Medium)$/)?.[1];
+  if (chevron) return CHEVRON_SCALE[chevron] as number;
+  const cross = name.match(/^IconCross(Small|Medium)$/)?.[1];
+  return cross ? (CROSS_SCALE[cross] as number) : null;
 }
 
 function scaleAbout(inner: string, scale: number): string {
@@ -199,10 +215,10 @@ export function renderIconMarkup(name: string, radius: IconRadius): string {
   if (!inner) throw new Error(`Failed to extract SVG for ${name}@r${radius}`);
   const stroke = STROKE_OVERRIDES[name];
   const stroked = stroke ? inner.replaceAll('stroke-width="2"', `stroke-width="${stroke}"`) : inner;
-  const chevron = selectChevronScale(name);
-  if (chevron) {
-    const weight = Number((2 / chevron).toFixed(4));
-    return scaleAbout(stroked.replaceAll('stroke-width="2"', `stroke-width="${weight}"`), chevron);
+  const glyph = selectGlyphScale(name);
+  if (glyph) {
+    const weight = Number((2 / glyph).toFixed(4));
+    return scaleAbout(stroked.replaceAll('stroke-width="2"', `stroke-width="${weight}"`), glyph);
   }
   const matched = MATCHED_SCALE[name];
   if (matched) {

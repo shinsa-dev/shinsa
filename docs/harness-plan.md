@@ -93,7 +93,9 @@ login PTY), Kanna's reactive retry (`claude-swap.ts`, `agent.ts:305-313`, `:3101
 8. **Structured questions** and **per-finding verdicts**; a newer message makes an older question historical.
 9. **Ask mode**: a task that only answers.
 10. **Suggested tasks** (`suggest_tasks`).
-11. **Setup verification before dispatch**: repository, default branch and checks verified before any agent.
+11. **Setup verification before dispatch**: repository, default branch and workspace verified before any agent
+    (the checks were part of it until 2026-10-27, when they became the agent's choice per task: `docs/engine.md` →
+    Checks).
 
 ## WS4 Engine hardening (T3)
 

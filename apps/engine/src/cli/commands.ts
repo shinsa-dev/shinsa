@@ -10,7 +10,7 @@ import {
   shortenHome,
 } from '../terminal/index.ts';
 import type { ApiClient } from './api.ts';
-import { HOME_LINK, isPathArgument, resolvePathArgument, resolveTaskLink } from './app.ts';
+import { isPathArgument, resolveHomeLink, resolvePathArgument, resolveTaskLink } from './app.ts';
 import { readHealth } from './engine.ts';
 import { describeSession, readSession } from './session.ts';
 
@@ -177,10 +177,10 @@ export async function printStatus(args: string[], io: CommandIo) {
 
 export async function openApp(args: string[], io: CommandIo) {
   const [target] = parseArgs(args).positional;
-  if (!target) return io.openApp(HOME_LINK);
+  if (!target) return io.openApp(resolveHomeLink());
   if (!isPathArgument(target)) return io.openApp(resolveTaskLink(target));
   await focusFolder(resolvePathArgument(target, io.cwd), io);
-  await io.openApp(HOME_LINK);
+  await io.openApp(resolveHomeLink());
 }
 
 async function focusFolder(dir: string, io: CommandIo) {

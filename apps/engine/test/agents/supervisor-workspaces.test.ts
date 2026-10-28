@@ -11,7 +11,15 @@ import type {
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { Workspaces } from '../../src/workspaces/index.ts';
-import { createGitRepo, createTempDir, createTestConfig, git, until, writeFiles } from '../helpers/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  git,
+  startGitButler,
+  until,
+  writeFiles,
+} from '../helpers/index.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
 interface Started {
@@ -38,7 +46,7 @@ function createSessions() {
 
 async function setup(dataDir = createTempDir()) {
   const { repo, path } = await createGitRepo({ files: { 'a.txt': 'a\n' } });
-  await runCommandOrThrow(['but', 'setup', '--json'], path);
+  await startGitButler(path);
   const workspaces = new Workspaces({ dataDir, worktreesDir: createTempDir() });
   const sessions = createSessions();
   const butler = createRepo({ path, workspace: 'gitbutler' });

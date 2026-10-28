@@ -1,5 +1,16 @@
 export type * from './accounts.ts';
 export {
+  describeWholeSuiteRefusal,
+  isBlockingCheck,
+  isWholeSuiteCommand,
+  listBlockingChecks,
+  listPhaseChecks,
+  listRepoChecks,
+  listTaskChecks,
+  listTouchedPhaseChecks,
+  resolveNextCheckId,
+} from './checks.ts';
+export {
   DELEGATE_ROLES,
   DELEGATION_LIMITS,
   type DelegateRole,

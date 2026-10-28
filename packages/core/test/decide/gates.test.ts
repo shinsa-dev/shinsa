@@ -10,6 +10,7 @@ import {
 import {
   approve,
   buildAll,
+  checkResult,
   completePhase,
   createHarness,
   createTask,
@@ -107,7 +108,7 @@ describe('answering a gate', () => {
     expect(harness.activeRun(taskId).prompt).toContain('Feedback on the previous plan:\nRevise the plan.');
   });
 
-  test('asking for changes at the review gate starts the agent, then checks and review again', () => {
+  test('asking for changes at the review gate starts the agent, then the checks it names and review again', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
@@ -120,8 +121,25 @@ describe('answering a gate', () => {
     const run = harness.activeRun(taskId);
     expect(run).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(run.prompt).toContain('Dark mode.');
-    harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Added dark mode.' });
+    harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Added dark mode.', checks: ['c1'] });
     expect(harness.task(taskId).stage).toBe('checking');
+    harness.send({ type: 'checks.record', taskId, results: [checkResult('c1', 'pass')] });
+    expect(harness.activeRun(taskId).role).toBe('reviewer');
+  });
+
+  test('a fix of your changes that names no check goes straight to the agent review', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Fix the copy.',
+    });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Reworded.' });
+    expect(harness.task(taskId).stage).toBe('reviewing');
+    expect(harness.effectsOf('checks.run')).toHaveLength(1);
   });
 
   test('asking for changes at the merge gate without words still starts a fix', () => {
@@ -522,7 +540,7 @@ describe('decisions only the human makes', () => {
     ];
     expect([...gates.keys()].sort()).toEqual(types.sort());
     for (const gateId of gates.values()) {
-      for (const decision of ['approve', 'revise', 'reject', 'reply', 'waive'] as const) {
+      for (const decision of ['approve', 'revise', 'reject', 'reply'] as const) {
         const before = harness.events.length;
         expect(() =>
           harness.send(
@@ -542,28 +560,21 @@ describe('decisions only the human makes', () => {
     ).toThrow('Only the human decides this.');
   });
 
-  test('reply and waive are taken only by the gates that list them, and refused with the gate’s own words', () => {
+  test('a reply is taken only by the gates that list it, and refused with the gate’s own words', () => {
     const { harness, gates } = openEveryGate();
     for (const [type, gateId] of gates) {
       const definition = GATE_SCHEMA[type];
-      for (const decision of ['reply', 'waive'] as const) {
-        if (definition.decisions.some((choice) => choice.decision === decision)) continue;
-        const refusal = type === 'secret' ? 'Paste the secret into the secret field.' : definition.refusal;
-        expect(
-          () => harness.send({ type: 'gate.answer', gateId, decision, response: 'Words.' }),
-          type
-        ).toThrow(refusal);
-      }
+      if (definition.decisions.some((choice) => choice.decision === 'reply')) continue;
+      const refusal = type === 'secret' ? 'Paste the secret into the secret field.' : definition.refusal;
+      expect(
+        () => harness.send({ type: 'gate.answer', gateId, decision: 'reply', response: 'Words.' }),
+        type
+      ).toThrow(refusal);
     }
     const takesReply = [...gates.keys()].filter((type) =>
       GATE_SCHEMA[type].decisions.some((choice) => choice.decision === 'reply')
     );
     expect(takesReply.sort()).toEqual(['failure', 'operation', 'question', 'secret', 'sign_in']);
-    expect(
-      [...gates.keys()].filter((type) =>
-        GATE_SCHEMA[type].decisions.some((choice) => choice.decision === 'waive')
-      )
-    ).toEqual(['configuration']);
   });
 
   test('a reply retries a failure or a Sign in gate with the words as guidance, and needs words', () => {

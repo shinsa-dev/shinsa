@@ -1,5 +1,6 @@
 export {
   commitWorktree,
+  listChangedFiles,
   pushBranch,
   resolveHead,
   resolveTree,

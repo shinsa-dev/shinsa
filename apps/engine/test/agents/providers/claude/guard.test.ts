@@ -159,8 +159,7 @@ describe('the command guard', () => {
       'shinsa settings set agentFastModes \'{"builder":true}\'',
       'shinsa settings set delegationLimit 4',
       'shinsa repos update app --checks "bun test"',
-      'shinsa repos update app --name web --waive-checks',
-      'shinsa repos update app --no-waive-checks',
+      'shinsa repos update app --name web --checks lint',
       'shinsa repos update app --checks=lint',
       'shinsa repos update app --workspace gitbutler',
       'shinsa repos update app --workspace=main_checkout',
@@ -185,10 +184,10 @@ describe('the command guard', () => {
           'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching, fast mode and delegations at once. Tell them what you would change and why.',
       },
     });
-    expect(resolveCommandVerdict('shinsa repos update app --waive-checks', 'main')).toMatchObject({
+    expect(resolveCommandVerdict('shinsa repos update app --checks lint', 'main')).toMatchObject({
       hookSpecificOutput: {
         permissionDecisionReason:
-          'Only the human changes a repository’s check commands, works without checks, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
+          'Only the human changes a repository’s check commands, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
       },
     });
   });

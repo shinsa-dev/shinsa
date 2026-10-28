@@ -17,7 +17,7 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
-import { type Check, countPassing } from '@/lib/tasks/pull-request.ts';
+import { describeChecksPassed } from '@/lib/tasks/checks.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 
@@ -47,6 +47,7 @@ export function resolveNowTitle(
   run: Run | undefined
 ) {
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
+  if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
   return capitalise(task.stageReason);
@@ -80,17 +81,6 @@ export function resolveResultPlace(state: ShinsaState, task: Task, gate: Gate | 
   if (DELIVERING_STAGES.has(task.stage)) return 'hidden';
   if (gate) return 'panel';
   return resolveNowKind(state, task, gate) === 'result' ? 'now_card' : 'panel';
-}
-
-export function describeChecksPassed(checks: Check[]) {
-  const passed = countPassing(checks);
-  if (checks.length === 1) return passed === 1 ? 'The check passed' : 'The check failed';
-  if (passed === checks.length) return `All ${checks.length} checks passed`;
-  return `${passed} of ${formatCount(checks.length, 'check', 'checks')} passed`;
-}
-
-export function hasFailingCheck(checks: Check[]) {
-  return checks.some((check) => check.outcome === 'fail');
 }
 
 export function isAgentWorking(state: ShinsaState, task: Task) {

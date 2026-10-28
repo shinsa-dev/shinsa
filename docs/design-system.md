@@ -193,7 +193,7 @@ a UI change.
 - **A command the human runs is fenced ```` ```bash run ````** (Run in terminal); any other fence is an example.
   Code is linked as `[file.ts](shinsa://file/src/file.ts#L12-L20)`.
 - **Evidence before review**: each changed view as one before and after `comparison`, at 1280px and the narrow
-  width, light and dark; a recording of 5 to 20 seconds for behaviour; the focused test run as `test`. Before shots
+  width, light and dark; a recording of 5 to 20 seconds for behaviour; the focused test as `test`, linked to its check (never its output pasted). Before shots
   first; the console read on every page; never claim what was not seen working.
 - **A review proves every blocking finding** (`file:line`, what breaks, how it was seen), runs what CI runs, judges
   earlier comments as valid, stale or a nitpick, leads with the verdict, and says nothing about what is fine. Taste
@@ -1235,7 +1235,7 @@ type IconSize = 'sm' | 'md' | 'lg';
 />
 ```
 
-It renders `<svg data-slot="icon" viewBox="0 0 24 24" fill="none" class="shrink-0 size-(--icon-size)">` with the pre-rendered paths inside. A size maps to `size-(--icon-size-sm|md|lg)`; with no size it is `size-(--icon-size)`. Any name starting `IconChevron` is always drawn in the 14px `sm` box, whatever `size` it is given.
+It renders `<svg data-slot="icon" viewBox="0 0 24 24" fill="none" class="shrink-0 size-(--icon-size)">` with the pre-rendered paths inside. A size maps to `size-(--icon-size-sm|md|lg)`; with no size it is `size-(--icon-size)`. Any name starting `IconChevron` or `IconCross` is always drawn in the 14px `sm` box, whatever `size` it is given, so every chevron and every X is one size.
 
 The module also exports the two class maps a primitive uses:
 
@@ -1324,6 +1324,7 @@ Corrections, all applied by scaling about the box's centre (`<g transform="trans
 | --- | --- | --- |
 | `STROKE_OVERRIDES` | `IconCheckmark1`: stroke 2.5 | Central ships 1 / 1.5 / 2; the checkmark's 2 reads too thin at small sizes |
 | `CHEVRON_SCALE` | `…Small` 1.4×, `…Medium` 0.9333×, stroke divided by the scale (1.4286 / 2.1429) | A `Small` chevron spans 8 of 24 units and a `Medium` one 12, where an icon spans about 18, so a chevron read a size smaller. Every chevron is drawn 11.2 units long (6.5px in its 14px box) at the weight of every other icon. |
+| `CROSS_SCALE` | `IconCrossSmall` 1.4×, `IconCrossMedium` 1.0182×, stroke divided by the scale (1.4286 / 1.9643) | A cross is the same kind of glyph as a chevron, but a `Small` one spans 8 × 8 units and a `Medium` one 11 × 11, so an X beside a chevron or the queue's pen read smaller. Every cross is drawn 11.2 units on both axes, so its ink (7.7 × 7.7px at 14px, round caps included) is as wide and tall as a chevron's long side (7.7 × 4.45px). |
 | `MATCHED_SCALE` | `IconHomeRoundDoor` 1.025, `IconListBullets` 1.15, `IconServer` 1.15, `IconSettingsGear4` 1.1132, and the same for each `Filled` twin; stroke divided by the scale | Icons that sit side by side in the top bar must draw the same size. The usage gauge sets it (its ink is 20 of 24 units tall, 11.67px at 14px); each other icon is scaled until its ink is as tall, unless that brings it within half a unit of the box's sides (where it would clip). Settings' gear (18 × 16.17 units) matches at 1.1132; the server (18 × 14) stops at 1.15; Home (16 × 16.06) and Tasks (17 × 15) are set by eye at 1.025 and 1.15. A filled twin takes its outline's scale so the icon keeps its size when it fills. |
 | `OPTICAL_SCALE` | `IconPaperPlaneTopRight` and its `Filled` twin 0.9 | Reads large at the same box |
 | `OPTICAL_OFFSET` | `IconApple` (0.14, −1.03), `IconAndroid` (0, −0.92) | Centres the ink's alpha-weighted centroid, damped, instead of the bounding box |
@@ -1754,7 +1755,7 @@ Do: sentence case ("Default", "Recommended"), never all caps. Don't: restate the
 | --- | --- | --- |
 | `primary` (default) | the one filled accent action of a group: Approve, Save limit, Create project | two in one group |
 | `secondary` | the only variant that sits beside a primary (Cancel, Back, Request changes); every icon-only button that isn't `bare`; every button on an already-filled surface (Settings shelf) | |
-| `outline` | a standalone action or trigger with no primary near it (a picker, a menu button, "Try again" in an empty state) | next to a primary, except a decision or now card's alternatives (Review, Start without checks, Resume now) |
+| `outline` | a standalone action or trigger with no primary near it (a picker, a menu button, "Try again" in an empty state) | next to a primary, except a decision or now card's alternatives (Review, Resume now, Check in now) |
 | `destructive` | the confirming action of something irreversible; its companion is `secondary` | beside `outline` |
 | `bare` | an icon-only quiet action inside a row that already has its own hover wash (a row's edit pencil) | anywhere a row doesn't wash |
 | `link` | inline text action in `primary-text`, no box | |
@@ -5796,7 +5797,7 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 **Rules**
 
 - Six variants: `primary` (the default; blue fill, white label, `shadow-control` highlight, the fill at 80% on hover and press), `secondary` (no fill at rest, `text-fg-2`, hover and press lay `bg-bg-a2/70` and brighten to `text-fg-4`), `outline` (`text-fg-4` on `bg-background`, `dark:bg-bg-3`, edged by `shadow-control-elevated`), `destructive` (`text-white` on `bg-red-4`, `shadow-control-destructive`, the fill at 90% on hover and press), `bare` (icon-only, no wash at all, glyph `fg-2` to `fg-4`) and `link` (`text-primary-text`, no box, `opacity-80` on hover and press, the content scales to 0.975 on press).
-- At most one `primary` per group of actions. Its companion is `secondary`. `outline` stands alone (a trigger, a standalone action) and never sits next to a primary, with one exception in the code: a decision or now card's alternatives. A review's decision card puts Review (`outline`, it opens the review) beside its primary decision (Decision cards and action naming, in 11.2), and a now card's alternatives are `outline` beside its one primary (Start without checks, Resume now, Check in now). A `destructive` confirm's companion is `secondary`.
+- At most one `primary` per group of actions. Its companion is `secondary`. `outline` stands alone (a trigger, a standalone action) and never sits next to a primary, with one exception in the code: a decision or now card's alternatives. A review's decision card puts Review (`outline`, it opens the review) beside its primary decision (Decision cards and action naming, in 11.2), and a now card's alternatives are `outline` beside its one primary (Resume now, Check in now). A `destructive` confirm's companion is `secondary`.
 - An icon button is `secondary` everywhere, except a quiet action in a row that already washes on its own, which is `bare`.
 - Sizes are one value at every width; there is no touch step-up.
 
@@ -6546,7 +6547,7 @@ Example: moving the pointer down Home's In progress card, one grey block glides 
 - Every section holds only the focus project's tasks: the focus is the filter; to see other work, switch focus. Only a search of every task reaches past it.
 - A task shows in one section only. Sections that summarise (Recently finished, Recent conversations) leave out tasks another section holds and tasks the page's guide already names; their own counts (five at most) are picked after that.
 - Wide (Home): under the composer, each section a `text-2xs` label over a `rounded-xl` list card; each row a 20px gate or stage tile, title, status line, age. On Home, Needs you becomes "Also needs you", leaves out the tasks the guide above names, and hides when none are left.
-- Home order: greeting, guide, composer, then Also needs you, In progress, Recently finished (merged or done in the last week, five at most), Recent conversations (latest agent message of five tasks, opening their chat), Waiting on another task. Reason: what needs you, what is moving, what just happened, then the long tail, so a long list never pushes the timely ones off screen.
+- Home order: greeting, guide, composer, then Also needs you, In progress, Recently finished (merged or done in the last 24 hours, five at most), Recent conversations (latest agent message of five tasks, opening their chat), Waiting on another task. Reason: what needs you, what is moving, what just happened, then the long tail, so a long list never pushes the timely ones off screen.
 - Compact (sidebar and queue popover): collapsible `h-6` headers, the whole header folds. Header: `w-full gap-2 rounded-control ps-1.5 pe-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`; a 14px section icon in its tone in a 20px slot; the title truncating; the count in `font-normal tabular-nums`; the chevron shown only on hover (`opacity-0 group-hover/disclosure:opacity-100`) 6px after the count (`gap-1.5`), 5px from the header's top and bottom, never at the header's end: the chevron belongs to what it folds, and the end is where a section's action goes. Section: `flex flex-col border-border border-t px-2 py-1.5`, no top border on the first; rows `pt-0.5` below the header; the same rows as wide without the age; empty text `py-1 ps-8.5 pe-2.5 text-2xs text-fg-2`.
 - Open and closed state is shared by sidebar and popover through `localStorage` (key per section). A section can always be collapsed, including the one holding the task on screen. Until you have toggled a section yourself it opens when it holds the task on screen; after that your choice wins everywhere.
 - Queue popover: `max-h-(--available-height) w-80 gap-0 p-0` (320px, as tall as its content up to the room under the button, then it scrolls), list inset 6px more at the top (`pt-1.5`) so the first header's icon is as far from the top as from the side.
@@ -6795,13 +6796,14 @@ Example: "(chevron) Worked for 3m · 14 steps" over the agent's final paragraph,
 
 #### Your message, and acting never moves you
 
-- Your message is its bubble: `corner-superellipse/1.125 min-w-0 max-w-4/5 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed`, right-aligned (`flex flex-col items-end gap-2`), `whitespace-pre-wrap break-words`. Over 12 lines (or 1080 characters) it clamps to 12 with a "Show more"/"Show less" toggle (`px-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`).
+- Your message is its bubble: `corner-superellipse/1.125 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed` inside a `relative min-w-0 max-w-4/5` frame that also holds the delivery light, right-aligned (`flex flex-col items-end gap-2`), `whitespace-pre-wrap break-words`. Over 12 lines (or 1080 characters) it clamps to 12 with a "Show more"/"Show less" toggle (`px-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`).
 - Attachments sit above the bubble: images as a large thumbnail strip (`max-w-4/5 justify-end`), other files as chips (`CARD`, `h-10 max-w-64 gap-2 p-1 pr-3`, a 32px `rounded-lg bg-muted` icon box with a 16px icon, name `text-xs fg-4` over meta `text-2xs fg-2`, `gap-px`), wrapping `gap-2`.
 - Acting never moves you: approving, merging, answering, replying or cancelling stays on the page and confirms with a toast. There is no previous/next stepper; the queue and the command menu move between items.
-- A sent message shows at once, with a `text-2xs` line under it (`px-1`) until delivered: "Sending" until the server accepts it, then "Queued" while it waits, both shimmering. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
+- A sent message shows at once, and while it is delivered (on its way to the server, then routed into the task) the bubble stays at full opacity and a blue light travels around its border: a 1px ring over the border (`message-delivery`), a conic gradient of `primary-4` (both themes) with a soft tail turning once every 2.4s, only `transform`. No text line. It fades in; when the message is delivered the light fades out over 400ms on the strong ease-out. Under reduced motion the ring is a still `primary-4` border. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
+- A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass) over one row per message (`text-xs fg-3`, three lines at most, a pencil and a cross 1px apart). The pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
 - A deep link to a run scrolls to it and washes it: `outline-2 outline-transparent transition-[background-color,outline-color] duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1`, the 2px outline outside the box so the wash wraps full-width content instead of sitting flush; it fades with the wash. Because the run's box hugs its content, the wash is the same 2px on all four sides.
 
-Example: you type "also handle logout", it appears at once right-aligned with "Sending" shimmering under it, then "Queued", then nothing.
+Example: you type "also handle logout", it appears at once right-aligned with a light circling its border, which fades once the agent has it. "Then add a logout page" while round 2 works goes to the queue above the composer instead, and joins the chat when round 3 starts.
 
 #### Round divider
 
@@ -7320,9 +7322,9 @@ A top-bar reading that opens more on hover.
 
 - Trigger: a `secondary` `sm` button with the icon (`IconGauge`) and the one figure that matters next, in the usage
   tone from 75%; without a figure it reads its name ("Agent usage"). Hidden when there is nothing to read.
-- Pick the figure the way the server picks: the window of what the next run uses (its 5-hour window, or the fullest
-  window that applies when there is no 5-hour one). A window at 100% that blocks the next run takes the figure's
-  place, so a spent resource never reads low while it is blocked.
+- Pick the figure the way the server picks: of the windows that apply to what the next run uses, the one closest to
+  running out (the fullest; the 5-hour one when two are as full once rounded). An empty 5-hour window never hides a
+  nearly spent weekly one, and the row's label says which limit binds.
 - Popover (`w-72`), titled with the name alone, no description; one shared row per resource:
   `flex flex-col gap-1.5 px-3 py-1.5`: name and percentage
   (`flex items-center justify-between gap-4 text-xs`), the bar, then the window's label and its reset or its status
@@ -7543,14 +7545,14 @@ Every waiting or result state of a running process is one card on the same frame
   disabled while a sibling action runs. Cancel, veto and "not now" actions are quiet links, never buttons.
 - Name a retry for what it does: "Allow another 10%", "Allow another $5.00", "Check the Codex sign-in again", not
   "Retry", wherever the action appears (card and command menu).
-- One primary at the top right; alternatives are `outline` (Start without checks, Resume now, Check in now) or quiet
+- One primary at the top right; alternatives are `outline` (Resume now, Check in now) or quiet
   links.
 - The variants, with the shape each teaches:
 
 | State | Tone and icon | Title / body | Actions |
 | --- | --- | --- | --- |
 | Paused (a failure) | orange, Paused group | the gate's title, a link to the agent's last message or the body | Retry (primary, named for what it does); Cancel task as a quiet link |
-| Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary), Start without checks (`outline`, only when checks are all that is missing); Cancel task quiet |
+| Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary); Cancel task quiet. Nothing configured to check is never a setup problem |
 | Sign-in needed | orange, `IconUserKey` | title and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
 | A wait | blue, "Waiting to check in again" | "The agent is waiting on something outside the repository", the notes (`selectable text-fg-4`) over "Check-in 2 of 10 · gives up in 3 hours" (`text-2xs text-fg-2`) | Check in now (`outline`); eyebrow counts down |
 | Waiting on a limit | blue, In progress | "Resumes when the usage limit resets", the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
@@ -7861,6 +7863,13 @@ in its turn like any tool, folded with the other Shinsa tools as "Used 2 Shinsa 
 A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
 names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
 
+A task's cost shows in one unit: its share of the weekly window when it ran on a subscription (a gauge icon, "1.8%
+of weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
+learned (a coins icon, "$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
+as estimated by the agent provider."), never beside the total as a second number. A share is an estimate, said once
+and quietly in that same line ("The share is learned from 12 tasks on this account."), never as a badge. It follows
+the account's current rate, so it can move a little as the rate improves. Shares show a tenth below 10% ("0.4%") and whole percentages above.
+
 ### 11.4 The desktop window, code, review, navigation, errors, selection and folding
 
 These patterns cover the desktop window, the code workbench, how code and diffs are shown, the report layout for a technical review, navigation speed, loading, terminals, error containment, text selection and remembered disclosure. They follow the same rules as the rest of the system; where a value repeats a token defined elsewhere, the class is used as written.
@@ -7869,7 +7878,7 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 
 **Rules**
 
-- The desktop app is a thin native shell that loads the same web UI from the local server (`http://127.0.0.1:5180` by default). The app window, a browser tab and the floating companion window always show one version of the UI; the companion stays the small floating window and the app is the full one.
+- The desktop app is a thin native shell that loads the same web UI from the local server (`http://127.0.0.1:7446` by default). The app window, a browser tab and the floating companion window always show one version of the UI; the companion stays the small floating window and the app is the full one.
 - The page learns it runs in the app only from a preload bridge object on `window` (`window.shinsaDesktop`). A browser and the floating window have no bridge, and nothing in the desktop patterns below applies there.
 - On start, the page sets `data-desktop` on `<html>` to `window`, or `fullscreen` while the window is full screen (the traffic lights are gone), and keeps it in sync with the bridge's window-state events.
 - A Tailwind custom variant holds every desktop-only adjustment:
@@ -7985,7 +7994,7 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 | Problem | Buttons |
 | --- | --- |
 | Allow Shinsa to run in the background | Open Login Items, Try again |
-| Port 5180 is taken | Start engine, Copy details (the sentence says to quit the other program or set another `port` in Shinsa's config) |
+| Port 7446 is taken | Start engine, Copy details (the sentence says to quit the other program or set another `port` in Shinsa's config) |
 | The engine keeps stopping | Start engine, Copy details; the engine log's warnings and errors under them |
 | The engine is not running | Start engine, Open Privacy & Security, Copy details |
 
@@ -8389,10 +8398,10 @@ Row class:
 **Rules**
 
 - A `Panel` with `IconImages1`, the count right after the title, placed before the code.
-- Items grouped by kind, in order: Comparison, Recording, Screenshot, Test run, Check run, Note, Preview. Each group under a `SectionLabel` naming its kind (plural with the count when more than one). 20px between groups, 4px from a label to its items.
+- Items grouped by kind, in order: Comparison, Recording, Screenshot, Test, Check, Note, Preview. Each group under a `SectionLabel` naming its kind (plural with the count when more than one). 20px between groups, 4px from a label to its items.
 - A comparison is one item: title and facts ("1280px · Dark"), what to look at, then its parts side by side (three across from `sm` when more than two), each labelled Before, After or its state. A light/dark pair is a comparison labelled Light and Dark with only the width as facts.
 - Recordings and screenshots: a two-column grid (one below `sm`), each with title, facts and what to look at. A lone screenshot shows no before/after stage.
-- Test or check run: a bordered list of each command (a `$ ` line starts a command, else the first line is the command), each with the check glyph and counts ("2 pass, 0 fail"), or Passed / Failed without counts. Raw output behind "Show the output" (`secondary` `xs`, chevron) in the caption's trailing slot. Checks the product ran itself are titled "Checks run by Shinsa: …".
+- A test or check is a reference to one of the task's checks, never a text blob of its own: the agent links a check (its id) instead of pasting test output, and the output the product keeps each time it runs a check belongs to that check. Every piece of one check folds into one item, a Test when the agent linked it as one, else a Check, drawn as that check's row from the Checks list (below): label, who added it, command, outcome, the agent's note on what it proves, and "Show the output" on the latest output kept this round. A check the task no longer has reads "No longer one of the task’s checks".
 - A note: `IconNote1`, the shared markdown renderer at `text-xs` in an inset (`px-3.5 py-2.5`).
 - A run with no command is a code block (monospace, copy on hover, max 320px tall). A preview is a link row.
 - Last line: where the files are on disk ("Stored in ~/…/evidence/<task>/round-1", `IconFolder1`, a copy button).
@@ -8400,7 +8409,7 @@ Row class:
 - A recording shows its first frame (muted, metadata preloaded) under a round play glyph and plays only in the viewer with controls (server supports byte ranges).
 - Evidence from the reviewer, not the author, carries a purple "From the agent review" badge.
 - Empty: "No screenshots, recordings or test runs were attached this round. Request changes to ask the agent for them." A missing proof is visible, not silent.
-- Decision layer summary line counts by kind: "1 comparison, 1 recording and 2 test runs in the review".
+- Decision layer summary line counts by kind, a check once: "1 comparison, 1 recording and 2 tests in the review".
 
 #### Chaptered reading order
 
@@ -8408,7 +8417,7 @@ Row class:
 
 - Chapters follow how a reader comes to understand a change: How it's built (Approach, How it works, How to test, then Pre-merge steps and Post-merge steps when present), Key code, Judgement calls, Read carefully (critical spots, then risks), then Agent review. Then your comments (each with Remove), then Everything else, collapsed (changed files nothing points at, with counts; findings dismissed in earlier rounds, compact).
 - A chapter with more than one block opens with a `SectionLabel` (count beside it) 4px over its cards; 8px between cards; 20px between chapters.
-- Every point appears in exactly one chapter; no duplicate attention list, phase walkthrough or checks list.
+- Every point appears in exactly one chapter; no duplicate attention list or phase walkthrough, and the Checks list only in How to test.
 - Every section is a `Panel` card (36px `CARD_HEADER` band, icon slot, title, count right after the title, disclosure header with the box chevron), never loose text under a heading.
 - Walkthrough prose includes a text diagram in a code fence whenever the change has structure or flow worth drawing.
 - Judgement call cards: tag Judgement call (purple), titled by the decision in a few words, then the call and reason, "Also considered" with each alternative and why rejected, then the snippet. If the reviewer disagrees, the card is Disputed (orange) and carries "The agent review disagrees" with its reason on an orange inset note (`orange-a2` on the inset's hairline).
@@ -8420,9 +8429,22 @@ Row class:
 **Rules**
 
 - Two parts, each under a quiet `text-2xs` label; never a checklist.
-- Covered by tests: one or two lines of plain text, then one line on checks ("All 4 checks passed. The Overview lists each check."). When measured, changed-line coverage in one `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines." or "All 42 changed lines are covered.") and a quiet `text-2xs` toggle "Show 3 files" listing each file link, "10 of 14 lines" and, if missed, "Not covered:" with each range a file link. Nothing at all when coverage is off, unmeasurable or no changed line is code.
+- Covered by tests: one or two lines of plain text, then the Checks list in both stages. When measured, changed-line coverage in one `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines." or "All 42 changed lines are covered.") and a quiet `text-2xs` toggle "Show 3 files" listing each file link, "10 of 14 lines" and, if missed, "Not covered:" with each range a file link. Nothing at all when coverage is off, unmeasurable or no changed line is code.
 - Try it yourself: ordered steps, each a `StepNumber`, the action (markdown), its target, and "You should see" over the expected result. Targets render by kind: an `http`/`https` address is a link with `IconGlobe` opening in the browser; a file a file link at its lines; a command a shell code block with Copy and Run; a screen, or an unreadable address or file, plain text with its icon.
 - Shown when either part exists, there are checks, or coverage was measured.
+
+#### Checks list
+
+**Rules**
+
+- One list, two stages, read as a bonus, never a wall: **Building** (before the pull request: the checks the plan chose and the agent added as it built, then the repository's optional "Always run before review" commands) and **CI** (after the pull request: its CI checks).
+- Each stage opens on a `text-2xs` line: the stage's title (medium `fg-2`) and its summary in its state's colour ("All 4 passed" in the check ink, "1 of 4 failed" in red, "Running 2 checks" in blue, "2 passed, 2 not run yet" in `fg-2`). Its rows sit in one inset with hairlines between them.
+- A row: the state glyph on the first line, the label (`text-xs fg-4`) with who added it beside it (`text-2xs fg-2`: "From the plan · phases 1 to 3", "Added by the agent · phase 3", "Repository · before review"; a CI check "Required" or "Optional", its name a link to the run), the command under it (mono `text-2xs fg-3`, selectable), then a note or what failed, and at the end the state's word and "Show the output" when the product kept the check's output (the latest run only, never one block per run).
+- States: Passed (the check ink, never green), Failed (red, with what failed under the command), Not run yet (dotted circle), Running (a spinner in the accent: a check in the current run is never shown as its old result, so a run of the checks never looks stuck), Passed with "Passed when re-run alone" under it, and "Already failing on main, so it does not block" (a grey failed glyph, "Not blocking").
+- While the checks run between phases, the now card's title is the stage reason ("Running the checks for phase 1 of 3"), never the next phase's title, and the card shows the list.
+- Where it shows: the review card, the now card while the checks run, How to test, and compact (no output) in the checks fact's and the pull request's popovers.
+- The plan names its checks the same way: a "Checks" parameter with each label, its phases ("Phases 1 to 3") and its command as a mono chip.
+- A repository's "Always run before review" is a setting with a default of nothing: nothing configured means nothing extra runs, and it is never a setup problem.
 
 #### Pinned index line
 
@@ -8912,7 +8934,7 @@ Mistakes that were made before and must not come back:
 | Field label | Noun phrase | No | "Folder path", "Project name", "Notes for the agent" |
 | Field hint, setting description | Full sentence | Yes | "Leave it empty to keep the saved one." |
 | Placeholder | What to type, or an example | Yes when a sentence, else no | "Describe the work", "Add a folder by its path, like ~/code", "What should change here? It goes to the agent with your review." |
-| Message status line | One or two short sentences | Yes after "Noted" / "Not delivered" | "Sending", "Queued", "Noted. It needs no reply.", "Not delivered. ‹reason›" |
+| Message status line | One or two short sentences | Yes | "Noted. It needs no reply.", "Not delivered. ‹reason›", the queue's "Sends once round 2 is finished." |
 | Home guide line | One sentence a person would say out loud | Yes | "Start with ‹task›: why.", "Then ‹task›: why." |
 | `aria-label` | The control's name, verb + object for an action | No | "Copy the task’s handle", "Collapse summary", "Remove folder" |
 | Agent prompt | Imperative, one instruction per sentence, tools in backticks, limits as numbers | Yes | (not shown on screen) |
@@ -8944,7 +8966,7 @@ Rules that sit behind the table:
 | `’` (U+2019) | Every apostrophe a person reads: "Don’t", "Couldn’t", "Shinsa’s", "task’s" | `'` |
 | `“ ”` (U+201C, U+201D) | Every quotation and every quoted task title: "waiting for “Base” to finish" | `"` |
 | `…` (U+2026) | Truncation, in-progress labels, actions that ask for more, an elided value ("Create task: …") | `...` |
-| `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com", "$1.75 · 12% of the weekly limit" | `•`, `|`, ` - ` |
+| `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com" | `•`, `|`, ` - ` |
 | `–` (U+2013), no spaces around it, in a number range | Ranges: "lines 4–9" | `-` |
 | `−` (U+2212) | The minus of a diff count: "+12 −3" | `-` |
 | `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Agent usage" | `->` |
@@ -9241,9 +9263,10 @@ change works, it sends `walkthrough` with only the parts that changed, each whol
 #### Review findings
 
 At most 12 findings, one per problem, most severe first, each anchored to a `file` and `line`/`end`. `blocking` is a
-bug, a missed requirement, a broken rule, a failing check, a test that encodes the old behaviour or passes either
-way, or UI work without evidence of the changed flow; everything else is a `suggestion`, and taste is never
-blocking. Each finding has a `title` (what is wrong, a few words), a `message` (what is wrong and why it matters) and,
+bug, a missed requirement, a broken rule, a check the change makes fail, a test that encodes the old behaviour or
+passes either way, or UI work without evidence of the changed flow; everything else is a `suggestion`, and taste is
+never blocking. A check that fails because of the change is always a blocking finding; one already failing on the
+base branch is not the change's and does not count against it. Each finding has a `title` (what is wrong, a few words), a `message` (what is wrong and why it matters) and,
 when known, a `fix` (a sentence or a short code block). A `summary` of one or two sentences says what was checked and
 the overall view. `disagreements` names a judgement call by its number with the `reason` and what the reviewer would
 do instead; calls it agrees with are left out. Nothing about what is fine, and nothing restated after the call. The
@@ -9447,7 +9470,8 @@ keyboard usable instead:
 | Health and engine banners | `role="status"` | |
 | Find match counts (Code tab, terminal, search panel) | `aria-live="polite"` | The "3 of 12" updates are read |
 | Live card's latest agent text | `aria-live="polite"` | Interim messages are read as they arrive |
-| Shimmering text ("Starting", "Thinking", "Sending") | per-character spans `aria-hidden`, the whole string in an `sr-only` span | Read once as a word, not letter by letter |
+| Shimmering text ("Starting", "Thinking") | per-character spans `aria-hidden`, the whole string in an `sr-only` span | Read once as a word, not letter by letter |
+| A message being delivered | the light `aria-hidden`, "Sending" in an `sr-only` span | The state has no visible word, so it is read |
 | Busy `Button` (`loading`) | `aria-busy="true"` | Keeps its label; presses and keys are ignored; never `disabled` |
 | Invalid field | `aria-invalid` | Draws a 1px `red-4` ring (`aria-invalid:ring-1 aria-invalid:ring-red-4`) on `Input` and `Textarea` |
 | Tooltip | the trigger gets `aria-describedby` pointing at it while open | |
@@ -10574,7 +10598,7 @@ const [stage, setStage] = useState(task.stage);
 | --- | --- |
 | `commit-msg` | The first line must match `^(feat\|fix\|docs\|refactor\|test\|chore\|perf\|ci\|build\|style\|revert)(\([a-z0-9./-]+\))?!?: .{1,100}$`; lines starting `Merge`, `Revert`, `fixup!`, `squash!` pass. The hook reads only the first line; by convention a commit message is that one subject line and nothing else. |
 | `pre-commit` | `lint-staged` (`biome check --write --no-errors-on-unmatched --files-ignore-unknown=true` on staged `*.{ts,tsx,js,jsx,json,jsonc,css}`), `bun lint:conventions`, `bunx sherif -i @types/node` |
-| `pre-push` | `bun check-types`, `bun run test` |
+| `pre-push` | `bun check-types` (Turbo-cached, seconds). A hook stays a short validation: anything that takes minutes, like the full test suite, runs in CI. |
 | CI Lint | `bunx biome ci .`, `bun lint:conventions`, `bun lint:spelling`, `bunx sherif -i @types/node`, `bunx knip`; separately `bun check-types` |
 | CI Test | `bun run test`; and the loading walk: a production build, seeded and served, must show no loading state in normal use (two attempts) |
 

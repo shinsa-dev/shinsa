@@ -43,11 +43,15 @@ export function PlanParameterList({
         </Parameter>
       )}
       {view.checks.length > 0 && (
-        <Parameter title='Extra checks' headingClassName={headingClassName}>
-          <ul className='flex flex-col gap-1'>
+        <Parameter title='Checks' headingClassName={headingClassName}>
+          <ul className='flex flex-col gap-2'>
             {view.checks.map((check) => (
-              <li key={check} className={cn(CHIP, 'break-all font-mono text-2xs')}>
-                {check}
+              <li key={check.command} className='flex min-w-0 flex-col gap-1'>
+                <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
+                  <span className='text-fg-3 text-xs'>{check.label}</span>
+                  {check.phases && <span className='text-2xs text-fg-2'>{check.phases}</span>}
+                </span>
+                <span className={cn(CHIP, 'selectable break-all font-mono text-2xs')}>{check.command}</span>
               </li>
             ))}
           </ul>

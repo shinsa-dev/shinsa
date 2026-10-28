@@ -26,7 +26,6 @@ const GATE_REPLY = {
   guide: { decision: 'reply', done: 'Retrying with your guidance.' },
   cancel: { decision: 'reject', done: 'Cancelled.' },
   recheck: { decision: 'approve', done: 'Verifying the setup again.' },
-  skipChecks: { decision: 'waive', done: 'Starting without checks for this repository.' },
   approvePlan: { decision: 'approve', done: 'Approved. Building now.' },
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
   revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },

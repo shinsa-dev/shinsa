@@ -13,7 +13,7 @@ const REPO: Repo = {
   defaultBranch: 'main',
   remote: 'git@github.com:superwall/paywall-next.git',
   projectId: null,
-  checkCommands: ['bun test'],
+  checkCommands: ['bunx knip'],
 };
 
 const PLAN: PlanDocument = {
@@ -26,7 +26,7 @@ const PLAN: PlanDocument = {
   approach: 'A small retry helper.',
   files: [],
   outOfScope: [],
-  verification: ['bun test'],
+  verification: [{ label: 'Chunk retries', command: 'bun test src/export', phases: [1, 2] }],
   questions: [],
 };
 
@@ -77,7 +77,15 @@ function listEvents(): ShinsaEventInput[] {
     {
       type: 'checks.recorded',
       taskId: TASK,
-      results: [{ name: 'bunx knip', outcome: 'fail', detail: 'Unused export SpotKey' }],
+      results: [
+        {
+          id: 'r1',
+          label: 'bunx knip',
+          command: 'bunx knip',
+          outcome: 'fail',
+          detail: 'Unused export SpotKey',
+        },
+      ],
     },
     { type: 'run.started', run: createRun('fix-checks', 'fix', { resume: true }) },
     { type: 'run.started', run: createRun('review', null) },
@@ -156,7 +164,7 @@ describe('stampRunPrompts', () => {
 
   it('gives each later agent run its short instruction', () => {
     expect(prompts.get('build')).toContain('Now build phase 2 of 2: Cover it with tests.');
-    expect(prompts.get('fix-unchecked')).toContain('`bun run test` failed');
+    expect(prompts.get('fix-unchecked')).toContain('`bun test src/index.test.ts` failed');
     expect(prompts.get('fix-checks')).toContain('`bunx knip` failed');
     expect(prompts.get('fix-review')).toContain('The agent review found problems.');
     expect(prompts.get('fix-review')).toContain('Retries a 400 too.');

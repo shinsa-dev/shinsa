@@ -3,6 +3,7 @@ import { listActiveRuns, listOpenGates } from '../../src/index.ts';
 import { assembleReport } from '../../src/report/index.ts';
 import {
   buildAll,
+  checkResult,
   completePhase,
   createHarness,
   createTask,
@@ -135,17 +136,7 @@ describe('agent hand-overs', () => {
       theme: 'dark',
       stage: 'after',
     });
-    harness.send({
-      type: 'agent.attach_evidence',
-      runId,
-      kind: 'test',
-      title: 'Tests',
-      uri: '/e/out.txt',
-      detail: null,
-      width: null,
-      theme: null,
-      stage: null,
-    });
+    harness.send({ type: 'agent.attach_check', runId, kind: 'test', checkId: 'c1', detail: null });
     const [shot, run] = Object.values(harness.state.evidence);
     expect(shot).toMatchObject({
       detail: 'The muted labels now read clearly.',
@@ -153,8 +144,34 @@ describe('agent hand-overs', () => {
       theme: 'dark',
       stage: 'after',
     });
+    expect(run).toMatchObject({
+      kind: 'test',
+      checkId: 'c1',
+      title: 'Panel tests',
+      uri: 'shinsa://check/c1',
+    });
     expect(run).not.toHaveProperty('detail');
     expect(run).not.toHaveProperty('stage');
+  });
+
+  test('a test run links a check of the task by its id, and an unknown id is refused with the list', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const runId = harness.activeRun(taskId).id;
+    expect(() =>
+      harness.send({
+        type: 'agent.attach_check',
+        runId,
+        kind: 'test',
+        checkId: 'c9',
+        detail: 'It proves it.',
+      })
+    ).toThrow('There is no check c9. The checks are c1 (Panel tests), r1 (bun lint), r2 (bun check-types).');
+    harness.send({ type: 'agent.attach_check', runId, kind: 'check', checkId: 'r2', detail: 'Types hold.' });
+    expect(Object.values(harness.state.evidence)).toMatchObject([
+      { kind: 'check', checkId: 'r2', title: 'bun check-types', detail: 'Types hold.', runId },
+    ]);
   });
 
   test('a comparison attaches each part as a piece of one item, with one activity entry', () => {
@@ -205,7 +222,7 @@ describe('agent hand-overs', () => {
       type: 'checks.record',
       taskId: bareTask,
       results: PASSING,
-      evidence: { title: 'Checks: 1 passed', uri: '/e/checks.txt' },
+      outputs: [{ checkId: 'c1', title: 'Panel tests', uri: '/e/checks.txt' }],
     });
     expect(bare.activeRun(bareTask).prompt).toContain('The agent attached no evidence this round.');
     const harness = createHarness();
@@ -222,11 +239,10 @@ describe('agent hand-overs', () => {
       stage: 'after',
     });
     harness.send({
-      type: 'agent.attach_evidence',
+      type: 'agent.attach_check',
       runId: harness.activeRun(taskId).id,
       kind: 'test',
-      title: 'Tests',
-      uri: '/e/out.txt',
+      checkId: 'c1',
     });
     harness.send({
       type: 'agent.attach_comparison',
@@ -243,11 +259,11 @@ describe('agent hand-overs', () => {
     const prompt = harness.activeRun(taskId).prompt ?? '';
     expect(prompt).toContain('- screenshot: Settings (after, 390px, light)');
     expect(prompt).toContain('- comparison: Tabs (before and after, 1280px)');
-    expect(prompt).toContain('- test: Tests\n');
+    expect(prompt).toContain('- test: Panel tests\n');
     expect(prompt).toContain('independent evidence from the review');
   });
 
-  test('Shinsa attaches the output of its own checks run, of no run, while the task is checking', () => {
+  test('Shinsa attaches the output of each check it ran, of no run, while the task is checking', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
@@ -255,26 +271,34 @@ describe('agent hand-overs', () => {
       type: 'checks.record',
       taskId,
       results: failing(),
-      evidence: { title: 'Checks: 1 of 2 failed', uri: '/e/checks-1.txt', detail: 'Run by Shinsa.' },
+      outputs: [
+        { checkId: 'r1', title: 'bun lint', uri: '/e/r1-1.txt' },
+        { checkId: 'r2', title: 'bun check-types', uri: '/e/r2-1.txt' },
+      ],
     });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Fixed it.' });
     harness.send({
       type: 'checks.record',
       taskId,
-      results: PASSING,
-      evidence: { title: 'Checks: 1 passed', uri: '/e/checks-2.txt' },
+      results: [checkResult('r2', 'pass')],
+      outputs: [{ checkId: 'r2', title: 'bun check-types', uri: '/e/r2-2.txt' }],
     });
     harness.send({
       type: 'checks.record',
       taskId,
       results: PASSING,
-      evidence: { title: 'Late', uri: '/e/late.txt' },
+      outputs: [{ checkId: 'r2', title: 'Late', uri: '/e/late.txt' }],
     });
     const pieces = Object.values(harness.state.evidence);
-    expect(pieces.map((piece) => piece.uri)).toEqual(['/e/checks-1.txt', '/e/checks-2.txt']);
-    expect(pieces[0]).toMatchObject({ taskId, runId: null, kind: 'check', detail: 'Run by Shinsa.' });
-    expect(pieces[0]).not.toHaveProperty('round');
-    expect(pieces[1]).not.toHaveProperty('detail');
+    expect(pieces.map((piece) => piece.uri)).toEqual(['/e/r1-1.txt', '/e/r2-1.txt', '/e/r2-2.txt']);
+    expect(pieces[1]).toMatchObject({
+      taskId,
+      runId: null,
+      kind: 'check',
+      checkId: 'r2',
+      title: 'bun check-types',
+    });
+    expect(pieces[1]).not.toHaveProperty('round');
   });
 
   test('an agent is refused a tool its role does not have', () => {
@@ -490,7 +514,7 @@ describe('the plan meets the verification rules', () => {
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);
     expect(() => proposePlan(harness, taskId, { ...PLAN, verification: [] })).toThrow(
-      'This task changes code, so the plan needs a verification plan up front'
+      'This task changes code, so the plan needs its checks up front'
     );
     expect(harness.activeRun(taskId).id).toBe(planner.id);
     expect(harness.task(taskId).plan).toBeNull();
@@ -528,7 +552,7 @@ describe('the plan meets the verification rules', () => {
         judgementCalls: [],
       });
     expect(complete).toThrow(
-      'The plan asks for a screenshot (`screenshot`) and test output (`test`) as evidence. Attach it with `attach_evidence` before you complete the last phase.'
+      'The plan asks for a screenshot (`screenshot`) and a test run, linked to its check (`test`) as evidence. Attach it with `attach_evidence` before you complete the last phase.'
     );
     harness.send({
       type: 'agent.attach_evidence',
@@ -537,14 +561,8 @@ describe('the plan meets the verification rules', () => {
       title: 'The panel',
       uri: 'a.png',
     });
-    expect(complete).toThrow('The plan asks for test output (`test`) as evidence.');
-    harness.send({
-      type: 'agent.attach_evidence',
-      runId: last.id,
-      kind: 'test',
-      title: 'Tests',
-      uri: 'out.txt',
-    });
+    expect(complete).toThrow('The plan asks for a test run, linked to its check (`test`) as evidence.');
+    harness.send({ type: 'agent.attach_check', runId: last.id, kind: 'test', checkId: 'c1' });
     complete();
     expect(harness.task(taskId).stage).toBe('checking');
     expect(harness.task(taskId).plan?.body).toContain('## Evidence\nscreenshot, test');

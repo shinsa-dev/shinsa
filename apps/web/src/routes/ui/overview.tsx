@@ -21,6 +21,7 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
+import { TaskFacts } from '@/components/task/facts.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import {
@@ -131,6 +132,12 @@ export function OverviewSpecimens() {
             onSave={acknowledgeSample}
             onDecline={acknowledgeSample}
           />
+        </Card>
+      </Specimen>
+      <Specimen label='TaskFacts · cost in the task’s unit: its share of the weekly limit on a subscription, past its limit · dollars on an API key'>
+        <Card>
+          <TaskFacts state={state} task={tasks.budget} />
+          <TaskFacts state={state} task={tasks.keyed} />
         </Card>
       </Specimen>
       <Specimen label='PausedCard · a failure · a usage limit · a wait that ran out of checks'>

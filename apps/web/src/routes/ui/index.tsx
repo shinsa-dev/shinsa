@@ -16,6 +16,7 @@ import { readThemePreference, type ThemePreference, writeThemePreference } from 
 import { AccountSpecimens } from './accounts.tsx';
 import { ChatSpecimens } from './chat.tsx';
 import { CHECKLIST_SECTIONS, ChecklistSpecimens } from './checklist.tsx';
+import { ChecksSpecimens } from './checks.tsx';
 import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
 import { ErrorSpecimens } from './errors.tsx';
@@ -44,6 +45,7 @@ const SECTIONS = [
   { id: 'shinsa-overview', label: 'Overview cards' },
   { id: 'shinsa-chat', label: 'Chat' },
   { id: 'shinsa-review', label: 'Review' },
+  { id: 'shinsa-checks', label: 'Checks' },
   { id: 'shinsa-evidence', label: 'Evidence' },
   { id: 'shinsa-code', label: 'Code' },
   { id: 'shinsa-terminal', label: 'Terminal' },
@@ -221,6 +223,14 @@ export function UiPage() {
             className='flex-col items-start gap-8'
           >
             <ReviewSpecimens />
+          </Section>
+          <Section
+            id='shinsa-checks'
+            title='Shinsa composites · checks'
+            description='The Checks list in its two stages, Building (the checks the plan and the agent chose, and the repository’s Always run before review commands) and CI (the pull request’s), from apps/web/src/components/checks; a linked test, the plan’s Checks, check activity and the repository setting. Sample data.'
+            className='flex-col items-start gap-8'
+          >
+            <ChecksSpecimens />
           </Section>
           <Section
             id='shinsa-evidence'

@@ -5,7 +5,7 @@ file and the code disagree, the code wins and this file is wrong. Behaviour live
 nouns, the fields and who may send what.
 
 Sections: Glossary · Naming decisions · The task · Rounds · Lifecycle · Projects and handles · Runs, attempts and
-roles · Steps and gates · Verification · Composing · Messages · Commands · Events · Effects · Agent tools · Where it lives ·
+roles · Steps and gates · Verification · Composing · Checks · Messages · Commands · Events · Effects · Agent tools · Where it lives ·
 Open protocol questions · Settled protocol questions.
 
 ## Glossary
@@ -40,13 +40,13 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | gate | A durable decision record that holds a task until it is decided | `Gate` | the decision ("Review", "Merge"…) |
 | hard gate | A gate only you decide (plan, review, merge, question, secret, proposal, operation, failure, setup, sign-in) | `GateType`, `HardGateDefinition` | Needs you |
 | soft gate | An automatic check a step must pass (checks, agent review, CI); it passes, fails back to the round's agent, or escalates to the hard gate it names | `SoftGateType`, `SoftGateDefinition` | not a gate on screen |
-| decision | Your answer to a hard gate: approve, revise, reject, reply (with words) or waive (start without checks) | `GateDecision` | Approve, Ask for changes, Reject… |
-| evidence | A file or link an agent attached to prove something (screenshot, recording, test, check, note, preview), with the width, theme and stage (before or after) it was captured at, or the output of Shinsa's own checks (a `check` of no run) | `Evidence`, `EvidenceKind`, `EvidenceTheme`, `EvidenceStage` | Evidence |
+| decision | Your answer to a hard gate: approve, revise, reject or reply (with words) | `GateDecision` | Approve, Ask for changes, Reject… |
+| evidence | A file or link an agent attached to prove something (screenshot, recording, test, check, note, preview), with the width, theme and stage (before or after) it was captured at, or the output of one of Shinsa's check runs (a `check` of no run); a test or check an agent attaches links a check (`checkId`, `shinsa://check/<id>`) | `Evidence`, `EvidenceKind`, `EvidenceTheme`, `EvidenceStage`, `CheckEvidence` | Evidence |
 | evidence item | What you review as one piece of evidence: a comparison (one view before and after, or in several states, its parts sharing an `itemId`) or a single piece of its own kind | `EvidenceItem`, `EvidenceItemKind`, `listEvidenceItems` | a comparison, a recording, a screenshot, a test run… |
-| check | A command Shinsa runs in the worktree (the repository's and the plan's own), recorded pass or fail | `ReportCheck`, step `checks` | Checks |
+| check | A scoped command that proves part of a change, chosen by the task's agent in its plan and kept current as it builds (or one of the repository's own commands, run once before review); Shinsa runs it and records pass, fail or skipped, with a note when it passed when re-run alone or already fails on the base branch | `PlanCheck`, `TaskCheck`, `ReportCheck`, step `checks` | Checks |
 | CI run | One CI check GitHub reports on the pull request | `CiRun`, `CiState` (stored as `PullRequest.checkRuns`, `PullRequest.checks`) | CI |
 | check-in | A monitor's next look at what it waits for | `Monitor.nextCheckAt`, `monitor.check_in_now` | "Check in now", "Check-in 2 of 10" |
-| setup verification | Shinsa verifying the repository, the default branch and the checks before a task's first agent | `config.verify`, `VERIFYING_SETUP`, gate type `configuration` | "Setup incomplete", "Verify again" |
+| setup verification | Shinsa verifying the repository, the default branch and the workspace before a task's first agent | `config.verify`, `VERIFYING_SETUP`, gate type `configuration` | "Setup incomplete", "Verify again" |
 | review | Reading a change: the agent review (the reviewer, on its own session, soft gate) or your review (hard gate) | steps `agent_review`, `your_review` | Agent review, Review |
 | finding | One problem the reviewer reports, blocking or a suggestion, at a file and line | `ReviewFinding` | finding |
 | diagnosis | What an investigation hands over: what it found and why | `report_diagnosis`, `TaskResult` step `investigate` | Diagnosis |
@@ -99,7 +99,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | --- | --- |
 | round | a task's round (`Round`); a fix round (`fixRounds`, "Fix round 2"); a review round (`MAX_REVIEW_ROUNDS`) |
 | step | a pipeline step (`PipelineStep`); an operation's numbered steps (`PlanDocument.operation`); a step around the merge (`MergeStep`, `walkthrough.steps`), which you do, not an agent |
-| check | a repository check (`checks` step, `ReportCheck`); CI on the pull request as stored (`PullRequest.checks`, `checkRuns`); the evidence kind `check` |
+| check | a task's check (`checks` step, `TaskCheck`, `ReportCheck`), the agent's or the repository's; CI on the pull request as stored (`PullRequest.checks`, `checkRuns`); the evidence kind `check` |
 | wait | a monitor (`wait_for`); a usage wait; a run waiting on its delegations (`RunStatus 'waiting'`, `RunWait`); a task waiting on other tasks (`waiting_on_tasks`); a round waiting to start (`RoundStatus 'waiting'`) |
 | queued | the status of a run created but not yet dispatched; GitHub's merge queue; a round waiting to start, in the event `round.queued` |
 | answer | the step, the tool and the result step `answer`; the command `gate.answer`, which takes every decision (the words-taking one is `reply`); CLI `questions answer`; the delegation tool `delegation_answer` |
@@ -131,9 +131,12 @@ command, stored shape and route uses the current one. Old shapes already in the 
 8. **Diagnosis**: `report_diagnosis` with `diagnosis`, `SHAPE_LIMITS.diagnosis`; "finding" is the reviewer's only.
    Stored results keep `task.delivered` step `investigate`.
 9. **Phases**: `PlanPhase`, `PlanDocument.phases`, `ReportSection`, `WorkReport.sections`.
-10. **Checks are the repository's**: `CiRun`, `CiState` (the stored `PullRequest.checks` and `checkRuns` keep their
-    names); a monitor's look is a check-in (`monitor.check_in_now`, `tasks check-in-now`); the setup check is setup
-    verification (`VERIFYING_SETUP`, "Verify again").
+10. **Checks are the task's** (since 2026-10-27): the plan's `verification` is `PlanCheck[]`, the task keeps
+    `TaskCheck`s (`Task.checks`, ids `c1`…, source `plan` or `agent`) and the repository's `checkCommands` are the
+    baseline `r1`… (source `repo`); a result is `ReportCheck` with `id`, `label` and `command` (no `name`), changes are
+    `CheckChange` (`checks.changed`) and the tool field is `check_changes`. CI is `CiRun`, `CiState` (the stored
+    `PullRequest.checks` and `checkRuns` keep their names); a monitor's look is a check-in (`monitor.check_in_now`,
+    `tasks check-in-now`); the setup check is setup verification (`VERIFYING_SETUP`, "Verify again").
 11. **Waits on**: `waitsOn`, `task.wait_on`, `task.waits_on_changed`, triage's `waits_on`, `releaseWaiting`, stage
     `waiting_on_tasks`, `RoundStatus 'waiting'`, `tasks wait-on` and `tasks stop-waiting`.
 12. **One role list**: `RunRole` has no `triage` and no `shipper`; `RUN_AGENT_ROLE` is the one table. A round has one
@@ -141,7 +144,7 @@ command, stored shape and route uses the current one. Old shapes already in the 
     and `builder` name delegated agents only (`docs/engine.md` → Agents).
 13. **Judgement calls**: `JudgementCall { title, call, reason, file, line, end?, alternatives? }`, `judgementCalls`,
     `complete_phase` `judgement_calls`; a decision is only your answer at a gate.
-14. **Reply**: `GateDecision` is `approve | revise | reject | reply | waive`; the command stays `gate.answer`.
+14. **Reply**: `GateDecision` is `approve | revise | reject | reply`; the command stays `gate.answer`.
 15. **One result field**: `Task.answer`, `agent.answer` and `validateAnswer` are gone; the `answer` tool sends
     `agent.deliver` with step `answer` into `Task.result`.
 16. **Commands are imperative**: `pull_request.record_push`, `run.record_lost_session`, `delegation.record_delivery`,
@@ -197,7 +200,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
-| `activity` | `Activity[]` | what happened, newest last; a gate's entry names its `gateType`, and a decision sent with line comments keeps them (`comments`); a message of yours that needed nothing is `noted`, and one dropped from the inbox keeps its `undelivered` text and reason |
+| `activity` | `Activity[]` | what happened, newest last (each with an `ActivityKind`: `check` for check results and the agent's check changes); a gate's entry names its `gateType`, and a decision sent with line comments keeps them (`comments`); a message of yours that needed nothing is `noted`, and one dropped from the inbox keeps its `undelivered` text and reason |
 
 **Plan and build**
 
@@ -207,9 +210,9 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `planHistory?` | `PlanRevision[]` (last 10) | earlier versions |
 | `planAnswers` | string \| null | your words when you approved the plan, for the agent as it builds |
 | `phases` | `PhaseProgress[]` | per plan phase: `pending`, `active`, `done`, `skipped` |
-| `phaseReports` | `PhaseReport[]` | per finished phase: summary, code spots, judgement calls (`judgementCalls`), and the last phase's `walkthrough?` |
+| `phaseReports` | `PhaseReport[]` | per finished phase: summary, code spots, judgement calls (`judgementCalls`), the last phase's `walkthrough?`, and `files?`: the files the phase's commit changed (absent when it changed none), which decide the checks a later fix runs again |
 | `summary` | string \| null | the work's summary |
-| `report` | `WorkReport` \| null | the review built from every phase: headline, sections, checks, judgement calls, `walkthrough?` |
+| `report` | `WorkReport` \| null | the review built from every phase: headline, sections, the check results, judgement calls, `walkthrough?` |
 | `mergeStepsDone?` | string[] | the steps around the merge you ticked, by key (`resolveMergeStepKey`: `when:` and a hash of the step's kind, title, detail and command, so any change to a step clears its tick); the steps themselves are the latest walkthrough's `steps` (`listMergeSteps`); a new round starts it empty |
 | `carriedMergeSteps?` | `CarriedMergeStep[]` (`MergeStep` with `round`, `done`) | the open steps a new round carried over from the round before it: every step after the merge, and the steps before the merge of a round still shipping onto the next one's pull request; ticks of a carried step land here; done ones are dropped at the next round |
 | `worktreePath` | string \| null | the task's worktree; for a GitButler or main-checkout task, the repository itself |
@@ -217,7 +220,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
 | `stackedOn?` | `TaskStack` (`taskId`, `branch`) | GitButler: the other task whose branch this task's branch is stacked on (`task.stack`); its pull request targets that branch while that task's pull request is open (`resolvePullRequestBase`); while that task is open the dependency on it cannot be removed (`dependency_stacked`), and cleared by `task.unstacked` when it settles without a merge |
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
-| `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: the checks run again before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
+| `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `heldConflict?` | string \| null | a branch GitButler left conflicted while the task could not take a fix (planning, reviewing, checking, merging); told to the Agent at its next build, fix or operation turn (the note at the end of its prompt), else the fix starts where its next review or merge gate would open (`task.conflict_held`) |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
@@ -227,8 +230,10 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `checkResults` | `ReportCheck[]` \| null | the last round of checks |
-| `coverage?` | `Coverage` \| null | the tests' coverage of the task's changed lines, measured after the last passing checks (`checks.recorded`); cleared by checks without it and by a new round |
+| `checks?` | `TaskCheck[]` | the task's checks: the plan's (`plan.proposed`, ids `c1`…, source `plan`) and the agent's changes (`checks.changed`, source `agent`); the repository's commands are not stored here (`listRepoChecks`, `listTaskChecks`); a new round starts from its plan |
+| `runningChecks?` | `string[]` | the ids of the checks the current run holds (`checks.started`); empty once its result is recorded or the stage leaves `checking` |
+| `checkResults` | `ReportCheck[]` \| null | the latest result of each check, by id (`checks.recorded` merges; a changed or removed check loses its result) |
+| `coverage?` | `Coverage` \| null | the coverage of the task's changed lines by the tests among its checks, measured once before review (`checks.recorded`); kept until the next measurement, cleared by a new round |
 | `reviewSummary` | string \| null | the last agent review's summary: what the reviewer checked and its view of the change |
 | `findings` | `ReviewFinding[]` | the last agent review's findings, each with an optional `title` and `fix` |
 | `reviewDisagreements?` | `ReviewDisagreement[]` | the judgement calls the last agent review would have made differently: the call's text and why |
@@ -261,7 +266,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
-| `configProblems?` | `ConfigProblem[]` | the problems setup verification found |
+| `configProblems?` | `ConfigProblem[]` | the problems setup verification found, each a `kind` (`repository`, `no_repository`, `default_branch` or `workspace`) and a `detail`; the checks are never one (`docs/engine.md` → Setup verification) |
 
 **Agents and other tasks**
 
@@ -402,10 +407,9 @@ the merge gate, so an open pull request is never left without one.
 | `defaultBranch` | string | |
 | `remote` | string \| null | `origin`'s URL |
 | `projectId` | string \| null | its project |
-| `checkCommands` | string[] | configured checks; empty means read from `package.json`; only you change it |
-| `checksWaived?` | boolean | "Start without checks"; only you change it |
+| `checkCommands` | string[] | the repository's own commands, an optional baseline every task runs once before review (`r1`…); empty runs nothing extra; only you change it |
 | `workspace?` | `WorkspaceMode` | where agents work: `worktrees` (the default), `gitbutler` or `main_checkout`; only you change it (`docs/engine.md` → Where agents work) |
-| `coverage?` | `CoverageSetting` | how test coverage is measured after the checks: `{ mode: 'auto' }` (the default, absent), `{ mode: 'off' }` or `{ mode: 'custom', command, report, format }` (`report` a path inside the repository, `format` `lcov` \| `cobertura` \| `go` or null to read it from the report's name, `resolveCoverageFormat`); only you change it (`docs/engine.md` → Test coverage of the change) |
+| `coverage?` | `CoverageSetting` | how test coverage is measured from the tests among a task's checks: `{ mode: 'auto' }` (the default, absent), `{ mode: 'off' }` or `{ mode: 'custom', command, report, format }` (`report` a path inside the repository, `format` `lcov` \| `cobertura` \| `go` or null to read it from the report's name, `resolveCoverageFormat`); only you change it (`docs/engine.md` → Test coverage of the change) |
 
 `Coverage` (`packages/core/src/test-coverage/types.ts`) is either `{ status: 'measured', command, covered, executable,
 files }`, where `files` lists each changed file with executable changed lines (`path`, `covered`, `executable`,
@@ -437,7 +441,7 @@ executable changed line (`selectMeasuredCoverage`).
 | `resumePending?`, `continuations?` | | restart continuation and its loop guard |
 | `monitorId?`, `usageWaitId?` | | the wait it was woken from |
 | `feedback?` | string \| null | your words it carries |
-| `usage?`, `weeklyPercent?` | | tokens and cost; share of the weekly window it used |
+| `usage?`, `meters?` | | tokens and cost; per attempt (`RunMeter`), its window (`account:<id>` or `provider:<id>`), time span, usage and the weekly readings taken at its start and end, which teach its window's rate; its share of the weekly window is its cost at that rate (`resolveUsageShares`) |
 | `silence?` | `RunSilence` | the quiet-run mark, snooze and dismissal |
 | `account?` | `RunAccount` | the account this run is bound to |
 | `delegation?`, `cohort?`, `waitingOn?` | | set on a delegated run; its parent's delivery state and what it waits on |
@@ -549,7 +553,7 @@ secret.
 | `proposal` | Your OK | the answer, report or diagnosis, the proposal and why | approve (setup verified again, then planned) · reject (keeps the inquiry, finishes) | "Approve the proposal or keep the task as it is." | no |
 | `operation` | Run the operation | the merged commit and pull request, the steps, the impact, your notes | approve (runs with the notes on the gate) · reply (replaces the notes with your words, then runs; empty clears them) · reject (finishes without it) | "Run the operation or finish the task without it." | no |
 | `failure` | Paused | what stopped, why, what Retry does | approve (retry) · reply (retry with guidance) · reject (cancel) | "Retry or cancel the task." | yes |
-| `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · waive (starts without checks, only when checks are all that is missing) · reject | "Verify the setup again, start without checks, or cancel the task." | yes |
+| `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · reject | "Verify the setup again, or cancel the task." | yes |
 | `sign_in` | Sign in | the provider and the account | approve (retry) · reply (retry with guidance) · reject (cancel) | "Sign in, retry or cancel the task." | yes |
 | `post_merge` | Post-merge | each step left for you after the merge, which are ticked | none: ticking the last step withdraws it (`merge_step.tick`), unticking one opens it again | "Tick each step under Post-merge once you did it; the gate closes with the last one." | no |
 
@@ -559,7 +563,7 @@ Soft gates, decided by Shinsa or the reviewer:
 
 | Type | Decided by | Pass | Fail | Escalate (`escalatesTo`) |
 | --- | --- | --- | --- | --- |
-| `checks` | Shinsa | agent review | the agent with the output, then checks again | `failure` (out of rounds or stalled) |
+| `checks` | Shinsa | the next phase, or the agent review after the last | the agent with the output of the checks the change broke, then those checks again | `failure` (out of rounds or stalled) |
 | `agent_review` | reviewer | your review | the agent on the blocking findings, then checks and a new reviewer | `review`, with the findings (3 rounds, a stall, the budget) |
 | `ci` | Shinsa | the merge gate | the agent told exactly what is new | `failure` (the watch stopped or ran out) |
 
@@ -590,7 +594,7 @@ the rule's scope holds (`always`; `alone`: no `build`; `with_code`: with `build`
 
 | Rule | Class | Scope | Checked by | Requirement |
 | --- | --- | --- | --- | --- |
-| `code.verification_plan` | code | `always` | `propose_plan` | the plan says up front how the change is proven (`verification`) |
+| `code.verification_plan` | code | `always` | `propose_plan` | the plan names the checks that prove the change (`verification`: each a label, its scoped command and the phases it covers) |
 | `code.evidence` | code | `always` | the last `complete_phase` | the evidence kinds the plan asks for are attached (`evidence_missing`) |
 | `code.checks` | code | `always` | the composition | `checks` follows `build` |
 | `code.agent_review` | code | `always` | the composition | `agent_review` follows `checks` |
@@ -604,7 +608,9 @@ the rule's scope holds (`always`; `alone`: no `build`; `with_code`: with `build`
 
 `validateComposition` = `validatePipeline` + the `step` rules + two rules about the task as it stands (an inquiry that
 ran stays; an inquiry that leads to a plan needs `your_ok` unless it already ran). `validatePlanRules` = the `plan`
-rules + "`checks` are for a code change". A plan may ask for `evidence` for an operation as for a code change.
+rules + "a plan without `build` has no `verification`", and `validatePlanHandOver` refuses a whole-suite command
+(`isWholeSuiteCommand`, `describeWholeSuiteRefusal`). A plan may ask for `evidence` for an operation as for a code
+change.
 `listMissingEvidence` names the kinds still missing.
 
 ## Composing
@@ -614,10 +620,11 @@ The agent composes steps and sets plan parameters while it plans; it cannot add 
 - **Steps**: `reshape_task` with `shape` (answer, investigate, research) or `steps` (an enum of `PIPELINE_ORDER`),
   before it plans, once per task, never for a kind you chose. A refusal is `pipeline_invalid` with every problem;
   the run carries on.
-- **Plan parameters** in `propose_plan` (`PlanDocument`): `verification` (required for code), `evidence`
-  (`screenshot`, `recording`, `test`, `note`, `preview`; for a code change or an operation), `checks` (at most 6 extra
-  commands, a code change only), `impact` (required for an operation), `operation` (its steps, required with code),
-  `approval` (asks for the plan gate). A refusal is `plan_invalid`.
+- **Plan parameters** in `propose_plan` (`PlanDocument`): `verification` (the checks, required for code, none
+  without it; Checks, below), `evidence` (`screenshot`, `recording`, `test`, `note`, `preview`; for a code change or an
+  operation), `impact` (required for an operation), `operation` (its steps, required with code), `approval` (asks for
+  the plan gate). A refusal is `plan_invalid`.
+- **Checks later**: `check_changes` on `complete_phase` and `complete_fix` (Checks, below).
 - The only hard gates an agent can add: your OK (`your_ok`, after an inquiry) and plan approval (`approval`).
 
 Examples:
@@ -629,6 +636,26 @@ Examples:
 | A change, then an operation | `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`, `operate` | code rules, `operation.impact`, `operation.steps`, the plan gate, the operation gate after the merge |
 | An operation alone | `plan`, `operate` | `operation.impact`, `operation.evidence`, the plan gate |
 | Investigate, your OK, then a change | `investigate`, `your_ok`, `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge` | your OK first; leaving out `your_ok`, `checks` or `agent_review` is refused with the rule's message |
+
+## Checks
+
+The agent chooses a task's checks and Shinsa runs them (`docs/engine.md` → Checks). Types in
+`packages/core/src/report/types.ts` and `domain/types.ts`, rules in `domain/checks.ts` and `decide/checks.ts`.
+
+| Object | Fields | Meaning |
+| --- | --- | --- |
+| `PlanCheck` | `label` (60), `command` (200), `phases` (1-based, at least one) | one check in the plan's `verification`, at most 12 (`PROTOCOL_LIMITS.checks`, `checkLabel`, `checkCommand`); never a whole-suite command (`isWholeSuiteCommand`) |
+| `TaskCheck` | `PlanCheck` + `id`, `source` (`plan` \| `agent` \| `repo`) | a check of the task: `c1`… from the plan or the agent (`Task.checks`), `r1`… for the repository's `checkCommands` (derived by `listRepoChecks`, `phases: []`, never stored) |
+| `ReportCheck` | `id`, `label`, `command`, `outcome` (`pass` \| `fail` \| `skipped`), `detail` (string \| null), `note?` | one check's result; `note` is `CheckNote`: `passed_alone` (passed when its failing test files were re-run alone) or `fails_on_base` (every failure it names, each failing test or error compared by its identity without line numbers, fails on the base commit too, so not blocking; with new ones it blocks and its `detail` starts with them); `isBlockingCheck` is a `fail` without `fails_on_base` |
+| `CheckChangeHandOver` | `action` (`add` \| `change` \| `remove`), `id`, `label`, `command`, `phases` (each null when not given), `reason` (200) | one entry of `check_changes`, at most 6 (`checkChanges`); `add` needs a label and a command and covers the current phase onward unless it names phases; `id` (12, `checkId`) names the check to change or remove |
+| `CheckChange` | `action`, `check` (the `TaskCheck` after the change), `reason` | what `checks.changed` records |
+| `CheckToRun` | `id`, `label`, `command` | one check in a `checks.run` effect |
+| `CheckEvidence` | `checkId`, `title`, `uri` | the stored output of one check run, which `checks.record` attaches as Shinsa's own `check` evidence |
+| `Evidence.checkId?` | string | the check a piece of evidence is the output of (Shinsa's, `runId: null`) or links to (an agent's `test` or `check`, `uri` `shinsa://check/<id>`) |
+
+Refusals of a check change: `check_unknown` (an id the task does not have), `check_exists` (an `add` whose command the
+task already has), `check_phases_invalid` (a phase the plan does not have), `check_human_only` (a repository check,
+`r*`). A linked test or check with an unknown id is refused with `check_unknown` too.
 
 ## Messages
 
@@ -645,7 +672,11 @@ records it (`task.messaged`) and nothing else, and the next agent's brief carrie
 an agent on the human’s behalf: …", or "Sent by a schedule: …").
 
 `task.message` carries an optional `kind` (`MessageKind`), with the classifier's `title`, `why` and `shape` for new
-work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. `feedback` is
+work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. Where the
+effect is `retry`, `verify_setup`, `supersede_question`, `revise_plan`, `request_changes`, `decline_proposal` or
+`operation_notes` it is `feedback` whatever `kind` it carries, and the server asks no classifier (`needsMessageKind`).
+A `task.message` or `message.receive` whose text matches a message still in the task's inbox, or the request of a
+round still waiting, from the last 10 minutes emits nothing. `feedback` is
 delivered by the effect: on a resting task a follow-up in the same round (an answerer resuming the round's last session
 when the round was not an inquiry, which rests again as it was; `answer` with a proposal is refused there with
 `follow_up_proposal`). `acknowledge` is only recorded (`task.messaged` with `kind: 'acknowledge'`, "Sent a message"),
@@ -680,6 +711,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.create` | creates a task (request, project, priority, plan first, waits on, mode, account) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
+| `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
+| `round.remove` | removes a round waiting to start; the waiting rounds after it move up one number; a round that started is refused (`round_started`) | `rounds remove` | agent |
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
@@ -702,7 +735,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
 | `project.remove` | removes one | `projects remove` | agent |
-| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `checksWaived`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
+| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus | `focus set`, `focus clear` | agent |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit` (`HUMAN_ONLY_SETTINGS`) |
@@ -745,14 +778,15 @@ role without the tool (`hasTool`).
 | Command | Tool | Does |
 | --- | --- | --- |
 | `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`) |
-| `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls; Shinsa commits it (the last one needs the evidence) |
-| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, and `walkthrough` when it changes how the change works); Shinsa commits and pushes when shipping |
+| `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls and `checkChanges?` (`check_changes`, recorded as `checks.changed`); Shinsa commits it, adds `treeHash` and `files` (the files the commit changed, kept on the `PhaseReport`) and runs the phase's checks (the last one needs the evidence) |
+| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, `walkthrough` when it changes how the change works, `checks?`: the ids to run again, `checkChanges?`); Shinsa commits and adds `treeHash` and `files`, then runs the failing checks, those, the changed ones and the checks of every phase whose files the fix changed, or pushes when shipping |
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
 | `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
 | `agent.attach_comparison` | `attach_evidence` with `kind: "comparison"` | attaches one comparison: a piece per part, sharing one `itemId` (`docs/engine.md` → Evidence) |
+| `agent.attach_check` | `attach_evidence` with `kind: "test"` or `"check"` | links a check (`kind`, `checkId`, `detail?`): `evidence.attached` with `checkId`, the check's label as title and `shinsa://check/<id>` (`check_unknown` otherwise) |
 | `agent.note` | `note` | keeps a note on the task |
 | `agent.wait_for` | `wait_for` | ends the run and arms a monitor |
 | `agent.suggest_tasks` | `suggest_tasks` | suggests up to five tasks |
@@ -787,7 +821,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.record_edit` | the file route after a save from the Code tab (`http/edits.ts`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
 | `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
-| `checks.record` | `checks.run` effect | records a round of checks, with `evidence` (title, detail, uri) for the output the server stored, attached as Shinsa's own `check` evidence, and `coverage?` (`Coverage`) when the checks passed and the repository measures coverage |
+| `checks.record` | `checks.run` effect | records a round of checks (`results: ReportCheck[]`), with `outputs?` (`CheckEvidence[]`, one per check run: the output the server stored, attached as Shinsa's own `check` evidence with its `checkId`) and `coverage?` (`Coverage`) when the run before review measured it; ignored outside `checking` or with no results |
 | `pull_request.record` | open, merge and watch effects | records a pull request read |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
@@ -834,6 +868,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
 | `round.started` | a round became the active one (`branch`, `base`, `onto`: the pull request it ships onto); the round before it, if any, is archived as shipped |
 | `round.shipping_changed` | how a round ships changed; for an active round also its `branch`, `base` and `onto` |
+| `round.updated` | a waiting round asks for something else (`request`, `title`) |
+| `round.removed` | a waiting round was removed; the waiting rounds after it took the numbers one lower |
 | `round.pull_request_merged` | an earlier round's pull request merged outside Shinsa while a later round works: that round is merged, and the active round takes a new `branch` from the default branch for its own pull request |
 | `task.noted` | an agent kept a note |
 | `task.recovered` | the recovery count changed |
@@ -861,10 +897,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `merge_step.ticked` | you ticked or unticked a step around the merge (`key`, `title`, `done`); adds or removes its key in `mergeStepsDone`, or marks the carried step, and records it in the activity |
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |
 | `work.committed` | Shinsa committed (the tree hash) |
-| `checks.recorded` | a round of checks finished (`results`, and `coverage?` when it was measured; sets `checkResults` and `coverage`) |
+| `checks.recorded` | a round of checks finished (`results`, and `coverage?` when it was measured; merges `checkResults` by id, sets `coverage`, an activity entry of kind `check`) |
+| `checks.changed` | the agent changed the task's checks at a hand-over (`changes: CheckChange[]`, `runId`); updates `Task.checks`, drops the last result of a changed or removed check, an activity entry of kind `check` per change |
+| `checks.started` | Shinsa started a run of checks (`checkIds`); sets `Task.runningChecks` |
 | `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
-| `evidence.attached` | evidence was attached |
+| `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check) |
 | `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered, withdrawn, or replaced by your message |
 | `gate.noted` | the open operation gate's notes were replaced (`notes`, null clears them; the same gate, no new notification) |
 | `run.started`, `run.dispatched` | a run was created; it started |
@@ -872,7 +910,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.ended` | a run ended (outcome, failure) |
 | `run.interrupted`, `run.continued` | marked at shutdown; continued after a restart |
 | `run.session_lost`, `run.compacted` | a session is gone; an idle session was compacted |
-| `run.metered` | usage and cost were charged |
+| `run.metered` | usage and cost were charged, with the weekly readings (`readings`) the attempt took |
 | `run.silenced`, `run.silence_snoozed`, `run.silence_dismissed` | a run went quiet; the warning snoozed or dismissed |
 | `run.waiting` | a step's turn ended while its delegations work |
 | `monitor.armed`, `monitor.fired`, `monitor.ended` | a monitor was armed, fired, ran out or was cleared |
@@ -901,7 +939,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `worktree.create` | replay_safe | `task:<id>` | `worktree.ready` |
 | `worktree.remove` | replay_safe | `task:<id>` | `worktree.gone` |
 | `scratch.remove` | replay_safe | `task:<id>` | none: deletes `data/scratch/<id>` once the task's runs stop, if it is still settled |
-| `checks.run` | replay_safe | `task:<id>` | `task.commit_edits` first when the review was approved with edits, then `checks.record` |
+| `checks.run` | replay_safe | `task:<id>` | `task.commit_edits` first when the review was approved with edits, then `checks.record`; payload `round`, `checks: CheckToRun[]` (run in parallel) and `coverage` (true for the run before review) |
 | `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_push`, `pull_request.record` |
 | `pull_request.push` | replay_safe | `task:<id>` | `pull_request.record_push` |
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record` |
@@ -974,16 +1012,16 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 
 | Tool | Fields (required in bold) | Limits |
 | --- | --- | --- |
-| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`**, **`questions`** (**`question`**, **`options`**, `recommendation`); `impact`, `evidence`, `checks`, `approval`, `operation`, `change_summary` | goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope and verification 6 × 200; questions 4 (question 200, 2 to 4 options of 100); impact 1,000; checks 6 × 200; operation 8 × 200; change summary 240 |
-| `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400) |
-| `complete_fix` | **`summary`**; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included | summary 240; walkthrough as in `complete_phase` |
+| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `impact`, `evidence`, `approval`, `operation`, `change_summary` | goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; change summary 240 |
+| `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command) |
+| `complete_fix` | **`summary`**; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase` | summary 240; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase` |
 | `report_review` | **`findings`** (**`severity`**: blocking or suggestion, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
 | `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**) | answer 8,000; request 2,000, why 240 |
 | `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |
 | `submit_report` | **`report`**; `propose_change` | 40,000 |
 | `report_outcome` | **`outcome`** | 8,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
-| `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview), **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40 |
+| `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40 |
 
 Shinsa assembles the work report you review (`WorkReport`: headline, sections, checks, judgement calls and the
 walkthrough) from the plan's goal, every `complete_phase` (the latest walkthrough wins, as revised by a fix's
@@ -1080,6 +1118,7 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Gate predicates | `packages/core/src/domain/gates.ts` (`isPausingGate`, `isDecisionGate`, `isAgentQuestion`) |
 | Steps, gates, `validatePipeline`, `PLAN_GATE_RULE` | `packages/core/src/domain/steps.ts`; `needsPlanApproval` in `decide/lifecycle.ts` |
 | Verification rules | `packages/core/src/domain/verification.ts` |
+| Checks: whole-suite refusal, the repository baseline, blocking, when they run, the agent's changes | `packages/core/src/domain/checks.ts`, `decide/checks.ts`; the runner, re-runs alone and the base comparison in `apps/engine/src/checks/` |
 | Shapes, presets, `validateComposition`, `resolveProposalUpgrade` | `packages/core/src/domain/shapes.ts` |
 | Tools per role | `packages/core/src/domain/tools.ts` |
 | Projects, keys, handles | `packages/core/src/domain/projects.ts` |
@@ -1144,7 +1183,8 @@ Tests are in `packages/core/test/`.
    `decide/lifecycle.test.ts`.
 10. **Operations take evidence.** A plan may ask for `evidence` for an operation; one without a code change must
     attach it before `report_outcome` (`evidence_missing`, rule `operation.evidence`, `recordDelivery` in
-    `decide/shapes.ts`); `checks` stay for code changes. Tests: `domain/verification.test.ts`,
+    `decide/shapes.ts`); the `checks` step and the plan's `verification` stay for code changes. Tests:
+    `domain/verification.test.ts`,
     `decide/shapes.test.ts`.
 11. **Dead combinations are gone.** The gate kind and purpose went with `Gate.type`, and `RunRole` has neither
     `triage` nor `shipper` (`domain/types.ts`). Tests: `domain/tools.test.ts`, `state/`.
@@ -1159,3 +1199,8 @@ Tests are in `packages/core/test/`.
 15. **Settings and repository fields only you change.** A `settings.change` or `repo.update` on your behalf that
     touches `HUMAN_ONLY_SETTINGS` or `HUMAN_ONLY_REPO_FIELDS` is refused with `human_only` (`decide/settings.ts`);
     agents keep models, providers, fix rounds, attention and compaction. Test: `decide/settings.test.ts`.
+16. **The agent chooses the checks** (2026-10-27). The plan's `verification` is the task's checks, scoped commands
+    (a whole-suite command is refused), changed with `check_changes`; Shinsa runs them per phase, after a fix and
+    before review, and only a failure the change caused blocks (`domain/checks.ts`, `decide/checks.ts`). The
+    repository's commands are a baseline only you change, and setup verification no longer asks for checks (no
+    `waive`, no `checksWaived`). Tests: `domain/checks.test.ts`, `decide/checks.test.ts`.

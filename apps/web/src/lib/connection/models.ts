@@ -19,6 +19,11 @@ function requestProviders() {
   return request;
 }
 
+export function resetAgentProviders() {
+  latest = KNOWN_AGENT_PROVIDERS;
+  request = null;
+}
+
 export function useAgentProviders() {
   const [providers, setProviders] = React.useState<AgentProviderInfo[]>(latest);
   React.useEffect(() => {

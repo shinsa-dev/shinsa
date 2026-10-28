@@ -16,6 +16,13 @@ export interface EvidenceView {
   image: number | null;
 }
 
+export interface EvidenceCheck {
+  id: string;
+  taskId: string;
+  links: Evidence[];
+  output: EvidenceView | null;
+}
+
 export interface EvidenceEntry {
   key: string;
   kind: EvidenceItemKind;
@@ -24,6 +31,7 @@ export interface EvidenceEntry {
   detail: string | null;
   fromReview: boolean;
   parts: EvidenceView[];
+  check?: EvidenceCheck;
 }
 
 export interface EvidenceGroup {
@@ -57,8 +65,8 @@ const KIND_NAME: Record<EvidenceItemKind, readonly [string, string]> = {
   comparison: ['comparison', 'comparisons'],
   screenshot: ['screenshot', 'screenshots'],
   recording: ['recording', 'recordings'],
-  test: ['test run', 'test runs'],
-  check: ['check run', 'check runs'],
+  test: ['test', 'tests'],
+  check: ['check', 'checks'],
   note: ['note', 'notes'],
   preview: ['preview', 'previews'],
 };
@@ -97,9 +105,42 @@ function joinList(items: readonly string[]) {
   return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
+interface CheckPieces {
+  id: string;
+  taskId: string;
+  pieces: Evidence[];
+}
+
+function splitCheckEvidence(evidence: readonly Evidence[]) {
+  const checks = new Map<string, CheckPieces>();
+  const others: Evidence[] = [];
+  for (const piece of evidence) {
+    if (!piece.checkId) {
+      others.push(piece);
+      continue;
+    }
+    const group = checks.get(piece.checkId) ?? { id: piece.checkId, taskId: piece.taskId, pieces: [] };
+    group.pieces.push(piece);
+    checks.set(piece.checkId, group);
+  }
+  return { others, checks: [...checks.values()] };
+}
+
+function resolveCheckKind(pieces: readonly Evidence[]): EvidenceItemKind {
+  return pieces.some((piece) => piece.kind === 'test') ? 'test' : 'check';
+}
+
+function listItemKinds(evidence: readonly Evidence[]) {
+  const { others, checks } = splitCheckEvidence(evidence);
+  return [
+    ...listEvidenceItems(others).map((item) => item.kind),
+    ...checks.map((check) => resolveCheckKind(check.pieces)),
+  ];
+}
+
 export function describeEvidenceSummary(evidence: readonly Evidence[]) {
   const counts = new Map<EvidenceItemKind, number>();
-  for (const item of listEvidenceItems(evidence)) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
+  for (const kind of listItemKinds(evidence)) counts.set(kind, (counts.get(kind) ?? 0) + 1);
   const phrases = KIND_ORDER.flatMap((kind) => {
     const count = counts.get(kind);
     return count ? [`${count} ${resolveKindName(kind, count)}`] : [];
@@ -167,6 +208,27 @@ export function resolveEvidenceLayout(
   return resolveEvidenceListLayout(listRoundEvidence(state.evidence, task), state.runs, dataDir);
 }
 
+function resolveCheckEntry(check: CheckPieces, resolveView: (item: Evidence) => EvidenceView): EvidenceEntry {
+  const links = check.pieces.filter((piece) => piece.runId !== null).map(resolveView);
+  const outputs = check.pieces.filter((piece) => piece.runId === null);
+  const latest = outputs.reduce<Evidence | null>(
+    (found, piece) => (found && found.attachedAt > piece.attachedAt ? found : piece),
+    null
+  );
+  const output = latest ? resolveView(latest) : null;
+  const first = links[0] ?? output;
+  return {
+    key: `check:${check.id}`,
+    kind: resolveCheckKind(check.pieces),
+    title: first?.evidence.title ?? check.id,
+    facts: '',
+    detail: links.find((link) => link.evidence.detail)?.evidence.detail ?? null,
+    fromReview: links.some((link) => link.fromReview),
+    parts: output ? [output] : [],
+    check: { id: check.id, taskId: check.taskId, links: links.map((link) => link.evidence), output },
+  };
+}
+
 export function resolveEvidenceListLayout(
   evidence: readonly Evidence[],
   runs: ShinsaState['runs'],
@@ -179,7 +241,8 @@ export function resolveEvidenceListLayout(
     fromReview: item.runId !== null && runs[item.runId]?.role === 'reviewer',
     image: null,
   });
-  const entries = listEvidenceItems(evidence).map((item): EvidenceEntry => {
+  const { others, checks } = splitCheckEvidence(evidence);
+  const items = listEvidenceItems(others).map((item): EvidenceEntry => {
     const parts = item.parts.map(resolveView);
     return {
       key: item.id,
@@ -191,6 +254,7 @@ export function resolveEvidenceListLayout(
       parts,
     };
   });
+  const entries = [...items, ...checks.map((check) => resolveCheckEntry(check, resolveView))];
   const groups = KIND_ORDER.flatMap((kind) => {
     const members = entries.filter((entry) => entry.kind === kind);
     if (members.length === 0) return [];

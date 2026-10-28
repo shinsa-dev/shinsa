@@ -92,14 +92,15 @@ export function resolveUsageModel(settings: Settings) {
   return resolveAgentModel(settings, 'agent', CLAUDE_PROVIDER);
 }
 
+function compareGlanceWindows(a: UsageWindow, b: UsageWindow) {
+  const fuller = clampPercent(b.usedPercent) - clampPercent(a.usedPercent);
+  if (fuller !== 0) return fuller;
+  return Number(b.kind === 'session') - Number(a.kind === 'session');
+}
+
 function selectGlanceWindow(usage: AccountUsage, model: string | null) {
-  const windows = listRelevantWindows(usage, model);
-  const spent = windows.find((window) => window.kind !== 'session' && window.usedPercent >= 100);
-  if (spent) return createUsageRow(spent);
-  const session = windows.find((window) => window.kind === 'session');
-  if (session) return createUsageRow(session);
-  const [highest] = windows.slice().sort((a, b) => b.usedPercent - a.usedPercent);
-  return highest ? createUsageRow(highest) : null;
+  const [binding] = listRelevantWindows(usage, model).sort(compareGlanceWindows);
+  return binding ? createUsageRow(binding) : null;
 }
 
 export function selectGlanceRow(account: AccountSummary, model: string | null) {

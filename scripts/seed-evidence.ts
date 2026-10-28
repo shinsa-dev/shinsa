@@ -9,22 +9,45 @@ type SeedEvidence = Omit<Evidence, 'uri' | 'attachedAt' | 'taskId' | 'runId'> & 
   runId: string;
   minutesBeforeEnd: number;
   byShinsa?: true;
-} & ({ file: string } | { name: string; text: string } | { url: string });
+} & ({ file: string } | { name: string; text: string } | { url: string } | { check: string });
+
+type StoredEvidence = Exclude<SeedEvidence, { url: string } | { check: string }>;
 
 function resolveTaskId(runId: string) {
   return runId.replace(/-run-\d+$/, '');
 }
 
-function resolveName(piece: Exclude<SeedEvidence, { url: string }>) {
+function resolveName(piece: StoredEvidence) {
   return 'file' in piece ? piece.file : piece.name;
 }
 
 function resolveUri(piece: SeedEvidence) {
   if ('url' in piece) return piece.url;
+  if ('check' in piece) return `shinsa://check/${piece.check}`;
   return `/api/evidence/${resolveTaskId(piece.runId)}/round-1/${resolveName(piece)}`;
 }
 
-const TAB_GROUP_TESTS = `bun test src/ui/tab-group.test.tsx
+function createCheckOutput(
+  runId: string,
+  checkId: string,
+  title: string,
+  text: string,
+  minutesBeforeEnd = -0.5
+): SeedEvidence {
+  return {
+    id: `evidence-${resolveTaskId(runId).replace(/^task-/, '')}-check-${checkId}`,
+    runId,
+    byShinsa: true,
+    minutesBeforeEnd,
+    kind: 'check',
+    title,
+    checkId,
+    name: `check-${checkId}.txt`,
+    text,
+  };
+}
+
+const TAB_GROUP_TESTS = `$ bun test src/ui/tab-group.test.tsx
 bun test v1.3.0
 
 src/ui/tab-group.test.tsx:
@@ -37,7 +60,7 @@ src/ui/tab-group.test.tsx:
 Ran 2 tests across 1 file. [182.00ms]
 `;
 
-const REGISTRY_TESTS = `bun test src/cli
+const REGISTRY_TESTS = `$ bun test src/cli
 bun test v1.3.0
 
 src/cli/help.test.ts:
@@ -54,7 +77,7 @@ src/cli/parse.test.ts:
 Ran 4 tests across 2 files. [311.00ms]
 `;
 
-const QUEUE_TESTS = `bun test packages/core/test/queue
+const QUEUE_TESTS = `$ bun test packages/core/test/queue
 bun test v1.3.0
 
 packages/core/test/queue/stack.test.ts:
@@ -67,7 +90,7 @@ packages/core/test/queue/stack.test.ts:
 Ran 2 tests across 1 file. [41.00ms]
 `;
 
-const SPOTS_TESTS = `bun test apps/web/test/lib/review
+const SPOTS_TESTS = `$ bun test apps/web/test/lib/review
 bun test v1.3.0
 
 apps/web/test/lib/review/spots.test.ts:
@@ -82,12 +105,9 @@ apps/web/test/lib/review/spots.test.ts:
  0 fail
  17 expect() calls
 Ran 6 tests across 1 file. [96.00ms]
-
-$ bun run check-types
-Tasks:    6 successful, 6 total
 `;
 
-const DEFAULTS_TESTS = `bun test src/shared
+const DEFAULTS_TESTS = `$ bun test src/shared/defaults.test.ts
 bun test v1.3.0
 
 src/shared/defaults.test.ts:
@@ -99,18 +119,13 @@ src/shared/defaults.test.ts:
  0 fail
 `;
 
-const TAB_SCROLL_CHECKS = `$ bun run lint
-Passed.
+const LINT_OUTPUT = `$ bun lint
 Checked 214 files in 412ms. No fixes applied.
+`;
 
-$ bun run test
-Passed.
-bun test v1.3.0
-
- 48 pass
- 0 fail
- 131 expect() calls
-Ran 48 tests across 9 files. [1.21s]
+const TYPES_OUTPUT = `$ bun check-types
+Tasks:    4 successful, 4 total
+Time:    6.84s
 `;
 
 const CONTRAST_NOTE = `Contrast on the dark settings page, measured on \`#18191b\` against WCAG 2.2 for normal text. The tokens are in [src/client/theme.css](shinsa://file/src/client/theme.css#L14-L16).
@@ -275,21 +290,14 @@ const SEED_EVIDENCE: SeedEvidence[] = [
     runId: 'task-tab-scroll-run-0',
     minutesBeforeEnd: 1,
     kind: 'test',
-    title: 'bun test src/ui/tab-group.test.tsx',
-    name: 'tab-group-tests.txt',
-    text: TAB_GROUP_TESTS,
+    title: 'Tab group scrolling',
+    detail: 'Fails without the change: the active tab stays off screen.',
+    checkId: 'c1',
+    check: 'c1',
   },
-  {
-    id: 'evidence-tabs-checks',
-    runId: 'task-tab-scroll-run-0',
-    byShinsa: true,
-    minutesBeforeEnd: -0.5,
-    kind: 'check',
-    title: 'Checks run by Shinsa: all 2 passed',
-    detail: "Shinsa ran these in the task's worktree after the agent's work.",
-    name: 'checks-run-by-shinsa.txt',
-    text: TAB_SCROLL_CHECKS,
-  },
+  createCheckOutput('task-tab-scroll-run-0', 'c1', 'Tab group scrolling', TAB_GROUP_TESTS),
+  createCheckOutput('task-tab-scroll-run-0', 'r1', 'bun lint', LINT_OUTPUT),
+  createCheckOutput('task-tab-scroll-run-0', 'r2', 'bun check-types', TYPES_OUTPUT),
   {
     id: 'evidence-tabs-review-dark',
     runId: 'task-tab-scroll-run-1',
@@ -315,29 +323,32 @@ const SEED_EVIDENCE: SeedEvidence[] = [
     runId: 'task-usage-defaults-run-0',
     minutesBeforeEnd: 1,
     kind: 'test',
-    title: 'bun test src/shared',
-    name: 'defaults-tests.txt',
-    text: DEFAULTS_TESTS,
+    title: 'Model defaults',
+    checkId: 'c1',
+    check: 'c1',
   },
+  createCheckOutput('task-usage-defaults-run-0', 'c1', 'Model defaults', DEFAULTS_TESTS),
   {
     id: 'evidence-registry-tests',
     runId: 'task-command-registry-run-1',
     minutesBeforeEnd: 1,
     kind: 'test',
-    title: 'bun test src/cli',
+    title: 'CLI help and flags',
     detail: 'The help snapshot fails without the registry and passes with it.',
-    name: 'cli-tests.txt',
-    text: REGISTRY_TESTS,
+    checkId: 'c1',
+    check: 'c1',
   },
+  createCheckOutput('task-command-registry-run-1', 'c1', 'CLI help and flags', REGISTRY_TESTS),
   {
     id: 'evidence-queue-tests',
     runId: 'task-sample-queue-run-2',
     minutesBeforeEnd: 1,
     kind: 'test',
-    title: 'bun test packages/core/test/queue',
-    name: 'queue-tests.txt',
-    text: QUEUE_TESTS,
+    title: 'Queue order',
+    checkId: 'c1',
+    check: 'c1',
   },
+  createCheckOutput('task-sample-queue-run-2', 'c1', 'Queue order', QUEUE_TESTS),
   {
     id: 'evidence-spots-review-light',
     itemId: 'evidence-spots-review',
@@ -369,15 +380,16 @@ const SEED_EVIDENCE: SeedEvidence[] = [
     runId: 'task-sample-review-run-3',
     minutesBeforeEnd: 1,
     kind: 'test',
-    title: 'bun test apps/web/test/lib/review',
-    name: 'review-tests.txt',
-    text: SPOTS_TESTS,
+    title: 'Review spots',
+    checkId: 'c1',
+    check: 'c1',
   },
+  createCheckOutput('task-sample-review-run-3', 'c1', 'Review spots', SPOTS_TESTS),
 ];
 
 export function writeSeedEvidence(dataDir: string) {
   for (const piece of SEED_EVIDENCE) {
-    if ('url' in piece) continue;
+    if ('url' in piece || 'check' in piece) continue;
     const folder = join(dataDir, 'evidence', resolveTaskId(piece.runId), 'round-1');
     mkdirSync(folder, { recursive: true });
     const target = join(folder, resolveName(piece));
@@ -396,8 +408,10 @@ export function listSeedEvidenceEvents(runEnds: ReadonlyMap<string, number>) {
       name: _name,
       text: _text,
       url: _url,
+      check: _check,
       ...fields
-    } = piece as typeof piece & Partial<{ file: string; name: string; text: string; url: string }>;
+    } = piece as typeof piece &
+      Partial<{ file: string; name: string; text: string; url: string; check: string }>;
     const event: ShinsaEventInput = {
       type: 'evidence.attached',
       evidence: {

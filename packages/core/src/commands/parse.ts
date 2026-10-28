@@ -51,7 +51,7 @@ const MAX_LIST = 500;
 
 const PRIORITIES: ReadonlySet<TaskPriority> = new Set(TASK_PRIORITIES);
 
-const DECISIONS = new Set<GateDecision>(['approve', 'revise', 'reject', 'reply', 'waive']);
+const DECISIONS = new Set<GateDecision>(['approve', 'revise', 'reject', 'reply']);
 
 const ROLES: ReadonlySet<AgentRole> = new Set(AGENT_ROLES);
 
@@ -274,7 +274,6 @@ const REPO_PATCH_KEYS = [
   'remote',
   'projectId',
   'checkCommands',
-  'checksWaived',
   'workspace',
   'coverage',
 ] as const;
@@ -288,7 +287,6 @@ function readRepoPatch(value: unknown): RepoPatch {
   if ('remote' in fields) patch.remote = readNullableText(fields, 'remote', MAX_ID);
   if ('projectId' in fields) patch.projectId = readNullableId(fields, 'projectId');
   if ('checkCommands' in fields) patch.checkCommands = readList(fields, 'checkCommands', readText);
-  if ('checksWaived' in fields) patch.checksWaived = readBoolean(fields, 'checksWaived');
   if ('workspace' in fields) patch.workspace = readChoice(fields, 'workspace', WORKSPACES);
   if ('coverage' in fields) patch.coverage = readCoverage(fields.coverage);
   return patch;
@@ -457,6 +455,15 @@ function readRoundShip(fields: Fields): UserCommand {
   };
 }
 
+function readRoundUpdate(fields: Fields): UserCommand {
+  return {
+    type: 'round.update',
+    taskId: readId(fields, 'taskId'),
+    number: readCount(fields, 'number'),
+    request: readText(fields, 'request'),
+  };
+}
+
 function readSnooze(fields: Fields): UserCommand {
   return {
     type: 'run.snooze_silence',
@@ -587,6 +594,12 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.retry': readRetry,
   'task.message': readTaskMessage,
   'round.ship': readRoundShip,
+  'round.update': readRoundUpdate,
+  'round.remove': (fields) => ({
+    type: 'round.remove',
+    taskId: readId(fields, 'taskId'),
+    number: readCount(fields, 'number'),
+  }),
   'gate.answer': readGateAnswer,
   'merge_step.tick': readMergeStepTick,
   'suggestion.accept': readSuggestionAccept,

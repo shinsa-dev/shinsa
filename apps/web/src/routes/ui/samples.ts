@@ -194,6 +194,45 @@ function createSampleRound(
   };
 }
 
+const SAMPLE_QUEUE = [
+  'Add a dark theme to the settings page.',
+  'Then move the theme switch into the menu bar, next to the account menu, so it is one click from every page.',
+  'And update the screenshots in the README.',
+];
+
+export function createSampleQueueTask(now: number, count: number): Task {
+  const active = createSampleRound(now, {
+    number: 2,
+    title: 'Cache the server list',
+    request: 'Cache the server list so the picker opens at once.',
+    status: 'active',
+    endedAt: null,
+  });
+  const waiting = SAMPLE_QUEUE.slice(0, count).map((request, index) =>
+    createSampleRound(now, {
+      number: index + 3,
+      title: request,
+      request,
+      status: 'waiting',
+      startedAt: null,
+      endedAt: null,
+      pullRequest: null,
+    })
+  );
+  return createSampleTask(now, {
+    id: `sample-queue-${count}`,
+    handle: 'SW-15',
+    title: 'Move the embedded chat to MCP v2',
+    stage: 'building',
+    stageReason: 'building the change',
+    rounds: [
+      createSampleRound(now, { number: 1, title: 'Move the embedded chat to MCP v2' }),
+      active,
+      ...waiting,
+    ],
+  });
+}
+
 export function createSampleRoundsTask(now: number): Task {
   return createSampleTask(now, {
     id: 'sample-rounds',

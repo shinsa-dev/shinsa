@@ -1,12 +1,15 @@
 import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import {
+  type CheckEvidence,
   type Coverage,
   evaluatePullRequestWatch,
-  isOfCurrentRound,
+  isBlockingCheck,
   isSamePullRequest,
   isSamePullRequestWatch,
   isTaskSettled,
   listStackedPullRequests,
+  listTaskChecks,
   needsRepository,
   needsWorktree,
   type PullRequest,
@@ -21,10 +24,12 @@ import {
 } from '@shinsa/core';
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
-import { serializeCheckEvidence } from '../checks/evidence.ts';
-import { type CheckRun, runChecks } from '../checks/index.ts';
+import { BaseCheckouts } from '../checks/base.ts';
+import { serializeCheckOutput } from '../checks/evidence.ts';
+import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
 import { removeIsolatedWorktrees, syncRemoteBranch } from '../git/index.ts';
+import { resolveTaskRefs } from '../git/task-refs.ts';
 import {
   createPullRequest,
   mergePullRequest,
@@ -66,7 +71,7 @@ export interface TaskServices {
 
 const WATCH_INTERVAL_MS = 45_000;
 
-const OUTPUT_KINDS = new Set(['test', 'check', 'note']);
+type ChecksEffect = Extract<ShinsaEffect, { kind: 'checks.run' }>;
 
 const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
   'task.triage': 'Could not start the task',
@@ -117,6 +122,7 @@ export class EffectRunner {
   readonly #services: TaskServices | null;
   readonly #evidence: EvidenceStore;
   readonly #ledgers: LedgerStore;
+  readonly #bases: BaseCheckouts;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #taskSyncs = new Map<string, Promise<unknown>>();
   readonly #background = new Set<Promise<unknown>>();
@@ -143,6 +149,7 @@ export class EffectRunner {
     this.#services = options.services ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#ledgers = new LedgerStore(config.dataDir);
+    this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
     this.#workspaces =
       options.workspaces ?? new Workspaces({ dataDir: config.dataDir, worktreesDir: config.worktreesDir });
   }
@@ -164,7 +171,7 @@ export class EffectRunner {
       case 'question.resolve':
         return this.#runs.resolveQuestion(effect.gateId);
       case 'checks.run':
-        return this.#runChecks(effect.taskId, context);
+        return this.#runChecks(effect, context);
       case 'pull_request.open':
         return this.#openPullRequest(effect.taskId, context);
       case 'pull_request.push':
@@ -403,11 +410,7 @@ export class EffectRunner {
 
   async #recordSetup(task: Task, repo: Repo, context: EffectContext, bind: boolean) {
     const pipeline = resolveTaskPipeline(task);
-    const problems = await verifySetup(
-      repo,
-      { defaultBranch: needsWorktree(pipeline), checks: pipeline.includes('build') },
-      context.signal
-    );
+    const problems = await verifySetup(repo, { defaultBranch: needsWorktree(pipeline) }, context.signal);
     if (needsWorktree(pipeline) && problems.every((problem) => problem.kind !== 'repository')) {
       const mode = resolveTaskWorkspace(this.#engine.state, task);
       const workspace = await describeWorkspaceProblem(
@@ -442,21 +445,26 @@ export class EffectRunner {
     );
   }
 
-  async #runChecks(taskId: string, context: EffectContext) {
-    const { task, repo } = this.#requireTask(taskId);
+  async #runChecks(effect: ChecksEffect, context: EffectContext) {
+    const { task, repo } = this.#requireTask(effect.taskId);
     if (task.stage !== 'checking' || !task.worktreePath) return;
-    await this.#runs.quiesce(taskId);
+    await this.#runs.quiesce(task.id);
     if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
-    const planChecks = task.plan?.document?.checks ?? [];
+    const worktree = task.worktreePath;
     const release = await this.#workspaces.resolve(task).claim(repo, task, context.signal);
     let runs: CheckRun[];
     let coverage: Coverage | null = null;
     try {
-      runs = await runChecks(repo, task.worktreePath, planChecks, context.signal);
-      if (runs.every((run) => run.check.outcome !== 'fail')) {
+      runs = await runChecks(effect.checks, worktree, {
+        timeoutMs: CHECK_TIMEOUT_MS,
+        signal: context.signal,
+        compare: this.#createBaseComparison(task, repo, worktree, context.signal),
+      });
+      if (effect.coverage && !runs.some((run) => isBlockingCheck(run.check))) {
         coverage = await measureTaskCoverage({
           repo,
           task,
+          commands: listTaskChecks(task, repo).map((check) => check.command),
           ledgers: this.#ledgers,
           baseBranch: resolvePullRequestBase(this.#engine.state, task),
           signal: context.signal,
@@ -467,35 +475,49 @@ export class EffectRunner {
     }
     if (context.signal.aborted) return;
     if (coverage?.status === 'unavailable') {
-      log.warn('[Coverage] Could not measure the changed lines', { taskId, reason: coverage.reason });
+      log.warn('[Coverage] Could not measure the changed lines', {
+        taskId: task.id,
+        reason: coverage.reason,
+      });
     }
-    const evidence = this.#storeCheckEvidence(task, runs);
     await this.#engine.dispatch(
       {
         type: 'checks.record',
-        taskId,
+        taskId: task.id,
         results: runs.map((run) => run.check),
-        ...(evidence ? { evidence } : {}),
+        outputs: this.#storeCheckOutputs(task, runs),
         ...(coverage ? { coverage } : {}),
       },
       { id: `${context.key}:checks.record` }
     );
   }
 
-  #storeCheckEvidence(task: Task, runs: readonly CheckRun[]) {
-    const attached = Object.values(this.#engine.state.evidence).flatMap((item) => {
-      if (item.taskId !== task.id || item.runId === null || !OUTPUT_KINDS.has(item.kind)) return [];
-      const text = isOfCurrentRound(task, item) ? this.#evidence.selectText(item.uri) : null;
-      return text === null ? [] : [text];
-    });
-    const piece = serializeCheckEvidence(runs, attached);
-    if (!piece) return null;
-    const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
-    return {
-      title: piece.title,
-      detail: piece.detail,
-      uri: this.#evidence.writeText(piece.text, folder, piece.title),
+  #createBaseComparison(task: Task, repo: Repo, cwd: string, signal: AbortSignal): BaseComparison {
+    let base: Promise<string | null> | null = null;
+    const resolveBase = () => {
+      base ??= resolveTaskRefs(repo, task, resolvePullRequestBase(this.#engine.state, task), signal).then(
+        (refs) => refs.base
+      );
+      return base;
     };
+    return (run) =>
+      this.#bases.compareWithBase({
+        repo,
+        resolveBase,
+        cwd,
+        run,
+        timeoutMs: CHECK_TIMEOUT_MS,
+        signal,
+      });
+  }
+
+  #storeCheckOutputs(task: Task, runs: readonly CheckRun[]): CheckEvidence[] {
+    const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
+    return runs.map((run) => ({
+      checkId: run.check.id,
+      title: run.check.label,
+      uri: this.#evidence.writeText(serializeCheckOutput(run), folder, run.check.label),
+    }));
   }
 
   async #pushHead(task: Task, repo: Repo, context: EffectContext) {

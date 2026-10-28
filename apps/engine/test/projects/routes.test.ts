@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createProjectChanges, createProjectRoutes } from '../../src/projects/routes.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { createGitRepo, createTempDir } from '../helpers/index.ts';
+import { createGitRepo, createTempDir, overrideEnv } from '../helpers/index.ts';
 
 const logs: EventLog[] = [];
 
@@ -146,12 +146,19 @@ describe('a project’s repositories and folders', () => {
     const app = await createGitRepo({ root: home, name: 'app', remote: false });
     await call('POST', `/api/projects/${projectId}/repos`, { path: app.path });
     const repoId = Object.keys(engine.state.repos)[0] ?? '';
+    const newer = overrideEnv({ FAKE_BUT_VERSION: '0.23.0' });
+    expect(await call('GET', '/api/repos/workspaces')).toEqual({
+      support: { [repoId]: { butInstalled: true, gitButlerWorkspace: true } },
+    });
+    newer();
+    const older = overrideEnv({ FAKE_BUT_VERSION: '0.22.3' });
     expect(await call('GET', '/api/repos/workspaces')).toEqual({
       support: { [repoId]: { butInstalled: true, gitButlerWorkspace: false } },
     });
+    older();
   });
 
-  test('every registered repository says which coverage command Auto would run, or none', async () => {
+  test('every registered repository says which coverage tool Auto would use, or none', async () => {
     const { home, engine, call, projectId } = await setup();
     const app = await createGitRepo({
       root: home,
@@ -167,7 +174,7 @@ describe('a project’s repositories and folders', () => {
       detected: {
         [ids.app ?? '']: {
           tool: 'go test',
-          command: "go test ./... -coverprofile='<report folder>/cover.out'",
+          command: "The test checks of each task, run once more with go test's coverage report.",
         },
         [ids.web ?? '']: null,
       },

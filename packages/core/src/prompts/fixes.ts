@@ -1,4 +1,5 @@
 import { describeCount } from '../chat/text.ts';
+import { isBlockingCheck } from '../domain/checks.ts';
 import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import { describeFindingPlace } from './context.ts';
@@ -11,9 +12,12 @@ function describeFindingLines(findings: ReviewFinding[]) {
 
 function describeCheckFailures(results: ReportCheck[]) {
   return results
-    .filter((check) => check.outcome === 'fail')
+    .filter(isBlockingCheck)
     .map((check) =>
-      [`- \`${check.name}\` failed:`, check.detail ? `\`\`\`\n${check.detail}\n\`\`\`` : ''].join('\n')
+      [
+        `- ${check.id}, ${check.label}: \`${check.command}\` failed:`,
+        check.detail ? `\`\`\`\n${check.detail}\n\`\`\`` : '',
+      ].join('\n')
     )
     .join('\n');
 }
@@ -21,21 +25,24 @@ function describeCheckFailures(results: ReportCheck[]) {
 function describeFixClosing(next: string) {
   return [
     '',
-    'Fix it, re-run the checks yourself, then call `complete_fix` with a one or two sentence summary of what you changed.',
+    'Fix it, confirming the fix with the scoped commands it touches, never the whole suite: Shinsa runs the checks itself after you hand over.',
+    'Then call `complete_fix` with a one or two sentence summary of what you changed. Shinsa runs again the checks that failed, the checks of every phase whose files your fix changes, and the ones you name in `checks` by their ids; add, change or remove a check with `check_changes` and a reason when the fix needs one.',
     'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
     `${next} Then stop.`,
   ].join('\n');
 }
 
 const WORK_FIX_NEXT =
-  "Afterwards Shinsa runs the task's checks and agent review, where it has them, and then the human reviews the work.";
+  'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.';
 
-export function resolveChecksFixPrompt(results: ReportCheck[]) {
+const PHASE_FIX_NEXT = 'Afterwards Shinsa runs those checks, then you build the next phase.';
+
+export function resolveChecksFixPrompt(results: ReportCheck[], phasesLeft: boolean) {
   return [
-    'The checks failed after the last change:',
+    "The checks failed after the last change. Shinsa ran each failing test file alone and on the base branch first: these failures are the change's own.",
     '',
     describeCheckFailures(results),
-    describeFixClosing(WORK_FIX_NEXT),
+    describeFixClosing(phasesLeft ? PHASE_FIX_NEXT : WORK_FIX_NEXT),
   ].join('\n');
 }
 

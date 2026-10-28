@@ -117,6 +117,10 @@ export function storeEvidence(
     );
   }
   const handOver = result.value;
+  if ('check' in handOver) {
+    const { kind, check, detail } = handOver;
+    return { type: 'agent.attach_check' as const, kind, checkId: check, detail };
+  }
   if (handOver.kind === 'comparison') return storeComparison(handOver, worktreePath, evidence, folder);
   const { source: _source, ...fields } = handOver;
   const uri = resolveEvidenceUri(handOver, worktreePath, evidence, folder);

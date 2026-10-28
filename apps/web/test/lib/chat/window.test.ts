@@ -64,6 +64,31 @@ describe('transcript blocks', () => {
     });
   });
 
+  it('leaves waiting rounds to the queue, and marks a started round delivering until one of its runs starts', () => {
+    const rounded = createTask({
+      id: 't',
+      rounds: [
+        createRound({ number: 1, status: 'shipped' }),
+        createRound({ number: 2, status: 'active' }),
+        createRound({ number: 3, status: 'waiting' }),
+      ],
+    });
+    const waitingRun = [
+      createRun({ id: 'a', taskId: 't' }),
+      createRun({ id: 'q', taskId: 't', round: 2, status: 'queued' }),
+    ];
+    expect(
+      listTranscriptBlocks(rounded, waitingRun, [], true).flatMap((block) =>
+        block.kind === 'round' ? [[block.key, block.delivering]] : []
+      )
+    ).toEqual([
+      ['round-1', false],
+      ['round-2', true],
+    ]);
+    const started = listTranscriptBlocks(rounded, runs, [], true).find((block) => block.key === 'round-2');
+    expect(started).toMatchObject({ delivering: false });
+  });
+
   it('finds the chat run a delegated run belongs to, and its block', () => {
     const byId = Object.fromEntries(
       [...runs, delegated('d1', 'a'), delegated('d2', 'd1'), delegated('loop', 'loop')].map((run) => [

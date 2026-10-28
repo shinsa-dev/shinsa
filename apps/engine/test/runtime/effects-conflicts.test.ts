@@ -6,7 +6,6 @@ import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
 import { log } from '../../src/log/index.ts';
 import { EffectRunner } from '../../src/runtime/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { Workspaces } from '../../src/workspaces/index.ts';
 import {
   createGitRepo,
@@ -14,6 +13,7 @@ import {
   createTestConfig,
   git,
   overrideEnv,
+  startGitButler,
   writeFiles,
 } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
@@ -61,7 +61,7 @@ async function commitAs(workspaces: Workspaces, repo: Repo, task: Task, files: R
 
 async function stackTwo() {
   const made = await createGitRepo({ files: { 'a.txt': 'a\n' } });
-  await runCommandOrThrow(['but', 'setup', '--json'], made.path);
+  await startGitButler(made.path);
   const repo = { ...made.repo, workspace: 'gitbutler' as const };
   const workspaces = new Workspaces({ dataDir: createTempDir(), worktreesDir: createTempDir() });
   const strategy = workspaces.resolve({ workspace: 'gitbutler' });
@@ -117,7 +117,9 @@ describe('conflicts in a GitButler stack', () => {
       { ...repo, workspace: 'gitbutler' }
     );
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const restore = overrideEnv({ FAKE_BUT_MISSING: '1' });
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    restore();
     expect(warn).toHaveBeenCalledWith(
       '[Effects] Could not read which branches are conflicted',
       expect.objectContaining({ taskId: 'task-1' })

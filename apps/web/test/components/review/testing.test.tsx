@@ -16,7 +16,7 @@ function renderPanel(coverage: Coverage | null) {
         persistId={createDisclosureId('task', 't', 'review', 'panel', 'testing')}
         task={TASK}
         testing={null}
-        checks={[]}
+        checks={null}
         coverage={coverage}
       />
     </TooltipProvider>

@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { DisplayPhase, ReportCheck } from '@shinsa/core';
 import {
-  describeChecksPassed,
   describeFollowUpNote,
   describeReviewFacts,
-  hasFailingCheck,
   isAgentWorking,
   isTaskWatchable,
   listFeedLines,
@@ -21,7 +19,7 @@ function phase(overrides: Partial<DisplayPhase>): DisplayPhase {
 }
 
 function check(outcome: ReportCheck['outcome']): ReportCheck {
-  return { name: `check ${outcome}`, outcome, detail: null };
+  return { id: `c-${outcome}`, label: `check ${outcome}`, command: 'bun test', outcome, detail: null };
 }
 
 const PULL_REQUEST = {
@@ -60,6 +58,16 @@ describe('resolveNowTitle', () => {
     const task = createTask({ id: 'task-1' });
     const current = phase({ key: 'plan-1', title: 'Wire the retry button', planned: true });
     expect(resolveNowTitle(task, [], current, undefined)).toBe('Wire the retry button');
+  });
+
+  it('names the checks run between phases rather than the next phase, so it never looks stuck', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'checking',
+      stageReason: 'running the checks for phase 1 of 3',
+    });
+    const next = phase({ key: 'plan-1', title: 'Wire the retry button', planned: true });
+    expect(resolveNowTitle(task, [], next, undefined)).toBe('Running the checks for phase 1 of 3');
   });
 
   it('says a settled task is settled when nothing is running', () => {
@@ -114,20 +122,6 @@ describe('describeReviewFacts', () => {
     );
     expect(describeReviewFacts(task, false, null)).toBe('The check passed · agent review found nothing');
     expect(describeReviewFacts(createTask({ id: 'task-2' }), true, null)).toBe('Agent review found nothing');
-  });
-});
-
-describe('describeChecksPassed', () => {
-  it('says how many checks passed, with a lone check named as one', () => {
-    expect(describeChecksPassed([check('pass')])).toBe('The check passed');
-    expect(describeChecksPassed([check('fail')])).toBe('The check failed');
-    expect(describeChecksPassed([check('pass'), check('pass')])).toBe('All 2 checks passed');
-    expect(describeChecksPassed([check('fail'), check('fail')])).toBe('0 of 2 checks passed');
-  });
-
-  it('notices a failing check among passing ones', () => {
-    expect(hasFailingCheck([check('pass'), check('fail')])).toBe(true);
-    expect(hasFailingCheck([check('pass')])).toBe(false);
   });
 });
 

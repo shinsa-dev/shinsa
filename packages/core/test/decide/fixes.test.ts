@@ -12,7 +12,14 @@ import {
   proposePlan,
   reachReviewGate,
   readInstruction,
+  registerRepo,
 } from '../harness.ts';
+
+const MANY_CHECKS = Array.from({ length: 24 }, (_, index) => `check ${index + 1}`);
+
+function createManyChecks(harness: Harness) {
+  registerRepo(harness, 'paywall-next', 'Superwall', MANY_CHECKS);
+}
 
 const COVERAGE = {
   status: 'measured',
@@ -41,7 +48,7 @@ describe('coverage of the changed lines', () => {
     expect(reviewer).toContain('- src/a.ts: 3 of 4 changed lines covered; not covered: 7');
   });
 
-  test('checks without it clear what an earlier run measured', () => {
+  test('a run that measured nothing keeps what the last measured run found', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
@@ -53,8 +60,8 @@ describe('coverage of the changed lines', () => {
     });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Typed it.' });
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    expect(harness.task(taskId).coverage).toBeNull();
-    expect(harness.activeRun(taskId).prompt).not.toContain('coverage of the changed lines');
+    expect(harness.task(taskId).coverage).toEqual(COVERAGE as unknown as Coverage);
+    expect(harness.activeRun(taskId).prompt).toContain('coverage of the changed lines');
   });
 });
 
@@ -167,25 +174,27 @@ describe('checks and agent review', () => {
 
   test('a different failure each round keeps fixing until the round cap', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     harness.send({ type: 'settings.change', patch: { maxFixRounds: 2 } });
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    harness.send({ type: 'checks.record', taskId, results: failing('a') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r3') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'One.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('b') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Two.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('c') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r5') });
     expect(harness.openGate(taskId).title).toBe('Out of automatic fix rounds');
   });
 
   test('retrying after a stalled loop gives the agent another go', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     harness.send({ type: 'settings.change', patch: { maxFixRounds: 1 } });
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    harness.send({ type: 'checks.record', taskId, results: failing('a') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r3') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'One.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('b') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     const gate = harness.openGate(taskId);
     harness.send({
       type: 'gate.answer',
@@ -208,6 +217,7 @@ describe('checks and agent review', () => {
 describe('fix loop limits', () => {
   test('alternating failures still stop: a failure seen twice before ends the loop', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     const finding = (message: string) => ({
@@ -217,7 +227,7 @@ describe('fix loop limits', () => {
       message,
     });
     for (let round = 0; round < 3; round += 1) {
-      harness.send({ type: 'checks.record', taskId, results: failing('lint') });
+      harness.send({ type: 'checks.record', taskId, results: failing('r1') });
       if (harness.task(taskId).stage !== 'fixing') break;
       harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'x' });
       harness.send({ type: 'checks.record', taskId, results: PASSING });
@@ -228,17 +238,23 @@ describe('fix loop limits', () => {
         findings: [finding(`wording ${round}`)],
       });
       if (harness.task(taskId).stage !== 'fixing') break;
-      harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'y' });
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'y',
+        checks: ['r1'],
+      });
     }
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
   });
 
   test('"until clean" still has a ceiling', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     for (let round = 0; round < 20; round += 1) {
-      harness.send({ type: 'checks.record', taskId, results: failing(`check-${round}`) });
+      harness.send({ type: 'checks.record', taskId, results: failing(`r${round + 3}`) });
       if (harness.task(taskId).stage !== 'fixing') break;
       harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'x' });
     }
@@ -250,15 +266,16 @@ describe('fix loop limits', () => {
 describe('the automatic fix budget', () => {
   test('retrying after the rounds ran out gives the agent a fresh budget', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     harness.send({ type: 'settings.change', patch: { maxFixRounds: 1 } });
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    harness.send({ type: 'checks.record', taskId, results: failing('a') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r3') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'One.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('b') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     expect(harness.openGate(taskId).title).toBe('Out of automatic fix rounds');
     harness.send({ type: 'task.retry', taskId });
-    harness.send({ type: 'checks.record', taskId, results: failing('b') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(harness.task(taskId).fixRounds).toBe(1);
   });
@@ -289,7 +306,12 @@ describe('the automatic fix budget', () => {
       decision: 'revise',
       response: 'Rename.',
     });
-    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Renamed.' });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Renamed.',
+      checks: ['r2'],
+    });
     harness.send({ type: 'checks.record', taskId, results: failing() });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
   });
@@ -480,29 +502,31 @@ describe('review rounds that escalate to you', () => {
 describe('fix fingerprints', () => {
   test('a round that changed no code counts as a repeat even when the failure differs', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    harness.send({ type: 'checks.record', taskId, results: failing('a') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r3') });
     harness.send({
       type: 'agent.complete_fix',
       runId: harness.activeRun(taskId).id,
       summary: 'x',
       treeHash: 't1',
     });
-    harness.send({ type: 'checks.record', taskId, results: failing('b') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Same.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('c') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r5') });
     expect(harness.task(taskId).stalledFixes).toBe(1);
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Same again.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('d') });
+    harness.send({ type: 'checks.record', taskId, results: failing('r6') });
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
   });
 
   test('a round that changed the code and moved the failure keeps going', () => {
     const harness = createHarness();
+    createManyChecks(harness);
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    for (const [round, check] of ['a', 'b', 'c', 'd'].entries()) {
+    for (const [round, check] of ['r3', 'r4', 'r5', 'r6'].entries()) {
       harness.send({ type: 'checks.record', taskId, results: failing(check) });
       harness.send({
         type: 'agent.complete_fix',
@@ -513,10 +537,10 @@ describe('fix fingerprints', () => {
     }
     expect(harness.task(taskId).fixRounds).toBe(4);
     expect(harness.task(taskId).fixFingerprints?.map((fingerprint) => fingerprint.signature)).toEqual([
-      'a',
-      'b',
-      'c',
-      'd',
+      'r3',
+      'r4',
+      'r5',
+      'r6',
     ]);
   });
 });

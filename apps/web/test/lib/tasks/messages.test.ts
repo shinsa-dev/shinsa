@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { describeMessageStatus, resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
+import {
+  describeMessageStatus,
+  isDelivering,
+  resolveMessageHint,
+  sendTaskMessage,
+} from '@/lib/tasks/messages.ts';
 import { listOutboxMessages } from '@/lib/tasks/outbox.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
@@ -89,11 +94,18 @@ describe('sendTaskMessage', () => {
   });
 });
 
+describe('isDelivering', () => {
+  it('is true only while the message is on its way into the task', () => {
+    expect(isDelivering({ status: 'delivering' })).toBe(true);
+    expect(isDelivering({})).toBe(false);
+    expect(isDelivering({ status: 'noted' })).toBe(false);
+  });
+});
+
 describe('describeMessageStatus', () => {
-  it('says where a message is until the agent has it, and why one was not delivered', () => {
+  it('words only the end states: a delivered or delivering message has no line', () => {
     expect(describeMessageStatus({})).toBeNull();
-    expect(describeMessageStatus({ status: 'sending' })).toEqual({ text: 'Sending', tone: 'waiting' });
-    expect(describeMessageStatus({ status: 'queued' })).toEqual({ text: 'Queued', tone: 'waiting' });
+    expect(describeMessageStatus({ status: 'delivering' })).toBeNull();
     expect(describeMessageStatus({ status: 'noted' })).toEqual({
       text: 'Noted. It needs no reply.',
       tone: 'quiet',

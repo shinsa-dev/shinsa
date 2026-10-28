@@ -4,6 +4,7 @@ import { ChatLine, DetailRail, ExpandRow, FoldLine } from '@/components/chat/cha
 import { ContextGauge } from '@/components/chat/context-meter.tsx';
 import { DelegationReportRow, DelegationSpawnCard } from '@/components/chat/delegation-card.tsx';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
+import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { NoticeLine } from '@/components/chat/notice-line.tsx';
 import { RoundDivider } from '@/components/chat/round-divider.tsx';
 import { ToolGroup, ToolRow } from '@/components/chat/tool-group.tsx';
@@ -12,6 +13,7 @@ import { CHAT_COLUMN, CHAT_INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
+import { Composer } from '@/components/task/composer.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { resolveContextMeter } from '@/lib/chat/context.ts';
 import { type DelegationView, selectDelegation } from '@/lib/chat/delegations.ts';
@@ -24,7 +26,13 @@ import {
 } from '@/lib/preferences/disclosure.ts';
 import { createSampleChatCalls } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
-import { acknowledgeSample, createSampleRoundsTask, createSampleRun, createSampleState } from './samples.ts';
+import {
+  acknowledgeSample,
+  createSampleQueueTask,
+  createSampleRoundsTask,
+  createSampleRun,
+  createSampleState,
+} from './samples.ts';
 import { Specimen } from './section.tsx';
 
 const CONTEXT_TOKENS = [48_000, 156_000, 188_000];
@@ -113,6 +121,30 @@ function RoundSpecimens({ now }: { now: number }) {
             onOpen={() => acknowledgeSample()}
             onShippingChange={acknowledgeSample}
           />
+        </div>
+      </Specimen>
+    </>
+  );
+}
+
+function QueueSpecimens({ now }: { now: number }) {
+  const [one] = React.useState(() => createSampleQueueTask(now, 1));
+  const [several] = React.useState(() => createSampleQueueTask(now, 3));
+  return (
+    <>
+      <Specimen label='MessageQueue · one queued message, docked above the composer'>
+        <div className='w-full max-w-xl'>
+          <Composer
+            placeholder='Tell the agent something.'
+            submitLabel='Send message'
+            onSubmit={acknowledgeSample}
+            dock={<MessageQueue task={one} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='MessageQueue · several queued messages, each one editable and removable until it sends'>
+        <div className='w-full max-w-xl'>
+          <MessageQueue task={several} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />
         </div>
       </Specimen>
     </>
@@ -237,17 +269,41 @@ export function ChatSpecimens() {
   );
 }
 
+const DELIVERY_REPLAY_MS = 2_400;
+
+function DeliveryReplay() {
+  const [delivering, setDelivering] = React.useState(true);
+  React.useEffect(() => {
+    const timer = setInterval(() => setDelivering((current) => !current), DELIVERY_REPLAY_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <UserMessage
+      persistId={createDisclosureId('ui', 'chat', 'message', 'replay')}
+      text='Delivering, then delivered, again and again.'
+      status={delivering ? 'delivering' : undefined}
+    />
+  );
+}
+
 function SampleMessages() {
   const sample = (name: string) => createDisclosureId('ui', 'chat', 'message', name);
   return (
     <div className='flex w-full max-w-xl flex-col gap-2'>
       <UserMessage persistId={sample('delivered')} text='Use the cheaper plan.' />
       <UserMessage
-        persistId={sample('sending')}
+        persistId={sample('delivering')}
         text='Also add search to the settings page.'
-        status='sending'
+        status='delivering'
       />
-      <UserMessage persistId={sample('queued')} text='And dark mode.' status='queued' />
+      <UserMessage
+        persistId={sample('delivering-long')}
+        text={
+          'Keep the old endpoint for a release.\nLog a warning when a client still calls it, with the client name.'
+        }
+        status='delivering'
+      />
+      <DeliveryReplay />
       <UserMessage persistId={sample('noted')} text='Thanks!' status='noted' />
       <UserMessage
         persistId={sample('undelivered')}
@@ -288,9 +344,10 @@ function ChatSpecimenList() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
+      <Specimen label='UserMessage · delivered, delivering at half opacity with the blue light going round (one line, several lines, then delivered on a loop), noted with no reply, not delivered'>
         <SampleMessages />
       </Specimen>
+      <QueueSpecimens now={now} />
       <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           {notices.map((item) => (

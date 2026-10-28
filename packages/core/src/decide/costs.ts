@@ -7,7 +7,7 @@ import {
   selectSpentBudget,
   type TaskBudget,
 } from '../costs/index.ts';
-import { DomainError, type Gate, type Run, type RunUsage } from '../domain/index.ts';
+import { DomainError, type Gate, type Run, type RunUsage, type WeeklyReading } from '../domain/index.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { retryTask } from './retry.ts';
@@ -34,24 +34,40 @@ function isSameUsage(a: RunUsage, b: RunUsage) {
   );
 }
 
-function assertWeeklyPercent(value: number | undefined) {
-  if (value !== undefined && !(Number.isFinite(value) && value >= 0 && value <= 100)) {
-    throw new DomainError('usage_invalid', 'The weekly usage a run used must be a percentage from 0 to 100.');
+function isTime(value: number | null) {
+  return value === null || (Number.isFinite(value) && value >= 0);
+}
+
+function assertReadings(readings: WeeklyReading[]) {
+  const valid = readings.every(
+    (reading) =>
+      Number.isFinite(reading.percent) &&
+      reading.percent >= 0 &&
+      reading.percent <= 100 &&
+      isTime(reading.at) &&
+      isTime(reading.resetsAt)
+  );
+  if (!valid) {
+    throw new DomainError(
+      'usage_invalid',
+      'A weekly reading must be a percentage from 0 to 100 with a time and a reset time or none.'
+    );
   }
 }
 
 export function meterRun(decider: Decider, command: CommandOf<'run.meter'>) {
   if (!decider.state.runs[command.runId]) return;
   assertUsage(command.usage);
-  assertWeeklyPercent(command.weeklyPercent);
-  const weekly = command.weeklyPercent ? { weeklyPercent: command.weeklyPercent } : {};
+  const readings = command.readings ?? [];
+  assertReadings(readings);
+  const weekly = readings.length > 0 ? { readings } : {};
   const sessionId = command.sessionId ?? null;
   if (sessionId === null) {
     decider.emit({ type: 'run.metered', runId: command.runId, usage: command.usage, ...weekly });
     return;
   }
   const previous = decider.state.sessionUsage[sessionId] ?? null;
-  if (previous && isSameUsage(previous, command.usage) && !command.weeklyPercent) return;
+  if (previous && isSameUsage(previous, command.usage) && readings.length === 0) return;
   decider.emit({
     type: 'run.metered',
     runId: command.runId,
@@ -72,6 +88,10 @@ function describeSpent(budget: TaskBudget) {
   return budget.unit === 'usd' ? spent : `${spent} of the weekly usage limit`;
 }
 
+function describeEstimate(budget: TaskBudget) {
+  return budget.estimated ? ' The share is an early estimate while Shinsa learns the account’s rate.' : '';
+}
+
 export function holdForBudget(decider: Decider, run: Run) {
   const task = decider.task(run.taskId);
   const budget = selectSpentBudget(decider.state, task);
@@ -79,7 +99,7 @@ export function holdForBudget(decider: Decider, run: Run) {
   decider.fail(
     task.id,
     BUDGET_TITLE[budget.unit],
-    `This task has used ${describeSpent(budget)}, past its ${describeBudgetAmount(budget, budget.limit)} limit, so the next step did not start. Continue to allow another ${describeBudgetAmount(budget, budget.cap)}, or cancel the task.`,
+    `This task has used ${describeSpent(budget)}, past its ${describeBudgetAmount(budget, budget.limit)} limit, so the next step did not start.${describeEstimate(budget)} Continue to allow another ${describeBudgetAmount(budget, budget.cap)}, or cancel the task.`,
     null,
     'budget'
   );

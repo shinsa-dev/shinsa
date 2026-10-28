@@ -50,7 +50,9 @@ export {
   type EngineFit,
   type EngineRestartWhen,
   isPrereleaseVersion,
+  type ReleaseChannel,
   resolveEngineFit,
+  resolveReleaseChannel,
   resolveVersionOrder,
   type ShinsaBuild,
 } from './engine.ts';
@@ -84,6 +86,14 @@ export {
   sumLoadedTokens,
   type UsageFacts,
 } from './extensions.ts';
+export {
+  APP_FLAVORS,
+  type AppFlavor,
+  type FlavorIdentity,
+  parseAppFlavor,
+  resolveAppFlavor,
+  resolveEngineLabel,
+} from './flavor.ts';
 export {
   type ClientMessage,
   type DiffFile,

@@ -123,6 +123,17 @@ describe('renderIconMarkup', () => {
     expect(renderIconMarkup('IconChevronDoubleRight', '0')).not.toContain('scale(');
   });
 
+  it('draws every cross to the chevron’s length on both axes, at the same stroke weight', () => {
+    expect(renderIconMarkup('IconCrossSmall', '3')).toBe(
+      '<g transform="translate(12 12) scale(1.4) translate(-12 -12)"><g><path d="M8 8L16 16M16 8L8 16" stroke="currentColor" stroke-width="1.4286" stroke-linecap="round"/></g></g>'
+    );
+    expect(renderIconMarkup('IconCrossMedium', '3')).toStartWith(
+      '<g transform="translate(12 12) scale(1.0182) translate(-12 -12)">'
+    );
+    expect(renderIconMarkup('IconCrossMedium', '3')).toContain('stroke-width="1.9643"');
+    expect(renderIconMarkup('IconCrossLarge', '3')).not.toContain('scale(');
+  });
+
   it('draws the Settings gear as tall as the usage gauge beside it, at the same stroke weight', () => {
     const gear = renderIconMarkup('IconSettingsGear4', '2');
     expect(gear).toStartWith('<g transform="translate(12 12) scale(1.1132) translate(-12 -12)">');

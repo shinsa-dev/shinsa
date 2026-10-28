@@ -1,6 +1,7 @@
 import { type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
+import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
@@ -165,6 +166,7 @@ export function OverviewTab({
           placeholder={hint.placeholder}
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}
+          dock={<MessageQueue task={task} />}
         />
       )}
     </div>
