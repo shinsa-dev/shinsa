@@ -6,7 +6,7 @@ import { RoadmapRow } from '@/components/roadmap/row.tsx';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
 const STATE = createShinsaState({
   tasks: [
@@ -198,6 +198,31 @@ describe('the repository column', () => {
       'working'
     );
     expect(screen.getByText('No repository')).toBeTruthy();
+  });
+
+  it('names the repository beside its GitHub mark in its project’s colour, the project on hover', async () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'web', title: 'Fix the paywall', repoId: 'web' })],
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
+      repos: [
+        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p', remote: 'git@github.com:sw/web.git' }),
+      ],
+    });
+    const view = renderRow(state.tasks.web as Task, 'working', 0, state);
+    const ink = view.container.querySelector('[data-project-ink]') as SVGElement;
+    expect(ink.getAttribute('data-project-ink')).toBe('purple');
+    expect(screen.getByText('paywall-next')).toBeTruthy();
+    expect(await findTooltipText(ink.parentElement as HTMLElement)).toBe('Superwall project');
+  });
+
+  it('leaves a repository with no project its plain mark and no hint', () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'loose', title: 'Try a thing', repoId: 'scratch' })],
+      repos: [createRepo({ id: 'scratch', name: 'scratch' })],
+    });
+    const view = renderRow(state.tasks.loose as Task, 'working', 0, state);
+    expect(view.container.querySelector('[data-project-ink]')).toBeNull();
+    expect(screen.getByText('scratch')).toBeTruthy();
   });
 });
 

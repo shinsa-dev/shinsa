@@ -10,10 +10,10 @@ export const SMART_LINK = 'group/link cursor-pointer font-medium text-fg-4 no-un
 
 export const INLINE_TILE = 'relative -top-px me-1 align-middle';
 
+export const INLINE_MARK = 'relative -top-px me-1 inline align-middle';
+
 export function InlineMark({ icon, className }: { icon: IconName; className?: string }) {
-  return (
-    <Icon size='sm' name={icon} className={cn('relative -top-px me-1 inline align-middle', className)} />
-  );
+  return <Icon size='sm' name={icon} className={cn(INLINE_MARK, className)} />;
 }
 
 export function GlyphLabel({

@@ -88,7 +88,7 @@ describe('HomePage', () => {
   it('orders what needs you, what moves and what just happened above the long tail, every section open', () => {
     renderHome();
     expect(headers()).toEqual([
-      'Also needs you1|true',
+      'Needs you5|true',
       'In progress1|true',
       'Recently finished1|true',
       'Recent conversations1|true',
@@ -126,7 +126,7 @@ describe('HomePage', () => {
     view.unmount();
     renderHome();
     expect(headers()).toEqual([
-      'Also needs you1|true',
+      'Needs you5|true',
       'In progress1|true',
       'Recently finished1|false',
       'Recent conversations1|false',
@@ -134,29 +134,31 @@ describe('HomePage', () => {
     ]);
   });
 
-  it('lists in Also needs you only the decisions the guide above does not name', () => {
+  it('lists every decision under Needs you, the ones the guide names too', () => {
     renderHome();
     const guide = screen.getByRole('region', { name: 'What to do now' });
     const named = within(guide)
       .getAllByRole('link', { name: /Review the/ })
       .map((link) => link.textContent);
-    const also = screen.getByRole('button', { name: /^Also needs you/ }).closest('section') as HTMLElement;
-    const listed = within(also)
+    const needs = header(/^Needs you/).closest('section') as HTMLElement;
+    const listed = within(needs)
       .getAllByRole('button', { name: /Review the/ })
       .map((row) => DECISIONS.find((name) => row.textContent?.includes(`Review the ${name} fix`)));
     expect(named).toHaveLength(4);
-    expect(listed).toHaveLength(1);
-    expect(named.some((title) => title?.includes(`Review the ${listed[0]} fix`))).toBe(false);
+    expect(listed.sort()).toEqual([...DECISIONS].sort());
+    expect(screen.queryByRole('button', { name: /^Also needs you/ })).toBeNull();
   });
 
-  it('leaves Also needs you out when the guide names every decision', () => {
+  it('keeps Needs you when the guide names every decision', () => {
     const state = createShinsaState({
       tasks: [createTask({ id: 'login', title: 'Review the login fix', stage: 'reviewing' })],
       gates: [createGate({ id: 'g-login', taskId: 'login', type: 'review' })],
     });
     renderHome(state);
-    expect(screen.queryByRole('button', { name: /^Also needs you/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Needs you/ })).toBeNull();
+    const guide = screen.getByRole('region', { name: 'What to do now' });
+    expect(within(guide).getByRole('link', { name: /Review the login fix/ })).toBeTruthy();
+    const needs = header(/^Needs you/).closest('section') as HTMLElement;
+    expect(within(needs).getByRole('button', { name: /Review the login fix/ })).toBeTruthy();
   });
 
   it('folds the long tail too and keeps it folded', () => {
@@ -206,7 +208,12 @@ describe('HomePage', () => {
     expect(
       ['Review the garden plan', 'Water the beds', 'Order the seeds', 'Ask about the beds'].some(shows)
     ).toBe(false);
-    expect(headers()).toEqual(['In progress1|true', 'Recently finished1|true', 'Recent conversations1|true']);
+    expect(headers()).toEqual([
+      'Needs you1|true',
+      'In progress1|true',
+      'Recently finished1|true',
+      'Recent conversations1|true',
+    ]);
     expect(screen.getByRole('button', { name: /Rename the settings page/ }).textContent).toContain('WK-2 · ');
 
     view.rerender(
@@ -222,7 +229,12 @@ describe('HomePage', () => {
         <HomePage state={{ ...state, focus: { projectId: null, until: null } }} />
       </TooltipProvider>
     );
-    expect(headers()).toEqual(['In progress2|true', 'Recently finished2|true', 'Recent conversations2|true']);
+    expect(headers()).toEqual([
+      'Needs you2|true',
+      'In progress2|true',
+      'Recently finished2|true',
+      'Recent conversations2|true',
+    ]);
     expect(['Review the login fix', 'Review the garden plan'].every(shows)).toBe(true);
   });
 });

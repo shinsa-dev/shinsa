@@ -6,7 +6,7 @@ import { ReferenceAnchor, ReferenceText } from '@/components/links/reference.tsx
 import { replaceRoute } from '@/router.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
 function createWorld(extra: Task[] = []) {
   return createShinsaState({
@@ -65,6 +65,21 @@ describe('ReferenceText', () => {
     expect(link.textContent).toBe('Build the login form');
     expect(link.getAttribute('href')).toStartWith('/tasks/task-2');
     expect(view.container.textContent).toBe('Next: Build the login form then ship.');
+  });
+
+  it('marks a repository link in its project’s colour, and leaves one with no project plain', () => {
+    const state = createShinsaState({
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
+      repos: [
+        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p', remote: 'git@github.com:sw/web.git' }),
+        createRepo({ id: 'scratch', name: 'scratch' }),
+      ],
+    });
+    const view = renderText(state, 'See shinsa://repo/paywall-next and shinsa://repo/scratch.');
+    const inks = [...view.container.querySelectorAll('[data-project-ink]')];
+    expect(inks.map((ink) => ink.getAttribute('data-project-ink'))).toEqual(['purple']);
+    expect(view.container.querySelectorAll('svg[data-slot="icon"]')).toHaveLength(2);
+    expect(view.container.textContent).toBe('See paywall-next and scratch.');
   });
 
   it('keeps an unknown task reference as plain text', () => {
