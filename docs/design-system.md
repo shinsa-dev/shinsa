@@ -7583,6 +7583,8 @@ A secondary block inside a card sits on an inset: `INSET` + `bg-bg-a1`.
 - An inset note never changes the process's status; it informs.
 - Example: "No output for 23 minutes" above the live feed (`IconClock`, `fg-3`, orange from 15 minutes) with Snooze
   and Dismiss.
+- Say what is happening when you know it: while a tool call is still running the strip reads "A command has been
+  running for 23 minutes" with the command's first line in mono (`font-mono text-fg-2`, truncated), not "No output".
 
 #### Choice buttons
 

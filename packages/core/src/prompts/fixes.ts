@@ -25,7 +25,7 @@ function describeCheckFailures(results: ReportCheck[]) {
 function describeFixClosing(next: string) {
   return [
     '',
-    'Fix it, confirming the fix with the scoped commands it touches, never the whole suite: Shinsa runs the checks itself after you hand over.',
+    'Fix it, confirming the fix with the test files or folders it touches, never the whole suite (Shinsa refuses it): Shinsa runs the checks itself after you hand over.',
     'Then call `complete_fix` with a one or two sentence summary of what you changed. Shinsa runs again the checks that failed, the checks of every phase whose files your fix changes, and the ones you name in `checks` by their ids; add, change or remove a check with `check_changes` and a reason when the fix needs one.',
     'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
     `${next} Then stop.`,

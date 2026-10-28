@@ -205,6 +205,46 @@ describe('the command guard', () => {
   });
 });
 
+describe('the whole-suite guard', () => {
+  test('refuses a whole suite in any role, however it is wrapped, and says what to run instead', () => {
+    for (const command of [
+      'bun run test > /tmp/loc11-engine-test.log 2>&1; echo exit $?; grep -n fail /tmp/loc11-engine-test.log',
+      'bun test',
+      'npm test',
+      'pnpm test',
+      'yarn test',
+      'turbo run test',
+      'vitest run',
+      'jest',
+      'pytest',
+      'go test ./...',
+      'cargo test',
+      'bun run check',
+      'cd apps/engine && bun run test 2>&1 | tail -40',
+      'bun --cwd apps/engine run test',
+      'timeout 900 nice -n 10 CI=1 bun test',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
+    }
+    const verdict = resolveCommandVerdict('bun run test', 'main');
+    expect(JSON.stringify(verdict)).toContain('Run the test files or folders you changed');
+  });
+
+  test('allows a run scoped to a file, a folder or a test name', () => {
+    for (const command of [
+      'bun test src/parser',
+      'bun test --cwd apps/engine test/checks',
+      'bun run test src/onboarding > /tmp/out.log 2>&1',
+      'bun test -t "silence note"',
+      'go test ./internal/parser/...',
+      'cargo test parser',
+      'bun run --cwd apps/web check-types',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
+    }
+  });
+});
+
 describe('the read-only guard', () => {
   test('one matcher per edit tool, each refusing the edit until the plan is in', async () => {
     const matchers = listReadOnlyHooks('agent');

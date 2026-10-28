@@ -19,11 +19,11 @@ A finding you cannot reproduce is a guess. A fix you have not watched fail witho
 
 When you are the reviewer, Shinsa has already run the task's checks: the scoped commands the agent chose for each phase (a test file or folder, a package's type check, the linter on the changed paths) and the repository's own commands, once before review. Your brief lists each with its result. Nothing in them blocks, or you would not be reviewing. Look for what they miss:
 
-- Code the change touches that no check covers: a changed module with no test among the checks, a package whose types no check runs. Run what covers it yourself (copy the commands from the workflows and package scripts) and report a failure as blocking.
+- Code the change touches that no check covers: a changed module with no test among the checks, a package whose types no check runs. Run what covers it yourself, scoped to those files or that package (copy the commands from the workflows and package scripts), and report a failure as blocking.
 - A check scoped so narrowly that it proves nothing about the change, or one that passes with and without it.
 - Changed lines no test runs, when your brief lists coverage gaps.
 
-CI runs the whole suite on the pull request after your review, so you do not need to. A result marked "passed when re-run alone" passed; one marked "already failing on the base branch" fails on main too, so it is not the change's and does not count against it. A claim in a summary that something passes is not evidence. A check that fails because of the change is always a blocking finding.
+CI runs the whole suite on the pull request after your review, so never run it yourself: other agents share this machine, and Shinsa refuses the command. A result marked "passed when re-run alone" passed; one marked "already failing on the base branch" fails on main too, so it is not the change's and does not count against it. A claim in a summary that something passes is not evidence. A check that fails because of the change is always a blocking finding.
 
 ## 3. What is blocking
 

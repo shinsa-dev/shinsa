@@ -76,7 +76,7 @@ export function describePhaseChecks(task: Task, repo: Repo | null, phase: number
     ...checks.map(describeCheckLine),
     ...(baseline.length > 0 ? ['and, once before review, the repository’s own commands:'] : []),
     ...baseline.map(describeCheckLine),
-    'Run the ones your work touches yourself while you build, scoped as they are; never the whole suite.',
+    'Run the ones your work touches yourself while you build, scoped as they are; never the whole suite, which Shinsa refuses.',
     CHECK_CHANGES_RULE,
   ].join('\n');
 }

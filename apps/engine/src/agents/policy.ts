@@ -1,4 +1,4 @@
-import { HUMAN_ONLY_SETTINGS } from '@shinsa/core';
+import { HUMAN_ONLY_SETTINGS, isWholeSuiteCommand } from '@shinsa/core';
 import { HUMAN_ONLY_ENGINE_COMMANDS } from '../cli/engine.ts';
 import { SURFACE } from '../surface/index.ts';
 
@@ -78,6 +78,11 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
   ];
 }
 
+const WHOLE_SUITE_REASON =
+  'This runs the whole suite, which is slow and slows every other agent on this machine. Run the test files or folders you changed (`bun test src/parser`), or your task’s checks; Shinsa runs the checks itself after you hand over, and CI runs the whole suite on the pull request.';
+
 export function resolveForbiddenReason(command: string, defaultBranch: string) {
-  return listForbiddenCommands(defaultBranch).find((rule) => rule.pattern.test(command))?.reason ?? null;
+  const rule = listForbiddenCommands(defaultBranch).find((forbidden) => forbidden.pattern.test(command));
+  if (rule) return rule.reason;
+  return isWholeSuiteCommand(command) ? WHOLE_SUITE_REASON : null;
 }

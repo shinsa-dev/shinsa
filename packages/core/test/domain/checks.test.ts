@@ -53,6 +53,60 @@ describe('isWholeSuiteCommand', () => {
       expect(isWholeSuiteCommand(command), command).toBe(false);
     }
   });
+
+  test('a whole suite is found inside redirects, pipes, chains, wrappers and options', () => {
+    for (const command of [
+      'bun run test > /tmp/loc11-engine-test.log 2>&1; echo exit $?; grep -n fail /tmp/loc11-engine-test.log',
+      'bun test --randomize',
+      'bunx turbo run test --force',
+      'turbo test',
+      'npx vitest run --coverage',
+      'jest --ci',
+      'pytest -x -q',
+      'go test -race ./...',
+      'cargo test -- --nocapture',
+      'cd apps/engine && bun run test',
+      'bun --cwd apps/engine run test',
+      'bun run --cwd=apps/engine test',
+      'npm --prefix apps/web test',
+      'make -C apps test',
+      'timeout 600 bun run test',
+      'timeout -s KILL 60 bun test',
+      'nice -n 10 bun test',
+      'CI=1 FORCE_COLOR=0 bun test',
+      'env -i CI=1 bun test',
+      'bash -lc "cd apps/web && bun test"',
+      "/bin/zsh -lc 'bun test'",
+      '/usr/bin/env CI=1 bun run test',
+      '(cd apps && bun test)',
+      'bun test 2>&1 | tail -50',
+      'bun test &>/tmp/out.log',
+      'bun test --timeout 5000',
+      'echo $(bun test)',
+      'echo `bun test`',
+      'bun lint || bun run test',
+      'bun test &',
+    ]) {
+      expect(isWholeSuiteCommand(command), command).toBe(true);
+    }
+    for (const command of [
+      'bun test --cwd apps/engine test/checks',
+      'bun run test src/onboarding',
+      'bun test -t "silence note"',
+      'bun test src/a > /tmp/out.log 2>&1 | tail -5',
+      'timeout 600 bun test test/agents',
+      'vitest run src/foo.test.ts',
+      'pytest -k parser',
+      'npm test -- src/parser',
+      'grep -rn "bun test" docs',
+      "/bin/zsh -lc 'bun test src/a.test.ts'",
+      'echo test',
+      'timeout',
+      'constructor',
+    ]) {
+      expect(isWholeSuiteCommand(command), command).toBe(false);
+    }
+  });
 });
 
 describe('the task’s checks', () => {

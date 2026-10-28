@@ -119,11 +119,24 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   characters, a `command` of at most 200 and the `phases` it covers, 1-based, at least one; at most 12 checks,
   `PROTOCOL_LIMITS`). `propose_plan` refuses a command that runs the whole suite (`isWholeSuiteCommand`: a bare
   `bun test`, `npm test`, `bun run test`, `vitest`, `jest`, `pytest`, `go test ./...`, `cargo test`, `make test` or
-  `make check`, or `<package manager> run check|ci|verify|test:all`) with `describeWholeSuiteRefusal`, which tells the
+  `make check`, `<package manager> run check|ci|verify|test:all` or `turbo run test|check`, with no path or filter
+  left once options are dropped, found in any part of a chain or pipe, behind redirects, `cd x &&`, `--cwd`,
+  `timeout`, `nice`, `env`, `bash -c` and variable assignments) with `describeWholeSuiteRefusal`, which tells the
   agent how to scope it, and `validatePlanRules` needs at least one check for a code change and none for a task
   without `build`. `plan.proposed` sets the task's checks from the plan (`Task.checks`, each a `TaskCheck` with an id
   `c1`…`cn` and the source `plan`). The planning prompt asks for scoped commands, and each phase instruction lists
   that phase's checks (`describePhaseChecks`).
+- **No agent runs a whole suite itself either** (since 2026-10-28). Six tasks' agents each running the engine's
+  suite in their shell made every run crawl. `agents/policy.ts` refuses a shell command `isWholeSuiteCommand`
+  matches, in every role, and tells the agent to run the test files or folders it changed or its task's checks,
+  which Shinsa runs itself after the hand-over. Scoped runs stay allowed: a file or folder, `--cwd` with a path
+  argument, a `-t` filter. The house rules, the phase and fix instructions and the plugin's handover and review
+  skills say the same. Claude is refused through its PreToolUse hook and a writing Codex run through its command
+  approvals, where Codex sends each command wrapped in its shell (`/bin/zsh -lc 'bun test'`), so the wrapper is
+  matched by its file name. A read-only Codex run stays on `approvalPolicy: never` and only its prompt stops it:
+  under `untrusted` a command Shinsa accepts runs outside the `read-only` sandbox (checked against codex 0.164.0,
+  where an accepted `touch` and `echo x > README.md` both wrote), `on-request` never asks about a plain command, and
+  the granular policy needs Codex's experimental API.
 - **The Agent keeps them current** while it builds and fixes: `complete_phase` and `complete_fix` take
   `check_changes` (at most 6, each `add`, `change` or `remove` with a `reason` of at most 200 characters; an `add`
   needs a label and a command, and covers the current phase onward unless it names its phases). A new file in a later
@@ -1485,6 +1498,10 @@ checks it ran.
   waiting on its delegated runs.
 - It is informational only: it never stops, retries or reassigns anything. Snooze (30 minutes)
   and Dismiss (for the rest of that run) are `run.snooze_silence` and `run.dismiss_silence`.
+- A run whose transcript has a tool call with no result yet (`selectRunningTool` in
+  `apps/web/src/lib/overview/wait.ts`: the newest such call) is busy, not quiet, so the note says what runs: "A
+  command has been running for 5 minutes" with the command, or "A tool has been running for 5 minutes" for any
+  other tool. "No output for 5 minutes" is kept for a run with nothing running.
 
 ### Ask mode
 
@@ -2006,7 +2023,7 @@ plainly what protects what.
   `localhost:7446/api/commands` itself, or run `gh pr merge` or `git push` directly, and Shinsa would not know.
   `agents/policy.ts` refuses the obvious ones (`gh pr merge|create`, `git commit|push|rebase|reset --hard`, a
   `git pull` without `--no-rebase`, the default branch, every `but` command but the reads and the in-place conflict
-  resolution, the human-only `shinsa` commands) so an agent does not do them by accident, but a policy over
+  resolution, the human-only `shinsa` commands, a whole test suite) so an agent does not do them by accident, but a policy over
   command text is a guard rail, not a lock. **The real safeguard for merges is GitHub's branch protection:** require
   a pull request review (from someone other than the account agents run as, or a code owner) and passing checks on
   the default branch, so a merge cannot happen without you whatever runs on your machine. Shinsa recommends it for
@@ -2577,7 +2594,7 @@ and a session is resumed only by the provider that owns it. Two providers are re
 | Member | Contract |
 | --- | --- |
 | `id`, `label` | `claude` / `Claude`, `codex` / `Codex`. The id is what `settings.defaultProvider` and `settings.agentProviders` store |
-| `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no `but` command beyond reads and in-place conflict resolution) |
+| `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no `but` command beyond reads and in-place conflict resolution, no whole test suite) |
 | `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
 | `inspectSession({ cwd, sessionId })` | Optional. Whether the provider still has a session: `present`, `missing`, `empty` (metadata only, so it can neither be resumed nor recreated) or `unknown` |
 | `AgentSession.done` | Resolves to `{ outcome: completed \| failed \| cancelled, summary, failure?, undelivered?, usage?, subagentUsage?, context? }` when the run ends: `failure` is the classified `RunFailure`, `undelivered` the steered messages the agent never answered, `usage` the session's running totals (metered with `run.meter`), `subagentUsage` the totals of each agent it started on its own thread (Codex), `context` the tokens in use, when the prompt cache expires and whether background work is pending (idle compaction reads it) |
@@ -2955,7 +2972,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   `agents/policy.ts` forbids (and steers the reason into the turn, since a decision carries none) and accepts the
   rest, and accepts file changes. A read-only run (the Agent while it plans, a reviewer, answerer, researcher or delegated planner;
   `isReadOnlyRun`) runs with `approvalPolicy: never` and
-  `sandbox: read-only`: nothing it runs can write or reach the network, so a commit, a push or `gh pr merge` fails in
+  `sandbox: read-only`, since an approved command would leave the sandbox (the whole-suite rule, above): nothing it
+  runs can write or reach the network, so a commit, a push or `gh pr merge` fails in
   the sandbox and a patch is rejected. Elicitations from Shinsa's own MCP server are accepted, others declined;
   anything that needs a person (`item/tool/requestUserInput`, a permissions request) is refused, since no one is there to answer it mid-turn.
 - **Steering and stopping.** A message steers the running turn with `turn/steer` against its turn id. When Codex

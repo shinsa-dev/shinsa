@@ -95,7 +95,7 @@ src/
 │   │                    account seam: leases and rejections (accounts.ts), idle
 │   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface), what `read_task` reads (reading.ts),
+│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)

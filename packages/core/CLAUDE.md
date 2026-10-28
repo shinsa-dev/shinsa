@@ -28,7 +28,7 @@ src/
 │                    validatePipeline read from each step's needs), the verification rules
 │                    (verification.ts: VERIFICATION_RULES, validateVerification, validatePlanRules,
 │                    listMissingEvidence), a task's checks (checks.ts: isWholeSuiteCommand and
-│                    describeWholeSuiteRefusal for a plan's command, listRepoChecks (the repository's commands as
+│                    describeWholeSuiteRefusal for a plan's command and an agent's shell, listRepoChecks (the repository's commands as
 │                    r1…), listTaskChecks, listPhaseChecks, listTouchedPhaseChecks (the checks of the phases whose
 │                    files a fix changed, from PhaseReport.files), resolveNextCheckId, isBlockingCheck and
 │                    listBlockingChecks: a fail not noted fails_on_base), projects (projects.ts: keys, task handles,

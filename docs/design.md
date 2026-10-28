@@ -1154,7 +1154,9 @@ Only these, and they win over anything below:
     - **A quiet agent** (`silence-note.tsx`): a `bg-bg-a1` `rounded-lg` strip above the live
       feed, "No output for 23 minutes" (`fg-3`, orange from 15 minutes; the thresholds are
       `docs/engine.md` → Silent runs) with Snooze and Dismiss as quiet links. It never changes the
-      task's status.
+      task's status. While a tool call is still running it says so instead: "A command has been
+      running for 23 minutes" followed by the command's first line in mono (`fg-2`, `Truncate`, so a cut
+      line shows whole in its tooltip), or "A tool has been running for 23 minutes" for any other tool.
     - **Held up by another task**: under "Waits on ‹A›" the work card names the stalled leaf of
       the chain with its `TaskLink`: "Held up because ‹C› is waiting on you."
     - **Suggested tasks** is a `Panel` right under the now card; a suggested task's
