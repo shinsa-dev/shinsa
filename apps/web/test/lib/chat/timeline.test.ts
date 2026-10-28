@@ -75,7 +75,7 @@ describe('listHumanMessages', () => {
     expect(listHumanMessages(createTask({ id: 't' }))).toEqual([]);
   });
 
-  it('shows a message still on its way as sending and one Shinsa has not routed yet as queued', () => {
+  it('shows a message on its way to the server, and one Shinsa has not routed yet, as delivering', () => {
     const task = createTask({
       id: 't',
       activity: [activity({ at: 1_000, kind: 'message', detail: 'Use tabs' })],
@@ -89,17 +89,17 @@ describe('listHumanMessages', () => {
       ])
     ).toEqual([
       { at: 1_000, text: 'Use tabs' },
-      { at: 9_000, text: 'Also add search', status: 'queued' },
-      { at: 10_000, text: 'And dark mode', status: 'sending' },
+      { at: 9_000, text: 'Also add search', status: 'delivering' },
+      { at: 10_000, text: 'And dark mode', status: 'delivering' },
     ]);
     expect(listHumanMessages(task, [{ at: 7_000, text: 'Use tabs' }])).toContainEqual({
       at: 7_000,
       text: 'Use tabs',
-      status: 'sending',
+      status: 'delivering',
     });
   });
 
-  it('matches each landed message to one sent message, so a repeated message stays sending until it lands too', () => {
+  it('matches each landed message to one sent message, so a repeated message stays delivering until it lands too', () => {
     const task = createTask({ id: 't', inbox: [{ id: 'm1', at: 1_000, text: 'test' }] });
     expect(
       listHumanMessages(task, [
@@ -107,8 +107,8 @@ describe('listHumanMessages', () => {
         { at: 1_100, text: 'test' },
       ])
     ).toEqual([
-      { at: 1_000, text: 'test', status: 'queued' },
-      { at: 1_100, text: 'test', status: 'sending' },
+      { at: 1_000, text: 'test', status: 'delivering' },
+      { at: 1_100, text: 'test', status: 'delivering' },
     ]);
   });
 
@@ -131,7 +131,7 @@ describe('listHumanMessages', () => {
     expect(listFollowUpMessages(task)).toEqual([
       { at: 2, text: 'Thanks', status: 'noted' },
       { at: 3, text: 'More?', status: 'undelivered', reason: 'This task is finished.' },
-      { at: 4, text: 'Answer this', status: 'queued' },
+      { at: 4, text: 'Answer this', status: 'delivering' },
     ]);
   });
 });
@@ -205,13 +205,13 @@ describe('resolveTimeline', () => {
       [],
       [
         { at: 5, text: 'sent' },
-        { at: 6, text: 'on its way', status: 'sending' },
+        { at: 6, text: 'on its way', status: 'delivering' },
         { at: 7, text: 'refused', status: 'undelivered', reason: 'This task is finished.' },
       ]
     );
     expect(only(items, 'human').map(({ status, reason }) => ({ status, reason }))).toEqual([
       { status: undefined, reason: undefined },
-      { status: 'sending', reason: undefined },
+      { status: 'delivering', reason: undefined },
       { status: 'undelivered', reason: 'This task is finished.' },
     ]);
   });
@@ -470,7 +470,14 @@ describe('resolveTurns', () => {
     );
     const [turn] = resolveTurns(items, finished, 500);
     expect(turn?.notices).toEqual([
-      { kind: 'account', key: 'switch', at: 2, email: 'b@example.com', reason: 'usage_limit' },
+      {
+        kind: 'account',
+        key: 'switch',
+        at: 2,
+        email: 'b@example.com',
+        previous: 'a@example.com',
+        reason: 'usage_limit',
+      },
     ]);
     expect(turn?.work.map((item) => item.kind)).toEqual(['tools']);
     expect(turn?.steps).toBe(2);
@@ -782,6 +789,47 @@ describe('resolveTurns', () => {
     expect(turn?.reply).toBeNull();
     expect(turn?.errors.map((item) => item.text)).toEqual(['Session failed']);
     expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
+  });
+
+  it('collapses the same error said again into one line with a count', () => {
+    const items = resolveTimeline(
+      [
+        createErrorEntry('Codex’s API had a server error.', 1),
+        createNoticeEntry(
+          {
+            kind: 'retrying',
+            provider: 'codex',
+            detail: 'Codex’s API had a server error.',
+            attempt: 1,
+            attempts: 3,
+            retryAt: 40,
+          },
+          2,
+          'retry'
+        ),
+        createErrorEntry(' Codex’s API had a server error. ', 3),
+        createErrorEntry('Something else.', 4),
+        createErrorEntry('Codex’s API had a server error.', 5),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.errors.map((item) => [item.text, item.count])).toEqual([
+      ['Codex’s API had a server error.', 3],
+      ['Something else.', 1],
+    ]);
+    expect(turn?.notices).toEqual([
+      {
+        kind: 'retrying',
+        key: 'retry',
+        at: 2,
+        provider: 'codex',
+        detail: 'Codex’s API had a server error.',
+        attempt: 1,
+        attempts: 3,
+        retryAt: 40,
+      },
+    ]);
   });
 
   it('keeps a final reply even when the run failed afterwards', () => {

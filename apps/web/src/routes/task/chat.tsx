@@ -6,6 +6,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ContextMeter } from '@/components/chat/context-meter.tsx';
 import { OpenDelegations } from '@/components/chat/delegation-card.tsx';
+import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { RoundDivider } from '@/components/chat/round-divider.tsx';
 import { ROW, RunSection } from '@/components/chat/run-section.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
@@ -81,7 +82,11 @@ function TranscriptBlockView({
         <>
           <RoundDivider round={block.round} first={block.first} />
           <div className={ROW}>
-            <UserMessage persistId={messageId} text={block.round.request} />
+            <UserMessage
+              persistId={messageId}
+              text={block.round.request}
+              status={block.delivering ? 'delivering' : undefined}
+            />
           </div>
         </>
       );
@@ -197,6 +202,7 @@ export function ChatTab({
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}
           aside={<ContextMeter runIds={runs.map((run) => run.id)} />}
+          dock={<MessageQueue task={task} />}
         />
       )}
     </div>

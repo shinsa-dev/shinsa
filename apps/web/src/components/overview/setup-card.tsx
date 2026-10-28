@@ -4,7 +4,6 @@ import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
-import { canSkipChecks } from '@/lib/overview/setup.ts';
 import { type GateReplier, type GateReply, replyToGate } from '@/lib/tasks/gates.ts';
 
 export function SetupCard({
@@ -25,21 +24,9 @@ export function SetupCard({
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
       title={gate.title}
       action={
-        <>
-          {canSkipChecks(task) && (
-            <Button
-              variant='outline'
-              size='sm'
-              loading={busy === 'skipChecks'}
-              onClick={() => reply('skipChecks')}
-            >
-              Start without checks
-            </Button>
-          )}
-          <Button size='sm' loading={busy === 'recheck'} onClick={() => reply('recheck')}>
-            Verify again
-          </Button>
-        </>
+        <Button size='sm' loading={busy === 'recheck'} onClick={() => reply('recheck')}>
+          Verify again
+        </Button>
       }
       footer={
         <FooterNote note='Fix it in the repository or in Settings, then verify it again.'>

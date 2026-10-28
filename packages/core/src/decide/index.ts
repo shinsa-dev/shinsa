@@ -12,14 +12,17 @@ import {
 } from './accounts.ts';
 import {
   askQuestion,
+  attachCheck,
   attachComparison,
   attachEvidence,
   completeFix,
   completePhase,
   noteProgress,
   proposePlan,
+  removeEvidence,
   reportReview,
 } from './agents.ts';
+import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
 import { recordConflict, recordWorkspaceUpdate } from './conflicts.ts';
@@ -28,7 +31,6 @@ import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting, stackTask } from './dependencies.ts';
 import { commitEdits, recordEdit } from './edits.ts';
-import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -37,8 +39,16 @@ import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
-import { recordPullRequest, recordPullRequestReadFailure, recordPush } from './pull-requests.ts';
-import { changeRoundShipping, startQueuedRounds } from './rounds.ts';
+import {
+  recordHookFailure,
+  recordPullRequest,
+  recordPullRequestReadFailure,
+  recordPush,
+  recordPushRetry,
+  recordShippingStep,
+  recordUpdateConflict,
+} from './pull-requests.ts';
+import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
   attemptRun,
@@ -136,6 +146,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return dropMessage(decider, command);
     case 'round.ship':
       return changeRoundShipping(decider, command);
+    case 'round.update':
+      return updateRound(decider, command);
+    case 'round.remove':
+      return removeRound(decider, command);
     case 'gate.answer':
       assertHumanDecides(decider);
       return answerGate(decider, command.gateId, command.decision, command.response, {
@@ -197,6 +211,14 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPullRequest(decider, command);
     case 'pull_request.record_push':
       return recordPush(decider, command);
+    case 'pull_request.record_step':
+      return recordShippingStep(decider, command);
+    case 'pull_request.record_retry':
+      return recordPushRetry(decider, command);
+    case 'pull_request.record_update_conflict':
+      return recordUpdateConflict(decider, command);
+    case 'pull_request.record_hook_failure':
+      return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
       return recordPullRequestReadFailure(decider, command);
     case 'run.link':
@@ -225,8 +247,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return routeQuestion(decider, command, askQuestion);
     case 'agent.attach_evidence':
       return attachEvidence(decider, command);
+    case 'agent.attach_check':
+      return attachCheck(decider, command);
     case 'agent.attach_comparison':
       return attachComparison(decider, command);
+    case 'agent.remove_evidence':
+      return removeEvidence(decider, command);
     case 'agent.note':
       return noteProgress(decider, command);
     case 'task.bind_account':

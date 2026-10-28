@@ -30,6 +30,7 @@ for await (const chunk of Bun.stdin.stream()) {
     appendFileSync(${JSON.stringify(received)}, line + '\\n');
     const message = JSON.parse(line);
     if (message.method === 'echo') out(JSON.stringify({ id: message.id, result: message.params }));
+    if (message.method === 'env') out(JSON.stringify({ id: message.id, result: { headless: process.env.PLAYWRIGHT_MCP_HEADLESS } }));
     if (message.method === 'refuse') out(JSON.stringify({ id: message.id, error: {} }));
     if (message.method === 'quit') {
       process.stderr.write('first\\n\\nbye from the server');
@@ -44,11 +45,28 @@ for await (const chunk of Bun.stdin.stream()) {
   return { path, cwd: dir, received: () => readFileSync(received, 'utf8') };
 }
 
+function createDeafServer() {
+  const dir = createTempDir();
+  const path = join(dir, 'server');
+  writeFileSync(
+    path,
+    `#!/bin/sh
+exec 0<&-
+printf 'stopped reading' >&2
+echo '{"method":"deaf"}'
+exec sleep 30
+`
+  );
+  chmodSync(path, 0o755);
+  return { path, cwd: dir };
+}
+
 describe('the app server client', () => {
   test('talks JSON-RPC over lines, skips noise and answers requests it has no handler for', async () => {
     const server = createServer();
     const client = new CodexClient({ path: server.path, cwd: server.cwd });
     expect(await client.request('echo', { value: 1 })).toEqual({ value: 1 });
+    expect(await client.request('env', {})).toEqual({ headless: 'true' });
     await expect(client.request('refuse', {})).rejects.toThrow(
       new CodexRequestError('refuse', 'Codex refused the request.')
     );
@@ -74,5 +92,18 @@ describe('the app server client', () => {
     expect(notes).toContain('note');
     expect(notes).toContain('last');
     await expect(client.request('echo', {})).rejects.toThrow('Codex’s app server has stopped.');
+  });
+
+  test('a server that stops reading is stopped, and its requests fail with its last words', async () => {
+    const server = createDeafServer();
+    const client = new CodexClient({ path: server.path, cwd: server.cwd });
+    const deaf = Promise.withResolvers<void>();
+    const exits: string[] = [];
+    client.onNotification(() => deaf.resolve());
+    client.onExit((message) => exits.push(message));
+    await deaf.promise;
+    await expect(client.request('echo', {})).rejects.toThrow('stopped reading');
+    await client.exited;
+    expect(exits).toEqual(['stopped reading']);
   });
 });

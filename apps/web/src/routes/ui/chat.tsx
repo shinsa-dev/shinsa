@@ -5,6 +5,7 @@ import { ChatLine, DetailRail, ExpandRow, FoldLine } from '@/components/chat/cha
 import { ContextGauge } from '@/components/chat/context-meter.tsx';
 import { DelegationReportRow, DelegationSpawnCard } from '@/components/chat/delegation-card.tsx';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
+import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { NoticeLine } from '@/components/chat/notice-line.tsx';
 import { RoundDivider } from '@/components/chat/round-divider.tsx';
 import { ToolGroup, ToolRow } from '@/components/chat/tool-group.tsx';
@@ -13,6 +14,7 @@ import { CHAT_COLUMN, CHAT_INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
+import { Composer } from '@/components/task/composer.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { resolveContextMeter } from '@/lib/chat/context.ts';
 import { type DelegationView, selectDelegation } from '@/lib/chat/delegations.ts';
@@ -23,16 +25,40 @@ import {
   useDisclosure,
   useDisclosureScope,
 } from '@/lib/preferences/disclosure.ts';
-import { createSampleChatCalls } from './sample-chat.ts';
+import { createSampleChatCalls, createSampleRevisionCall } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
-import { acknowledgeSample, createSampleRoundsTask, createSampleRun, createSampleState } from './samples.ts';
+import { createOverviewScene } from './sample-overview.ts';
+import {
+  acknowledgeSample,
+  createSampleQueueTask,
+  createSampleRoundsTask,
+  createSampleRun,
+  createSampleState,
+} from './samples.ts';
 import { Specimen } from './section.tsx';
 
 const CONTEXT_TOKENS = [48_000, 156_000, 188_000];
 
 function createNoticeItems(now: number): TimelineItemOf<QuietNoticeKind>[] {
   return [
-    { kind: 'account', key: 'account', at: now, email: 'christo@example.com', reason: 'usage_limit' },
+    {
+      kind: 'account',
+      key: 'account',
+      at: now,
+      email: 'christo@example.com',
+      previous: null,
+      reason: 'usage_limit',
+    },
+    {
+      kind: 'retrying',
+      key: 'retrying',
+      at: now,
+      provider: 'claude',
+      detail: 'Claude’s API is overloaded (529).',
+      attempt: 1,
+      attempts: 3,
+      retryAt: now + 15_000,
+    },
     { kind: 'compaction', key: 'compaction', at: now, trigger: 'auto', by: 'claude' },
     { kind: 'compaction', key: 'eunoe-cut', at: now, trigger: 'auto', by: 'eunoe' },
     { kind: 'compaction', key: 'eunoe-fold', at: now, trigger: 'fold', by: 'eunoe' },
@@ -120,6 +146,30 @@ function RoundSpecimens({ now }: { now: number }) {
   );
 }
 
+function QueueSpecimens({ now }: { now: number }) {
+  const [one] = React.useState(() => createSampleQueueTask(now, 1));
+  const [several] = React.useState(() => createSampleQueueTask(now, 3));
+  return (
+    <>
+      <Specimen label='MessageQueue · one queued message, docked above the composer'>
+        <div className='w-full max-w-xl'>
+          <Composer
+            placeholder='Tell the agent something.'
+            submitLabel='Send message'
+            onSubmit={acknowledgeSample}
+            dock={<MessageQueue task={one} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='MessageQueue · several queued messages, each one editable and removable until it sends'>
+        <div className='w-full max-w-xl'>
+          <MessageQueue task={several} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />
+        </div>
+      </Specimen>
+    </>
+  );
+}
+
 function IconColumnGuide() {
   return (
     <span aria-hidden className='pointer-events-none absolute inset-y-0 start-0 flex ps-(--chat-inset)'>
@@ -184,6 +234,10 @@ function IconColumnSpecimen({ view }: { view: DelegationView | undefined }) {
 
 function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<QuietNoticeKind>[] }) {
   const [calls] = React.useState(createSampleChatCalls);
+  const [revised] = React.useState(() => {
+    const task = createOverviewScene(now).tasks.plan;
+    return { task, call: createSampleRevisionCall(task) };
+  });
   const [run] = React.useState(() =>
     createSampleRun(now, {
       id: 'agent',
@@ -226,6 +280,11 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
           <HandoverCard call={calls.failed} run={run} live={false} />
         </div>
       </Specimen>
+      <Specimen label='Hand-over cards · a revised plan: what changed above the goal, its new and reworked phases tagged, the same as the plan gate'>
+        <div className='flex w-full max-w-xl flex-col gap-4'>
+          <HandoverCard call={revised.call} run={run} live={false} task={revised.task} />
+        </div>
+      </Specimen>
     </>
   );
 }
@@ -241,6 +300,23 @@ export function ChatSpecimens() {
 const SAMPLE_SCREENSHOT = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#f4f4f5"/><rect width="320" height="36" fill="#e4e4e7"/><rect x="16" y="12" width="80" height="12" rx="3" fill="#a1a1aa"/><rect x="16" y="28" width="120" height="16" rx="3" fill="#3b82f6"/><rect x="16" y="64" width="288" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="88" width="220" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="112" width="250" height="12" rx="3" fill="#d4d4d8"/></svg>'
 )}`;
+
+const DELIVERY_REPLAY_MS = 2_400;
+
+function DeliveryReplay() {
+  const [delivering, setDelivering] = React.useState(true);
+  React.useEffect(() => {
+    const timer = setInterval(() => setDelivering((current) => !current), DELIVERY_REPLAY_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <UserMessage
+      persistId={createDisclosureId('ui', 'chat', 'message', 'replay')}
+      text='Delivering, then delivered, again and again.'
+      status={delivering ? 'delivering' : undefined}
+    />
+  );
+}
 
 function SampleMessages() {
   const sample = (name: string) => createDisclosureId('ui', 'chat', 'message', name);
@@ -292,11 +368,18 @@ function SampleMessages() {
         )}
       />
       <UserMessage
-        persistId={sample('sending')}
+        persistId={sample('delivering')}
         text='Also add search to the settings page.'
-        status='sending'
+        status='delivering'
       />
-      <UserMessage persistId={sample('queued')} text='And dark mode.' status='queued' />
+      <UserMessage
+        persistId={sample('delivering-long')}
+        text={
+          'Keep the old endpoint for a release.\nLog a warning when a client still calls it, with the client name.'
+        }
+        status='delivering'
+      />
+      <DeliveryReplay />
       <UserMessage persistId={sample('noted')} text='Thanks!' status='noted' />
       <UserMessage
         persistId={sample('undelivered')}
@@ -337,9 +420,10 @@ function ChatSpecimenList() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, with attachments, every kind of file, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
+      <Specimen label='UserMessage · delivered, with attachments, every kind of file, delivering at half opacity with the blue light going round (one line, several lines, then delivered on a loop), noted with no reply, not delivered'>
         <SampleMessages />
       </Specimen>
+      <QueueSpecimens now={now} />
       <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           {notices.map((item) => (

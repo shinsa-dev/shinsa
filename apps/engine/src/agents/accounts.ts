@@ -5,6 +5,7 @@ import type {
   RunAccount,
   RunFailure,
   ShinsaState,
+  WeeklyReading,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -16,12 +17,14 @@ export interface RunRejection {
   attemptId: string;
   accountId: string | null;
   tried: string[];
+  renewed: string[];
   failure: RunFailure;
 }
 
 export interface RejectionVerdict {
   retry: boolean;
   failure?: RunFailure;
+  renewed?: string;
 }
 
 export type RejectionHandler = (rejection: RunRejection) => Promise<RejectionVerdict> | RejectionVerdict;
@@ -44,8 +47,8 @@ export interface AccountLeaseRequest {
 
 export interface AccountBroker {
   lease: (request: AccountLeaseRequest) => Promise<AccountLease | null>;
-  readWeeklyPercent: (accountId: string, force: boolean) => Promise<number | null>;
-  readProviderWeeklyPercent: (provider: string, force: boolean) => Promise<number | null>;
+  readWeeklyReading: (accountId: string, force: boolean) => Promise<WeeklyReading | null>;
+  readProviderWeeklyReading: (provider: string, force: boolean) => Promise<WeeklyReading | null>;
   readFastMode: (provider: string, accountId: string | null) => Promise<FastModeAvailability>;
 }
 
@@ -85,7 +88,7 @@ export class AccountLeasing {
     this.#transcripts = transcripts;
   }
 
-  async leaseAttempt(run: Run, exclude: string[]) {
+  async leaseAttempt(run: Run, exclude: string[], renewed: RunAccount | null = null) {
     if (!this.#broker) return null;
     const state = this.#state();
     const previous = selectPreviousAccount(state, run.taskId);
@@ -93,7 +96,7 @@ export class AccountLeasing {
       runId: run.id,
       taskId: run.taskId,
       model: run.model,
-      bound: run.account ?? state.tasks[run.taskId]?.account ?? null,
+      bound: renewed ?? run.account ?? state.tasks[run.taskId]?.account ?? null,
       previous,
       exclude,
     });
@@ -111,11 +114,11 @@ export class AccountLeasing {
     return lease;
   }
 
-  async readWeeklyPercent(runId: string, lease: AccountLease | null, provider: string, force: boolean) {
+  async readWeeklyReading(runId: string, lease: AccountLease | null, provider: string, force: boolean) {
     if (!this.#broker) return null;
     try {
-      if (!lease) return await this.#broker.readProviderWeeklyPercent(provider, force);
-      return await this.#broker.readWeeklyPercent(lease.id, force);
+      if (!lease) return await this.#broker.readProviderWeeklyReading(provider, force);
+      return await this.#broker.readWeeklyReading(lease.id, force);
     } catch (error) {
       log.warn('[Runs] Could not read the weekly usage a run is charged against', {
         runId,

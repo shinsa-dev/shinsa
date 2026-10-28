@@ -1,10 +1,11 @@
 import type { Round, Run, Task } from '@shinsa/core';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
+import { isRoundDelivering } from '@/lib/tasks/message-queue.ts';
 import { listRoundSections } from '@/lib/tasks/rounds.ts';
 
 export type TranscriptBlock =
   | { kind: 'message'; key: string; message: HumanMessage }
-  | { kind: 'round'; key: string; round: Round; first: boolean }
+  | { kind: 'round'; key: string; round: Round; first: boolean; delivering: boolean }
   | { kind: 'run'; key: string; run: Run; first: boolean };
 
 export const INITIAL_BLOCKS = 8;
@@ -39,12 +40,14 @@ export function listTranscriptBlocks(
       ),
     ];
   }
-  listRoundSections(task, runs).forEach((section, index) => {
+  const sections = listRoundSections(task, runs).filter((section) => section.round.status !== 'waiting');
+  sections.forEach((section, index) => {
     blocks.push({
       kind: 'round',
       key: `round-${section.round.number}`,
       round: section.round,
       first: index === 0 && preamble.length === 0,
+      delivering: isRoundDelivering(section.round, section.runs),
     });
     section.runs.forEach((run, position) => {
       blocks.push({ kind: 'run', key: run.id, run, first: position === 0 });

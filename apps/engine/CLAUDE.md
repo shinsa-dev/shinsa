@@ -43,7 +43,9 @@ src/
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
-│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
+│                        source), flavor.ts (FLAVOR: Shinsa or Shinsa Canary, baked in by build-engine.ts from
+│                        SHINSA_FLAVOR as SHINSA_BUILD_FLAVOR; it picks the data folder, port, job label and link
+│                        scheme), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
 │                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
@@ -54,8 +56,10 @@ src/
 │                        plugins, services, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
-├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
-│                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
+├── config/              paths.ts (where ~/.config/shinsa, or ~/.config/shinsa-canary for Shinsa Canary, config.json and data/ are), file.ts (config.json: read
+│                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json, the port
+│                        defaulting to the flavor's: 7446, 7447 for Shinsa Canary; package.json's dev and start
+│                        scripts pin 5180 so a checkout never meets the Mac app's engine; every SHINSA_*
 │                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (instance/service.ts) and the
 │                        SHINSA_BUILD_* a compiled engine carries (instance/bundle.ts); prepareDataDir)
 ├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
@@ -80,8 +84,10 @@ src/
 ├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
-│                        effect pump, cancellation, settle), EffectRunner (effects.ts: one handler per
-│                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
+│                        effect pump, cancellation, settle, the retry policy an error carries and onEffectRetry),
+│                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
+│                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
+│                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
 │                        base of every timer that fires from state) and MonitorClock (monitors.ts)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
@@ -93,7 +99,7 @@ src/
 │   │                    account seam: leases and rejections (accounts.ts), idle
 │   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface), what `read_task` reads (reading.ts),
+│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
@@ -124,9 +130,11 @@ src/
 │   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process.ts), the hand-overs
 │   │                    of each task shape: answer, report_diagnosis, submit_report, report_outcome, reshape_task
 │   │                    (shapes.ts), delegation and couriers (orchestration.ts), schedules (schedules.ts). The plan
-│   │                    parameters in `propose_plan` (verification, impact, evidence, checks, approval) and the
-│   │                    steps `reshape_task` offers are generated from core's VERIFICATION_RULES, PROTOCOL_LIMITS,
-│   │                    PLAN_EVIDENCE_KINDS and STEP_SCHEMA, never hand-written
+│   │                    parameters in `propose_plan` (verification as checks, impact, evidence, approval), the
+│   │                    `check_changes` of `complete_phase` and `complete_fix`, the `checks` of `complete_fix`, a
+│   │                    linked check on `attach_evidence` (`check`) and the steps `reshape_task` offers are generated
+│   │                    from core's VERIFICATION_RULES, PROTOCOL_LIMITS, PLAN_EVIDENCE_KINDS and STEP_SCHEMA, never
+│   │                    hand-written
 │   ├── transcripts/     Per-run JSONL transcripts, live listeners with each entry's position, tailing a file another
 │   │                    writer appends to, reading only the bytes appended since; the entries of followed and
 │   │                    recently read runs stay in memory
@@ -137,9 +145,11 @@ src/
 ├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
 │                        account, shared entries linked), paths.ts (folders, the Claude config dir and
 │                        resolveAccountEnv, the environment every command for an account runs with), login.ts
-│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder),
+│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read and written),
 │                        usage.ts and limits.ts (reading and caching usage), rotation.ts (leases, the spent marks in
 │                        account-marks.json and the one retry budget; the picker itself is core's `pickAccount`),
+│                        renewal.ts (a login Claude could not refresh: read again, claude-swap's copy taken, the
+│                        Sign in gate's text, noticing it works again),
 │                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
 │                        resume.ts (the usage-wait clock), routes.ts (/api/accounts), index.ts (the Accounts
 │                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
@@ -164,7 +174,11 @@ src/
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, isolation.ts (detached
+├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
+│                        PushError: a failed push typed as hook, network, non_fast_forward or other by
+│                        classifyPushFailure; hasPrePushHook, core.hooksPath and husky's stubs followed; the output's
+│                        tail), update.ts (updateOntoBase: fetch the base, merge it in when the branch lacks it, or
+│                        list the conflicts and abort the merge), isolation.ts (detached
 │                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
 │                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte or line cap,
 │                        each chunk as it comes, the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
@@ -175,23 +189,36 @@ src/
 │                        files a task's branch committed since its base plus what its checkout has not committed)
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
 │                        (types.ts: prepare, claim, commit, push, remove, writeEdit, listConflicted, update: `but
-│                        pull` for GitButler only), worktrees.ts,
+│                        pull` for GitButler only, syncBase: the merge of the base before a push, skipped in
+│                        GitButler), worktrees.ts,
 │                        main-checkout.ts and gitbutler.ts (a branch per task through `but`, one writing agent at a
 │                        time, stacked on another task's branch when its commit needs that branch's lines, taken out
 │                        of its stack before it is unapplied, never pushed while a commit on it is conflicted:
 │                        ConflictedBranchError), but.ts (the
-│                        `but` runner, isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
+│                        `but` runner, readButVersion, needsButSetup for 0.22, isGitButlerReady,
+│                        isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
 │                        data/workspaces/), lock.ts (WorkspaceLock), index.ts (Workspaces.resolve, the setup check's
 │                        describeWorkspaceProblem, listWorkspaceSupport for GET /api/repos/workspaces)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
-├── checks/              The repository's check commands, then the plan's own `checks`, each run the same way
-│                        (`sh -c` in the worktree, one timeout, the result named by its command; a repeat runs once);
-│                        evidence.ts writes their output as Shinsa's own `check` evidence, leaving out output an agent
-│                        already attached (docs/engine.md → Evidence)
-├── test-coverage/       Changed-line coverage after passing checks: detect.ts (resolveCoveragePlan: the command Auto
-│                        detects from the repository's files, writing into a temporary folder), index.ts
-│                        (measureTaskCoverage: run it like a check, read the report, diff against the task's base (in a
+├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
+│                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
+│                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after
+│                        CHECK_TIMEOUT_MS (15 minutes); a command named twice runs once (index.ts: runChecks). A
+│                        failure re-runs its failing test files alone once (reruns.ts; all pass: `passed_alone`), then
+│                        runs on the task's base commit in a kept detached checkout, cached per base commit and command
+│                        (base.ts: BaseCheckouts, compareWithBase), comparing the failures themselves (failures.ts:
+│                        listCheckFailures reads failing tests by file and name, or tsc, Biome, ESLint, Prettier and
+│                        path:line diagnostics by file, code and message, never the line; resolveFailureDiff,
+│                        describeFailureDiff): none new is `fails_on_base`, not blocking; new ones block, named first;
+│                        output it cannot read, or a failing file or a path in the command missing on the base, is
+│                        never compared); evidence.ts writes each check's output
+│                        as one piece of Shinsa's `check` evidence with its id (serializeCheckOutput)
+│                        (docs/engine.md → Checks)
+├── test-coverage/       Changed-line coverage, once before review, from the tests among the task's checks: detect.ts
+│                        (resolveCoverageRun: a test check's command run again with its runner's coverage report in a
+│                        temporary folder; resolveCoverageDetection for Settings), index.ts
+│                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base (in a
 │                        GitButler workspace only the task's branch and the files the ledger says it owns), and
 │                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
@@ -219,7 +246,8 @@ src/
 │                        message is accepted into the task's inbox at once (message.receive) and inbox.ts
 │                        (MessageInbox) classifies and routes it after, one task at a time and in order:
 │                        everything waiting in a task's inbox is classified together against the task as it is
-│                        then and routed as one (message.route with messageIds), a classifier that does not
+│                        then and routed as one (message.route with messageIds; not classified at a gate that
+│                        takes words, needsMessageKind), a classifier that does not
 │                        answer within 30 s routes it unclassified, and a route that breaks is dropped with a
 │                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
@@ -239,7 +267,7 @@ src/
 │                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
 │                        services: add, update, remove, start, stop, restart, resume after a restart);
 │                        pty.ts also reads the program in front of a shell (readForegroundProgram)
-└── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
+└── http/                server.ts (Bun.serve; a taken port names itself and config.json's `port`), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
                          page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),
                          static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the
@@ -261,6 +289,11 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Effects report back as commands.** An effect never writes state; it dispatches `run.end`, `pull_request.record`,
   `effect.fail` and so on. One that gives up becomes a failure gate when its kind has one, never a silent log line
   (`docs/engine.md` → Guarantees).
+- **A failure that is not the outside world's is not thrown.** A deterministic failure (a pre-push hook rejection, a
+  conflict while updating onto the base) is reported as a command and the effect settles, so the outbox never
+  retries it; one that is never worth retrying throws an `EffectError` with `retryable: false`; and every retry of a
+  push is reported to its task (`reportRetry`). No push skips the repository's hooks (`docs/engine.md` → Pushing the
+  branch).
 - **Every command the server sends gets a fixed id from its cause** (`Engine.dispatch(command, { id })`), unique for
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
@@ -289,7 +322,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
   (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are
-  `shinsa settings set` naming one of core's `HUMAN_ONLY_SETTINGS` and `shinsa repos update` changing the checks;
+  `shinsa settings set` naming one of core's `HUMAN_ONLY_SETTINGS` and `shinsa repos update` changing the
+  repository's check commands, workspace or coverage;
   which decisions those are is `docs/engine.md` → Who can change Shinsa. Core refuses them on your behalf as well. There are no keys, codes or cookies and no per-caller routes;
   never add one, since an agent's shell reads whatever the user can.
 - **Nothing reaches git or gh as an option.** Branch names pass `assertRefName` (no leading `-`, no `..`), fetches put
@@ -301,6 +335,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `agents/providers/claude/guard.ts`. The rules themselves are in
   `agents/policy.ts`, so every provider enforces the same ones; a run is read-only by core's `isReadOnlyRun` (a
   read-only role, or the task's agent while it plans), which reaches the provider as `AgentSessionInput.readOnly`.
+- **No browser an agent starts opens a window.** Every stdio MCP server a run or a health check starts, and the
+  `claude` and `codex` processes themselves, get `HEADLESS_BROWSER_ENV` (`extensions/definitions.ts`:
+  `PLAYWRIGHT_MCP_HEADLESS=true`, which `@playwright/mcp` reads; without it the server is headed on a Mac).
 - **One session per task, two kinds of access.** The task's agent plans, builds every phase, fixes, runs the
   operation and answers, investigates or researches in later rounds as separate runs on one resumed session, so its
   access changes between turns without changing its prompt-cache prefix (`docs/engine.md` → Caching): Claude keeps
@@ -316,7 +353,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
-  pipeline needs a worktree and for check commands only when it builds (`runtime/effects.ts`); a worktree reused
+  pipeline needs a worktree, and never for check commands (`runtime/effects.ts`); a worktree reused
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
@@ -338,7 +375,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. Evidence is checked by core's `validateEvidence` (`storeEvidence`): exactly one of a path (absolute or relative
-  to the worktree, at most 200 MB), an http or https URL, or text.
+  to the worktree, at most 200 MB), an http or https URL, or text; a test or check takes only a check id and is
+  dispatched as `agent.attach_check`, with nothing stored.
 - **Code reads are pinned and confined** (`http/code.ts`, `docs/engine.md` → The Code tab's reads): only the task's
   registered repository, a ref is a full commit id the repository has or `working`, paths are relative with no `.`
   or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `resolveInside`, and
@@ -386,7 +424,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   in `test/helpers/fish`, off the `PATH`, that `FAKE_FISH_SILENT` fails and `FAKE_FISH_LOG` records);
   `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` and a `but` that runs the real GitButler CLI
   with its own `HOME` (`FAKE_BUT_HOME`, so tests never touch your GitButler projects; `FAKE_BUT_MISSING` makes it
-  missing; the GitButler tests need `but` installed) (every config's `eunoe.command`,
+  missing and `FAKE_BUT_VERSION` makes `but --version` report that version; the GitButler tests need `but` 0.22 or
+  newer installed, and set a repository up with `startGitButler`, which runs `but setup` only for 0.22) (every
+  config's `eunoe.command`,
   `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last
   parameters (`startSession`, `providers`, `triage`, `resolveLogin`, `ask`, `runQuery`, `launch`, `discover`,
@@ -395,6 +435,15 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   with the preload, and a test that ends with one still running fails (the stray is killed): stop and await the work that runs it (`await runner.stop()`,
   `engine.settle()`). The fake `gh` gives up on a state folder that is gone and breaks a lock its killed holder left
   behind.
+- **A test leaves no folder behind.** The preload points `TMPDIR` at a folder of the run's own, removed when the run
+  ends, and removes every `createTempDir` folder after each test (`test/helpers/temp.ts`). A hook lives in the
+  preload or a test file: Bun never runs an `afterEach` that a helper module registers. Leftover folders slow every
+  test that starts a fake: Bun reads each folder above its working directory when it starts, so a `TMPDIR` holding
+  a hundred thousand of them adds a second to each fake `gh`, `codex` or `eunoe`.
+- **A test starts as few processes as it can.** Under load each one costs about a second, so a test that runs one
+  scenario after another through the fake `codex` passes a runtime or runner that answers in process where the
+  scenario is about Shinsa's reading (`readCodexLogin`'s runner, a `resolveExecutable` that says what it found), and
+  gives each scenario that needs the fake its own test (`test.each`).
 - The fake `gh` answers `pr view` with a `mergeCommit`: the one a test puts on the pull request, or the head's sha
   once it merges one, so a test can follow a task past the merge (the operation gate shows that commit).
 - **Tests wait on conditions, never on time.** Use `awaitEffect(log, key)` from `test/helpers` (keys come from
@@ -409,4 +458,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `planner` or `builder`); the fake `codex` picks its script the same way, `plan` by the read-only sandbox.
 - `SHINSA_SETTLE_DELAY_MS` sets how long the watch waits before it reads a pull request Shinsa just pushed to or
   opened (15 s); tests set it low.
+- `SHINSA_PUSH_RETRY_MS` sets how long a push waits before it tries an unreachable remote again (30 s,
+  `config.pushRetryMs`); the test config sets it to 10 ms.
+- `SHINSA_OVERLOAD_RETRY_MS` sets the first wait before an overloaded turn is tried again (15 s, doubled for each of
+  the three retries, `config.overloadRetryMs`); the test config sets it to 10 ms.
 - `bun run test` fails below 100% line and function coverage (`bunfig.toml`).

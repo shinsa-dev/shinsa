@@ -8,6 +8,7 @@ import {
   resolveIdleCompaction,
   resolveRepoWorkspace,
   type Settings,
+  type UsageRate,
 } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
@@ -94,7 +95,13 @@ import {
   resolveSettingsPath,
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
-import { UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
+import {
+  CANARY_DOWNLOAD_URL,
+  isChannelFixed,
+  parseUpdateChannel,
+  UPDATE_CHANNEL_ITEMS,
+  UPDATES_LABEL,
+} from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate } from '@/router.ts';
@@ -396,7 +403,11 @@ function listRoleChoices(
   });
 }
 
-function listUsageChoices(settings: Settings, snapshot: AccountsSnapshot | null): Command[] {
+function listUsageChoices(
+  settings: Settings,
+  snapshot: AccountsSnapshot | null,
+  rates: Map<string, UsageRate | null> | null
+): Command[] {
   const choices = [
     settingChoice(
       'usage-limit',
@@ -406,7 +417,7 @@ function listUsageChoices(settings: Settings, snapshot: AccountsSnapshot | null)
       (value) => patchSettings({ taskUsageLimit: parseUsageLimit(value) })
     ),
   ];
-  if (needsCostLimit(settings, snapshot?.accounts ?? null)) {
+  if (needsCostLimit(settings, snapshot?.accounts ?? null, rates)) {
     choices.push(
       settingChoice(
         'budget',
@@ -460,6 +471,29 @@ function listWorkspaceChoices({ repos, support }: WorkspaceChoices): Command[] {
     });
 }
 
+function listChannelChoices(channel: UpdateChannel | null): Command[] {
+  if (!channel || isChannelFixed(channel)) return [];
+  return [
+    settingChoice('update-channel', UPDATES_LABEL.channel, UPDATE_CHANNEL_ITEMS, channel, (value) =>
+      applyDesktopChannel(parseUpdateChannel(value))
+    ),
+  ];
+}
+
+function listCanaryCommands(channel: UpdateChannel | null): Command[] {
+  if (!channel || isChannelFixed(channel)) return [];
+  return [
+    {
+      kind: 'link',
+      id: 'settings.canary.download',
+      label: UPDATES_LABEL.downloadCanary,
+      icon: 'IconArrowUpRight',
+      keywords: ['canary', 'update channel', 'main', 'nightly', 'install'],
+      href: CANARY_DOWNLOAD_URL,
+    },
+  ];
+}
+
 export function listSettingsSections(
   settings: Settings,
   providers: AgentProviderInfo[],
@@ -467,7 +501,8 @@ export function listSettingsSections(
   snapshot: AccountsSnapshot | null = null,
   workspaces: WorkspaceChoices = { repos: [], support: null },
   explorerSide: ExplorerSide = 'left',
-  updateChannel: UpdateChannel | null = null
+  updateChannel: UpdateChannel | null = null,
+  rates: Map<string, UsageRate | null> | null = null
 ): CommandSection[] {
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
@@ -480,22 +515,12 @@ export function listSettingsSections(
         ...listWorkflowChoices(settings),
         ...listGroupChoices(settings, providers, snapshot),
         ...listRoleChoices(settings, providers, snapshot),
-        ...listUsageChoices(settings, snapshot),
+        ...listUsageChoices(settings, snapshot, rates),
         ...listWorkspaceChoices(workspaces),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),
-        ...(updateChannel
-          ? [
-              settingChoice(
-                'update-channel',
-                UPDATES_LABEL.channel,
-                UPDATE_CHANNEL_ITEMS,
-                updateChannel,
-                (value) => applyDesktopChannel(value === 'beta' ? 'beta' : 'stable')
-              ),
-            ]
-          : []),
+        ...listChannelChoices(updateChannel),
       ],
     },
     {
@@ -511,6 +536,7 @@ export function listSettingsSections(
           keywords: ['onboarding', 'setup steps', 'folders', 'start over'],
           run: () => void restartOnboarding(),
         },
+        ...listCanaryCommands(updateChannel),
       ],
     },
   ];

@@ -26,6 +26,8 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     editor: null,
     terminal: 'Terminal',
     settleDelayMs: 3_600_000,
+    pushRetryMs: 10,
+    overloadRetryMs: 10,
     eunoe: { command: resolve(import.meta.dirname, 'bin/eunoe'), port: null },
     ...overrides,
   };

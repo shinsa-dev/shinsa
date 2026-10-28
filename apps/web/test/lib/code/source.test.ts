@@ -50,6 +50,23 @@ describe('resolveFileSource', () => {
   });
 });
 
+describe('resolveFileSource baseline', () => {
+  it('reads a changed file opened on its own against its base, and nothing else', () => {
+    const baseline = (path: string, kind: 'diff' | 'file' = 'file', diff: TaskDiff | null = DIFF) =>
+      resolveFileSource({ kind, path }, diff).baselinePath;
+    expect(baseline('same.ts')).toBe('same.ts');
+    expect(baseline('new.ts')).toBe('old.ts');
+    expect(baseline('added.ts')).toBeNull();
+    expect(baseline('gone.ts')).toBeNull();
+    expect(baseline('other.ts')).toBeNull();
+    expect(baseline('same.ts', 'file', null)).toBeNull();
+    expect(baseline('same.ts', 'diff')).toBeNull();
+    expect(baseline('other.ts', 'diff')).toBeNull();
+    const binary: TaskDiff = { ...DIFF, files: [{ ...file('logo.png', 'modified'), binary: true }] };
+    expect(baseline('logo.png', 'file', binary)).toBeNull();
+  });
+});
+
 describe('hasOneSide', () => {
   it('is true for a whole file added or deleted, and false for a change on both sides or no diff', () => {
     const open = (path: string, kind: 'diff' | 'file' = 'diff') => resolveFileSource({ kind, path }, DIFF);

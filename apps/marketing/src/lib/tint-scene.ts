@@ -46,9 +46,9 @@ const FINDINGS: ReviewFinding[] = [
 ];
 
 const CHECKS: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
-  { name: 'bun run test', outcome: 'pass', detail: '1,835 tests' },
+  { id: 'r1', label: 'bun lint', command: 'bun lint', outcome: 'pass', detail: null },
+  { id: 'r2', label: 'bun check-types', command: 'bun check-types', outcome: 'pass', detail: null },
+  { id: 'r3', label: 'bun run test', command: 'bun run test', outcome: 'pass', detail: '1,835 tests' },
 ];
 
 const REPORT: WorkReport = {

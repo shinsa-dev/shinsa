@@ -1,9 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { Task } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
-import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+import { createGitRepo, git, startParallelBranches, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 const strategy = new MainCheckoutStrategy();
@@ -73,7 +72,7 @@ describe('the main checkout', () => {
 
   test('a GitButler workspace is refused: switching its checkout would take it out of GitButler', async () => {
     const { repo, path } = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], path);
+    await startParallelBranches(path);
     await expect(strategy.prepare(repo, createTask({ worktreePath: null }))).rejects.toThrow(
       'app is a GitButler workspace. Choose GitButler or worktrees for it in Settings → Projects.'
     );

@@ -17,5 +17,5 @@ export {
   resolveSpentUntil,
   resolveUsedPercent,
   resolveWeeklyPercent,
-  resolveWeeklyUsed,
+  resolveWeeklyReading,
 } from './usage.ts';

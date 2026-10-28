@@ -1,4 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { HEADLESS_BROWSER_ENV } from '../../../extensions/definitions.ts';
 import { type ClaudeExecutable, type ExecutableResolver, resolveClaudeExecutable } from './executable.ts';
 
 export type QueryFn = typeof query;
@@ -17,7 +18,7 @@ export class ClaudeSetupError extends Error {
   override name = 'ClaudeSetupError';
 }
 
-function resolveClaudeEnv() {
+function resolveClaudeEnv(): Record<string, string | undefined> {
   const {
     CLAUDECODE: _claudeCode,
     ANTHROPIC_BASE_URL: _baseUrl,
@@ -25,7 +26,7 @@ function resolveClaudeEnv() {
     EUNOE_DIR: _eunoeDir,
     ...env
   } = Bun.env;
-  return env;
+  return { ...env, ...HEADLESS_BROWSER_ENV };
 }
 
 export async function resolveClaudeProcess(resolveExecutable: ExecutableResolver) {

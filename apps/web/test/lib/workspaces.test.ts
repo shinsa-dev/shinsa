@@ -35,7 +35,7 @@ describe('where agents work', () => {
       'Install GitButler’s command line (`but`) to use it.'
     );
     expect(describeGitButlerSupport({ butInstalled: true, gitButlerWorkspace: false })).toBe(
-      'Run `but setup` in this repository to use it.'
+      'Run `but setup` in this repository, or update `but` to 0.23 or newer, to use it.'
     );
     expect(describeGitButlerSupport({ butInstalled: true, gitButlerWorkspace: true })).toBeNull();
   });

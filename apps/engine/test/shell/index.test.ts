@@ -60,6 +60,18 @@ describe('runCommand', () => {
     expect(result.timedOut).toBe(true);
   });
 
+  test('a command with no time limit runs to the end, and a cancel still stops it', async () => {
+    const done = await runCommand(['sh', '-c', 'sleep 0.2; echo done'], createTempDir(), { timeoutMs: null });
+    expect(done).toMatchObject({ ok: true, stdout: 'done', timedOut: false });
+    const controller = new AbortController();
+    const running = runCommand(['sh', '-c', 'sleep 30'], createTempDir(), {
+      timeoutMs: null,
+      signal: controller.signal,
+    });
+    controller.abort();
+    expect(await running).toMatchObject({ ok: false, timedOut: false });
+  });
+
   test('a command whose effect was cancelled before it started never runs', async () => {
     const dir = createTempDir();
     const controller = new AbortController();
@@ -81,6 +93,28 @@ describe('runCommand', () => {
     const result = await running;
     expect(result.ok).toBe(false);
     expect(result.timedOut).toBe(false);
+  });
+
+  test('a process the group stop misses while it is being forked is stopped once the command ends', async () => {
+    const dir = createTempDir();
+    const controller = new AbortController();
+    const kill = spyOn(process, 'kill');
+    let missed = false;
+    kill.mockImplementation((pid: number, signal?: string | number) => {
+      kill.mockRestore();
+      const target = !missed && pid < 0 ? -pid : pid;
+      missed = true;
+      return process.kill(target, signal);
+    });
+    const started = Date.now();
+    const running = runCommand(['sh', '-c', 'touch started; sleep 30 & wait'], dir, {
+      signal: controller.signal,
+    });
+    await until('the command to start', () => existsSync(join(dir, 'started')));
+    controller.abort();
+    expect(await running).toMatchObject({ ok: false, timedOut: false });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(missed).toBe(true);
   });
 
   test('a group that already ended when the timeout fires is not reported as a failed stop', async () => {

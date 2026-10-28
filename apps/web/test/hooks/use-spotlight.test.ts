@@ -1,13 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test';
+import { beforeEach, describe, expect, it, jest } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
 import { SPOTLIGHT_HOLD_MS, useSpotlight } from '@/hooks/use-spotlight.ts';
 
 beforeEach(() => {
   jest.useFakeTimers();
-});
-
-afterEach(() => {
-  jest.useRealTimers();
 });
 
 describe('the spotlight on a place you jump to', () => {

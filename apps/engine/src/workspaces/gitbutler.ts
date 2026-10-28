@@ -1,14 +1,17 @@
 import { DomainError, type Repo, resolveRoundBase, type Task } from '@shinsa/core';
-import { assertRefName } from '../git/index.ts';
+import { assertRefName, createPushError, hasPrePushHook } from '../git/index.ts';
+import type { BaseUpdate } from '../git/update.ts';
 import { resolveFreeBranch } from '../git/worktree.ts';
 import { describeError, log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 import {
-  isGitButlerWorkspace,
+  BUT_MISSING,
+  isGitButlerReady,
   isStackedWithOthers,
   listAppliedBranches,
   listConflictedBranches,
   readButStatus,
+  readButVersion,
   runBut,
 } from './but.ts';
 import {
@@ -39,8 +42,8 @@ function describeConflicts(paths: string[]) {
   return `These files had uncommitted changes that are not this task’s, so Shinsa will not commit them to its branch: ${paths.join(', ')}. Undo your edits to them, or ask the human what to do.`;
 }
 
-export function describeNotWorkspace(repo: Repo) {
-  return `${repo.path} is not a GitButler workspace. Run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`;
+export function describeNotWorkspace(repo: Repo, version: string) {
+  return `${repo.path} is not a GitButler workspace, which \`but\` ${version} needs. Update \`but\` (0.23 and newer work in any repository) or run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`;
 }
 
 async function hasLocalBranch(repo: Repo, branch: string) {
@@ -82,8 +85,10 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     this.#lease = lease;
   }
 
-  prepare(repo: Repo, task: Task, signal?: AbortSignal) {
-    if (!isGitButlerWorkspace(repo.path)) throw new Error(describeNotWorkspace(repo));
+  async prepare(repo: Repo, task: Task, signal?: AbortSignal) {
+    const version = await readButVersion(signal);
+    if (version === null) throw new Error(BUT_MISSING);
+    if (!isGitButlerReady(repo.path, version)) throw new Error(describeNotWorkspace(repo, version));
     if (!task.branch) throw new Error('The task has no branch yet.');
     const requested = assertRefName(task.branch);
     return this.#serially(repo, async () => {
@@ -142,13 +147,14 @@ export class GitButlerStrategy implements WorkspaceStrategy {
       const paths = listOwnedPaths(claimed.ledger, task.id, dirty);
       if (paths.length === 0) {
         this.#ledgers.write(repo.id, claimed.ledger);
-        return { treeHash: await resolveBranchTree(repo, branch), undo: () => Promise.resolve() };
+        return { treeHash: await resolveBranchTree(repo, branch), files: [], undo: () => Promise.resolve() };
       }
       const { commitId, stackedOn } = await this.#commitOrStack(repo, branch, message, paths, canStackOn);
       const after = await readDirtyState(repo.path);
       this.#ledgers.write(repo.id, recordCommitted(claimed.ledger, task.id, paths, after));
       return {
         treeHash: await resolveBranchTree(repo, branch),
+        files: paths,
         undo: () => this.#uncommit(repo, task, commitId, paths, dirty),
         ...(stackedOn ? { stackedOn } : {}),
       };
@@ -160,7 +166,9 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     await this.#serially(repo, async () => {
       const status = await readButStatus(repo.path, signal);
       if (listConflictedBranches(status).includes(branch)) throw new ConflictedBranchError(branch);
-      await runBut(['push', branch], repo.path, { signal });
+      const command = ['but', 'push', branch];
+      const result = await runCommand(command, repo.path, { signal, timeoutMs: null });
+      if (!result.ok) throw createPushError(command, result, await hasPrePushHook(repo.path));
     });
     return runCommandOrThrow(['git', 'rev-parse', `refs/heads/${branch}`], repo.path);
   }
@@ -172,6 +180,10 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     } finally {
       release();
     }
+  }
+
+  syncBase(): Promise<BaseUpdate> {
+    return Promise.resolve({ status: 'skipped' });
   }
 
   listConflicted(repo: Repo) {

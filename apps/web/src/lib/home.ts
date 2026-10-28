@@ -17,7 +17,7 @@ import { resolveCatalog, selectPullRequestTask } from '@/lib/tasks/references.ts
 
 const RECENT_LIMIT = 5;
 
-const FINISHED_WINDOW_MS = 7 * DAY_MS;
+const FINISHED_WINDOW_MS = DAY_MS;
 
 const RUNNING_VERB: Partial<Record<TaskStage, string>> = {
   triage: 'sorting out',

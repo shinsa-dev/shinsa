@@ -224,7 +224,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       extra: [{ type: 'task.account_bound', taskId: 'task-sign-in', account: OPS }],
       gate: {
         type: 'sign_in',
-        title: `Sign in to Claude as ${OPS.email}`,
+        title: `Paused: ${OPS.email} needs signing in`,
         body: 'Claude signed this account out, so the agent stopped. Signing in starts the step again.',
         details: { provider: 'claude', account: OPS },
       },
@@ -243,7 +243,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       runs: [{ role: 'agent', purpose: 'build', minutes: 3, summary: 'Signed out.', failed: true }],
       gate: {
         type: 'sign_in',
-        title: `Sign in to Codex as ${PERSONAL.email}`,
+        title: `Paused: ${PERSONAL.email} needs signing in`,
         body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
         details: { provider: 'codex', account: null },
       },

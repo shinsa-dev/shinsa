@@ -26,7 +26,7 @@ const SPEC: PlanDocument = {
   approach: 'Carefully.',
   files: [],
   outOfScope: [],
-  verification: ['The overflow test passes.'],
+  verification: [{ label: 'Overflow test', command: 'bun test test/overflow.test.ts', phases: [2] }],
   questions: [],
 };
 

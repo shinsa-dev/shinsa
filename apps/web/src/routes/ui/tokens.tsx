@@ -1,4 +1,5 @@
-import { ICON_NAMES, Icon, type IconSize } from '@shinsa/ui/components/icon';
+import { Button } from '@shinsa/ui/components/button';
+import { ICON_NAMES, Icon, type IconName, type IconSize } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { Section, Specimen } from './section.tsx';
 
@@ -8,6 +9,13 @@ export const TOKEN_SECTIONS = [
   { id: 'font-weights', label: 'Font weights' },
   { id: 'shadows', label: 'Shadows' },
   { id: 'icons', label: 'Icons' },
+];
+
+const GLYPHS: IconName[] = [
+  'IconChevronDownSmall',
+  'IconChevronRightMedium',
+  'IconCrossSmall',
+  'IconCrossMedium',
 ];
 
 const SURFACES = [
@@ -253,6 +261,23 @@ export function TokenSpecimens() {
               {pair.replace('text-', '')}
             </span>
           ))}
+        </Specimen>
+        <Specimen label='chevrons and crosses · one ink size, 7.7px in the 14px box, whatever size they are given'>
+          <div className='flex items-center gap-4 text-fg-3'>
+            {GLYPHS.map((name) => (
+              <Icon key={name} name={name} size='lg' />
+            ))}
+          </div>
+          <div className='flex gap-px'>
+            <Button variant='secondary' size='icon-xs' icon='IconPencil' aria-label='Edit message' />
+            <Button
+              variant='secondary'
+              size='icon-xs'
+              icon='IconCrossSmall'
+              aria-label='Remove from the queue'
+            />
+            <Button variant='secondary' size='icon-xs' icon='IconChevronDownSmall' aria-label='Open' />
+          </div>
         </Specimen>
         <Specimen label='corner radius · 0 → 3'>
           <Icon name='IconArchive' radius='0' size='lg' className='text-fg-3' />

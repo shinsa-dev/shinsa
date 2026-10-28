@@ -29,7 +29,7 @@ function linkedTask() {
 }
 
 describe('commits GitButler left conflicted', () => {
-  test('at the review gate the agent resolves them in its own session, then the checks and review run again', () => {
+  test('at the review gate the agent resolves them in its own session, then the checks it names and review run again', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     linkSession(harness, taskId, 'agent-session');
@@ -58,8 +58,14 @@ describe('commits GitButler left conflicted', () => {
       'Fix round 1: resolving the conflicts GitButler left'
     );
 
-    harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Kept both lines.' });
-    expect(harness.task(taskId).stage).toBe('checking');
+    harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Kept both lines.', checks: ['c1'] });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'checking',
+      stageReason: 'running the checks again after the fix',
+    });
+    expect(harness.lastEffect('checks.run')).toMatchObject({
+      checks: [{ id: 'c1', label: 'Panel tests', command: 'bun test src/panel' }],
+    });
   });
 
   test('with the pull request open the merge gate is withdrawn and the resolved branch is pushed', () => {

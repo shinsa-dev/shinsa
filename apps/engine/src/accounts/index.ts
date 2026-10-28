@@ -13,7 +13,7 @@ import {
   resolveAgentModel,
   resolveCandidateSpentUntil,
   resolveSpentUntil,
-  resolveWeeklyPercent,
+  resolveWeeklyReading,
 } from '@shinsa/core';
 import type { AccountLease, AccountLeaseRequest, RejectionVerdict, RunRejection } from '../agents/index.ts';
 import { resolveClaudeExecutable } from '../agents/providers/claude/executable.ts';
@@ -24,7 +24,13 @@ import { describeError, log } from '../log/index.ts';
 import { type AccountActions, type AccountSource, createSummaryAccountSource } from '../onboarding/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
-import { createKeychainReader, readStoredLogin, type SecretReader } from './credentials.ts';
+import {
+  createKeychainReader,
+  createKeychainWriter,
+  readStoredLogin,
+  type SecretReader,
+  type SecretWriter,
+} from './credentials.ts';
 import { Cswap } from './cswap.ts';
 import { AccountImports } from './imports.ts';
 import { UsageLimits } from './limits.ts';
@@ -37,6 +43,7 @@ import {
 } from './login.ts';
 import { parseAccountPatch } from './patch.ts';
 import { type Env, resolveAccountEnv, resolveSharedConfigDir, resolveSharedGlobalConfig } from './paths.ts';
+import { LoginRenewal, type RenewedLogin } from './renewal.ts';
 import { AccountRotation, type SignInState } from './rotation.ts';
 import { type AuthStatus, type ClaudeRunner, readAuthStatus, STATUS_TIMEOUT_MS } from './status.ts';
 import { AccountStore, type StoredAccount } from './store.ts';
@@ -50,6 +57,7 @@ export interface AccountsOptions {
   env?: Env;
   run?: ClaudeRunner;
   readSecret?: SecretReader;
+  writeSecret?: SecretWriter;
   requestHttp?: UsageRequester;
   spawnLogin?: LoginSpawner;
   cswap?: Cswap;
@@ -96,6 +104,7 @@ export class Accounts {
   readonly #providerIdentities = new Map<string, ProviderIdentity>();
   readonly #signIns = new Map<string, SignInState>();
   readonly #rotation: AccountRotation;
+  readonly #renewal: LoginRenewal;
   readonly #imports: AccountImports;
   readonly #newLogins = new Set<string>();
   readonly #listeners = new Set<(snapshot: AccountsSnapshot) => void>();
@@ -145,9 +154,19 @@ export class Accounts {
       now: this.#now,
       timers: options.loginTimers,
     });
+    const cswap = options.cswap ?? new Cswap({ run: this.#run });
+    this.#renewal = new LoginRenewal({
+      cswap,
+      env: this.#env,
+      userHome,
+      readSecret: this.#readSecret,
+      writeSecret: options.writeSecret ?? createKeychainWriter(),
+      now: this.#now,
+    });
     this.#rotation = new AccountRotation({
       store: this.store,
       limits: this.limits,
+      renewal: this.#renewal,
       signIns: this.#signIns,
       state: () => this.#engine.state,
       now: this.#now,
@@ -158,7 +177,7 @@ export class Accounts {
       store: this.store,
       limits: this.limits,
       signIns: this.#signIns,
-      cswap: options.cswap ?? new Cswap({ run: this.#run }),
+      cswap,
       readStatus: (env) => this.#status(env),
       forget: (accountId) => this.#forget(accountId),
       onChange: () => this.#changed(),
@@ -180,6 +199,7 @@ export class Accounts {
       void this.limits.refresh(this.#listIds());
       void this.#refreshProviderUsage();
       void this.syncProviderLogins();
+      void this.#resumeRenewed();
     }, this.#refreshIntervalMs);
     this.#timer.unref();
     this.#changed();
@@ -407,15 +427,17 @@ export class Accounts {
     return Promise.resolve(this.#rotation.lease(request));
   }
 
-  async readWeeklyPercent(accountId: string, force: boolean) {
-    await this.limits.refresh([accountId], force);
-    return resolveWeeklyPercent(this.limits.snapshot(accountId));
+  async readWeeklyReading(accountId: string, force: boolean) {
+    const pushed = this.limits.snapshot(accountId).source === 'push';
+    await this.limits.refresh([accountId], force || pushed);
+    return resolveWeeklyReading(this.limits.snapshot(accountId));
   }
 
-  async readProviderWeeklyPercent(provider: string, force: boolean) {
+  async readProviderWeeklyReading(provider: string, force: boolean) {
     if (!this.#providerUsage.has(provider)) return null;
-    await this.providerLimits.refresh([provider], force);
-    return resolveWeeklyPercent(this.providerLimits.snapshot(provider));
+    const pushed = this.providerLimits.snapshot(provider).source === 'push';
+    await this.providerLimits.refresh([provider], force || pushed);
+    return resolveWeeklyReading(this.providerLimits.snapshot(provider));
   }
 
   async readFastMode(provider: string, accountId: string | null): Promise<FastModeAvailability> {
@@ -441,16 +463,28 @@ export class Accounts {
   async #recordProviderRejection(rejection: RunRejection): Promise<RejectionVerdict> {
     const { failure, provider } = rejection;
     if (failure.class === 'auth') {
+      this.#markProviderSignedOut(provider, failure.message);
       const email = this.#providerIdentities.get(provider)?.email ?? null;
       return { retry: false, failure: { ...failure, login: { provider, email } } };
     }
-    if (failure.class !== 'usage_limit' || failure.resetAt !== null) return { retry: false };
+    if (failure.class !== 'usage_limit') return { retry: false };
+    if (failure.resetAt !== null) {
+      void this.#refreshProviderUsage(true);
+      return { retry: false };
+    }
     const model = this.#engine.state.runs[rejection.runId]?.model ?? null;
     const pushed = resolveSpentUntil(this.providerLimits.snapshot(provider), model, this.#now());
     if (pushed !== null) return { retry: false, failure: { ...failure, resetAt: pushed } };
     await this.#refreshProviderUsage(true);
     const resetAt = resolveSpentUntil(this.providerLimits.snapshot(provider), model, this.#now());
     return { retry: false, failure: { ...failure, resetAt } };
+  }
+
+  #markProviderSignedOut(provider: string, detail: string) {
+    this.#providerLogins = this.#providerLogins.map((login) =>
+      login.provider === provider ? { ...login, status: 'signed_out', detail } : login
+    );
+    this.#changed();
   }
 
   onNotice = (runId: string, notice: ChatNotice) => {
@@ -478,9 +512,43 @@ export class Accounts {
     this.#changed();
   };
 
+  async #resumeRenewed() {
+    let renewed: RenewedLogin[];
+    try {
+      renewed = await this.#renewal.listRenewed(this.store.list());
+    } catch (error) {
+      log.warn('[Accounts] Could not check the logins that needed signing in', {
+        error: describeError(error),
+      });
+      return;
+    }
+    await Promise.all(
+      renewed.map(async ({ account, fingerprint }) => {
+        this.#signIns.set(account.id, { signIn: 'signed_in', detail: null });
+        log.info('[Accounts] A login that needed signing in works again; carrying on', {
+          accountId: account.id,
+          email: account.email,
+        });
+        try {
+          await this.#engine.dispatch(
+            { type: 'account.signed_in', account: { id: account.id, email: account.email } },
+            { id: `login-renewed:${account.id}:${fingerprint}` }
+          );
+        } catch (error) {
+          log.warn('[Accounts] Could not carry on after a login works again', {
+            accountId: account.id,
+            error: describeError(error),
+          });
+        }
+      })
+    );
+    if (renewed.length > 0) this.#changed();
+  }
+
   async refresh() {
     this.#assertChangeable();
     await Promise.all([this.syncSignIns(), this.#imports.sync(), this.syncProviderLogins()]);
+    await this.#resumeRenewed();
     await Promise.all([this.limits.refresh(this.#listIds(), true), this.#refreshProviderUsage(true)]);
     return this.snapshot();
   }
@@ -526,6 +594,7 @@ export class Accounts {
     });
     this.#signIns.set(accountId, { signIn: 'signed_in', detail: null });
     this.#rotation.clear(accountId);
+    this.#renewal.clear(accountId);
     this.#newLogins.delete(accountId);
     await this.#engine.dispatch(
       { type: 'account.signed_in', account: { id: accountId, email: status.email ?? account.email } },
@@ -612,6 +681,7 @@ export class Accounts {
     this.limits.remove(accountId);
     this.#signIns.delete(accountId);
     this.#rotation.clear(accountId);
+    this.#renewal.clear(accountId);
     this.#newLogins.delete(accountId);
   }
 }

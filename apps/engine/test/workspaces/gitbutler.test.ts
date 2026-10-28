@@ -1,7 +1,8 @@
 import { describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, Task } from '@shinsa/core';
+import { PushError } from '../../src/git/index.ts';
 import { log } from '../../src/log/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { readButStatus } from '../../src/workspaces/but.ts';
@@ -10,14 +11,21 @@ import { ConflictedBranchError } from '../../src/workspaces/index.ts';
 import { WorkspaceLock } from '../../src/workspaces/lock.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  git,
+  overrideEnv,
+  startGitButler,
+  writeFiles,
+} from '../helpers/index.ts';
 import { createRound, createTask } from '../helpers/state.ts';
 
 setDefaultTimeout(30_000);
 
 async function createWorkspace(files: Record<string, string> = {}) {
   const made = await createGitRepo({ files: { 'a.txt': 'a\n', 'b.txt': 'b\n', ...files } });
-  await runCommandOrThrow(['but', 'setup', '--json'], made.path);
+  await startGitButler(made.path);
   const strategy = new GitButlerStrategy(createTempDir());
   return { ...made, strategy };
 }
@@ -81,6 +89,7 @@ describe('GitButler workspaces', () => {
     const task = await startTask(strategy, repo, 'task-1', 'fix/scroll');
     const commit = await editAndCommit(strategy, repo, task, { 'a.txt': 'a, fixed\n' });
     expect(commit.treeHash).toBe(await git(path, 'rev-parse', 'fix/scroll^{tree}'));
+    expect(commit.files).toEqual(['a.txt']);
     expect(await git(path, 'show', '--name-only', '--format=', 'fix/scroll')).toBe('a.txt');
     expect(await listUncommitted(path)).toBe('M b.txt\n?? notes.txt');
   });
@@ -110,6 +119,7 @@ describe('GitButler workspaces', () => {
     const release = await strategy.claim(repo, task);
     const empty = await strategy.commit(repo, task, 'feat: nothing');
     expect(empty.treeHash).toBe(await git(path, 'rev-parse', 'main^{tree}'));
+    expect(empty.files).toEqual([]);
     await empty.undo();
     writeFiles(path, { 'a.txt': 'a, fixed\n' });
     const commit = await strategy.commit(repo, task, 'feat: a');
@@ -295,6 +305,19 @@ describe('GitButler workspaces', () => {
     expect(await git(origin, 'rev-parse', 'refs/heads/fix/scroll')).toBe(sha);
   });
 
+  test('a pre-push hook that refuses the push is a hook failure, and the branch never reaches the remote', async () => {
+    const { repo, path, origin, strategy } = await createWorkspace();
+    const task = await startTask(strategy, repo, 'task-1', 'fix/scroll');
+    await editAndCommit(strategy, repo, task, { 'a.txt': 'a, fixed\n' });
+    writeFiles(path, { '.git/hooks/pre-push': '#!/bin/sh\necho "FAIL test/a.test.ts"\nexit 1\n' });
+    chmodSync(join(path, '.git/hooks/pre-push'), 0o755);
+    const refused = await strategy.push(repo, task).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(PushError);
+    expect(refused).toMatchObject({ kind: 'hook' });
+    expect(await git(origin, 'branch', '--list', 'fix/scroll')).toBe('');
+    expect(await strategy.syncBase()).toEqual({ status: 'skipped' });
+  });
+
   test('a cancelled task’s branch is unapplied and its untouched edits discarded; a merged one stays for GitButler', async () => {
     const { repo, path, strategy } = await createWorkspace();
     const cancelled = await startTask(strategy, repo, 'task-1', 'fix/scroll');
@@ -320,16 +343,24 @@ describe('GitButler workspaces', () => {
     await strategy.remove(repo, { ...merged, branch: null });
   });
 
-  test('a repository that is not a GitButler workspace is refused before anything changes', async () => {
+  test('a repository `but` cannot work in is refused before anything changes', async () => {
     const { repo, path } = await createGitRepo();
     const strategy = new GitButlerStrategy(createTempDir());
-    expect(() => strategy.prepare(repo, createTask({ worktreePath: null }))).toThrow(
-      `${path} is not a GitButler workspace. Run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`
+    const restore = overrideEnv({ FAKE_BUT_VERSION: '0.22.3' });
+    await expect(strategy.prepare(repo, createTask({ worktreePath: null }))).rejects.toThrow(
+      `${path} is not a GitButler workspace, which \`but\` 0.22.3 needs. Update \`but\` (0.23 and newer work in any repository) or run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`
     );
+    restore();
+    const hidden = overrideEnv({ FAKE_BUT_MISSING: '1' });
+    await expect(strategy.prepare(repo, createTask({ worktreePath: null }))).rejects.toThrow(
+      'GitButler’s command line (`but`) is not installed or not on the PATH.'
+    );
+    hidden();
+    expect(await git(path, 'branch', '--show-current')).toBe('main');
     const workspace = await createWorkspace();
-    expect(() =>
+    await expect(
       workspace.strategy.prepare(workspace.repo, createTask({ branch: null, worktreePath: null }))
-    ).toThrow('The task has no branch yet.');
+    ).rejects.toThrow('The task has no branch yet.');
   });
 
   test('a ledger write that fails gives the claim back', async () => {

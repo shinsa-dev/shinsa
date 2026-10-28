@@ -90,7 +90,14 @@ export const ONBOARDING_PLAN: PlanDocument = {
   approach: '',
   files: [],
   outOfScope: [],
-  verification: ['A test that a reload resumes on the next step', 'Screenshots of each step in both themes'],
+  verification: [
+    {
+      label: 'Reload resumes on the next step',
+      command: 'bun test src/onboarding/draft-store.test.ts',
+      phases: [2],
+    },
+    { label: 'Progress dots', command: 'bun test src/onboarding/progress-dots.test.tsx', phases: [3] },
+  ],
   questions: [],
 };
 

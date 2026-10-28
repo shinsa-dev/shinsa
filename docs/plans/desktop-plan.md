@@ -8,7 +8,7 @@ absolute. References: T3 Code `/tmp/refs/t3code/apps/desktop` (commit a12d6ed9),
 
 **Electron**, as a thin shell around the daemon, never the other way round. The daemon (`shinsa engine`) runs as a
 **launchd user agent** so it lives through the window closing, the app quitting, a crash and a reboot; the app
-finds it, starts it if needed, and loads the UI **from the daemon's own URL** (`http://127.0.0.1:5180`), so the
+finds it, starts it if needed, and loads the UI **from the daemon's own URL** (`http://127.0.0.1:7446`), so the
 app, a browser tab and Floaty always show the same version. The app adds only what a page cannot do: dock badge,
 notifications that focus the task, `shinsa://` links, a summon shortcut, a menu, window state and updates. Start from
 Kanna's `macos/` (same shape: an Electron window around a local server, bundled with `bun build`, koffi for the
@@ -54,7 +54,7 @@ The plan keeps that path first-class and does not re-implement docking in Electr
 ## How the app finds and runs the daemon
 
 Today: `apps/engine/package.json` `bin: { shinsa: 'src/main.ts' }` (bun-linked from the checkout); port
-`SHINSA_PORT` → `config.json` `port` → 5180, host 127.0.0.1 (`apps/engine/src/config/index.ts:37,69`); data
+`SHINSA_PORT` → `config.json` `port` → 7446, host 127.0.0.1 (`apps/engine/src/config/index.ts:37,69`); data
 `~/.config/shinsa` (`config/paths.ts`); `webDir` and `pluginDir` resolve from `import.meta.dirname`
 (`config/index.ts:107-108`); no auth beyond the loopback Host and same-site Origin guard (`http/guard.ts`); and
 **no lock on the data directory**, so two daemons on one data dir would both run effects (two agents per run).

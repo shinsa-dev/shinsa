@@ -493,16 +493,11 @@ describe('a task that runs in rounds', () => {
     expect(view.getAllByRole('heading', { level: 2 }).map((divider) => divider.textContent)).toEqual([
       'Round 1 · Add MCP v2 · On its pull request',
       'Round 2 · Stream the tool results · In progress',
-      'Round 3 · Cache the server list · Waiting to start',
     ]);
+    const queue = view.getByRole('region', { name: 'Queued messages' });
+    expect(queue.textContent).toBe('Queued· Sends once round 2 is finished.Do round 3');
     const text = view.container.textContent ?? '';
-    const order = [
-      'Add MCP v2',
-      'Do round 1',
-      'Stream the tool results',
-      'Also stream them',
-      'Cache the server list',
-    ];
+    const order = ['Add MCP v2', 'Do round 1', 'Stream the tool results', 'Also stream them', 'Queued'];
     expect(order.map((part) => text.indexOf(part))).toEqual(
       [...order.map((part) => text.indexOf(part))].sort((left, right) => left - right)
     );
@@ -510,6 +505,7 @@ describe('a task that runs in rounds', () => {
     expect(view.container.querySelector('#run-run-2')).toBeTruthy();
     expect(view.container.querySelector('[aria-expanded][aria-label^="Round"]')).toBeNull();
     expect(view.queryByRole('region', { name: /^Round/ })).toBeNull();
+    expect(view.container.querySelector('[data-delivery]')).toBeNull();
     expect(view.queryByRole('combobox', { name: 'How round 3 ships' })).toBeNull();
     expect(view.queryByRole('list', { name: 'Progress' })).toBeNull();
   });
@@ -717,7 +713,8 @@ describe('a follow-up and the next round in the chat', () => {
     });
     const view = renderChat(createShinsaState({ tasks: [queued], runs }), queued);
     expect(view.getAllByText('hey')).toHaveLength(1);
-    expect(view.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+    expect(view.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    expect(view.getByRole('region', { name: 'Queued messages' }).textContent).toContain('what can u do');
     const started = answered({
       rounds: [
         { ...one, status: 'finished' },
@@ -739,5 +736,8 @@ describe('a follow-up and the next round in the chat', () => {
       'Round 1 · Respond to greeting · Finished',
       'Round 2 · Say what you can do · In progress',
     ]);
+    expect(view.queryByRole('region', { name: 'Queued messages' })).toBeNull();
+    const delivering = view.container.querySelector('[data-delivery="active"]');
+    expect(delivering?.textContent).toBe('what can u doSending');
   });
 });

@@ -32,8 +32,9 @@ export const LARGE: SyntheticOptions = {
 };
 
 const PASSING: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
+  { id: 'c1', label: 'Chunk retries', command: 'bun test src/export', outcome: 'pass', detail: null },
+  { id: 'r1', label: 'bun lint', command: 'bun lint', outcome: 'pass', detail: null },
+  { id: 'r2', label: 'bun check-types', command: 'bun check-types', outcome: 'pass', detail: null },
 ];
 
 const PLAN: PlanDocument = {
@@ -47,7 +48,7 @@ const PLAN: PlanDocument = {
   approach: 'A small retry helper beside the writer, used by every chunk write.',
   files: [],
   outOfScope: [],
-  verification: ['bun test covers every error kind.'],
+  verification: [{ label: 'Chunk retries', command: 'bun test src/export', phases: [1, 2] }],
   questions: [],
 };
 

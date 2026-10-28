@@ -6,7 +6,9 @@ import {
   isTaskClosed,
   isTaskResting,
   isTaskSettled,
+  listQueuedRounds,
   type MessageKind,
+  MINUTE_MS,
   type Run,
   resolveNextRoundNumber,
   type Task,
@@ -57,6 +59,18 @@ type Delivery =
   | { effect: 'steer' | 'wake'; run: Run }
   | { effect: 'retry' | 'verify_setup' | 'supersede_question'; gate: Gate }
   | { effect: StageEffect | 'follow_up' };
+
+const FEEDBACK_ONLY_EFFECTS: ReadonlySet<MessageEffect> = new Set<MessageEffect>([
+  'retry',
+  'verify_setup',
+  'supersede_question',
+  'revise_plan',
+  'request_changes',
+  'decline_proposal',
+  'operation_notes',
+]);
+
+const MESSAGE_REPEAT_WINDOW_MS = 10 * MINUTE_MS;
 
 const STAGE_EFFECT: Record<TaskStage, StageEffect> = {
   triage: 'kept',
@@ -113,8 +127,13 @@ export function resolveMessageEffect(state: ShinsaState, task: Task): MessageEff
   return resolveMessageDelivery(state, task).effect;
 }
 
+function isFeedbackOnly(effect: MessageEffect) {
+  return FEEDBACK_ONLY_EFFECTS.has(effect);
+}
+
 export function needsMessageKind(state: ShinsaState, task: Task) {
-  return resolveMessageEffect(state, task) !== 'closed';
+  const effect = resolveMessageEffect(state, task);
+  return effect !== 'closed' && !isFeedbackOnly(effect);
 }
 
 function restartStep(decider: Decider, task: Task, text: string) {
@@ -186,7 +205,13 @@ interface MessageSend extends MessageRoute {
   texts: string[];
 }
 
-function resolveMessageKind(send: MessageSend, task: Task, scheduled: boolean): MessageKind {
+function resolveMessageKind(
+  send: MessageSend,
+  task: Task,
+  delivery: MessageDelivery,
+  scheduled: boolean
+): MessageKind {
+  if (isFeedbackOnly(delivery.effect)) return 'feedback';
   if (send.kind) return send.kind;
   return scheduled && isTaskResting(task) ? 'new_round' : 'feedback';
 }
@@ -224,18 +249,27 @@ function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {
   return delivery;
 }
 
+function isRepeatedMessage(task: Task, text: string, now: number) {
+  const isRecent = (at: number) => now - at <= MESSAGE_REPEAT_WINDOW_MS;
+  return (
+    (task.inbox ?? []).some((message) => message.text === text && isRecent(message.at)) ||
+    listQueuedRounds(task).some((round) => round.request === text && isRecent(round.queuedAt))
+  );
+}
+
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
   const text = texts.join('\n\n');
   const delivery = assertMessageAccepted(decider.state, task, text);
+  if (isRepeatedMessage(task, text, decider.context.now)) return;
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
   if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
     recordMessages(decider, task.id, texts, scheduled);
     return;
   }
-  const kind = resolveMessageKind(send, task, scheduleId !== null);
+  const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
     recordMessages(decider, task.id, texts, { kind });
     suggestSplitOff(decider, task.id, text, send.title ?? null, send.why ?? null);
@@ -272,6 +306,7 @@ export function receiveMessage(decider: Decider, command: CommandOf<'message.rec
   const task = decider.task(command.taskId);
   const text = command.text.trim();
   assertMessageAccepted(decider.state, task, text);
+  if (isRepeatedMessage(task, text, decider.context.now)) return;
   decider.emit({ type: 'task.message_received', taskId: task.id, messageId: decider.context.newId(), text });
 }
 

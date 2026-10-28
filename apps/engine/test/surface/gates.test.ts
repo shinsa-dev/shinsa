@@ -56,16 +56,6 @@ describe('answering a gate by id', () => {
     expect(result.text).toBe('Asked for changes. The agent picks them up.');
   });
 
-  test('waive starts a task without checks at its setup gate', async () => {
-    const fake = createClient();
-    expect((await runSpec(fake, ['gates', 'answer', 'gate-setup', '--decision', 'waive'])).text).toBe(
-      'Starting without checks.'
-    );
-    expect(fake.sent).toEqual([
-      { type: 'gate.answer', gateId: 'gate-setup', decision: 'waive', response: null },
-    ]);
-  });
-
   test('an answer to a question or a failure is a reply', async () => {
     const fake = createClient();
     expect(
@@ -76,7 +66,7 @@ describe('answering a gate by id', () => {
       { type: 'gate.answer', gateId: 'gate-question', decision: 'reply', response: 'Blue' },
     ]);
     expect(() => runSpec(fake, ['gates', 'answer', 'gate-question', '--decision', 'answer'])).toThrow(
-      '--decision must be one of approve, revise, reject, reply, waive.'
+      '--decision must be one of approve, revise, reject, reply.'
     );
   });
 

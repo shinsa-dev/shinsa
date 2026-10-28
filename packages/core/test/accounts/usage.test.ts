@@ -6,7 +6,7 @@ import {
   resolveSpentUntil,
   resolveUsedPercent,
   resolveWeeklyPercent,
-  resolveWeeklyUsed,
+  resolveWeeklyReading,
   type UsageWindow,
 } from '../../src/index.ts';
 
@@ -88,10 +88,11 @@ describe('the weekly window a task budget counts', () => {
     expect(resolveWeeklyPercent(usage([SESSION, FABLE]))).toBeNull();
   });
 
-  test('counts what a run added, starts over when the window reset, and needs both readings', () => {
-    expect(resolveWeeklyUsed(20, 23.5)).toBe(3.5);
-    expect(resolveWeeklyUsed(80, 2)).toBe(2);
-    expect(resolveWeeklyUsed(null, 30)).toBeNull();
-    expect(resolveWeeklyUsed(30, null)).toBeNull();
+  test('a reading is the weekly window when it was read, with its reset; a pushed value has no time', () => {
+    const read = { ...usage([SESSION, WEEKLY]), checkedAt: 5_000, source: 'read' as const };
+    expect(resolveWeeklyReading(read)).toEqual({ percent: 20, at: 5_000, resetsAt: WEEKLY.resetsAt });
+    expect(resolveWeeklyReading({ ...read, source: 'push' })).toBeNull();
+    expect(resolveWeeklyReading({ ...read, checkedAt: null })).toBeNull();
+    expect(resolveWeeklyReading({ ...read, windows: [SESSION] })).toBeNull();
   });
 });

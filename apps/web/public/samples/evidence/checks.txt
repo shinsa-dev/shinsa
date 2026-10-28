@@ -1,7 +1,2 @@
 $ bun run lint
-Passed.
 Checked 214 files in 412ms. No fixes applied.
-
-$ bun run check-types
-Passed.
-Tasks:    6 successful, 6 total

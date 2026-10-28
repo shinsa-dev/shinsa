@@ -27,7 +27,7 @@ const EXPORT = JSON.stringify({
 });
 
 function createRunner(results: Partial<CommandResult>[]) {
-  const calls: { command: string[]; cwd: string; timeoutMs: number | undefined }[] = [];
+  const calls: { command: string[]; cwd: string; timeoutMs: number | null | undefined }[] = [];
   const run: CswapRunner = (command, cwd, options) => {
     calls.push({ command, cwd, timeoutMs: options.timeoutMs });
     const result = results[Math.min(calls.length - 1, results.length - 1)];

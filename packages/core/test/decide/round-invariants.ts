@@ -56,7 +56,7 @@ const PLAN = {
   approach: '',
   files: [],
   outOfScope: [],
-  verification: ['A test covers it.'],
+  verification: [{ label: 'Round tests', command: 'bun test src/round', phases: [1] }],
   questions: [],
   impact: 'Touches nothing else; undo by reverting.',
   operation: ['Run it and check the result.'],
@@ -70,7 +70,17 @@ function listLaterRoundCommands(state: ShinsaState): ShinsaCommand[] {
   );
   const runs = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (!later.has(run.taskId) || run.delegation) return [];
-    if (run.purpose === 'plan') return [{ type: 'agent.propose_plan', runId: run.id, document: PLAN }];
+    if (run.purpose === 'plan') {
+      const task = state.tasks[run.taskId];
+      const builds = task ? resolveTaskPipeline(task).includes('build') : false;
+      return [
+        {
+          type: 'agent.propose_plan',
+          runId: run.id,
+          document: builds ? PLAN : { ...PLAN, verification: [] },
+        },
+      ];
+    }
     if (run.purpose === 'build') {
       return [
         { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },

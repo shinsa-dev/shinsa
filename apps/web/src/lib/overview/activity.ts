@@ -9,6 +9,7 @@ const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
   decision: { icon: 'IconCheckCircle2', tone: 'blue' },
   work: { icon: 'IconHammer', tone: 'blue' },
   review: { icon: 'IconShieldCheck', tone: 'amber' },
+  check: { icon: 'IconTestTube', tone: 'blue' },
   fix: { icon: 'IconArrowRotateClockwise', tone: 'amber' },
   pull_request: { icon: 'IconPullRequest', tone: 'green' },
   evidence: { icon: 'IconImages1', tone: 'blue' },
@@ -28,6 +29,12 @@ const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
 export function resolveActivityGlyph(entry: Activity): Glyph {
   if (entry.gateType === 'failure') return ACTIVITY_GLYPH[entry.kind];
   return resolvePauseGlyph(entry.gateType) ?? ACTIVITY_GLYPH[entry.kind];
+}
+
+export function listActivityDetail(entry: Activity): string[] {
+  if (!entry.detail) return [];
+  if (entry.kind !== 'check') return [entry.detail];
+  return entry.detail.split('\n').filter((line) => line.trim() !== '');
 }
 
 export const ACTOR_LABEL: Record<Activity['actor'], string> = {

@@ -16,11 +16,13 @@ export function Composer({
   submitLabel,
   onSubmit,
   aside,
+  dock,
 }: {
   placeholder: string;
   submitLabel: string;
   onSubmit: (text: string) => Promise<boolean>;
   aside?: React.ReactNode;
+  dock?: React.ReactNode;
 }) {
   const [text, setText] = React.useState('');
   const [busy, setBusy] = React.useState(false);
@@ -44,6 +46,7 @@ export function Composer({
   return (
     <div className='sticky bottom-0 z-20 bg-background pt-1 pb-3'>
       <div className={PAGE_COLUMN}>
+        {dock}
         <div {...dropProps} className={cn(CARD, 'flex flex-col', dragging && 'border-primary')}>
           <AttachmentChips attachments={attachments} />
           <textarea

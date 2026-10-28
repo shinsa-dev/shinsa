@@ -3,7 +3,9 @@ import { decide, serializeState, type UserCommand, type WireState } from '@shins
 const OPTIMISTIC_COMMANDS = new Set<UserCommand['type']>([
   'focus.change',
   'gate.answer',
+  'round.remove',
   'round.ship',
+  'round.update',
   'run.dismiss_silence',
   'run.snooze_silence',
   'settings.change',

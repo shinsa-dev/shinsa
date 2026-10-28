@@ -53,7 +53,7 @@ const PLAN = {
   approach: 'Directly.',
   files: [{ path: 'turn.txt', change: 'A new file per turn.' }],
   out_of_scope: [],
-  verification: ['The checks pass.'],
+  verification: [{ label: 'Round file', command: 'true', phases: [1] }],
   questions: [],
 };
 
@@ -236,7 +236,7 @@ async function openWorld(wait: SteerWait | null = null) {
   const fake = createFakeQuery((params) => cachedTurn(params, calls++, home, turns, sessions, wait));
   const provider = createClaudeProvider(createFakeRuntime(fake.query), { env: {}, home });
   world = await World.create({
-    checks: ['test -f fixed.txt'],
+    checks: ['test -f fixed.txt || ! ls turn-*.txt'],
     providers: () => new ProviderRegistry([provider]),
   });
   return { w: world, turns };

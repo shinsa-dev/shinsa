@@ -1,21 +1,47 @@
-import { isPrereleaseVersion, resolveVersionOrder } from '@shinsa/core';
+import { type AppFlavor, resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
 import type { UpdateChannel } from './bridge.ts';
+import { FLAVOR } from './flavor.ts';
 
-const CHANNEL_LABELS: Record<UpdateChannel, string> = { stable: 'Stable', beta: 'Beta' };
+export const UPDATE_FEED = { provider: 'github', owner: 'shinsa-dev', repo: 'shinsa' } as const;
 
-export function parseUpdateChannel(value: unknown): UpdateChannel | null {
-  return value === 'stable' || value === 'beta' ? value : null;
+const CHANNEL_LABELS: Record<UpdateChannel, string> = { stable: 'Stable', beta: 'Beta', canary: 'Canary' };
+
+const CHANNEL_RANKS: Record<UpdateChannel, number> = { stable: 0, beta: 1, canary: 2 };
+
+const FLAVOR_CHANNELS: Record<AppFlavor, { channels: readonly UpdateChannel[]; nearest: UpdateChannel }> = {
+  stable: { channels: ['stable', 'beta'], nearest: 'beta' },
+  canary: { channels: ['canary'], nearest: 'canary' },
+};
+
+export function listUpdateChannels(flavor: AppFlavor = FLAVOR.flavor) {
+  return FLAVOR_CHANNELS[flavor].channels;
 }
 
-export function resolveUpdateChannel(stored: unknown, version: string): UpdateChannel {
-  return parseUpdateChannel(stored) ?? (isPrereleaseVersion(version) ? 'beta' : 'stable');
+export function parseUpdateChannel(value: unknown, flavor: AppFlavor = FLAVOR.flavor): UpdateChannel | null {
+  return listUpdateChannels(flavor).find((channel) => channel === value) ?? null;
+}
+
+export function resolveUpdateChannel(
+  stored: unknown,
+  version: string,
+  flavor: AppFlavor = FLAVOR.flavor
+): UpdateChannel {
+  return (
+    parseUpdateChannel(stored, flavor) ??
+    parseUpdateChannel(resolveReleaseChannel(version), flavor) ??
+    FLAVOR_CHANNELS[flavor].nearest
+  );
+}
+
+export function isAboveChannel(version: string, channel: UpdateChannel) {
+  return CHANNEL_RANKS[resolveReleaseChannel(version)] > CHANNEL_RANKS[channel];
 }
 
 export function resolveUpdaterOptions(channel: UpdateChannel, downgrade = false) {
   return {
-    channel: channel === 'beta' ? 'beta' : 'latest',
-    allowPrerelease: channel === 'beta',
-    allowDowngrade: downgrade && channel === 'stable',
+    channel: channel === 'stable' ? 'latest' : channel,
+    allowPrerelease: channel !== 'stable',
+    allowDowngrade: downgrade && channel !== 'canary',
   };
 }
 
@@ -30,7 +56,7 @@ export function resolveDowngradeOffer({
   latest: string;
   kept: string | null;
 }) {
-  if (channel !== 'stable' || kept === current || !isPrereleaseVersion(current)) return null;
+  if (kept === current || !isAboveChannel(current, channel)) return null;
   return resolveVersionOrder(latest, current) === -1 ? latest : null;
 }
 
