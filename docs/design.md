@@ -1547,7 +1547,9 @@ Only these, and they win over anything below:
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
       dialog), then 40px rows of two lines each. Shinsa (Shinsa Canary in that app): the app's version (`TOKEN_TEXT`)
       and, once the updater has something to say, its status ("Checking for updates…", "Up to date", "Downloading
-      1.3.1…", the failure in orange, or "1.3.1 is ready" in blue with a secondary `sm` Restart to update,
+      1.3.1… 42%", "Preparing 1.3.1…" while macOS's installer unpacks and verifies it, the failure in orange,
+      "Restarting to install 1.3.1…" after the click, or "1.3.1 is ready" in blue with a secondary `sm` Restart to
+      update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
       `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: in Shinsa a select
@@ -1562,8 +1564,8 @@ Only these, and they win over anything below:
       updates only to the next canary.", the version row reads "Canary channel · Updates install when you quit Shinsa
       Canary", and there is no download row. ⌘K's Change a setting has Update channel (Stable and Beta) in Shinsa
       only, and Setup has Download Shinsa Canary there too; Shinsa Canary has neither. `/ui` → Settings shows Stable
-      up to date, Beta with an update ready, a beta switched to Stable offered the latest stable, and Shinsa Canary
-      downloading the next canary.
+      up to date, Beta with an update ready, a beta switched to Stable offered the latest stable, Shinsa Canary
+      downloading the next canary, a downloaded beta being prepared, and a beta restarting to install.
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 
