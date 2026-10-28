@@ -74,6 +74,18 @@ function escalateReview(decider: Decider, taskId: string, reason: ReviewEscalati
   openReviewGate(decider, taskId, escalation);
 }
 
+function listAgentEvidence(decider: Decider, task: Task) {
+  return Object.values(decider.state.evidence)
+    .filter(
+      (piece) =>
+        piece.taskId === task.id &&
+        piece.runId !== null &&
+        decider.state.runs[piece.runId]?.role === 'agent' &&
+        isOfCurrentRound(task, piece)
+    )
+    .sort((a, b) => a.attachedAt - b.attachedAt);
+}
+
 export function startFix(
   decider: Decider,
   taskId: string,
@@ -103,10 +115,16 @@ export function startFix(
     treeHash: task.treeHash ?? null,
   });
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
-  decider.startRun(decider.task(taskId), 'agent', resolveAgentPrompt(prompt), {
-    purpose: 'fix',
-    resumeFrom: decider.taskSession(taskId, 'agent'),
-  });
+  const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));
+  decider.startRun(
+    decider.task(taskId),
+    'agent',
+    resolveAgentPrompt([prompt, evidence].filter(Boolean).join('\n\n')),
+    {
+      purpose: 'fix',
+      resumeFrom: decider.taskSession(taskId, 'agent'),
+    }
+  );
 }
 
 function isDismissed(task: Task, finding: ReviewFinding) {

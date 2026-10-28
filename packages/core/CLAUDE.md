@@ -130,8 +130,9 @@ src/
 │   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),
 │   │                attempts and stale writes, restart continuation and its loop guards, lost sessions, dispatch
 │   ├── agents.ts    Agent hand-overs (propose_plan with the plan rules, complete_phase with the evidence the plan
-│   │                asks for and its check changes, complete_fix with the checks it names, report_review, ask,
-│   │                evidence, a linked check (attachCheck), note)
+│   │                asks for and its check changes, complete_fix with the checks it names and the earlier evidence
+│   │                it must account for (evidence_stale), report_review, ask, evidence that replaces what it shows
+│   │                again by key, a linked check (attachCheck), removing evidence (removeEvidence), note)
 │   ├── shapes.ts    Task shapes: the next step of a pipeline, the inquiry steps (answer, research, investigate)
 │   │                and the operation, results and proposals, your OK and its proposal gate, the agent's
 │   │                presets and composed steps, the operation gate and its notes after a merge, follow-ups (an

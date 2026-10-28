@@ -134,6 +134,7 @@ export interface FixHandOver {
   walkthrough: ReportWalkthroughRevision | null;
   checks: string[];
   checkChanges: CheckChangeHandOver[];
+  evidenceKept: string[];
 }
 
 export interface WorkReport {
@@ -240,6 +241,8 @@ interface EvidenceFacts {
   detail: string | null;
   width: number | null;
   theme: EvidenceTheme | null;
+  key: string | null;
+  replaces: string[];
 }
 
 export type LinkedEvidenceKind = Extract<EvidenceKind, 'test' | 'check'>;
@@ -265,6 +268,12 @@ export interface CheckLinkHandOver {
   kind: LinkedEvidenceKind;
   check: string;
   detail: string | null;
+  replaces: string[];
 }
 
 export type EvidenceHandOver = PieceHandOver | ComparisonHandOver | CheckLinkHandOver;
+
+export interface EvidenceRemovalHandOver {
+  items: string[];
+  reason: string;
+}

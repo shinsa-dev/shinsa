@@ -55,6 +55,7 @@ export {
   type Validation,
   validateDelivery,
   validateEvidence,
+  validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,

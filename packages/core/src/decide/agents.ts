@@ -1,11 +1,19 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
+  type Evidence,
+  type EvidenceItem,
+  type EvidenceItemKind,
+  isCurrentEvidence,
   isOfCurrentRound,
+  listEvidenceItems,
   listMissingEvidence,
   type PlanEvidenceKind,
+  type Run,
+  resolveEvidenceKey,
   resolveRoundStamp,
   resolveTaskPipeline,
+  selectEvidenceItem,
   type Task,
   validatePlanRules,
 } from '../domain/index.ts';
@@ -47,7 +55,8 @@ const EVIDENCE_NOUN: Record<PlanEvidenceKind, string> = {
 
 export function assertEvidence(decider: Decider, task: Task, handOver: string) {
   const attached = Object.values(decider.state.evidence).filter(
-    (evidence) => evidence.taskId === task.id && isOfCurrentRound(task, evidence)
+    (evidence) =>
+      evidence.taskId === task.id && isOfCurrentRound(task, evidence) && isCurrentEvidence(evidence)
   );
   const missing = listMissingEvidence(task.plan?.document ?? null, attached);
   if (missing.length === 0) return;
@@ -112,6 +121,123 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
   startPhaseChecks(decider, task.id, index + 1, changed);
 }
 
+const REVISED_KINDS: ReadonlySet<EvidenceItemKind> = new Set<EvidenceItemKind>([
+  'comparison',
+  'screenshot',
+  'recording',
+  'note',
+]);
+
+function isReviewEvidence(decider: Decider, evidence: Evidence) {
+  return evidence.runId !== null && decider.state.runs[evidence.runId]?.role === 'reviewer';
+}
+
+function listOwnEvidence(decider: Decider, task: Task, run: Run) {
+  const review = run.role === 'reviewer';
+  return Object.values(decider.state.evidence)
+    .filter(
+      (piece) =>
+        piece.taskId === task.id &&
+        piece.runId !== null &&
+        isOfCurrentRound(task, piece) &&
+        isCurrentEvidence(piece) &&
+        isReviewEvidence(decider, piece) === review
+    )
+    .sort((a, b) => a.attachedAt - b.attachedAt);
+}
+
+function findOwnItems(decider: Decider, task: Task, run: Run, references: readonly string[], field: string) {
+  const items = listEvidenceItems(listOwnEvidence(decider, task, run));
+  return references.map((reference) => {
+    const item = selectEvidenceItem(items, reference);
+    if (item) return item;
+    throw new DomainError(
+      'evidence_unknown',
+      `${field} names ${reference}, which is not current evidence you attached this round. Name an item by its key or its id.`
+    );
+  });
+}
+
+function listReplacedIds(
+  decider: Decider,
+  task: Task,
+  run: Run,
+  incoming: Evidence,
+  whole: boolean,
+  references: readonly string[]
+) {
+  const key = resolveEvidenceKey(incoming);
+  const matching = listOwnEvidence(decider, task, run).filter(
+    (piece) =>
+      resolveEvidenceKey(piece) === key &&
+      (whole || piece.stage === incoming.stage || (piece.stage === undefined && piece.label === undefined))
+  );
+  const named = findOwnItems(decider, task, run, references, 'replaces').flatMap((item) => item.parts);
+  return [...new Set([...matching, ...named].map((piece) => piece.id))];
+}
+
+function emitAttached(decider: Decider, evidence: Evidence, replaces: readonly string[]) {
+  decider.emit({
+    type: 'evidence.attached',
+    evidence,
+    ...(replaces.length > 0 ? { replaces: [...replaces] } : {}),
+  });
+}
+
+function resolveFixStamp(task: Task, run: Run) {
+  return run.purpose === 'fix' && task.fixFor ? { fixFor: task.fixFor } : {};
+}
+
+function listCoveredFiles(decider: Decider, task: Task, item: EvidenceItem) {
+  const files = new Set<string>();
+  for (const part of item.parts) {
+    const run = part.runId ? decider.state.runs[part.runId] : undefined;
+    const report =
+      run?.purpose === 'build'
+        ? task.phaseReports.find((phase) => phase.index === run.phaseIndex)
+        : undefined;
+    const covered = report?.files ?? [];
+    if (covered.length === 0) return null;
+    for (const file of covered) files.add(file);
+  }
+  return files;
+}
+
+function describeStaleItem(item: EvidenceItem) {
+  const [first] = item.parts;
+  const facts = [item.kind, first?.width ? `${first.width}px` : null, first?.theme]
+    .filter(Boolean)
+    .join(', ');
+  return `- \`${item.key}\`: ${item.title} (${facts})`;
+}
+
+function assertEvidenceAccounted(
+  decider: Decider,
+  task: Task,
+  run: Run,
+  files: readonly string[],
+  kept: readonly string[]
+) {
+  const keptIds = new Set(findOwnItems(decider, task, run, kept, 'evidence_kept').map((item) => item.id));
+  if (files.length === 0) return;
+  const changed = new Set(files);
+  const stale = listEvidenceItems(listOwnEvidence(decider, task, run)).filter((item) => {
+    if (!REVISED_KINDS.has(item.kind) || keptIds.has(item.id)) return false;
+    if (item.parts.some((part) => part.runId === run.id)) return false;
+    const covered = listCoveredFiles(decider, task, item);
+    return covered === null || [...covered].some((file) => changed.has(file));
+  });
+  if (stale.length === 0) return;
+  throw new DomainError(
+    'evidence_stale',
+    [
+      'Your fix changed files this evidence shows, so it may still show the work as it was before the fix:',
+      ...stale.map(describeStaleItem),
+      'For each one, attach a new one with the same `key` (it replaces the old one), remove it with `remove_evidence` when it no longer applies, or name its key in `evidence_kept` when it still shows the work as it is. Then call `complete_fix` again.',
+    ].join('\n')
+  );
+}
+
 function isPushedFix(task: Task) {
   if (task.fixFor === 'pull_request') return true;
   return task.fixFor === 'conflict' && (task.pullRequest !== null || task.pushPending === true);
@@ -121,6 +247,7 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   const { run, task } = findCurrentRun(decider, command.runId, 'complete_fix');
   const named = command.checks ?? [];
   assertCheckIds(decider, task, named);
+  assertEvidenceAccounted(decider, task, run, command.files ?? [], command.evidenceKept ?? []);
   const done = new Set(task.phaseReports.map((report) => report.index)).size;
   const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], done);
   recordTree(decider, task.id, command.treeHash);
@@ -189,69 +316,89 @@ export function askQuestion(decider: Decider, command: CommandOf<'agent.ask'>) {
 
 export function attachEvidence(decider: Decider, command: CommandOf<'agent.attach_evidence'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
-  decider.emit({
-    type: 'evidence.attached',
-    evidence: {
-      id: decider.context.newId(),
-      taskId: task.id,
-      runId: run.id,
-      kind: command.kind,
-      title: command.title,
-      uri: command.uri,
-      attachedAt: decider.context.now,
-      ...resolveRoundStamp(task),
-      ...(command.detail ? { detail: command.detail } : {}),
-      ...(command.width ? { width: command.width } : {}),
-      ...(command.theme ? { theme: command.theme } : {}),
-      ...(command.stage ? { stage: command.stage } : {}),
-    },
-  });
+  const evidence: Evidence = {
+    id: decider.context.newId(),
+    taskId: task.id,
+    runId: run.id,
+    kind: command.kind,
+    title: command.title,
+    uri: command.uri,
+    attachedAt: decider.context.now,
+    ...resolveRoundStamp(task),
+    ...(command.detail ? { detail: command.detail } : {}),
+    ...(command.width ? { width: command.width } : {}),
+    ...(command.theme ? { theme: command.theme } : {}),
+    ...(command.stage ? { stage: command.stage } : {}),
+    ...(command.key ? { key: command.key } : {}),
+    ...resolveFixStamp(task, run),
+  };
+  const replaces = listReplacedIds(decider, task, run, evidence, !command.stage, command.replaces ?? []);
+  emitAttached(decider, evidence, replaces);
 }
 
 export function attachCheck(decider: Decider, command: CommandOf<'agent.attach_check'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
   const check = findTaskCheck(decider, task, command.checkId);
-  decider.emit({
-    type: 'evidence.attached',
-    evidence: {
-      id: decider.context.newId(),
-      taskId: task.id,
-      runId: run.id,
-      kind: command.kind,
-      title: check.label,
-      uri: `shinsa://check/${command.checkId}`,
-      attachedAt: decider.context.now,
-      checkId: command.checkId,
-      ...resolveRoundStamp(task),
-      ...(command.detail ? { detail: command.detail } : {}),
-    },
-  });
+  const evidence: Evidence = {
+    id: decider.context.newId(),
+    taskId: task.id,
+    runId: run.id,
+    kind: command.kind,
+    title: check.label,
+    uri: `shinsa://check/${command.checkId}`,
+    attachedAt: decider.context.now,
+    checkId: command.checkId,
+    ...resolveRoundStamp(task),
+    ...(command.detail ? { detail: command.detail } : {}),
+    ...resolveFixStamp(task, run),
+  };
+  emitAttached(
+    decider,
+    evidence,
+    listReplacedIds(decider, task, run, evidence, true, command.replaces ?? [])
+  );
 }
 
 export function attachComparison(decider: Decider, command: CommandOf<'agent.attach_comparison'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
   const itemId = decider.context.newId();
-  for (const part of command.parts) {
-    decider.emit({
-      type: 'evidence.attached',
-      evidence: {
-        id: decider.context.newId(),
-        taskId: task.id,
-        runId: run.id,
-        kind: part.kind,
-        title: command.title,
-        uri: part.uri,
-        attachedAt: decider.context.now,
-        itemId,
-        ...resolveRoundStamp(task),
-        ...(command.detail ? { detail: command.detail } : {}),
-        ...(command.width ? { width: command.width } : {}),
-        ...(command.theme ? { theme: command.theme } : {}),
-        ...(part.stage ? { stage: part.stage } : {}),
-        ...(part.label ? { label: part.label } : {}),
-      },
-    });
-  }
+  const parts = command.parts.map(
+    (part): Evidence => ({
+      id: decider.context.newId(),
+      taskId: task.id,
+      runId: run.id,
+      kind: part.kind,
+      title: command.title,
+      uri: part.uri,
+      attachedAt: decider.context.now,
+      itemId,
+      ...resolveRoundStamp(task),
+      ...(command.detail ? { detail: command.detail } : {}),
+      ...(command.width ? { width: command.width } : {}),
+      ...(command.theme ? { theme: command.theme } : {}),
+      ...(part.stage ? { stage: part.stage } : {}),
+      ...(part.label ? { label: part.label } : {}),
+      ...(command.key ? { key: command.key } : {}),
+      ...resolveFixStamp(task, run),
+    })
+  );
+  const [first] = parts;
+  const replaces = first ? listReplacedIds(decider, task, run, first, true, command.replaces ?? []) : [];
+  parts.forEach((evidence, index) => {
+    emitAttached(decider, evidence, index === 0 ? replaces : []);
+  });
+}
+
+export function removeEvidence(decider: Decider, command: CommandOf<'agent.remove_evidence'>) {
+  const { run, task } = findCurrentRun(decider, command.runId, 'remove_evidence');
+  const items = findOwnItems(decider, task, run, command.items, 'items');
+  decider.emit({
+    type: 'evidence.removed',
+    taskId: task.id,
+    ids: [...new Set(items.flatMap((item) => item.parts.map((part) => part.id)))],
+    reason: command.reason,
+    runId: run.id,
+  });
 }
 
 export function noteProgress(decider: Decider, command: CommandOf<'agent.note'>) {

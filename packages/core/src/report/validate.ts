@@ -6,6 +6,7 @@ import {
   EVIDENCE_KINDS,
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
+  isEvidenceKey,
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
   SHAPE_LIMITS,
@@ -19,6 +20,7 @@ import type {
   CodeSpot,
   ComparisonPartHandOver,
   EvidenceHandOver,
+  EvidenceRemovalHandOver,
   EvidenceSource,
   FixHandOver,
   JudgementAlternative,
@@ -119,6 +121,9 @@ export const PROTOCOL_LIMITS = {
   evidenceUrl: 2_000,
   evidenceParts: 6,
   evidenceLabel: 40,
+  evidenceKey: 60,
+  evidenceItems: 24,
+  evidenceReason: 200,
 } as const;
 
 export const ATTACHED_EVIDENCE_KINDS: readonly [EvidenceItemKind, ...EvidenceItemKind[]] = [
@@ -518,6 +523,7 @@ export function validateFixHandOver(input: Record<string, unknown>): Validation<
     walkthrough: readWalkthroughRevision(reader, input.walkthrough),
     checks: readCheckIds(reader, input.checks),
     checkChanges: readCheckChanges(reader, input.check_changes),
+    evidenceKept: readEvidenceRefs(reader, input.evidence_kept, 'evidence_kept'),
   });
 }
 
@@ -732,12 +738,27 @@ function readOptionalPick<T extends string>(
   return reader.pick(value, path, allowed);
 }
 
+function readEvidenceRefs(reader: Reader, value: unknown, path: string) {
+  const refs = readTextList(reader, value, path, PROTOCOL_LIMITS.evidenceItems, PROTOCOL_LIMITS.evidenceKey);
+  return [...new Set(refs)];
+}
+
+function readEvidenceKey(reader: Reader, value: unknown) {
+  const key = reader.optionalText(value, 'key', PROTOCOL_LIMITS.evidenceKey);
+  if (key !== null && !isEvidenceKey(key)) {
+    reader.errors.push('key takes lower-case letters, digits and single hyphens, like settings-dark-900.');
+  }
+  return key;
+}
+
 function readEvidenceFacts(reader: Reader, input: Record<string, unknown>) {
   return {
     title: reader.text(input.title, 'title', PROTOCOL_LIMITS.evidenceTitle),
     detail: reader.optionalText(input.detail, 'detail', PROTOCOL_LIMITS.evidenceDetail),
     width: reader.optionalCount(input.width, 'width', PROTOCOL_LIMITS.evidenceWidth),
     theme: readOptionalPick(reader, input.theme, 'theme', EVIDENCE_THEMES),
+    key: readEvidenceKey(reader, input.key),
+    replaces: readEvidenceRefs(reader, input.replaces, 'replaces'),
   };
 }
 
@@ -767,7 +788,7 @@ function readComparisonParts(reader: Reader, input: Record<string, unknown>) {
 }
 
 function readCheckLink(reader: Reader, input: Record<string, unknown>) {
-  const given = ['path', 'url', 'text', 'parts', 'stage', 'width', 'theme'].filter((field) =>
+  const given = ['path', 'url', 'text', 'parts', 'stage', 'width', 'theme', 'key'].filter((field) =>
     isGiven(input[field])
   );
   if (given.length > 0) {
@@ -778,6 +799,7 @@ function readCheckLink(reader: Reader, input: Record<string, unknown>) {
   return {
     check: reader.text(input.check, 'check', PROTOCOL_LIMITS.checkId),
     detail: reader.optionalText(input.detail, 'detail', PROTOCOL_LIMITS.evidenceDetail),
+    replaces: readEvidenceRefs(reader, input.replaces, 'replaces'),
   };
 }
 
@@ -804,6 +826,16 @@ export function validateEvidence(input: Record<string, unknown>): Validation<Evi
     ...readEvidenceFacts(reader, input),
     stage: readOptionalPick(reader, input.stage, 'stage', EVIDENCE_STAGES),
     source: readEvidenceSource(reader, input),
+  });
+}
+
+export function validateEvidenceRemoval(input: Record<string, unknown>): Validation<EvidenceRemovalHandOver> {
+  const reader = new Reader();
+  const items = readEvidenceRefs(reader, input.items, 'items');
+  if (items.length === 0 && reader.errors.length === 0) reader.errors.push('items names no evidence.');
+  return reader.result({
+    items,
+    reason: reader.text(input.reason, 'reason', PROTOCOL_LIMITS.evidenceReason),
   });
 }
 

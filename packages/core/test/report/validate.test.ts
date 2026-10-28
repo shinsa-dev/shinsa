@@ -4,6 +4,7 @@ import {
   type Validation,
   validateDelivery,
   validateEvidence,
+  validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
@@ -515,8 +516,20 @@ describe('validateFixHandOver', () => {
       walkthrough: null,
       checks: [],
       checkChanges: [],
+      evidenceKept: [],
     });
     expect(errorsOf(validateFixHandOver({}))).toEqual(['summary is required.']);
+  });
+
+  test('names the earlier evidence that still applies, each once', () => {
+    expect(
+      readValue(
+        validateFixHandOver({ summary: 'Fixed.', evidence_kept: ['settings-dark', ' settings-dark ', 'e1'] })
+      ).evidenceKept
+    ).toEqual(['settings-dark', 'e1']);
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', evidence_kept: 'settings-dark' }))).toEqual([
+      'evidence_kept must be a list.',
+    ]);
   });
 
   test('keeps only the parts of the walkthrough the fix sends', () => {
@@ -1010,9 +1023,43 @@ describe('validateEvidence', () => {
       detail: 'The labels read clearly.',
       width: 1280,
       theme: 'dark',
+      key: null,
+      replaces: [],
       stage: 'before',
       source: { path: 'shots/settings.png' },
     });
+  });
+
+  test('reads a key for what it shows and the items it replaces', () => {
+    expect(
+      readValue(
+        validateEvidence({
+          kind: 'screenshot',
+          title: 'Settings',
+          key: 'settings-dark-900',
+          replaces: ['old-settings', 'e7'],
+          path: 'a.png',
+        })
+      )
+    ).toMatchObject({ key: 'settings-dark-900', replaces: ['old-settings', 'e7'] });
+    expect(
+      errorsOf(
+        validateEvidence({ kind: 'screenshot', title: 'Settings', key: 'Settings Dark', path: 'a.png' })
+      )
+    ).toEqual(['key takes lower-case letters, digits and single hyphens, like settings-dark-900.']);
+    expect(
+      errorsOf(
+        validateEvidence({
+          kind: 'screenshot',
+          title: 'Settings',
+          key: 'a'.repeat(PROTOCOL_LIMITS.evidenceKey + 1),
+          path: 'a.png',
+        })
+      )
+    ).toEqual([
+      `key is ${PROTOCOL_LIMITS.evidenceKey + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceKey}.`,
+      'key takes lower-case letters, digits and single hyphens, like settings-dark-900.',
+    ]);
   });
 
   test('the optional fields may be left out, and a url or text is the source', () => {
@@ -1022,6 +1069,8 @@ describe('validateEvidence', () => {
       detail: null,
       width: null,
       theme: null,
+      key: null,
+      replaces: [],
       stage: null,
       source: { url: 'https://a.dev' },
     });
@@ -1039,6 +1088,7 @@ describe('validateEvidence', () => {
       kind: 'test',
       check: 'c2',
       detail: 'Fails without the fix.',
+      replaces: [],
     });
     expect(
       errorsOf(validateEvidence({ kind: 'check', title: 'Tests', text: '3 pass', stage: 'after' }))
@@ -1099,6 +1149,8 @@ describe('validateEvidence', () => {
       detail: null,
       width: 1280,
       theme: 'light',
+      key: null,
+      replaces: [],
       parts: [
         { path: 'before.png', stage: 'before', label: null },
         { path: 'empty.png', stage: null, label: 'Empty list' },
@@ -1141,6 +1193,30 @@ describe('validateEvidence', () => {
       `parts[4].label is ${PROTOCOL_LIMITS.evidenceLabel + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceLabel}.`,
       'Each part needs its own stage or label; two parts are named the same.',
       'A comparison takes its files in parts: leave out path, url, text and stage.',
+    ]);
+  });
+});
+
+describe('validateEvidenceRemoval', () => {
+  test('names the items to remove and why', () => {
+    expect(
+      readValue(validateEvidenceRemoval({ items: ['settings-dark', 'e2'], reason: ' The banner is gone. ' }))
+    ).toEqual({ items: ['settings-dark', 'e2'], reason: 'The banner is gone.' });
+  });
+
+  test('needs at least one item and a reason', () => {
+    expect(errorsOf(validateEvidenceRemoval({ items: [] }))).toEqual([
+      'items names no evidence.',
+      'reason is required.',
+    ]);
+    expect(errorsOf(validateEvidenceRemoval({ reason: 'Gone.', items: [''] }))).toEqual([
+      'items[0] is required.',
+    ]);
+  });
+
+  test('a check link takes no key, since its check is what it shows', () => {
+    expect(errorsOf(validateEvidence({ kind: 'test', check: 'c1', key: 'tests' }))).toEqual([
+      'A test or check run is a check Shinsa runs: give `check`, its id, and leave out key. Add the command with `check_changes` first when it is not a check yet.',
     ]);
   });
 });

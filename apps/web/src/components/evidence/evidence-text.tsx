@@ -3,7 +3,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { ReviewMark } from '@/components/evidence/evidence-figure.tsx';
+import { ReviewMark, UpdatedMark } from '@/components/evidence/evidence-figure.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
@@ -97,6 +97,7 @@ export function EvidenceText({ view }: { view: EvidenceView }) {
           <Icon size='sm' name={note ? 'IconNote1' : 'IconConsole'} className='shrink-0 text-fg-2' />
           <span className='wrap-anywhere min-w-0 font-medium text-fg-4 text-xs'>{evidence.title}</span>
           {view.fromReview && <ReviewMark />}
+          {view.updated && <UpdatedMark text={view.updated} />}
           {ran && <OutputToggle open={open} onToggle={toggle} />}
         </span>
         {evidence.detail && <span className='text-2xs text-fg-3'>{evidence.detail}</span>}

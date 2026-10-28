@@ -552,6 +552,11 @@ export interface Evidence {
   itemId?: string;
   label?: string;
   checkId?: string;
+  key?: string;
+  fixFor?: FixReason;
+  replacedBy?: string;
+  removedAt?: number;
+  removedReason?: string;
 }
 
 export interface EvidencePart {

@@ -33,7 +33,8 @@ CI runs the whole suite on the pull request after your review, so never run it y
 - A check the change makes fail (not one already failing on main), a test that encodes the old behaviour, a test that
   passes with and without the fix.
 - UI work without evidence, or evidence that does not show the changed flow. Capture your own as the evidence skill
-  says, so the human has independent evidence either way.
+  says, so the human has independent evidence either way. When you capture a view again in a later review, attach it
+  with the same `key` so it replaces your earlier shot, and remove your own that no longer applies.
 
 Everything else is a suggestion. Do not report taste as blocking.
 

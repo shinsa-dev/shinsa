@@ -1294,8 +1294,9 @@ checks it ran.
   simulator for iOS) is the `evidence` skill (`apps/engine/plugin/skills/evidence/SKILL.md`), which the skill index
   in the system prompt points to for a change a user sees and for a review of one.
 - **What it carries.** `attach_evidence` takes `kind`, a `title` (80) that a before and its after share, an optional
-  `detail` (280, what to look at), `width` (CSS pixels), `theme` (`light`, `dark`), `stage` (`before`, `after`) and
-  exactly one of `path`, `url` or `text` (40,000). A note's text is markdown (a table for measurements, `shinsa://`
+  `detail` (280, what to look at), `width` (CSS pixels), `theme` (`light`, `dark`), `stage` (`before`, `after`), an
+  optional `key` (60, what it shows, below) and `replaces` (items by key or id) and exactly one of `path`, `url` or
+  `text` (40,000). A note's text is markdown (a table for measurements, `shinsa://`
   references for files and tasks), and the Review tab renders it so. Core's `validateEvidence` checks it and the
   server refuses with every reason (`Shinsa did not attach it. Fix these…`). `evidence.attached` keeps the optional
   fields only when set.
@@ -1312,12 +1313,38 @@ checks it ran.
   `PROTOCOL_LIMITS.evidenceParts`, each a `path` with a `stage` or a `label` of 40); the server stores each part and dispatches `agent.attach_comparison`, which
   `decide` folds into one `evidence.attached` per part sharing a fresh `itemId` (each part a `screenshot` or
   `recording` by its file, carrying its `stage` and `label`), so the event stays the one it was and a planned
-  `screenshot` is met by a comparison of screenshots. Core's `listEvidenceItems` turns a round's pieces back into
-  items (`EvidenceItem`: `id`, `kind`, `title`, `parts`): the pieces of one `itemId` are one comparison; a `before`
-  and an `after` screenshot or recording attached by separate calls with the same title, width and theme pair into
-  one too (the latest of each stage, so a retaken after replaces the earlier one), which is how a before shot taken
-  early meets its after; every other piece is an item of its own kind. The Review tab and the Overview count these
-  items, never files.
+  `screenshot` is met by a comparison of screenshots. Core's `listEvidenceItems` turns a round's current pieces back
+  into items (`EvidenceItem`: `id`, `key`, `kind`, `title`, `parts`, and `updated`, below): the pieces of one
+  `itemId` are one comparison; a `before` and an `after` screenshot or recording attached by separate calls with the
+  same key pair into one too, which is how a before shot taken early meets its after; every other piece is an item of
+  its own kind. The Review tab and the Overview count these items, never files.
+- **Evidence shows the work as it is now** (since 2026-10-28). Every piece has an identity for what it shows,
+  `resolveEvidenceKey`: the `key` the agent gave (lower-case words and hyphens, like `settings-dark-900`), else the
+  check it links (`check-c1`), else a slug of its title, width and theme (prefixed with its kind for a note, a
+  preview or an unlinked run). When a piece is attached, `decide` replaces the current pieces of the same key that the
+  same side attached this round (the agent's never replace the reviewer's, or the other way round): a piece with a
+  `stage` replaces the piece of its stage and a plain shot of that key, so a new after keeps its before; a piece
+  without one, a comparison or a check link replaces every piece of the key; `replaces` names further items by key or
+  id. `evidence.attached` carries the replaced ids as `replaces`, and the fold sets `replacedBy` on each. An item that
+  no longer applies is removed with the `remove_evidence` tool (`agent.remove_evidence`: `items` by key or id, a
+  `reason` of 200; `evidence.removed` sets `removedAt` and `removedReason`). Neither deletes anything: a replaced or
+  removed piece stays in the log and on disk, out of `listEvidenceItems` and the plan's evidence count
+  (`assertEvidence` counts current pieces only), and in `listEarlierEvidenceItems`. A piece attached in a fix carries
+  the fix's reason (`fixFor`), so the item it replaced says after what it was updated (`updated`: `you` for your
+  review, `review`, `checks`, … or `work` outside a fix). A key or id that names no current item of the side is
+  refused (`evidence_unknown`). Shinsa's own check outputs are untouched: the Review tab shows the latest one.
+- **A fix accounts for the evidence before it** (since 2026-10-28). `complete_fix` takes `evidence_kept` (items by key
+  or id that still apply). Before a fix hands over, core takes the agent's current screenshots, recordings,
+  comparisons and notes of the round that no part of was attached in this fix run, and for each the files it covers:
+  the files of the phase it was attached in (`PhaseReport.files`); an item attached outside a phase (in an earlier
+  fix), or in a phase that recorded no files, covers every file. When the fix changed a file an item covers (the
+  committed `files`) and the item is not named in `evidence_kept`, `complete_fix` is refused (`evidence_stale`), and
+  the commit undone, with a message that names each item by key: "Your fix changed files this evidence shows, so it
+  may still show the work as it was before the fix: - `settings-dark`: Settings (comparison) … For each one, attach a
+  new one with the same `key` (it replaces the old one), remove it with `remove_evidence` when it no longer applies,
+  or name its key in `evidence_kept` when it still shows the work as it is. Then call `complete_fix` again." A fix
+  that changed no file needs nothing. Every fix prompt lists the round's items by key (`describeEvidenceForFix`), and
+  the fix closing asks the agent to refresh them, so the refusal is the backstop, not the first it hears.
 - **Where it is kept.** The server copies a file, or writes the text (a note as `.md`, other text as `.txt`), into
   `<data>/evidence/<task id>/round-<n>/<slug of the title>-<id>.<ext>` (`EvidenceStore`, 200 MB a file), so the
   agent's own temporary files can go; a URL is kept as given. `/api/evidence/<task id>/round-<n>/<name>` serves it
@@ -1333,7 +1360,7 @@ checks it ran.
   changed-line coverage measured before review travels on the same `checks.record` as `coverage` (Test coverage of
   the change). So every check has its output beside its result, even when no agent linked it, and a later run of a
   check after a fix adds its own piece. The reviewer's list of attached evidence leaves Shinsa's pieces out, since its
-  brief already lists the checks and their results (`describeTaskChecks`).
+  brief already lists the checks and their results (`describeTaskChecks`), and names each item by its key.
 - **Where you see it.** The Review tab's Evidence section (`docs/design.md` 34), also when the task has no work report
   and its changes cannot be read (a merged branch that was cleaned up); the Overview keeps one line pointing there,
   or shows the section itself for a task with no review (an operation).

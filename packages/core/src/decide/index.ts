@@ -19,6 +19,7 @@ import {
   completePhase,
   noteProgress,
   proposePlan,
+  removeEvidence,
   reportReview,
 } from './agents.ts';
 import { recordChecks } from './checks.ts';
@@ -234,6 +235,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return attachCheck(decider, command);
     case 'agent.attach_comparison':
       return attachComparison(decider, command);
+    case 'agent.remove_evidence':
+      return removeEvidence(decider, command);
     case 'agent.note':
       return noteProgress(decider, command);
     case 'task.bind_account':

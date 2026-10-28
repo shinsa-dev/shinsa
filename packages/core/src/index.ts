@@ -96,6 +96,7 @@ export {
   validateDelegationRequest,
   validateDelivery,
   validateEvidence,
+  validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,

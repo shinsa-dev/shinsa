@@ -96,6 +96,8 @@ describe('storeEvidence', () => {
         width: 390,
         theme: 'dark',
         stage: 'after',
+        key: 'home-dark-390',
+        replaces: ['home-old'],
       },
       worktree,
       evidence,
@@ -108,6 +110,8 @@ describe('storeEvidence', () => {
       detail: 'The header wraps.',
       width: 390,
       theme: 'dark',
+      key: 'home-dark-390',
+      replaces: ['home-old'],
       stage: 'after',
       uri: expect.stringMatching(/^\/api\/evidence\/task-1\/round-2\/home-page-\w+\.png$/),
     });
@@ -149,6 +153,7 @@ describe('storeEvidence', () => {
       kind: 'test',
       checkId: 'c2',
       detail: 'The new file is read.',
+      replaces: [],
     });
     expect(() =>
       storeEvidence({ kind: 'check', check: 'c1', text: '12 pass' }, null, evidence, FOLDER)
@@ -179,6 +184,8 @@ describe('storeEvidence', () => {
       detail: null,
       width: 1280,
       theme: null,
+      key: null,
+      replaces: [],
       parts: [
         {
           kind: 'screenshot',

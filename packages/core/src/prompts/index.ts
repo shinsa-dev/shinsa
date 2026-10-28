@@ -29,6 +29,7 @@ export {
 } from './orchestration.ts';
 export { resolveProjectContext } from './project.ts';
 export {
+  describeEvidenceForFix,
   resolveAgentPrompt,
   resolveAnswererPrompt,
   resolveInvestigatorPrompt,

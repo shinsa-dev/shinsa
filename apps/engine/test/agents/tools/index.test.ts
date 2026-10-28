@@ -33,6 +33,7 @@ describe('the shinsa tool server', () => {
     expect(result.tools.map((tool) => tool.name)).toEqual([
       'report_review',
       'attach_evidence',
+      'remove_evidence',
       'find_tasks',
       'note',
       'suggest_tasks',

@@ -50,7 +50,9 @@ Only these, and they win over anything below:
    failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
    pull request, a linked test, the plan's Checks, check activity and Always run before review), the
    Review tab's Evidence panel (`routes/ui/evidence.tsx`: `EvidencePanel` with a before and after pair, a recording,
-   a test the agent linked (read as its check), a check Shinsa ran and a markdown note with a table, on sample files in `apps/web/public/samples/evidence` that
+   a test the agent linked (read as its check), a check Shinsa ran and a markdown note with a table, and a second panel
+   after a revision: a shot marked "Updated after your review" with the replaced shot and a removed note under Earlier
+   versions, on sample files in `apps/web/public/samples/evidence` that
    `scripts/seed-media/generate.ts` renders, 34), and the error fallbacks in their three sizes (`routes/ui/errors.tsx`,
    38). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
@@ -2145,7 +2147,16 @@ Only these, and they win over anything below:
       image viewer on it, whose arrows step item by item ("1 of 4") and whose bar switches Before and After inside a
       comparison. A recording's frame shows its first frame (muted, metadata preloaded) under a round play glyph, and
       plays only in the viewer, with its controls (the server answers byte ranges so it seeks). An item the reviewer
-      attached carries a purple "From the agent review" badge: evidence from outside the author. With nothing
+      attached carries a purple "From the agent review" badge: evidence from outside the author. Only current evidence
+      shows (`docs/engine.md` → Evidence): an item that replaced an earlier one says so beside its title in a quiet
+      `text-2xs` `fg-2` line, never a badge ("Updated after your review", "Updated after the agent review", "Updated
+      after the checks", "Updated after the pull request feedback", else "Updated"), and the replaced and removed items
+      sit under a collapsed **Earlier versions** line at the end of the panel (`DisclosureHeader` as Advanced in a
+      service form: `line`, `glyph`, `text-2xs` `fg-2`, the count beside it; `task:<taskId>:evidence:panel:earlier`),
+      each over its status ("Replaced by a later version", "Removed: " and the agent's reason) and drawn as in the panel
+      (the image viewer steps through them only while the line is open), so stale proof is never read as the work as
+      it is. With every item removed the panel says "The agents removed
+      the evidence they attached this round." over that line. With nothing
       attached, the panel says so ("No screenshots, recordings or test runs were attached this round. Request changes
       to ask the agent for them."), so a missing proof is visible, not silent. 20px between groups, 4px from a group's
       label to its items. When the task has no work report and its changes cannot be read (a merged branch that was
@@ -2633,7 +2644,7 @@ Only these, and they win over anything below:
       `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:`, never an array index:
       `task:<taskId>:review:card:<point>` (the point's kind and a hash of its place and text,
       `resolveReviewItemIdentity`), `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`
-      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`,
+      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`, `task:<taskId>:evidence:panel:earlier`,
       `task:<taskId>:chat:tool:<callKey>` (the chat's rows under `DisclosureScope`, `useDisclosureScope`),
       `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`,
       `services:project:<id>`, `roadmap:group:<group>`, `settings:mcp:server:<id>`, and `ui:…` for `/ui`.

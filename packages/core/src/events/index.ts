@@ -229,7 +229,8 @@ type EventBody =
   | { type: 'run.continued'; runId: string; reason: RunContinuationReason }
   | { type: 'run.session_lost'; runId: string; sessionId: string }
   | { type: 'run.compacted'; runId: string; sessionId: string }
-  | { type: 'evidence.attached'; evidence: Evidence }
+  | { type: 'evidence.attached'; evidence: Evidence; replaces?: string[] }
+  | { type: 'evidence.removed'; taskId: string; ids: string[]; reason: string; runId: string }
   | { type: 'pull_request.opened'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.updated'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.push_requested'; taskId: string }

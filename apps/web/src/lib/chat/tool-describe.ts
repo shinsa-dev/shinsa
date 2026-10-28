@@ -209,6 +209,8 @@ function describeShinsaMessage(
       if (check) return plain('IconTestTube', 'Linked the check as evidence:', check);
       return plain('IconPaperclip1', 'Attached evidence:', readString(args, 'title'));
     }
+    case 'remove_evidence':
+      return plain('IconTrashCan', 'Removed evidence:', readString(args, 'reason'));
     case 'find_tasks': {
       const query = readString(args, 'query');
       return plain('IconMagnifyingGlass', query ? 'Looked up tasks:' : 'Looked up tasks', query);
@@ -369,6 +371,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   report_review: () => 'reported the review',
   ask: () => 'asked you a question',
   attach_evidence: (count) => `attached ${formatCount(count, 'piece of evidence', 'pieces of evidence')}`,
+  remove_evidence: (count) => (count === 1 ? 'removed evidence' : `removed evidence ${count} times`),
   find_tasks: (count) => (count === 1 ? 'looked up tasks once' : `looked up tasks ${count} times`),
   read_task: (count) => `read ${formatCount(count, 'task', 'tasks')}`,
   list_repository_work: (count) =>

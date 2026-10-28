@@ -28,6 +28,7 @@ function describeFixClosing(next: string) {
     'Fix it, confirming the fix with the test files or folders it touches, never the whole suite (Shinsa refuses it): Shinsa runs the checks itself after you hand over.',
     'Then call `complete_fix` with a one or two sentence summary of what you changed. Shinsa runs again the checks that failed, the checks of every phase whose files your fix changes, and the ones you name in `checks` by their ids; add, change or remove a check with `check_changes` and a reason when the fix needs one.',
     'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
+    'When the fix changes what your evidence shows, refresh it before you hand over: attach the new shot with the same `key` so it replaces the old one (never add it beside it), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` what still shows the work as it is.',
     `${next} Then stop.`,
   ].join('\n');
 }

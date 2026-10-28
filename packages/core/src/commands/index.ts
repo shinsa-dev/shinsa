@@ -142,6 +142,7 @@ type AgentCommand =
       walkthrough?: ReportWalkthroughRevision | null;
       checks?: string[];
       checkChanges?: CheckChangeHandOver[];
+      evidenceKept?: string[];
       treeHash?: string | null;
       files?: string[];
     }
@@ -171,6 +172,8 @@ type AgentCommand =
       width?: number | null;
       theme?: EvidenceTheme | null;
       stage?: EvidenceStage | null;
+      key?: string | null;
+      replaces?: string[];
     }
   | {
       type: 'agent.attach_comparison';
@@ -180,6 +183,8 @@ type AgentCommand =
       detail?: string | null;
       width?: number | null;
       theme?: EvidenceTheme | null;
+      key?: string | null;
+      replaces?: string[];
     }
   | {
       type: 'agent.attach_check';
@@ -187,7 +192,9 @@ type AgentCommand =
       kind: LinkedEvidenceKind;
       checkId: string;
       detail?: string | null;
+      replaces?: string[];
     }
+  | { type: 'agent.remove_evidence'; runId: string; items: string[]; reason: string }
   | { type: 'agent.note'; runId: string; note: string }
   | {
       type: 'agent.wait_for';

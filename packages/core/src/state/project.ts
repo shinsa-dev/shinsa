@@ -574,15 +574,40 @@ function hasEvidenceItem(state: ShinsaState, itemId: string | undefined) {
   return itemId !== undefined && Object.values(state.evidence).some((piece) => piece.itemId === itemId);
 }
 
+function updateEvidence(state: ShinsaState, id: string, patch: Partial<Evidence>) {
+  const evidence = state.evidence[id];
+  if (!evidence) return;
+  writeEntry(state, 'evidence', id, { ...evidence, ...patch });
+}
+
 function applyEvidenceAttached(state: ShinsaState, event: EventOf<'evidence.attached'>) {
   const known = hasEvidenceItem(state, event.evidence.itemId);
+  const replaces = event.replaces ?? [];
   writeEntry(state, 'evidence', event.evidence.id, event.evidence);
+  for (const id of replaces) updateEvidence(state, id, { replacedBy: event.evidence.id });
   if (known) return;
   record(state, event.evidence.taskId, event.at, {
     actor: 'agent',
     kind: 'evidence',
-    text: `Attached ${event.evidence.title}`,
+    text: `${replaces.length > 0 ? 'Updated' : 'Attached'} ${event.evidence.title}`,
     evidenceId: event.evidence.id,
+  });
+}
+
+function applyEvidenceRemoved(state: ShinsaState, event: EventOf<'evidence.removed'>) {
+  const [first] = event.ids;
+  const removed = first ? state.evidence[first] : undefined;
+  for (const id of event.ids) {
+    updateEvidence(state, id, { removedAt: event.at, removedReason: event.reason });
+  }
+  if (!removed) return;
+  record(state, event.taskId, event.at, {
+    actor: 'agent',
+    kind: 'evidence',
+    text: `Removed ${removed.title}`,
+    detail: event.reason,
+    evidenceId: removed.id,
+    runId: event.runId,
   });
 }
 
@@ -758,6 +783,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'evidence.attached':
       applyEvidenceAttached(state, event);
+      break;
+    case 'evidence.removed':
+      applyEvidenceRemoved(state, event);
       break;
     case 'pull_request.opened':
     case 'pull_request.updated':
