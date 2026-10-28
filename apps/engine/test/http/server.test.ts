@@ -131,7 +131,6 @@ describe('the health endpoint', () => {
       problems: [],
       version: '0.0.0',
       protocol: ENGINE_PROTOCOL,
-      flavor: 'stable',
       busy: false,
       restart: null,
       commit: null,

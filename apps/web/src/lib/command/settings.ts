@@ -95,13 +95,7 @@ import {
   resolveSettingsPath,
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
-import {
-  CANARY_DOWNLOAD_URL,
-  isChannelFixed,
-  parseUpdateChannel,
-  UPDATE_CHANNEL_ITEMS,
-  UPDATES_LABEL,
-} from '@/lib/updates.ts';
+import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate } from '@/router.ts';
@@ -472,25 +466,11 @@ function listWorkspaceChoices({ repos, support }: WorkspaceChoices): Command[] {
 }
 
 function listChannelChoices(channel: UpdateChannel | null): Command[] {
-  if (!channel || isChannelFixed(channel)) return [];
+  if (!channel) return [];
   return [
     settingChoice('update-channel', UPDATES_LABEL.channel, UPDATE_CHANNEL_ITEMS, channel, (value) =>
       applyDesktopChannel(parseUpdateChannel(value))
     ),
-  ];
-}
-
-function listCanaryCommands(channel: UpdateChannel | null): Command[] {
-  if (!channel || isChannelFixed(channel)) return [];
-  return [
-    {
-      kind: 'link',
-      id: 'settings.canary.download',
-      label: UPDATES_LABEL.downloadCanary,
-      icon: 'IconArrowUpRight',
-      keywords: ['canary', 'update channel', 'main', 'nightly', 'install'],
-      href: CANARY_DOWNLOAD_URL,
-    },
   ];
 }
 
@@ -536,7 +516,6 @@ export function listSettingsSections(
           keywords: ['onboarding', 'setup steps', 'folders', 'start over'],
           run: () => void restartOnboarding(),
         },
-        ...listCanaryCommands(updateChannel),
       ],
     },
   ];

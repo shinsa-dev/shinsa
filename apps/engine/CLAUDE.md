@@ -43,9 +43,7 @@ src/
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
-│                        source), flavor.ts (FLAVOR: Shinsa or Shinsa Canary, baked in by build-engine.ts from
-│                        SHINSA_FLAVOR as SHINSA_BUILD_FLAVOR; it picks the data folder, port, job label and link
-│                        scheme), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
+│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
 │                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
@@ -56,9 +54,9 @@ src/
 │                        plugins, services, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
-├── config/              paths.ts (where ~/.config/shinsa, or ~/.config/shinsa-canary for Shinsa Canary, config.json and data/ are), file.ts (config.json: read
+├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
 │                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json, the port
-│                        defaulting to the flavor's: 7446, 7447 for Shinsa Canary; package.json's dev and start
+│                        defaulting to core's APP_IDENTITY: 7446; package.json's dev and start
 │                        scripts pin 5180 so a checkout never meets the Mac app's engine; every SHINSA_*
 │                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (instance/service.ts) and the
 │                        SHINSA_BUILD_* a compiled engine carries (instance/bundle.ts); prepareDataDir)

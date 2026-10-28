@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: Stable is a normal release marked latest; beta is a pre-release of the next version; canary is a build of main as Shinsa Canary, as every tested merge makes
+        description: Stable is a normal release marked latest; beta is a pre-release of the next version; canary is a pre-release of main for the Canary channel, as every tested merge makes
         type: choice
         options: [beta, stable, canary]
         default: beta
@@ -72,8 +72,6 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       channel: ${{ steps.version.outputs.channel }}
-    env:
-      SHINSA_FLAVOR: ${{ needs.trigger.outputs.channel == 'canary' && 'canary' || 'stable' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -139,8 +137,7 @@ jobs:
           if [ "$MODE" = signed ]; then signing=(-c.mac.notarize=true); fi
           config=(--config electron-builder.yml)
           case "$CHANNEL" in
-            beta) config+=(-c.dmg.background=dmg/background-beta.png) ;;
-            canary) config=(--config electron-builder.canary.yml) ;;
+            beta | canary) config+=(-c.dmg.background="dmg/background-$CHANNEL.png") ;;
           esac
           bunx electron-builder --mac dmg zip --arm64 --publish never "${config[@]}" \
             -c.extraMetadata.version="$VERSION" \
@@ -151,26 +148,19 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           MODE: ${{ steps.signing.outputs.mode }}
         run: |
-          if [ "$SHINSA_FLAVOR" = canary ]; then
-            app="mac-arm64/Shinsa Canary.app"
-            want_id=studio.overclock.shinsa.canary
-          else
-            app=mac-arm64/Shinsa.app
-            want_id=studio.overclock.shinsa
-          fi
+          app=mac-arm64/Shinsa.app
           plist="$app/Contents/Info.plist"
           bundled=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
           bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
           report=$("$app/Contents/Resources/engine/bin/shinsa" version --json)
           engine=$(jq -r .command.version <<<"$report")
-          flavor=$(jq -r .command.flavor <<<"$report")
-          echo "Release $VERSION, app $bundled ($bundle_id), engine $engine ($flavor)"
+          echo "Release $VERSION, app $bundled ($bundle_id), engine $engine"
           if [ "$bundled" != "$VERSION" ] || [ "$engine" != "$VERSION" ]; then
             echo "::error title=Versions::The app ($bundled) and its engine ($engine) must both be $VERSION."
             exit 1
           fi
-          if [ "$bundle_id" != "$want_id" ] || [ "$flavor" != "$SHINSA_FLAVOR" ]; then
-            echo "::error title=Identity::A $SHINSA_FLAVOR build must be $want_id with a $SHINSA_FLAVOR engine, not $bundle_id with a $flavor one."
+          if [ "$bundle_id" != studio.overclock.shinsa ]; then
+            echo "::error title=Identity::Every channel builds studio.overclock.shinsa, not $bundle_id."
             exit 1
           fi
           codesign --verify --deep --strict "$app"

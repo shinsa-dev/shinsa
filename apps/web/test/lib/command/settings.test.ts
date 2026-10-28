@@ -123,10 +123,9 @@ describe('Change a setting', () => {
     ]);
   });
 
-  it('switches the app’s update channel between Stable and Beta, and only in the app', () => {
+  it('switches the app’s update channel between Stable, Beta and Canary, and only in the app', () => {
     const browser = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES);
     expect(() => find(browser, 'settings.update-channel')).toThrow();
-    expect(() => find(browser, 'settings.canary.download')).toThrow();
     const fake = installDesktop();
     const sections = listSettingsSections(
       createSettings(),
@@ -143,31 +142,14 @@ describe('Change a setting', () => {
       options: [
         { value: 'stable', label: 'Stable' },
         { value: 'beta', label: 'Beta' },
+        { value: 'canary', label: 'Canary' },
       ],
     });
+    pick(sections, 'settings.update-channel', 'canary');
     pick(sections, 'settings.update-channel', 'beta');
     pick(sections, 'settings.update-channel', 'stable');
-    expect(fake.channels).toEqual(['beta', 'stable']);
-    expect(find(sections, 'settings.canary.download')).toMatchObject({
-      kind: 'link',
-      label: 'Download Shinsa Canary',
-      href: 'https://shinsa.dev/download/canary',
-    });
+    expect(fake.channels).toEqual(['canary', 'beta', 'stable']);
     fake.restore();
-  });
-
-  it('in Shinsa Canary has no update channel to change and nothing to download', () => {
-    const sections = listSettingsSections(
-      createSettings(),
-      MODELS,
-      DEFAULT_PREFERENCES,
-      null,
-      undefined,
-      'left',
-      'canary'
-    );
-    expect(() => find(sections, 'settings.update-channel')).toThrow();
-    expect(() => find(sections, 'settings.canary.download')).toThrow();
   });
 
   it('moves the Code tab’s file list to either side', () => {
