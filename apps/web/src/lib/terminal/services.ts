@@ -18,6 +18,7 @@ import {
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { formatCount } from '@/lib/format/count.ts';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -95,6 +96,16 @@ export function describeServicesTrigger(views: ServiceView[]): { label: string; 
   if (failed > 0) return { label: `${failed} failed`, tone: 'red' };
   if (starting > 0) return { label: `${starting} starting`, tone: 'blue' };
   if (running > 0) return { label: `${running} running`, tone: 'neutral' };
+  return { label: 'Services', tone: 'neutral' };
+}
+
+export function describeTaskServicesFact(views: ServiceView[]): { label: string; tone: Tone } {
+  const { running, starting, failed } = resolveServicesSummary(views);
+  if (failed > 0) return { label: `${formatCount(failed, 'service', 'services')} failed`, tone: 'red' };
+  if (starting > 0)
+    return { label: `${formatCount(starting, 'service', 'services')} starting`, tone: 'blue' };
+  if (running > 0)
+    return { label: `${formatCount(running, 'service', 'services')} running`, tone: 'neutral' };
   return { label: 'Services', tone: 'neutral' };
 }
 

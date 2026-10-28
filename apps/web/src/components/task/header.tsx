@@ -1,7 +1,6 @@
 import type { ShinsaState, Task } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { Choice } from '@/components/controls/choice.tsx';
-import { TaskServicesMenu } from '@/components/services/task-menu.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
@@ -39,7 +38,6 @@ export function TaskHeader({
       <div className='flex items-start gap-2'>
         <TaskFacts state={state} task={task} className='min-w-0 flex-1' />
         <div className='flex h-6 shrink-0 items-center gap-2'>
-          <TaskServicesMenu state={state} task={task} />
           <TaskMenu state={state} task={task} />
         </div>
       </div>

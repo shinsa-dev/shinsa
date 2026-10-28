@@ -92,7 +92,7 @@ export function ServiceRow({
   const state = describeServiceState(view, now);
   const name = view.service.name;
   return (
-    <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control pe-1'>
+    <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control pe-0.5'>
       <button
         type='button'
         disabled={!view.terminal}
@@ -128,11 +128,13 @@ function RowRunButtons({ view, handlers }: { view: ServiceView; handlers: Servic
 
 export function TaskRunRow({
   run,
+  last,
   project,
   now,
   handlers,
 }: {
   run: TaskServiceRun;
+  last: boolean;
   project: Project;
   now: number;
   handlers: ServiceHandlers;
@@ -141,7 +143,18 @@ export function TaskRunRow({
   const glyph = SERVICE_GLYPHS[view.state];
   const state = describeServiceState(view, now);
   return (
-    <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control ps-6 pe-1'>
+    <div
+      data-highlight-item=''
+      className='group/service relative flex items-center gap-1 rounded-control ps-6 pe-0.5'
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute start-3.75 top-0 w-px bg-bg-a4',
+          last ? 'h-1/2' : 'bottom-0'
+        )}
+      />
+      <span aria-hidden className='pointer-events-none absolute start-3.75 top-1/2 h-px w-2.5 bg-bg-a4' />
       <button
         type='button'
         aria-label={`Open the terminal of ${view.service.name} for ${label}`}
@@ -197,7 +210,7 @@ export function ManagedServiceRow({
     <div
       data-highlight-item=''
       onClick={onPick}
-      className='group/service flex cursor-pointer items-center gap-1 rounded-control pe-1'
+      className='group/service flex cursor-pointer items-center gap-1 rounded-control pe-0.5'
     >
       <span className={cn(LIST_ROW, LIST_ROW_LINES, 'min-w-0 flex-1 ps-1.5')}>
         <span className={ICON_SLOT}>

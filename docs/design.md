@@ -2437,11 +2437,16 @@ Only these, and they win over anything below:
       as a queue section folds, and each project remembers its fold (`services:project:<projectId>`, `resolveServiceGroupId`, 40). When two or more of
       the project's services are not running, the header ends with a play button (`icon-sm`, `IconPlay`, no text,
       the tooltip "Start all services in ‹project›", `describeStartAll`; the section's action, so a press on it never
-      folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as a row does, so the play
-      button stands in the column of each row's last button, while the chevron stays after the counts. The rows follow one
+      folds) that starts every one that is not; the header then ends 2px in (`pe-0.5`, `CompactSection`'s
+      `headerClassName`), as every row does, so the play button stands in the column of each row's last button, while
+      the chevron stays after the counts. A row's last button sits 2px from the row's end, as far as a task run's
+      24px buttons sit from the top and bottom of its 28px row (measured: 2px right, 2px top), so every Start, Restart
+      and Stop and the header's play button share one x. The rows follow one
       another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
       (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
-      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). A row
+      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side), and its bottom by as
+      much (`pb-1.5`), so a project folded on its own sits as far from the footer's hairline as from the popover's
+      top (12px each). A row
       (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
       mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
@@ -2451,7 +2456,7 @@ Only these, and they win over anything below:
       shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
       as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
       set (measured: 1px between Restart and Stop, each 24px). A row has no `•••`: editing and removing are Manage's. Measured in the
-      browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
+      browser: the header's play button and every row's last button at the same x, 10px from the popover's end and
       24px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
       trigger (`max-h-(--available-height)`, `COMPACT_POPOVER`, the queue popover's classes) and then scrolls,
@@ -2512,17 +2517,21 @@ Only these, and they win over anything below:
       /api/services/remove`) and clears the ticks, and a refusal keeps them.
     - **A task's runs under its service** (since 2026-10-27; `docs/engine.md` → Services → Runs for a task). Under
       a service's row the popover lists each task that runs it, or whose run failed (`listTaskServiceRuns`; a stopped
-      one is left out, so the list stays what is running): `TaskRunRow`, indented 24px (`ps-6`) under the row, one
+      one is left out, so the list stays what is running): `TaskRunRow`, indented 24px (`ps-6`) under the row and
+      joined to it by a tree line, as the Code tab's file tree draws its guides (`bg-bg-a4`, 1px): a vertical line under
+      the service's tile, through each run and ending at the last one's middle, and a short arm into each run; then one
       line of the state's small tile, the task's handle and title ("LOC-10 Add task-scoped services", `fg-3`,
       `text-xs`, truncated; "A finished task" once it is gone) and the state at its end in its tone, then the same
       run buttons as a service's row. Pressing it opens that run's terminal. The trigger and a project's header still
       count your own runs only, so a task starting its dev server never turns the top bar's label. On the Terminal
       page a task run's tab is a service tab like yours: the toolbar's Restart and Stop act on that run
       (`listProjectServiceRuns` finds the service in front among every run).
-    - **A task's Services** (`components/services/task-menu.tsx`, `TaskServicesMenu`). A task's header has a
-      Services button beside its `•••` (`secondary sm`, the top bar's trigger label: the server glyph and the count
-      in its tone) whenever its project has a service the task can run (`listTaskServices`, core); none, and the
-      button is not there. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
+    - **A task's Services** (`components/services/task-menu.tsx`, `TaskServicesFact`). A task's facts (its status,
+      repository, branch, checks, priority…) have a Services item whenever its project has a service the task can run
+      (`listTaskServices`, core); none, and it is not there. It is a fact like the others (`FACT` and
+      `FACT_INTERACTIVE`, `components/task/fact.ts`): the server glyph and "Services", or "1 service running", "2
+      services starting", "1 service failed" in its tone (`describeTaskServicesFact`), and a press opens its popover,
+      washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
       ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
       `ServiceRow` per service for this task: its state is the task's run's, Start starts it in the worktree, and
       the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.

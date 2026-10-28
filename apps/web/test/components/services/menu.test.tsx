@@ -235,6 +235,10 @@ describe('the Services popover', () => {
     const starts = screen.getAllByRole('button', { name: 'Start api' });
     for (const start of starts) fireEvent.click(start);
     expect(calls).toEqual(['open api', 'stop api', 'start api', 'start api']);
+    const guide = (label: string) =>
+      (screen.getByText(label).closest('[data-highlight-item]') as HTMLElement).querySelector('span');
+    expect(guide('SH-4 Fix the cart')?.className).toContain('bottom-0');
+    expect(guide('SH-7 Show the total')?.className).toContain('h-1/2');
   });
 
   it('draws each project as the compact queue draws a section, the play button in the column of the rows’ buttons', () => {
@@ -253,7 +257,10 @@ describe('the Services popover', () => {
     const shared = classes(queueHeader).filter((name) => !/^(h-|pe-|\[|outline-none$)/.test(name));
     expect(classes(header)).toEqual(expect.arrayContaining(shared));
     expect(classes(header.children[1] ?? null)).toEqual(classes(queueHeader.children[1] ?? null));
-    expect(header.className).toContain('pe-1');
+    expect(header.className).toContain('pe-0.5');
+    expect(header.className).not.toMatch(/(^| )pe-1( |$)/);
+    const row = within(shop).getByText('api').closest('[data-highlight-item]') as HTMLElement;
+    expect(row.className).toContain('pe-0.5');
     const chevron = header.querySelector('[data-disclosure-chevron]') as HTMLElement;
     expect(chevron.className).toContain('group-hover/disclosure:opacity-100');
     const play = within(shop).getByRole('button', { name: 'Start all services in Shop' });

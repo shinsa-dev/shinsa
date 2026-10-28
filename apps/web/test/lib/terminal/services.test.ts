@@ -17,6 +17,7 @@ import {
   describeStartAll,
   describeTaskRunLabel,
   describeTaskServices,
+  describeTaskServicesFact,
   listAllPicks,
   listPickedInputs,
   listProjectServiceRuns,
@@ -87,6 +88,24 @@ describe('describeServicesTrigger', () => {
     expect(describeServicesTrigger([running, starting])).toEqual({ label: '1 starting', tone: 'blue' });
     expect(describeServicesTrigger([running, running])).toEqual({ label: '2 running', tone: 'neutral' });
     expect(describeServicesTrigger([view(null)])).toEqual({ label: 'Services', tone: 'neutral' });
+  });
+});
+
+describe('describeTaskServicesFact', () => {
+  it('names the services among the task’s facts, failed first, then starting, then running', () => {
+    const running = view({ id: 'r', startedAt: NOW });
+    const starting = view({ id: 's', startedAt: LATER });
+    const failed = view({ id: 'f', status: 'exited', exitCode: 1, endedAt: NOW });
+    expect(describeTaskServicesFact([running, failed, starting])).toEqual({
+      label: '1 service failed',
+      tone: 'red',
+    });
+    expect(describeTaskServicesFact([starting, starting])).toEqual({
+      label: '2 services starting',
+      tone: 'blue',
+    });
+    expect(describeTaskServicesFact([running])).toEqual({ label: '1 service running', tone: 'neutral' });
+    expect(describeTaskServicesFact([view(null)])).toEqual({ label: 'Services', tone: 'neutral' });
   });
 });
 
