@@ -8,7 +8,7 @@ import { describeAttachment, resolveFileGlyph } from '@/lib/chat/attachments.ts'
 
 const FILE_CARD = cn(
   CARD,
-  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 ps-2 pe-3 shadow-1'
+  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 rounded-3xl ps-2 pe-3'
 );
 
 function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | null; busy: boolean }) {
