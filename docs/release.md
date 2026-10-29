@@ -90,17 +90,19 @@ version, `X.Y.Z-beta.N`, and a canary `X.Y.Z-canary.N`:
 - **Stable** = the bump of the last stable tag. Prerelease tags are ignored when finding it, and tags are compared by
   semver, not by date or name.
 - **Beta** = `<bump of the last stable>-beta.N`, where N is one more than the highest `v<that version>-beta.*` tag.
-- **Canary** = `<patch after the newest stable or beta>-canary.N`, where the newest is the highest stable or beta tag
-  by semver (canary tags are ignored when finding it) and N is one more than the highest `v<that version>-canary.*`
-  tag. Canary tags are never the last stable release or the base of a beta.
+- **Canary** = `<the version in progress>-canary.N`. The version in progress comes from the highest stable or beta
+  tag by semver (canary tags are ignored when finding it): a beta `X.Y.Z-beta.M` gives `X.Y.Z`, the version its betas
+  lead to, and a stable `X.Y.Z` gives the patch after it, `X.Y.(Z+1)`. N is one more than the highest
+  `v<that version>-canary.*` tag. Canary tags are never the last stable release or the base of a beta.
 
-Semver compares prerelease words alphabetically, so `beta` sorts **below** `canary`: `1.3.1-beta.1 < 1.3.1-canary.1 <
-1.3.1`. The canary rule never relies on that order: a canary's version is the patch above the newest beta or stable
-release, so every canary is newer than every beta and stable release that existed when it was built, the next canary
-after a new beta or stable release is above it again, and canaries never go down:
-`1.2.0 < 1.3.0-beta.1 < 1.3.1-canary.1 < 1.3.1-canary.2`. A stable `1.3.0` cut after them is below
-`1.3.1-canary.2`, so the next canary is `1.3.1-canary.3`; a stable `1.3.1` passes them, and the next is
-`1.3.2-canary.1`.
+Semver compares prerelease words alphabetically, so `beta` sorts **below** `canary`: `1.3.0-beta.9 < 1.3.0-canary.1 <
+1.3.0`. The canary rule relies on that order: while `1.3.0` betas run, canaries are `1.3.0-canary.N`, newer than every
+beta of that version and older than the stable `1.3.0` they lead to, so a canary never jumps a version ahead of the
+release in progress: `1.2.0 < 1.3.0-beta.1 < 1.3.0-canary.1 < 1.3.0-canary.2 < 1.3.0`. Once the stable `1.3.0` ships,
+the next canary is `1.3.1-canary.1`, above it; a new beta `1.4.0-beta.1` moves the next one to `1.4.0-canary.1`.
+Canaries never go down as long as betas only go up: a stable hotfix `1.3.1` cut while `1.4.0` betas run is below
+them, so canaries stay on `1.4.0`. Shinsa Canary updates only to canaries, so a canary is only ever compared with
+other canaries.
 
 So a beta sorts after the stable release before it and before the stable release it leads to, never above a newer
 stable: `1.2.0 < 1.3.0-beta.1 < 1.3.0-beta.2 < 1.3.0 < 1.3.1-beta.1`.
@@ -115,9 +117,10 @@ stable: `1.2.0 < 1.3.0-beta.1 < 1.3.0-beta.2 < 1.3.0 < 1.3.1-beta.1`.
 | `1.2.0` | `v1.3.0-beta.1`…`3` | stable, minor | `1.3.0` (ships what the betas led to) |
 | `1.3.0` | `v1.3.0-beta.*` | beta, minor | `1.4.0-beta.1` (betas start again) |
 | `1.3.0` | none | stable, patch | `1.3.1` (a hotfix while `1.4.0` betas run is fine) |
-| `1.2.0` | `v1.3.0-beta.2` | canary | `1.3.1-canary.1`, then `.2`, `.3` on the next merges |
-| `1.3.0` | `v1.3.0-beta.*`, `v1.3.1-canary.1`…`5` | canary | `1.3.1-canary.6` (the stable `1.3.0` is below them) |
-| `1.3.0` | `v1.4.0-beta.1` | canary | `1.4.1-canary.1` (a new beta moves canaries above it) |
+| none | `v1.0.0-beta.5` | canary | `1.0.0-canary.1`, then `.2`, `.3` on the next merges |
+| `1.2.0` | `v1.3.0-beta.2` | canary | `1.3.0-canary.1` (the version its betas lead to) |
+| `1.3.0` | `v1.3.0-beta.*`, `v1.3.0-canary.*` | canary | `1.3.1-canary.1` (above the stable `1.3.0`) |
+| `1.3.0` | `v1.4.0-beta.1` | canary | `1.4.0-canary.1` (a new beta moves canaries to its version) |
 
 Pick the same bump for a version's betas and its stable release. A beta of a different bump is still valid but sorts
 by semver: after `1.3.0-beta.3`, a `patch` beta is `1.2.1-beta.1`, lower, so nobody already on `1.3.0-beta.3` gets it.

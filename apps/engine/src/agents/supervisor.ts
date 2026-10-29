@@ -69,6 +69,7 @@ import {
   type SessionStarter,
 } from './providers/index.ts';
 import { Questions } from './questions.ts';
+import type { TaskServiceRunner } from './services.ts';
 import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -99,6 +100,7 @@ export interface SupervisorOptions {
   extensions?: SessionExtensionSource;
   manage?: ManageAccess;
   workspaces?: Workspaces;
+  services?: TaskServiceRunner;
 }
 
 interface Workspace {
@@ -216,6 +218,7 @@ export class RunSupervisor {
       minuteMs: options.minuteMs ?? MINUTE_MS,
       manage: options.manage ?? null,
       workspaces: this.workspaces,
+      services: options.services ?? null,
     });
     this.#manages = options.manage !== undefined;
     this.#deliveries = new Deliveries({

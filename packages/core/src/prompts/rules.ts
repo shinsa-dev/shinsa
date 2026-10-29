@@ -58,6 +58,11 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
         ]
       : []),
     describeWaitingRule(tools),
+    ...(tools.includes('run_service')
+      ? [
+          'To run one of the project’s services for this task, such as its dev server, in this task’s worktree, call `list_services` and `run_service`; read its output with `list_services` and the service’s name. Stop the services you started once you no longer need them.',
+        ]
+      : []),
   ];
 }
 

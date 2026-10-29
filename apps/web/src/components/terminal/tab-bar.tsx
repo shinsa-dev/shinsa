@@ -1,4 +1,10 @@
-import { resolveServiceView, resolveTerminalLabel, type ServiceView, type TerminalInfo } from '@shinsa/core';
+import {
+  resolveServiceView,
+  resolveTerminalLabel,
+  type ServiceView,
+  type Task,
+  type TerminalInfo,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
@@ -9,7 +15,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
-import { describeTerminalTab, moveTerminal } from '@/lib/terminal/tabs.ts';
+import { describeTerminalTab, moveTerminal, resolveTerminalTabLabel } from '@/lib/terminal/tabs.ts';
 
 function RenameField({
   terminal,
@@ -117,6 +123,7 @@ function ServiceTabLabel({
 
 function TerminalTab({
   terminal,
+  tasks,
   service,
   now,
   active,
@@ -127,6 +134,7 @@ function TerminalTab({
   onDrop,
 }: {
   terminal: TerminalInfo;
+  tasks: Record<string, Pick<Task, 'handle'>>;
   service: ServiceView | null;
   now: number | undefined;
   active: boolean;
@@ -136,7 +144,7 @@ function TerminalTab({
   onDragStart: () => void;
   onDrop: () => void;
 }) {
-  const label = resolveTerminalLabel(terminal);
+  const label = resolveTerminalTabLabel(terminal, tasks);
   const ended = terminal.status !== 'running';
   return (
     <TabsTrigger
@@ -193,6 +201,7 @@ function TerminalTab({
 
 export function TerminalTabs({
   terminals,
+  tasks = {},
   services,
   now,
   activeId,
@@ -204,6 +213,7 @@ export function TerminalTabs({
   onReorder,
 }: {
   terminals: TerminalInfo[];
+  tasks?: Record<string, Pick<Task, 'handle'>>;
   services: ServiceView[];
   now?: number;
   activeId: string | null;
@@ -233,6 +243,7 @@ export function TerminalTabs({
             <TerminalTab
               key={terminal.id}
               terminal={terminal}
+              tasks={tasks}
               service={services.find((view) => view.terminal?.id === terminal.id) ?? null}
               now={now}
               active={terminal.id === activeId}

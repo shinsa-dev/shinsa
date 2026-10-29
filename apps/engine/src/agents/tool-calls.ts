@@ -1,5 +1,6 @@
 import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import {
+  assertRunTool,
   type CommandOf,
   isDelegatedRun,
   isTaskSettled,
@@ -25,6 +26,7 @@ import type { ProviderRegistry } from './providers/index.ts';
 import type { Questions } from './questions.ts';
 import { resolveTaskReading } from './reading.ts';
 import { RepositoryWork } from './repository-work.ts';
+import { handleServiceTool, type TaskServiceRunner } from './services.ts';
 import { handleOrchestrationTool } from './tools/orchestration.ts';
 import { handleProcessTool } from './tools/process.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -47,6 +49,7 @@ interface ToolCallsOptions {
   minuteMs: number;
   manage: ManageAccess | null;
   workspaces: Workspaces;
+  services: TaskServiceRunner | null;
 }
 
 interface ToolCall {
@@ -101,6 +104,9 @@ export class ToolCalls {
         return this.#work.describe(this.#findCurrent(runId, attemptId).task.id, signal);
       case 'note':
         return this.#note(call, dispatch);
+      case 'list_services':
+      case 'run_service':
+        return this.#runServiceTool(name, call);
       default:
         if (isSurfaceTool(name)) return this.#manage(name, call);
         return this.#handleOther(name, call, dispatch);
@@ -210,6 +216,19 @@ export class ToolCalls {
     const taskId = readString(input, 'task_id');
     if (!taskId) return Promise.reject(new Error('task_id is required.'));
     return Promise.resolve(resolveTaskReading(engine.state, transcripts, taskId));
+  }
+
+  async #runServiceTool(name: 'list_services' | 'run_service', { runId, attemptId, input }: ToolCall) {
+    const { engine, services } = this.#options;
+    const { run, task } = this.#findCurrent(runId, attemptId);
+    assertRunTool(run, name);
+    if (!services) throw new Error(`${name} is not available while Shinsa runs without terminals.`);
+    return await handleServiceTool(name, input, {
+      state: engine.state,
+      task,
+      runner: services,
+      now: Date.now(),
+    });
   }
 
   async #note({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {

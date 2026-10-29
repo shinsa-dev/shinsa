@@ -100,6 +100,7 @@ src/
 │   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
+│   │                    the task's own service runs (services.ts: `list_services` and `run_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
 │   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
@@ -260,7 +261,8 @@ src/
 │                        Compose service, Cargo, Go, Django, make),
 │                        routes.ts (/api/terminals, the foreground check, /api/services with its batch add, and /ws/terminals/<id>),
 │                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
-│                        services: add, update, remove, start, stop, restart, resume after a restart);
+│                        services: add, update, remove, start, stop, restart, a run per task, closing a task's
+│                        runs, resume after a restart);
 │                        pty.ts also reads the program in front of a shell (readForegroundProgram)
 └── http/                server.ts (Bun.serve; a taken port names itself and config.json's `port`), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the

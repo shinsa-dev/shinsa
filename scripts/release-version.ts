@@ -72,8 +72,14 @@ function countPrereleases(tags: readonly string[], base: string, identifier: 'be
   return tags.reduce((highest, tag) => Math.max(highest, Number(pattern.exec(tag)?.[1] ?? 0)), 0);
 }
 
+function resolveCanaryBase(tags: readonly string[]) {
+  const newest = selectNewest(tags, RELEASE_TAG) ?? '0.0.0';
+  const beta = /^(\d+\.\d+\.\d+)-beta\.\d+$/.exec(newest);
+  return beta?.[1] ?? bumpVersion(newest, 'patch');
+}
+
 function resolveCanaryPlan(tags: readonly string[], lastStable: string | null): ReleasePlan {
-  const base = bumpVersion(selectNewest(tags, RELEASE_TAG) ?? '0.0.0', 'patch');
+  const base = resolveCanaryBase(tags);
   const version = `${base}-canary.${countPrereleases(tags, base, 'canary') + 1}`;
   const notesStartTag = selectLastCanaryTag(tags);
   return { channel: 'canary', version, tag: `v${version}`, prerelease: true, lastStable, notesStartTag };
