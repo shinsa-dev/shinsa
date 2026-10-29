@@ -2488,9 +2488,11 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
 
 The description is one block Shinsa writes between `<!-- shinsa:start -->` and `<!-- shinsa:end -->`
 (`serializePullRequestMarkdown`, `packages/core/src/report/pull-request.ts`, pure), in this order: a note naming the
-task (handle and title) with a link to open it in Shinsa, the summary, How it works (the walkthrough's approach, its
+task (handle and title) with a link to open it in Shinsa, the summary, the earlier rounds in this pull request (when
+a later round ships onto it: each one's title, goal or headline, result and phases, from its `outcome`), How it works (the walkthrough's approach, its
 flow folded away), Evidence, Checks (a table of each check with ✓, ✗ or –, the count that passed and the
-changed-line coverage when it was measured), What changed (each phase's summary with its critical and high spots),
+changed-line coverage when it was measured), What changed (What changed in round N when earlier rounds share the
+pull request; each phase's summary with its critical and high spots),
 the judgement calls with the options turned down, the risks, How to test (the tests and the steps to try), the steps
 around the merge, the plan folded away, and a one-line footer linking shinsa.dev.
 
@@ -2498,7 +2500,7 @@ around the merge, the plan folded away, and a one-line footer linking shinsa.dev
   (`resolveShinsaTaskUrl`), a static page of the site (`apps/marketing/src/pages/open.astro`) whose button opens
   `shinsa://task/<id>` in the Mac app and which offers the download to anyone without it. The page never opens the
   app by itself: browsers refuse an external scheme without a click.
-- **Evidence.** The current round's evidence of the task, as items (`listPullRequestEvidence`), without linked tests
+- **Evidence.** The evidence of the current round and of every earlier round on the same pull request, as items (`listPullRequestEvidence`), without linked tests
   and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part
   (Before, After or the part's label); a comparison with a recording lists its parts in turn, since GitHub plays a
   video only from a link on a line of its own; a screenshot is an image and a recording that link; a note's text
@@ -2521,8 +2523,10 @@ around the merge, the plan folded away, and a one-line footer linking shinsa.dev
   (`replacePullRequestBlock`), so what a person wrote around it stays, and edits the pull request only when the body
   changed. A body without the markers is replaced whole. A failed rewrite is logged; the push stands.
 - **The size limit.** GitHub takes 65,536 characters. Over that, whole sections go in this order: the plan, the
-  flow, the evidence, What changed, the judgement calls, the risks, How it works, Checks, How to test; the note, the
-  summary, the steps around the merge and the footer stay. Only when that is not enough is the block cut, with `…`.
+  flow, the earlier rounds, the evidence, What changed, the judgement calls, the risks, How it works, Checks, How to
+  test; the note, the summary, the steps around the merge and the footer stay. Only when that is not enough is the
+  block cut, with `…`, closing the code block and every `<details>` the cut lands in, so the footer is never folded
+  away.
 
 ## The pull request watch
 

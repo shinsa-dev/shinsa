@@ -1,5 +1,5 @@
 import { listEvidenceItems } from '../domain/evidence.ts';
-import { isOfCurrentRound } from '../domain/rounds.ts';
+import { type Round, resolveCurrentRound, resolveTaskRounds } from '../domain/rounds.ts';
 import type { Evidence, Task } from '../domain/types.ts';
 import { assembleReport } from './assemble.ts';
 import {
@@ -53,9 +53,22 @@ export function resolvePublicUrl(evidence: Evidence) {
   return isPublicAddress(evidence.uri) ? evidence.uri : null;
 }
 
+function listEarlierRounds(task: Task): Round[] {
+  const number = task.pullRequest?.number;
+  const current = resolveCurrentRound(task).number;
+  if (number === undefined) return [];
+  return resolveTaskRounds(task).filter(
+    (round) => round.number < current && round.pullRequest?.number === number
+  );
+}
+
 export function listPullRequestEvidence(task: Task, evidence: readonly Evidence[]) {
+  const rounds = new Set([
+    resolveCurrentRound(task).number,
+    ...listEarlierRounds(task).map((round) => round.number),
+  ]);
   return listEvidenceItems(
-    evidence.filter((piece) => piece.taskId === task.id && isOfCurrentRound(task, piece))
+    evidence.filter((piece) => piece.taskId === task.id && rounds.has(piece.round ?? 1))
   ).filter((item) => item.kind !== 'test' && item.kind !== 'check');
 }
 
@@ -144,7 +157,24 @@ function serializeChecks(task: Task, report: WorkReport) {
   return `### Checks\n${passed} of ${report.checks.length} passed.\n\n${rows.join('\n')}${coverage}`;
 }
 
-function serializeChanges(report: WorkReport) {
+function describeEarlierRound(round: Round) {
+  const outcome = round.outcome;
+  const parts = [outcome?.headline ?? outcome?.goal ?? '', outcome?.result ?? '']
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const phases = (outcome?.phases ?? []).map((phase) => `\n  - ${phase}`).join('');
+  const text = parts.length > 0 ? `: ${parts.join(' ')}` : '';
+  return `**Round ${round.number}, ${round.title}**${text}${phases}`;
+}
+
+function serializeEarlierRounds(rounds: readonly Round[]) {
+  return describeSection(
+    '### Earlier rounds in this pull request',
+    bulletList(rounds.map(describeEarlierRound))
+  );
+}
+
+function serializeChanges(report: WorkReport, heading: string) {
   const lines = report.sections.map((section) => {
     const spots = section.spots
       .filter((spot) => SHOWN_ATTENTION.has(spot.attention))
@@ -152,7 +182,7 @@ function serializeChanges(report: WorkReport) {
       .join('');
     return `**${section.title}**: ${section.summary}${spots}`;
   });
-  return describeSection('### What changed', bulletList(lines));
+  return describeSection(heading, bulletList(lines));
 }
 
 function serializeJudgementCalls(report: WorkReport) {
@@ -186,9 +216,13 @@ function serializeSections(source: PullRequestSource): Section[] {
   const report = assembleReport(task);
   const taskUrl = resolveShinsaTaskUrl(task.id);
   const flow = report.walkthrough?.flow?.trim();
+  const earlier = listEarlierRounds(task);
+  const changes =
+    earlier.length > 0 ? `### What changed in round ${resolveCurrentRound(task).number}` : '### What changed';
   return [
     { text: serializeHeader(task, taskUrl), drop: Number.POSITIVE_INFINITY },
     { text: task.summary?.trim() ?? '', drop: Number.POSITIVE_INFINITY },
+    { text: serializeEarlierRounds(earlier), drop: 3 },
     { text: describeSection('### How it works', report.walkthrough?.approach ?? ''), drop: 8 },
     {
       text: flow ? `<details><summary>How it flows</summary>\n\n${flow}\n\n</details>` : '',
@@ -196,7 +230,7 @@ function serializeSections(source: PullRequestSource): Section[] {
     },
     { text: serializeEvidence(source, taskUrl), drop: 4 },
     { text: serializeChecks(task, report), drop: 9 },
-    { text: serializeChanges(report), drop: 5 },
+    { text: serializeChanges(report, changes), drop: 5 },
     { text: serializeJudgementCalls(report), drop: 6 },
     { text: serializeRisks(report), drop: 7 },
     { text: serializeTestingMarkdown(report.walkthrough?.testing), drop: 10 },
@@ -231,8 +265,24 @@ function fitBlock(sections: Section[], limit: number) {
   }
   const block = joinBlock(kept);
   if (block.length <= limit) return block;
+  return cutBlock(block, limit);
+}
+
+function resolveClosingTags(text: string) {
+  const fence = (text.match(/^\s*```/gm) ?? []).length % 2 === 1 ? '\n```' : '';
+  const open = (text.match(/<details[\s>]/g) ?? []).length - (text.match(/<\/details>/g) ?? []).length;
+  return `${fence}${'\n\n</details>'.repeat(Math.max(0, open))}`;
+}
+
+function cutBlock(block: string, limit: number) {
   const tail = `\n${PULL_REQUEST_BLOCK_END}`;
-  return `${block.slice(0, limit - tail.length - 1)}…${tail}`;
+  let size = limit - tail.length - 1;
+  for (;;) {
+    const cut = block.slice(0, size);
+    const text = `${cut}…${resolveClosingTags(cut)}${tail}`;
+    if (text.length <= limit) return text;
+    size -= text.length - limit;
+  }
 }
 
 export function serializePullRequestMarkdown(source: PullRequestSource, limit = PULL_REQUEST_BODY_LIMIT) {

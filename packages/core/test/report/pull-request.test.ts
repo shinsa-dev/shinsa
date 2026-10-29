@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Evidence, PhaseReport, Task } from '../../src/index.ts';
+import type { Evidence, PhaseReport, Round, Task } from '../../src/index.ts';
 import {
   listPullRequestEvidence,
   PULL_REQUEST_BLOCK_END,
@@ -244,6 +244,115 @@ describe('serializePullRequestMarkdown', () => {
     );
     expect(cut).toHaveLength(300);
     expect(cut.endsWith(`…\n${PULL_REQUEST_BLOCK_END}`)).toBe(true);
+  });
+
+  test('a last-resort cut closes the fold and the code block it lands in', () => {
+    const base = withReports(builtTask());
+    const folded = serializePullRequestMarkdown(
+      {
+        task: { ...base, summary: `<details><summary>Log</summary>\n\n${'y'.repeat(400)}` },
+        evidence: [],
+        notes: {},
+      },
+      400
+    );
+    expect(folded.length).toBeLessThanOrEqual(400);
+    expect(folded.endsWith(`…\n\n</details>\n${PULL_REQUEST_BLOCK_END}`)).toBe(true);
+    const [first, second] = base.phaseReports as [PhaseReport, PhaseReport];
+    const walkthrough = second.walkthrough as NonNullable<PhaseReport['walkthrough']>;
+    const step = {
+      when: 'pre_merge',
+      kind: 'env',
+      title: 'Run it',
+      detail: 'Once.',
+      command: 'z'.repeat(800),
+    } as const;
+    const task = {
+      ...base,
+      phaseReports: [first, { ...second, walkthrough: { ...walkthrough, steps: [step] } }],
+    };
+    const fenced = serializePullRequestMarkdown({ task, evidence: [], notes: {} }, 600);
+    expect(fenced.length).toBeLessThanOrEqual(600);
+    expect(fenced.endsWith(`…\n\`\`\`\n${PULL_REQUEST_BLOCK_END}`)).toBe(true);
+  });
+});
+
+function round(number: number, overrides: Partial<Round> = {}): Round {
+  return {
+    number,
+    title: `Round ${number} work`,
+    request: 'Do it',
+    why: null,
+    shipping: 'onto_pull_request',
+    status: 'shipped',
+    pipeline: [],
+    branch: 'fix/tabs',
+    base: 'main',
+    pullRequest: { number: 42, url: 'https://github.com/acme/app/pull/42', state: 'open', base: 'main' },
+    queuedAt: 0,
+    startedAt: number,
+    endedAt: null,
+    outcome: null,
+    ...overrides,
+  };
+}
+
+describe('a pull request that carries several rounds', () => {
+  test('describes the earlier rounds on it and shows their evidence beside this round’s', () => {
+    const base = withReports(builtTask());
+    const task: Task = {
+      ...base,
+      pullRequest: { ...(base.pullRequest ?? {}), number: 42 } as Task['pullRequest'],
+      rounds: [
+        round(1, {
+          title: 'Clamp the tabs',
+          outcome: {
+            goal: 'Stop the scroll.',
+            phases: ['Find it', 'Fix it'],
+            headline: null,
+            result: 'Merged into the PR.',
+          },
+        }),
+        round(2, { title: 'Stacked elsewhere', pullRequest: null }),
+        round(3, { title: 'Bare round', outcome: null }),
+        round(4, { status: 'active', endedAt: null }),
+      ],
+    };
+    const evidence = [
+      piece(task, { id: 'first', kind: 'screenshot', title: 'First', uri: 'https://cdn.example.com/1.png' }),
+      piece(task, {
+        id: 'stacked',
+        kind: 'screenshot',
+        title: 'Stacked',
+        uri: 'https://cdn.example.com/2.png',
+        round: 2,
+      }),
+      piece(task, {
+        id: 'now',
+        kind: 'screenshot',
+        title: 'Now',
+        uri: 'https://cdn.example.com/4.png',
+        round: 4,
+      }),
+    ];
+    const markdown = serializePullRequestMarkdown({ task, evidence, notes: {} });
+    expect(markdown).toContain(
+      '### Earlier rounds in this pull request\n- **Round 1, Clamp the tabs**: Stop the scroll. Merged into the PR.\n  - Find it\n  - Fix it\n- **Round 3, Bare round**'
+    );
+    expect(markdown).not.toContain('Stacked elsewhere');
+    expect(markdown).toContain('### What changed in round 4');
+    expect(listPullRequestEvidence(task, evidence).map((item) => item.title)).toEqual(['First', 'Now']);
+  });
+
+  test('before its pull request opens, a round shows only its own work', () => {
+    const task: Task = {
+      ...builtTask(),
+      pullRequest: null,
+      rounds: [round(1), round(2, { status: 'active' })],
+    };
+    const markdown = serializePullRequestMarkdown({ task, evidence: [], notes: {} });
+    expect(markdown).not.toContain('Earlier rounds');
+    expect(markdown).toContain('### What changed\n');
   });
 });
 
