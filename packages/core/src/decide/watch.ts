@@ -205,18 +205,21 @@ export function hasFixableChange(changes: PullRequestWatchChange[]) {
   return changes.some((change) => change.kind !== 'checks_passed');
 }
 
+function isUnnamed(pullRequest: PullRequest) {
+  const checksUnnamed = !pullRequest.checkRuns && pullRequest.checks === 'failing';
+  const threadsUnnamed = !pullRequest.unresolvedThreads && pullRequest.unresolvedComments > 0;
+  return checksUnnamed || threadsUnnamed;
+}
+
 function resolveSignatureParts(pullRequest: PullRequest, watch: PullRequestWatch) {
-  const checks = pullRequest.checkRuns
-    ? pullRequest.checkRuns.filter(isFailedCheck).map((check) => `check:${check.name}`)
-    : [pullRequest.checks === 'failing' ? 'checks:failing' : ''];
-  const threads = pullRequest.unresolvedThreads
-    ? pullRequest.unresolvedThreads.map((id) => `thread:${id}`)
-    : [pullRequest.unresolvedComments > 0 ? `threads:${pullRequest.unresolvedComments}` : ''];
+  const checks = (pullRequest.checkRuns ?? []).filter(isFailedCheck).map((check) => `check:${check.name}`);
+  const threads = (pullRequest.unresolvedThreads ?? []).map((id) => `thread:${id}`);
   const conflict = watch.conflicting || pullRequest.mergeable === false ? 'conflict' : '';
   return [...checks, ...threads, conflict].filter(Boolean);
 }
 
 export function resolvePullRequestSignature(pullRequest: PullRequest, watch: PullRequestWatch) {
+  if (isUnnamed(pullRequest)) return null;
   const parts = resolveSignatureParts(pullRequest, watch);
   if (parts.length === 0) return null;
   return [...new Set(parts)].sort().join('\n');
