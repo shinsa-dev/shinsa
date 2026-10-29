@@ -1044,12 +1044,18 @@ describe('pull requests', () => {
       'pull_request.record',
     ]);
     await first.runner.stop();
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    restores.push(() => warn.mockRestore());
     const second = setup(withTask({ stage: 'shipping', worktreePath: worktree, pullRequest: PULL }, repo));
     await second.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     expect(second.dispatched.map((command) => command.type)).toEqual([
       'pull_request.record_step',
       'pull_request.record_push',
     ]);
+    expect(warn).toHaveBeenCalledWith(
+      '[GitHub] Could not refresh the pull request description',
+      expect.objectContaining({ taskId: 'task-1', number: PULL.number })
+    );
     await second.runner.stop();
   });
 

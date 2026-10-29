@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { chmodSync, writeFileSync } from 'node:fs';
+import { chmodSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runCommand, runCommandOrThrow } from '../../src/shell/index.ts';
 import { World } from './harness.ts';
@@ -191,5 +191,50 @@ describe('a new pull request whose CI has not started yet', () => {
     const merge = w.github.calls.find((call) => call[0] === 'pr' && call[1] === 'merge');
     expect(merge?.slice(3, 6)).toEqual(['--squash', '--match-head-commit', head]);
     expect(merge?.slice(6, 7)).toEqual(['--subject']);
+  });
+});
+
+describe('the pull request description', () => {
+  test('opens with the review and its uploaded evidence, and each later push rewrites only that block', async () => {
+    const w = await open();
+    w.github.configure({ repositoryId: 4242 });
+    w.agents.queue('build', async (agent) => {
+      const shot = join(agent.cwd, 'shot.png');
+      writeFileSync(shot, 'png');
+      await agent.call('attach_evidence', { kind: 'screenshot', title: 'The greeting', path: shot });
+      rmSync(shot);
+      agent.write('a.txt', 'a\n');
+      await agent.call('complete_phase', { summary: 'Wrote the greeting.', spots: [], judgement_calls: [] });
+    });
+    const taskId = await w.createTask();
+    await approveReview(w, taskId);
+    await w.until('the pull request to open', () => w.task(taskId).pullRequest !== null);
+    const uploaded = 'https://github.com/user-attachments/assets/upload-1';
+    const opened = w.github.pulls[0]?.body ?? '';
+    expect(opened.startsWith('<!-- shinsa:start -->')).toBe(true);
+    expect(opened).toContain(`![The greeting](${uploaded})`);
+    expect(opened).toContain('Wrote the greeting.');
+    const shot = Object.values(w.state.evidence).find((piece) => piece.taskId === taskId);
+    expect(shot?.uploadUrl).toBe(uploaded);
+
+    w.github.update(1, { body: `Notes from a teammate.\n\n${opened}`, checks: 'failing' });
+    w.agents.queue('fix', async (agent) => {
+      const after = join(agent.cwd, 'ci.png');
+      writeFileSync(after, 'png');
+      await agent.call('attach_evidence', { kind: 'screenshot', title: 'The CI run', path: after });
+      rmSync(after);
+      agent.write('ci.txt', 'fixed\n');
+      await agent.call('complete_fix', { summary: 'Fixed CI.' });
+    });
+    await w.sync(taskId);
+    await w.until('the description to be rewritten', () =>
+      w.github.calls.some((call) => call[0] === 'pr' && call[1] === 'edit' && call.includes('--body-file'))
+    );
+    const refreshed = w.github.pulls[0]?.body ?? '';
+    expect(refreshed.startsWith('Notes from a teammate.\n\n<!-- shinsa:start -->')).toBe(true);
+    expect(refreshed).toContain(`![The greeting](${uploaded})`);
+    expect(refreshed).toContain('![The CI run](https://github.com/user-attachments/assets/upload-2)');
+    const uploads = w.github.calls.filter((call) => call[1]?.startsWith('https://uploads.github.com/'));
+    expect(uploads).toHaveLength(2);
   });
 });

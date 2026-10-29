@@ -42,6 +42,7 @@ import {
 } from '../git/index.ts';
 import { resolveTaskRefs } from '../git/task-refs.ts';
 import { RepoCiCache } from '../github/ci.ts';
+import { PullRequestDescriptions } from '../github/description.ts';
 import {
   createPullRequest,
   mergePullRequest,
@@ -49,6 +50,7 @@ import {
   readPullRequest,
   readStackedPullRequest,
   retargetPullRequest,
+  writePullRequestBlock,
 } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
 import {
@@ -145,6 +147,7 @@ export class EffectRunner {
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
   readonly #evidence: EvidenceStore;
+  readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
   readonly #ci = new RepoCiCache();
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
@@ -172,6 +175,7 @@ export class EffectRunner {
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
+    this.#descriptions = new PullRequestDescriptions(this.#evidence);
     this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
     this.#workspaces = options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir });
   }
@@ -655,7 +659,8 @@ export class EffectRunner {
     if (!pushed || context.signal.aborted) return;
     await this.#recordStep(taskId, { kind: 'opening' }, context);
     const read = await this.#ship('opening', async () => {
-      const created = await createPullRequest(repo, task, resolveRoundBase(task), context.signal);
+      const body = await this.#describePullRequest(taskId, context);
+      const created = await createPullRequest(repo, task, resolveRoundBase(task), body, context.signal);
       if (!created) throw new Error('GitHub did not return the new pull request.');
       return created;
     });
@@ -669,7 +674,38 @@ export class EffectRunner {
       await this.#openPullRequest(taskId, context);
       return;
     }
-    if (await this.#pushHead(task, repo, context)) this.#syncSoon(taskId);
+    if (!(await this.#pushHead(task, repo, context))) return;
+    await this.#refreshDescription(taskId, context);
+    this.#syncSoon(taskId);
+  }
+
+  async #describePullRequest(taskId: string, context: EffectContext) {
+    const { task, repo } = this.#requireTask(taskId);
+    const evidence = Object.values(this.#engine.state.evidence).filter((piece) => piece.taskId === taskId);
+    const { body, uploads } = await this.#descriptions.describe(repo, task, evidence, context.signal);
+    if (uploads.length === 0) return body;
+    const ids = uploads.map((upload) => upload.evidenceId).join(',');
+    await this.#engine.dispatch(
+      { type: 'evidence.record_uploads', taskId, uploads },
+      { id: `${context.key}:${context.attempt}:evidence.record_uploads:${ids}` }
+    );
+    return body;
+  }
+
+  async #refreshDescription(taskId: string, context: EffectContext) {
+    const number = this.#engine.state.tasks[taskId]?.pullRequest?.number;
+    if (number === undefined || context.signal.aborted) return;
+    try {
+      const body = await this.#describePullRequest(taskId, context);
+      const { repo } = this.#requireTask(taskId);
+      await writePullRequestBlock(repo, number, body, context.signal);
+    } catch (error) {
+      log.warn('[GitHub] Could not refresh the pull request description', {
+        taskId,
+        number,
+        error: describeError(error),
+      });
+    }
   }
 
   async #mergeHead(repo: Repo, task: Task, number: number, headSha: string | null, signal: AbortSignal) {

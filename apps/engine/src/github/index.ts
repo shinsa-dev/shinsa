@@ -1,8 +1,6 @@
 import {
-  assembleReport,
   type CiRun,
   type CiState,
-  listMergeSteps,
   MERGE_METHODS,
   type MergeQueueEntry,
   type MergeQueueState,
@@ -10,10 +8,9 @@ import {
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
+  replacePullRequestBlock,
   resolveCurrentRound,
   type Settings,
-  serializeMergeStepsMarkdown,
-  serializeTestingMarkdown,
   type Task,
 } from '@shinsa/core';
 import { assertRefName, resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
@@ -140,6 +137,10 @@ const PULL_REQUEST_FIELDS =
   'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup';
 
 const NO_PULL_REQUEST = /no pull requests found/i;
+
+const ATTACHMENT_UPLOAD_URL = 'https://uploads.github.com/user-attachments/assets';
+
+const ATTACHMENT_URL_PREFIX = 'https://github.com/user-attachments/';
 
 const COMMIT_SHA = /^[0-9a-f]{7,64}$/i;
 
@@ -379,29 +380,71 @@ export function serializePullRequestTitle(task: Task) {
   return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title, null);
 }
 
-function serializeTaskReference(task: Task) {
-  const link = `\`shinsa://task/${task.id}\``;
-  return task.handle ? `Shinsa task: ${task.handle}, ${link}` : `Shinsa task: ${link}`;
+export async function resolveRepositoryId(repo: Repo, signal?: AbortSignal) {
+  const slug = resolveRepoSlug(repo);
+  if (!slug) throw new Error('The repository has no GitHub remote.');
+  const output = await runGhOrThrow(['api', `repos/${slug.owner}/${slug.name}`, '--jq', '.id'], repo.path, {
+    signal,
+  });
+  const id = Number(output.trim());
+  if (!Number.isSafeInteger(id) || id <= 0)
+    throw new Error(`GitHub returned "${output.trim()}" as the repository id.`);
+  return id;
 }
 
-export function serializePullRequestBody(task: Task) {
-  const testing = serializeTestingMarkdown(assembleReport(task).walkthrough?.testing);
-  const steps = serializeMergeStepsMarkdown(listMergeSteps(task));
-  return [
-    serializeTaskReference(task),
-    task.summary?.trim() ?? '',
-    testing,
-    steps,
-    task.plan ? `<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
-  ]
-    .filter((part) => part.length > 0)
-    .join('\n\n');
+export interface Attachment {
+  path: string;
+  name: string;
+  contentType: string;
+}
+
+export async function uploadAttachment(
+  repo: Repo,
+  repositoryId: number,
+  attachment: Attachment,
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams({
+    name: attachment.name,
+    content_type: attachment.contentType,
+    repository_id: String(repositoryId),
+  });
+  const output = await runGhOrThrow(
+    [
+      'api',
+      `${ATTACHMENT_UPLOAD_URL}?${query}`,
+      '--method',
+      'POST',
+      '--input',
+      attachment.path,
+      '-H',
+      `Content-Type: ${attachment.contentType}`,
+      '-H',
+      'Accept: application/json',
+    ],
+    repo.path,
+    { signal }
+  );
+  const url = (JSON.parse(output) as { url?: unknown }).url;
+  if (typeof url !== 'string' || !url.startsWith(ATTACHMENT_URL_PREFIX))
+    throw new Error('GitHub did not return an attachment address.');
+  return url;
+}
+
+export async function writePullRequestBlock(repo: Repo, number: number, block: string, signal?: AbortSignal) {
+  const output = await runGhOrThrow(['pr', 'view', String(number), '--json', 'body'], repo.path, { signal });
+  const current = (JSON.parse(output) as { body?: string }).body ?? '';
+  const body = replacePullRequestBlock(current, block);
+  if (body === current) return false;
+  await runGhOrThrow(['pr', 'edit', String(number), '--body-file', '-'], repo.path, { input: body, signal });
+  return true;
 }
 
 export async function createPullRequest(
   repo: Repo,
   task: Task,
   baseBranch: string | null,
+  body: string,
   signal?: AbortSignal
 ) {
   if (!task.branch || !task.worktreePath)
@@ -423,7 +466,7 @@ export async function createPullRequest(
       '-',
     ],
     task.worktreePath,
-    { input: serializePullRequestBody(task), signal }
+    { input: body, signal }
   );
   return readPullRequest(repo, task, signal);
 }
