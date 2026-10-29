@@ -6,6 +6,13 @@ export {
   stashEdits,
   writeMergeHead,
 } from './commit.ts';
+export {
+  BRANCH_PATTERN,
+  COMMIT_TYPES,
+  type CommitType,
+  resolveCommitType,
+  serializeConventionalSubject,
+} from './conventional.ts';
 export { resolveCommitDiff, resolveWorkingDiff } from './diff.ts';
 export {
   createIsolatedWorktree,
