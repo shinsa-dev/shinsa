@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { Schedule } from '@shinsa/core';
 import {
   ANY_REPOSITORY,
   type AutomationDraft,
   createAutomationDraft,
-  describeAutomationFacts,
   describeAutomationSaved,
+  describeAutomationTasks,
   describeReadsEmpty,
-  listAutomationFiled,
+  listAutomationFacts,
   listAutomationGates,
   listAutomationReads,
+  listAutomationTasks,
   listRepoItems,
   listSourceItems,
   resolveAutomationCommand,
@@ -204,42 +206,118 @@ describe('a watch’s page', () => {
     patch: { schedules: { s1: watch } },
   });
 
-  it('opens from its home task, and says what it reads and when', () => {
+  it('opens from its home task, and lays out its type, state, integration, project and times as facts', () => {
     expect(resolveAutomationPath('s 1')).toBe('/automations/s%201');
     expect(selectWatchOfHome(state, 'home')?.id).toBe('s1');
     expect(selectWatchOfHome(state, 'other')).toBeNull();
     expect(selectWatchSource(state, watch)).toBe(SLACK);
     expect(selectWatchSource(state, createSchedule({ id: 'plain' }))).toBeNull();
-    expect(describeAutomationFacts(state, watch)).toBe(
-      'Watch · Reads slack: The #feedback channel · Every hour'
-    );
-    expect(describeAutomationFacts(state, createSchedule({ id: 'p', enabled: false }))).toBe(
-      'Schedule · Every hour · Paused'
+    expect(
+      listAutomationFacts(state, watch).map((fact) => [fact.key, fact.label, fact.tone, fact.at])
+    ).toEqual([
+      ['type', 'Watch', 'neutral', null],
+      ['state', 'On', 'green', null],
+      ['source', 'slack', 'neutral', null],
+      ['project', 'Superwall', 'neutral', null],
+      ['when', 'Every hour', 'neutral', null],
+      ['next', 'Next run', 'neutral', NOW + 60 * 60_000],
+      ['last', 'Last read', 'neutral', NOW - 1_000],
+      ['filed', '2 tasks filed', 'neutral', null],
+    ]);
+    expect(listAutomationFacts(state, watch).find((fact) => fact.key === 'source')?.hint).toBe(
+      'The #feedback channel'
     );
   });
 
-  it('lists every read newest first, with what it filed, and the runs it skipped or failed', () => {
-    expect(listAutomationFiled(state, watch).map((task) => task.id)).toEqual(['f1', 'f0']);
+  it('says how a plain schedule stands: paused, finished, stopped or failing, in its project', () => {
+    const repo = createRepo({ id: 'r1', projectId: 'p1' });
+    const plain = createShinsaState({ projects: [PROJECT], repos: [repo] });
+    const facts = (schedule: Partial<Schedule>) =>
+      listAutomationFacts(plain, createSchedule({ id: 'x', ...schedule })).map((fact) => fact.label);
+    expect(facts({ enabled: false })).toEqual(['Schedule', 'Paused', 'Every hour']);
+    expect(
+      facts({
+        stopped: 'finished',
+        target: { kind: 'new_task', repoId: 'r1', priority: 'normal', mode: 'build' },
+      })
+    ).toEqual(['Schedule', 'Finished', 'Superwall', 'Every hour']);
+    expect(facts({ stopped: 'target_gone', target: { kind: 'task', taskId: 'gone' } })).toEqual([
+      'Schedule',
+      'Stopped',
+      'Every hour',
+    ]);
+    expect(
+      facts({
+        trigger: { kind: 'webhook', signature: null, replayKey: null },
+        nextRunAt: null,
+        runs: [{ at: NOW, outcome: 'failed', taskId: null, deliveryId: null, detail: 'Bad.' }],
+      })
+    ).toEqual(['Trigger', 'Last run failed', 'When its webhook is called']);
+    expect(
+      facts({ runs: [{ at: NOW, outcome: 'sent', taskId: null, deliveryId: null, detail: null }] })
+    ).toEqual(['Schedule', 'On', 'Every hour', 'Next run', 'Last run']);
+  });
+
+  it('lists the tasks it filed, and every run newest first as activity', () => {
+    expect(listAutomationTasks(state, watch).map((task) => task.id)).toEqual(['f1', 'f0']);
+    expect(describeAutomationTasks(watch)).toEqual({ title: 'Tasks it filed', empty: 'Nothing filed yet.' });
     expect(
       listAutomationReads(state, watch).map((read) => [
         read.label,
+        read.icon,
         read.tone,
         read.summary,
         read.filed.length,
       ])
     ).toEqual([
-      ['Failed', 'red', 'It broke.', 0],
-      ['Skipped', 'neutral', 'The task was at work.', 0],
-      ['Did not finish', 'amber', null, 0],
-      ['Reading now', 'neutral', null, 0],
-      ['Read', 'neutral', 'Read 4 messages; filed 1.', 1],
+      ['Failed', 'IconExclamationCircle', 'red', 'It broke.', 0],
+      ['Skipped', 'IconClockSnooze', 'neutral', 'The task was at work.', 0],
+      ['Did not finish', 'IconExclamationTriangle', 'amber', null, 0],
+      ['Reading slack', 'IconEyeOpen', 'blue', null, 0],
+      ['Read slack, filed 1 task', 'IconListBullets', 'green', 'Read 4 messages; filed 1.', 1],
     ]);
-    expect(listAutomationReads(state, createSchedule({ id: 'plain' }))).toEqual([]);
+    const quiet = {
+      ...state,
+      runs: {
+        r: createRun({
+          id: 'r',
+          taskId: 'home',
+          purpose: 'intake',
+          startedAt: NOW,
+          endedAt: NOW,
+          outcome: 'completed',
+          summary: 'Nothing new.',
+        }),
+      },
+    };
+    expect(listAutomationReads(quiet, { ...watch, runs: [] }).map((read) => read.label)).toEqual([
+      'Read slack, filed nothing',
+    ]);
   });
 
-  it('says why it has no read yet', () => {
+  it('shows what a plain schedule started or messaged, and the tasks it started', () => {
+    const started = createTask({ id: 't1', scheduleId: 'n' });
+    const sent = { at: NOW, outcome: 'sent' as const, taskId: 't1', deliveryId: null, detail: null };
+    const plain = createShinsaState({
+      tasks: [started, createTask({ id: 'home2', scheduleId: 'n', watchHome: true })],
+    });
+    const starter = createSchedule({ id: 'n', runs: [sent, { ...sent, at: NOW - 1, taskId: 'gone' }] });
+    expect(listAutomationTasks(plain, starter).map((task) => task.id)).toEqual(['t1']);
+    expect(describeAutomationTasks(starter)).toEqual({ title: 'Tasks it started', empty: 'No task yet.' });
+    expect(listAutomationReads(plain, starter).map((read) => [read.label, read.filed.length])).toEqual([
+      ['Started a task', 1],
+      ['Started a task', 0],
+    ]);
+    const messenger = createSchedule({ id: 'm', target: { kind: 'task', taskId: 't1' }, runs: [sent] });
+    expect(listAutomationReads(plain, messenger).map((read) => read.label)).toEqual(['Messaged its task']);
+  });
+
+  it('says why there is nothing yet', () => {
     expect(describeReadsEmpty(watch)).toBe('No read yet. The first one starts at its next run.');
-    expect(describeReadsEmpty({ ...watch, enabled: false })).toBe('No read yet, and it is paused.');
+    expect(describeReadsEmpty({ ...watch, enabled: false })).toBe('Nothing yet, and it is paused.');
+    expect(describeReadsEmpty(createSchedule({ id: 'n' }))).toBe(
+      'Nothing yet. It first runs at its next run.'
+    );
   });
 });
 

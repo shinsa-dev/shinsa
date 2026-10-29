@@ -1,47 +1,56 @@
 import type { Gate, Schedule, ShinsaState, Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
+import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
-import { SectionLabel } from '@/components/layout/page/section-label.tsx';
-import { CARD } from '@/components/layout/surface/card.ts';
+import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
+import { Panel } from '@/components/layout/surface/panel.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { PausedCard, QuestionCard } from '@/components/overview/now-card.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
+import { FILED_COLUMNS, RoadmapRow } from '@/components/roadmap/row.tsx';
 import { createScheduleActions, ScheduleMenu } from '@/components/settings/schedules.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
+import { FACT } from '@/components/task/fact.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
+  type AutomationFact,
   type AutomationRead,
-  describeAutomationFacts,
+  describeAutomationTasks,
   describeReadsEmpty,
-  listAutomationFiled,
+  listAutomationFacts,
   listAutomationGates,
   listAutomationReads,
+  listAutomationTasks,
 } from '@/lib/automations.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { describeNextRun } from '@/lib/schedules.ts';
+import { resolveRoadmapGroup } from '@/lib/tasks/roadmap.ts';
 
-const ROW = 'flex flex-col gap-1 border-border border-t px-3 py-2.5 first:border-t-0';
-
-function ReadRow({ state, read }: { state: ShinsaState; read: AutomationRead }) {
+function FactLabel({ fact }: { fact: AutomationFact }) {
+  if (fact.at === null) return fact.label;
+  const at = fact.at;
+  if (fact.key === 'next') return <TimeAgo at={at} text={(now) => describeNextRun(at, now)} />;
   return (
-    <li className={ROW}>
-      <div className='flex items-center justify-between gap-3 text-xs'>
-        <span className={cn('shrink-0', TONE_TEXT[read.tone])}>{read.label}</span>
-        <span className='shrink-0 text-fg-2'>
-          <TimeAgo at={read.at} />
-        </span>
-      </div>
-      {read.summary && <p className='selectable text-pretty text-fg-3 text-xs'>{read.summary}</p>}
-      {read.filed.length > 0 && (
-        <div className='flex flex-wrap gap-x-3 gap-y-1 text-xs'>
-          {read.filed.map((task) => (
-            <TaskLink key={task.id} state={state} task={task} />
-          ))}
-        </div>
-      )}
-    </li>
+    <>
+      {fact.label} <TimeAgo at={at} />
+    </>
   );
+}
+
+function FactItem({ fact }: { fact: AutomationFact }) {
+  const item = (
+    <span className={cn(FACT, 'max-w-72', fact.tone !== 'neutral' && TONE_TEXT[fact.tone])}>
+      <Icon size='sm' name={fact.icon} />
+      <span className='truncate'>
+        <FactLabel fact={fact} />
+      </span>
+    </span>
+  );
+  return fact.hint ? <Hint label={fact.hint}>{item}</Hint> : item;
 }
 
 function WatchGate({ state, home, gate }: { state: ShinsaState; home: Task; gate: Gate }) {
@@ -59,57 +68,122 @@ function WatchGate({ state, home, gate }: { state: ShinsaState; home: Task; gate
   }
 }
 
-function AutomationBody({ state, schedule }: { state: ShinsaState; schedule: Schedule }) {
+function TasksPanel({ state, schedule }: { state: ShinsaState; schedule: Schedule }) {
+  const tasks = listAutomationTasks(state, schedule);
+  const copy = describeAutomationTasks(schedule);
+  return (
+    <Panel
+      persistId={createDisclosureId('automation', schedule.id, 'tasks')}
+      title={copy.title}
+      icon='IconListBullets'
+      count={tasks.length}
+      flush
+    >
+      {tasks.length === 0 ? (
+        <p className='px-3 py-2.5 text-fg-2 text-xs'>{copy.empty}</p>
+      ) : (
+        <div className='-mb-px'>
+          <div
+            className={cn(
+              'grid h-7 items-center gap-4 border-border border-b px-3 font-medium text-2xs text-fg-2',
+              FILED_COLUMNS
+            )}
+          >
+            <span>Task</span>
+            <span className='max-md:hidden'>Status</span>
+            <span className='max-md:hidden'>Pull request</span>
+            <span className='text-right'>Updated</span>
+          </div>
+          {tasks.map((task) => (
+            <RoadmapRow
+              key={task.id}
+              state={state}
+              task={task}
+              group={resolveRoadmapGroup(state, task)}
+              depth={0}
+              columns={FILED_COLUMNS}
+            />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ReadRow({ state, read }: { state: ShinsaState; read: AutomationRead }) {
+  return (
+    <li className='group relative flex gap-3 pb-4 last:pb-0'>
+      <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
+      <StatusTile icon={read.icon} tone={read.tone} className='relative' />
+      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+        <div className='flex items-baseline gap-2 text-xs leading-5'>
+          <span className='font-medium text-fg-3'>{read.label}</span>
+          <span className='ms-auto shrink-0 text-2xs text-fg-2'>
+            <TimeAgo at={read.at} compact />
+          </span>
+        </div>
+        {read.summary && <p className='selectable text-pretty text-fg-4 text-xs'>{read.summary}</p>}
+        {read.filed.length > 0 && (
+          <div className='flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs'>
+            {read.filed.map((task) => (
+              <TaskLink key={task.id} state={state} task={task} />
+            ))}
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function ActivityPanel({ state, schedule }: { state: ShinsaState; schedule: Schedule }) {
   const reads = listAutomationReads(state, schedule);
-  const filed = listAutomationFiled(state, schedule);
+  return (
+    <Panel
+      persistId={createDisclosureId('automation', schedule.id, 'activity')}
+      title='Activity'
+      icon='IconClock'
+    >
+      {reads.length === 0 ? (
+        <p className='text-fg-2 text-xs'>{describeReadsEmpty(schedule)}</p>
+      ) : (
+        <ol className='flex flex-col'>
+          {reads.map((read) => (
+            <ReadRow key={read.key} state={state} read={read} />
+          ))}
+        </ol>
+      )}
+    </Panel>
+  );
+}
+
+function AutomationBody({ state, schedule }: { state: ShinsaState; schedule: Schedule }) {
   const gates = listAutomationGates(state, schedule);
   return (
-    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-6')}>
-      <div className='flex items-start gap-3'>
+    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-4 pb-6')}>
+      <div className='flex flex-col gap-2.5'>
         <PageHeading
           title={schedule.name}
-          description={describeAutomationFacts(state, schedule)}
-          className='flex-1'
+          description={
+            <p className={cn(PAGE_DESCRIPTION, 'selectable whitespace-pre-line')}>{schedule.text}</p>
+          }
+          className='py-0.5'
         />
-        <ScheduleMenu schedule={schedule} actions={createScheduleActions(state)} showOpen={false} />
+        <div className='flex items-start gap-2'>
+          <div className='-ms-1.5 flex min-w-0 flex-1 flex-wrap items-center gap-1'>
+            {listAutomationFacts(state, schedule).map((fact) => (
+              <FactItem key={fact.key} fact={fact} />
+            ))}
+          </div>
+          <div className='flex h-6 shrink-0 items-center'>
+            <ScheduleMenu schedule={schedule} actions={createScheduleActions(state)} showOpen={false} />
+          </div>
+        </div>
       </div>
       {gates.map(({ home, gate }) => (
         <WatchGate key={gate.id} state={state} home={home} gate={gate} />
       ))}
-      <section className='flex flex-col gap-1'>
-        <SectionLabel count={filed.length} className='px-1'>
-          Tasks it filed
-        </SectionLabel>
-        <div className={CARD}>
-          {filed.length === 0 ? (
-            <p className='px-3 py-2.5 text-fg-2 text-xs'>Nothing filed yet.</p>
-          ) : (
-            <ul>
-              {filed.map((task) => (
-                <li key={task.id} className={cn(ROW, 'text-xs')}>
-                  <TaskLink state={state} task={task} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-      <section className='flex flex-col gap-1'>
-        <SectionLabel count={reads.length} className='px-1'>
-          Reads
-        </SectionLabel>
-        <div className={CARD}>
-          {reads.length === 0 ? (
-            <p className='px-3 py-2.5 text-fg-2 text-xs'>{describeReadsEmpty(schedule)}</p>
-          ) : (
-            <ul>
-              {reads.map((read) => (
-                <ReadRow key={read.key} state={state} read={read} />
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+      <TasksPanel state={state} schedule={schedule} />
+      <ActivityPanel state={state} schedule={schedule} />
     </div>
   );
 }

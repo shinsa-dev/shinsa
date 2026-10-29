@@ -14,6 +14,7 @@ export function Panel({
   meta,
   action,
   defaultOpen = true,
+  flush = false,
   children,
 }: {
   persistId: DisclosurePersistId;
@@ -23,6 +24,7 @@ export function Panel({
   meta?: React.ReactNode;
   action?: React.ReactNode;
   defaultOpen?: boolean;
+  flush?: boolean;
   children: React.ReactNode;
 }) {
   const disclosure = useDisclosure(persistId, defaultOpen);
@@ -44,7 +46,9 @@ export function Panel({
         {count !== undefined && <span className='shrink-0 font-normal text-fg-2 tabular-nums'>{count}</span>}
         {meta && <span className='ms-auto shrink-0 ps-3'>{meta}</span>}
       </DisclosureHeader>
-      {disclosure.open && <div className='flex flex-col gap-3 border-border border-t p-3'>{children}</div>}
+      {disclosure.open && (
+        <div className={cn('flex flex-col border-border border-t', !flush && 'gap-3 p-3')}>{children}</div>
+      )}
     </section>
   );
 }

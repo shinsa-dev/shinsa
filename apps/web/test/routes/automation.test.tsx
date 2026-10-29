@@ -68,8 +68,12 @@ describe('an automation’s page', () => {
       </TooltipProvider>
     );
     expect(screen.getByRole('heading', { name: 'Feedback' })).toBeDefined();
-    expect(screen.getByText('Watch · Reads slack: The #feedback channel · Every hour')).toBeDefined();
-    expect(container.querySelectorAll('[data-task="filed"]')).toHaveLength(2);
+    expect(screen.getByText('Watch')).toBeDefined();
+    expect(screen.getByText('Every hour')).toBeDefined();
+    expect(screen.getByText('Tasks it filed')).toBeDefined();
+    expect(screen.getByText('Pull request')).toBeDefined();
+    expect(container.querySelectorAll('[data-task="filed"]')).toHaveLength(1);
+    expect(screen.getByText('Editor loses edits')).toBeDefined();
     expect(screen.getByText('Read 4 messages; filed 1.')).toBeDefined();
     expect(screen.queryByText('Watches slack')).toBeNull();
   });

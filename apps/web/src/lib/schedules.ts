@@ -6,7 +6,7 @@ import {
   type Schedule,
   type ShinsaState,
 } from '@shinsa/core';
-import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import type { IconName } from '@shinsa/ui/components/icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { copyText, describeFailure, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
@@ -25,14 +25,14 @@ interface WebhookDetails {
   hasSecret: boolean;
 }
 
-const TRIGGER_ICON: Record<Schedule['trigger']['kind'], MenuItemIcon> = {
+const TRIGGER_ICON: Record<Schedule['trigger']['kind'], IconName> = {
   once: 'IconHourglass',
   interval: 'IconArrowsRepeat',
   daily: 'IconClock',
   webhook: 'IconGlobe',
 };
 
-export function resolveScheduleIcon(schedule: Schedule): MenuItemIcon {
+export function resolveScheduleIcon(schedule: Schedule): IconName {
   return TRIGGER_ICON[schedule.trigger.kind];
 }
 

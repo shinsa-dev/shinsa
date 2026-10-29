@@ -24,7 +24,7 @@ src/
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
 ├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, automation.tsx (a
-│   │                    watch's own page at /automations/<id>: what it reads, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed, its reads), onboarding.tsx
+│   │                    automation's own page at /automations/<id>, laid out like a task page: facts row, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed in roadmap rows, an Activity log of its runs), onboarding.tsx
 │   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
