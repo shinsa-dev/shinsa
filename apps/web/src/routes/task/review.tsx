@@ -545,7 +545,15 @@ function ReviewChapters({
   });
 }
 
-export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
+export function ReviewTab({
+  state,
+  task,
+  summary,
+}: {
+  state: ShinsaState;
+  task: Task;
+  summary?: React.ReactNode;
+}) {
   const diff = useReviewDiff(task);
   const diffValue = diff.status === 'ready' ? diff.value : null;
   const report = React.useMemo(
@@ -618,14 +626,16 @@ export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
       )}
       <PageScroll viewportRef={viewport}>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 pt-4 pb-5', stops.length === 0 && 'pt-5')}>
-          <ReviewSummary
-            state={state}
-            task={task}
-            gate={gate}
-            report={report}
-            points={points}
-            diff={diffValue}
-          />
+          {summary ?? (
+            <ReviewSummary
+              state={state}
+              task={task}
+              gate={gate}
+              report={report}
+              points={points}
+              diff={diffValue}
+            />
+          )}
           <EvidenceSection state={state} task={task} showEmpty />
           <ReviewChapters task={task} report={report} checks={checks} chapters={chapters} selected={lit} />
           <AgentReview

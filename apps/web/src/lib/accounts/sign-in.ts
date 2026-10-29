@@ -9,6 +9,7 @@ import {
 export interface SignInDialogState {
   open: boolean;
   accountId: string | null;
+  importing: string | null;
   loginId: string | null;
   failure: string | null;
 }

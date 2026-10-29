@@ -29,7 +29,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -67,7 +67,7 @@ jobs:
     concurrency:
       group: ${{ needs.trigger.outputs.channel == 'canary' && 'release-canary' || 'release' }}
       cancel-in-progress: ${{ needs.trigger.outputs.channel == 'canary' }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-15
     timeout-minutes: 60
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -121,7 +121,28 @@ jobs:
         run: bun apps/engine/scripts/build-engine.ts
       - run: bun run build
         working-directory: apps/desktop
-      - name: Build, sign and notarize
+      - name: Build and sign the app
+        working-directory: apps/desktop
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          MODE: ${{ steps.signing.outputs.mode }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          signing=(-c.mac.identity=-)
+          if [ "$MODE" = signed ]; then signing=(); fi
+          bunx electron-builder --mac dir --arm64 --publish never --config electron-builder.yml \
+            -c.extraMetadata.version="$VERSION" \
+            -c.mac.notarize=false \
+            "${signing[@]}"
+      - name: Notarize and staple
+        if: steps.signing.outputs.mode == 'signed'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun scripts/release-notarize.ts apps/desktop/release/mac-arm64/Shinsa.app
+      - name: Package the disk image and the zip
         working-directory: apps/desktop
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -129,18 +150,17 @@ jobs:
           MODE: ${{ steps.signing.outputs.mode }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          signing=(-c.mac.identity=- -c.mac.notarize=false)
-          if [ "$MODE" = signed ]; then signing=(-c.mac.notarize=true); fi
+          signing=(-c.mac.identity=-)
+          if [ "$MODE" = signed ]; then signing=(); fi
           config=(--config electron-builder.yml)
           case "$CHANNEL" in
             beta | canary) config+=(-c.dmg.background="dmg/background-$CHANNEL.png") ;;
           esac
           bunx electron-builder --mac dmg zip --arm64 --publish never "${config[@]}" \
+            --prepackaged release/mac-arm64/Shinsa.app \
             -c.extraMetadata.version="$VERSION" \
+            -c.mac.notarize=false \
             "${signing[@]}"
       - name: Check the versions and the signature
         working-directory: apps/desktop/release
@@ -221,7 +241,7 @@ jobs:
 
   downloads:
     needs: [trigger, mac]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

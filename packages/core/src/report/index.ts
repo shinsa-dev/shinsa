@@ -34,6 +34,24 @@ export {
 } from './orchestration.ts';
 export { type PhaseChange, type PlanChange, resolvePhaseChange, resolvePlanChanges } from './plan-changes.ts';
 export {
+  listPullRequestEvidence,
+  PULL_REQUEST_BLOCK_END,
+  PULL_REQUEST_BLOCK_START,
+  type PullRequestSource,
+  replacePullRequestBlock,
+  resolvePublicUrl,
+  resolveShinsaTaskUrl,
+  serializePullRequestMarkdown,
+} from './pull-request.ts';
+export {
+  listReviewPayloadFits,
+  parseReviewPayload,
+  REVIEW_PAYLOAD_VERSION,
+  type ReviewPayload,
+  type ReviewPayloadEvidence,
+  serializeReviewPayload,
+} from './review-link.ts';
+export {
   createTesting,
   hasTesting,
   isWebUrl,

@@ -32,6 +32,7 @@ interface FakePullRequest {
   comments?: FakeComment[];
   queue?: { state: string; position: number | null } | null;
   queueRemoval?: string | null;
+  body?: string;
 }
 
 interface FakeState {
@@ -45,6 +46,10 @@ interface FakeState {
   requiredChecks?: string[];
   rulesetChecks?: string[];
   baseChecks?: boolean;
+  repositoryId?: number;
+  uploads?: number;
+  failUploads?: boolean;
+  uploadReply?: string;
 }
 
 const path = Bun.env.FAKE_GH_STATE || '/dev/null';
@@ -105,6 +110,7 @@ const state: FakeState = path !== '/dev/null' && existsSync(path)
   : { next: 1, defaultChecks: 'pending', pulls: [], calls: [] };
 const args = Bun.argv.slice(2);
 state.calls.push(args);
+if (Bun.env.FAKE_GH_HOLD_MS) Bun.sleepSync(Number(Bun.env.FAKE_GH_HOLD_MS));
 
 function save() {
   if (path === '/dev/null') return;
@@ -203,6 +209,10 @@ function details(pull: FakePullRequest) {
   };
 }
 
+function readBody() {
+  return flag('--body-file') === '-' ? readFileSync('/dev/stdin', 'utf8') : undefined;
+}
+
 function failRead() {
   if (!state.failReads) return false;
   state.failReads -= 1;
@@ -224,6 +234,7 @@ if (group === 'pr' && command === 'view') {
     JSON.stringify({
       number: pull.number,
       title: pull.title,
+      body: pull.body ?? '',
       url: `https://github.com/acme/app/pull/${pull.number}`,
       state: pull.state,
       mergeable: pull.mergeable,
@@ -252,6 +263,7 @@ if (group === 'pr' && command === 'create') {
     mergeable: 'MERGEABLE',
     unresolved: 0,
     mergedWith: null,
+    body: readBody() ?? '',
   };
   state.pulls.push(pull);
   save();
@@ -260,7 +272,10 @@ if (group === 'pr' && command === 'create') {
 }
 if (group === 'pr' && command === 'edit') {
   const pull = find(args[2]);
-  if (pull) pull.base = flag('--base') ?? pull.base;
+  if (pull) {
+    pull.base = flag('--base') ?? pull.base;
+    pull.body = readBody() ?? pull.body;
+  }
   save();
   process.exit(pull ? 0 : 1);
 }
@@ -297,6 +312,29 @@ if (group === 'api' && command === 'graphql' && args.some((arg) => arg.startsWit
       },
     })
   );
+  process.exit(0);
+}
+if (group === 'api' && command?.startsWith('https://uploads.github.com/user-attachments/assets?')) {
+  const file = flag('--input');
+  if (state.failUploads || !file || !existsSync(file)) {
+    save();
+    console.error('HTTP 422: Unprocessable Entity');
+    process.exit(1);
+  }
+  state.uploads = (state.uploads ?? 0) + 1;
+  save();
+  console.log(
+    state.uploadReply ?? JSON.stringify({ url: `https://github.com/user-attachments/assets/upload-${state.uploads}` })
+  );
+  process.exit(0);
+}
+if (group === 'api' && /^repos\/[^/]+\/[^/]+$/.test(command ?? '') && flag('--jq') === '.id') {
+  save();
+  if (state.repositoryId === undefined) {
+    console.error('HTTP 404: Not Found');
+    process.exit(1);
+  }
+  console.log(String(state.repositoryId));
   process.exit(0);
 }
 if (group === 'api' && command?.includes('/rules/branches/')) {

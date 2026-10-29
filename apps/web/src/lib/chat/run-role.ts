@@ -3,6 +3,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { resolveLastHandover } from '@/lib/chat/timeline.ts';
 import { readList } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { listSeverityCounts, readReportedFindings } from '@/lib/review/findings.ts';
 
 export interface RoleMark {
   name: string;
@@ -47,13 +48,10 @@ function resolveReviewerHeadline(done: boolean, entries: ChatEntry[]) {
   if (!done) return 'Reviewing the change';
   const report = resolveLastHandover(entries, 'report_review');
   if (!report) return 'Reviewed the change';
-  const findings = readList(report, 'findings');
+  const findings = readReportedFindings(report);
   if (findings.length === 0) return 'Reviewed the change, no findings';
-  const blocking = findings.filter((finding) => finding.severity === 'blocking').length;
   const count = formatCount(findings.length, 'finding', 'findings');
-  return blocking > 0
-    ? `Reviewed the change, ${count} (${blocking} blocking)`
-    : `Reviewed the change, ${count}`;
+  return `Reviewed the change, ${count} (${listSeverityCounts(findings).join(', ')})`;
 }
 
 function resolveFixHeadline(done: boolean, run: WireRun) {

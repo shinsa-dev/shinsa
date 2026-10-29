@@ -168,7 +168,7 @@ $ shinsa start
 
 ### shinsa stop
 
-Stop the engine cleanly. Runs resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in.
+Stop the engine cleanly. Runs resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in. An engine still running after 40 seconds is killed, and launchd starts a fresh one.
 
 ```
 shinsa stop
@@ -1437,18 +1437,17 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa accounts import
 
-Import a Claude login from Claude Code or claude-swap.
+Sign in to an account claude-swap has, as a login of its own.
 
 ```
-shinsa accounts import <origin> <email> [--json]
+shinsa accounts import <email> [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<origin>` | choice, required | claude or cswap. |
-| `<email>` | text, required | The login’s email. |
+| `<email>` | text, required | The account’s email in claude-swap. |
 
 #### shinsa accounts update
 

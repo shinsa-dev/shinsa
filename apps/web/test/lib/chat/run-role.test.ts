@@ -166,16 +166,16 @@ describe('resolveRunHeadline', () => {
     expect(resolveRunHeadline(done({ role: 'reviewer' }), task, review([]))).toBe(
       'Reviewed the change, no findings'
     );
-    expect(resolveRunHeadline(done({ role: 'reviewer' }), task, review([{ severity: 'suggestion' }]))).toBe(
-      'Reviewed the change, 1 finding'
+    expect(resolveRunHeadline(done({ role: 'reviewer' }), task, review([{ severity: 'optional' }]))).toBe(
+      'Reviewed the change, 1 finding (1 optional)'
     );
     expect(
       resolveRunHeadline(
         done({ role: 'reviewer' }),
         task,
-        review([{ severity: 'blocking' }, { severity: 'suggestion' }, { severity: 'blocking' }])
+        review([{ severity: 'blocking' }, { severity: 'should_fix' }, { severity: 'blocking' }])
       )
-    ).toBe('Reviewed the change, 3 findings (2 blocking)');
+    ).toBe('Reviewed the change, 3 findings (2 blocking, 1 should fix)');
   });
 
   it('names what a fix is for from the focus the server resolved', () => {

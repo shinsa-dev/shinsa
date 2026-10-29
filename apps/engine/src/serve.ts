@@ -52,7 +52,7 @@ import {
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
-import { Terminals, type TerminalsOptions } from './terminals/index.ts';
+import { ServiceRefiner, Terminals, type TerminalsOptions } from './terminals/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
 import {
@@ -217,13 +217,13 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
 
 function startHttp(services: Services, options: ShinsaOptions, instance: ServerInstance) {
   const { engine, config, store, roots, models, accounts } = services;
-  const onboardingAccounts = createOnboardingAccounts(accounts);
   return startServer({
     engine,
     config,
     instance,
     transcripts: services.transcripts,
     terminals: services.terminals,
+    refiner: new ServiceRefiner(services.quick.classify),
     evidence: services.evidence,
     models,
     providers: services.providers,
@@ -232,10 +232,11 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       config,
       store,
       roots,
+      resolveLogin: services.resolveLogin,
+      ask: services.quick.write,
       models,
       run: options.runPrerequisite,
-      accounts: options.accounts ?? onboardingAccounts.source,
-      accountActions: onboardingAccounts.actions,
+      accounts: options.accounts ?? createOnboardingAccounts(accounts),
     }),
     accounts,
     schedules: services.schedules,
@@ -247,6 +248,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     restarter: createLaunchdRestarter(engine, {
       byService: options.byService ?? false,
+      drain: services.runs,
       stop: () => services.stopShinsa?.() ?? Promise.resolve(),
       exit: options.exit,
     }),

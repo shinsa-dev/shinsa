@@ -22,6 +22,7 @@ import {
   STEPS_AFTER,
   UNCHANGED_FILES,
 } from './onboarding-code.ts';
+import { OPEN_TASK_ID } from './open-scene.ts';
 import { TINT_CHANGES, TINT_UNCHANGED, TONE_PATH } from './tint-code.ts';
 
 interface ChangedFile {
@@ -267,6 +268,7 @@ function createRefs(repo: Repository): TaskRefs {
 }
 
 export function answerCodeRead(taskId: string, name: string, params: URLSearchParams): unknown {
+  if (taskId === OPEN_TASK_ID) return null;
   const repo = selectRepository(taskId);
   const ref = params.get('ref') ?? repo.head;
   switch (name) {

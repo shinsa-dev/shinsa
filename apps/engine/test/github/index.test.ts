@@ -12,10 +12,12 @@ import {
   resolveChecks,
   resolveRemarks,
   resolveRepoSlug,
+  resolveRepositoryId,
   retargetPullRequest,
   serializePullRequest,
-  serializePullRequestBody,
   serializePullRequestTitle,
+  uploadAttachment,
+  writePullRequestBlock,
 } from '../../src/github/index.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
@@ -41,9 +43,18 @@ interface FakePull {
   reviewDecision?: string | null;
   comments?: { id: string; author: string | null; createdAt: string; body: string }[];
   queue?: { state: string; position: number | null } | null;
+  body?: string;
 }
 
-function useFakeGitHub(pulls: FakePull[] = [], extra: { mergeQueue?: boolean; failReads?: number } = {}) {
+interface FakeExtra {
+  mergeQueue?: boolean;
+  failReads?: number;
+  repositoryId?: number;
+  failUploads?: boolean;
+  uploadReply?: string;
+}
+
+function useFakeGitHub(pulls: FakePull[] = [], extra: FakeExtra = {}) {
   const path = join(createTempDir(), 'gh.json');
   writeFileSync(
     path,
@@ -168,6 +179,13 @@ describe('serializePullRequest', () => {
     statusCheckRollup: null,
   };
 
+  test('it reads the lines added and removed and the files changed when GitHub gives them', () => {
+    expect(
+      serializePullRequest({ ...view, additions: 120, deletions: 30, changedFiles: 7 }, null, 5).changes
+    ).toEqual({ additions: 120, deletions: 30, changedFiles: 7 });
+    expect(serializePullRequest({ ...view, additions: 120 }, null, 5).changes).toBeNull();
+  });
+
   test('without details it maps states, mergeability and the rollup, and a change request counts once', () => {
     expect(serializePullRequest(view, null, 5)).toEqual({
       number: 1,
@@ -179,6 +197,7 @@ describe('serializePullRequest', () => {
       mergeable: null,
       headSha: null,
       mergeCommit: null,
+      changes: null,
       updatedAt: 5,
     });
     expect(serializePullRequest({ ...view, state: 'MERGED', mergeable: 'MERGEABLE' }, null, 5)).toMatchObject(
@@ -252,13 +271,6 @@ describe('serializePullRequest', () => {
     expect(serializePullRequest(view, unknown, 5)).toMatchObject({ mergeQueue: null, queueRemoval: null });
   });
 
-  test('the body names the Shinsa task first, by handle when it has one', () => {
-    expect(serializePullRequestBody(createTask({ handle: 'LOC-22', summary: 'Did it.' }))).toBe(
-      'Shinsa task: LOC-22, `shinsa://task/task-1`\n\nDid it.'
-    );
-    expect(serializePullRequestBody(createTask())).toBe('Shinsa task: `shinsa://task/task-1`');
-  });
-
   test('the title is a conventional commit subject from the branch type and the current round', () => {
     expect(serializePullRequestTitle(createTask({ title: 'Fix the tab scroll' }))).toBe(
       'fix: the tab scroll'
@@ -279,39 +291,6 @@ describe('serializePullRequest', () => {
     );
     expect(serializePullRequestTitle(createTask({ branch: 'feat/search', title: 'feat: add search' }))).toBe(
       'feat: add search'
-    );
-  });
-
-  test('the body carries the summary and the plan', () => {
-    expect(serializePullRequestBody(createTask({ summary: 'Did it.' }))).toBe(
-      'Shinsa task: `shinsa://task/task-1`\n\nDid it.'
-    );
-    expect(serializePullRequestBody(createTask({ plan: { body: 'The plan' } as Task['plan'] }))).toContain(
-      '<details><summary>Plan</summary>\n\nThe plan\n</details>'
-    );
-    const step = {
-      when: 'pre_merge' as const,
-      kind: 'env' as const,
-      title: 'Set A',
-      detail: 'In production.',
-      command: null,
-    };
-    const walkthrough = {
-      approach: 'a',
-      flow: 'f',
-      risks: [],
-      testing: { automated: ['a.test.ts covers it.'], manual: [] },
-      steps: [step],
-    };
-    expect(
-      serializePullRequestBody(
-        createTask({
-          summary: 'Did it.',
-          phaseReports: [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }],
-        })
-      )
-    ).toBe(
-      'Shinsa task: `shinsa://task/task-1`\n\nDid it.\n\n### How to test\n**Covered by tests**\n- a.test.ts covers it.\n\n### Pre-merge steps\n- [ ] **Set A**: In production.'
     );
   });
 });
@@ -496,17 +475,19 @@ describe('the gh calls', () => {
     const github = useFakeGitHub([pull]);
     const { repo, path } = await createGitRepo({ remote: false });
     const task = createTask({ worktreePath: path, summary: 'Summary' });
-    expect((await createPullRequest(repo, task, null))?.pullRequest).toMatchObject({ number: 7 });
+    expect((await createPullRequest(repo, task, null, 'The body'))?.pullRequest).toMatchObject({ number: 7 });
     const created = await createPullRequest(
       repo,
       createTask({ worktreePath: path, branch: 'feat/new' }),
-      'feat/base'
+      'feat/base',
+      'The new body'
     );
     expect(created?.pullRequest).toMatchObject({ number: 2, base: 'feat/base' });
     const create = github.read().calls.find((call) => call[1] === 'create');
     expect(create).toContain('feat/new');
     expect(create?.[(create?.indexOf('--title') ?? 0) + 1]).toBe('feat: fix the tab scroll');
-    await expect(createPullRequest(repo, createTask({ worktreePath: null }), null)).rejects.toThrow(
+    expect(github.read().pulls.find((entry) => entry.head === 'feat/new')?.body).toBe('The new body');
+    await expect(createPullRequest(repo, createTask({ worktreePath: null }), null, '')).rejects.toThrow(
       'no branch'
     );
   });
@@ -553,3 +534,67 @@ function createFailingGraphql() {
   );
   return dir;
 }
+
+describe('the description on GitHub', () => {
+  test('reads the repository id once through gh, and refuses a repository without a GitHub remote', async () => {
+    const github = useFakeGitHub([], { repositoryId: 4242 });
+    const repo = createRepo({ path: createTempDir() });
+    expect(await resolveRepositoryId(repo)).toBe(4242);
+    expect(github.read().calls).toContainEqual(['api', 'repos/acme/app', '--jq', '.id']);
+    await expect(resolveRepositoryId({ ...repo, remote: null })).rejects.toThrow('no GitHub remote');
+  });
+
+  test('a repository id that is not a number is an error', async () => {
+    useFakeGitHub([], { repositoryId: -1 });
+    await expect(resolveRepositoryId(createRepo({ path: createTempDir() }))).rejects.toThrow(
+      'as the repository id'
+    );
+  });
+
+  test('uploads a file as a user attachment and returns its address', async () => {
+    const github = useFakeGitHub();
+    const dir = createTempDir();
+    const file = join(dir, 'after.png');
+    writeFileSync(file, 'png');
+    const repo = createRepo({ path: dir });
+    const attachment = { path: file, name: 'after.png', contentType: 'image/png' };
+    expect(await uploadAttachment(repo, 4242, attachment)).toBe(
+      'https://github.com/user-attachments/assets/upload-1'
+    );
+    const call = github.read().calls.at(-1) ?? [];
+    expect(call[1]).toBe(
+      'https://uploads.github.com/user-attachments/assets?name=after.png&content_type=image%2Fpng&repository_id=4242'
+    );
+    expect(call).toContain('Content-Type: image/png');
+    expect(call[call.indexOf('--input') + 1]).toBe(file);
+  });
+
+  test('a refused upload is an error', async () => {
+    useFakeGitHub([], { failUploads: true });
+    const dir = createTempDir();
+    const attachment = { path: join(dir, 'missing.png'), name: 'missing.png', contentType: 'image/png' };
+    await expect(uploadAttachment(createRepo({ path: dir }), 1, attachment)).rejects.toThrow('422');
+  });
+
+  test('a reply without an attachment address is an error', async () => {
+    useFakeGitHub([], { uploadReply: '{"url":"https://example.com/x.png"}' });
+    const dir = createTempDir();
+    const attachment = { path: join(dir, 'shot.png'), name: 'shot.png', contentType: 'image/png' };
+    writeFileSync(attachment.path, 'png');
+    await expect(uploadAttachment(createRepo({ path: dir }), 1, attachment)).rejects.toThrow(
+      'did not return an attachment address'
+    );
+  });
+
+  test('rewrites only the Shinsa block of the body, and nothing when it is already current', async () => {
+    const block = '<!-- shinsa:start -->\nNew\n<!-- shinsa:end -->';
+    const github = useFakeGitHub([
+      { ...pull, body: 'Notes from a teammate.\n\n<!-- shinsa:start -->\nOld\n<!-- shinsa:end -->' },
+    ]);
+    const repo = createRepo({ path: createTempDir() });
+    expect(await writePullRequestBlock(repo, 7, block)).toBe(true);
+    expect(github.read().pulls[0]?.body).toBe(`Notes from a teammate.\n\n${block}`);
+    expect(await writePullRequestBlock(repo, 7, block)).toBe(false);
+    expect(github.read().calls.filter((call) => call[1] === 'edit')).toHaveLength(1);
+  });
+});

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import {
   type AccountDuplicate,
+  type AccountOrigin,
   type AccountSummary,
   type AccountsSnapshot,
   type ChatNotice,
@@ -21,16 +22,10 @@ import type { ProviderUsageSource } from '../agents/providers/index.ts';
 import type { ServerConfig } from '../config/index.ts';
 import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
-import { type AccountActions, type AccountSource, createSummaryAccountSource } from '../onboarding/index.ts';
+import { type AccountSource, createSummaryAccountSource } from '../onboarding/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
-import {
-  createKeychainReader,
-  createKeychainWriter,
-  readStoredLogin,
-  type SecretReader,
-  type SecretWriter,
-} from './credentials.ts';
+import { createKeychainReader, readStoredLogin, type SecretReader } from './credentials.ts';
 import { Cswap } from './cswap.ts';
 import { AccountImports } from './imports.ts';
 import { UsageLimits } from './limits.ts';
@@ -46,7 +41,7 @@ import { type Env, resolveAccountEnv, resolveSharedConfigDir, resolveSharedGloba
 import { LoginRenewal, type RenewedLogin } from './renewal.ts';
 import { AccountRotation, type SignInState } from './rotation.ts';
 import { type AuthStatus, type ClaudeRunner, readAuthStatus, STATUS_TIMEOUT_MS } from './status.ts';
-import { AccountStore, type StoredAccount } from './store.ts';
+import { AccountStore, isSharedLogin, type StoredAccount } from './store.ts';
 import { PROVIDER_WINDOWS, requestUsage, type UsageRequester } from './usage.ts';
 
 export { UsageResumeClock } from './resume.ts';
@@ -57,7 +52,6 @@ export interface AccountsOptions {
   env?: Env;
   run?: ClaudeRunner;
   readSecret?: SecretReader;
-  writeSecret?: SecretWriter;
   requestHttp?: UsageRequester;
   spawnLogin?: LoginSpawner;
   cswap?: Cswap;
@@ -76,6 +70,13 @@ interface ProviderIdentity {
 }
 
 const REFRESH_INTERVAL_MS = 5 * 60_000;
+
+const SHARED_LOGIN_DETAIL: Record<Exclude<AccountOrigin, 'login'>, string> = {
+  cswap:
+    'Shinsa holds a copy of claude-swap’s login for this account, so each one signs the other out. Sign in again to give Shinsa a login of its own.',
+  claude:
+    'Shinsa runs this account on your Claude Code login, which Claude Code and claude-swap change and refresh too. Sign in again to give Shinsa a login of its own.',
+};
 
 async function resolveClaudePath() {
   const executable = await resolveClaudeExecutable();
@@ -154,13 +155,10 @@ export class Accounts {
       now: this.#now,
       timers: options.loginTimers,
     });
-    const cswap = options.cswap ?? new Cswap({ run: this.#run });
     this.#renewal = new LoginRenewal({
-      cswap,
       env: this.#env,
       userHome,
       readSecret: this.#readSecret,
-      writeSecret: options.writeSecret ?? createKeychainWriter(),
       now: this.#now,
     });
     this.#rotation = new AccountRotation({
@@ -175,11 +173,8 @@ export class Accounts {
     });
     this.#imports = new AccountImports({
       store: this.store,
-      limits: this.limits,
-      signIns: this.#signIns,
-      cswap,
-      readStatus: (env) => this.#status(env),
-      forget: (accountId) => this.#forget(accountId),
+      cswap: options.cswap ?? new Cswap({ run: this.#run }),
+      signIn: (email) => this.#beginLogin(null, email),
       onChange: () => this.#changed(),
     });
   }
@@ -190,7 +185,6 @@ export class Accounts {
       this.#changed();
       return;
     }
-    if (!this.store.exists) await this.#imports.adoptClaudeLogin();
     this.#subscribe();
     await Promise.all([this.syncSignIns(), this.#imports.sync(), this.syncProviderLogins()]);
     await Promise.all([this.limits.refresh(this.#listIds()), this.#refreshProviderUsage()]);
@@ -297,6 +291,11 @@ export class Accounts {
   }
 
   async #syncSignIn(account: StoredAccount) {
+    if (account.origin !== 'login') {
+      this.#signIns.set(account.id, { signIn: 'signed_out', detail: SHARED_LOGIN_DETAIL[account.origin] });
+      this.#changed();
+      return;
+    }
     let status: AuthStatus;
     try {
       status = await this.#status(resolveAccountEnv(account.configDir));
@@ -446,10 +445,9 @@ export class Accounts {
       return this.providerLimits.snapshot(provider).fastMode ?? 'unknown';
     }
     if (provider !== CLAUDE_PROVIDER) return 'unknown';
-    const id = accountId ?? this.store.list().find((account) => account.origin === 'claude')?.id;
-    if (!id) return 'unknown';
-    await this.limits.refresh([id]);
-    return this.limits.snapshot(id).fastMode ?? 'unknown';
+    if (accountId === null) return 'unknown';
+    await this.limits.refresh([accountId]);
+    return this.limits.snapshot(accountId).fastMode ?? 'unknown';
   }
 
   readQuickFastMode = (provider: string) => this.readFastMode(provider, null);
@@ -515,7 +513,9 @@ export class Accounts {
   async #resumeRenewed() {
     let renewed: RenewedLogin[];
     try {
-      renewed = await this.#renewal.listRenewed(this.store.list());
+      renewed = await this.#renewal.listRenewed(
+        this.store.list().filter((account) => !isSharedLogin(account))
+      );
     } catch (error) {
       log.warn('[Accounts] Could not check the logins that needed signing in', {
         error: describeError(error),
@@ -562,18 +562,22 @@ export class Accounts {
 
   async startLogin(accountId: string | null) {
     this.#assertChangeable();
+    await this.#beginLogin(accountId ? this.store.find(accountId) : null, null);
+    return this.snapshot();
+  }
+
+  async #beginLogin(existing: StoredAccount | null, email: string | null) {
     const claude = await this.#resolveClaude();
-    const account = accountId ? this.store.find(accountId) : this.store.create('login');
-    if (!accountId) this.#newLogins.add(account.id);
-    if (account.configDir) this.store.linkSharedEntries(account.configDir);
+    const account = existing ? this.store.createFolder(existing.id) : this.store.create({ email });
+    if (!account?.configDir) return;
+    if (!existing) this.#newLogins.add(account.id);
     this.logins.start({
       accountId: account.id,
       claude,
-      cwd: account.configDir ?? this.#config.userHome,
+      cwd: account.configDir,
       env: resolveAccountEnv(account.configDir),
       email: account.email,
     });
-    return this.snapshot();
   }
 
   #finishLogin: LoginFinisher = async (accountId, loginId) => {
@@ -583,14 +587,25 @@ export class Accounts {
     if (status.signIn !== 'signed_in') {
       return { ok: false, message: 'Sign-in finished, but Claude still reports this account as signed out.' };
     }
+    const isNew = this.#newLogins.has(accountId);
+    if (account.email && status.email?.toLowerCase() !== account.email.toLowerCase()) {
+      const message = `You signed in as ${status.email ?? 'another account'}, not ${account.email}. Sign in as ${account.email} instead.`;
+      if (!isNew) {
+        await this.#signOutFolder(account);
+        this.#signIns.set(accountId, { signIn: 'signed_out', detail: message });
+        this.#changed();
+      }
+      return { ok: false, message };
+    }
     const twin = this.store.selectByIdentity(status, accountId);
-    if (twin && this.#newLogins.has(accountId)) {
+    if (twin && isNew) {
       return { ok: false, message: `${status.email} is already in your accounts.` };
     }
     this.store.update(accountId, {
       email: status.email ?? account.email,
       organization: status.organization ?? account.organization,
       plan: status.plan ?? account.plan,
+      origin: 'login',
     });
     this.#signIns.set(accountId, { signIn: 'signed_in', detail: null });
     this.#rotation.clear(accountId);
@@ -607,7 +622,7 @@ export class Accounts {
 
   #loginEnded(accountId: string, done: boolean) {
     if (done || !this.#newLogins.delete(accountId)) return;
-    this.#forget(accountId).catch((error: unknown) => {
+    this.#forgetUnused(accountId).catch((error: unknown) => {
       log.warn('[Accounts] Could not clear an account that never signed in', {
         accountId,
         error: describeError(error),
@@ -652,6 +667,11 @@ export class Accounts {
     return this.snapshot();
   }
 
+  async #forgetUnused(accountId: string) {
+    await this.#forget(accountId);
+    await this.#imports.sync();
+  }
+
   async remove(accountId: unknown) {
     this.#assertChangeable();
     if (typeof accountId !== 'string')
@@ -666,17 +686,22 @@ export class Accounts {
     return this.snapshot();
   }
 
-  async #forget(accountId: string) {
-    const account = this.store.find(accountId);
-    if (account.configDir) {
-      const claude = await this.#resolveClaude();
-      const result = await this.#run([claude, 'auth', 'logout'], this.#config.userHome, {
-        env: resolveAccountEnv(account.configDir),
-        timeoutMs: STATUS_TIMEOUT_MS,
+  async #signOutFolder(account: StoredAccount) {
+    if (!account.configDir) return;
+    const claude = await this.#resolveClaude();
+    const result = await this.#run([claude, 'auth', 'logout'], this.#config.userHome, {
+      env: resolveAccountEnv(account.configDir),
+      timeoutMs: STATUS_TIMEOUT_MS,
+    });
+    if (!result.ok)
+      log.warn('[Accounts] Could not sign an account’s folder out', {
+        accountId: account.id,
+        code: result.code,
       });
-      if (!result.ok)
-        log.warn('[Accounts] Could not sign a removed account out', { accountId, code: result.code });
-    }
+  }
+
+  async #forget(accountId: string) {
+    await this.#signOutFolder(this.store.find(accountId));
     this.store.remove(accountId);
     this.limits.remove(accountId);
     this.#signIns.delete(accountId);
@@ -686,17 +711,6 @@ export class Accounts {
   }
 }
 
-export function createOnboardingAccounts(accounts: Accounts): {
-  source: AccountSource;
-  actions: AccountActions;
-} {
-  return {
-    source: createSummaryAccountSource(() => accounts.snapshot().accounts),
-    actions: {
-      listImports: () => Promise.resolve(accounts.snapshot().imports),
-      importAccount: async (origin, email) => {
-        await accounts.importAccount(origin, email);
-      },
-    },
-  };
+export function createOnboardingAccounts(accounts: Accounts): AccountSource {
+  return createSummaryAccountSource(() => accounts.snapshot().accounts);
 }

@@ -274,7 +274,7 @@ export function resolveEvidenceListLayout(
 ): EvidenceLayout {
   const resolveView = (item: Evidence, updated: string | null = null): EvidenceView => ({
     evidence: item,
-    media: resolveEvidenceMedia(item.uri),
+    media: resolveEvidenceMedia(item.uri, item.kind),
     facts: describeEvidenceFacts(item),
     fromReview: item.runId !== null && runs[item.runId]?.role === 'reviewer',
     updated,

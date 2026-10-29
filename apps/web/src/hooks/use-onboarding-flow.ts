@@ -1,16 +1,27 @@
-import type { OnboardingFlow, OnboardingReply, OnboardingStepId } from '@shinsa/core';
+import type {
+  OnboardingFlow,
+  OnboardingProjectChoice,
+  OnboardingReply,
+  OnboardingStepId,
+} from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { replyToOnboarding, requestOnboardingFlow } from '@/lib/connection/onboarding.ts';
-import { REFRESH_KEY, resolveStepDirection, type StepDirection, SUBMIT_KEY } from '@/lib/onboarding.ts';
+import {
+  REFRESH_KEY,
+  REVISE_KEY,
+  resolveStepDirection,
+  type StepDirection,
+  SUBMIT_KEY,
+} from '@/lib/onboarding.ts';
 import { replaceRoute } from '@/router.ts';
 
 export function useOnboardingFlow() {
   const [flow, setFlow] = React.useState<OnboardingFlow | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState<string | null>(null);
-  const [direction, setDirection] = React.useState<StepDirection>('forward');
+  const [direction, setDirection] = React.useState<StepDirection>('none');
   const [attempt, setAttempt] = React.useState(0);
   const index = React.useRef<number | null>(null);
 
@@ -60,8 +71,14 @@ export function useOnboardingFlow() {
     failure,
     pending,
     direction,
-    answer: (stepId: OnboardingStepId, values: string[], key = SUBMIT_KEY) =>
-      send({ type: 'answer', stepId, values }, key),
+    answer: (
+      stepId: OnboardingStepId,
+      values: string[],
+      key = SUBMIT_KEY,
+      projects?: OnboardingProjectChoice[]
+    ) => send({ type: 'answer', stepId, values, ...(projects ? { projects } : {}) }, key),
+    revise: (text: string, projects: OnboardingProjectChoice[]) =>
+      send({ type: 'revise', stepId: 'projects', text, projects }, REVISE_KEY),
     open: (stepId: OnboardingStepId) => send({ type: 'open', stepId }, `open:${stepId}`),
     refresh: () => run(REFRESH_KEY, requestOnboardingFlow),
     retry: () => setAttempt(attempt + 1),

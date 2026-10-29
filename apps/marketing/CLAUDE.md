@@ -50,7 +50,7 @@ window is a chip, two traces per side run from one chip to the next, and a signa
 src/
   pages/index.astro         The page: hero, then one Section per feature, then Closing
   layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer)
-  components/layout/        Header (solid, with a fade under it once you scroll), Section (centred title, text, then the
+  components/layout/        Header (solid, with a fade under it once you scroll; its links point at `/#section`, so they work from every page), Section (centred title, text, then the
                             demo), Backdrop (the circuit board and its scroll signal)
   components/sections/      Hero, Closing (principles and the last call)
   components/ui/Button.astro  An anchor with the kit's buttonVariants
@@ -80,7 +80,18 @@ src/
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
-  pages/                    index, 404, og.png, llms.txt and design.md; public/ holds the
+  pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
+                            own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:
+                            handle, status, repository, branch, pull request, checks, coverage, started; under the title
+                            the summary, cut to two lines, and where the review comes from), the web's Review tab under it without its summary card, Download Shinsa as an outline button and then Open in Shinsa, `shinsa://task/<id>` from `?task=` (resolveTaskInvite,
+                            lib/open.ts, which refuses anything else), and Download Shinsa; the review read from the
+                            link's `#review=` fragment (readReviewFragment in lib/open.ts; the task built in
+                            lib/open-scene.ts on OPEN_TASK_ID, which the demo server gives no repository;
+                            components/demos/open-review.tsx, which marks `<html data-review>` once it reads). Without a
+                            review it shows the handle and title from `?handle=` and `?title=` and the same buttons,
+                            Download alone and primary under "This link does not lead to a review" when the link names no task. The page is the window's height and
+                            never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
+                            `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket

@@ -405,7 +405,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    and a suggested fix when it has one, and the Agent's judgement calls it would have made differently
    (`disagreements`, by their number in its brief; `resolveReviewerPrompt`). The task keeps them as `reviewSummary`,
    `findings` and `reviewDisagreements` until the next review or round (The review report, below). Blocking findings go back to the Agent, and then
-   the checks and a new reviewer run again. Suggestions alone do not block.
+   the checks and a new reviewer run again. Each finding has one of three levels, named for what happens to it:
+   `blocking` (a bug, a missed requirement, a broken rule, a failing check: back to the Agent), `should_fix` (not
+   proven broken, but worth holding the merge for) and `optional` (taste, polish). Should fix and optional findings
+   alone do not block; they reach your review.
 6. **Your review.** The review gate shows one report built from every phase. Approve it, or write
    in the chat: a message while the gate is open withdraws it and goes to the Agent. Approving with edits you made in
    the Code tab that no commit has yet commits them and runs the checks again before the push (Your edits, below).
@@ -1409,7 +1412,8 @@ checks it ran.
   could not settle it. Only review fixes escalate: a checks or pull request fix that stalls or
   runs out opens a failure gate (Recovery, below).
 - At any review gate you can decide each finding: Fix or Dismiss (`gate.answer` with
-  `verdicts`, one per finding index). Kept findings go to the Agent with the dismissed ones named
+  `verdicts`, one per finding index). Fix is chosen at first for a blocking or should fix finding and Dismiss for an
+  optional one (`createVerdictDraft` in the web). Kept findings go to the Agent with the dismissed ones named
   as off-limits; dismissing all of them approves. Approving with a Fix verdict is refused.
 - Request changes at a review or merge gate carries your line comments as data (`gate.answer` with `comments`,
   `docs/protocol.md` → Line comments), not as text the web wrote: core writes them into the Agent's fix prompt after your
@@ -2102,7 +2106,20 @@ beside your run (Runs for a task, below).
   twice) and a workspace under `packages/`, `libs/` or `lib/` (a library's watcher, not a server). Two of one name
   are told apart by their folder. It leaves out what you already added (a service of the project with the same
   folder and command, or with the same name, which could not be added again) and offers 24 at most. Nothing is
-  added or started until you press it.
+  added or started until you press it. A suggestion carries the preview URL and port variable it would be added
+  with: none and `PORT` from the scan.
+- **Refined by a quick call.** `GET /api/services/suggestions?projectId=&refine=1` sends the scan's suggestions through
+  `ServiceRefiner` (`refine.ts`), on the classifier's quick call (`quick.classify`, Sonnet by default, 20 s): the
+  prompt is the candidates (index, name, folder, command, source) and, for each folder, its `package.json` scripts
+  (12, 200 characters each) and dependency names (60). It answers per candidate, by index, a name, the command (with
+  `--port $PORT` where the server needs it, such as Vite), a preview URL with `{port}` for a server you open in a
+  browser, the port variable and whether it is recommended; it never adds a candidate. Each field is checked as an
+  added service's would be (`isServicePreviewUrl`, `isServiceEnvKey`, the limits) and an invalid one keeps the
+  scan's value; a candidate it leaves out stays as found; two of one name keep the scan's name, then a numbered
+  one. The answer is `{ suggestions, refined }`, `refined: false` (the scan's list) when the call fails, which is
+  not cached so the next open asks again. A good answer is cached in memory per project for as long as the prompt
+  is the same, so reopening Add services asks nothing until the files or the candidates change, and two requests
+  at once share one call. The refined list leaves out the names the project already has, like the scan's.
 - **Adding and changing.** `POST /api/services { projectId, name, path, command, env }`, `POST /api/services/batch
   { projectId, services: [{ name, path, command, env }…] }` (what Add services sends for the suggestions you tick:
   every one is checked, names unique among them too, and the limit counted, before any is added; the answer is
@@ -2120,9 +2137,19 @@ beside your run (Runs for a task, below).
   yours or another task's. `list_services` lists the services the task can run with their state and folder in the
   worktree, and with `service` the run's last 60 lines of output as plain text (`TerminalMirror.readLines`); a start
   of a running one says so, and both report the run's preview URL. The house rules ask an agent to stop what it
-  started, except a preview it attaches for the review. Definitions stay yours: no tool
-  adds, changes or removes one, `shinsa services` stays human-only, and `agents/policy.ts` still refuses a shell
-  command naming `/api/services` as it does `/api/terminals`.
+  started, except a preview it attaches for the review. `shinsa services` stays human-only, and `agents/policy.ts`
+  still refuses a shell command naming `/api/services` as it does `/api/terminals`.
+- **Agents add the services they need.** An agent only runs a service that exists, so the Agent and the investigator
+  also have `add_service` (the reviewer does not, and is refused by `assertRunTool` like the inquiry roles): a name, a
+  folder relative to the task's repository (`path`, its root when left out), the command, and optionally
+  `preview_url`, `port_variable` and `env`. The folder resolves under the repository's own checkout, never the
+  worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
+  path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
+  `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
+  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
+  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
+  one that shows the change when none does.
 
 ## Agents manage Shinsa
 
@@ -2463,7 +2490,12 @@ truth, and a snapshot only saves replaying it.
   events are types core no longer knows and replay as no-ops, and a `workspace.update` effect still open in the outbox
   is failed on restart without running ("Shinsa does not know this kind of effect; another version wrote it.",
   `reconcileAfterRestart`).
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 6) marks the log so
+  Logs from before review findings had three levels (log version 7, `FINDING_LEVELS_LOG_VERSION`) can have
+  `review.reported` findings of severity `suggestion`; each becomes `optional`.
+  Logs from before a schedule could read a data source (log version 8, `SCHEDULE_SOURCE_LOG_VERSION`) have
+  `schedule.written` events without `source` or `lastReadAt`; both are set to `null`, so an old schedule reads nothing
+  and has never finished a read.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 8) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
@@ -2507,7 +2539,7 @@ keeps beside its events (`store/event-log.ts`).
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
   `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`,
-  `:task.commit_edits:<tree>`, and `<effect key>:effect.fail` when it gives up; the
+  `:task.commit_edits:<tree>`, `:<attempt>:evidence.record_uploads:<evidence ids>`, and `<effect key>:effect.fail` when it gives up; the
   push names each report after its attempt too (`<effect key>:<attempt>:pull_request.record_step:<step>`,
   `:<attempt>:pull_request.record_update_conflict`, `:<attempt>:pull_request.record_hook_failure`), so a retry shows its
   steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
@@ -2662,12 +2694,82 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
   characters (`serializeConventionalSubject`); a title already written as `type(scope)!: …` has that prefix
   replaced, never doubled. A fix commits as `fix: <what it fixed>`. One subject line, no body.
 - **The pull request** is titled the same way from the current round's title, kept whole (`serializePullRequestTitle`,
-  so a later round's pull request carries its own), and its description opens with the task it came from,
-  ``Shinsa task: LOC-22, `shinsa://task/<id>` `` (the handle, then the link as code: GitHub drops links of other
-  schemes, so it is there to copy), then the summary, how to test it, the steps around the merge and the plan.
+  so a later round's pull request carries its own). Its description is the review in small, so a teammate on GitHub
+  sees what you see in Shinsa (The pull request description, below).
 - **The merge commit.** A squash or merge passes `--subject "<the pull request's title on GitHub> (#N)"` and an empty
   `--body`, so the default branch gets one conventional line and a title you edit on GitHub before merging is kept; a
   rebase keeps the branch's own commits, which are already conventional.
+
+## The pull request description
+
+The description is one block Shinsa writes between `<!-- shinsa:start -->` and `<!-- shinsa:end -->`
+(`serializePullRequestMarkdown`, `packages/core/src/report/pull-request.ts`, pure), in the Review tab's order: a note
+naming the task (handle and title) with a link to open it in Shinsa, the summary, the earlier rounds in this pull
+request (when a later round ships onto it: each one's title, goal or headline, result and phases, from its
+`outcome`), Approach (the walkthrough's approach), Evidence (the screenshots, recordings, notes and previews, then
+the checks as a table of each with its mark, the count that passed and the changed-line coverage when it was
+measured, then the tests the walkthrough names), How it works (the walkthrough's flow), the judgement calls with the
+options turned down, the risks, How to test (the steps to try), the steps around the merge, and a one-line footer
+linking shinsa.dev. The plan, the goal and each phase's summary stay in Shinsa. Each section from Approach to How
+to test is an open `<details>` with its title as an `<h3>`, so a reader folds what they have read. Colour comes from
+emoji, since GitHub draws no alert inside a `<details>`: the checks open with ✅ when all passed or ❌ naming how many
+did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
+
+- **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to
+  `https://shinsa.dev/open?task=<id>&handle=<handle>&title=<title>` (`resolveShinsaTaskUrl`, the title cut to 120
+  characters) plus `#review=<data>`, a static page of the site (`apps/marketing/src/pages/open.astro`) that is this pull
+  request's review as a page: the task page's header pinned at the top (the task's title, Download Shinsa and Open in
+  Shinsa where the tabs sit, and the shared facts, `TaskSharedFacts`), the app's own Review tab scrolling under it, opened by a card
+  naming the pull request (its number when known and the task's handle) and its title, with Open in Shinsa (a button
+  that opens `shinsa://task/<id>` in the Mac app) as the main button and the download beside it, in place of the
+  app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data it shows the
+  task's handle and title and the same two buttons. The data is a compact copy of the review (`serializeReviewPayload`,
+  `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
+  task page's header shows that are not private (the status, as its stage once the pull request is open: shipping,
+  ready to merge, merged or done; the repository's name and GitHub slug, the branch, the changed-line coverage and when
+  the task started; never the priority, cost, account, agents or local paths), the walkthrough, the checks without their output, the
+  judgement calls, the agent review's summary and the findings you have not judged once it ran (a finding you dismissed or sent back is left out; without their code or suggested fix; the page
+  shows no agent review when the link carries none) and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
+  `apps/engine/src/github/description.ts`), at most 24,000 characters: a longer one is shrunk step by step
+  (`listReviewPayloadFits`: first the flow and the options turned down, then the agent review, the risks and the steps
+  to try, then the judgement calls, the steps around the merge, the tests and the evidence notes, and last everything
+  except the facts and the checks), and left out only when even that is too long. A link the page cannot read whole
+  (cut off, altered, of another version) shows the task's handle and title instead, never a broken page. It rides in the
+  fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
+  repository's review never leaves the reader's browser; the page reads it back through `parseReviewPayload`, which
+  keeps only well-formed fields, drops any check output and keeps only images and recordings on GitHub's own
+  attachment hosts (`github.com/user-attachments/`, `*.githubusercontent.com`). Anyone can write such a link, so the
+  page says the review is read from the link and that the pull request on GitHub is the record. The page is never indexed: its
+  `noindex, nofollow, noarchive` meta tag and `X-Robots-Tag` header (`public/_headers`), and no referrer leaves it.
+  The page never opens the app by itself: browsers refuse an external scheme without a click.
+- **Evidence.** The evidence of the current round and of every earlier round on the same pull request, as items (`listPullRequestEvidence`), without linked tests
+  and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part
+  (Before, After or the part's label); a comparison with a recording lists its parts in turn, since GitHub plays a
+  video only from a link on a line of its own; a screenshot is an image and a recording that link; a note's text
+  folds into `<details>`; a preview is its link. A piece needs an address GitHub can reach (`resolvePublicUrl`: its
+  upload, else its own http or https address unless it is on this machine); one without is a line linking to the
+  task in Shinsa instead.
+- **Uploads.** The engine uploads every screenshot and recording stored under `/api/evidence/` that has no such
+  address (`apps/engine/src/github/description.ts`, `PullRequestDescriptions`) as a GitHub user attachment, the same
+  kind of file a person drags into a pull request: `gh api` posts the file to
+  `https://uploads.github.com/user-attachments/assets` with its name, content type and the repository's numeric id
+  (read once per repository, `resolveRepositoryId`), with `gh`'s own sign-in, and gets back a
+  `https://github.com/user-attachments/assets/<uuid>` address, visible to whoever can see the repository
+  (`uploadAttachment`). PNG, JPEG, GIF and WebP up to 10 MB and MP4, MOV and WebM up to 100 MB go up; anything else
+  stays in Shinsa. The endpoint is not documented, so a failure (the id, an upload) is logged and that piece is linked
+  to Shinsa: an upload never stops a pull request from opening. The addresses are recorded with
+  `evidence.record_uploads` (`evidence.uploaded`, `Evidence.uploadUrl`), so a piece goes up once. Nothing is
+  committed to the repository.
+- **When it is written.** Opening the pull request writes it as the body (`--body-file -`), then once more with the
+  number GitHub just gave it, before the open is recorded, so the link carries it. Every later push to the
+  open pull request writes it again (`writePullRequestBlock`): it reads the body, replaces only the marked block
+  (`replacePullRequestBlock`), so what a person wrote around it stays, and edits the pull request only when the body
+  changed. A body without the markers is replaced whole. A failed rewrite is logged; the push stands.
+- **The size limit.** GitHub takes 65,536 characters. Over that, whole sections go in this order: the earlier
+  rounds, the judgement calls, How it works, the risks, Approach, How to test, Evidence; the note, the summary, the
+  steps around the merge and the footer stay. Only when that is not enough is the
+  block cut, with `…`, closing the code block and every `<details>` the cut lands in, so the footer is never folded
+  away.
 
 ## The pull request watch
 
@@ -3416,7 +3518,12 @@ refuses, and the run fails as `context_window_full`.
 
 **Restart continuation.** `startShinsa().stop()` calls `RunSupervisor.interruptForShutdown` before anything else:
 every live run is marked (`run.interrupt` → `run.interrupted`, skipped for a run waiting on your answer) and its
-session cancelled, and no `run.end` is sent, so the run stays open. Then it stops the pull request syncs and every
+session cancelled, and no `run.end` is sent, so the run stays open. It waits at most `stopMs` (15 s) for the
+sessions to settle, so one that ignores its cancel cannot hold the shutdown, and a run whose `run.execute` arrives
+while the engine stops is marked the same way instead of starting, so the next engine continues it as cut off by the
+shutdown. The whole stop has a deadline (`stopWithin`, `STOP_DEADLINE_MS`, 30 s): a restart exits with 75 once it
+passes or the stop fails, and a stop on SIGTERM or SIGINT exits 0 (1 when the stop failed), so a hung session never
+leaves the engine half shut. Then it stops the pull request syncs and every
 running effect (their `AbortSignal` fires, so a check, push or `gh` command is killed, not left running beside the one
 the next boot requeues) and waits for them before it closes the log. On boot `RunSupervisor.recover` asks core to
 continue each running run, oldest first (`run.continue`). Core declines a run waiting on your answer (the answer
@@ -3561,8 +3668,8 @@ left under `monthly_limit`; turned off, spent, or `null` needs credits; no `extr
 `resolveClaudeFastMode`); for Codex, the `credits` of `wham/usage` or of `account/rateLimits/read` (`has_credits` or
 `unlimited`; `resolveCodexFastMode`), and an API-key login, which pays per token, is available. The supervisor asks
 the broker for the leased account, or for the provider's own login (`AccountBroker.readFastMode`, the reading
-refreshed when older than a minute); quick calls ask for your own Claude Code login or the provider
-(`createQuickCalls`' `readFastMode`). Anything but `available` runs at standard speed (`fastMode: false`, which for
+refreshed when older than a minute); quick calls ask the provider's own login, and a Claude quick call, on no
+account of Shinsa's, reads as unknown (`createQuickCalls`' `readFastMode`). Anything but `available` runs at standard speed (`fastMode: false`, which for
 Claude is the explicit false above) and the run's chat says why with a `fast_mode` notice, `needs_credits` or
 `credits_unknown`. Without a broker (tests) the setting is taken as it is. Settings shows the same reading
 (`resolveFastModeAvailability` in core: Claude is available when any account that takes work has credits, Codex
@@ -3701,9 +3808,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 - **An account is a Claude config folder** (`accounts/store.ts`). Claude Code keys its login, its keychain entry and its
   `.claude.json` on `CLAUDE_CONFIG_DIR`, so each account Shinsa adds lives in `~/.config/shinsa/accounts/<id>` (under
   `SHINSA_HOME` or `SHINSA_DATA_DIR` when set) and every run on it gets that folder. Different runs use different
-  accounts at the same time; nothing global is swapped. Your own Claude Code login is the one account without a
-  folder (`origin: 'claude'`, `configDir: null`): runs on it keep the environment Shinsa started with, so its login
-  is never copied and its single-use refresh token never forks. The list is `accounts.json` beside the folders
+  accounts at the same time; nothing global is swapped. Every account is a sign-in in Shinsa with its own folder;
+  Shinsa never runs on your Claude Code login (`~/.claude`) or on claude-swap's, since each login's single-use
+  refresh token must have one holder. An account without a folder ran on your Claude Code login before (A shared
+  login, below) and gets one when you sign in to it again. The list is `accounts.json` beside the folders
   (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, addedAt, paused,
   switchAt }] }`, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
   Every command Shinsa runs for an account (a run, a sign-in, a status check) gets its environment from
@@ -3725,30 +3833,41 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   sign-in fails, or whose login is already an account (One login, one account, below), is removed again. Claude Code writes the keychain entry
   itself, named `Claude Code-credentials-<first 8 hex of sha256(NFC(config dir))>`. Success dispatches
   `account.signed_in`.
-- **Importing.** `GET /api/accounts` offers your Claude Code login while it is signed in and no account is your
-  login yet (`origin: 'claude'`; the email is not compared), and every claude-swap account (`cswap list --json`, or
-  `claude-swap` when `cswap` is missing, cached 10 minutes) whose email is not an account. Importing your login only
-  records it. Importing from claude-swap reads `cswap export - --account <email>`, writes `{ claudeAiOauth }` to the
-  new folder's `.credentials.json` (mode 600) and `oauthAccount` into its `.claude.json` (Claude Code moves it into
-  its keychain entry on first use), and keeps the account only if `claude auth status` then reports that email; a
-  login that is already an account, your Claude Code login included, is refused (`account_exists`). The
-  web tells you to take it out of claude-swap (or turn off its auto-switch): refresh tokens are single-use, so two
-  tools refreshing one login break it. The first start with no account list adds your signed-in Claude Code login as
-  the default account.
+- **Signing in is the only way in.** Shinsa adds no account by itself and imports no login: not your Claude Code
+  login, which Claude Code and claude-swap change and refresh, and not claude-swap's, which claude-swap refreshes
+  for every account it holds to read its usage. A copy of either would sign the other out at its next refresh,
+  because refresh tokens are single-use. `GET /api/accounts` offers every claude-swap account (`cswap list --json`,
+  or `claude-swap` when `cswap` is missing, cached 10 minutes) whose email is not an account, as a sign-in: `POST
+  /api/accounts/import` with `{ origin: 'cswap', email }` starts one (Signing in, above) for a new `login` account
+  that carries that email, and a sign-in as anyone else fails ("You signed in as a@example.com, not b@example.com.
+  Sign in as b@example.com instead.") and the account is removed again, and the entry is offered once more. A
+  fresh sign-in is a login of its own, with its own refresh token, so Shinsa, Claude Code and claude-swap each
+  refresh theirs, as two machines do. claude-swap is only ever asked for its list. An email that is already an
+  account is refused (`account_exists`).
+- **A shared login** (`isSharedLogin`: origin `claude` or `cswap`). An account an earlier Shinsa added without a
+  sign-in holds a login another program refreshes too: your Claude Code login (`claude`, no folder of its own) or a
+  copy of claude-swap's (`cswap`). It reads as signed out with why ("Shinsa runs this account on your Claude Code
+  login, which Claude Code and claude-swap change and refresh too. Sign in again to give Shinsa a login of its own."
+  or "Shinsa holds a copy of claude-swap's login for this account, so each one signs the other out. Sign in again to
+  give Shinsa a login of its own."), without asking `claude auth status`, which still says signed in for a dead
+  copy; it is never a candidate for a lease, so a task bound to it runs on the default login, as for a removed
+  account; and a changed stored login never counts as working again. Signing in to it again gives it a folder when
+  it has none (`AccountStore.createFolder`) and makes it a `login` account, which works as any other. Signing in
+  again to any account with an email must be as that email: a sign-in as anyone else fails with the same message,
+  signs the folder out again (`claude auth logout`) so the wrong login is not kept, and leaves the account as it was
+  (its email, its origin, signed out with that message), so it never becomes another login or a duplicate.
 - **One login, one account** (`isSameIdentity`, `AccountStore.resolveDuplicates` in `accounts/store.ts`). A login is
   its email and organization, compared without case; an organization that is not known yet matches any, and the same
-  email in another organization is another login. Your Claude Code login follows whatever `~/.claude` is signed in
-  as, so switching it (with claude-swap, or `claude auth login`) can make it the same login as an account Shinsa
-  already has, or the other way round. Two accounts with one login are never two rows and never two candidates:
-  their refresh token is single-use, so two copies refreshing sign each other out, and their usage is one quota
-  counted twice. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
-  removed): your Claude Code login first, since its token never forks, then the default account, then the one listed
-  first. The other is a duplicate. It is left out of the snapshot's `accounts` and listed in its `duplicates`
-  (`{ id, email, keptId }`, a line under the accounts in Settings → Agent usage and an info log the first time), its
-  usage is not read, and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the
-  kept account, and the kept account is the default when the duplicate is. Shinsa never signs a duplicate out,
-  which could revoke the login it shares. Once the logins differ again (your Claude Code login switched back), both
-  are accounts as before, with their own settings.
+  email in another organization is another login. A shared login (above) can be the same login as an account you
+  signed in to, and the email of one that ran on your Claude Code login follows whatever `~/.claude` is signed in
+  as. Two accounts with one login are never two rows and never two candidates: their usage is one quota counted
+  twice. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
+  removed): a login of its own before a shared one, then the default account, then the one listed first. The other
+  is a duplicate. It is left out of the snapshot's `accounts` and listed in its `duplicates` (`{ id, email, keptId
+  }`, a line under the accounts in Settings → Agent usage and an info log the first time), its usage is not read,
+  and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the kept account, and the
+  kept account is the default when the duplicate is. Shinsa never signs a duplicate out, which could revoke the
+  login it shares. Once the logins differ again, both are accounts as before, with their own settings.
 - **Usage** (`accounts/usage.ts`, `accounts/limits.ts`). `GET https://api.anthropic.com/api/oauth/usage` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
   `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
@@ -3769,7 +3888,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   a task bound to one (`task.account`, `task.bind_account`); the run's binding wins: neither moves. A run is bound
   when you run its step again on an account you choose (`task.retry` with `account`, only on a step an agent works
   on: planning, building, review, a fix or an answer; `run.account`), and the step's own recovery, usage-limit
-  resume and monitor wakes keep it, while the next step goes back to the task's binding or the pool. Otherwise the candidates are the accounts that are not left
+  resume and monitor wakes keep it, while the next step goes back to the task's binding or the pool. A copied login
+  (above) is never a candidate, bound or not. Otherwise the candidates are the accounts that are not left
   out of new work, not known to be signed out and not spent (a rejection's reset, or a window at 100% that has not
   reset), minus the ones this execution already tried (`exclude` on the lease request). Among those below their
   switch threshold (the account's own `switchAt`, else `settings.accountSwitchAt`, default 90%, any whole
@@ -3802,32 +3922,27 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   no accounts to rotate, is marked too: a sign-out sets its `providers` entry to `signed_out` with the reason until the
   next sign-in check reads it again, and a usage limit with a known reset reads Codex's usage again at once (one with
   an unknown reset already does, to find the reset).
-- **A login Claude could not refresh** (`accounts/renewal.ts`). Refresh tokens are single-use: when another
-  program refreshes a login Shinsa also holds a copy of (claude-swap's usage polling or its switch of `~/.claude` to
-  that account, a Claude Code session on it, an import of the same login), Shinsa's copy is dead the next time its
-  access token expires, and the run's `claude` stops with "Failed to authenticate: OAuth session expired and could
-  not be refreshed". A rejection whose failure is a dead token (`auth` with `authentication_failed`, `login_required`
-  or `api_error_401`; not billing, a hold or a verification) is first read again, once per account and execution
-  (`RunRejection.renewed`): an account imported from claude-swap takes claude-swap's current copy (`cswap export`)
-  when its refresh token differs from Shinsa's, written into the account's keychain entry (`security -i` with the
-  value hex-encoded on stdin, so it never shows in the process list, or as arguments when it is too long for one line;
-  only `claudeAiOauth` is replaced, the rest of the entry such as MCP sign-ins is kept; `.credentials.json` off a
-  Mac); any account counts as renewed when its stored access token has not expired (another process refreshed it
-  meanwhile). A renewed account is tried again for the same turn (the verdict's `renewed`; the supervisor leases that
-  account for the next attempt and takes it out of the tried list, logged "Read a login again after Claude could not
-  refresh it"). Otherwise the account is marked signed out and the turn moves to the next usable account as for any
-  sign-out, and its chat row reads "Account switched · b@example.com" with "Claude account a@example.com needed
-  signing in again; continued on b@example.com." When no account can take over (or the run or task is bound to the
-  account) the Sign in gate's body names the account, the other accounts of this execution that need signing in, and
-  what to run: "Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too."
-  then "Sign in to it here, or sign in to Claude Code as a@example.com and run `cswap add`: Shinsa takes the new login
-  from claude-swap." (claude-swap's account), "Sign in to it here, or run `claude auth login` in a terminal." (your
-  Claude Code login) or "Sign in to it here." (`failure.code` `login_expired`). Shinsa remembers the fingerprint of the
-  login that failed, in memory, and every usage refresh (5 minutes) and every refresh you ask for reads it again (a
-  claude-swap account taking claude-swap's copy when it changed): once it is another login, the account is signed
-  in again and `account.signed_in` answers its Sign in gates and retries those tasks, so a sign-in in claude-swap or
-  `claude auth login` carries the task on by itself. A sign-in through Shinsa clears the mark. The task is never
-  failed for a dead token: it moves, or waits at the Sign in gate.
+- **A login Claude could not refresh** (`accounts/renewal.ts`). Refresh tokens are single-use: when another program
+  refreshes a login Shinsa also holds a copy of (a shared login, above), Shinsa's copy is dead the next time its
+  access token expires, or the login was signed out or revoked, and the run's `claude` stops with "Failed to
+  authenticate: OAuth session expired and could not be refreshed". A rejection whose failure is a dead token (`auth`
+  with `authentication_failed`, `login_required` or `api_error_401`; not billing, a hold or a verification) is first
+  read again, once per account and execution (`RunRejection.renewed`): an account counts as renewed when its stored
+  access token has not expired (Claude refreshed it meanwhile). Shinsa never takes claude-swap's copy and never
+  writes a login itself. A renewed account is tried again for the same turn (the verdict's `renewed`; the supervisor
+  leases that account for the next attempt and takes it out of the tried list, logged "Read a login again after
+  Claude could not refresh it"). Otherwise the account is marked signed out and the turn moves to the next usable
+  account as for any sign-out, and its chat row reads "Account switched · b@example.com" with "Claude account
+  a@example.com needed signing in again; continued on b@example.com." When no account can take over (or the run or
+  task is bound to the account) the Sign in gate's body names the account, the other accounts of this execution that
+  need signing in, and what to run: "Claude could not refresh the login of a@example.com, and b@example.com needs
+  signing in again too." then "Sign in to it here, so Shinsa has a login of its own." (a shared login) or "Sign in
+  to it here." (`failure.code` `login_expired`). Shinsa remembers the fingerprint of the login that failed, in
+  memory, and every usage refresh (5 minutes) and every refresh you ask for reads it again (never a shared login's):
+  once it is another login, the account is signed in again and `account.signed_in` answers its Sign in gates and
+  retries those tasks, so a sign-in in a terminal (`claude auth login` with the account's `CLAUDE_CONFIG_DIR`)
+  carries the task on by itself. A sign-in through Shinsa clears the mark. The task is never failed for a dead
+  token: it moves, or waits at the Sign in gate.
 - **Usage waits** (core `waitForUsageReset`). A usage-limit failure with a reset later than now arms `task.usageWait`
   (`usage_wait.armed`: the run, role, phase, account, `resetAt` and `autoResume` frozen from `settings.autoResume`,
   default on) instead of a gate; the stage reason is "waiting for the usage limit to reset" ("paused until the usage
@@ -3858,7 +3973,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   providers }`, `packages/core/src/protocol/accounts.ts`), also pushed on every socket as `{ type: 'accounts' }` on connect and
   on every change. `POST /api/accounts/refresh`, `/login` (`{ accountId? }`; none signs in a new account),
   `/login/code` (`{ loginId, code }`), `/login/cancel` (`{ loginId }`; on a finished sign-in it clears it), `/import`
-  (`{ origin: 'claude' | 'cswap', email }`), `/update` (`{ accountId, patch: { isDefault?: true, paused?, switchAt?,
+  (`{ origin: 'cswap', email }`), `/update` (`{ accountId, patch: { isDefault?: true, paused?, switchAt?,
   position? } }`, `position` the 0-based place in the list) and `/remove` (`{ accountId }`; signs a folder account out
   with `claude auth logout` and deletes the folder, never touching your own Claude Code login) all answer with the
   snapshot; errors are `{ error: { code, message } }`. Under `SHINSA_INSPECT=1` the accounts service reads no login,
@@ -3923,7 +4038,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   SHINSA_INSPECT to change anything."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
-  `onboarding.json` and imports no account. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
+  `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
   above). It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
   a Shinsa that is running, on another port; it shows the log as it was when it started.
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
@@ -4048,10 +4163,14 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   `shinsa` command.
 - **Restarting.** A restart (`POST /api/engine/restart`, below) stops the engine cleanly and exits with 75
   (`EX_TEMPFAIL`, `EXIT_RESTART`); launchd starts the bundle's program again, which after an app update is the new
-  version.
+  version. One that waits for idle holds new runs back until the working ones hand over, for at most 15 minutes
+  (Health, below).
 - **By hand** (`apps/engine/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
   kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
-  stopped until a start, the app, a command that needs it or the next login), `shinsa restart` is `launchctl
+  stopped until a start, the app, a command that needs it or the next login; an engine still answering after 40 s,
+  past its own 30 s stop deadline, gets `launchctl kill SIGKILL`, which `KeepAlive` answers with a fresh engine, and
+  the command says so; one that exits with an error on SIGTERM is restarted by `KeepAlive` too, which the command
+  sees as a new pid and reports without a SIGKILL), `shinsa restart` is `launchctl
   kickstart -k` and `shinsa restart --when-idle` is `POST /api/engine/restart` with `when: idle`; each waits up to
   20 s for the engine to answer, stop answering or answer with a new pid. All three refuse, with
   `engine_unmanaged`, from a `shinsa` that is not a bundled build, with `engine_not_installed` when launchd has no
@@ -4062,10 +4181,13 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** The engine is a background process, so it cannot answer macOS's consent prompts
-  well: discovery in the bundle skips `~/Desktop`, `~/Documents` and `~/Downloads` (`createDiscoverer`), and a folder
-  chosen at setup that the engine may not read is refused with `roots_unreadable`, which says to give Shinsa Full Disk
-  Access (`resolveChosenRoots`).
+- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
+  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
+  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+  the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
+  (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
+  offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
+  the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.
 
 Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies. Its
 `dev` and `start` scripts (`apps/engine/package.json`) pass `SHINSA_PORT=5180` unless one is exported, so a checkout
@@ -4112,6 +4234,9 @@ into hidden folders, `node_modules`, `Library`, caches, build output or media fo
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
 
+**`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
+machine; answers `{ ok }`, whether `open` ran.
+
 **`GET /api/onboarding/prerequisites`**: the tools Shinsa needs, checked on this machine (each with a 15 second
 limit).
 
@@ -4123,7 +4248,8 @@ limit).
     label: string;      // "GitHub CLI", "Signed in to Claude"
     ok: boolean;
     detail: string;     // the version, "Signed in as octo.", or what went wrong
-    fix: string | null; // one sentence with the command that fixes it
+    fix: string | null; // one sentence on what fixes it
+    command: string | null; // the command to copy, when one fixes it (`gh auth login`)
     optional?: true;    // codex and codex_auth
   }[];
 }
@@ -4136,18 +4262,20 @@ limit).
 
 The web's setup is a short run of steps the server keeps (`apps/engine/src/onboarding/flow.ts`), over a fixed,
 ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
-discovered folders with their repository counts, several at once, and any other folder by its path), `model` (the
-default model, from the provider's catalog, or each role's own), `merge` (the merge method), `plans` (plan approval
-for large tasks), `accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login,
-claude and its login, bun, and optionally codex and its login, each with its fix). Each step has a short label for
-the steps along the top (Folders, Model, Merging, Plans, Accounts, Tools), a title and a one-line description.
+discovered folders with their repository counts, several at once, and any other folder by its path), `projects`
+(the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
+default model, from the provider's catalog, or each role's own; the merge method; plan approval for large tasks),
+`accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
+bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
+the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.
 Nothing you send can add, drop or reorder a step: a reply only ever answers the step on screen or opens one you
 have reached.
 
-- **Answering** (`{ type: 'answer', stepId, values }`) is checked against the step on screen and saved at once:
-  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `model`, `merge` and `plans` exactly one of
-  their options (`model`'s `:roles` saves no default model, so each role keeps its own), and `accounts` and
-  `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
+- **Answering** (`{ type: 'answer', stepId, values, projects? }`) is checked against the step on screen and saved at once:
+  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `defaults` exactly one option of each of its
+  three groups, each value written `<group>=<option>` (`serializeChoiceValue`, so `model=opus`, `merge=squash`,
+  `plans=yes`; `model=:roles` saves no default model, so each role keeps its own), all three saved as one
+  `settings.change`, and `projects`, `accounts` and `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
   the step refuses (a folder that is not there, one macOS keeps private, an option that is not listed) stays on the
   step with the reason as its `problem`, which the next reply clears. There are no free answers to read and no
   model call: an answer is a pick, or for folders a path.
@@ -4155,29 +4283,52 @@ have reached.
   you can change an answer you gave: a step you have answered lists that answer `chosen`, a new answer replaces it
   (with a command id of its own, so going back to the first answer saves it again), and you carry on from the step
   after it. The later steps keep their answers, shown again `chosen` when you get to them, and the steps along the
-  top carry each answered step's summary ("~/Developer and 1 more", "Opus 5.5", "Squash", "Plan first", "2
-  accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
+  top carry each answered step's summary ("~/Developer and 1 more", "6 projects", "Opus 5.5 · Squash · Plan first",
+  "2 accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
   one on screen with `step_stale`.
-- **Nothing is chosen for you on a step you have not answered**, a saved or default setting included: the options
-  carry no `chosen` until you answer the step, and `merge`'s Squash and `plans`' Show me the plan first are marked
-  `recommended` instead. `roots` is the exception, as it picks several at once: the folders already in
-  `config.json` start chosen, and with none, the found folder with the most repositories does.
-- **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports every login
-  `AccountActions.listImports` offers (your Claude Code login and each claude-swap account, Accounts and usage
-  limits above) whose email is not already one of your accounts, through the same import Settings uses. An email
-  counts as the same account whatever its organization says, as `AccountStore`'s identity rule does when one side
-  has none, so setup never adds a second copy. Each login is tried once per run of setup (`tried`, by origin and
-  email): one you remove afterwards is not imported again when you come back to the step. The step lists what it
-  imported (`imported`) and why an import failed (`notes`, the import's own message); the accounts themselves, with
-  removing one, signing in again and adding another, are the web's (`/api/accounts/*`). Under `SHINSA_INSPECT`
-  nothing is imported. With no account signed in the step's button says Skip for now.
+- **The recommended choice is picked for you**, so one Continue gets through a step: `defaults` starts with the
+  current model (or each role's own when none is set), Squash and Show me the plan first `chosen` and `recommended`;
+  once you have answered it, it shows what you saved. `roots` starts with the folders already in `config.json`, and
+  with none, the found folder with the most repositories; `projects` starts with every suggestion kept.
+- **Projects are suggested, not asked for** (`onboarding/projects.ts`, core's `resolveProjectSuggestions` in
+  `domain/project-suggestions.ts`). The step lists the repositories one level inside each chosen folder (and any
+  registered deeper inside one), each with its origin read from `.git/config` without running git
+  (`readOriginRemote`, following a worktree's `gitdir` and `commondir`), and groups them: by GitHub owner, your own
+  login (`gh api user`) and owners with a single repository into Personal, a product with three or more remotes
+  sharing a first word split off its owner, a repository with no remote by its name's first word or else into the
+  group holding most of its folder, and a chosen folder that is mostly one group becomes that project's folder.
+  Repositories already in a project are left out, and a suggestion named like a project you have adds to it. The
+  answer may carry `projects` (`{ id, name, repos }[]`, the suggestions you keep, renamed or with repositories left
+  out): without it every suggestion is created as shown, and an empty list creates none. Each kept suggestion is a
+  `project.write` with its suggested key and colour (its folder only when no repository was left out, so a folder
+  never files one back in), and each repository is registered in it through `createProjectChanges().upsertRepo`,
+  with ids from the answer's command id. A stale suggestion id, an empty or long name, or no repositories left is
+  the step's `problem`. The step also lists the projects already made with repositories in the chosen folders
+  (`filed`), so coming back to it after making them shows them.
+- **Projects change in words** (`onboarding/revise.ts`). A `{ type: 'revise', stepId: 'projects', text, projects? }`
+  reply (1 to 500 characters, `ONBOARDING_REQUEST_LIMIT`, with your edits as an answer's `projects`) asks the writer
+  model through the quick calls (`quick.write`, a fixed system prompt, the request, every repository by a short id
+  and the projects as they stand in the user prompt, a JSON schema for the answer) for the whole new list of
+  projects and one sentence to you. Unknown ids, a repository named twice and nameless or empty projects are
+  dropped; the result is the draft's `revision` (the projects as names and paths, and the last 10 turns, shown as
+  the step's `conversation`) and replaces the suggestions in the view and in the answer: a project with exactly the
+  repositories of a suggestion keeps its id, key and folder, a new one gets a fresh key, and one named like an
+  existing project adds to it. A repository filed since drops out. No model answering is the step's `problem`, and
+  the suggestions stay as they were.
+- **Accounts are signed in, never imported.** The `accounts` step lists the Claude accounts Shinsa has and Codex's
+  login, and adds none by itself: Add account signs in to a new one, or to each claude-swap account it offers ("Sign
+  in to ‹email›"), through the same sign-in Settings uses; removing one and signing in again are the web's too
+  (`/api/accounts/*`), and so is Codex's login, which the web shows from the accounts snapshot's `providers` (signed
+  in with `codex login` in a terminal, read again when you come back to the window). With no Claude account signed
+  in the step's button says Skip for now.
 - **Saving** goes through the same code as the endpoints above: each answer is `POST /setup`'s `applySetup`
   (folders to `config.json`, the rest as `settings.change`), and the last step is `complete`. The `settings.change`
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
   on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
   its receipt while a later answer to the same step is not.
-- **Persistence.** The run of setup lives in `data/onboarding.json` (version 2, written atomically: the step on
-  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem), so a
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 5, written atomically: the step on
+  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem, and the
+  private folders with the picks they came from, and the projects as you changed them in words), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
 - **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
@@ -4195,11 +4346,14 @@ how the tools are checked again.
   steps: { id: StepId; label: string; summary: string | null; reached: boolean }[];
   index: number;                   // the step on screen; steps.length once setup is done
   step: {                          // null once setup is done
-    id: 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+    id: 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';
     title: string;
     description: string;
     multiple: boolean;             // roots: pick several
     options: { value: string; label: string; detail: string | null; chosen: boolean; recommended: boolean }[];
+    groups: { id: 'model' | 'merge' | 'plans'; label: string; options: Option[] }[]; // defaults
+    projects: ProjectSuggestion[]; // projects: { id, name, key, color, projectId, folders, repos }
+    access: string[];              // roots: the folders macOS keeps private, to ask access for
     checks: Check[];               // prerequisites
     ready: boolean;                // prerequisites: every required tool is there
     imported: AccountImport[];     // accounts: what this run imported
@@ -4212,8 +4366,8 @@ how the tools are checked again.
 ```
 
 **`POST /api/onboarding/flow`** with a reply (`answer`, `open` or `restart`): answers with the run. Codes:
-`body_invalid`, `step_invalid`, `values_invalid`, `reply_invalid`, `step_stale`, `step_unreached`,
-`setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
+`body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
+`step_unreached`, `setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
 
 ## The socket
 
@@ -4281,7 +4435,7 @@ says hello counts as no desktop.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, working, restart, restartBy, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
 (`resolveHealth`, `apps/engine/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
 which Shinsa answered: `version` is the engine package's version, `commit` the checkout's `HEAD` (null outside a git
 checkout), `installPath` the folder holding `apps/engine`, and `startedAt` and `uptimeMs` count from when the server
@@ -4296,10 +4450,19 @@ and the next line is never glued onto it (`readChatEntries`).
 
 `protocol` is `ENGINE_PROTOCOL` (`packages/core/src/protocol/engine.ts`), raised only when the contract between the
 interface and the engine breaks; `busy` is whether an agent run is mid-turn (`isEngineBusy`: a live run with status
-`running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
+`running`, not counting a run held for the restart), `working` how many such runs there are, `restart` is `idle`
+while the engine waits for them to end before restarting, and `restartBy` the time it restarts at the latest (null
+when no restart waits; `resolveEngineActivity`). **`POST
 /api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
-75 for launchd to start it again, and answers `{ restarting }` before it goes; it refuses with `restart_unsupported`
-unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
+75 for launchd to start it again, and answers `{ restarting }` before it goes. Waiting for idle drains the engine
+(`EngineRestarter`, `RestartDrain`): the supervisor holds back every new run (`holdNewRuns`; a turn that carries a
+prompt or a delivery, such as your answer, still starts, and each hold tells the restarter to look again, since a
+run is held after the state change that dispatched it), so the working runs hand over and the engine restarts
+between turns; a held run does not count as busy. Shutdown marks each held run as it marks a run dispatched while stopping (`run.interrupt`,
+command id `run.interrupt:<run>:0:<continuations>`), so the next engine starts it as a free shutdown continuation. After
+`RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
+restart that fails releases the held runs; it refuses with `restart_unsupported`
+unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live
@@ -4381,6 +4544,9 @@ following a file through its watch and the check every second, both triggered by
     a crash loop, a dead session and a provider switch; a round's session lost mid-round, restarted on a handoff that
     holds the full brief (the plan, the finished phases with their summaries, the current phase), and a session
     compacted after its brief getting the full brief again;
+  - `engine-restart.test.ts`: a restart for an update through `EngineRestarter` on the whole engine: the drain waits
+    for the working agent to hand over, holds the steps that come after it and starts them on the next engine with
+    no recovery spent, and the deadline cuts a working agent, which resumes its own session;
   - `eunoe.test.ts`: the real Claude adapter over a scripted SDK and the fake eunoe: a run routed through Shinsa's
     eunoe in compact mode and fast mode, with eunoe's compaction in its transcript; eunoe always fold running eunoe in
     its `default` mode, each budget fold a quiet line; a proxy that cannot start, so the run goes direct with a

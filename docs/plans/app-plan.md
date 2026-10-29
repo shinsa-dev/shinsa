@@ -116,11 +116,10 @@ Shinsa.app/Contents/
   (`busy`) and a restart it waits for (`restart`) in `/api/health`. `protocol` goes up only when the contract
   between the interface and the engine breaks (an HTTP route, a socket message, the state's shape), so most releases
   keep it. The page compares the two and acts:
-  - **Same protocol, older engine:** it asks the engine to restart once agents are idle (`POST /api/engine/restart`
-    with `when: idle`); with nothing mid-turn that is at once. The banner says "The engine restarts into Shinsa 0.5.0
-    once agents are idle", with **Restart now**.
-  - **New protocol, older engine:** with nothing mid-turn it restarts the engine at once; otherwise the banner asks:
-    **Restart now** (runs resume on their own sessions afterwards) or **When agents are idle**.
+  - **An older engine, on any protocol:** it restarts the engine at once (`POST /api/engine/restart` with
+    `when: now`), with no banner and nothing to click: a run it cuts off resumes on its own session. Settings →
+    Updates shows "Moving to 0.5.0…" in its Engine row meanwhile. The drain for `when: idle` stays for the
+    command line's `--when-idle` (`docs/engine.md` → Health).
   - **An engine on a newer protocol** (an app put back to an older version): the banner asks you to update the app,
     with **Update Shinsa**. A newer engine on the same protocol only gets the header's Update button.
   - The engine restarts itself through launchd (`launchctl kickstart -k`, as `shinsa restart`), and only
@@ -209,10 +208,10 @@ and every page shows what it finds in the health banner at the top (`lib/connect
 | The engine keeps crashing | repeated exits, the engine's crash file in `data/` | The engine keeps stopping, with the last error; **Restart engine**, **Copy details** |
 | The engine was killed and is not coming back | no socket, the job not loaded | The engine is not running; **Start engine** (registers and kicks the job) |
 | A folder it needs is blocked | the engine reports `EPERM` on a chosen folder | Shinsa cannot read ‹folder›; **Open Privacy & Security** |
-| The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | Shinsa ‹version› finishes updating when agents are idle; **Restart now** (Versions and updates, above) |
+| The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | None: the page restarts the engine at once and Settings → Updates shows "Moving to ‹version›…"; only a failed restart shows a banner (Versions and updates, above) |
 
 Built as the app's status page (`apps/desktop/src/lib/engine.ts`), each state with its fix button and the engine
-log's warnings and errors; the version row is the web's engine banner. Not yet: a short guide per row
+log's warnings and errors; the version row is the web's engine view (`lib/connection/engine.ts`). Not yet: a short guide per row
 (`docs/troubleshooting.md`, and the same text on shinsa.dev) with the steps by hand, for when the button is not
 enough. A crash also leaves a line in the task's chat for any run it cut off ("The engine
 stopped during this run; it resumed when the engine came back"), as recovery does today. While the app is closed

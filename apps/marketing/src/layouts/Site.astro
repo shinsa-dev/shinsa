@@ -39,7 +39,8 @@ const structuredData = {
     <link rel='preload' href={areal} as='font' type='font/woff2' crossorigin />
     <meta name='description' content={description} />
     <link rel='canonical' href={canonical} />
-    <meta name='robots' content={noindex ? 'noindex' : 'index, follow, max-image-preview:large'} />
+    <meta name='robots' content={noindex ? 'noindex, nofollow, noarchive' : 'index, follow, max-image-preview:large'} />
+    {noindex && <meta name='referrer' content='no-referrer' />}
     <meta name='application-name' content={site.name} />
     <meta name='apple-mobile-web-app-title' content={site.name} />
     <meta name='theme-color' media='(prefers-color-scheme: light)' content='#ffffff' />

@@ -17,6 +17,7 @@ import {
   createHarness,
   createTask,
   type Harness,
+  proposePlan,
   pullRequest,
   pushed,
   pushFix,
@@ -1216,5 +1217,48 @@ describe('the activity while shipping', () => {
       .map((entry) => entry.text);
     expect(texts.filter((text) => text === 'Opening the pull request')).toHaveLength(1);
     expect(texts.at(-1)).toBe('Checking the pull request');
+  });
+});
+
+describe('evidence uploads', () => {
+  function attach(harness: Harness, taskId: string) {
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId: harness.activeRun(taskId).id,
+      kind: 'screenshot',
+      title: 'Settings',
+      uri: '/api/evidence/settings.png',
+    });
+    return Object.values(harness.state.evidence).find((piece) => piece.taskId === taskId)?.id ?? '';
+  }
+
+  test('keeps the GitHub address of each uploaded file on its evidence, through a replay', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const evidenceId = attach(harness, taskId);
+    const url = 'https://github.com/user-attachments/assets/1';
+    harness.send({ type: 'evidence.record_uploads', taskId, uploads: [{ evidenceId, url }] });
+    expect(harness.state.evidence[evidenceId]?.uploadUrl).toBe(url);
+    expect(replayEventLog(harness.events).state.evidence[evidenceId]?.uploadUrl).toBe(url);
+  });
+
+  test('records nothing for a known address, an unknown piece or another task’s piece', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const otherId = createTask(harness);
+    proposePlan(harness, taskId);
+    const evidenceId = attach(harness, taskId);
+    const url = 'https://github.com/user-attachments/assets/1';
+    harness.send({ type: 'evidence.record_uploads', taskId, uploads: [{ evidenceId, url }] });
+    const uploads = [
+      { evidenceId, url },
+      { evidenceId: 'missing', url },
+    ];
+    expect(harness.send({ type: 'evidence.record_uploads', taskId, uploads }).events).toEqual([]);
+    expect(
+      harness.send({ type: 'evidence.record_uploads', taskId: otherId, uploads: [{ evidenceId, url: 'x' }] })
+        .events
+    ).toEqual([]);
   });
 });

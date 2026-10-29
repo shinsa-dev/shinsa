@@ -1,19 +1,17 @@
 import {
-  assembleReport,
   type CiRun,
   type CiState,
-  listMergeSteps,
   MERGE_METHODS,
   type MergeQueueEntry,
   type MergeQueueState,
   type PullRequest,
+  type PullRequestChanges,
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
+  replacePullRequestBlock,
   resolveCurrentRound,
   type Settings,
-  serializeMergeStepsMarkdown,
-  serializeTestingMarkdown,
   type Task,
 } from '@shinsa/core';
 import { assertRefName, resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
@@ -36,6 +34,9 @@ interface PullRequestView {
   headRefOid?: string;
   mergeCommit?: { oid: string } | null;
   statusCheckRollup: CheckEntry[] | null;
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
 }
 
 interface Login {
@@ -137,9 +138,13 @@ const COMMENT_FIELDS = 'totalCount nodes{id author{login} createdAt lastEditedAt
 const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
 
 const PULL_REQUEST_FIELDS =
-  'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup';
+  'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup,additions,deletions,changedFiles';
 
 const NO_PULL_REQUEST = /no pull requests found/i;
+
+const ATTACHMENT_UPLOAD_URL = 'https://uploads.github.com/user-attachments/assets';
+
+const ATTACHMENT_URL_PREFIX = 'https://github.com/user-attachments/';
 
 const COMMIT_SHA = /^[0-9a-f]{7,64}$/i;
 
@@ -269,6 +274,12 @@ function resolveQueueRemoval(pull: PullRequestDetails['repository']['pullRequest
   return /^[A-Z_]+$/.test(reason) ? reason.toLowerCase().replaceAll('_', ' ') : reason;
 }
 
+function resolvePullRequestChanges(view: PullRequestView): PullRequestChanges | null {
+  const { additions, deletions, changedFiles } = view;
+  if (additions === undefined || deletions === undefined || changedFiles === undefined) return null;
+  return { additions, deletions, changedFiles };
+}
+
 export function serializePullRequest(
   view: PullRequestView,
   details: PullRequestDetails | null,
@@ -292,6 +303,7 @@ export function serializePullRequest(
     mergeable: view.mergeable === 'MERGEABLE' ? true : view.mergeable === 'CONFLICTING' ? false : null,
     headSha: view.headRefOid ?? null,
     mergeCommit: view.mergeCommit?.oid ?? null,
+    changes: resolvePullRequestChanges(view),
     updatedAt: now,
     ...(checkRuns ? { checkRuns } : {}),
     ...(pull
@@ -379,29 +391,71 @@ export function serializePullRequestTitle(task: Task) {
   return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title, null);
 }
 
-function serializeTaskReference(task: Task) {
-  const link = `\`shinsa://task/${task.id}\``;
-  return task.handle ? `Shinsa task: ${task.handle}, ${link}` : `Shinsa task: ${link}`;
+export async function resolveRepositoryId(repo: Repo, signal?: AbortSignal) {
+  const slug = resolveRepoSlug(repo);
+  if (!slug) throw new Error('The repository has no GitHub remote.');
+  const output = await runGhOrThrow(['api', `repos/${slug.owner}/${slug.name}`, '--jq', '.id'], repo.path, {
+    signal,
+  });
+  const id = Number(output.trim());
+  if (!Number.isSafeInteger(id) || id <= 0)
+    throw new Error(`GitHub returned "${output.trim()}" as the repository id.`);
+  return id;
 }
 
-export function serializePullRequestBody(task: Task) {
-  const testing = serializeTestingMarkdown(assembleReport(task).walkthrough?.testing);
-  const steps = serializeMergeStepsMarkdown(listMergeSteps(task));
-  return [
-    serializeTaskReference(task),
-    task.summary?.trim() ?? '',
-    testing,
-    steps,
-    task.plan ? `<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
-  ]
-    .filter((part) => part.length > 0)
-    .join('\n\n');
+export interface Attachment {
+  path: string;
+  name: string;
+  contentType: string;
+}
+
+export async function uploadAttachment(
+  repo: Repo,
+  repositoryId: number,
+  attachment: Attachment,
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams({
+    name: attachment.name,
+    content_type: attachment.contentType,
+    repository_id: String(repositoryId),
+  });
+  const output = await runGhOrThrow(
+    [
+      'api',
+      `${ATTACHMENT_UPLOAD_URL}?${query}`,
+      '--method',
+      'POST',
+      '--input',
+      attachment.path,
+      '-H',
+      `Content-Type: ${attachment.contentType}`,
+      '-H',
+      'Accept: application/json',
+    ],
+    repo.path,
+    { signal }
+  );
+  const url = (JSON.parse(output) as { url?: unknown }).url;
+  if (typeof url !== 'string' || !url.startsWith(ATTACHMENT_URL_PREFIX))
+    throw new Error('GitHub did not return an attachment address.');
+  return url;
+}
+
+export async function writePullRequestBlock(repo: Repo, number: number, block: string, signal?: AbortSignal) {
+  const output = await runGhOrThrow(['pr', 'view', String(number), '--json', 'body'], repo.path, { signal });
+  const current = (JSON.parse(output) as { body?: string }).body ?? '';
+  const body = replacePullRequestBlock(current, block);
+  if (body === current) return false;
+  await runGhOrThrow(['pr', 'edit', String(number), '--body-file', '-'], repo.path, { input: body, signal });
+  return true;
 }
 
 export async function createPullRequest(
   repo: Repo,
   task: Task,
   baseBranch: string | null,
+  body: string,
   signal?: AbortSignal
 ) {
   if (!task.branch || !task.worktreePath)
@@ -423,7 +477,7 @@ export async function createPullRequest(
       '-',
     ],
     task.worktreePath,
-    { input: serializePullRequestBody(task), signal }
+    { input: body, signal }
   );
   return readPullRequest(repo, task, signal);
 }

@@ -183,7 +183,8 @@ export const ATTENTION_LEVELS: readonly [Attention, ...Attention[]] = ['critical
 
 export const FINDING_SEVERITIES: readonly [ReviewFinding['severity'], ...ReviewFinding['severity'][]] = [
   'blocking',
-  'suggestion',
+  'should_fix',
+  'optional',
 ];
 
 export type Validation<T> = { ok: true; value: T } | { ok: false; errors: string[] };

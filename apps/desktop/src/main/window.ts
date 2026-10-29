@@ -77,10 +77,10 @@ export class MainWindow {
       if (action === 'close') return;
       event.preventDefault();
       if (action === 'hide') {
-        win.hide();
+        this.#hide();
         return;
       }
-      win.once('leave-full-screen', () => win.hide());
+      win.once('leave-full-screen', () => this.#hide());
       win.setFullScreen(false);
     });
     win.on('enter-full-screen', () => this.#sendWindowState('fullscreen'));
@@ -130,7 +130,13 @@ export class MainWindow {
     return this.#page === 'app';
   }
 
+  #hide() {
+    this.win.hide();
+    app.dock?.hide();
+  }
+
   show() {
+    void app.dock?.show();
     if (this.win.isMinimized()) this.win.restore();
     this.win.show();
     this.win.focus();

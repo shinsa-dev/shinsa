@@ -176,6 +176,11 @@ not chat text.
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
   request watch, Merge queues). A conflict is resolved by the agent merging the base in, never by rebasing, in every workspace
   (`docs/engine.md` → The pull request watch → Conflicts).
+- **The pull request reads like the review.** Its description is the review in small for a teammate who only has
+  GitHub: the approach, the before and after evidence shown inline (screenshots and recordings uploaded as GitHub
+  attachments, nothing committed), every check with its result, how it works, the judgement calls, the risks, how
+  to test it and the steps around the merge, with a link that opens the task in Shinsa. Each push rewrites Shinsa's
+  block and keeps what anyone wrote around it (`docs/engine.md` → The pull request description).
 - **Every push is current and passes the hooks.** Before each push Shinsa merges the latest base into the branch
   (never a rebase, so no force push), so it carries the base's fixes and its current pre-push hook; a conflict goes
   to the agent, which resolves it before Shinsa checks and pushes again. The repository's pre-push hook always runs:
@@ -287,19 +292,27 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   health check, each with `--help` and `--json`. Shaped like Tailscale's and Docker's
   (`docs/cli.md`). Agents in your own terminal can use it too.
 - **Claude accounts.** Shinsa runs agents on several Claude logins of its own (Settings → Agent usage:
-  sign in, import your Claude Code login or claude-swap's accounts, default, order, per-account
+  sign in to each, claude-swap's accounts included, default, order, per-account
   switch threshold). Each run uses the account with room (a task can be pinned to one, and a step
   rerun on the account you choose); a turn the limit rejects moves to another account, and when
   none has room the task waits for the reset and carries on by itself. A signed-out account asks
-  you to sign in instead of failing the task. One login is one account: when your Claude Code login
-  switches to a login Shinsa already has, Shinsa shows it once, runs it from your Claude Code login
-  and says so (`docs/engine.md` → Accounts and usage limits).
+  you to sign in instead of failing the task. Every account is a login of its own, signed in in
+  Shinsa: it never runs on your Claude Code login or copies claude-swap's, so their refreshes never
+  sign it out (`docs/engine.md` → Accounts and usage limits).
 - **Codex too.** Everything above works for agents on Codex, on its one login for now: its usage
   windows (read the way CodexBar reads them), a cost for every run that counts toward the usage
   and cost limits per task, waiting for its limit to reset and carrying on, a sign-in gate,
   compaction under the same setting, and the agents a Codex agent starts shown in its turn like
   Claude's subagents. Agent usage shows every connected provider in Settings and at a glance in the
   top bar.
+- **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
+  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). Shipping: pull requests merged, tasks finished, lines merged and the
+  shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
+  past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
+  input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
+  used the most. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
+  changed come from GitHub's pull request read (`changes`), so pull requests merged before it show none. Quick calls
+  (triage, briefings, titles) are not metered, and tokens are counted per run, not per turn or tool call.
 - **Fast mode only on credits you have.** Agents run at standard speed unless you pick Fast. Fast
   mode costs usage credits on a subscription, so Shinsa checks before each run whether the account
   has them, runs at standard speed (and says so in the chat) when it does not, and never turns
@@ -576,9 +589,12 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup steps): six steps on first run, one at a time, each
-answered with a pick (folders also by path), any earlier one open to change, your Claude logins imported
-for you, and the prerequisites checked. Nothing else opens until setup is complete.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): five steps on first run, one at a time (Folders,
+Projects, Defaults, Accounts, Tools), each with the recommended answer already picked (folders also by path),
+any earlier one open to change. Your projects are suggested from the repositories in your folders and made
+with one press, your Claude logins are imported for you, a folder macOS keeps private asks for access
+instead of failing, and the prerequisites are checked with the command that fixes each. Nothing else opens
+until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own
@@ -804,7 +820,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   files. The walkthrough split inside Code, with its order switch and its spot stepper, is gone.
 - **It reads top to bottom, like the Overview.** What the change does in a sentence, with the decision (Approve
   changes, Fix N findings, Merge #N) where it is on the Overview; then what needs your attention, most critical first:
-  blocking findings, critical spots, spots to read carefully, suggestions, judgement calls; then the walkthrough by
+  blocking findings, critical spots, spots to read carefully, should fix and optional findings, judgement calls; then the walkthrough by
   section with its snippets; then the agent review's summary and the checks; then everything else, collapsed.
 - **Every review comment is one rich card**: author (Agent review, Agent, You), severity in its tone, a short title,
   the reason as markdown with smart links, the exact lines as a snippet whose header opens Code there, and the
@@ -866,6 +882,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Services per task (2026-10-27).** A project's services run for a task in its worktree, started by you or by the
   task's agent (`list_services`, `run_service`), shown under each service and among the task's facts
   (`docs/engine.md` → Services → Runs for a task).
+- **Agents add services (2026-10-29).** The task's agent adds a service the project lacks (`add_service`), such as
+  the dev server that shows its change, so it can run it and attach the preview (`docs/engine.md` → Services →
+  Agents add the services they need).
 - **Local previews (2026-10-29).** A service's preview URL and port variable, a free port per task run, Open in
   the Services popovers, a task's Services fact and the Terminal toolbar, and the agent's `preview` evidence before
   the review (`docs/engine.md` → Services → A live preview).

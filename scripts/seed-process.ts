@@ -292,7 +292,7 @@ const ESCALATED_FINDINGS: ReviewFinding[] = [
     fix: 'Wait between attempts, doubling each time:\n\n```ts\nawait sleep(500 * 2 ** attempt);\n```',
   },
   {
-    severity: 'suggestion',
+    severity: 'optional',
     file: null,
     line: null,
     title: 'Retries are invisible in the logs',

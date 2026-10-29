@@ -1,36 +1,74 @@
-import type { AccountSummary, OnboardingFlow, OnboardingStep, OnboardingStepId } from '@shinsa/core';
+import type {
+  AccountImport,
+  AccountSummary,
+  OnboardingFlow,
+  OnboardingProjectChoice,
+  OnboardingStep,
+  OnboardingStepId,
+  ProviderLogin,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ErrorLine } from '@/components/chat/turn-detail.tsx';
-import { type OnboardingAccountActions, OnboardingAccounts } from '@/components/onboarding/accounts.tsx';
+import { SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { OnboardingAccess } from '@/components/onboarding/access.tsx';
+import {
+  type OnboardingAccountActions,
+  OnboardingAccounts,
+  OnboardingAddAccount,
+} from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
+import { OnboardingDefaults } from '@/components/onboarding/defaults.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
+import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
+import { OnboardingFiledProjects, OnboardingProjectsChat } from '@/components/onboarding/projects-chat.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
-import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { useWindowReturn } from '@/hooks/use-window-return.ts';
 import {
+  ACCESS_KEY,
   listChosenValues,
+  listReadableRoots,
   REFRESH_KEY,
+  REVISE_KEY,
   resolveFolderOptions,
   resolveSubmitValues,
   resolveToggledRoots,
-  type StepDirection,
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
+import {
+  createProjectDrafts,
+  describeProjectsSubmit,
+  isProjectsReady,
+  type ProjectDraft,
+  resolveProjectChoices,
+  resolveProjectsSignature,
+  updateProjectDraft,
+} from '@/lib/onboarding-projects.ts';
 
 export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-6';
 
 export interface OnboardingStepActions {
-  answer: (stepId: OnboardingStepId, values: string[], key?: string) => void;
+  openPrivacy: () => void;
+  answer: (
+    stepId: OnboardingStepId,
+    values: string[],
+    key?: string,
+    projects?: OnboardingProjectChoice[]
+  ) => void;
+  revise: (text: string, projects: OnboardingProjectChoice[]) => Promise<boolean>;
   open: (stepId: OnboardingStepId) => void;
   refresh: () => void;
 }
 
 export interface OnboardingAccountsView {
   list: AccountSummary[] | null;
+  imports: AccountImport[];
+  providers: ProviderLogin[];
   actions: OnboardingAccountActions;
+  refresh: () => void;
 }
 
 function AddFolderField({ onAdd }: { onAdd: (path: string) => void }) {
@@ -67,37 +105,63 @@ function FoldersBody({
   userHome,
   values,
   onChange,
-  busy,
+  pending,
+  actions,
   autoFocus,
 }: {
   step: OnboardingStep;
   userHome: string;
   values: string[];
   onChange: (values: string[]) => void;
-  busy: boolean;
+  pending: string | null;
+  actions: OnboardingStepActions;
   autoFocus: boolean;
 }) {
   const [typed, setTyped] = React.useState<string[]>([]);
   const options = resolveFolderOptions(step.options, typed, userHome);
+  const busy = pending !== null;
   return (
-    <OptionList
-      options={options}
-      values={values}
-      multiple
-      label='Folders'
-      busyValue={null}
-      disabled={busy}
-      autoFocus={autoFocus}
-      onPick={(value) => onChange(resolveToggledRoots(values, value))}
-    >
-      <AddFolderField
-        onAdd={(path) => {
-          setTyped([...typed, path]);
-          if (!values.includes(path)) onChange([...values, path]);
-        }}
-      />
-    </OptionList>
+    <>
+      {step.access.length > 0 && (
+        <OnboardingAccess
+          access={step.access}
+          userHome={userHome}
+          checking={pending === ACCESS_KEY}
+          disabled={busy}
+          actions={{
+            openSettings: actions.openPrivacy,
+            check: () => actions.answer(step.id, listChosenValues(step), ACCESS_KEY),
+            leaveOut: () => {
+              const readable = listReadableRoots(values, step.access, userHome);
+              onChange(readable);
+              if (readable.length > 0) actions.answer(step.id, readable, SUBMIT_KEY);
+            },
+          }}
+        />
+      )}
+      <OptionList
+        options={options}
+        values={values}
+        multiple
+        label='Folders'
+        disabled={busy}
+        autoFocus={autoFocus}
+        onPick={(value) => onChange(resolveToggledRoots(values, value))}
+      >
+        <AddFolderField
+          onAdd={(path) => {
+            setTyped([...typed, path]);
+            if (!values.includes(path)) onChange([...values, path]);
+          }}
+        />
+      </OptionList>
+    </>
   );
+}
+
+interface ProjectDrafts {
+  list: ProjectDraft[];
+  onChange: (id: string, patch: Partial<ProjectDraft>) => void;
 }
 
 function StepBody({
@@ -107,6 +171,7 @@ function StepBody({
   userHome,
   accounts,
   actions,
+  drafts,
   onChange,
   autoFocus,
 }: {
@@ -116,9 +181,34 @@ function StepBody({
   userHome: string;
   accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
+  drafts: ProjectDrafts;
   onChange: (values: string[]) => void;
   autoFocus: boolean;
 }) {
+  if (step.id === 'projects') {
+    return (
+      <>
+        <OnboardingProjects
+          projects={step.projects}
+          drafts={drafts.list}
+          disabled={pending !== null}
+          userHome={userHome}
+          onChange={drafts.onChange}
+        />
+        {step.projects.length > 0 && (
+          <OnboardingProjectsChat
+            busy={pending === REVISE_KEY}
+            disabled={pending !== null}
+            onSend={(text) => actions.revise(text, resolveProjectChoices(step.projects, drafts.list))}
+          />
+        )}
+        {step.filed.length > 0 && step.projects.length > 0 && (
+          <SectionLabel className='-mb-2'>Already set up</SectionLabel>
+        )}
+        <OnboardingFiledProjects projects={step.filed} userHome={userHome} />
+      </>
+    );
+  }
   if (step.id === 'roots') {
     return (
       <FoldersBody
@@ -126,8 +216,20 @@ function StepBody({
         userHome={userHome}
         values={values}
         onChange={onChange}
-        busy={pending !== null}
+        pending={pending}
+        actions={actions}
         autoFocus={autoFocus}
+      />
+    );
+  }
+  if (step.id === 'defaults') {
+    return (
+      <OnboardingDefaults
+        groups={step.groups}
+        values={values}
+        disabled={pending !== null}
+        autoFocus={autoFocus}
+        onChange={onChange}
       />
     );
   }
@@ -135,30 +237,12 @@ function StepBody({
     return (
       <OnboardingAccounts
         accounts={accounts.list}
-        imported={step.imported}
-        notes={step.notes}
+        providers={accounts.providers}
         actions={accounts.actions}
       />
     );
   }
-  if (step.id === 'prerequisites') {
-    return <OnboardingChecks checks={step.checks} />;
-  }
-  return (
-    <OptionList
-      options={step.options}
-      values={values}
-      multiple={false}
-      label={step.title}
-      busyValue={pending}
-      disabled={pending !== null}
-      autoFocus={autoFocus}
-      onPick={(value) => {
-        onChange([value]);
-        actions.answer(step.id, [value], value);
-      }}
-    />
-  );
+  return <OnboardingChecks checks={step.checks} />;
 }
 
 function StepAction({
@@ -174,9 +258,12 @@ function StepAction({
 }) {
   if (step.id === 'accounts') {
     return (
-      <Button variant='secondary' icon='IconUserAdd' onClick={() => accounts.actions.signIn(null)}>
-        {accounts.list?.length === 0 ? 'Sign in to Claude' : ACCOUNT_LABEL.add}
-      </Button>
+      <OnboardingAddAccount
+        accounts={accounts.list}
+        imports={accounts.imports}
+        providers={accounts.providers}
+        actions={accounts.actions}
+      />
     );
   }
   if (step.id !== 'prerequisites') return null;
@@ -192,10 +279,29 @@ function StepAction({
   );
 }
 
+function resolveSubmit(step: OnboardingStep, values: string[], drafts: ProjectDraft[]) {
+  const submitValues = resolveSubmitValues(step, values);
+  if (step.id !== 'projects' || step.projects.length === 0) {
+    return {
+      values: submitValues,
+      label: step.submitLabel,
+      ready: submitValues.length > 0,
+      projects: undefined,
+    };
+  }
+  return {
+    values: submitValues,
+    label: describeProjectsSubmit(step.projects, drafts),
+    ready: isProjectsReady(step.projects, drafts),
+    projects: resolveProjectChoices(step.projects, drafts),
+  };
+}
+
 function StepFooter({
   flow,
   step,
   values,
+  drafts,
   pending,
   accounts,
   actions,
@@ -204,14 +310,14 @@ function StepFooter({
   flow: OnboardingFlow;
   step: OnboardingStep;
   values: string[];
+  drafts: ProjectDraft[];
   pending: string | null;
   accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
   onClose?: () => void;
 }) {
   const previous = flow.steps[flow.index - 1];
-  const submitValues = resolveSubmitValues(step, values);
-  const choosing = step.options.length > 0 && !step.multiple;
+  const submit = resolveSubmit(step, values, drafts);
   return (
     <>
       {previous ? (
@@ -233,16 +339,14 @@ function StepFooter({
           </Button>
         )}
         <StepAction step={step} pending={pending} accounts={accounts} actions={actions} />
-        {(!choosing || values.length > 0) && (
-          <Button
-            icon={{ name: 'IconArrowRight', position: 'inline-end' }}
-            disabled={submitValues.length === 0 || (pending !== null && pending !== SUBMIT_KEY)}
-            loading={pending === SUBMIT_KEY}
-            onClick={() => actions.answer(step.id, submitValues)}
-          >
-            {step.submitLabel}
-          </Button>
-        )}
+        <Button
+          icon={{ name: 'IconArrowRight', position: 'inline-end' }}
+          disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
+          loading={pending === SUBMIT_KEY}
+          onClick={() => actions.answer(step.id, submit.values, SUBMIT_KEY, submit.projects)}
+        >
+          {submit.label}
+        </Button>
       </div>
     </>
   );
@@ -252,7 +356,6 @@ export function OnboardingStepView({
   flow,
   step,
   pending,
-  direction,
   userHome,
   accounts,
   actions,
@@ -262,7 +365,6 @@ export function OnboardingStepView({
   flow: OnboardingFlow;
   step: OnboardingStep;
   pending: string | null;
-  direction: StepDirection;
   userHome: string;
   accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
@@ -270,16 +372,30 @@ export function OnboardingStepView({
   autoFocus?: boolean;
 }) {
   const [values, setValues] = React.useState(() => listChosenValues(step));
+  const [drafts, setDrafts] = React.useState(() => createProjectDrafts(step.projects));
+  const signature = resolveProjectsSignature(step.projects);
+  const [draftedFor, setDraftedFor] = React.useState(signature);
+  if (draftedFor !== signature) {
+    setDraftedFor(signature);
+    setDrafts(createProjectDrafts(step.projects));
+  }
+  const waiting = step.access.length > 0 || step.id === 'prerequisites' || step.id === 'accounts';
+  useWindowReturn(() => {
+    if (pending !== null) return;
+    if (step.id === 'accounts') accounts.refresh();
+    else if (step.id === 'prerequisites') actions.refresh();
+    else actions.answer(step.id, listChosenValues(step), ACCESS_KEY);
+  }, waiting);
   return (
     <OnboardingSection
       title={step.title}
       description={step.description}
-      direction={direction}
       footer={
         <StepFooter
           flow={flow}
           step={step}
           values={values}
+          drafts={drafts}
           pending={pending}
           accounts={accounts}
           actions={actions}
@@ -294,6 +410,7 @@ export function OnboardingStepView({
         userHome={userHome}
         accounts={accounts}
         actions={actions}
+        drafts={{ list: drafts, onChange: (id, patch) => setDrafts(updateProjectDraft(drafts, id, patch)) }}
         onChange={setValues}
         autoFocus={autoFocus}
       />

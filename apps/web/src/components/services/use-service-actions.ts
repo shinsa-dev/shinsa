@@ -4,6 +4,7 @@ import type { ServiceHandlers } from '@/components/services/service-row.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import {
   openServiceTerminal,
+  requestRefinedServiceSuggestions,
   requestServiceAdd,
   requestServiceSuggestions,
   requestServicesAdd,
@@ -44,6 +45,7 @@ export function useServiceActions({ state, onNavigate }: { state: ShinsaState; o
     focusForms: true,
     listPlaces: (projectId) => listServicePlaces(listTerminalPlaces(state, projectId)),
     listSuggestions: requestServiceSuggestions,
+    refineSuggestions: requestRefinedServiceSuggestions,
     add: (projectId, inputs) =>
       requestWithToast(
         () => requestServicesAdd(projectId, inputs),

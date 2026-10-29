@@ -24,7 +24,6 @@ export const ICON_NAMES = [
   'IconArrowsRepeatRightLeft',
   'IconArrowsShow',
   'IconAudio',
-  'IconBandage',
   'IconBell',
   'IconBell2Snooze',
   'IconBezier',
@@ -339,9 +338,6 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconAudio: {
     '3': '<g><path d="M9.99609 18.5C9.99609 19.8807 8.65295 21 6.99609 21C5.33924 21 3.99609 19.8807 3.99609 18.5C3.99609 17.1193 5.33924 16 6.99609 16C8.65295 16 9.99609 17.1193 9.99609 18.5ZM9.99609 18.5V8.23211C9.99609 6.90728 10.8651 5.73932 12.1341 5.35863L17.4214 3.77243C18.7046 3.38746 19.9961 4.34835 19.9961 5.68808V15.5M19.9961 15.5C19.9961 16.8807 18.6529 18 16.9961 18C15.3392 18 13.9961 16.8807 13.9961 15.5C13.9961 14.1193 15.3392 13 16.9961 13C18.6529 13 19.9961 14.1193 19.9961 15.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',
-  },
-  IconBandage: {
-    '3': '<g><path d="M4.75 12.75L12.75 4.75C14.5449 2.95507 17.4551 2.95508 19.25 4.75C21.0449 6.54492 21.0449 9.45507 19.25 11.25L11.25 19.25C9.45507 21.0449 6.54492 21.0449 4.75 19.25C2.95508 17.4551 2.95507 14.5449 4.75 12.75Z" stroke="currentColor" stroke-width="2"/><path d="M6 12L12 18" stroke="currentColor" stroke-width="2"/><path d="M12 6L18 12" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="14" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="14" r="1" fill="currentColor"/><circle cx="10" cy="12" r="1" fill="currentColor"/></g>',
   },
   IconBell: {
     '3': '<g><path d="M4.58073 9.43467C5.10819 5.74248 8.2703 3 12 3C15.7296 3 18.8918 5.74248 19.4192 9.43467L20.0108 13.5757C20.269 15.383 18.8666 17 17.0409 17H6.959C5.13335 17 3.73096 15.383 3.98915 13.5757L4.58073 9.43467Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17C16 19.2091 14.2091 21 12 21C9.79086 21 8 19.2091 8 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',

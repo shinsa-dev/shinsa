@@ -36,11 +36,20 @@ function resolveExtension(name: string) {
   return match?.[1]?.toLowerCase() ?? null;
 }
 
+const VIDEO_EXTENSIONS = new Set(['mp4', 'm4v', 'mov', 'webm']);
+
 export function splitAttachments(attachments: ChatAttachment[]) {
   const images = attachments.filter(
     (attachment) => attachment.kind === 'image' && isBrowserUrl(attachment.url)
   );
   return { images, files: attachments.filter((attachment) => !images.includes(attachment)) };
+}
+
+export function canPlayAttachment(attachment: Pick<ChatAttachment, 'name' | 'mimeType' | 'url'>) {
+  if (!isBrowserUrl(attachment.url)) return false;
+  if (attachment.mimeType?.startsWith('video/')) return true;
+  const extension = resolveExtension(attachment.name);
+  return extension !== null && VIDEO_EXTENSIONS.has(extension);
 }
 
 export function canOpenAttachment(attachment: Pick<ChatAttachment, 'url'>) {

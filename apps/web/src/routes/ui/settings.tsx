@@ -21,6 +21,7 @@ import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedul
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
+import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
@@ -73,7 +74,13 @@ const SAMPLE_UPDATE_ACTIONS: UpdateActions = {
   answerDowngrade: () => void acknowledgeSample(),
 };
 
-const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; update: DesktopUpdate }[] = [
+const UPDATE_SCENES: {
+  label: string;
+  version: string;
+  channel: UpdateChannel;
+  update: DesktopUpdate;
+  engine?: EngineStatus | null;
+}[] = [
   {
     label: 'UpdatesGroup · Stable, up to date',
     version: '1.3.0',
@@ -110,6 +117,17 @@ const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; u
     channel: 'beta',
     update: { status: 'installing', version: '1.3.0-beta.3' },
   },
+  {
+    label: 'UpdatesGroup · Beta, the engine moving to the version just installed',
+    version: '1.3.0-beta.3',
+    channel: 'beta',
+    update: { status: 'current' },
+    engine: resolveEngineView(
+      { version: '1.3.0-beta.3', protocol: 2 },
+      { ok: true, seq: 1, problems: [], version: '1.3.0-beta.2', protocol: 2 },
+      null
+    ).status,
+  },
 ];
 
 const SAMPLE_VERSION_ACTIONS: VersionActions = {
@@ -135,11 +153,19 @@ function createAccountScenes(now: number): { label: string; snapshot: AccountsSn
   return [
     {
       label:
-        'AccountsGroup · accounts with their windows, out of usage, paused, signed out, no readings yet · Codex signed in',
+        'AccountsGroup · accounts with their windows, out of usage, paused, signed out, a copied claude-swap login, no readings yet · Codex signed in',
       snapshot: {
         ...full,
-        accounts: fresh ? [...full.accounts, fresh] : full.accounts,
-        imports: [{ origin: 'claude', email: 'christo@superwall.com', plan: 'max' }],
+        accounts: [
+          ...full.accounts.map((account) =>
+            account.id === 'lapsed' ? { ...account, origin: 'cswap' as const } : account
+          ),
+          ...(fresh ? [fresh] : []),
+        ],
+        imports: [
+          { origin: 'cswap', email: 'swap@superwall.com', plan: null },
+          { origin: 'cswap', email: 'side@superwall.com', plan: null },
+        ],
         providers: selectSampleLogin(logins, 'signed_in'),
       },
     },
@@ -318,10 +344,10 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      {UPDATE_SCENES.map(({ label, ...app }) => (
+      {UPDATE_SCENES.map(({ label, engine, ...app }) => (
         <Specimen key={label} label={label}>
           <div className='w-full max-w-xl'>
-            <UpdatesGroup app={app} actions={SAMPLE_UPDATE_ACTIONS} />
+            <UpdatesGroup app={app} engine={engine} actions={SAMPLE_UPDATE_ACTIONS} />
           </div>
         </Specimen>
       ))}

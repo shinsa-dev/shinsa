@@ -74,7 +74,7 @@ async function createBench(emails: string[]): Promise<Bench> {
   });
   worlds.push(world);
   const ready = accounts as unknown as Accounts;
-  const added = emails.map((email) => ready.store.create('login', { email, plan: 'max' }));
+  const added = emails.map((email) => ready.store.create({ email, plan: 'max' }));
   const clock = new UsageResumeClock(world.engine, { graceMs: 0 });
   clocks.push(clock);
   clock.start();
@@ -155,6 +155,14 @@ describe('accounts end to end', () => {
     expect(resumed?.account).toBe(added[1]?.id);
     expect(resumed?.resume).toBe(world.agents.of('plan')[2]?.sessionId);
     expect(resumed?.prompt).toContain('The limit has reset.');
+  });
+
+  test('a wait that never comes true gives up at its deadline while the clock is frozen at a reset', async () => {
+    const { world, clock } = await createBench(['a@example.com']);
+    await passReset(clock, Date.now() + RESET_IN_MS);
+    await expect(world.until('a planner that never starts', () => false, 50)).rejects.toThrow(
+      'Timed out waiting for a planner that never starts.'
+    );
   });
 
   test('a task bound to an account never moves: it waits for that account to reset and resumes on it', async () => {

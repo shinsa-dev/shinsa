@@ -1,4 +1,5 @@
 import type {
+  OnboardingChoiceGroup,
   OnboardingFlow,
   OnboardingOption,
   OnboardingStatus,
@@ -48,9 +49,8 @@ export function createSuggestions(paths: [string, number][]): RootSuggestions {
 
 const STEP_LABELS: [OnboardingStepId, string][] = [
   ['roots', 'Folders'],
-  ['model', 'Model'],
-  ['merge', 'Merging'],
-  ['plans', 'Plans'],
+  ['projects', 'Projects'],
+  ['defaults', 'Defaults'],
   ['accounts', 'Accounts'],
   ['prerequisites', 'Tools'],
 ];
@@ -59,20 +59,46 @@ export function createOption(overrides: Partial<OnboardingOption> = {}): Onboard
   return { value: 'squash', label: 'Squash', detail: null, chosen: false, recommended: false, ...overrides };
 }
 
+function createDefaultGroups(): OnboardingChoiceGroup[] {
+  return [
+    {
+      id: 'merge',
+      label: 'Merging',
+      options: [
+        createOption({
+          value: 'merge=squash',
+          detail: 'Every pull request lands as one commit.',
+          chosen: true,
+          recommended: true,
+        }),
+        createOption({ value: 'merge=rebase', label: 'Rebase', detail: 'No merge commit.' }),
+      ],
+    },
+    {
+      id: 'plans',
+      label: 'Large tasks',
+      options: [
+        createOption({ value: 'plans=yes', label: 'Show me the plan first', chosen: true }),
+        createOption({ value: 'plans=no', label: 'Start building' }),
+      ],
+    },
+  ];
+}
+
 export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingStep {
   return {
-    id: 'merge',
-    title: 'How should pull requests be merged?',
-    description: 'Shinsa merges a pull request only after you approve the merge.',
+    id: 'defaults',
+    title: 'How should agents work?',
+    description: 'The recommended choices are picked.',
     multiple: false,
-    options: [
-      createOption({ detail: 'Every pull request lands as one commit.', recommended: true }),
-      createOption({ value: 'rebase', label: 'Rebase', detail: 'No merge commit.' }),
-    ],
+    options: [],
+    groups: overrides.id === undefined || overrides.id === 'defaults' ? createDefaultGroups() : [],
+    projects: [],
+    filed: [],
+    conversation: [],
+    access: [],
     checks: [],
     ready: true,
-    imported: [],
-    notes: [],
     problem: null,
     submitLabel: 'Continue',
     ...overrides,

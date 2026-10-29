@@ -4,10 +4,14 @@ import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { CHIP } from '@/components/layout/surface/card.ts';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
-import { SuggestedFix } from '@/components/text/inset-note.tsx';
-import { NoteHead } from '@/components/text/note-head.tsx';
+import { FindingNote } from '@/components/text/finding-note.tsx';
 import { hashDisclosurePart, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { describeFindingPlace, SEVERITY_LABEL } from '@/lib/review/findings.ts';
+import {
+  describeFindingPlace,
+  SEVERITY_LABEL,
+  SEVERITY_TONE,
+  SEVERITY_VERDICT,
+} from '@/lib/review/findings.ts';
 
 export function FindingText({
   finding,
@@ -25,42 +29,29 @@ export function FindingText({
       ? { task, path: finding.file, line: finding.line }
       : null;
   return (
-    <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
-      <NoteHead
-        label={
-          <>
-            <span className={severity === 'blocking' ? 'text-red-text' : 'text-fg-2'}>
-              {SEVERITY_LABEL[severity]}
-            </span>
-            {where && !snippet && <Truncate className={cn(CHIP, 'font-mono')}>{where}</Truncate>}
-          </>
-        }
-        title={finding.title}
-        body={finding.message}
-        action={action}
-      />
+    <FindingNote
+      label={SEVERITY_LABEL[severity]}
+      tone={SEVERITY_TONE[severity]}
+      place={where && !snippet && <Truncate className={cn(CHIP, 'font-mono')}>{where}</Truncate>}
+      body={finding.message}
+      fix={finding.fix}
+      action={action}
+    >
       {snippet && (
-        <div className='mt-1.5'>
-          <ChangeSnippet
-            persistId={resolveTaskDisclosureId(
-              snippet.task.id,
-              'finding',
-              hashDisclosurePart([snippet.path, snippet.line, finding.message].join('\n')),
-              'snippet'
-            )}
-            task={snippet.task}
-            path={snippet.path}
-            start={snippet.line}
-            end={finding.end ?? snippet.line}
-            startsOpen={severity === 'blocking'}
-          />
-        </div>
+        <ChangeSnippet
+          persistId={resolveTaskDisclosureId(
+            snippet.task.id,
+            'finding',
+            hashDisclosurePart([snippet.path, snippet.line, finding.message].join('\n')),
+            'snippet'
+          )}
+          task={snippet.task}
+          path={snippet.path}
+          start={snippet.line}
+          end={finding.end ?? snippet.line}
+          startsOpen={SEVERITY_VERDICT[severity] === 'fix'}
+        />
       )}
-      {finding.fix && (
-        <div className='mt-1.5'>
-          <SuggestedFix text={finding.fix} />
-        </div>
-      )}
-    </div>
+    </FindingNote>
   );
 }

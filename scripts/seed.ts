@@ -62,6 +62,7 @@ import { EXPORT_FILES_BASE, EXPORT_FILES_NEW, listProcessTasks } from './seed-pr
 import { resolveRunOpening, stampRunPrompts } from './seed-prompts.ts';
 import { listRoundTasks } from './seed-rounds.ts';
 import { listShapeTasks, resolveShapeHandover } from './seed-shapes.ts';
+import { listHistoryTasks } from './seed-stats.ts';
 import { listTriggerTasks, writeAccountFiles, writeAccountTranscripts } from './seed-triggers.ts';
 
 const ROOT = Bun.env.SHINSA_SEED_DIR ?? join(homedir(), '.shinsa-seed');
@@ -1696,6 +1697,7 @@ function resolveSeedPullRequest(task: SeedTask, at: number): PullRequest | null 
     mergeable: task.pullRequest.checks === 'passing',
     updatedAt: at,
     ...(task.pullRequest.mergeCommit ? { mergeCommit: task.pullRequest.mergeCommit } : {}),
+    ...(task.pullRequest.changes ? { changes: task.pullRequest.changes } : {}),
   };
 }
 
@@ -2803,7 +2805,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           fix: 'Count attempts for the whole session: remove `this.attempts = 0;` from ensureConnected and reset it in `close()` instead.\n\n```ts\nasync close() {\n  await this.client?.close();\n  this.client = null;\n  this.attempts = 0;\n}\n```',
         },
         {
-          severity: 'suggestion',
+          severity: 'should_fix',
           file: sessionFile,
           line: lineOf(MCP_SESSION_NEW, 'const client = new Client({'),
           end: lineOf(MCP_SESSION_NEW, 'this.client = client;'),
@@ -2813,7 +2815,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           fix: 'Clear the client when the connection closes:\n\n```ts\nclient.onclose = () => {\n  this.client = null;\n};\n```',
         },
         {
-          severity: 'suggestion',
+          severity: 'should_fix',
           file: sessionFile,
           line: lineOf(MCP_SESSION_NEW, "if (item.type === 'tool_result')"),
           end: lineOf(MCP_SESSION_NEW, 'isError: false'),
@@ -2823,7 +2825,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           fix: 'Pass the flag through from the response item:\n\n```ts\nisError: item.isError === true,\n```\n\nand add `isError?: boolean` to the item type.',
         },
         {
-          severity: 'suggestion',
+          severity: 'should_fix',
           file: chatFile,
           line: lineOf(EMBEDDED_CHAT_NEW, 'async reset()'),
           end: lineOf(EMBEDDED_CHAT_NEW, 'await this.session.close();'),
@@ -3790,7 +3792,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           fix: "Split on the first `=` only:\n\n```ts\nconst body = token.replace(/^--?/, '');\nconst at = body.indexOf('=');\nconst raw = at < 0 ? body : body.slice(0, at);\nconst inline = at < 0 ? undefined : body.slice(at + 1);\n```",
         },
         {
-          severity: 'suggestion',
+          severity: 'should_fix',
           file: CLI_PATHS.mcp,
           ...rangeOf(MCP_COMMANDS_NEW, 'properties.args = {', 'properties.args = {'),
           title: 'The args schema has no items',
@@ -4030,7 +4032,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         'I read the scroll change and opened a group with 40 tabs. The row scrolls and keeps the active tab in view; the only issue is the animation on first render.',
       findings: [
         {
-          severity: 'suggestion',
+          severity: 'optional',
           file: 'src/ui/tab-group.tsx',
           line: lineOf(TAB_GROUP_NEW, "behavior: 'smooth'"),
           title: 'The row animates on page load',
@@ -5002,6 +5004,7 @@ function listTasks(repos: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
     ...listTriggerTasks({ paywall, kanna }),
     ...listRoundTasks({ paywall }, worktrees.rounds),
     ...listMergeStepTasks({ paywall, kanna }),
+    ...listHistoryTasks(paywall),
   ];
 }
 

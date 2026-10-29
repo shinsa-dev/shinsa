@@ -504,7 +504,7 @@ describe('NowCard on the Overview', () => {
       stage: 'awaiting_review',
       findings: [
         { severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' },
-        { severity: 'suggestion', file: null, line: null, message: 'Rename it.' },
+        { severity: 'optional', file: null, line: null, message: 'Rename it.' },
       ],
     });
     const escalated = { ...gate, escalation: { reason: 'rounds' as const, rounds: 2, at: 1 } };

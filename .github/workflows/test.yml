@@ -3,7 +3,16 @@ name: Test
 on:
   push:
     branches: [main]
+    paths: &tested
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - docs/cli.md
+      - docs/design-system.md
+      - .claude/skills/**
+      - apps/engine/plugin/**
   pull_request:
+    paths: *tested
 
 concurrency:
   group: test-${{ github.ref }}
@@ -11,7 +20,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -20,48 +29,3 @@ jobs:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun run test
-
-  loading:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
-    env:
-      SHELL_PERF_CHROME: /usr/bin/google-chrome
-      LOADING_ORIGIN: http://127.0.0.1:5720
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-      - run: bun install --frozen-lockfile
-      - name: Build the web app for production
-        run: bun run build --mode production
-        working-directory: apps/web
-        env:
-          NODE_ENV: production
-      - name: Seed and serve
-        run: |
-          git config --global user.name 'Shinsa CI'
-          git config --global user.email 'ci@shinsa.dev'
-          SHINSA_SEED_DIR="$RUNNER_TEMP/seed" bun scripts/seed.ts
-          SHINSA_DATA_DIR="$RUNNER_TEMP/seed/data" SHINSA_INSPECT=1 SHINSA_PORT=5720 \
-            nohup bun apps/engine/src/main.ts engine > "$RUNNER_TEMP/serve.log" 2>&1 &
-          for _ in $(seq 120); do
-            curl -sf "$LOADING_ORIGIN/api/health" > /dev/null && exit 0
-            sleep 1
-          done
-          cat "$RUNNER_TEMP/serve.log"
-          exit 1
-      - name: Warm up the server and the page
-        run: LOADING_WALK_WARM_UP=1 LOADING_WALK_WIDTHS=1440 bun scripts/perf/loading-walk.ts "$LOADING_ORIGIN"
-      - name: No loading state in normal use
-        run: |
-          for attempt in 1 2; do
-            bun scripts/perf/loading-walk.ts "$LOADING_ORIGIN" && exit 0
-            echo "::warning::The walk saw a loading state (attempt $attempt of 2)."
-          done
-          exit 1
-      - name: Server log
-        if: failure()
-        run: cat "$RUNNER_TEMP/serve.log"

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { act } from '@testing-library/react';
-import { requestEngineRestart, resolveEngineView } from '@/lib/connection/engine.ts';
+import { type EngineView, requestEngineRestart, resolveEngineView } from '@/lib/connection/engine.ts';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 
@@ -36,69 +36,57 @@ describe('resolveEngineView', () => {
   });
 
   it('says nothing when app and engine match, or the engine is newer on the same protocol', () => {
-    expect(resolveEngineView(APP, createHealth(), null)).toEqual({ banner: null, automatic: null, key: '' });
+    expect(resolveEngineView(APP, createHealth(), null)).toEqual({
+      banner: null,
+      status: null,
+      automatic: null,
+      key: '',
+    });
     expect(resolveEngineView(APP, createHealth({ version: '0.6.0' }), null).banner).toBeNull();
   });
 
   it('asks you to update the app when the engine speaks a newer protocol', () => {
     expect(resolveEngineView(APP, createHealth({ version: '0.6.0', protocol: 3 }), null)).toEqual({
       banner: {
-        tone: 'warning',
         text: 'This app is older than Shinsa’s engine. Update Shinsa to keep working.',
         actions: ['update_app'],
       },
+      status: { version: '0.6.0', label: 'Newer than this app', tone: 'orange' },
       automatic: null,
       key: '0.6.0:3',
     });
   });
 
-  it('restarts an older engine at once while no agent is mid-turn', () => {
-    expect(resolveEngineView(APP, createHealth({ version: '0.4.0' }), null)).toEqual({
-      banner: {
-        tone: 'info',
-        text: 'Restarting the engine into Shinsa 0.5.0. Agents pick up where they were.',
-        actions: [],
-      },
+  it('restarts an older engine at once with no banner, even while agents work or wait to hand over', () => {
+    const moving: EngineView = {
+      banner: null,
+      status: { version: '0.4.0', label: 'Moving to 0.5.0…', tone: 'neutral' },
       automatic: 'now',
       key: '0.4.0:2',
-    });
-    expect(resolveEngineView(APP, createHealth({ version: '0.4.0', protocol: 1 }), null).automatic).toBe(
-      'now'
+    };
+    expect(resolveEngineView(APP, createHealth({ version: '0.4.0' }), null)).toEqual(moving);
+    expect(resolveEngineView(APP, createHealth({ version: '0.4.0', busy: true, working: 3 }), null)).toEqual(
+      moving
     );
-  });
-
-  it('waits for agents on the same protocol, and lets you choose on a new one', () => {
-    const later = resolveEngineView(APP, createHealth({ version: '0.4.0', busy: true }), null);
-    expect(later.automatic).toBe('idle');
-    expect(later.banner).toEqual({
-      tone: 'info',
-      text: 'The engine restarts into Shinsa 0.5.0 once agents are idle.',
-      actions: ['restart_now'],
-    });
-    const choose = resolveEngineView(APP, createHealth({ version: '0.4.0', protocol: 1, busy: true }), null);
-    expect(choose.automatic).toBeNull();
-    expect(choose.banner).toEqual({
-      tone: 'warning',
-      text: 'Shinsa 0.5.0 needs its engine restarted.',
-      actions: ['restart_now', 'restart_idle'],
-    });
-  });
-
-  it('shows a restart the engine already waits for, and a restart it could not do', () => {
-    const waiting = resolveEngineView(
+    expect(
+      resolveEngineView(APP, createHealth({ version: '0.4.0', busy: true, restart: 'idle' }), null)
+    ).toEqual(moving);
+    const newProtocol = resolveEngineView(
       APP,
-      createHealth({ version: '0.4.0', busy: true, restart: 'idle' }),
+      createHealth({ version: '0.4.0', protocol: 1, busy: true }),
       null
     );
-    expect(waiting.automatic).toBeNull();
-    expect(waiting.banner?.actions).toEqual(['restart_now']);
-    const failed = resolveEngineView(APP, createHealth({ version: '0.4.0' }), 'It runs from a terminal.');
-    expect(failed).toEqual({
+    expect(newProtocol.automatic).toBe('now');
+    expect(newProtocol.banner).toBeNull();
+  });
+
+  it('warns when the engine could not restart', () => {
+    expect(resolveEngineView(APP, createHealth({ version: '0.4.0' }), 'It runs from a terminal.')).toEqual({
       banner: {
-        tone: 'warning',
         text: 'Restart Shinsa’s engine to finish updating to 0.5.0. It runs from a terminal.',
         actions: [],
       },
+      status: { version: '0.4.0', label: 'Restart it to move to 0.5.0', tone: 'orange' },
       automatic: null,
       key: '0.4.0:2',
     });

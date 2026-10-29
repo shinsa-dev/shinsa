@@ -69,7 +69,9 @@ export {
   listMergeSteps,
   listOpenChecklistItems,
   listOpenMergeSteps,
+  listPullRequestEvidence,
   listRankedSpots,
+  listReviewPayloadFits,
   listTestingLines,
   MANUAL_TEST_TARGETS,
   MERGE_STEP_KINDS,
@@ -78,14 +80,22 @@ export {
   type PhaseChange,
   type PlanChange,
   PROTOCOL_LIMITS,
+  type PullRequestSource,
+  parseReviewPayload,
   parseTestFile,
+  type ReviewPayload,
+  type ReviewPayloadEvidence,
+  replacePullRequestBlock,
   resolveChecklistProgress,
   resolveMergeStepKey,
   resolvePhaseChange,
+  resolvePublicUrl,
   type SplitRequest,
   serializeMergeStepsMarkdown,
   serializePlanMarkdown,
+  serializePullRequestMarkdown,
   serializeReportMarkdown,
+  serializeReviewPayload,
   serializeTestFile,
   serializeTestingMarkdown,
   type TestFile,
@@ -113,4 +123,5 @@ export {
 export type * from './report/types.ts';
 export * from './schedules/index.ts';
 export * from './state/index.ts';
+export * from './stats/index.ts';
 export * from './test-coverage/index.ts';

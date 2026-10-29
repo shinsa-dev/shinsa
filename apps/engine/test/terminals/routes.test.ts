@@ -14,7 +14,7 @@ import { startServer } from '../../src/http/index.ts';
 import { createSocketHandlers } from '../../src/http/server.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { Terminals } from '../../src/terminals/index.ts';
+import { ServiceRefiner, Terminals } from '../../src/terminals/index.ts';
 import {
   createTerminalSockets,
   resolveServicePlace,
@@ -36,7 +36,7 @@ afterEach(async () => {
   for (const stop of running.splice(0)) await stop();
 });
 
-async function start(options: { inspect?: boolean } = {}) {
+async function start(options: { inspect?: boolean; refiner?: ServiceRefiner } = {}) {
   const root = createTempDir();
   const config = createTestConfig(root, { inspect: options.inspect ?? false });
   const engine = new Engine(new EventLog(config.databasePath));
@@ -55,6 +55,7 @@ async function start(options: { inspect?: boolean } = {}) {
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
     onboarding: createTestOnboarding(engine, config).onboarding,
     terminals,
+    ...(options.refiner ? { refiner: options.refiner } : {}),
   });
   running.push(async () => {
     await terminals.stop();
@@ -269,6 +270,51 @@ describe('services over HTTP', () => {
     );
   });
 
+  test('refines the suggestions when asked, leaving out a name the project already has', async () => {
+    const answers: unknown[] = [
+      {
+        services: [
+          {
+            index: 0,
+            name: 'gateway',
+            command: 'npm run dev',
+            previewUrl: '',
+            portVariable: '',
+            recommended: true,
+          },
+          {
+            index: 1,
+            name: 'web',
+            command: 'npm run dev -- --port $PORT',
+            previewUrl: 'http://localhost:{port}',
+            portVariable: '',
+            recommended: true,
+          },
+        ],
+      },
+    ];
+    const refiner = new ServiceRefiner(<T>() => Promise.resolve((answers.shift() ?? null) as T | null));
+    const { read, projectId, repoPath, terminals } = await start({ refiner });
+    for (const app of ['api', 'site']) {
+      mkdirSync(join(repoPath, `apps/${app}`), { recursive: true });
+      writeFileSync(join(repoPath, `apps/${app}/package.json`), JSON.stringify({ scripts: { dev: 'x' } }));
+    }
+    writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
+    terminals.addService(projectId, { name: 'gateway', cwd: repoPath, command: 'x', env: {}, ...NO_PREVIEW });
+    const plain = await read<{ suggestions: ServiceSuggestion[]; refined: boolean }>(
+      `/api/services/suggestions?projectId=${projectId}`
+    );
+    expect(plain.refined).toBe(false);
+    expect(plain.suggestions.map((each) => each.name)).toEqual(['api', 'site']);
+    const refined = await read<{ suggestions: ServiceSuggestion[]; refined: boolean }>(
+      `/api/services/suggestions?projectId=${projectId}&refine=1`
+    );
+    expect(refined.refined).toBe(true);
+    expect(refined.suggestions.map((each) => [each.name, each.command, each.previewUrl])).toEqual([
+      ['web', 'npm run dev -- --port $PORT', 'http://localhost:{port}'],
+    ]);
+  });
+
   test('suggests, adds, starts, stops, restarts, edits and removes a service', async () => {
     const { post, read, projectId, repoPath, terminals } = await start();
     mkdirSync(join(repoPath, 'apps/api'), { recursive: true });
@@ -284,6 +330,8 @@ describe('services over HTTP', () => {
         command: 'npm run dev',
         source: 'package',
         recommended: true,
+        previewUrl: null,
+        portVariable: 'PORT',
       },
     ]);
     const added = await post('/api/services', {

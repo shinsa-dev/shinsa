@@ -1,6 +1,7 @@
 import type { OnboardingCheck } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
+import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { SETTING_ROW, SettingsCard, TOKEN_TEXT } from '@/components/settings/group.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
@@ -18,6 +19,14 @@ export function OnboardingChecks({ checks }: { checks: OnboardingCheck[] }) {
               {check.fix && (
                 <span className='text-2xs text-fg-3'>
                   <InlineMarkdown text={check.fix} />
+                </span>
+              )}
+              {check.command && (
+                <span className='mt-1 flex min-w-0 items-center gap-1.5'>
+                  <code className='selectable min-w-0 truncate font-mono text-2xs text-fg-4'>
+                    {check.command}
+                  </code>
+                  <CopyButton text={check.command} />
                 </span>
               )}
             </span>

@@ -3,8 +3,10 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { FileCard } from '@/components/chat/file-card.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
 import { ATTACHMENT_CORNER } from '@/components/layout/surface/card.ts';
+import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
+import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { type SettlingPhase, useSettling } from '@/hooks/use-settling.ts';
-import { canOpenAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
+import { canOpenAttachment, canPlayAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { describeMessageStatus, isDelivering } from '@/lib/tasks/messages.ts';
@@ -13,14 +15,46 @@ const CLAMP_LINES = 12;
 
 const CLAMP_CHARACTERS = CLAMP_LINES * 90;
 
-function FileChip({ attachment }: { attachment: ChatAttachment }) {
+function FileChip({
+  attachment,
+  viewer,
+}: {
+  attachment: ChatAttachment;
+  viewer: { open: () => void; originRef: (element: HTMLElement | null) => void } | null;
+}) {
   return (
     <FileCard
       name={attachment.name}
       mimeType={attachment.mimeType}
       size={attachment.size}
-      href={canOpenAttachment(attachment) ? attachment.url : null}
+      href={!viewer && canOpenAttachment(attachment) ? attachment.url : null}
+      onOpen={viewer?.open}
+      originRef={viewer?.originRef}
     />
+  );
+}
+
+function Files({ files }: { files: ChatAttachment[] }) {
+  const viewer = useImageViewer();
+  const videos = files.filter(canPlayAttachment);
+  return (
+    <div className='flex max-w-4/5 flex-wrap justify-end gap-2'>
+      {files.map((attachment, index) => {
+        const at = videos.indexOf(attachment);
+        return (
+          <FileChip
+            // biome-ignore lint/suspicious/noArrayIndexKey: attachments are positional
+            key={`${attachment.url}-${index}`}
+            attachment={attachment}
+            viewer={at < 0 ? null : { open: () => viewer.show(at), originRef: viewer.recordOrigin(at) }}
+          />
+        );
+      })}
+      <ImageViewer
+        images={videos.map((video) => ({ src: video.url, caption: video.name, media: 'video' }))}
+        viewer={viewer}
+      />
+    </div>
   );
 }
 
@@ -36,14 +70,7 @@ function Attachments({ attachments }: { attachments: ChatAttachment[] }) {
           className='max-w-4/5 justify-end'
         />
       )}
-      {files.length > 0 && (
-        <div className='flex max-w-4/5 flex-wrap justify-end gap-2'>
-          {files.map((attachment, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: attachments are positional
-            <FileChip key={`${attachment.url}-${index}`} attachment={attachment} />
-          ))}
-        </div>
-      )}
+      {files.length > 0 && <Files files={files} />}
     </>
   );
 }

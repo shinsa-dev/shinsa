@@ -55,6 +55,7 @@ import {
   recordPushRetry,
   recordShippingStep,
   recordUpdateConflict,
+  recordUploads,
 } from './pull-requests.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
@@ -246,6 +247,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
       return recordPullRequestReadFailure(decider, command);
+    case 'evidence.record_uploads':
+      return recordUploads(decider, command);
     case 'run.link':
       return linkRun(decider, command);
     case 'run.end':

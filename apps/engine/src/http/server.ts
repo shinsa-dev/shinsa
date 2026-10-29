@@ -8,6 +8,7 @@ import {
   createTerminalRoutes,
   createTerminalSockets,
   readTerminalSocketId,
+  type ServiceRefiner,
   type TerminalSocketData,
   type Terminals,
 } from '../terminals/index.ts';
@@ -29,6 +30,7 @@ const ATTACHMENT_UPLOAD_PATH = '/api/attachments';
 export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
   terminals?: Terminals;
+  refiner?: ServiceRefiner;
 }
 
 type ServerSocketData = SocketData | TerminalSocketData;
@@ -96,7 +98,7 @@ export function startServer(context: HttpContext) {
   const { terminals } = context;
   const handleApi = createApiRoutes(
     context,
-    terminals ? createTerminalRoutes(context.engine, terminals) : []
+    terminals ? createTerminalRoutes(context.engine, terminals, context.refiner ?? null) : []
   );
   const hub = createSocketHub(
     context.engine,

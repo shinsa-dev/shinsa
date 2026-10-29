@@ -1,15 +1,24 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { type UpdateActions, UpdateSettings, UpdatesGroup } from '@/components/settings/updates.tsx';
+import { refreshHealth } from '@/lib/connection/health.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import { installDesktop } from '../../support/desktop.ts';
+import { startFakeOnboarding } from '../../support/onboarding.ts';
 
 let fake: ReturnType<typeof installDesktop> | null = null;
 
-afterEach(() => {
+let server: ReturnType<typeof startFakeOnboarding> | null = null;
+
+afterEach(async () => {
   fake?.restore();
   fake = null;
+  server?.stop();
+  server = startFakeOnboarding({ 'GET /api/health': { answer: { ok: true, seq: 1, problems: [] } } });
+  await act(() => refreshHealth());
+  server.stop();
+  server = null;
 });
 
 function renderGroup(update: DesktopUpdate, version = '1.3.0-beta.2', channel: UpdateChannel = 'beta') {
@@ -33,6 +42,12 @@ describe('the Updates settings', () => {
     expect(screen.getByText('1.3.0-beta.2')).toBeTruthy();
     expect(screen.getByText('1.3.0-beta.3 is ready')).toBeTruthy();
     expect(screen.getByText('Beta channel · Updates install when you quit Shinsa')).toBeTruthy();
+    const note = screen.getByText(
+      'Updating or quitting the app never stops your agents. After an update the engine restarts into the new version on its own, and agents pick up where they were.'
+    );
+    expect(note.previousElementSibling?.textContent).toContain('Update channel');
+    expect(note.parentElement?.tagName).toBe('SECTION');
+    expect(screen.queryByText('Engine')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
     expect(actions.check).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Restart to update' }));
@@ -89,6 +104,37 @@ describe('the Updates settings', () => {
     renderGroup({ status: 'none' });
     expect(screen.queryByRole('button', { name: 'Restart to update' })).toBeNull();
     expect(screen.getByText('Update channel')).toBeTruthy();
+  });
+
+  it('shows the engine moving to the new version in one line', () => {
+    render(
+      <UpdatesGroup
+        app={{ version: '1.3.0-beta.3', channel: 'beta', update: { status: 'current' } }}
+        engine={{ version: '1.3.0-beta.2', label: 'Moving to 1.3.0-beta.3…', tone: 'neutral' }}
+        actions={{ check: mock(), install: mock(), changeChannel: mock(), answerDowngrade: mock() }}
+      />
+    );
+    expect(screen.getByText('Engine')).toBeTruthy();
+    expect(screen.getByText('1.3.0-beta.2')).toBeTruthy();
+    expect(screen.getByText('Moving to 1.3.0-beta.3…')).toBeTruthy();
+  });
+
+  it('in the app reads the engine’s version from its health', async () => {
+    fake = installDesktop();
+    fake.bridge.version = '1.2.0';
+    fake.bridge.protocol = 2;
+    fake.bridge.update = { status: 'current' };
+    server = startFakeOnboarding({
+      'GET /api/health': { answer: { ok: true, seq: 1, problems: [], version: '1.1.0', protocol: 2 } },
+    });
+    await act(() => refreshHealth());
+    render(
+      <TooltipProvider>
+        <UpdateSettings />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Moving to 1.2.0…')).toBeTruthy();
+    expect(screen.getByText('1.1.0')).toBeTruthy();
   });
 
   it('in a browser points to the app', () => {

@@ -63,6 +63,11 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
           'To run one of the project’s services for this task, such as its dev server, in this task’s worktree, call `list_services` and `run_service`; read its output with `list_services` and the service’s name. A run reports its preview URL, on a port of its own. Stop the services you started once you no longer need them, except a preview you attach for the review: it runs until the task is finished.',
         ]
       : []),
+    ...(tools.includes('add_service')
+      ? [
+          'When the project has no service you need, such as the dev server that shows your change, add it with `add_service`: a name, the folder in this task’s repository, the command and, for a server, the preview URL with `{port}` where the run’s port goes. The human sees it under Services and can run it too. Add only what someone would keep running; never a one-off command such as a test or a build.',
+        ]
+      : []),
   ];
 }
 

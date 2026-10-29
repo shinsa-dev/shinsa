@@ -435,6 +435,7 @@ export interface FakePullRequest {
   unresolved: number;
   mergedWith: string | null;
   mergeCommit?: string | null;
+  body?: string;
   checkRuns?: { name: string; status: string; conclusion: string | null; required: boolean }[];
 }
 
@@ -444,6 +445,7 @@ interface GitHubState {
   pulls: FakePullRequest[];
   calls: string[][];
   workflows?: Record<string, string>;
+  repositoryId?: number;
 }
 
 export class FakeGitHub {
@@ -471,14 +473,35 @@ export class FakeGitHub {
     return this.#read().calls;
   }
 
-  configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows'>>) {
-    this.#write({ ...this.#read(), ...patch });
+  #change(apply: (state: GitHubState) => GitHubState) {
+    const lock = `${this.path}.lock`;
+    const deadline = performance.now() + 20_000;
+    for (;;) {
+      try {
+        mkdirSync(lock);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      if (performance.now() > deadline) throw new Error(`${lock} stayed locked.`);
+      Bun.sleepSync(2);
+    }
+    try {
+      this.#write(apply(this.#read()));
+    } finally {
+      rmSync(lock, { recursive: true, force: true });
+    }
+  }
+
+  configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows' | 'repositoryId'>>) {
+    this.#change((state) => ({ ...state, ...patch }));
   }
 
   update(number: number, patch: Partial<FakePullRequest>) {
-    const state = this.#read();
-    state.pulls = state.pulls.map((pull) => (pull.number === number ? { ...pull, ...patch } : pull));
-    this.#write(state);
+    this.#change((state) => ({
+      ...state,
+      pulls: state.pulls.map((pull) => (pull.number === number ? { ...pull, ...patch } : pull)),
+    }));
   }
 }
 
@@ -711,9 +734,9 @@ export class World {
   }
 
   async until(describe: string, predicate: () => boolean, timeoutMs = 15_000) {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = performance.now() + timeoutMs;
     while (!predicate()) {
-      if (Date.now() > deadline) {
+      if (performance.now() > deadline) {
         const tasks = Object.values(this.state.tasks).map(
           (task) =>
             `${task.title}: ${task.stage} (${task.stageReason}) gates=${this.gates(task.id)

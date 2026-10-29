@@ -4,10 +4,12 @@ import {
   describeDefaultChanged,
   describeDuplicate,
   describeImport,
-  describeImported,
   describeRemoval,
   describeRerun,
   describeRunsOn,
+  describeSharedLogin,
+  IMPORT_ICON,
+  isSharedLogin,
   listAccountChoices,
   listRerunChoices,
   resolveAccountChoiceValue,
@@ -100,40 +102,32 @@ describe('binding a task to an account', () => {
 });
 
 describe('imports and switches', () => {
-  it('says which copy of a login added twice Shinsa runs on', () => {
-    const accounts = [
-      createAccount({ id: 'mine', origin: 'claude' }),
-      createAccount({ id: 'first', origin: 'login' }),
-    ];
-    expect(describeDuplicate({ id: 'copy', email: 'me@example.com', keptId: 'mine' }, accounts)).toBe(
-      'Your Claude Code login is now me@example.com, which is also one of your accounts. Shinsa runs it from your Claude Code login and leaves the other copy alone.'
-    );
-    expect(describeDuplicate({ id: 'copy', email: 'me@example.com', keptId: 'first' }, accounts)).toBe(
+  it('says a login added twice runs from one copy', () => {
+    expect(describeDuplicate({ id: 'copy', email: 'me@example.com', keptId: 'first' })).toBe(
       'me@example.com is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.'
     );
   });
 
-  it('names each login it can import', () => {
-    expect(describeImport({ origin: 'claude', email: 'me@example.com', plan: 'max' })).toEqual({
-      label: 'Use your Claude Code login',
-      detail: 'me@example.com',
-    });
+  it('offers each claude-swap account as a sign-in', () => {
     expect(describeImport({ origin: 'cswap', email: 'two@example.com', plan: null })).toEqual({
-      label: 'Import two@example.com from claude-swap',
-      detail: null,
+      label: 'Sign in to two@example.com',
+      detail: 'From claude-swap',
     });
+    expect(IMPORT_ICON).toBe('IconArrowsRepeatRightLeft');
   });
 
-  it('confirms an import, and warns that a claude-swap login must not be refreshed by both', () => {
-    expect(describeImported({ origin: 'claude', email: 'me@example.com', plan: 'max' })).toEqual({
-      title: 'Added your Claude Code login.',
-      description: null,
-    });
-    expect(describeImported({ origin: 'cswap', email: 'two@example.com', plan: null })).toEqual({
-      title: 'Imported two@example.com.',
-      description:
-        'Remove it from claude-swap or turn off claude-swap’s auto-switch, so only Shinsa refreshes this login.',
-    });
+  it('explains why a login Shinsa shares with another program needs signing in, and which logins are shared', () => {
+    const copied = createAccount({ id: 'copy', origin: 'cswap', email: 'two@example.com' });
+    const mine = createAccount({ id: 'mine', origin: 'claude', email: 'me@example.com' });
+    expect(isSharedLogin(copied)).toBe(true);
+    expect(isSharedLogin(mine)).toBe(true);
+    expect(isSharedLogin(createAccount({ id: 'own', origin: 'login' }))).toBe(false);
+    expect(describeSharedLogin(copied)).toBe(
+      'two@example.com is a copy of claude-swap’s login, so each one signs the other out. Sign in to it again from its menu to give Shinsa a login of its own.'
+    );
+    expect(describeSharedLogin(mine)).toBe(
+      'me@example.com runs on your Claude Code login, which Claude Code and claude-swap change and refresh too. Sign in to it again from its menu to give Shinsa a login of its own.'
+    );
   });
 
   it('removing your Claude Code login only stops using it; removing another account signs it out', () => {

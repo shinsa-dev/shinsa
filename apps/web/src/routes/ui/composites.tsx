@@ -397,7 +397,7 @@ export function CompositeSpecimens() {
           </div>
         </Specimen>
       )}
-      <Specimen label='EngineCard · the app is newer than the engine, older than it, or waits for agents'>
+      <Specimen label='EngineCard · the app is older than the engine, or the engine could not restart'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           {ENGINE_SAMPLES.map(({ key, view }) =>
             view.banner ? (
@@ -416,10 +416,9 @@ export function CompositeSpecimens() {
 const ENGINE_APP = { version: '0.6.0', protocol: 2 };
 
 const ENGINE_SAMPLES = [
-  { key: 'waiting', health: { version: '0.5.2', protocol: 2, busy: true, restart: 'idle' as const } },
-  { key: 'choose', health: { version: '0.5.2', protocol: 1, busy: true, restart: null } },
-  { key: 'update', health: { version: '0.7.0', protocol: 3, busy: false, restart: null } },
-].map(({ key, health }) => ({
+  { key: 'update', health: { version: '0.7.0', protocol: 3 }, failure: null },
+  { key: 'failed', health: { version: '0.5.2', protocol: 2 }, failure: 'Stop it and start it again.' },
+].map(({ key, health, failure }) => ({
   key,
-  view: resolveEngineView(ENGINE_APP, { ok: true, seq: 1, problems: [], ...health }, null),
+  view: resolveEngineView(ENGINE_APP, { ok: true, seq: 1, problems: [], ...health }, failure),
 }));

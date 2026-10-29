@@ -35,4 +35,22 @@ describe('Input', () => {
       expect.arrayContaining(['before:bg-input', 'enabled:hover:before:bg-input-hover/80'])
     );
   });
+
+  it('gives a select’s chevron the 14px of the buttons beside it, at either size', () => {
+    const view = render(
+      <>
+        <Select>
+          <SelectTrigger aria-label='Default' />
+        </Select>
+        <Select>
+          <SelectTrigger size='sm' aria-label='Small' />
+        </Select>
+      </>
+    );
+    for (const name of ['Default', 'Small']) {
+      expect(view.getByRole('combobox', { name }).className.split(' ')).toContain(
+        '[--icon-size:var(--icon-size-sm)]'
+      );
+    }
+  });
 });

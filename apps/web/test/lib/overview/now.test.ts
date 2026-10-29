@@ -119,7 +119,7 @@ describe('describeReviewFacts', () => {
     const task = createTask({
       id: 'task-1',
       checkResults: [check('pass'), check('pass'), check('fail')],
-      findings: [{ severity: 'suggestion', file: null, line: null, message: 'Consider a guard.' }],
+      findings: [{ severity: 'optional', file: null, line: null, message: 'Consider a guard.' }],
     });
     expect(describeReviewFacts(task, false)).toBe('2 of 3 checks passed · agent review left 1 note');
   });
@@ -131,7 +131,7 @@ describe('describeReviewFacts', () => {
   it('counts several notes', () => {
     const findings = [
       { severity: 'blocking' as const, file: null, line: null, message: 'One' },
-      { severity: 'suggestion' as const, file: null, line: null, message: 'Two' },
+      { severity: 'optional' as const, file: null, line: null, message: 'Two' },
     ];
     expect(describeReviewFacts(createTask({ id: 'task-1', findings }), false)).toBe(
       'Agent review left 2 notes'

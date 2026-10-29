@@ -45,7 +45,7 @@ Only these, and they win over anything below:
    notice rows and context meter, the schedule and notification rows, the MCP, plugin and skill
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
    chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
-   a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
+   a blocking finding, an optional finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
    Checks list in each state (`routes/ui/checks.tsx`, on `routes/ui/sample-checks.ts`: running, all passed,
    failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
    pull request, a linked test, the plan's Checks, check activity and Always run before review), the
@@ -177,7 +177,9 @@ Only these, and they win over anything below:
      long output capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
-     the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
+     the chat and in evidence: attachments (sent ones, and the image chips in the composer and the new task form, so
+     you can look at a draft before sending it), tool results, evidence, and an evidence or attached recording (a sent
+     video file chip opens it there instead of a new tab), which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
      and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
      CSS pixels) is laid out at that width, never at its file's: a 2560px shot taken at 1280px shows 1280px wide, two
@@ -215,12 +217,13 @@ Only these, and they win over anything below:
      out under `.dark`, so its chrome reads the same on the black in both themes (a `.dark` region reads dark aliases too:
      `globals.css` declares every alias, `foreground`, `popover-foreground`, `muted-foreground`, `primary-*`, `code-*`,
      on `:root, .dark`, so it resolves against the region's tokens): Close, Previous and Next are the
-     kit's `Button` (`outline`, `icon`, 26px with a 16px glyph), and the bar at the bottom is a `rounded-popup`
+     kit's `Button` (`outline`, `icon`, 26px with a 14px glyph), and the bar at the bottom is a `rounded-popup`
      `bg-popover` `shadow-3` strip (`h-8`, `text-xs`, `popover-foreground`; never a pill) with the caption (attachment name, evidence
      title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
      parts (Before, After, or each state's label) that switches the image in place.
    - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
-     attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
+     attachments sit above it as thumbnails, or as file chips when the browser can't load the path; a video's chip
+     opens the image viewer (`cursor-zoom-in`, `IconExpandSimple` on hover), every other chip a new tab.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
      outside its box so the wash wraps the full-width content instead of sitting flush with it; a delegation card
      opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash. The run's
@@ -620,8 +623,8 @@ Only these, and they win over anything below:
       dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
-      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts for a moment and agents keep
-      working."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
+      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
+      own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
@@ -1114,47 +1117,74 @@ Only these, and they win over anything below:
     - **The steps along the top** (`OnboardingStepper`, items from `listStepperItems`): one 26px segmented `Choice`
       with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
       slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
-      answered has the accent checkmark before its label (`Choice` items take `checked`) and its answer as the
-      tooltip ("Opus 5.5"); a step you reached but have not answered again (after going back) is a plain segment;
-      both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
-      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 2 of 6: Model",
+      answered has no mark, only its answer as the tooltip ("Opus 5.5 · Squash · Plan first"), and so has a step
+      you reached but have not answered again (after going back); both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
+      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 3 of 5: Defaults",
       `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
       height on every step and on the finished page.
     - **Each step** (`OnboardingSection`, shared with the finished page) is the `PageHeading` (the question itself as
-      the `text-base` title, "How should pull requests be merged?", its one line of description in `text-xs` `fg-2`
+      the `text-base` title, "How should agents work?", its one line of description in `text-xs` `fg-2`
       under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
-      action (Add account, Check again) and the primary button with the step's label ("Continue", "Skip for now",
-      "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
-      It enters with a 0.5rem slide and a fade (220ms, the strong ease-out; from the left when you went back), only a
-      fade under reduced motion; nothing leaves, so two steps never overlap.
+      action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
+      "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
+      The first step you open, and the finished page when you load it, are simply there. Moving to another step
+      slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
+      (the other way when you go back), both the full width of the column and 360ms on the standard curve
+      (`cubic-bezier(0.4, 0, 0.2, 1)`: it eases in and out without the long settle of a strong ease-out), and
+      neither fades on its own: the track masks only its 24px edges, the column's padding, so a step fades only as
+      it crosses the edge and nothing at rest is ever masked. The mask stays on, so starting a slide adds no layer. The track's one column is `minmax(0, 1fr)`, so a long line truncates inside the column
+      instead of widening the step past the track's clip. The step leaving is `inert` and goes when its slide ends.
+      Under reduced motion the steps swap at once.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
       like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
-      marked with the accent `SelectedMark` at the row's end, as a select or menu marks the current value. The hover
-      and the keyboard highlight are the menus' one surface, which slides to the row on the movement clock. Clicking a
-      one-answer option answers it at once and moves on, a spinner in the mark's slot while it saves; nothing starts
-      chosen on a step you have not answered, so there is no Continue until you go back to one you have, where your
-      answer is marked and Continue keeps it. The list takes focus when the step opens: the arrows, Home and End move
-      the highlight (`aria-activedescendant`) and Enter or Space picks, so setup runs from the keyboard alone; these
-      keys belong to the list, not the page (10).
+      marked with the accent `SelectedMark` at the row's end, centred on the whole row, as a select or menu marks the
+      current value. The hover and the keyboard highlight are the menus' one surface, which slides to the row on the
+      movement clock; in a pick-one list it rests on your pick and slides back to it when the pointer leaves. The first
+      list takes focus when the step opens: the arrows, Home and End move the highlight (`aria-activedescendant`) and
+      Enter or Space picks, so setup runs from the keyboard alone; these keys belong to the list, not the page (10).
+    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Large tasks, each a
+      `SectionLabel` over its list card, 16px apart. The recommended choice of each starts picked, so one Continue
+      keeps them all; a click only moves that list's mark, and nothing is sent until Continue.
+    - **Projects** (`OnboardingProjects`) are one card of the projects Shinsa suggests, all kept: a row each with a
+      `sm` `Checkbox`, the project's colour dot and its name in a `sm` `Input` you can rename, and under it the count,
+      the folder and the first repositories in `text-2xs` `fg-2` ("29 repositories · ~/Developer/Superwall · docs,
+      ios, pwn and 26 more"). A quiet Repositories button opens the project's repositories as checkbox rows, to leave
+      one out ("2 of 3 repositories"). The primary button counts what you keep ("Create 6 projects", "Create the
+      project", "Continue without projects"), is off while a kept project has no name, and shows its spinner while the
+      projects are made; the rows are locked meanwhile. Under the list, outside any card, sits a plain chat box for a change in words
+      (`OnboardingProjectsChat`), with no earlier messages shown: a `default` field
+      ("Ask for a change, like …") with a secondary Ask button, no icon, which sends the request with your edits and
+      shows its spinner; the box clears once the change is made and keeps your words when it is not. The projects you
+      already made are a read-only card (`OnboardingFiledProjects`: the dot, the name, and the count, folder and first
+      repositories), under an "Already set up" `SectionLabel` when new suggestions are shown above it, and alone when
+      you come back to the step after making them.
     - **Folders** pick several: the found folders with their repository counts, each with a `sm` `Checkbox` in the
       row's icon slot, the folders you chose already checked (the one with the most repositories on a first run), and
       as the card's last row a `sm` path field with a secondary Add folder (Settings → Repository folders' row), which
-      adds the folder to the list checked. Continue is off with nothing checked.
-    - **Accounts** are already imported when the step opens (the server does it, never a question): one Settings
-      card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where it came from
-      and its plan in `text-2xs` `fg-2`: "Your Claude Code login · Max plan", "From claude-swap"), "Added" on the ones
-      this setup imported, Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
-      words). Until the socket has the accounts the card holds one row with a delayed `LoadingLine`, never "no login
-      found". Add account (Sign in to Claude with none) is in the footer and opens the sign-in dialog. An import that
-      failed is an amber line under the card.
+      adds the folder to the list checked. Continue is off with nothing checked. A folder macOS keeps private is never
+      an error: a Settings card above the list (`OnboardingAccess`, the lock icon in `fg-3`, "macOS keeps ~/Documents
+      private" in `text-xs` `fg-4` over why in `text-2xs` `fg-3`) offers Open System Settings (Full Disk Access),
+      Check again and Leave it out, `sm` secondary buttons; your picks stay checked, and coming back to the window
+      checks again by itself (`useWindowReturn`).
+    - **Accounts** are the ones you signed in to, never imported for you: one Settings card of your Claude accounts
+      from the socket, each a `PathRow` (the Claude mark, the email, where it came from and its plan in `text-2xs`
+      `fg-2`: "Signed in through Shinsa · Max plan", "From claude-swap"), Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
+      words), then Codex's login as a row of its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus
+      plan" or "Not signed in", and the `CopyButton` of `codex login` while it is not). Until the socket has the
+      accounts the card holds one row with a delayed `LoadingLine`, never "no login found". Add account in the footer
+      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, and so does
+      each claude-swap account ("Sign in to ‹email›", "From claude-swap"), which signs in to that email; a Codex
+      account copies `codex login` to run in a terminal (off once Codex is signed in, with how it is). Coming back to
+      the window reads the accounts again, so a Codex login you finished in a terminal shows.
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
-      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3`, and its
-      version or state at the right in `TOKEN_TEXT`. Check again is in the footer. An optional check that fails (codex
+      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
+      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in
+      `TOKEN_TEXT`. Check again is in the footer, and coming back to the window checks again by itself. An optional check that fails (codex
       and its sign-in) is a skipped row, never a fail, and never holds setup back.
     - **Finished** (`OnboardingFinished`) is "Shinsa is ready" with its line, what you set up as `SettingRow`s in a
-      Settings card (Folders, Model, Merging, Plans, Accounts, the answer at the right in `fg-3`) and Go to Home.
+      Settings card (Folders, Projects, Defaults, Accounts, the answer at the right in `fg-3`) and Go to Home.
       Opening `/onboarding` once the server's run is finished (setup done and not started again) goes Home instead.
     Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
     as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,
@@ -1204,10 +1234,13 @@ Only these, and they win over anything below:
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
       "Or write your own answer."
-    - **Review verdicts** (`finding-verdicts.tsx`): each finding opens on `NoteHead` (34, The review card): a
-      full-width row with the severity in `red-text` or `fg-2` (the file as a mono chip when there is no snippet) over
-      the title on the left and the Fix / Dismiss `Choice` on the right, then the message, the file row and the
-      suggested fix full width below; blocking findings start on Fix. The primary action follows the verdicts:
+    - **Review verdicts** (`finding-verdicts.tsx`): each finding is a `FindingNote` (34, The review card): the
+      severity as plain text in its tone (Blocking `red-text`, Should fix `amber-text`, Optional `fg-2`; no dot; the file
+      as a mono chip when there is no snippet) over the issue (the message) on the left and the Fix / Dismiss `Choice`
+      on the right, then the snippet and the proposed fix full width below. The reviewer's title is not shown: the
+      message says the same thing in full. Blocking and Should fix
+      findings start on Fix and Optional ones on Dismiss (`SEVERITY_VERDICT`, `lib/review/findings.ts`), so the default
+      is the reviewer's ranking. The primary action follows the verdicts:
       "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip says so, 13),
       Approve changes when all are dismissed. The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
@@ -1345,7 +1378,8 @@ Only these, and they win over anything below:
       so the card does not repeat the page's name, `ACCOUNT_LABEL.section`) is one section for every login agents
       run on, whatever the provider (`components/settings/accounts.tsx`; the old `#agent-usage`, `#usage` and
       `#codex` links land on it). Its header has a secondary icon button "Refresh usage" (it
-      refreshes every account) and Add account, a menu when Claude Code or claude-swap logins can be imported,
+      refreshes every account) and Add account, a menu when claude-swap accounts are offered ("Sign in to ‹email›"
+      with "From claude-swap", which opens the sign-in dialog for that email, since Shinsa never copies a login),
       otherwise it signs in straight away; with no account the card holds one sentence and that button. Each
       Claude account is a `UsageAccountBlock` (`usage-account.tsx`, a `SettingsBlock`: 15, Cards), in order, 6px
       apart: a 32px header row with the account
@@ -1359,10 +1393,11 @@ Only these, and they win over anything below:
       is never signed out). Under it, on the block's shelf, one 40px row per usage window: label over "Resets in 3h" (`ResetTime`, the
       exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
       `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
-      muted line, "No usage reported yet." before the first read. Importing from claude-swap confirms with a
-      toast that says to take the login out of claude-swap, since refresh tokens are single-use. A login in your
-      accounts twice shows once; after the accounts, a muted `SettingsEmpty` row says which copy Shinsa runs it from
-      (`describeDuplicate`: "Your Claude Code login is now ‹email›, which is also one of your accounts. …").
+      muted line, "No usage reported yet." before the first read. An account that still runs on your Claude Code
+      login or a copy of claude-swap's (`docs/engine.md` → A shared login) reads "Needs sign-in" and a muted
+      `SettingsEmpty` row after the accounts says why and to sign in to it again from its menu
+      (`describeSharedLogin`). A login in your accounts twice shows once; after the accounts, a muted
+      `SettingsEmpty` row says Shinsa runs it from one copy (`describeDuplicate`).
       Every provider with a sign-in of its own (Codex today) follows in the same `UsageAccountBlock`
       (`ProviderLoginBlock` in `providers.tsx`; the header from `resolveProviderHeader`, Claude's from
       `resolveAccountHeader`), so its row reads like an account's: the provider and its account (`AccountName`,
@@ -1511,8 +1546,7 @@ Only these, and they win over anything below:
       cause) and body, Sign in (primary) opens the dialog for
       that account, and Retry anyway / Cancel task are the footer's quiet links. For a login Claude could not
       refresh the body names the account, the others that need signing in too, and what to run, from where the login
-      comes from ("…or sign in to Claude Code as a@b.com and run `cswap add`: Shinsa takes the new login from
-      claude-swap.", "…or run `claude auth login` in a terminal."), and the gate closes by itself once that login
+      comes from ("…so Shinsa has a login of its own." for a shared login), and the gate closes by itself once that login
       works again (`docs/engine.md` → A login Claude could not refresh). The card reads the gate's provider
       (`resolveSignInProvider(gate)` over `gate.provider`: `claude` is a Claude account, anything else a provider with a
       sign-in of its own). A gate for such a provider (Codex) has no Sign in: Shinsa never signs Codex in. Its
@@ -1646,13 +1680,12 @@ Only these, and they win over anything below:
       then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
       `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
-      banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
-      (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
-      ("The engine restarts into Shinsa 0.5.0 once agents are idle."), the orange triangle when you must act ("Shinsa
-      0.5.0 needs its engine restarted."), and `sm` buttons at the end, the last `primary` as macOS orders them: one
-      alone (Restart now, Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents are idle
-      `primary`. No dismiss: it goes when
-      the versions match. `/ui` shows `EngineCard` in its three states.
+      banner, the same `CARD` row, shown only in the desktop app and only when you must act: the orange triangle
+      and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
+      Shinsa, or "Restart Shinsa’s engine to finish updating to 0.5.0." and the reason when the restart failed. An
+      engine older than the app is restarted at once, without a banner (the page asks for `when: now`, working
+      agents pick up where they were); while it moves, Settings → Updates says so in its Engine row. No dismiss: it
+      goes when the versions match. `/ui` shows `EngineCard` in its two states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
       scales in (`fade-in-0 zoom-in-95`, 200 ms), its tooltip names the version and says the app restarts for a
@@ -1668,15 +1701,20 @@ Only these, and they win over anything below:
       update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
-      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: a select
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". While the engine and the app
+      differ, an Engine row of one line: the engine's version (`TOKEN_TEXT`) and "Moving to 1.3.1…", or in orange
+      "Newer than this app" or "Restart it to move to 1.3.1" (`resolveEngineView`'s `status`). Update channel: a select
       of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
       "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
       pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
       pass. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
       place with the same data and engine. ⌘K's Change a setting has Update channel with the same three in the app.
       `/ui` → Settings shows Stable up to date, Beta with an update ready, a beta switched to Stable offered the
-      latest stable, Canary downloading the next canary, a downloaded beta being prepared, and a beta restarting to
-      install.
+      latest stable, Canary downloading the next canary, a downloaded beta being prepared, a beta restarting to
+      install, and the engine moving to the version just installed. Under the card, as the group's `description`
+      (`SettingsGroup`, a `2xs` `fg-2` line), the one thing people fear about updating: "Updating or quitting the app
+      never stops your agents. After an update the engine restarts into the new version on its own, and agents pick
+      up where they were."
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 
@@ -1878,11 +1916,23 @@ Only these, and they win over anything below:
       Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
       the engine stops answering for 15 s while you work (`apps/desktop/src/lib/engine.ts`,
       `static/waiting.html`).
-    - **The window**: closing it hides it (the page keeps its socket, so the badge and notifications go on), the
-      Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the engine. Its size and place
-      are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own (Settings… ⌘,
-      opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no other shortcut
-      and no menu bar icon.
+    - **The window**: closing it hides it and the Dock icon with it, so the app lives on in the menu bar (the page
+      keeps its socket, so notifications go on); the menu bar item's Open Shinsa, a `shinsa://` link, a
+      notification or opening Shinsa again brings both back, and ⌘Q quits the app and never stops the engine. Its
+      size and place are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own
+      (Settings… ⌘, opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no
+      other shortcut.
+    - **The menu bar item** shows while the app runs (`main/tray.ts`, its text in `lib/tray.ts`): the Shinsa mark at
+      14 of the 18 points as a template image (`static/trayTemplate.png`, written by `scripts/icon.ts`), so macOS
+      draws it in the menu bar's own colour, with the number of decisions waiting for you beside it (none when
+      there are none). Its menu: the engine's state as a disabled first line ("The engine is running", or "The
+      engine is running. 2 agents are working" from `working` in `/api/health` when the queue cannot be read, or
+      "The engine is not answering"), "Moves to the new version once
+      agents hand over" under it while a restart waits; then, from `/api/queue`, a Needs you (3) header over each
+      decision and a Working (2) header over each working task, each task its title over what it waits for or is
+      doing ("Review · LOC-4", "Building · LOC-9"), opening the task in the window, the first 5 of each and "2 more"
+      opening Home; then Open Shinsa, and Quit Shinsa over the line "The engine and your agents keep running". It is
+      read with the app's 5 s engine check.
     - **It is called Shinsa** in the menu bar, its first menu (About Shinsa, Hide Shinsa, Quit Shinsa), the About
       panel, the Dock and notifications, packaged and in development alike. The menu bar and the Dock read the
       bundle's `CFBundleName`, so `bun run dev` runs a copy of Electron.app renamed to `.electron/Shinsa.app`
@@ -2100,9 +2150,9 @@ Only these, and they win over anything below:
       (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go
       into the round's next commit, and the agent hears which files you edited (`docs/engine.md` → Your edits).
     - **Inline.** Findings sit under their last line as the review card (`ReviewNote`, 34) in its compact form: the
-      author (Agent review), the tone (Blocking red, Suggestion amber), the title, the message as markdown and the
-      suggested fix, with no snippet or place (the line above is the place); at a review gate the row of its label and
-      title carries the same Fix / Dismiss `Choice` on its right as the Review tab and the Overview (`NoteHead`,
+      severity in its tone's text (Blocking red, Should fix amber, Optional neutral), the issue as markdown and the
+      proposed fix, with no snippet or place (the line above is the place); at a review gate the row of the severity and
+      the issue carries the same Fix / Dismiss `Choice` on its right as the Review tab and the Overview (`FindingNote`,
       `components/review/verdict-choice.tsx`, on the
       one review draft, so a verdict set anywhere shows everywhere). Each spot's lines carry their mark in the spot
       gutter (above) and the selected one the `primary-a1` wash. Every note is rendered by React into an element
@@ -2196,8 +2246,8 @@ Only these, and they win over anything below:
       lead with a label (a spot's attention). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
       two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
       them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
-      header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
-      (`startsOpen`); a suggestion's and every spot's stay folded.
+      header, so a finding with a snippet drops its place chip. A finding's snippet starts open when it starts
+      on Fix (`startsOpen`: Blocking and Should fix); an Optional one's and every spot's stay folded.
 34. **Review is the technical read; the Overview is the decision** (`routes/task/review.tsx`,
     `components/review/note.tsx`, `lib/review/report.ts`, since 2026-10-25; the deep read since 2026-10-26). Review is
     a task tab of its own, after Overview and before Code: Overview, Review, Code, Chat. It shows once there is something
@@ -2377,20 +2427,22 @@ Only these, and they win over anything below:
         open and remembers a fold (`task:<id>:review:card:<point>`, 40), and a card you jump to (J and K, the
         index, `?spot=`) opens again. Under the bar, 12px in: a judgement
         call's call (`text-xs` medium `fg-4`), then the body as markdown (`fg-3` under the call, `fg-4` without).
-      - **A finding** (Blocking, Suggestion, a dismissed one in Everything else) has no bar. It opens on the head every
-        finding has (`NoteHead`, `components/text/note-head.tsx`, the Overview's too): one full-width row,
-        `justify-between`, with the label line (`text-2xs`: Agent review in `fg-2`, the tag as a dot and label) and
-        the title (`text-xs` medium `fg-4`) stacked on the left and Fix / Dismiss on the right at a review gate,
-        aligned to the row's top, then the body full width. It does not fold, so the verdict is always in view.
-      Both then show, full width: Why it matters, Also considered, the disagreement, the change snippet of its exact
-      lines open (the header a link into Code at those lines, with the point's key), and the suggested fix on an inset
-      note headed "Suggested fix" (`IconBandage`); the body's markdown has inline code and smart links to tasks, pull
+      - **A finding** (Blocking, Should fix, Optional, a dismissed one in Everything else) has no bar. It is the one finding layout
+        (`FindingNote`, `components/text/finding-note.tsx`, the Overview's too) and shows only the issue and the
+        proposed fix: one full-width row, `justify-between`, with the severity (`text-2xs` medium in its tone's text,
+        no dot, no author: every finding is the agent review's) over the message (`text-xs` `fg-4`) on the left and
+        Fix / Dismiss on the right at a review gate, aligned to the row's top. The reviewer's title is left out, since
+        the message opens the same way. It does not fold, so the verdict is always in view. Then, full width, the change
+        snippet of its exact lines (open on the Review tab for every finding; the Overview folds an Optional one) and
+        the proposed fix on an inset note headed "Proposed fix". A point or a comment shows, full width: Why it matters, Also considered, the disagreement, the
+        change snippet of its exact lines open (the header a link into Code at those lines, with the point's key), and
+        the proposed fix; the body's markdown has inline code and smart links to tasks, pull
       requests, files and branches through the shared reference components. The card you jump to has a 2px
       `primary-a3` outline 2px outside it and scrolls into view; on the Review tab the outline (and a risk row's
       `primary-a1` wash) holds 1.5s and fades over 500ms (`useSpotlight`, `hooks/use-spotlight.ts`, the hold the chat's
       jumped-to run uses), while `?spot=` keeps the place. In the Code tab the same card is compact: no snippet and no
-      place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding's parts on
-      the same `NoteHead`, with the severity as the label line. There is one finding layout with Fix / Dismiss, never a
+      place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding on the same
+      `FindingNote`. There is one finding layout with Fix / Dismiss, never a
       variant with the toggle in a header band; /ui shows both variants (Review: a point, a finding, your comment, and
       both inline in the Code tab).
     - **Instant.** Nothing on the tab waits on a read it could have made earlier: the snippets are slices of the task's
@@ -2529,10 +2581,13 @@ Only these, and they win over anything below:
     - **The footer is always there** (`PANEL_FOOTER`, 41px with its hairline, 8px in on every side, measured: each
       24px button 8px from the footer's top, bottom and sides): Manage (`IconSettingsSliderHor`, disabled while the
       popover lists no service), Add… (`IconPlusMedium`, disabled when there is no project to add to) and, at its
-      end, Terminal, which goes to the Terminal page. With no services the body is the kit's `EmptyState` (`sm`,
-      `IconServer`): "No services in ‹project› yet" (or "No services yet"), "A service is a command you keep running
-      for a project, like its dev server.", with the footer's Add… to add some, and Create a project… in the empty
-      state itself when there is no project. The rows tick every second, since the running time is in them.
+      end, Terminal, which goes to the Terminal page. **A project with no services opens on what was found**
+      (`resolveShownServicesView`'s `found` view): Add services itself, titled "No services in ‹project› yet" with
+      "These were found in its folders. Each runs in a terminal of its own.", the recommended ones ticked and no
+      Back, so a new project's services are one press away. Only when nothing is found, or there is no project, is
+      the body the kit's `EmptyState` (`sm`, `IconServer`): "No services in ‹project› yet" (or "No services yet"),
+      "A service is a command you keep running for a project, like its dev server.", with the footer's Add… to add
+      some, and Create a project… in the empty state itself when there is no project. The rows tick every second, since the running time is in them.
     - **Everything happens in the popover, never in a dialog.** Adding, editing and removing services are views of
       the same popover (`lib/terminal/services-panel.ts`: `reduceServicesPanel` moves between the list, Manage, Add
       services, the custom form and a service's form, and `resolveShownServicesView` falls back to the list when a
@@ -2549,7 +2604,13 @@ Only these, and they win over anything below:
       slot, `outline` like Manage's, the name over the command in mono and its folder by the project's place, "bun run dev in
       shop/apps/api"); and last Custom service… (`IconPlusMedium`). The recommended ones start ticked, so the common
       case is one press of the primary "Add 2 services" (disabled at none) beside Back; what you already added is not
-      listed. While it reads, "Looking for services" after 300ms. Once added, the popover is the list again.
+      listed. While it reads, "Looking for services" after 300ms. **Then an AI check**: the list shows as soon as
+      the scan answers, and the popover asks again with `refine=1` (`docs/engine.md` → Services → Refined by a quick
+      call), "Checking names and ports with AI" under the list (`LoadingLine`, 2xs) meanwhile. When it answers, its
+      list replaces the scan's, names, commands (a `--port $PORT` where the server needs one) and preview URLs
+      included, which Add services sends; the ticks become its recommendations, unless you changed them, in which
+      case each keeps its place in the list (`resolveSuggestionPicks`). When it fails the scan's list stays, and you
+      can tick and add at any point. Once added, the popover is the list again.
     - **The form** (Custom service…, "Add a service"; or a service's, "Edit ‹name›") is short: Name, Folder (a
       select of the project's repositories and folders, never a typed path), Command and Preview URL (optional,
       `http://localhost:{port}` as its placeholder, the note "Where Open takes you. Shinsa puts the run's port where
@@ -3670,8 +3731,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, every button (icon-only ones too), every select, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -3872,8 +3933,8 @@ it sits with (Where Shinsa differs, 19). No icon has an opacity.
 ### Sizes — one table, keyed by control height
 
 An icon's spacing comes from **the height of the control it sits in**, and its
-size from the three-size scale (Icon sizes): `sm` in 22/24px controls, `md` in
-26/30px ones. Primitives set the size for their glyphs; never override it.
+size from the three-size scale (Icon sizes): `sm` in 22/24px controls and `default` buttons, `md` in
+the other 26/30px ones. Primitives set the size for their glyphs; never override it.
 The pixel columns below are paywall-next's; Shinsa's control heights are
 Where Shinsa differs, 20.
 
@@ -3887,9 +3948,8 @@ Where Shinsa differs, 20.
 
 - **Edge → icon is 1px less than edge → text**: a glyph's box carries empty
   space, so an icon at the text's inset reads indented.
-- **Icon-only buttons** (`icon-sm`, `icon`, `icon-lg`) keep a 16px glyph,
-  centred in the box — with no label, the glyph is the whole control;
-  `icon-xs` takes 14/16px and `icon-xl` 18/20px (see Buttons).
+- **Icon-only buttons** draw a 14px glyph like every button, centred in the
+  box (see Buttons).
 - **Icons centre 0.5px above the label's cap-height middle** (see Buttons).
 - Field affixes (`InputGroupAddon` inline icons) follow the row for the field's
   size for icon and edge → icon, but the **icon → text gap is 2px larger**
@@ -4355,10 +4415,10 @@ trailing alike (Iconography → Icon colour): a trailing chevron or a
 "view all" arrow is the label's ink. On a secondary button the icon rests at
 `icon-2` beside the `fg-2` label and turns `icon-4` with it on hover; on a filled
 button it is the label's white. Icons in a Button never take a size, colour,
-opacity or stroke override: the button's size sets them (`sm` in `xs`/`sm`,
-`md` from `default` up), chevrons and the loading spinner included.
+opacity or stroke override: every size draws them at 14px (`sm`), chevrons
+and the loading spinner included.
 Icon sizes are square: `icon-xs` 24px (14/16px glyph), `icon-sm` 28px,
-`icon` 32px at every width, `icon-lg` 36px (16px glyph), `icon-xl` 40px
+`icon` 32px at every width, `icon-lg` 36px (14px glyph), `icon-xl` 40px
 (18px glyph), each at every width. `list-row` is a
 full-width, left-aligned, `font-normal`, **single 32px line** — its label goes in `Truncate`
 so a long one ends in an ellipsis with the full text in a tooltip. A row that

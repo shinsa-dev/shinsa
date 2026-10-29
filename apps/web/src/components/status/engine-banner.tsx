@@ -10,8 +10,10 @@ import {
   ENGINE_ACTION_LABEL,
   type EngineAction,
   type EngineBannerView,
+  recordEngineFailure,
   requestEngineRestart,
   resolveEngineView,
+  useEngineFailure,
 } from '@/lib/connection/engine.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
@@ -35,11 +37,7 @@ export function EngineCard({
 }) {
   return (
     <div role='status' className={cn(CARD, 'flex min-w-0 items-center gap-2 py-1.5 ps-3 pe-1.5 text-xs')}>
-      <Icon
-        size='sm'
-        name={banner.tone === 'warning' ? 'IconExclamationTriangle' : 'IconArrowsRepeat'}
-        className={banner.tone === 'warning' ? 'text-orange-text' : 'text-fg-2'}
-      />
+      <Icon size='sm' name='IconExclamationTriangle' className='text-orange-text' />
       <span className='min-w-0 flex-1 py-0.5 text-fg-3'>{banner.text}</span>
       {banner.actions.map((action, index) => (
         <Button
@@ -58,7 +56,7 @@ export function EngineCard({
 
 export function EngineBanner() {
   const health = useServerHealth();
-  const [failure, setFailure] = React.useState<string | null>(null);
+  const failure = useEngineFailure();
   const requested = React.useRef<string | null>(null);
   const view = resolveEngineView(selectDesktopBuild(), health, failure);
 
@@ -66,7 +64,7 @@ export function EngineBanner() {
     try {
       await requestEngineRestart(when);
     } catch (error) {
-      setFailure(describeFailure(error));
+      recordEngineFailure(describeFailure(error));
     }
   }, []);
 
@@ -79,13 +77,9 @@ export function EngineBanner() {
   }, [view.automatic, view.key, restart]);
 
   if (!view.banner) return null;
-  const onAction = (action: EngineAction) => {
-    if (action === 'update_app') updateApp();
-    else void restart(action === 'restart_now' ? 'now' : 'idle');
-  };
   return (
     <div className={cn(PAGE_COLUMN, 'shrink-0 pt-3')}>
-      <EngineCard banner={view.banner} onAction={onAction} />
+      <EngineCard banner={view.banner} onAction={updateApp} />
     </div>
   );
 }
