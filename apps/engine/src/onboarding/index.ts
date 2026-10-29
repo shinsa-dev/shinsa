@@ -12,11 +12,12 @@ import type { JsonObject } from '../http/body.ts';
 import { createProjectChanges } from '../projects/routes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { runCommand } from '../shell/index.ts';
 import type { AccountActions, AccountSource } from './accounts.ts';
 import { OnboardingSetup } from './flow.ts';
 import { type CommandRunner, resolvePrerequisites } from './prerequisites.ts';
 import { createChosenProjects, listProjectSuggestions, type ProjectSetup } from './projects.ts';
-import { resolveChosenRoots } from './roots.ts';
+import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 
 export type { AccountActions, AccountSource, ClaudeAccount } from './accounts.ts';
@@ -155,6 +156,12 @@ export class Onboarding {
     }
     if (store.config.onboardedAt === null) store.update({ onboardedAt: Date.now() });
     return this.resolveStatus();
+  }
+
+  async openPrivacySettings() {
+    const run = this.#context.run ?? runCommand;
+    const result = await run(['open', PRIVACY_SETTINGS_URL], this.#context.config.userHome);
+    return { ok: result.ok };
   }
 
   resolvePrerequisites() {

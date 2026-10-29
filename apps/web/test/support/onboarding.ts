@@ -71,6 +71,7 @@ export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingS
       createOption({ value: 'rebase', label: 'Rebase', detail: 'No merge commit.' }),
     ],
     projects: [],
+    access: [],
     checks: [],
     ready: true,
     imported: [],

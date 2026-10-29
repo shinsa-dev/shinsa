@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  describeAccessTitle,
   describeAccountSource,
   describeStepHeading,
   describeStepPosition,
@@ -8,6 +9,7 @@ import {
   listChosenValues,
   listFolderRows,
   listFolderSuggestions,
+  listReadableRoots,
   listSetupSummary,
   listStepperItems,
   resolveCheckOutcome,
@@ -186,9 +188,28 @@ describe('resolveToggledRoots', () => {
 
 describe('resolveCheckOutcome', () => {
   it('a missing optional tool is skipped, not failed', () => {
-    const check = { id: 'codex', label: 'Codex', detail: '', fix: null };
+    const check = { id: 'codex', label: 'Codex', detail: '', fix: null, command: null };
     expect(resolveCheckOutcome({ ...check, ok: true })).toBe('pass');
     expect(resolveCheckOutcome({ ...check, ok: false })).toBe('fail');
     expect(resolveCheckOutcome({ ...check, ok: false, optional: true })).toBe('skipped');
+  });
+});
+
+describe('folders macOS keeps private', () => {
+  it('names them the way you see them', () => {
+    expect(describeAccessTitle(['/Users/me/Documents'], '/Users/me')).toBe('macOS keeps ~/Documents private');
+    expect(describeAccessTitle(['/Users/me/Documents', '/Users/me/Desktop'], '/Users/me')).toBe(
+      'macOS keeps ~/Documents and ~/Desktop private'
+    );
+  });
+
+  it('leaves out the private ones however you typed them and keeps the rest', () => {
+    expect(
+      listReadableRoots(
+        ['/Users/me/Developer', '~/Documents/', '/Users/me/Desktop', '~/oss'],
+        ['/Users/me/Documents', '/Users/me/Desktop'],
+        '/Users/me'
+      )
+    ).toEqual(['/Users/me/Developer', '~/oss']);
   });
 });

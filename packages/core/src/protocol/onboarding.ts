@@ -42,6 +42,7 @@ export interface OnboardingCheck {
   ok: boolean;
   detail: string;
   fix: string | null;
+  command: string | null;
   optional?: boolean;
 }
 
@@ -72,6 +73,7 @@ export interface OnboardingStep {
   imported: AccountImport[];
   notes: string[];
   problem: string | null;
+  access: string[];
   submitLabel: string;
 }
 

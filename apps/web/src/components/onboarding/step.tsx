@@ -10,15 +10,19 @@ import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ErrorLine } from '@/components/chat/turn-detail.tsx';
+import { OnboardingAccess } from '@/components/onboarding/access.tsx';
 import { type OnboardingAccountActions, OnboardingAccounts } from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
 import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
+import { useWindowReturn } from '@/hooks/use-window-return.ts';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
+  ACCESS_KEY,
   listChosenValues,
+  listReadableRoots,
   REFRESH_KEY,
   resolveFolderOptions,
   resolveSubmitValues,
@@ -38,6 +42,7 @@ import {
 export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-6';
 
 export interface OnboardingStepActions {
+  openPrivacy: () => void;
   answer: (
     stepId: OnboardingStepId,
     values: string[],
@@ -87,36 +92,58 @@ function FoldersBody({
   userHome,
   values,
   onChange,
-  busy,
+  pending,
+  actions,
   autoFocus,
 }: {
   step: OnboardingStep;
   userHome: string;
   values: string[];
   onChange: (values: string[]) => void;
-  busy: boolean;
+  pending: string | null;
+  actions: OnboardingStepActions;
   autoFocus: boolean;
 }) {
   const [typed, setTyped] = React.useState<string[]>([]);
   const options = resolveFolderOptions(step.options, typed, userHome);
+  const busy = pending !== null;
   return (
-    <OptionList
-      options={options}
-      values={values}
-      multiple
-      label='Folders'
-      busyValue={null}
-      disabled={busy}
-      autoFocus={autoFocus}
-      onPick={(value) => onChange(resolveToggledRoots(values, value))}
-    >
-      <AddFolderField
-        onAdd={(path) => {
-          setTyped([...typed, path]);
-          if (!values.includes(path)) onChange([...values, path]);
-        }}
-      />
-    </OptionList>
+    <>
+      {step.access.length > 0 && (
+        <OnboardingAccess
+          access={step.access}
+          userHome={userHome}
+          checking={pending === ACCESS_KEY}
+          disabled={busy}
+          actions={{
+            openSettings: actions.openPrivacy,
+            check: () => actions.answer(step.id, values, ACCESS_KEY),
+            leaveOut: () => {
+              const readable = listReadableRoots(values, step.access, userHome);
+              onChange(readable);
+              if (readable.length > 0) actions.answer(step.id, readable, SUBMIT_KEY);
+            },
+          }}
+        />
+      )}
+      <OptionList
+        options={options}
+        values={values}
+        multiple
+        label='Folders'
+        busyValue={null}
+        disabled={busy}
+        autoFocus={autoFocus}
+        onPick={(value) => onChange(resolveToggledRoots(values, value))}
+      >
+        <AddFolderField
+          onAdd={(path) => {
+            setTyped([...typed, path]);
+            if (!values.includes(path)) onChange([...values, path]);
+          }}
+        />
+      </OptionList>
+    </>
   );
 }
 
@@ -164,7 +191,8 @@ function StepBody({
         userHome={userHome}
         values={values}
         onChange={onChange}
-        busy={pending !== null}
+        pending={pending}
+        actions={actions}
         autoFocus={autoFocus}
       />
     );
@@ -329,6 +357,12 @@ export function OnboardingStepView({
 }) {
   const [values, setValues] = React.useState(() => listChosenValues(step));
   const [drafts, setDrafts] = React.useState(() => createProjectDrafts(step.projects));
+  const waiting = step.access.length > 0 || step.id === 'prerequisites';
+  useWindowReturn(() => {
+    if (pending !== null) return;
+    if (step.id === 'prerequisites') actions.refresh();
+    else actions.answer(step.id, values, ACCESS_KEY);
+  }, waiting);
   return (
     <OnboardingSection
       title={step.title}

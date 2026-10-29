@@ -73,6 +73,7 @@ function serve(first: OnboardingFlow, replies: ((body: unknown) => OnboardingFlo
     'GET /api/onboarding/flow': { answer: first },
     'POST /api/onboarding/flow': { answer: (body: unknown) => replies.shift()?.(body) ?? first },
     'GET /api/onboarding': { answer: createOnboardingStatus() },
+    'POST /api/onboarding/privacy': { answer: { ok: true } },
   });
   return fake;
 }
@@ -276,13 +277,14 @@ describe('the setup page', () => {
       ready: false,
       submitLabel: 'Finish anyway',
       checks: [
-        { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50', fix: null },
+        { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50', fix: null, command: null },
         {
           id: 'bun',
           label: 'Bun',
           ok: false,
           detail: 'bun: not found',
           fix: 'Install Bun from https://bun.sh.',
+          command: 'curl -fsSL https://bun.sh/install | bash',
         },
       ],
     });
@@ -301,6 +303,68 @@ describe('the setup page', () => {
     expect(location.pathname).toBe('/onboarding');
     fireEvent.click(screen.getByRole('button', { name: /Go to Home/ }));
     expect(location.pathname).toBe('/');
+  });
+
+  it('a folder macOS keeps private offers System Settings, checks again when you come back, or leaves it out', async () => {
+    const blocked = createStep({
+      ...ROOTS,
+      options: ROOTS.options.map((option) => ({ ...option, chosen: true })),
+      access: ['/Users/me/oss'],
+    });
+    serve(createFlow(blocked));
+    renderPage();
+    expect(await screen.findByText('macOS keeps ~/oss private')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open System Settings' }));
+    await waitFor(() =>
+      expect(fake?.requests.some((request) => request.path === '/api/onboarding/privacy')).toBe(true)
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(sentReplies()).toHaveLength(1));
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(sentReplies()).toHaveLength(2));
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave it out' }));
+    await waitFor(() => expect(sentReplies()).toHaveLength(3));
+    const both = { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer', '/Users/me/oss'] };
+    expect(sentReplies()).toEqual([
+      both,
+      both,
+      { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer'] },
+    ]);
+  });
+
+  it('a tool you install by command shows it to copy, and the tools are checked again when you come back', async () => {
+    const tools = createStep({
+      id: 'prerequisites',
+      title: 'The tools Shinsa runs',
+      options: [],
+      ready: false,
+      checks: [
+        {
+          id: 'gh',
+          label: 'GitHub CLI',
+          ok: false,
+          detail: 'gh: not found',
+          fix: 'Install the GitHub CLI with Homebrew.',
+          command: 'brew install gh',
+        },
+      ],
+    });
+    serve(createFlow(tools));
+    renderPage();
+    expect(await screen.findByText('brew install gh')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    const reads = () =>
+      fake?.requests.filter((request) => request.method === 'GET' && request.path === '/api/onboarding/flow')
+        .length;
+    const before = reads();
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(reads()).toBe((before ?? 0) + 1));
   });
 
   it('lets you leave setup you started again from Settings', async () => {

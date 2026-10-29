@@ -53,9 +53,10 @@ describe('resolvePrerequisites', () => {
       expect.objectContaining({ id: 'codex', ok: false, detail: 'It exited with code 1.' }),
       expect.objectContaining({ id: 'codex_auth', ok: false, detail: 'Codex is missing.' }),
     ]);
-    expect(missing.checks.find((check) => check.id === 'codex')?.fix).toContain(
-      'npm install -g @openai/codex'
-    );
+    expect(missing.checks.find((check) => check.id === 'codex')).toMatchObject({
+      fix: 'Only for agents you run on Codex.',
+      command: 'npm install -g @openai/codex',
+    });
     const signedOut = await resolvePrerequisites(
       HOME,
       createRunner({ ...READY, 'codex login status': result(false, '', 'Not logged in') })
@@ -63,7 +64,8 @@ describe('resolvePrerequisites', () => {
     expect(signedOut.checks.find((check) => check.id === 'codex_auth')).toMatchObject({
       ok: false,
       detail: 'Not logged in',
-      fix: 'Only for agents you run on Codex: sign in with `codex login`.',
+      fix: 'Only for agents you run on Codex.',
+      command: 'codex login',
     });
   });
 
@@ -88,7 +90,17 @@ describe('resolvePrerequisites', () => {
       ['codex_auth', false, 'Codex is missing.'],
       ['bun', false, 'command not found: bun'],
     ]);
-    expect(report.checks[2]?.fix).toBe('Sign in to GitHub with `gh auth login`.');
+    expect(report.checks.map((check) => [check.id, check.command])).toEqual([
+      ['git', 'xcode-select --install'],
+      ['gh', 'brew install gh'],
+      ['gh_auth', 'gh auth login'],
+      ['claude', null],
+      ['claude_auth', 'claude auth login'],
+      ['codex', 'npm install -g @openai/codex'],
+      ['codex_auth', 'codex login'],
+      ['bun', 'curl -fsSL https://bun.sh/install | bash'],
+    ]);
+    expect(report.checks[2]?.fix).toBe('Sign in to GitHub in a terminal.');
   });
 
   test('reads older CLIs that print plain text, and a failed sign-in check', async () => {

@@ -12,10 +12,11 @@ import { writeJsonFile } from '../config/file.ts';
 import type { JsonObject } from '../http/body.ts';
 import { describeError, log } from '../log/index.ts';
 import type { AccountActions } from './accounts.ts';
+import { PrivateFoldersError } from './roots.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
 
 interface Draft {
-  version: 2;
+  version: 3;
   id: string;
   index: number;
   furthest: number;
@@ -25,6 +26,8 @@ interface Draft {
   imported: AccountImport[];
   notes: string[];
   problem: string | null;
+  access: string[];
+  picked: string[];
 }
 
 type FlowContext = StepReadContext & {
@@ -50,14 +53,16 @@ function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<Draft>;
   return (
-    draft.version === 2 &&
+    draft.version === 3 &&
     typeof draft.id === 'string' &&
     typeof draft.index === 'number' &&
     typeof draft.furthest === 'number' &&
     typeof draft.saves === 'number' &&
     Array.isArray(draft.tried) &&
     Array.isArray(draft.imported) &&
-    Array.isArray(draft.notes)
+    Array.isArray(draft.notes) &&
+    Array.isArray(draft.access) &&
+    Array.isArray(draft.picked)
   );
 }
 
@@ -179,7 +184,7 @@ export class OnboardingSetup {
 
   #start(): Draft {
     const draft: Draft = {
-      version: 2,
+      version: 3,
       id: Bun.randomUUIDv7(),
       index: 0,
       furthest: 0,
@@ -189,6 +194,8 @@ export class OnboardingSetup {
       imported: [],
       notes: [],
       problem: null,
+      access: [],
+      picked: [],
     };
     this.#draft = draft;
     this.#write(draft);
@@ -208,6 +215,8 @@ export class OnboardingSetup {
     draft.index = index;
     draft.furthest = Math.max(draft.furthest, index);
     draft.problem = null;
+    draft.access = [];
+    draft.picked = [];
     this.#write(draft);
   }
 
@@ -232,7 +241,10 @@ export class OnboardingSetup {
       );
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
-      draft.problem = error.message;
+      const refused = error instanceof PrivateFoldersError;
+      draft.problem = refused ? null : error.message;
+      draft.access = refused ? error.folders : [];
+      draft.picked = refused ? error.picked : [];
       this.#write(draft);
       return;
     }
@@ -306,7 +318,7 @@ export class OnboardingSetup {
   ): Promise<OnboardingStep | null> {
     if (!definition) return null;
     const answered = draft.revisit || draft.index < draft.furthest;
-    const view = await definition.view(context, answered);
+    const view = await definition.view(context, answered, draft.picked);
     const accounts = definition.id === 'accounts';
     return {
       id: definition.id,
@@ -314,6 +326,7 @@ export class OnboardingSetup {
       imported: accounts ? draft.imported : [],
       notes: accounts ? draft.notes : [],
       problem: draft.problem,
+      access: draft.access,
     };
   }
 }

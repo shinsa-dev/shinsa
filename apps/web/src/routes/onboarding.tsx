@@ -10,7 +10,7 @@ import { OnboardingStepper } from '@/components/onboarding/stepper.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { useOnboardingFlow } from '@/hooks/use-onboarding-flow.ts';
 import { removeAccount, startSignIn, useAccounts } from '@/lib/connection/accounts.ts';
-import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
+import { requestPrivacySettings, useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { navigate } from '@/router.ts';
 
 const ACCOUNT_ACTIONS = {
@@ -62,6 +62,7 @@ function OnboardingContent() {
           answer: (stepId, values, key, projects) => void answer(stepId, values, key, projects),
           open: openStep,
           refresh: () => void refresh(),
+          openPrivacy: () => void requestPrivacySettings(),
         }}
         onClose={flow.revisit ? () => navigate('/settings') : undefined}
       />

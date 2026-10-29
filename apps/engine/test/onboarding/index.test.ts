@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigStore } from '../../src/config/index.ts';
-import { Onboarding } from '../../src/onboarding/index.ts';
-import { resolveChosenRoots } from '../../src/onboarding/roots.ts';
+import { type CommandRunner, Onboarding } from '../../src/onboarding/index.ts';
+import { PRIVACY_SETTINGS_URL, PrivateFoldersError, resolveChosenRoots } from '../../src/onboarding/roots.ts';
 import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig } from '../helpers/index.ts';
 
-function setup() {
+function setup(run?: CommandRunner) {
   const root = createTempDir();
   const config = createTestConfig(root, { roots: [] });
   const engine = new Engine(new EventLog(config.databasePath));
@@ -25,7 +25,7 @@ function setup() {
     store,
     roots,
     resolveLogin: () => Promise.resolve(null),
-    run: () => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false }),
+    run: run ?? (() => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false })),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),
     accountActions: {
@@ -113,16 +113,39 @@ describe('Onboarding', () => {
     expect(resolveChosenRoots(['~', '~/Developer', developer], root)).toEqual([root, developer]);
   });
 
-  test('resolveChosenRoots says how to give Shinsa access to a folder macOS keeps private', () => {
-    const { root } = setup();
-    const refuse = (code: string) => () => {
+  test('resolveChosenRoots names every folder macOS keeps private, once, and how to allow them', () => {
+    const { root, developer } = setup();
+    const refuse = (code: string) => (path: string) => {
+      if (path === developer) return [];
       throw Object.assign(new Error(code), { code });
     };
     for (const code of ['EPERM', 'EACCES']) {
-      expect(() => resolveChosenRoots(['~'], root, refuse(code))).toThrow(
-        expect.objectContaining({ code: 'roots_unreadable' })
-      );
+      let refusal: unknown = null;
+      try {
+        resolveChosenRoots(['~', '~/Developer', root], root, refuse(code));
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toBeInstanceOf(PrivateFoldersError);
+      expect(refusal).toMatchObject({
+        code: 'roots_private',
+        folders: [root],
+        picked: [root, developer],
+        message:
+          'macOS keeps ~ private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.',
+      });
     }
     expect(() => resolveChosenRoots(['~'], root, refuse('EIO'))).toThrow('EIO');
+  });
+
+  test('opens the Full Disk Access pane of System Settings', async () => {
+    const calls: string[][] = [];
+    const { onboarding } = setup((command) => {
+      calls.push(command);
+      return Promise.resolve({ ok: true, code: 0, stdout: '', stderr: '', timedOut: false });
+    });
+    expect(await onboarding.openPrivacySettings()).toEqual({ ok: true });
+    expect(calls).toEqual([['open', PRIVACY_SETTINGS_URL]]);
+    expect(PRIVACY_SETTINGS_URL).toContain('Privacy_AllFiles');
   });
 });

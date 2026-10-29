@@ -1,6 +1,7 @@
 import {
   type AccountImport,
   type AccountSummary,
+  describeList,
   type OnboardingCheck,
   type OnboardingFlow,
   type OnboardingOption,
@@ -157,6 +158,18 @@ export function listStepperItems(flow: OnboardingFlow) {
 export const SUBMIT_KEY = 'submit';
 
 export const REFRESH_KEY = 'refresh';
+
+export const ACCESS_KEY = 'access';
+
+export function describeAccessTitle(access: string[], userHome: string) {
+  const names = access.map((path) => resolveDisplayPath(path, userHome));
+  return `macOS keeps ${describeList(names, 'and')} private`;
+}
+
+export function listReadableRoots(values: string[], access: string[], userHome: string) {
+  const refused = new Set(access.map((path) => resolveDisplayPath(path, userHome)));
+  return values.filter((value) => !refused.has(resolveDisplayPath(value.replace(/\/+$/, ''), userHome)));
+}
 
 export function resolveSubmitValues(step: OnboardingStep, values: string[]) {
   if (step.id === 'roots' || step.options.length > 0) return values;

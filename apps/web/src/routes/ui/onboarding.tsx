@@ -28,6 +28,7 @@ function createSampleStep(
     multiple: false,
     options: [],
     projects: [],
+    access: [],
     checks: [],
     ready: true,
     imported: [],
@@ -82,6 +83,21 @@ const FOLDERS = createSampleStep({
       recommended: false,
     },
   ],
+});
+
+const PRIVATE_FOLDERS = createSampleStep({
+  ...FOLDERS,
+  options: [
+    ...FOLDERS.options,
+    {
+      value: `${USER_HOME}/Documents`,
+      label: '~/Documents',
+      detail: null,
+      chosen: true,
+      recommended: false,
+    },
+  ],
+  access: [`${USER_HOME}/Documents`],
 });
 
 function createSampleRepos(folder: string, names: string[]) {
@@ -169,15 +185,24 @@ const TOOLS = createSampleStep({
   ready: false,
   submitLabel: 'Finish anyway',
   checks: [
-    { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50.1', fix: null },
+    { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50.1', fix: null, command: null },
     {
       id: 'gh_auth',
       label: 'Signed in to GitHub',
       ok: false,
       detail: 'Not signed in.',
-      fix: 'Sign in to GitHub with `gh auth login`.',
+      fix: 'Sign in to GitHub in a terminal.',
+      command: 'gh auth login',
     },
-    { id: 'codex', label: 'Codex', ok: false, detail: 'Codex is missing.', fix: null, optional: true },
+    {
+      id: 'codex',
+      label: 'Codex',
+      ok: false,
+      detail: 'Codex is missing.',
+      fix: 'Only for agents you run on Codex.',
+      command: 'npm install -g @openai/codex',
+      optional: true,
+    },
   ],
 });
 
@@ -198,6 +223,7 @@ const ACTIONS = {
   answer: () => void acknowledgeSample(),
   open: () => void acknowledgeSample(),
   refresh: () => void acknowledgeSample(),
+  openPrivacy: () => void acknowledgeSample(),
 };
 
 const ACCOUNT_ACTIONS = {
@@ -232,6 +258,9 @@ export function OnboardingSpecimens() {
       <Specimen label='Folders · several at once, the one with the most repositories picked, more by path'>
         <StepSpecimen step={FOLDERS} />
       </Specimen>
+      <Specimen label='Folders · one macOS keeps private, with the way to allow it or leave it out'>
+        <StepSpecimen step={PRIVATE_FOLDERS} />
+      </Specimen>
       <Specimen label='Projects · suggested from the folders, all kept; rename one, untick it or open its repositories'>
         <StepSpecimen step={PROJECTS} />
       </Specimen>
@@ -241,7 +270,7 @@ export function OnboardingSpecimens() {
       <Specimen label='Accounts · imported for you, one added now, one that could not be, each removable'>
         <StepSpecimen step={ACCOUNTS} />
       </Specimen>
-      <Specimen label='Tools · passed, failed with its fix, optional and missing'>
+      <Specimen label='Tools · passed, failed with its fix and the command to copy, optional and missing'>
         <StepSpecimen step={TOOLS} />
       </Specimen>
       <Specimen label='Finished · what you set up and the way home'>

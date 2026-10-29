@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type AccountImport,
@@ -266,6 +266,41 @@ describe('the setup steps', () => {
     expect((await openStep(onboarding, 'model')).step?.problem).toBeNull();
   });
 
+  test('a folder macOS keeps private stays on the step as access to ask for, not as an error', async () => {
+    const world = setup();
+    const { onboarding, store, developer, work } = world;
+    chmodSync(work, 0o000);
+    try {
+      const blocked = await answer(onboarding, 'roots', developer, work);
+      expect(blocked.step).toMatchObject({ id: 'roots', problem: null, access: [work] });
+      expect(listChosen(blocked)).toEqual([developer, work]);
+      expect(listChosen(await world.open().onboarding.setup.resolve())).toEqual([developer, work]);
+      expect(store.config.roots).toEqual([]);
+      chmodSync(work, 0o755);
+      const allowed = await answer(onboarding, 'roots', developer, work);
+      expect(allowed.step).toMatchObject({ id: 'projects', access: [] });
+      expect(store.config.roots).toEqual([developer, work]);
+    } finally {
+      chmodSync(work, 0o755);
+    }
+  });
+
+  test('leaving the private folder out moves on with the others', async () => {
+    const { onboarding, store, developer, work } = setup();
+    chmodSync(work, 0o000);
+    try {
+      await answer(onboarding, 'roots', developer, work);
+      const back = await openStep(onboarding, 'roots');
+      expect(back.step?.access).toEqual([]);
+      await answer(onboarding, 'roots', work);
+      const next = await answer(onboarding, 'roots', developer);
+      expect(next.step?.id).toBe('projects');
+      expect(store.config.roots).toEqual([developer]);
+    } finally {
+      chmodSync(work, 0o755);
+    }
+  });
+
   test('a saved model outside the catalog is still listed', async () => {
     const { onboarding, engine, developer } = setup();
     await engine.dispatch({ type: 'settings.change', patch: { defaultModel: 'claude-legacy' } });
@@ -417,7 +452,7 @@ describe('the saved setup', () => {
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
     expect(warn).toHaveBeenCalledTimes(3);
     warn.mockRestore();
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 2, index: 0 });
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 3, index: 0 });
   });
 
   test('in inspect mode it shows the first step, writes nothing and imports nothing', async () => {

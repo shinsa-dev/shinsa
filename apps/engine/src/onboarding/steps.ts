@@ -53,7 +53,7 @@ interface StepView {
 export interface StepDefinition {
   id: OnboardingStepId;
   label: string;
-  view: (context: StepReadContext, answered: boolean) => Promise<StepView>;
+  view: (context: StepReadContext, answered: boolean, picked: string[]) => Promise<StepView>;
   summarize: (context: StepReadContext) => Promise<string | null>;
   answer: (values: string[], context: StepContext, projects?: OnboardingProjectChoice[]) => Promise<void>;
 }
@@ -109,9 +109,9 @@ function assertContinue(values: string[]) {
 const ROOTS: StepDefinition = {
   id: 'roots',
   label: 'Folders',
-  view: async (context) => {
+  view: async (context, _answered, picked) => {
     const { suggestions } = await context.suggestRoots();
-    const configured = new Set(context.roots);
+    const configured = new Set(picked.length > 0 ? picked : context.roots);
     const options = suggestions
       .slice(0, MAX_SUGGESTIONS)
       .map((suggestion, index) =>

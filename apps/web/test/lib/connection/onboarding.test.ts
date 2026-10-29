@@ -4,6 +4,7 @@ import {
   refreshOnboardingStatus,
   replyToOnboarding,
   requestOnboardingFlow,
+  requestPrivacySettings,
   requestRootSuggestions,
   resetOnboardingStatus,
   restartOnboarding,
@@ -132,5 +133,19 @@ describe('the setup requests', () => {
     });
     await restartOnboarding();
     expect(toasts.error).toHaveBeenCalledWith('Busy.');
+  });
+});
+
+describe('System Settings for a private folder', () => {
+  it('asks the engine to open Full Disk Access, and says how to get there when it cannot', async () => {
+    let opened = true;
+    fake = startFakeOnboarding({ 'POST /api/onboarding/privacy': { answer: () => ({ ok: opened }) } });
+    expect(await requestPrivacySettings()).toBe(true);
+    expect(toasts.error).not.toHaveBeenCalled();
+    opened = false;
+    expect(await requestPrivacySettings()).toBe(false);
+    expect(toasts.error).toHaveBeenCalledWith(
+      'System Settings did not open. Open it yourself and go to Privacy & Security → Full Disk Access.'
+    );
   });
 });

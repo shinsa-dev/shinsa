@@ -227,6 +227,7 @@ describe('the onboarding endpoints', () => {
     }
     const tools = (await (await call('/api/onboarding/prerequisites')).json()) as { ready: boolean };
     expect(tools.ready).toBe(true);
+    expect(await (await post('/api/onboarding/privacy', {})).json()).toEqual({ ok: true });
     expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
   });
 
@@ -234,10 +235,10 @@ describe('the onboarding endpoints', () => {
     const { call, post, config } = await start({ config: { roots: [] } });
     const opened = (await (await call('/api/onboarding/flow')).json()) as OnboardingFlow;
     expect(opened).toMatchObject({ index: 0, step: { id: 'roots', multiple: true, options: [] } });
-    const model = (await (
+    const projects = (await (
       await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: [config.home] })
     ).json()) as OnboardingFlow;
-    expect(model.step?.id).toBe('model');
+    expect(projects.step?.id).toBe('projects');
     const back = (await (
       await post('/api/onboarding/flow', { type: 'open', stepId: 'roots' })
     ).json()) as OnboardingFlow;

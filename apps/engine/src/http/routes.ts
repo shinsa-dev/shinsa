@@ -307,6 +307,11 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
     },
     {
       method: 'POST',
+      pattern: /^\/api\/onboarding\/privacy$/,
+      respond: async () => respondJson(await onboarding.openPrivacySettings()),
+    },
+    {
+      method: 'POST',
       pattern: /^\/api\/onboarding\/complete$/,
       respond: async () => respondJson(await onboarding.complete()),
     },
