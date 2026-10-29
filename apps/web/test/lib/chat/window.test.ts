@@ -26,12 +26,10 @@ function delegated(id: string, parentRunId: string): Run {
 }
 
 describe('transcript blocks', () => {
-  it('lists the messages before any run, then one block per run, the first run leading only without them', () => {
-    expect(
-      listTranscriptBlocks(task, runs, [], false).map((block) => [block.key, 'first' in block && block.first])
-    ).toEqual([
-      ['a', true],
-      ['b', false],
+  it('lists the messages before any run, then one block per run', () => {
+    expect(listTranscriptBlocks(task, runs, [], false).map((block) => [block.kind, block.key])).toEqual([
+      ['run', 'a'],
+      ['run', 'b'],
     ]);
     const blocks = listTranscriptBlocks(
       task,
@@ -43,10 +41,10 @@ describe('transcript blocks', () => {
       false
     );
     expect(blocks.map((block) => block.key)).toEqual(['message-5-0', 'message-5-1', 'a', 'b']);
-    expect(blocks[2]).toMatchObject({ kind: 'run', first: false });
+    expect(blocks[2]).toMatchObject({ kind: 'run', key: 'a' });
   });
 
-  it('puts each round’s divider before its runs, every round’s first run leading', () => {
+  it('puts each round’s divider before its runs, the first divider leading', () => {
     const rounded = createTask({ id: 't', rounds: [createRound({ number: 1 }), createRound({ number: 2 })] });
     expect(
       listTranscriptBlocks(rounded, runs, [], true).map((block) => [
@@ -55,11 +53,12 @@ describe('transcript blocks', () => {
       ])
     ).toEqual([
       ['round-1', true],
-      ['a', true],
+      ['a', false],
       ['round-2', false],
-      ['b', true],
+      ['b', false],
     ]);
     expect(listTranscriptBlocks(rounded, runs, [{ at: 1, text: 'x' }], true)[1]).toMatchObject({
+      kind: 'round',
       first: false,
     });
   });

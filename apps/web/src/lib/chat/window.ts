@@ -6,7 +6,7 @@ import { listRoundSections } from '@/lib/tasks/rounds.ts';
 export type TranscriptBlock =
   | { kind: 'message'; key: string; message: HumanMessage }
   | { kind: 'round'; key: string; round: Round; first: boolean; delivering: boolean }
-  | { kind: 'run'; key: string; run: Run; first: boolean };
+  | { kind: 'run'; key: string; run: Run };
 
 export const INITIAL_BLOCKS = 8;
 
@@ -28,17 +28,7 @@ export function listTranscriptBlocks(
     message,
   }));
   if (!rounds) {
-    return [
-      ...blocks,
-      ...runs.map(
-        (run, index): TranscriptBlock => ({
-          kind: 'run',
-          key: run.id,
-          run,
-          first: index === 0 && preamble.length === 0,
-        })
-      ),
-    ];
+    return [...blocks, ...runs.map((run): TranscriptBlock => ({ kind: 'run', key: run.id, run }))];
   }
   const sections = listRoundSections(task, runs).filter((section) => section.round.status !== 'waiting');
   sections.forEach((section, index) => {
@@ -49,9 +39,7 @@ export function listTranscriptBlocks(
       first: index === 0 && preamble.length === 0,
       delivering: isRoundDelivering(section.round, section.runs),
     });
-    section.runs.forEach((run, position) => {
-      blocks.push({ kind: 'run', key: run.id, run, first: position === 0 });
-    });
+    for (const run of section.runs) blocks.push({ kind: 'run', key: run.id, run });
   });
   return blocks;
 }
