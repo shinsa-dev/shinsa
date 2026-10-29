@@ -4128,7 +4128,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
     {
       id: 'task-docs-safari',
       request:
-        'The framework docs show a blank page in Safari 17\n\nSince #339 merged, Maple shows 41 `TypeError: undefined is not an object` errors from `/docs/framework` in Safari 17, and none in Chrome or Firefox. The page renders nothing for those visitors. Find the cause and fix it so the page works in Safari 17.\n\nFound by the watchdog “Docs errors in Safari and Chrome” of SW-2 after its change merged.',
+        'The framework docs show a blank page in Safari 17\n\nSince #339 merged, Maple shows Safari 17 throwing `TypeError: undefined is not an object` on `/docs/framework` 41 times, and Chrome and Firefox none. The page renders nothing for those visitors. Find the cause and fix it so the page works in Safari 17.\n\nFound by the watchdog “Docs errors in Safari and Chrome” of SW-2 after its change merged.',
       title: 'Fix the blank framework docs page in Safari 17',
       repo: docs,
       size: 'small',
@@ -4188,7 +4188,7 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
         at: NOW - HOUR,
         healthy: false,
         summary:
-          '41 `TypeError: undefined is not an object` errors from /docs/framework in Safari 17 since 03:10, none in Chrome or Firefox.',
+          'Safari 17 threw `TypeError: undefined is not an object` on `/docs/framework` 41 times since 03:10; Chrome and Firefox threw none.',
       },
       status: 'tripped',
       nextCheckAt: null,

@@ -2791,7 +2791,7 @@ Only these, and they win over anything below:
     - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
       many still watch and how long is left, then one row per watchdog in two lines. The first has its title, its
       status in its tone and, quiet at the end, where it stands ("18 h left · 5 checks", "Not started"); hovering or
-      focusing the title opens a card with what it checks, its schedule and its source. The second is one sentence
+      focusing the status opens a card with what it checks, its schedule and its source. The second is one sentence
       that changes with the state: the last check's summary while it watches, "First check in 20 min.", "Starts once
       the change is live in production.", "Held up for 72 h with nothing wrong.", or the issue it found and the task
       it filed, as a link. Stop is a secondary button on the rows still active.

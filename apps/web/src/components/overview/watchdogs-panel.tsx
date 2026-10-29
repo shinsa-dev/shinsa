@@ -95,14 +95,15 @@ function WatchdogRow({
       <div className='flex items-start gap-3'>
         <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
           <div className='flex min-w-0 items-baseline gap-2'>
+            <span className='min-w-0 truncate font-medium text-fg-4 leading-5'>{watchdog.title}</span>
             <InfoPopover
               render={
                 <button
                   type='button'
-                  className='min-w-0 cursor-default truncate text-left font-medium text-fg-4 leading-5 outline-none'
+                  className={cn('shrink-0 cursor-default text-left outline-none', TONE_TEXT[status.tone])}
                 />
               }
-              trigger={watchdog.title}
+              trigger={status.label}
               className='w-80'
             >
               <InfoHeader
@@ -110,7 +111,6 @@ function WatchdogRow({
                 description={`${describeWatchdogSchedule(watchdog)}${watchdog.source ? ` · ${watchdog.source.server}` : ''}`}
               />
             </InfoPopover>
-            <span className={cn('shrink-0', TONE_TEXT[status.tone])}>{status.label}</span>
             <span className='ml-auto shrink-0 text-2xs text-fg-2 tabular-nums'>
               {describeWatchdogMeta(watchdog, now)}
             </span>

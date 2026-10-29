@@ -95,10 +95,11 @@ describe('the watchdogs panel', () => {
     );
   });
 
-  it('shows what a watchdog checks and how often in a card on its title', async () => {
+  it('shows what a watchdog checks and how often in a card on its status', async () => {
     renderPanel([watchdog({})]);
-    const title = within(rowOf('Checkout latency')).getByRole('button', { name: 'Checkout latency' });
-    fireEvent.focus(title);
+    const row = rowOf('Checkout latency');
+    expect(within(row).queryByRole('button', { name: 'Checkout latency' })).toBeNull();
+    fireEvent.focus(within(row).getByRole('button', { name: 'Watching' }));
     expect(await screen.findByText('p95 of POST /checkout under 400 ms.')).toBeTruthy();
     expect(screen.getByText('First check after 6 h, then up to every 6 h, for 48 h · maple')).toBeTruthy();
   });
