@@ -205,7 +205,8 @@ const DEFAULTS = createSampleStep({
 const ACCOUNTS = createSampleStep({
   id: 'accounts',
   title: 'Which accounts can agents use?',
-  description: 'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
+  description:
+    'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
   imported: [{ origin: 'cswap', email: 'agents@superwall.com', plan: null }],
   notes: ['claude-swap did not hand over side@superwall.com. Sign in to it instead.'],
 });

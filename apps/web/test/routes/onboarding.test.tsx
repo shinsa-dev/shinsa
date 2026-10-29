@@ -321,10 +321,14 @@ describe('the setup page', () => {
     expect(screen.getByRole('button', { name: /Skip for now/ })).toBeTruthy();
     pushAccounts(createSnapshot({ accounts: [] }));
     expect(await screen.findByText('Shinsa found no Claude login on this machine.')).toBeTruthy();
-    pushAccounts(createSnapshot({ accounts: [], providers: [createProviderLogin({ email: 'me@openai.com' })] }));
+    pushAccounts(
+      createSnapshot({ accounts: [], providers: [createProviderLogin({ email: 'me@openai.com' })] })
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
     expect(await screen.findByRole('menuitem', { name: /Sign in to Claude/ })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Codex account/ }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('menuitem', { name: /Codex account/ }).getAttribute('aria-disabled')).toBe(
+      'true'
+    );
     expect(screen.getAllByText(/Signed in with ChatGPT/).length).toBeGreaterThan(0);
   });
 
