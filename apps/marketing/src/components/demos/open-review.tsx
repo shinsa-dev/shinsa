@@ -1,6 +1,7 @@
 import type { ShinsaState, Task } from '@shinsa/core';
 import * as React from 'react';
 import { ReviewTab } from '@/routes/task/review.tsx';
+import { openTask } from '../../lib/content.ts';
 import { readReviewFragment } from '../../lib/open.ts';
 import { createOpenState } from '../../lib/open-scene.ts';
 import { DemoRoot, Window } from './frame.tsx';
@@ -22,6 +23,7 @@ export function OpenReview() {
   if (!scene) return null;
   return (
     <div className='@container mx-auto mt-12 w-full max-w-5xl md:mt-14' data-chip>
+      <p className='mb-3 text-center text-fg-2 text-sm'>{openTask.source}</p>
       <div className='demo-window' style={WINDOW_STYLE}>
         <DemoRoot>
           <div className='demo-scroll h-full'>

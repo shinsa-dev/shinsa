@@ -141,7 +141,10 @@ describe('serializeReviewLink', () => {
     useFakeGitHub();
     const { store } = createStore();
     const task = createTask({ handle: 'LOC-28', summary: 'Did it.' });
-    const evidence = [piece(task, 'web', { kind: 'screenshot', uri: 'https://cdn.example.com/web.png' })];
+    const evidence = [
+      piece(task, 'web', { kind: 'screenshot', uri: 'https://cdn.example.com/web.png' }),
+      piece(task, 'hosted', { kind: 'screenshot', uri: 'https://github.com/user-attachments/assets/h' }),
+    ];
     const description = await new PullRequestDescriptions(store).describe(
       createRepo({ path: createTempDir() }),
       task,
@@ -152,7 +155,9 @@ describe('serializeReviewLink', () => {
       JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString())
     );
     expect(payload?.task).toMatchObject({ id: task.id, handle: 'LOC-28', summary: 'Did it.' });
-    expect(payload?.evidence.map((part) => part.url)).toEqual(['https://cdn.example.com/web.png']);
+    expect(payload?.evidence.map((part) => part.url)).toEqual([
+      'https://github.com/user-attachments/assets/h',
+    ]);
     expect(serializeReviewLink({ ...task, summary: randomBytes(40_000).toString('hex') }, [])).toBeNull();
   });
 });

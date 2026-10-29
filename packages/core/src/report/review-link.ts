@@ -46,6 +46,9 @@ export interface ReviewPayload {
   evidence: ReviewPayloadEvidence[];
 }
 
+const GITHUB_ATTACHMENT =
+  /^https:\/\/(?:github\.com\/user-attachments\/|[a-z0-9-]+\.githubusercontent\.com\/)/;
+
 function isReviewEvidenceKind(kind: Evidence['kind']): kind is ReviewEvidenceKind {
   return (REVIEW_EVIDENCE_KINDS as readonly string[]).includes(kind);
 }
@@ -54,7 +57,7 @@ function listPayloadEvidence(task: Task, evidence: readonly Evidence[]): ReviewP
   return listPullRequestEvidence(task, evidence).flatMap((item) =>
     item.parts.flatMap((part) => {
       const url = resolvePublicUrl(part);
-      if (!url || !isReviewEvidenceKind(part.kind)) return [];
+      if (!url || !GITHUB_ATTACHMENT.test(url) || !isReviewEvidenceKind(part.kind)) return [];
       return [
         {
           id: part.id,
@@ -87,6 +90,7 @@ export function serializeReviewPayload(task: Task, evidence: readonly Evidence[]
     report: {
       ...report,
       sections: report.sections.map((section) => ({ ...section, spots: [] })),
+      checks: report.checks.map((check) => ({ ...check, detail: null })),
       judgementCalls: report.judgementCalls.map((call) => ({ ...call, file: null, line: null, end: null })),
       walkthrough,
     },
@@ -129,7 +133,7 @@ function parseCheck(fields: Fields): ReportCheck | null {
   const command = readText(fields, 'command');
   const outcome = readChoice(fields, 'outcome', CHECK_OUTCOMES);
   if (!id || !label || command === null || !outcome) return null;
-  return { id, label, command, outcome, detail: readText(fields, 'detail') };
+  return { id, label, command, outcome, detail: null };
 }
 
 function parseCall(fields: Fields): JudgementCall | null {
@@ -202,7 +206,7 @@ function parseEvidence(fields: Fields): ReviewPayloadEvidence | null {
   const kind = readChoice(fields, 'kind', REVIEW_EVIDENCE_KINDS);
   const title = readText(fields, 'title');
   const url = readText(fields, 'url');
-  if (!id || !itemId || !kind || !title || !url || !/^https?:\/\//.test(url)) return null;
+  if (!id || !itemId || !kind || !title || !url || !GITHUB_ATTACHMENT.test(url)) return null;
   return {
     id,
     itemId,

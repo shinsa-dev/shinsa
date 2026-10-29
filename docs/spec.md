@@ -178,7 +178,7 @@ not chat text.
   (`docs/engine.md` → The pull request watch → Conflicts).
 - **The pull request reads like the review.** Its description is the review in small for a teammate who only has
   GitHub: the approach, the before and after evidence shown inline (screenshots and recordings uploaded as GitHub
-  attachments, nothing committed), every check with its result, what changed, the judgement calls, the risks, how
+  attachments, nothing committed), every check with its result, how it works, the judgement calls, the risks, how
   to test it and the steps around the merge, with a link that opens the task in Shinsa. Each push rewrites Shinsa's
   block and keeps what anyone wrote around it (`docs/engine.md` → The pull request description).
 - **Every push is current and passes the hooks.** Before each push Shinsa merges the latest base into the branch

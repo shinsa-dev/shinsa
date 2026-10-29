@@ -146,4 +146,5 @@ export const openTask = {
   missing: 'This link does not name a task. Ask whoever shared it for the pull request’s own link.',
   primary: 'Download Shinsa',
   secondary: 'Open in Shinsa',
+  source: 'This review is read from the link you followed. The pull request on GitHub is the record.',
 };

@@ -2504,12 +2504,14 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   characters) plus `#review=<data>`, a static page of the site (`apps/marketing/src/pages/open.astro`) that shows the
   task's handle and title, the download, a button that opens `shinsa://task/<id>` in the Mac app, and this pull
   request's own review in the app's Review tab. The data is a compact copy of the review (`serializeReviewPayload`,
-  `packages/core/src/report/review-link.ts`: the summary, the walkthrough, the checks, the judgement calls and every
-  piece of evidence with a web address, without the code), JSON deflated and in base64url (`serializeReviewLink`,
+  `packages/core/src/report/review-link.ts`: the summary, the walkthrough, the checks without their output, the
+  judgement calls and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
   `apps/engine/src/github/description.ts`), left out when it is longer than 24,000 characters. It rides in the
   fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
   repository's review never leaves the reader's browser; the page reads it back through `parseReviewPayload`, which
-  keeps only well-formed fields and http or https addresses. The page never opens the app by itself: browsers refuse
+  keeps only well-formed fields, drops any check output and keeps only images and recordings on GitHub's own
+  attachment hosts (`github.com/user-attachments/`, `*.githubusercontent.com`). Anyone can write such a link, so the
+  page says the review is read from the link and that the pull request on GitHub is the record. The page never opens the app by itself: browsers refuse
   an external scheme without a click.
 - **Evidence.** The evidence of the current round and of every earlier round on the same pull request, as items (`listPullRequestEvidence`), without linked tests
   and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part

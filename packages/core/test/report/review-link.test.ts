@@ -91,8 +91,22 @@ describe('serializeReviewPayload', () => {
       }),
       piece(task, { id: 'local', kind: 'screenshot', title: 'Local', uri: '/api/evidence/l.png' }),
       piece(task, { id: 'note', kind: 'note', title: 'Note', uri: 'https://example.com/n.md' }),
+      piece(task, {
+        id: 'cdn',
+        kind: 'screenshot',
+        title: 'Elsewhere',
+        uri: 'https://cdn.example.com/x.png',
+      }),
     ];
-    const payload = serializeReviewPayload(task, evidence);
+    const failing = {
+      id: 'c9',
+      label: 'Tests',
+      command: 'bun test',
+      outcome: 'fail' as const,
+      detail: '/Users/me/app: TOKEN=abc',
+    };
+    const payload = serializeReviewPayload({ ...task, checkResults: [failing] }, evidence);
+    expect(payload.report.checks).toEqual([{ ...failing, detail: null }]);
     expect(payload.task).toEqual({
       id: task.id,
       handle: 'LOC-28',
@@ -134,7 +148,7 @@ describe('parseReviewPayload', () => {
     expect(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: { id: 'a', title: 'T' } })).toBeNull();
   });
 
-  test('keeps only well-formed parts and never an address that is not a web one', () => {
+  test('keeps only well-formed parts, no check output, and only images GitHub hosts', () => {
     const payload = parseReviewPayload({
       v: REVIEW_PAYLOAD_VERSION,
       task: { id: 'a', title: 'T', handle: 7 },
@@ -145,7 +159,7 @@ describe('parseReviewPayload', () => {
           'junk',
         ],
         checks: [
-          { id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: null },
+          { id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: 'secret output' },
           { id: 'c2', label: 'Odd', command: 'x', outcome: 'maybe' },
         ],
         judgementCalls: [
@@ -171,18 +185,28 @@ describe('parseReviewPayload', () => {
           itemId: 'i',
           kind: 'screenshot',
           title: 'Shot',
-          url: 'https://x.dev/a.png',
+          url: 'https://github.com/user-attachments/assets/a',
           width: '9',
           theme: 'dim',
         },
         { id: 'e2', itemId: 'i', kind: 'screenshot', title: 'Bad', url: 'javascript:alert(1)' },
+        { id: 'e4', itemId: 'i', kind: 'screenshot', title: 'Fake', url: 'https://evil.example/pass.png' },
+        {
+          id: 'e5',
+          itemId: 'i',
+          kind: 'recording',
+          title: 'Raw',
+          url: 'https://private-user-images.githubusercontent.com/1/v.mp4',
+        },
         { id: 'e3', itemId: 'i', kind: 'note', title: 'Note', url: 'https://x.dev/n' },
       ],
     });
     expect(payload?.task).toEqual({ id: 'a', handle: null, title: 'T', summary: null });
     expect(payload?.report.headline).toBe('');
     expect(payload?.report.sections).toEqual([{ title: 'One', summary: 'Did it.', spots: [] }]);
-    expect(payload?.report.checks.map((check) => check.id)).toEqual(['c1']);
+    expect(payload?.report.checks).toEqual([
+      { id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: null },
+    ]);
     expect(payload?.report.judgementCalls).toEqual([
       { title: 'Call', call: 'Do it', reason: '', file: null, line: null, end: null, alternatives: [] },
     ]);
@@ -204,7 +228,19 @@ describe('parseReviewPayload', () => {
         itemId: 'i',
         kind: 'screenshot',
         title: 'Shot',
-        url: 'https://x.dev/a.png',
+        url: 'https://github.com/user-attachments/assets/a',
+        detail: null,
+        width: null,
+        theme: null,
+        stage: null,
+        label: null,
+      },
+      {
+        id: 'e5',
+        itemId: 'i',
+        kind: 'recording',
+        title: 'Raw',
+        url: 'https://private-user-images.githubusercontent.com/1/v.mp4',
         detail: null,
         width: null,
         theme: null,
