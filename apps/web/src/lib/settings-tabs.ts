@@ -1,6 +1,7 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
+import { USAGE_SECTION } from '@/lib/stats/usage.ts';
 import { UPDATES_SECTION } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 
@@ -28,7 +29,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   stats: {
     id: 'stats',
     label: 'Stats',
-    sections: [SHIPPING_SECTION],
+    sections: [SHIPPING_SECTION, USAGE_SECTION],
   },
   agents: {
     id: 'agents',

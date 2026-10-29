@@ -8,7 +8,7 @@ import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
 import { createRound } from '../support/rounds.ts';
 import { clearAccounts, pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
-import { createShinsaState, createTask } from '../support/state.ts';
+import { createRun, createShinsaState, createTask } from '../support/state.ts';
 
 let requests: Mock<(input: RequestInfo | URL) => Promise<Response>>;
 
@@ -136,7 +136,7 @@ describe('Settings stats', () => {
     expect(screen.getByText('1 day')).toBeTruthy();
     const graph = screen.getByRole('img', { name: '1 pull request merged in the last year' });
     const cells = graph.querySelectorAll('span:not(.invisible)');
-    fireEvent.pointerOver(cells[cells.length - 1] as Element);
+    fireEvent.pointerOver([...cells].at(-1) as Element);
     expect(screen.getByText(/^1 pull request merged on /)).toBeTruthy();
     fireEvent.pointerOut(graph, { relatedTarget: document.body });
     expect(screen.getAllByText('1 pull request merged in the last year').length).toBeGreaterThan(0);
@@ -149,9 +149,61 @@ describe('Settings stats', () => {
     fireEvent.click(screen.getByRole('tab', { name: '90 days' }));
     await settle();
     expect(location.search).toBe('?tab=stats&range=90');
-    expect(screen.getAllByText(/^Week of /)).toHaveLength(2);
+    expect(screen.getAllByText(/^Week of /)).toHaveLength(4);
     fireEvent.click(screen.getByRole('tab', { name: '30 days' }));
     await settle();
     expect(location.search).toBe('?tab=stats');
+  });
+
+  it('shows where the tokens went, the tasks that used the most and where to save', async () => {
+    const now = Date.now();
+    const heavy = {
+      inputTokens: 300_000,
+      outputTokens: 5_000,
+      cacheReadTokens: 50_000,
+      cacheWriteTokens: 50_000,
+    };
+    const task = createTask({ id: 't1', title: 'Rebuild the parser' });
+    const runs = [
+      createRun({
+        id: 'r1',
+        taskId: 't1',
+        purpose: 'build',
+        model: 'claude-opus-5-5',
+        startedAt: now,
+        endedAt: now,
+        usage: { ...heavy, costUsd: 2 },
+      }),
+      createRun({
+        id: 'r2',
+        taskId: 'gone',
+        role: 'reviewer',
+        startedAt: now,
+        endedAt: now,
+        usage: { inputTokens: 10, outputTokens: 10, cacheReadTokens: 80, cacheWriteTokens: 0, costUsd: null },
+      }),
+    ];
+    await renderSettings('/settings?tab=stats', createShinsaState({ tasks: [task], runs }));
+    expect(screen.getByText('Token usage')).toBeTruthy();
+    expect(screen.getAllByText('$2.00').length).toBeGreaterThan(1);
+    expect(screen.getByText('Building')).toBeTruthy();
+    expect(screen.getByText('Review')).toBeTruthy();
+    expect(screen.getByText('Opus 5.5')).toBeTruthy();
+    expect(screen.getByText('Unknown model')).toBeTruthy();
+    expect(document.querySelectorAll('[data-task="t1"]').length).toBe(2);
+    expect(screen.getByText('gone')).toBeTruthy();
+    expect(screen.getByText('Only 13% of the prompt came from the cache')).toBeTruthy();
+    const chart = screen.getByRole('img', { name: 'Tokens over time' });
+    const bars = chart.querySelectorAll('[data-bar]');
+    fireEvent.pointerEnter([...bars].at(-1) as Element);
+    expect(screen.getByText(/: 405k tokens$/)).toBeTruthy();
+    fireEvent.pointerLeave(chart);
+    expect(screen.queryByText(/: 405k tokens$/)).toBeNull();
+  });
+
+  it('says so when no agent ran and nothing stands out', async () => {
+    await renderSettings('/settings?tab=stats', createShinsaState({}));
+    expect(screen.getAllByText('No agent runs')).toHaveLength(4);
+    expect(screen.getByText('Nothing stands out in this range.')).toBeTruthy();
   });
 });

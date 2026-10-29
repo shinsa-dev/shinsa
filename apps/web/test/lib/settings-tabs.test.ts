@@ -31,7 +31,7 @@ describe('settings tabs', () => {
       'Setup',
       'Updates',
     ]);
-    expect(findSettingsTab('stats').sections).toEqual(['Shipping']);
+    expect(findSettingsTab('stats').sections).toEqual(['Shipping', 'Token usage']);
     expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
     expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Memory', 'Versions']);
     expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Projects']);
@@ -46,6 +46,7 @@ describe('settings tabs', () => {
     expect(resolveSettingsTab('agents')).toBe('agents');
     expect(resolveSettingsTab('stats')).toBe('stats');
     expect(resolveSettingsTab(null, '#shipping')).toBe('stats');
+    expect(resolveSettingsTab(null, '#token-usage')).toBe('stats');
     expect(resolveSettingsTab(null, '#limits')).toBe('accounts');
     expect(resolveSettingsTab(null, '#accounts')).toBe('accounts');
     expect(resolveSettingsTab(null, '#models')).toBe('agents');

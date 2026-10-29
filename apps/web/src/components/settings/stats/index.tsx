@@ -13,11 +13,20 @@ import {
   type StatsRange,
 } from '@/lib/stats/days.ts';
 import { listShippingTiles, SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
+import {
+  listBreakdowns,
+  listSavingRows,
+  listTaskRows,
+  listUsageTiles,
+  USAGE_SECTION,
+} from '@/lib/stats/usage.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 import { SettingsGroup } from '../group.tsx';
 import { ShippingChart } from './shipping-chart.tsx';
 import { ShippingGraph } from './shipping-graph.tsx';
 import { StatTile, StatTiles } from './stat-tile.tsx';
+import { UsageChart } from './usage-chart.tsx';
+import { Breakdown, Savings, TopTasks } from './usage-tables.tsx';
 
 function useStatsRange() {
   const range = parseStatsRange(useSearchParam('range') ?? '');
@@ -55,6 +64,21 @@ export function StatsSettings({ state }: { state: ShinsaState }) {
         </StatTiles>
         <ShippingGraph year={year} />
         <ShippingChart days={stats.days} />
+      </SettingsGroup>
+      <SettingsGroup title={USAGE_SECTION} className='gap-3'>
+        <StatTiles>
+          {listUsageTiles(stats).map((tile) => (
+            <StatTile key={tile.key} label={tile.label} value={tile.value} detail={tile.detail} />
+          ))}
+        </StatTiles>
+        <UsageChart days={stats.days} />
+        <div className='grid gap-3 md:grid-cols-3'>
+          {listBreakdowns(stats).map((breakdown) => (
+            <Breakdown key={breakdown.key} title={breakdown.title} rows={breakdown.rows} />
+          ))}
+        </div>
+        <TopTasks state={state} rows={listTaskRows(stats.tasks)} />
+        <Savings state={state} rows={listSavingRows(stats.savings)} />
       </SettingsGroup>
     </>
   );
