@@ -141,8 +141,8 @@ export const closing = {
 };
 
 export const openTask = {
-  title: 'A pull request built with Shinsa',
-  text: 'An agent planned, built and checked this change in Shinsa, then wrote its review: the evidence first, then how it works, the calls it made and how to test it.',
+  untitled: 'A task built with Shinsa',
+  unreviewed: 'This link carries no review. Open the task in Shinsa to read it.',
   missingTitle: 'This link does not lead to a review',
   missing:
     'It names no task or pull request. Open the review again from the link in the pull request on GitHub.',

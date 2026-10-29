@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
-import { readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
+import { readReviewFragment, resolveDocumentTitle, resolveTaskInvite } from '../../src/lib/open';
 
 function encode(value: unknown) {
   return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
@@ -32,6 +32,22 @@ describe('resolveTaskInvite', () => {
     expect(resolveTaskInvite('?task=../settings')).toBeNull();
     expect(resolveTaskInvite('?task=javascript:alert(1)')).toBeNull();
     expect(resolveTaskInvite(`?task=${'a'.repeat(65)}`)).toBeNull();
+  });
+});
+
+describe('resolveDocumentTitle', () => {
+  test('names the task by its handle and title, or as a task without a handle', () => {
+    expect(
+      resolveDocumentTitle({ link: 'shinsa://task/id-1', handle: 'LOC-28', title: 'Fix the tabs' })
+    ).toBe('LOC-28: Fix the tabs · Shinsa');
+    expect(resolveDocumentTitle({ link: 'shinsa://task/id-1', handle: null, title: 'Fix the tabs' })).toBe(
+      'Task: Fix the tabs · Shinsa'
+    );
+  });
+
+  test('keeps the page title when the link names no task or no title', () => {
+    expect(resolveDocumentTitle(null)).toBeNull();
+    expect(resolveDocumentTitle({ link: 'shinsa://task/id-1', handle: 'LOC-28', title: null })).toBeNull();
   });
 });
 

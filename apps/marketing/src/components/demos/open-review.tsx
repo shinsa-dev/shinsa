@@ -8,7 +8,12 @@ import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import { readReviewFragment, resolveTaskInvite } from '../../lib/open.ts';
+import {
+  readReviewFragment,
+  resolveDocumentTitle,
+  resolveTaskInvite,
+  type TaskInvite,
+} from '../../lib/open.ts';
 import { createOpenState } from '../../lib/open-scene.ts';
 import { site } from '../../lib/site.ts';
 import { DemoRoot } from './frame.tsx';
@@ -19,6 +24,8 @@ interface OpenScene {
   payload: ReviewPayload;
   link: string | null;
 }
+
+type OpenView = { kind: 'review'; scene: OpenScene } | { kind: 'invite'; invite: TaskInvite | null };
 
 function OpenActions({ link }: { link: string | null }) {
   return (
@@ -36,24 +43,29 @@ function OpenActions({ link }: { link: string | null }) {
   );
 }
 
-function OpenHeader({ scene }: { scene: OpenScene }) {
+function OpenHeader({
+  title,
+  description,
+  link,
+  facts,
+}: {
+  title: string;
+  description: React.ReactNode;
+  link: string | null;
+  facts: React.ReactNode;
+}) {
   return (
     <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex shrink-0 flex-col gap-2.5 pb-1')}>
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
-        <PageHeading
-          title={scene.task.title}
-          description={<OpenDescription scene={scene} />}
-          className='min-w-60 flex-1 py-0.5'
-        />
-        <OpenActions link={scene.link} />
+        <PageHeading title={title} description={description} className='min-w-60 flex-1 py-0.5' />
+        <OpenActions link={link} />
       </div>
-      <TaskSharedFacts state={scene.state} task={scene.task} className='min-w-0' />
+      {facts}
     </div>
   );
 }
 
-function OpenDescription({ scene }: { scene: OpenScene }) {
-  const { payload } = scene;
+function ReviewDescription({ payload }: { payload: ReviewPayload }) {
   return (
     <div className='flex flex-col gap-1'>
       <p className={PAGE_DESCRIPTION}>{payload.task.summary ?? payload.report.headline}</p>
@@ -62,23 +74,56 @@ function OpenDescription({ scene }: { scene: OpenScene }) {
   );
 }
 
-export function OpenReview() {
-  const [scene, setScene] = React.useState<OpenScene | null>(null);
-  React.useEffect(() => {
-    void readReviewFragment(window.location.hash).then((payload) => {
-      if (!payload) return;
-      document.documentElement.dataset.review = '';
-      const link = resolveTaskInvite(window.location.search)?.link ?? null;
-      setScene({ ...createOpenState(payload, Date.now()), payload, link });
-    });
-  }, []);
-  if (!scene) return null;
+function InviteHeader({ invite }: { invite: TaskInvite | null }) {
+  if (!invite) {
+    return (
+      <OpenHeader title={openTask.missingTitle} description={openTask.missing} link={null} facts={null} />
+    );
+  }
+  return (
+    <OpenHeader
+      title={invite.title ?? openTask.untitled}
+      description={openTask.unreviewed}
+      link={invite.link}
+      facts={invite.handle && <p className='text-fg-2 text-xs'>{invite.handle}</p>}
+    />
+  );
+}
+
+function ReviewPage({ scene }: { scene: OpenScene }) {
   return (
     <DemoRoot>
       <div className='flex min-h-0 flex-1 flex-col'>
-        <OpenHeader scene={scene} />
+        <OpenHeader
+          title={scene.task.title}
+          description={<ReviewDescription payload={scene.payload} />}
+          link={scene.link}
+          facts={<TaskSharedFacts state={scene.state} task={scene.task} className='min-w-0' />}
+        />
         <ReviewTab state={scene.state} task={scene.task} summary={false} />
       </div>
     </DemoRoot>
   );
+}
+
+export function OpenReview() {
+  const [view, setView] = React.useState<OpenView | null>(null);
+  React.useEffect(() => {
+    const invite = resolveTaskInvite(window.location.search);
+    const title = resolveDocumentTitle(invite);
+    if (title) document.title = title;
+    void readReviewFragment(window.location.hash).then((payload) => {
+      if (!payload) {
+        setView({ kind: 'invite', invite });
+        return;
+      }
+      setView({
+        kind: 'review',
+        scene: { ...createOpenState(payload, Date.now()), payload, link: invite?.link ?? null },
+      });
+    });
+  }, []);
+  if (!view) return null;
+  if (view.kind === 'invite') return <InviteHeader invite={view.invite} />;
+  return <ReviewPage scene={view.scene} />;
 }

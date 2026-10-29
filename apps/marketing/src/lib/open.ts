@@ -37,3 +37,8 @@ export async function readReviewFragment(hash: string): Promise<ReviewPayload | 
     return null;
   }
 }
+
+export function resolveDocumentTitle(invite: TaskInvite | null): string | null {
+  if (!invite?.title) return null;
+  return `${invite.handle ?? 'Task'}: ${invite.title} · Shinsa`;
+}
