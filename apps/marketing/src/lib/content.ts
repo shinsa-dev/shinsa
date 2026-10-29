@@ -144,7 +144,7 @@ export const openTask = {
   title: 'A pull request built with Shinsa',
   text: 'An agent planned, built and checked this change in Shinsa, then wrote its review: the evidence first, then how it works, the calls it made and how to test it.',
   missing: 'This link does not name a task. Ask whoever shared it for the pull request’s own link.',
-  primary: 'Download Shinsa',
-  secondary: 'Open in Shinsa',
+  primary: 'Open in Shinsa',
+  secondary: 'Download Shinsa',
   source: 'This review is read from the link you followed. The pull request on GitHub is the record.',
 };

@@ -14,7 +14,7 @@ import type {
   WorkReport,
 } from './types.ts';
 
-export const CHECK_MARK: Record<ReportCheck['outcome'], string> = { pass: '✓', fail: '✗', skipped: '–' };
+const CHECK_MARK: Record<ReportCheck['outcome'], string> = { pass: '✓', fail: '✗', skipped: '–' };
 
 const ATTENTION_RANK: Record<Attention, number> = { critical: 0, high: 1, normal: 2 };
 

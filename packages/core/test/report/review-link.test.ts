@@ -105,14 +105,17 @@ describe('serializeReviewPayload', () => {
       outcome: 'fail' as const,
       detail: '/Users/me/app: TOKEN=abc',
     };
-    const payload = serializeReviewPayload({ ...task, checkResults: [failing] }, evidence);
+    const pullRequest = { ...(task.pullRequest ?? {}), number: 23 } as Task['pullRequest'];
+    const payload = serializeReviewPayload({ ...task, checkResults: [failing], pullRequest }, evidence);
     expect(payload.report.checks).toEqual([{ ...failing, detail: null }]);
     expect(payload.task).toEqual({
       id: task.id,
       handle: 'LOC-28',
       title: task.title,
       summary: 'Tabs stay put.',
+      pullRequest: 23,
     });
+    expect(serializeReviewPayload({ ...task, pullRequest: null }, []).task.pullRequest).toBeNull();
     expect(payload.report.sections.every((section) => section.spots.length === 0)).toBe(true);
     expect(payload.report.judgementCalls[0]).toMatchObject({ file: null, line: null });
     expect(payload.report.walkthrough?.risks[0]).toMatchObject({ file: null, line: null, end: null });
@@ -151,7 +154,7 @@ describe('parseReviewPayload', () => {
   test('keeps only well-formed parts, no check output, and only images GitHub hosts', () => {
     const payload = parseReviewPayload({
       v: REVIEW_PAYLOAD_VERSION,
-      task: { id: 'a', title: 'T', handle: 7 },
+      task: { id: 'a', title: 'T', handle: 7, pullRequest: 1.5 },
       report: {
         sections: [
           { title: 'One', summary: 'Did it.', spots: [{ file: 'x' }] },
@@ -201,7 +204,13 @@ describe('parseReviewPayload', () => {
         { id: 'e3', itemId: 'i', kind: 'note', title: 'Note', url: 'https://x.dev/n' },
       ],
     });
-    expect(payload?.task).toEqual({ id: 'a', handle: null, title: 'T', summary: null });
+    expect(payload?.task).toEqual({ id: 'a', handle: null, title: 'T', summary: null, pullRequest: null });
+    const numbered = parseReviewPayload({
+      v: REVIEW_PAYLOAD_VERSION,
+      task: { id: 'a', title: 'T', pullRequest: 23 },
+      report: {},
+    });
+    expect(numbered?.task.pullRequest).toBe(23);
     expect(payload?.report.headline).toBe('');
     expect(payload?.report.sections).toEqual([{ title: 'One', summary: 'Did it.', spots: [] }]);
     expect(payload?.report.checks).toEqual([

@@ -210,6 +210,8 @@ describe('the pull request description', () => {
     await approveReview(w, taskId);
     await w.until('the pull request to open', () => w.task(taskId).pullRequest !== null);
     const uploaded = 'https://github.com/user-attachments/assets/upload-1';
+    const edits = () => w.github.calls.filter((call) => call[0] === 'pr' && call[1] === 'edit').length;
+    await w.until('the description to carry the new number', () => edits() === 1);
     const opened = w.github.pulls[0]?.body ?? '';
     expect(opened.startsWith('<!-- shinsa:start -->')).toBe(true);
     expect(opened).toContain(`![The greeting](${uploaded})`);
@@ -228,7 +230,7 @@ describe('the pull request description', () => {
     });
     await w.sync(taskId);
     await w.until('the description to be rewritten', () =>
-      w.github.calls.some((call) => call[0] === 'pr' && call[1] === 'edit' && call.includes('--body-file'))
+      (w.github.pulls[0]?.body ?? '').includes('The CI run')
     );
     const refreshed = w.github.pulls[0]?.body ?? '';
     expect(refreshed.startsWith('Notes from a teammate.\n\n<!-- shinsa:start -->')).toBe(true);

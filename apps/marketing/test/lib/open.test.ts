@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
-import { readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
+import { describePullRequestEyebrow, readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
 
 function encode(value: unknown) {
   return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
@@ -38,7 +38,13 @@ describe('resolveTaskInvite', () => {
 describe('readReviewFragment', () => {
   const review = {
     v: 1,
-    task: { id: 'task-1', handle: 'LOC-28', title: 'Fix the tabs', summary: 'Tabs stay put.' },
+    task: {
+      id: 'task-1',
+      handle: 'LOC-28',
+      title: 'Fix the tabs',
+      summary: 'Tabs stay put.',
+      pullRequest: 23,
+    },
     report: { headline: 'H', sections: [], checks: [], judgementCalls: [], walkthrough: null },
     evidence: [],
   };
@@ -52,5 +58,14 @@ describe('readReviewFragment', () => {
     expect(await readReviewFragment('#review=not+base64')).toBeNull();
     expect(await readReviewFragment('#review=AAAA')).toBeNull();
     expect(await readReviewFragment(`#review=${encode({ v: 9 })}`)).toBeNull();
+  });
+});
+
+describe('describePullRequestEyebrow', () => {
+  test('names the pull request by number and the task by handle, each when known', () => {
+    expect(describePullRequestEyebrow(23, 'LOC-28')).toBe('Pull request #23 · LOC-28');
+    expect(describePullRequestEyebrow(null, 'LOC-28')).toBe('Pull request · LOC-28');
+    expect(describePullRequestEyebrow(23, null)).toBe('Pull request #23');
+    expect(describePullRequestEyebrow(null, null)).toBe('Pull request');
   });
 });

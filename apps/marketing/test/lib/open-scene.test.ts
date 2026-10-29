@@ -7,7 +7,13 @@ describe('createOpenState', () => {
     const { state, task } = createOpenState(
       {
         v: 1,
-        task: { id: 'task-1', handle: 'LOC-28', title: 'Fix the tabs', summary: 'Tabs stay put.' },
+        task: {
+          id: 'task-1',
+          handle: 'LOC-28',
+          title: 'Fix the tabs',
+          summary: 'Tabs stay put.',
+          pullRequest: 23,
+        },
         report: {
           headline: 'Clamp the width.',
           sections: [],

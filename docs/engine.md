@@ -2501,10 +2501,13 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
 
 - **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to
   `https://shinsa.dev/open?task=<id>&handle=<handle>&title=<title>` (`resolveShinsaTaskUrl`, the title cut to 120
-  characters) plus `#review=<data>`, a static page of the site (`apps/marketing/src/pages/open.astro`) that shows the
-  task's handle and title, the download, a button that opens `shinsa://task/<id>` in the Mac app, and this pull
-  request's own review in the app's Review tab. The data is a compact copy of the review (`serializeReviewPayload`,
-  `packages/core/src/report/review-link.ts`: the summary, the walkthrough, the checks without their output, the
+  characters) plus `#review=<data>`, a static page of the site (`apps/marketing/src/pages/open.astro`) that is this pull
+  request's review as a page: the app's own Review tab filling the window under the site's header, opened by a card
+  naming the pull request (its number when known and the task's handle) and its title, with Open in Shinsa (a button
+  that opens `shinsa://task/<id>` in the Mac app) as the main button and the download beside it, in place of the
+  app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data it shows the
+  task's handle and title and the same two buttons. The data is a compact copy of the review (`serializeReviewPayload`,
+  `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the walkthrough, the checks without their output, the
   judgement calls and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
   `apps/engine/src/github/description.ts`), left out when it is longer than 24,000 characters. It rides in the
   fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
@@ -2531,7 +2534,8 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   to Shinsa: an upload never stops a pull request from opening. The addresses are recorded with
   `evidence.record_uploads` (`evidence.uploaded`, `Evidence.uploadUrl`), so a piece goes up once. Nothing is
   committed to the repository.
-- **When it is written.** Opening the pull request writes it as the body (`--body-file -`). Every later push to the
+- **When it is written.** Opening the pull request writes it as the body (`--body-file -`), then once more with the
+  number GitHub just gave it, before the open is recorded, so the link carries it. Every later push to the
   open pull request writes it again (`writePullRequestBlock`): it reads the body, replaces only the marked block
   (`replacePullRequestBlock`), so what a person wrote around it stays, and edits the pull request only when the body
   changed. A body without the markers is replaced whole. A failed rewrite is logged; the push stands.

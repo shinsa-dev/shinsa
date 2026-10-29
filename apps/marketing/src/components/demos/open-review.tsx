@@ -1,43 +1,63 @@
-import type { ShinsaState, Task } from '@shinsa/core';
+import type { ReviewPayload, ShinsaState, Task } from '@shinsa/core';
+import { buttonVariants } from '@shinsa/ui/components/button';
+import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
+import { NowFrame } from '@/components/overview/now-frame.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import { readReviewFragment } from '../../lib/open.ts';
+import { describePullRequestEyebrow, readReviewFragment, resolveTaskInvite } from '../../lib/open.ts';
 import { createOpenState } from '../../lib/open-scene.ts';
-import { DemoRoot, Window } from './frame.tsx';
+import { site } from '../../lib/site.ts';
+import { DemoRoot } from './frame.tsx';
 
-const WINDOW_STYLE = {
-  '--wide-w': '1040px',
-  '--wide-h': 'clamp(420px, 100svh - 240px, 820px)',
-  '--narrow-h': '684px',
-  '--window-extra': '0px',
-} as React.CSSProperties;
+interface OpenScene {
+  state: ShinsaState;
+  task: Task;
+  payload: ReviewPayload;
+  link: string | null;
+}
+
+function OpenSummary({ scene }: { scene: OpenScene }) {
+  const { payload, link } = scene;
+  return (
+    <NowFrame
+      eyebrow={describePullRequestEyebrow(payload.task.pullRequest, payload.task.handle)}
+      title={payload.task.title}
+      action={
+        <>
+          {link && (
+            <a href={link} data-icon='inline-start' className={buttonVariants({ variant: 'primary' })}>
+              <Icon name='IconArrowUpRight' />
+              {openTask.primary}
+            </a>
+          )}
+          <a href={site.downloadUrl} className={buttonVariants({ variant: link ? 'secondary' : 'primary' })}>
+            {openTask.secondary}
+          </a>
+        </>
+      }
+    >
+      <p className='text-fg-3 text-xs'>{openTask.source}</p>
+    </NowFrame>
+  );
+}
 
 export function OpenReview() {
-  const [scene, setScene] = React.useState<{ state: ShinsaState; task: Task } | null>(null);
+  const [scene, setScene] = React.useState<OpenScene | null>(null);
   React.useEffect(() => {
     void readReviewFragment(window.location.hash).then((payload) => {
-      if (payload) setScene(createOpenState(payload, Date.now()));
+      if (!payload) return;
+      document.documentElement.dataset.review = '';
+      const link = resolveTaskInvite(window.location.search)?.link ?? null;
+      setScene({ ...createOpenState(payload, Date.now()), payload, link });
     });
   }, []);
   if (!scene) return null;
   return (
-    <div className='@container mx-auto mt-12 w-full max-w-5xl md:mt-14' data-chip>
-      <p className='mb-3 text-center text-fg-2 text-sm'>{openTask.source}</p>
-      <div className='demo-window' style={WINDOW_STYLE}>
-        <DemoRoot>
-          <div className='demo-scroll h-full'>
-            <Window
-              state={scene.state}
-              route={{ name: 'task', reference: scene.task.handle ?? scene.task.id }}
-            >
-              <div className='flex h-full min-h-0 flex-col'>
-                <ReviewTab state={scene.state} task={scene.task} />
-              </div>
-            </Window>
-          </div>
-        </DemoRoot>
+    <DemoRoot>
+      <div className='flex min-h-0 flex-1 flex-col'>
+        <ReviewTab state={scene.state} task={scene.task} summary={<OpenSummary scene={scene} />} />
       </div>
-    </div>
+    </DemoRoot>
   );
 }

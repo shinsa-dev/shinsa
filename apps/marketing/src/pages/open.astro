@@ -7,26 +7,27 @@ import { site } from '../lib/site';
 ---
 
 <Site title='Open a task · Shinsa' description={site.description} noindex>
-  <section class='flex flex-col px-6 pt-16 pb-16 md:pt-20 md:pb-24'>
-    <div class='mx-auto flex max-w-2xl flex-col items-center gap-4 text-center'>
-      <p data-open-handle hidden class='font-medium font-mono text-fg-2 text-sm'></p>
-      <h1
-        data-open-title
-        class='font-medium text-3xl text-fg-4 leading-[1.1] tracking-tight text-balance md:text-4xl'
-      >
-        {openTask.title}
-      </h1>
-      <p class='max-w-xl text-base text-fg-2 leading-relaxed text-pretty'>{openTask.text}</p>
-      <p data-open-missing hidden class='max-w-xl text-fg-2 text-sm'>{openTask.missing}</p>
-      <div class='mt-2 flex flex-wrap items-center justify-center gap-2'>
-        <Button href={site.downloadUrl}>{openTask.primary}</Button>
-        <Button href='shinsa://' variant='secondary' icon='IconArrowUpRight' class='data-[missing]:hidden'>
-          {openTask.secondary}
-        </Button>
+  <div class='flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col'>
+    <section class='flex flex-1 flex-col items-center justify-center px-6 pb-14 in-data-review:hidden'>
+      <div class='flex max-w-2xl flex-col items-center gap-4 text-center'>
+        <p data-open-handle hidden class='font-medium font-mono text-fg-2 text-sm'></p>
+        <h1
+          data-open-title
+          class='font-medium text-3xl text-fg-4 leading-[1.1] tracking-tight text-balance md:text-4xl'
+        >
+          {openTask.title}
+        </h1>
+        <p class='max-w-xl text-base text-fg-2 leading-relaxed text-pretty'>{openTask.text}</p>
+        <p data-open-missing hidden class='max-w-xl text-fg-2 text-sm'>{openTask.missing}</p>
+        <div class='mt-2 flex flex-wrap items-center justify-center gap-2'>
+          <Button href='shinsa://' icon='IconArrowUpRight' class='in-data-missing:hidden'>{openTask.primary}</Button>
+          <Button href={site.downloadUrl} variant='secondary' class='in-data-missing:hidden'>{openTask.secondary}</Button>
+          <Button href={site.downloadUrl} class='not-in-data-missing:hidden'>{openTask.secondary}</Button>
+        </div>
       </div>
-    </div>
+    </section>
     <OpenReview client:only='react' />
-  </section>
+  </div>
 </Site>
 
 <script>
@@ -47,7 +48,7 @@ import { site } from '../lib/site';
       document.title = `${invite.handle ?? 'Task'}: ${invite.title} · Shinsa`;
     }
   } else {
-    button?.setAttribute('data-missing', '');
+    document.documentElement.dataset.missing = '';
     document.querySelector('[data-open-missing]')?.removeAttribute('hidden');
   }
 </script>

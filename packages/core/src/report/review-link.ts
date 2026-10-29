@@ -41,7 +41,13 @@ export interface ReviewPayloadEvidence {
 
 export interface ReviewPayload {
   v: typeof REVIEW_PAYLOAD_VERSION;
-  task: { id: string; handle: string | null; title: string; summary: string | null };
+  task: {
+    id: string;
+    handle: string | null;
+    title: string;
+    summary: string | null;
+    pullRequest: number | null;
+  };
   report: WorkReport;
   evidence: ReviewPayloadEvidence[];
 }
@@ -86,7 +92,13 @@ export function serializeReviewPayload(task: Task, evidence: readonly Evidence[]
     : null;
   return {
     v: REVIEW_PAYLOAD_VERSION,
-    task: { id: task.id, handle: task.handle ?? null, title: task.title, summary: task.summary },
+    task: {
+      id: task.id,
+      handle: task.handle ?? null,
+      title: task.title,
+      summary: task.summary,
+      pullRequest: task.pullRequest?.number ?? null,
+    },
     report: {
       ...report,
       sections: report.sections.map((section) => ({ ...section, spots: [] })),
@@ -116,6 +128,11 @@ function readTexts(value: unknown) {
 function readNumber(fields: Fields, key: string) {
   const value = fields[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function readPullRequestNumber(fields: Fields) {
+  const value = readNumber(fields, 'pullRequest');
+  return value !== null && Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 function readChoice<T extends string>(fields: Fields, key: string, choices: readonly T[]) {
@@ -229,7 +246,13 @@ export function parseReviewPayload(value: unknown): ReviewPayload | null {
   if (!id || !title) return null;
   return {
     v: REVIEW_PAYLOAD_VERSION,
-    task: { id, handle: readText(value.task, 'handle'), title, summary: readText(value.task, 'summary') },
+    task: {
+      id,
+      handle: readText(value.task, 'handle'),
+      title,
+      summary: readText(value.task, 'summary'),
+      pullRequest: readPullRequestNumber(value.task),
+    },
     report: parseReport(value.report),
     evidence: listFields(value.evidence).flatMap((piece) => parseEvidence(piece) ?? []),
   };

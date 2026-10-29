@@ -664,6 +664,7 @@ export class EffectRunner {
       if (!created) throw new Error('GitHub did not return the new pull request.');
       return created;
     });
+    await this.#refreshDescription(taskId, context, read.pullRequest);
     await this.#recordFreshRead(repo, taskId, read, context.signal);
     this.#syncSoon(taskId);
   }
@@ -679,8 +680,9 @@ export class EffectRunner {
     this.#syncSoon(taskId);
   }
 
-  async #describePullRequest(taskId: string, context: EffectContext) {
-    const { task, repo } = this.#requireTask(taskId);
+  async #describePullRequest(taskId: string, context: EffectContext, pullRequest?: PullRequest) {
+    const { task: current, repo } = this.#requireTask(taskId);
+    const task = pullRequest ? { ...current, pullRequest } : current;
     const evidence = Object.values(this.#engine.state.evidence).filter((piece) => piece.taskId === taskId);
     const { body, uploads } = await this.#descriptions.describe(repo, task, evidence, context.signal);
     if (uploads.length === 0) return body;
@@ -692,11 +694,11 @@ export class EffectRunner {
     return body;
   }
 
-  async #refreshDescription(taskId: string, context: EffectContext) {
-    const number = this.#engine.state.tasks[taskId]?.pullRequest?.number;
+  async #refreshDescription(taskId: string, context: EffectContext, opened?: PullRequest) {
+    const number = (opened ?? this.#engine.state.tasks[taskId]?.pullRequest)?.number;
     if (number === undefined || context.signal.aborted) return;
     try {
-      const body = await this.#describePullRequest(taskId, context);
+      const body = await this.#describePullRequest(taskId, context, opened);
       const { repo } = this.#requireTask(taskId);
       await writePullRequestBlock(repo, number, body, context.signal);
     } catch (error) {

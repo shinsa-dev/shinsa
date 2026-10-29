@@ -37,3 +37,7 @@ export async function readReviewFragment(hash: string): Promise<ReviewPayload | 
     return null;
   }
 }
+
+export function describePullRequestEyebrow(pullRequest: number | null, handle: string | null) {
+  return [pullRequest ? `Pull request #${pullRequest}` : 'Pull request', handle].filter(Boolean).join(' · ');
+}
