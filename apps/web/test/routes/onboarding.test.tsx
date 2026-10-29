@@ -66,7 +66,7 @@ describe('the setup page', () => {
     serve(createFlow(createStep()));
     renderPage();
     expect(await screen.findByRole('heading', { name: 'How should pull requests be merged?' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: 'Setup, step 3 of 6' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Setup, step 4 of 7' })).toBeTruthy();
     const options = screen.getAllByRole('option');
     expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['false', 'false']);
     expect(within(options[0] as HTMLElement).getByText('Recommended')).toBeTruthy();

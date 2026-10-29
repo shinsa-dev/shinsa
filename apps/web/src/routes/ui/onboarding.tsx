@@ -12,6 +12,7 @@ const USER_HOME = '/Users/sam';
 
 const LABELS: [OnboardingStepId, string, string][] = [
   ['roots', 'Folders', '~/Developer'],
+  ['projects', 'Projects', '6 projects'],
   ['model', 'Model', 'Opus 5.5'],
   ['merge', 'Merging', 'Squash'],
   ['plans', 'Plans', 'Plan first'],
@@ -26,6 +27,7 @@ function createSampleStep(
     description: '',
     multiple: false,
     options: [],
+    projects: [],
     checks: [],
     ready: true,
     imported: [],

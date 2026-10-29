@@ -24,6 +24,7 @@ function setup() {
     config,
     store,
     roots,
+    resolveLogin: () => Promise.resolve(null),
     run: () => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false }),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),

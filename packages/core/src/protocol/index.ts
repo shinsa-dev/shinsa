@@ -102,6 +102,7 @@ export type {
   OnboardingCheck,
   OnboardingFlow,
   OnboardingOption,
+  OnboardingProjectChoice,
   OnboardingReply,
   OnboardingStatus,
   OnboardingStep,

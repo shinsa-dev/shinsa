@@ -97,6 +97,7 @@ function setup(options: Setup = {}) {
       config,
       store,
       roots,
+      resolveLogin: () => Promise.resolve(null),
       run: options.run ?? ALL_OK,
       models: { listModels: () => Promise.resolve(options.models ?? MODELS) },
       accounts: () => Promise.resolve([...accounts]),
@@ -112,6 +113,11 @@ function answer(onboarding: Onboarding, stepId: OnboardingStepId, ...values: str
   return onboarding.setup.reply({ type: 'answer', stepId, values });
 }
 
+async function answerFolders(onboarding: Onboarding, ...roots: string[]) {
+  await answer(onboarding, 'roots', ...roots);
+  return onboarding.setup.reply({ type: 'answer', stepId: 'projects', values: ['continue'], projects: [] });
+}
+
 function openStep(onboarding: Onboarding, stepId: OnboardingStepId) {
   return onboarding.setup.reply({ type: 'open', stepId });
 }
@@ -121,7 +127,7 @@ function listChosen(flow: OnboardingFlow) {
 }
 
 async function reachAccounts(world: ReturnType<typeof setup>) {
-  await answer(world.onboarding, 'roots', world.developer);
+  await answerFolders(world.onboarding, world.developer);
   await answer(world.onboarding, 'model', 'opus');
   await answer(world.onboarding, 'merge', 'squash');
   return answer(world.onboarding, 'plans', 'yes');
@@ -135,6 +141,7 @@ describe('the setup steps', () => {
     expect(flow.revisit).toBe(false);
     expect(flow.steps.map((step) => [step.id, step.label, step.reached])).toEqual([
       ['roots', 'Folders', true],
+      ['projects', 'Projects', false],
       ['model', 'Model', false],
       ['merge', 'Merging', false],
       ['plans', 'Plans', false],
@@ -161,7 +168,7 @@ describe('the setup steps', () => {
     expect(flow.step?.description).toContain('found no repositories');
     const next = await answer(onboarding, 'roots', work);
     expect(store.config.roots).toEqual([work]);
-    expect(next.step?.id).toBe('model');
+    expect(next.step?.id).toBe('projects');
     expect(next.steps[0]?.summary).toMatch(/work$/);
     const back = await openStep(onboarding, 'roots');
     expect(back.step?.options).toEqual([
@@ -171,7 +178,7 @@ describe('the setup steps', () => {
 
   test('each answer saves its setting and moves on; nothing is picked on a step you have not answered', async () => {
     const { onboarding, engine, store, developer, work } = setup();
-    const model = await answer(onboarding, 'roots', developer, work);
+    const model = await answerFolders(onboarding, developer, work);
     expect(store.config.roots).toEqual([developer, work]);
     expect(model.step).toMatchObject({ id: 'model', title: 'Which model should agents use?' });
     expect(model.step?.options.map((option) => [option.value, option.detail])).toEqual([
@@ -182,8 +189,9 @@ describe('the setup steps', () => {
     expect(listChosen(model)).toEqual([]);
     const merge = await answer(onboarding, 'model', 'sonnet');
     expect(engine.state.settings.defaultModel).toBe('sonnet');
-    expect(merge.steps.slice(0, 2).map((step) => step.summary)).toEqual([
+    expect(merge.steps.slice(0, 3).map((step) => step.summary)).toEqual([
       expect.stringMatching(/Developer and 1 more$/),
+      null,
       'Sonnet 5.5',
     ]);
     expect(merge.step?.options.map((option) => [option.value, option.recommended])).toEqual([
@@ -202,6 +210,7 @@ describe('the setup steps', () => {
     expect(accounts.step).toMatchObject({ id: 'accounts', submitLabel: 'Continue', imported: [], notes: [] });
     expect(accounts.steps.map((step) => step.summary)).toEqual([
       expect.any(String),
+      null,
       'Sonnet 5.5',
       'Rebase',
       'Plan first',
@@ -212,13 +221,13 @@ describe('the setup steps', () => {
 
   test('going back shows your answer picked, a new one replaces it, and the later steps keep theirs', async () => {
     const { onboarding, engine, developer } = setup();
-    await answer(onboarding, 'roots', developer);
+    await answerFolders(onboarding, developer);
     await answer(onboarding, 'model', 'opus');
     await answer(onboarding, 'merge', 'squash');
     const back = await openStep(onboarding, 'merge');
-    expect(back.index).toBe(2);
+    expect(back.index).toBe(3);
     expect(listChosen(back)).toEqual(['squash']);
-    expect(back.steps[3]).toMatchObject({ reached: true, summary: null });
+    expect(back.steps[4]).toMatchObject({ reached: true, summary: null });
     const plans = await answer(onboarding, 'merge', 'merge');
     expect(engine.state.settings.mergeMethod).toBe('merge');
     expect(plans.step?.id).toBe('plans');
@@ -230,7 +239,7 @@ describe('the setup steps', () => {
     expect(listChosen(model)).toEqual(['opus']);
     const roles = await answer(onboarding, 'model', ':roles');
     expect(engine.state.settings.defaultModel).toBeNull();
-    expect(roles.steps[1]?.summary).toBe('Each role’s own');
+    expect(roles.steps[2]?.summary).toBe('Each role’s own');
     const reopened = await openStep(onboarding, 'model');
     expect(listChosen(reopened)).toEqual([':roles']);
     const forward = await openStep(onboarding, 'plans');
@@ -251,7 +260,7 @@ describe('the setup steps', () => {
       id: 'roots',
       problem: '/no/such/folder is not a folder on this machine.',
     });
-    await answer(onboarding, 'roots', developer);
+    await answerFolders(onboarding, developer);
     const wrong = await answer(onboarding, 'model', 'gpt');
     expect(wrong.step?.problem).toBe('Pick one of these: Opus 5.5, Sonnet 5.5 or Each role’s own model.');
     expect((await openStep(onboarding, 'model')).step?.problem).toBeNull();
@@ -260,7 +269,7 @@ describe('the setup steps', () => {
   test('a saved model outside the catalog is still listed', async () => {
     const { onboarding, engine, developer } = setup();
     await engine.dispatch({ type: 'settings.change', patch: { defaultModel: 'claude-legacy' } });
-    await answer(onboarding, 'roots', developer);
+    await answerFolders(onboarding, developer);
     await answer(onboarding, 'model', 'claude-legacy');
     const back = await openStep(onboarding, 'model');
     expect(back.step?.options[0]).toMatchObject({ value: 'claude-legacy', chosen: true });
@@ -303,7 +312,7 @@ describe('the accounts step', () => {
     });
     await world.onboarding.setup.resolve();
     expect(world.importCalls).toHaveLength(2);
-    expect(flow.steps[4]?.summary).toBeNull();
+    expect(flow.steps[5]?.summary).toBeNull();
   });
 
   test('an account you removed after it was imported is not imported again', async () => {
@@ -333,14 +342,14 @@ describe('the accounts step', () => {
     });
     const tools = await answer(world.onboarding, 'accounts', 'continue');
     expect(tools.step?.id).toBe('prerequisites');
-    expect(tools.steps[4]?.summary).toBe('1 account');
+    expect(tools.steps[5]?.summary).toBe('1 account');
   });
 
   test('counts no accounts as none yet', async () => {
     const world = setup({ accounts: [] });
     await reachAccounts(world);
     const tools = await answer(world.onboarding, 'accounts', 'continue');
-    expect(tools.steps[4]?.summary).toBe('None yet');
+    expect(tools.steps[5]?.summary).toBe('None yet');
   });
 });
 
@@ -352,7 +361,7 @@ describe('finishing', () => {
     expect(tools.step).toMatchObject({ id: 'prerequisites', ready: false, submitLabel: 'Finish anyway' });
     expect(tools.step?.checks.find((check) => check.id === 'bun')).toMatchObject({ ok: false });
     const done = await answer(world.onboarding, 'prerequisites', 'continue');
-    expect(done).toMatchObject({ index: 6, step: null });
+    expect(done).toMatchObject({ index: 7, step: null });
     expect(world.store.config.onboardedAt).not.toBeNull();
     expect((await world.open().onboarding.setup.resolve()).step).toBeNull();
     await expect(openStep(world.onboarding, 'roots')).rejects.toMatchObject({ code: 'setup_finished' });
@@ -382,7 +391,7 @@ describe('finishing', () => {
 describe('the saved setup', () => {
   test('a restart of the server resumes the step you were on', async () => {
     const world = setup();
-    await answer(world.onboarding, 'roots', world.developer);
+    await answerFolders(world.onboarding, world.developer);
     const resumed = await world.open().onboarding.setup.resolve();
     expect(resumed.step?.id).toBe('model');
   });

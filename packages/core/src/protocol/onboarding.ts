@@ -1,3 +1,4 @@
+import type { ProjectSuggestion } from '../domain/project-suggestions.ts';
 import type { Settings } from '../domain/settings.ts';
 import type { AccountImport } from './accounts.ts';
 
@@ -26,7 +27,14 @@ export interface RootSuggestions {
   truncated: boolean;
 }
 
-export type OnboardingStepId = 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+export type OnboardingStepId =
+  | 'roots'
+  | 'projects'
+  | 'model'
+  | 'merge'
+  | 'plans'
+  | 'accounts'
+  | 'prerequisites';
 
 export interface OnboardingCheck {
   id: string;
@@ -60,6 +68,7 @@ export interface OnboardingStep {
   options: OnboardingOption[];
   checks: OnboardingCheck[];
   ready: boolean;
+  projects: ProjectSuggestion[];
   imported: AccountImport[];
   notes: string[];
   problem: string | null;
@@ -73,8 +82,19 @@ export interface OnboardingFlow {
   revisit: boolean;
 }
 
+export interface OnboardingProjectChoice {
+  id: string;
+  name: string;
+  repos: string[];
+}
+
 export type OnboardingReply =
-  | { type: 'answer'; stepId: OnboardingStepId; values: string[] }
+  | {
+      type: 'answer';
+      stepId: OnboardingStepId;
+      values: string[];
+      projects?: OnboardingProjectChoice[];
+    }
   | { type: 'open'; stepId: OnboardingStepId }
   | { type: 'restart' };
 

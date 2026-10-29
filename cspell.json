@@ -5,6 +5,8 @@
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_"],
   "words": [
     "gtimeout",
+    "gitdir",
+    "commondir",
     "nohup",
     "acks",
     "Adyen",

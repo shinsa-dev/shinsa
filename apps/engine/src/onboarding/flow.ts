@@ -3,6 +3,7 @@ import {
   type AccountImport,
   DomainError,
   type OnboardingFlow,
+  type OnboardingProjectChoice,
   type OnboardingReply,
   type OnboardingStep,
   type OnboardingStepId,
@@ -28,6 +29,7 @@ interface Draft {
 
 type FlowContext = StepReadContext & {
   save: (patch: SetupPatch, commandId: string) => Promise<void>;
+  createProjects: (choices: OnboardingProjectChoice[] | undefined, commandId: string) => Promise<void>;
 };
 
 interface FlowOptions {
@@ -41,6 +43,8 @@ interface FlowOptions {
 }
 
 const MAX_VALUES = 50;
+
+const MAX_PROJECT_REPOS = 400;
 
 function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
@@ -79,6 +83,26 @@ function parseStepId(value: unknown, steps: readonly StepDefinition[]) {
   return step.id;
 }
 
+function isProjectChoice(value: unknown): value is OnboardingProjectChoice {
+  if (!value || typeof value !== 'object') return false;
+  const choice = value as Partial<OnboardingProjectChoice>;
+  return (
+    typeof choice.id === 'string' &&
+    typeof choice.name === 'string' &&
+    Array.isArray(choice.repos) &&
+    choice.repos.length <= MAX_PROJECT_REPOS &&
+    choice.repos.every((repo) => typeof repo === 'string')
+  );
+}
+
+function parseProjectChoices(value: unknown) {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.length > MAX_VALUES || !value.every(isProjectChoice)) {
+    throw new DomainError('projects_invalid', 'Send each project as its id, name and repositories.');
+  }
+  return value;
+}
+
 function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition[]): OnboardingReply {
   if (fields.type === 'restart') return { type: 'restart' };
   if (fields.type === 'open') return { type: 'open', stepId: parseStepId(fields.stepId, steps) };
@@ -93,7 +117,8 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
     ) {
       throw new DomainError('values_invalid', 'Pick at least one option.');
     }
-    return { type: 'answer', stepId, values: values as string[] };
+    const projects = parseProjectChoices(fields.projects);
+    return { type: 'answer', stepId, values: values as string[], ...(projects ? { projects } : {}) };
   }
   throw new DomainError('reply_invalid', 'Answer a step, open one or start again.');
 }
@@ -129,7 +154,7 @@ export class OnboardingSetup {
       if (index !== draft.index) {
         throw new DomainError('step_stale', 'That step is no longer open. Answer the step on screen.');
       }
-      await this.#answer(draft, reply.stepId, reply.values);
+      await this.#answer(draft, reply.stepId, reply.values, reply.projects);
       return this.#present(draft);
     });
   }
@@ -186,12 +211,25 @@ export class OnboardingSetup {
     this.#write(draft);
   }
 
-  async #answer(draft: Draft, stepId: OnboardingStepId, values: string[]) {
+  async #answer(
+    draft: Draft,
+    stepId: OnboardingStepId,
+    values: string[],
+    projects: OnboardingProjectChoice[] | undefined
+  ) {
     const step = this.#options.steps[draft.index] as StepDefinition;
     const context = this.#options.resolveContext();
     const commandId = `setup:${draft.id}:${stepId}:${draft.saves}`;
     try {
-      await step.answer(values, { ...context, save: (patch) => context.save(patch, commandId) });
+      await step.answer(
+        values,
+        {
+          ...context,
+          save: (patch) => context.save(patch, commandId),
+          createProjects: (choices) => context.createProjects(choices, commandId),
+        },
+        projects
+      );
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
       draft.problem = error.message;

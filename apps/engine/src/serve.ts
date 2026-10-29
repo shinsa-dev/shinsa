@@ -221,6 +221,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       config,
       store,
       roots,
+      resolveLogin: services.resolveLogin,
       models,
       run: options.runPrerequisite,
       accounts: options.accounts ?? onboardingAccounts.source,

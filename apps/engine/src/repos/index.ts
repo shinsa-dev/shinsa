@@ -34,7 +34,7 @@ function selectLocalRepo(path: string, name: string): LocalRepo | null {
   }
 }
 
-export function listLocalRepos(roots: string[]): LocalRepo[] {
+export function listLocalRepos(roots: string[], limit = MAX_LOCAL_REPOS): LocalRepo[] {
   const found = new Map<string, LocalRepo>();
   for (const root of roots) {
     for (const entry of readDirectory(root)) {
@@ -42,7 +42,7 @@ export function listLocalRepos(roots: string[]): LocalRepo[] {
       if (repo && !found.has(repo.path)) found.set(repo.path, repo);
     }
   }
-  return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, MAX_LOCAL_REPOS);
+  return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, limit);
 }
 
 export function createLoginResolver(cwd: string): LoginResolver {
@@ -127,5 +127,6 @@ export async function listCandidateRepos(roots: string[], origin: string | null)
 }
 
 export { createDiscoverer, discoverRoots } from './discover.ts';
+export { readOriginRemote } from './remote.ts';
 export { type Discoverer, type RootSource, Roots } from './roots.ts';
 export { verifySetup } from './setup.ts';

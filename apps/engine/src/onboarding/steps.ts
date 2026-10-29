@@ -4,7 +4,9 @@ import {
   describeList,
   type OnboardingCheck,
   type OnboardingOption,
+  type OnboardingProjectChoice,
   type OnboardingStepId,
+  type ProjectSuggestion,
   type RootSuggestions,
   resolveDisplayPath,
   resolveModelLabel,
@@ -25,20 +27,24 @@ interface StepContext {
   userHome: string;
   settings: Settings;
   roots: string[];
+  projectCount: number;
   suggestRoots: () => Promise<RootSuggestions>;
+  suggestProjects: () => Promise<ProjectSuggestion[]>;
   listModels: () => Promise<AgentModel[]>;
   listAccounts: AccountSource;
   checkPrerequisites: () => Promise<PrerequisiteReport>;
   save: (patch: SetupPatch) => Promise<void>;
+  createProjects: (choices: OnboardingProjectChoice[] | undefined) => Promise<void>;
 }
 
-export type StepReadContext = Omit<StepContext, 'save'>;
+export type StepReadContext = Omit<StepContext, 'save' | 'createProjects'>;
 
 interface StepView {
   title: string;
   description: string;
   multiple: boolean;
   options: OnboardingOption[];
+  projects: ProjectSuggestion[];
   checks: OnboardingCheck[];
   ready: boolean;
   submitLabel: string;
@@ -49,7 +55,7 @@ export interface StepDefinition {
   label: string;
   view: (context: StepReadContext, answered: boolean) => Promise<StepView>;
   summarize: (context: StepReadContext) => Promise<string | null>;
-  answer: (values: string[], context: StepContext) => Promise<void>;
+  answer: (values: string[], context: StepContext, projects?: OnboardingProjectChoice[]) => Promise<void>;
 }
 
 const MAX_SUGGESTIONS = 8;
@@ -72,6 +78,7 @@ function createView(view: Partial<StepView> & Pick<StepView, 'title' | 'descript
   return {
     multiple: false,
     options: [],
+    projects: [],
     checks: [],
     ready: true,
     submitLabel: 'Continue',
@@ -136,6 +143,40 @@ const ROOTS: StepDefinition = {
   },
   answer: async (values, context) => {
     await context.save({ roots: resolveChosenRoots(values, context.userHome) });
+  },
+};
+
+function describeProjectCount(count: number) {
+  return count === 1 ? '1 project' : `${count} projects`;
+}
+
+const PROJECTS: StepDefinition = {
+  id: 'projects',
+  label: 'Projects',
+  view: async (context) => {
+    const projects = await context.suggestProjects();
+    if (projects.length === 0) {
+      return createView({
+        title: 'Your projects',
+        description:
+          context.projectCount > 0
+            ? 'Every repository in your folders already belongs to a project.'
+            : 'Shinsa found no repositories in these folders yet. It files each one in a project the first time it works there.',
+      });
+    }
+    return createView({
+      title: 'Shinsa sorted your repositories into projects',
+      description:
+        'Grouped by GitHub owner and folder. Rename a project or leave out what you do not want; you can change them later in Settings.',
+      projects,
+      submitLabel: projects.length === 1 ? 'Create the project' : `Create ${projects.length} projects`,
+    });
+  },
+  summarize: (context) =>
+    Promise.resolve(context.projectCount === 0 ? null : describeProjectCount(context.projectCount)),
+  answer: async (values, context, projects) => {
+    assertContinue(values);
+    await context.createProjects(projects);
   },
 };
 
@@ -314,6 +355,7 @@ const PREREQUISITES: StepDefinition = {
 
 export const ONBOARDING_STEPS: readonly StepDefinition[] = [
   ROOTS,
+  PROJECTS,
   MODEL,
   MERGE,
   PLANS,

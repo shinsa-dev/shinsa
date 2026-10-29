@@ -48,6 +48,7 @@ export function createSuggestions(paths: [string, number][]): RootSuggestions {
 
 const STEP_LABELS: [OnboardingStepId, string][] = [
   ['roots', 'Folders'],
+  ['projects', 'Projects'],
   ['model', 'Model'],
   ['merge', 'Merging'],
   ['plans', 'Plans'],
@@ -69,6 +70,7 @@ export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingS
       createOption({ detail: 'Every pull request lands as one commit.', recommended: true }),
       createOption({ value: 'rebase', label: 'Rebase', detail: 'No merge commit.' }),
     ],
+    projects: [],
     checks: [],
     ready: true,
     imported: [],
