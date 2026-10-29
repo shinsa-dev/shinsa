@@ -352,6 +352,8 @@ export function HandoverCard({
       return <DeliveryCard title='Wrote the report' args={tool.args} field='report' />;
     case 'report_outcome':
       return <DeliveryCard title='Reported the outcome' args={tool.args} field='outcome' />;
+    case 'report_watch':
+      return <DeliveryCard title='Reported the watchdog check' args={tool.args} field='summary' />;
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
     case 'attach_evidence':

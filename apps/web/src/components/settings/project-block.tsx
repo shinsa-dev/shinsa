@@ -21,6 +21,7 @@ import {
   resolveFolderName,
   validateFolderPath,
 } from '@/lib/projects.ts';
+import { describeWatchSource, removeWatchSource, WATCH_SOURCE_HINT } from '@/lib/tasks/watchdogs.ts';
 import { BaselineSelect } from './baseline-select.tsx';
 import { CoverageSelect } from './coverage-select.tsx';
 import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx';
@@ -268,6 +269,21 @@ export function ProjectBlock({
         <ProjectFolderRow key={folder} project={project} folder={folder} actions={actions} />
       ))}
       {adding && <ProjectFolderForm project={project} actions={actions} onDone={() => setAdding(false)} />}
+      {(project.watchSources ?? []).map((source) => (
+        <PathRow
+          key={source.server}
+          icon='IconRadar'
+          iconLabel={WATCH_SOURCE_HINT}
+          title={source.server}
+          path={describeWatchSource(state, source)}
+          action={
+            <RemoveButton
+              label={`Remove the data source ${source.server}`}
+              onClick={() => void removeWatchSource(project.id, source.server)}
+            />
+          }
+        />
+      ))}
     </SettingsBlock>
   );
 }

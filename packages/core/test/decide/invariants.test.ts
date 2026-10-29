@@ -531,6 +531,8 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
       planFirst: taskIds.length % 4 === 3,
     },
   ];
+  const forkOf = taskIds.length % 3 === 1 ? pick(random, taskIds) : undefined;
+  if (forkOf) commands.push({ type: 'task.create', request: 'Carry it on', repoId: 'repo', forkOf });
   const open = Object.values(state.tasks).filter((task) => !isTaskSettled(task));
   for (const gate of listOpenGates(state)) {
     const other = pick(

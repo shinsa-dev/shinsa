@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { describePullRequestFact, describeStarted } from '@/lib/tasks/facts.ts';
-import { createTask, NOW } from '../../support/state.ts';
+import { describePullRequestFact, describeStarted, listForkSources, listForks } from '@/lib/tasks/facts.ts';
+import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 type PullRequest = NonNullable<Task['pullRequest']>;
 
@@ -59,5 +59,18 @@ describe('describePullRequestFact', () => {
     expect(describePullRequestFact(pullRequest({ state: 'closed' }))).toEqual([
       { text: 'closed', tone: 'neutral' },
     ]);
+  });
+});
+
+describe('forks', () => {
+  it('lists the task a task was forked from, and the ones forked from it, oldest first', () => {
+    const source = createTask({ id: 's' });
+    const later = createTask({ id: 'b', forkOf: 's', createdAt: NOW });
+    const earlier = createTask({ id: 'a', forkOf: 's', createdAt: NOW - 1 });
+    const state = createShinsaState({ tasks: [source, later, earlier] });
+    expect(listForkSources(state, later)).toEqual([source]);
+    expect(listForkSources(state, source)).toEqual([]);
+    expect(listForkSources(state, createTask({ id: 'x', forkOf: 'gone' }))).toEqual([]);
+    expect(listForks(state, source).map((task) => task.id)).toEqual(['a', 'b']);
   });
 });

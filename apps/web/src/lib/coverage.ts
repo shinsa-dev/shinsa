@@ -28,7 +28,7 @@ export interface CoverageItem {
 }
 
 const MODE_COPY: Record<CoverageMode, Omit<CoverageItem, 'value'>> = {
-  auto: { label: 'Auto coverage', hint: '', icon: 'IconSparkle' },
+  auto: { label: 'Auto coverage', hint: '', icon: 'IconPieChart1' },
   custom: {
     label: 'Custom coverage',
     hint: 'Runs your command and reads the report it writes.',

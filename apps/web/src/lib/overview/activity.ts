@@ -24,6 +24,8 @@ const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
   delegation: { icon: 'IconAgents', tone: 'blue' },
   shape: { icon: 'IconSplit', tone: 'purple' },
   round: { icon: 'IconArrowsRepeatCircle', tone: 'blue' },
+  fork: { icon: 'IconFork', tone: 'blue' },
+  watchdog: { icon: 'IconRadar', tone: 'blue' },
 };
 
 export function resolveActivityGlyph(entry: Activity): Glyph {

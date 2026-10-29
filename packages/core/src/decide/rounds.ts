@@ -41,7 +41,7 @@ interface RoundBranch {
   onto: number | null;
 }
 
-const FALLBACK_BRANCH = 'shinsa/task';
+const FALLBACK_BRANCH = 'chore/shinsa-task';
 
 export type RoundRelease = 'now' | 'finish' | 'approve' | 'approve_and_merge' | 'merge';
 

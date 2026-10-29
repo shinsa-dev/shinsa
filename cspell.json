@@ -5,6 +5,8 @@
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_"],
   "words": [
     "gtimeout",
+    "gitdir",
+    "commondir",
     "nohup",
     "acks",
     "Adyen",
@@ -32,6 +34,7 @@
     "collapsibles",
     "COLORTERM",
     "commentable",
+    "Composio",
     "containerfile",
     "contenteditable",
     "contentless",

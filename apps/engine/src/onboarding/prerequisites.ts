@@ -14,6 +14,7 @@ interface Prerequisite {
   ok: boolean;
   detail: string;
   fix: string | null;
+  command: string | null;
   optional?: boolean;
 }
 
@@ -25,14 +26,25 @@ export interface PrerequisiteReport {
 const CHECK_TIMEOUT_MS = 15_000;
 
 const FIXES: Record<PrerequisiteId, string> = {
-  git: 'Install Git, for example with `xcode-select --install` or `brew install git`.',
-  gh: 'Install the GitHub CLI with `brew install gh`.',
-  gh_auth: 'Sign in to GitHub with `gh auth login`.',
+  git: 'Install Git with Apple’s command line tools, or with `brew install git`.',
+  gh: 'Install the GitHub CLI with Homebrew.',
+  gh_auth: 'Sign in to GitHub in a terminal.',
   claude: 'Install Claude Code from https://claude.com/claude-code.',
-  claude_auth: 'Sign in to Claude Code with `claude auth login`.',
-  codex: 'Only for agents you run on Codex: install it with `npm install -g @openai/codex`.',
-  codex_auth: 'Only for agents you run on Codex: sign in with `codex login`.',
+  claude_auth: 'Sign in to Claude Code in a terminal.',
+  codex: 'Only for agents you run on Codex.',
+  codex_auth: 'Only for agents you run on Codex.',
   bun: 'Install Bun from https://bun.sh.',
+};
+
+const COMMANDS: Record<PrerequisiteId, string | null> = {
+  git: 'xcode-select --install',
+  gh: 'brew install gh',
+  gh_auth: 'gh auth login',
+  claude: null,
+  claude_auth: 'claude auth login',
+  codex: 'npm install -g @openai/codex',
+  codex_auth: 'codex login',
+  bun: 'curl -fsSL https://bun.sh/install | bash',
 };
 
 const OPTIONAL: ReadonlySet<PrerequisiteId> = new Set(['codex', 'codex_auth']);
@@ -65,6 +77,7 @@ function createCheck(id: PrerequisiteId, ok: boolean, detail: string): Prerequis
     ok,
     detail,
     fix: ok ? null : FIXES[id],
+    command: ok ? null : COMMANDS[id],
     ...(OPTIONAL.has(id) ? { optional: true } : {}),
   };
 }

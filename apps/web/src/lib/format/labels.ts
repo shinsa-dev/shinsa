@@ -18,6 +18,7 @@ export const STAGE_LABEL: Record<TaskStage, string> = {
   investigating: 'Investigating',
   researching: 'Researching',
   operating: 'Running the operation',
+  watching: 'Checking a watchdog',
   awaiting_proposal: 'Change to approve',
   awaiting_operation: 'Operation to confirm',
   merged: 'Merged',
@@ -41,6 +42,7 @@ export const STAGE_TONE: Record<TaskStage, Tone> = {
   investigating: 'blue',
   researching: 'blue',
   operating: 'blue',
+  watching: 'blue',
   awaiting_proposal: 'purple',
   awaiting_operation: 'purple',
   merged: 'neutral',
@@ -58,6 +60,7 @@ export const STAGE_ICON: Partial<Record<TaskStage, IconName>> = {
   investigating: 'IconMagnifyingGlass',
   researching: 'IconBook',
   operating: 'IconConsole',
+  watching: 'IconRadar',
 };
 
 export const AGENT_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([

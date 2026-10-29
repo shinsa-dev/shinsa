@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Task } from '@shinsa/core';
+import type { Round, Task } from '@shinsa/core';
 import {
   createPullRequest,
   mergePullRequest,
@@ -15,6 +15,7 @@ import {
   retargetPullRequest,
   serializePullRequest,
   serializePullRequestBody,
+  serializePullRequestTitle,
 } from '../../src/github/index.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
@@ -35,6 +36,7 @@ interface FakePull {
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
   unresolved: number;
   mergedWith: string | null;
+  title?: string;
   mergeCommit?: string | null;
   reviewDecision?: string | null;
   comments?: { id: string; author: string | null; createdAt: string; body: string }[];
@@ -250,8 +252,40 @@ describe('serializePullRequest', () => {
     expect(serializePullRequest(view, unknown, 5)).toMatchObject({ mergeQueue: null, queueRemoval: null });
   });
 
+  test('the body names the Shinsa task first, by handle when it has one', () => {
+    expect(serializePullRequestBody(createTask({ handle: 'LOC-22', summary: 'Did it.' }))).toBe(
+      'Shinsa task: LOC-22, `shinsa://task/task-1`\n\nDid it.'
+    );
+    expect(serializePullRequestBody(createTask())).toBe('Shinsa task: `shinsa://task/task-1`');
+  });
+
+  test('the title is a conventional commit subject from the branch type and the current round', () => {
+    expect(serializePullRequestTitle(createTask({ title: 'Fix the tab scroll' }))).toBe(
+      'fix: the tab scroll'
+    );
+    expect(serializePullRequestTitle(createTask({ branch: 'docs/readme', title: 'Explain setup' }))).toBe(
+      'docs: explain setup'
+    );
+    const round = (number: number, title: string, status: Round['status']) =>
+      ({ number, title, status, startedAt: number }) as Round;
+    const later = createTask({
+      branch: 'feat/export-round-2',
+      rounds: [round(1, 'Add the export', 'merged'), round(2, 'Export to CSV too', 'active')],
+    });
+    expect(serializePullRequestTitle(later)).toBe('feat: export to CSV too');
+    const long = 'Let the export also write CSV files and remember the last folder you chose';
+    expect(serializePullRequestTitle(createTask({ branch: 'feat/export', title: long }))).toBe(
+      `feat: l${long.slice(1)}`
+    );
+    expect(serializePullRequestTitle(createTask({ branch: 'feat/search', title: 'feat: add search' }))).toBe(
+      'feat: add search'
+    );
+  });
+
   test('the body carries the summary and the plan', () => {
-    expect(serializePullRequestBody(createTask({ summary: 'Did it.' }))).toBe('Did it.');
+    expect(serializePullRequestBody(createTask({ summary: 'Did it.' }))).toBe(
+      'Shinsa task: `shinsa://task/task-1`\n\nDid it.'
+    );
     expect(serializePullRequestBody(createTask({ plan: { body: 'The plan' } as Task['plan'] }))).toContain(
       '<details><summary>Plan</summary>\n\nThe plan\n</details>'
     );
@@ -277,7 +311,7 @@ describe('serializePullRequest', () => {
         })
       )
     ).toBe(
-      'Did it.\n\n### How to test\n**Covered by tests**\n- a.test.ts covers it.\n\n### Pre-merge steps\n- [ ] **Set A**: In production.'
+      'Shinsa task: `shinsa://task/task-1`\n\nDid it.\n\n### How to test\n**Covered by tests**\n- a.test.ts covers it.\n\n### Pre-merge steps\n- [ ] **Set A**: In production.'
     );
   });
 });
@@ -438,6 +472,26 @@ describe('the gh calls', () => {
     expect(github.read().pulls.map((entry) => entry.state)).toEqual(['OPEN', 'MERGED']);
   });
 
+  test('a squash or merge commit takes the pull request title and number as its subject, with no body', async () => {
+    const { repo } = await createGitRepo({ remote: false });
+    const github = useFakeGitHub([
+      { ...pull, title: 'fix: the tab scroll' },
+      { ...pull, number: 8, title: 'feat: add search' },
+      { ...pull, number: 9, title: 'docs: explain setup' },
+      { ...pull, number: 10 },
+    ]);
+    await mergePullRequest(repo, 7, 'squash', null);
+    await mergePullRequest(repo, 8, 'merge', null);
+    await mergePullRequest(repo, 9, 'rebase', null);
+    await mergePullRequest(repo, 10, 'squash', null);
+    expect(github.read().calls.filter((call) => call[1] === 'merge')).toEqual([
+      ['pr', 'merge', '7', '--squash', '--subject', 'fix: the tab scroll (#7)', '--body', ''],
+      ['pr', 'merge', '8', '--merge', '--subject', 'feat: add search (#8)', '--body', ''],
+      ['pr', 'merge', '9', '--rebase'],
+      ['pr', 'merge', '10', '--squash'],
+    ]);
+  });
+
   test('opening reuses an open pull request, otherwise creates one against the right base', async () => {
     const github = useFakeGitHub([pull]);
     const { repo, path } = await createGitRepo({ remote: false });
@@ -449,7 +503,9 @@ describe('the gh calls', () => {
       'feat/base'
     );
     expect(created?.pullRequest).toMatchObject({ number: 2, base: 'feat/base' });
-    expect(github.read().calls.find((call) => call[1] === 'create')).toContain('feat/new');
+    const create = github.read().calls.find((call) => call[1] === 'create');
+    expect(create).toContain('feat/new');
+    expect(create?.[(create?.indexOf('--title') ?? 0) + 1]).toBe('feat: fix the tab scroll');
     await expect(createPullRequest(repo, createTask({ worktreePath: null }), null)).rejects.toThrow(
       'no branch'
     );

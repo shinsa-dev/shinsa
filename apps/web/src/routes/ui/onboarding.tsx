@@ -1,4 +1,10 @@
-import type { AccountSummary, OnboardingFlow, OnboardingStep, OnboardingStepId } from '@shinsa/core';
+import type {
+  AccountSummary,
+  OnboardingFlow,
+  OnboardingStep,
+  OnboardingStepId,
+  ProviderLogin,
+} from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { OnboardingFinished } from '@/components/onboarding/finished.tsx';
@@ -12,9 +18,8 @@ const USER_HOME = '/Users/sam';
 
 const LABELS: [OnboardingStepId, string, string][] = [
   ['roots', 'Folders', '~/Developer'],
-  ['model', 'Model', 'Opus 5.5'],
-  ['merge', 'Merging', 'Squash'],
-  ['plans', 'Plans', 'Plan first'],
+  ['projects', 'Projects', '6 projects'],
+  ['defaults', 'Defaults', 'Opus 5.5 · Squash · Plan first'],
   ['accounts', 'Accounts', '2 accounts'],
   ['prerequisites', 'Tools', ''],
 ];
@@ -26,6 +31,11 @@ function createSampleStep(
     description: '',
     multiple: false,
     options: [],
+    groups: [],
+    projects: [],
+    filed: [],
+    conversation: [],
+    access: [],
     checks: [],
     ready: true,
     imported: [],
@@ -82,39 +92,129 @@ const FOLDERS = createSampleStep({
   ],
 });
 
-const MERGE = createSampleStep({
-  id: 'merge',
-  title: 'How should pull requests be merged?',
-  description: 'Shinsa merges a pull request only after you approve the merge.',
+const PRIVATE_FOLDERS = createSampleStep({
+  ...FOLDERS,
   options: [
+    ...FOLDERS.options,
     {
-      value: 'squash',
-      label: 'Squash',
-      detail: 'Every pull request lands as one commit.',
+      value: `${USER_HOME}/Documents`,
+      label: '~/Documents',
+      detail: null,
       chosen: true,
-      recommended: true,
-    },
-    {
-      value: 'merge',
-      label: 'Merge commit',
-      detail: 'Every commit is kept, joined by a merge commit.',
-      chosen: false,
       recommended: false,
     },
+  ],
+  access: [`${USER_HOME}/Documents`],
+});
+
+function createSampleRepos(folder: string, names: string[]) {
+  return names.map((name) => ({ path: `${USER_HOME}/${folder}/${name}`, name }));
+}
+
+const PROJECTS = createSampleStep({
+  id: 'projects',
+  title: 'Shinsa sorted your repositories into projects',
+  description:
+    'Grouped by GitHub owner and folder. Rename or leave out what you do not want, or ask for a change in your own words.',
+  conversation: [
     {
-      value: 'rebase',
-      label: 'Rebase',
-      detail: 'The commits are replayed onto the default branch, with no merge commit.',
-      chosen: false,
-      recommended: false,
+      request: 'Give the iOS app its own project',
+      reply: 'I moved paywall-ios into a new Superwall iOS project.',
+    },
+  ],
+  submitLabel: 'Create 3 projects',
+  projects: [
+    {
+      id: 'owner:superwall',
+      name: 'Superwall',
+      key: 'SUP',
+      color: 'sky',
+      projectId: null,
+      folders: [`${USER_HOME}/Superwall`],
+      repos: createSampleRepos('Superwall', ['paywall-next', 'ios', 'android', 'docs', 'web']),
+    },
+    {
+      id: 'owner:buzzkit-dev',
+      name: 'Buzzkit',
+      key: 'BUZ',
+      color: 'orange',
+      projectId: null,
+      folders: [],
+      repos: createSampleRepos('Developer', ['buzzkit', 'buzzkit-ios']),
+    },
+    {
+      id: 'personal',
+      name: 'Personal',
+      key: 'PER',
+      color: 'blue',
+      projectId: null,
+      folders: [],
+      repos: createSampleRepos('Developer', ['dotfiles', 'notes', 'website']),
+    },
+  ],
+});
+
+function createSampleChoice(value: string, label: string, detail: string, chosen = false) {
+  return { value, label, detail, chosen, recommended: chosen };
+}
+
+const DEFAULTS = createSampleStep({
+  id: 'defaults',
+  title: 'How should agents work?',
+  description:
+    'The recommended choices are picked. Continue to keep them; you can change any of them in Settings.',
+  groups: [
+    {
+      id: 'model',
+      label: 'Model',
+      options: [
+        createSampleChoice('model=opus', 'Opus 5.5', 'Most capable for complex work', true),
+        createSampleChoice('model=sonnet', 'Sonnet 5.5', 'Efficient for routine tasks'),
+        createSampleChoice(
+          'model=:roles',
+          'Each role’s own model',
+          'Planning, building and review each start on the model Shinsa picks for that role.'
+        ),
+      ],
+    },
+    {
+      id: 'merge',
+      label: 'Merging',
+      options: [
+        createSampleChoice('merge=squash', 'Squash', 'Every pull request lands as one commit.', true),
+        createSampleChoice('merge=merge', 'Merge commit', 'Every commit is kept, joined by a merge commit.'),
+        createSampleChoice(
+          'merge=rebase',
+          'Rebase',
+          'The commits are replayed onto the default branch, with no merge commit.'
+        ),
+      ],
+    },
+    {
+      id: 'plans',
+      label: 'Large tasks',
+      options: [
+        createSampleChoice(
+          'plans=yes',
+          'Show me the plan first',
+          'Before building a large task, the agent waits for you to approve its plan.',
+          true
+        ),
+        createSampleChoice(
+          'plans=no',
+          'Start building',
+          'Agents plan on their own and show you a plan only when you ask for one.'
+        ),
+      ],
     },
   ],
 });
 
 const ACCOUNTS = createSampleStep({
   id: 'accounts',
-  title: 'Which Claude accounts can agents use?',
-  description: 'Agents work under these. When one runs out of usage, Shinsa moves the work to the next.',
+  title: 'Which accounts can agents use?',
+  description:
+    'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
   imported: [{ origin: 'cswap', email: 'agents@superwall.com', plan: null }],
   notes: ['claude-swap did not hand over side@superwall.com. Sign in to it instead.'],
 });
@@ -126,15 +226,24 @@ const TOOLS = createSampleStep({
   ready: false,
   submitLabel: 'Finish anyway',
   checks: [
-    { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50.1', fix: null },
+    { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50.1', fix: null, command: null },
     {
       id: 'gh_auth',
       label: 'Signed in to GitHub',
       ok: false,
       detail: 'Not signed in.',
-      fix: 'Sign in to GitHub with `gh auth login`.',
+      fix: 'Sign in to GitHub in a terminal.',
+      command: 'gh auth login',
     },
-    { id: 'codex', label: 'Codex', ok: false, detail: 'Codex is missing.', fix: null, optional: true },
+    {
+      id: 'codex',
+      label: 'Codex',
+      ok: false,
+      detail: 'Codex is missing.',
+      fix: 'Only for agents you run on Codex.',
+      command: 'npm install -g @openai/codex',
+      optional: true,
+    },
   ],
 });
 
@@ -155,11 +264,26 @@ const ACTIONS = {
   answer: () => void acknowledgeSample(),
   open: () => void acknowledgeSample(),
   refresh: () => void acknowledgeSample(),
+  openPrivacy: () => void acknowledgeSample(),
+  revise: () => acknowledgeSample(),
 };
+
+const SAMPLE_PROVIDERS: ProviderLogin[] = [
+  {
+    provider: 'codex',
+    label: 'Codex',
+    status: 'signed_out',
+    method: null,
+    version: '0.50.0',
+    detail: 'Not logged in',
+    fix: 'Sign in with `codex login`.',
+  },
+];
 
 const ACCOUNT_ACTIONS = {
   signIn: () => void acknowledgeSample(),
   remove: () => void acknowledgeSample(),
+  copy: () => void acknowledgeSample(),
 };
 
 function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit?: boolean }) {
@@ -172,9 +296,13 @@ function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit
         flow={flow}
         step={step}
         pending={null}
-        direction='forward'
         userHome={USER_HOME}
-        accounts={{ list: accounts, actions: ACCOUNT_ACTIONS }}
+        accounts={{
+          list: accounts,
+          providers: SAMPLE_PROVIDERS,
+          actions: ACCOUNT_ACTIONS,
+          refresh: () => void acknowledgeSample(),
+        }}
         actions={ACTIONS}
         onClose={revisit ? () => void acknowledgeSample() : undefined}
         autoFocus={false}
@@ -189,13 +317,19 @@ export function OnboardingSpecimens() {
       <Specimen label='Folders · several at once, the one with the most repositories picked, more by path'>
         <StepSpecimen step={FOLDERS} />
       </Specimen>
-      <Specimen label='One answer · gone back to, your answer picked and Continue keeps it; run again from Settings'>
-        <StepSpecimen step={MERGE} revisit />
+      <Specimen label='Folders · one macOS keeps private, with the way to allow it or leave it out'>
+        <StepSpecimen step={PRIVATE_FOLDERS} />
+      </Specimen>
+      <Specimen label='Projects · suggested from the folders, all kept; rename one, untick it or open its repositories'>
+        <StepSpecimen step={PROJECTS} />
+      </Specimen>
+      <Specimen label='Defaults · the recommended choice picked in each group, Continue keeps them all; run again from Settings'>
+        <StepSpecimen step={DEFAULTS} revisit />
       </Specimen>
       <Specimen label='Accounts · imported for you, one added now, one that could not be, each removable'>
         <StepSpecimen step={ACCOUNTS} />
       </Specimen>
-      <Specimen label='Tools · passed, failed with its fix, optional and missing'>
+      <Specimen label='Tools · passed, failed with its fix and the command to copy, optional and missing'>
         <StepSpecimen step={TOOLS} />
       </Specimen>
       <Specimen label='Finished · what you set up and the way home'>

@@ -65,6 +65,11 @@ export {
   type OverlapNote,
 } from './overlaps.ts';
 export {
+  type ProjectSuggestion,
+  resolveProjectSuggestions,
+  type SuggestionRepo,
+} from './project-suggestions.ts';
+export {
   formatTaskHandle,
   isProjectKey,
   NO_PROJECT_KEY,
@@ -123,8 +128,11 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
+  WATCHDOG_DEFAULTS,
+  WATCHDOG_SETTING_LIMITS,
 } from './settings.ts';
 export {
   type AutoChoice,
@@ -239,6 +247,19 @@ export {
   validatePlanRules,
   validateVerification,
 } from './verification.ts';
+export {
+  isSourceForRepo,
+  isWatchdogActive,
+  isWatchdogScheduled,
+  listActiveWatchdogs,
+  listRepoWatchSources,
+  selectWatchingRun,
+  WATCHDOG_LIMITS,
+  type Watchdog,
+  type WatchdogCheck,
+  type WatchdogStatus,
+  type WatchSource,
+} from './watchdogs.ts';
 export {
   type ApprovalPath,
   DEFAULT_WORKSPACE_MODE,

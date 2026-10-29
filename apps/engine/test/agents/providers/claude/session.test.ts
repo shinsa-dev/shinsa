@@ -136,6 +136,21 @@ describe('starting a session', () => {
     });
   });
 
+  test('a fork resumes the source session as a copy, and only a resume can fork', async () => {
+    const forked = startScripted(createInput({ resume: 'sess-0', fork: true }).input);
+    forked.messages.push(success('ok'));
+    await forked.session.done;
+    expect(forked.calls[0]?.options).toMatchObject({ resume: 'sess-0', forkSession: true });
+    const fresh = startScripted(createInput({ fork: true }).input);
+    fresh.messages.push(success('ok'));
+    await fresh.session.done;
+    expect(fresh.calls[0]?.options).not.toHaveProperty('forkSession');
+    const resumed = startScripted(createInput({ resume: 'sess-0' }).input);
+    resumed.messages.push(success('ok'));
+    await resumed.session.done;
+    expect(resumed.calls[0]?.options).not.toHaveProperty('forkSession');
+  });
+
   test('the round agent keeps one tool list: planning refuses edits through a hook, building has none', async () => {
     const planning = startScripted(createInput({ readOnly: true, resume: 'sess-0' }).input);
     planning.messages.push(success('ok'));

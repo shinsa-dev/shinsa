@@ -259,7 +259,7 @@ export function startClaudeSession(
       options: {
         cwd: input.cwd,
         ...(input.model ? { model: input.model } : {}),
-        ...(input.resume ? { resume: input.resume } : {}),
+        ...(input.resume ? { resume: input.resume, ...(input.fork ? { forkSession: true } : {}) } : {}),
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         mcpServers: { [input.tools.name]: serializeToolServer(input.tools) },

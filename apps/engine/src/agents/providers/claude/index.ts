@@ -12,7 +12,7 @@ export { mapClaudeTool } from './map.ts';
 export type { EunoeLink, EunoeListener, EunoeMode, EunoeStatus } from './route.ts';
 
 export const CLAUDE_CAPABILITIES: ProviderCapabilities = {
-  sessions: { resume: true, inspect: true },
+  sessions: { resume: true, inspect: true, fork: true },
   turns: { steering: true },
   approvals: true,
   planning: { readOnly: true },

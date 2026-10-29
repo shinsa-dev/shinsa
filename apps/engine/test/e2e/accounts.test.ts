@@ -116,7 +116,7 @@ describe('accounts end to end', () => {
     const later = Date.now() + 60 * 60_000;
     world.agents.queue('plan', limitAt(later), limitAt(later + 1), plan());
     await world.createTask();
-    await world.until('the planners', () => world.agents.of('plan').length === 3);
+    await world.until('the builder', () => world.agents.of('build').length > 0);
     const planners = world.agents.of('plan');
     expect(planners.map((session) => session.account)).toEqual(added.map((account) => account.id));
     const plannerRun = Object.values(world.state.runs).find((run) => run.purpose === 'plan');
@@ -150,7 +150,7 @@ describe('accounts end to end', () => {
     expect(world.task(taskId).stageReason).toBe('waiting for the usage limit to reset');
     expect(listOpenGates(world.state, taskId)).toHaveLength(0);
     await passReset(clock, now + RESET_IN_MS);
-    await world.until('the planners', () => world.agents.of('plan').length === 4);
+    await world.until('the builder', () => world.agents.of('build').length > 0);
     const resumed = world.agents.of('plan')[3];
     expect(resumed?.account).toBe(added[1]?.id);
     expect(resumed?.resume).toBe(world.agents.of('plan')[2]?.sessionId);
@@ -246,7 +246,7 @@ describe('accounts end to end', () => {
     expect(world.agents.of('plan')).toHaveLength(1);
     expect(accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
     await accounts.startLogin(only.id);
-    await world.until('the planners', () => world.agents.of('plan').length === 2);
+    await world.until('the plan to run again', () => world.agents.of('plan').length === 2);
     expect(world.agents.of('plan').map((session) => session.account)).toEqual([only.id, only.id]);
   });
 
@@ -260,7 +260,7 @@ describe('accounts end to end', () => {
       plan()
     );
     await world.createTask();
-    await world.until('the planners', () => world.agents.of('plan').length === 2);
+    await world.until('the plan to run on the second account', () => world.agents.of('plan').length === 2);
     expect(world.agents.of('plan').map((session) => session.account)).toEqual(
       added.map((account) => account.id)
     );

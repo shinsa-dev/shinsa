@@ -51,7 +51,7 @@ cache (Sessions and the prompt cache, The agent loop).
 Phases stay checkpoints. `complete_phase` still commits the phase and moves the progress on, but the next phase is the
 same session's next turn with a short "Now build phase 2 of 3: …" instruction, not a new agent's full brief. Each turn
 is still a run of its own (its attempts, its account, its usage), so every run of a task shares one session, and an
-Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix` or `operate`). Long
+Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix`, `operate` or `watch`). Long
 tasks rely on compaction (eunoe's folds or Claude Code's, Compaction and fast mode below) to stay inside the window.
 
 Each role's provider (Claude or Codex) and model are set in Settings → Agents → Models: Task agents (Opus) and Quick
@@ -62,7 +62,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, and checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; what a watchdog check found (`report_watch`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -282,6 +282,54 @@ or modifies, the ones the report marks executable, and of those the ones a test 
   important new logic no test runs; the Agent's phase instruction and the handover skill tell it to cover new logic
   with tests and that Shinsa measures it, unless the repository turned coverage off. All of it is in the user turn,
   never a system prompt (Caching).
+
+### Forking a task
+
+A fork is a new task whose Agent carries on from another task's conversation: feature A shipped, a user reports an
+edge case in it, and the fix becomes its own task, kept apart on screen with its own branch, worktree, review and pull
+request, while its Agent still knows everything A's Agent learned. It is the one place a task's first session is not
+fresh, and it keeps the first rule: the fork has one session of its own from then on, and the source's session is
+never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`, the fold in `state/forks.ts`).
+
+- **Asking for one.** `task.create` and `agent.create_task` take `forkOf`, the source task's id; an unknown id is
+  refused (`task_not_found`) before anything is created. You fork with `shinsa tasks create --fork-from <task>`, and
+  an agent with `create_task`'s `fork_from` (a task's id or handle, its own task included; an unknown one is the
+  tool's error), for follow-up work on what a task did. The task keeps it as `Task.forkOf`, and both tasks record it
+  in their activity (`kind: 'fork'`: "Forked from LOC-14 “…”" on the new one, "Forked into LOC-15 “…”" with the
+  request on the source, which a courier forking its own task records only as the task it created).
+- **The first session is a copy.** The forked task's first run of a task-session role (planning, or an inquiry)
+  carries `Run.fork {taskId, runId, sessionId}`: the source's session as `Decider.taskSession` reads it, with
+  `resume: false` and `sessionId: null`. The provider copies that session (Claude's `forkSession`, Codex
+  `thread/fork`) and the run links the copy's own id, so every later run resumes the copy (`Decider.taskSession`) and
+  the source session is never touched. A fork run that failed before it linked a session forks again on its retry.
+  In the engine the fork is a turn plan (`resolveForkPlan` in `agents/turns.ts`): a provider with `sessions.fork`
+  that owns the source session and still has it (`inspectSession`) gets it as `resume` with `fork: true`, which
+  Claude passes as the SDK's `forkSession` and Codex sends as `thread/fork` with the run's own sandbox and tools, and
+  the session the provider reports is the fork's own. Otherwise (a provider without `sessions.fork`, the session on
+  another provider, the source session missing, or a fork the provider refuses as `session_lost` mid-start) the run
+  starts fresh with a handoff of the source task's transcripts (`reason: 'fork'`, "Forked from the transcript" in
+  the chat), read the same way as a lost session's (Resume fallback), and the source run's session is not marked
+  lost. The house rules are not sent again when the source session has them, and the first turn says where the
+  fork works (`resolveMovedNote`): its own worktree, not the source's.
+  Its prompt ends with what happened (`resolveForkNote`): everything above was the source task's work, that task stays
+  as it is, and from here on the agent works on this task only, with its own request. It also says where the source's
+  code is (`describeForkPlace`): merged in its pull request, so the default branch the fork starts from has it, or not
+  merged yet, on its branch and open pull request, so the fork's worktree does not; while it is unmerged, the source's
+  worktree to read (never to change); and the source's id for `read_task`. A fork only ever copies a session, never a
+  worktree or a branch. A fork of a fork copies the middle task's own session, and a restart while the fork's first
+  run plans resumes the fork's copy, never the source. The system prompt and tools are the same, so the copy keeps the
+  source's prompt-cache prefix (Caching).
+- **No session to copy, a brief instead.** When the source has no session, its session is on another provider than
+  the run's, or the provider lost it, or the fork's own session once existed and can no longer go on (a context
+  overflow), the run starts fresh and its prompt ends with the source's brief (`describeForkSource`): the source's
+  request and its rounds, each with its state, pull request and headline, result or goal, and `read_task` for more. A
+  fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
+- **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
+  is not told about the source.
+- **Forking from the web.** Fork into a new task (the task menu, a roadmap row's menu and ⌘K, on every task but a
+  cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
+  sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
+  into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
 
 ### Who is who
 
@@ -1177,6 +1225,84 @@ steps takes its step out again.
   and the pull request's description list them as task lists (`serializeMergeStepsMarkdown`), and the activity
   records each tick. Nothing runs a step for you: a step's command opens in a terminal only when you ask (Run in
   terminal).
+
+### Watchdogs
+
+You cannot verify everything before a merge: an edge case in one browser, an API whose callers break, events that
+stop arriving. A **watchdog** watches one shipped change for a window after its merge, through data the tests never
+see, and turns what it finds into work. It is a task-scoped automation: the Agent writes it, the task owns it, and it
+stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/watchdogs.ts`, the folds in
+`state/watchdogs.ts`, the prompts in `prompts/watchdogs.ts`); the clock is the engine's (`runtime/watchdogs.ts`).
+
+- **The Agent writes them.** The last phase's walkthrough takes `watchdogs` (at most 5; `WatchdogSpec`: a `title`, a
+  `check` with what counts as an issue, an optional schedule (`first_check_minutes`, `max_gap_hours`, `for_hours`, up to
+  720 hours; each left out takes the setting's default, below), `starts` `merge` or `production` with the
+  `production_check` that tells the change is live there, and either a `source`
+  `{server, data}`, an MCP server that holds the data, or a `source_request` `{data, evidence, suggestions}` when no
+  server it has does; `validatePhaseHandOver` refuses both or neither, a repeated title, and a check slower than its
+  window, and a production start with no `production_check`). The last phase's instruction lists the project's data sources for the repository
+  (`describeWatchdogGuide`, in the user turn), the handover skill says when one is worth it, a fix revises them like
+  `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
+- **Data sources live on the project.** `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
+  covers, none meaning every repository, `addedBy` `you` or `agent`), at most 20. A watchdog whose server the project
+  does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
+  repository finds it; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
+  them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
+  connects one for you.
+- **Armed by the merge.** After every command, `syncWatchdogs` looks at the tasks it changed: a round whose pull
+  request merged with watchdogs in its walkthrough arms each once (`watchdog.armed`, keyed by the round). One with a
+  source starts watching at once (`endsAt` the merge plus its window, `nextCheckAt` its first check in); one with a source
+  request waits (`needs_source`) and asks you on the Overview, with the data it needs, where the code sends it and the
+  servers it suggests. Connecting one (`watchdog.connect {server, data}`, or `shinsa watchdogs connect`) adds the server
+  to the project's sources for the repository and starts its window then (`watchdog.started`).
+- **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
+  doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
+  so far), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
+  leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
+  default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
+  read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
+- **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
+  branch, a manual deploy), the agent sets `starts: production` and says how to tell (`production_check`). Armed, the
+  watchdog waits (`awaiting_production`, from `awaitingSince`) and its checks only ask whether the change is live
+  (`resolveProductionPrompt`). Each costs a turn of the task's whole session, so they back off: the next one comes
+  after as long as the watchdog has already waited, at least 30 minutes (`productionPollMinutes`) and at most 6 hours
+  (`productionPollMaxMinutes`), about 30 turns in a week rather than one every half hour. One answer counts for every
+  watchdog of the task that waits for production, since they wait for the same change: `report_watch {live: false}`
+  asks again later for all of them (`watchdog.deferred`), and `live: true` starts every one's window then
+  (`watchdog.live`), with that turn's check as the first of the one that asked. A change that is not live within a week
+  of `awaitingSince` (`productionWaitHours`; for a watchdog that waited for a data source first, a week from when you
+  connected it) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves out `live` is refused
+  (`live_required`).
+- **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
+  `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
+  slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the
+  end runs late once the task rests; if the task is still at work then, the watchdog stops (`watchdog.missed` with no
+  next check) rather than passing without it. A watchdog passes only on a check's report. A task that is not resting, or has a
+  live run (a later round at work), defers it 15 minutes (`watchdog.deferred`), so a check never shares the session
+  with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
+  (`isReadOnlyRun`), in the repository itself, resuming the task's session (`Decider.taskSession`), so it knows what
+  shipped; its prompt (`resolveWatchPrompt`) names the watchdog, its check, its source and its last checks. It hands
+  over with `report_watch {healthy, summary, issue?}` (`validateWatchReport`; `PURPOSE_HAND_OVERS.watch`).
+- **What a check leads to.** A healthy check is kept (`watchdog.checked`, the last 20), and the next one is due an
+  interval later; when that would fall past the window, the watchdog passes. An issue trips it: Shinsa files a new
+  task forked from this one (`createdBy: {kind: 'watchdog'}`, its request the issue's title and request and which
+  watchdog found it), so the fix starts from this conversation and goes through every gate. Either way the task rests
+  again (`merged`). A check run that fails or ends without `report_watch` is recovered like any run (its nudged or
+  resumed run takes the check over, `watchdog.checking`), but where any other run would open a failure gate, the check
+  gives up instead (`missWatchCheck`, `watchdog.missed` with the reason): no gate, the task rests again, and the next
+  check is due an interval later; when that falls past the window, the watchdog stops (`stopped`, never `passed`,
+  since its last check never ran). One broken check never freezes the watchdog or the task's other watchdogs. A message while it checks steers it, and Retry at `watching` starts it again.
+- **You stop them.** `watchdog.stop` (Stop on the Overview, `shinsa watchdogs stop`) ends one, and its check if it is
+  running. Marking the task done or cancelling it stops every active one; an agent cannot mark a task done while one
+  is watching or waits for a source (`task_open`). While one is active the merged task's status reads Watching and its
+  Now card says its watchdogs keep watching the change; the task's steps end with Watching after Merge
+  (`resolveTaskProgress`: current while one of the round's watchdogs is active, "1 of 4 done", done once they all
+  ended; a check running at stage `watching` keeps every earlier step done), and the Watchdogs panel lists each with
+  its status, where it stands and one sentence on how it is going (its schedule and source on its title's card). `read_task` lists them too.
+- **Why a turn of the task's session, not an agent of its own.** The engine's first rule (Agents, above): a check is
+  the same work as the change, read back, and the agent that built it knows what to look for. A check resumes a
+  session that may be long and cold, so it costs a read of the whole context each time; compaction keeps that
+  bounded, and the interval is the Agent's to choose.
 
 ### Evidence
 
@@ -2466,6 +2592,25 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
      (someone pushed to it, or GitHub updated it), and a retry would only fail again.
 4. **Open the pull request** ("opening the pull request") for `pull_request.open`, or reuse the open one.
 
+**Conventional names.** Branches, commits, pull requests and the merge commit follow
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), from one list of types in
+`git/conventional.ts` (`COMMIT_TYPES`: feat, fix, chore, refactor, docs, perf, test):
+
+- **Branches** are `<type>/<kebab-slug>`. Triage asks the classifier for one and accepts only that form
+  (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one; a later round's branch
+  is the first one plus `-round-<n>`, and core's last resort is `chore/shinsa-task`.
+- **Commits.** A phase commits as `<type>: <phase title>`, its type the branch's prefix (`resolveCommitType`, `feat`
+  when the prefix is not a type), its subject lower-cased, never repeating the type, and cut at a word to at most 72
+  characters (`serializeConventionalSubject`); a title already written as `type(scope)!: …` has that prefix
+  replaced, never doubled. A fix commits as `fix: <what it fixed>`. One subject line, no body.
+- **The pull request** is titled the same way from the current round's title, kept whole (`serializePullRequestTitle`,
+  so a later round's pull request carries its own), and its description opens with the task it came from,
+  ``Shinsa task: LOC-22, `shinsa://task/<id>` `` (the handle, then the link as code: GitHub drops links of other
+  schemes, so it is there to copy), then the summary, how to test it, the steps around the merge and the plan.
+- **The merge commit.** A squash or merge passes `--subject "<the pull request's title on GitHub> (#N)"` and an empty
+  `--body`, so the default branch gets one conventional line and a title you edit on GitHub before merging is kept; a
+  rebase keeps the branch's own commits, which are already conventional.
+
 ## The pull request watch
 
 From T3 Code (harness plan WS4 names the sources). The evaluation is pure
@@ -2584,7 +2729,8 @@ A pull request GitHub puts in its merge queue, or on auto-merge, is waiting, not
 - The merge effect merges only the head you approved: `pull_request.merge` carries `headSha`
   (`gate.commit`, or the head the read showed when approving edits merged without a gate) and
   `gh pr merge` gets `--match-head-commit <sha>`, so a push after the gate opened can never ride in on
-  your approval. A read before the merge that shows another head, or a merge GitHub refuses because
+  your approval; a squash or merge also gets the subject and empty body of Pushing the branch →
+  Conventional names. A read before the merge that shows another head, or a merge GitHub refuses because
   the head moved, is recorded instead of merged (no failure gate); core sends the task back to
   shipping ("the branch changed before the merge") and judges the new head like any other, so the
   merge gate comes back only for it.
@@ -2749,7 +2895,7 @@ and a session is resumed only by the provider that owns it. Two providers are re
 | --- | --- |
 | `id`, `label` | `claude` / `Claude`, `codex` / `Codex`. The id is what `settings.defaultProvider` and `settings.agentProviders` store |
 | `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no whole test suite) |
-| `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
+| `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`, `fork`: it can copy a session into a new one), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
 | `inspectSession({ cwd, sessionId })` | Optional. Whether the provider still has a session: `present`, `missing`, `empty` (metadata only, so it can neither be resumed nor recreated) or `unknown` |
 | `AgentSession.done` | Resolves to `{ outcome: completed \| failed \| cancelled, summary, failure?, undelivered?, usage?, subagentUsage?, context? }` when the run ends: `failure` is the classified `RunFailure`, `undelivered` the steered messages the agent never answered, `usage` the session's running totals (metered with `run.meter`), `subagentUsage` the totals of each agent it started on its own thread (Codex), `context` the tokens in use, when the prompt cache expires and whether background work is pending (idle compaction reads it) |
 | `AgentSession.steer(text)` | Delivers a message into the running turn; returns false when it no longer can, and the supervisor hands the message to the next run instead (`message.deliver`) |
@@ -2767,7 +2913,7 @@ What each provider declares:
 
 | Capability | Claude | Codex |
 | --- | --- | --- |
-| `sessions.resume` / `inspect` | yes / yes (session files) | yes / no: a resume Codex refuses comes back as `session_lost` |
+| `sessions.resume` / `inspect` / `fork` | yes / yes (session files) / yes (`forkSession`) | yes / no / yes (`thread/fork`): a resume or fork Codex refuses comes back as `session_lost` |
 | `turns.steering` | yes (prompt ids) | yes (`turn/steer`) |
 | `approvals` | yes (the PreToolUse hook) | yes (a writing role runs `approvalPolicy: untrusted`, every unknown command asked; a read-only role `never`, in the `read-only` sandbox) |
 | `planning.readOnly` | yes (no Edit or Write tools) | yes (the `read-only` sandbox) |
@@ -3858,10 +4004,13 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** The engine is a background process, so it cannot answer macOS's consent prompts
-  well: discovery in the bundle skips `~/Desktop`, `~/Documents` and `~/Downloads` (`createDiscoverer`), and a folder
-  chosen at setup that the engine may not read is refused with `roots_unreadable`, which says to give Shinsa Full Disk
-  Access (`resolveChosenRoots`).
+- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
+  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
+  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+  the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
+  (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
+  offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
+  the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.
 
 Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies. Its
 `dev` and `start` scripts (`apps/engine/package.json`) pass `SHINSA_PORT=5180` unless one is exported, so a checkout
@@ -3908,6 +4057,9 @@ into hidden folders, `node_modules`, `Library`, caches, build output or media fo
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
 
+**`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
+machine; answers `{ ok }`, whether `open` ran.
+
 **`GET /api/onboarding/prerequisites`**: the tools Shinsa needs, checked on this machine (each with a 15 second
 limit).
 
@@ -3919,7 +4071,8 @@ limit).
     label: string;      // "GitHub CLI", "Signed in to Claude"
     ok: boolean;
     detail: string;     // the version, "Signed in as octo.", or what went wrong
-    fix: string | null; // one sentence with the command that fixes it
+    fix: string | null; // one sentence on what fixes it
+    command: string | null; // the command to copy, when one fixes it (`gh auth login`)
     optional?: true;    // codex and codex_auth
   }[];
 }
@@ -3932,18 +4085,20 @@ limit).
 
 The web's setup is a short run of steps the server keeps (`apps/engine/src/onboarding/flow.ts`), over a fixed,
 ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
-discovered folders with their repository counts, several at once, and any other folder by its path), `model` (the
-default model, from the provider's catalog, or each role's own), `merge` (the merge method), `plans` (plan approval
-for large tasks), `accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login,
-claude and its login, bun, and optionally codex and its login, each with its fix). Each step has a short label for
-the steps along the top (Folders, Model, Merging, Plans, Accounts, Tools), a title and a one-line description.
+discovered folders with their repository counts, several at once, and any other folder by its path), `projects`
+(the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
+default model, from the provider's catalog, or each role's own; the merge method; plan approval for large tasks),
+`accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
+bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
+the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.
 Nothing you send can add, drop or reorder a step: a reply only ever answers the step on screen or opens one you
 have reached.
 
-- **Answering** (`{ type: 'answer', stepId, values }`) is checked against the step on screen and saved at once:
-  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `model`, `merge` and `plans` exactly one of
-  their options (`model`'s `:roles` saves no default model, so each role keeps its own), and `accounts` and
-  `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
+- **Answering** (`{ type: 'answer', stepId, values, projects? }`) is checked against the step on screen and saved at once:
+  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `defaults` exactly one option of each of its
+  three groups, each value written `<group>=<option>` (`serializeChoiceValue`, so `model=opus`, `merge=squash`,
+  `plans=yes`; `model=:roles` saves no default model, so each role keeps its own), all three saved as one
+  `settings.change`, and `projects`, `accounts` and `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
   the step refuses (a folder that is not there, one macOS keeps private, an option that is not listed) stays on the
   step with the reason as its `problem`, which the next reply clears. There are no free answers to read and no
   model call: an answer is a pick, or for folders a path.
@@ -3951,13 +4106,38 @@ have reached.
   you can change an answer you gave: a step you have answered lists that answer `chosen`, a new answer replaces it
   (with a command id of its own, so going back to the first answer saves it again), and you carry on from the step
   after it. The later steps keep their answers, shown again `chosen` when you get to them, and the steps along the
-  top carry each answered step's summary ("~/Developer and 1 more", "Opus 5.5", "Squash", "Plan first", "2
-  accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
+  top carry each answered step's summary ("~/Developer and 1 more", "6 projects", "Opus 5.5 · Squash · Plan first",
+  "2 accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
   one on screen with `step_stale`.
-- **Nothing is chosen for you on a step you have not answered**, a saved or default setting included: the options
-  carry no `chosen` until you answer the step, and `merge`'s Squash and `plans`' Show me the plan first are marked
-  `recommended` instead. `roots` is the exception, as it picks several at once: the folders already in
-  `config.json` start chosen, and with none, the found folder with the most repositories does.
+- **The recommended choice is picked for you**, so one Continue gets through a step: `defaults` starts with the
+  current model (or each role's own when none is set), Squash and Show me the plan first `chosen` and `recommended`;
+  once you have answered it, it shows what you saved. `roots` starts with the folders already in `config.json`, and
+  with none, the found folder with the most repositories; `projects` starts with every suggestion kept.
+- **Projects are suggested, not asked for** (`onboarding/projects.ts`, core's `resolveProjectSuggestions` in
+  `domain/project-suggestions.ts`). The step lists the repositories one level inside each chosen folder (and any
+  registered deeper inside one), each with its origin read from `.git/config` without running git
+  (`readOriginRemote`, following a worktree's `gitdir` and `commondir`), and groups them: by GitHub owner, your own
+  login (`gh api user`) and owners with a single repository into Personal, a product with three or more remotes
+  sharing a first word split off its owner, a repository with no remote by its name's first word or else into the
+  group holding most of its folder, and a chosen folder that is mostly one group becomes that project's folder.
+  Repositories already in a project are left out, and a suggestion named like a project you have adds to it. The
+  answer may carry `projects` (`{ id, name, repos }[]`, the suggestions you keep, renamed or with repositories left
+  out): without it every suggestion is created as shown, and an empty list creates none. Each kept suggestion is a
+  `project.write` with its suggested key and colour (its folder only when no repository was left out, so a folder
+  never files one back in), and each repository is registered in it through `createProjectChanges().upsertRepo`,
+  with ids from the answer's command id. A stale suggestion id, an empty or long name, or no repositories left is
+  the step's `problem`. The step also lists the projects already made with repositories in the chosen folders
+  (`filed`), so coming back to it after making them shows them.
+- **Projects change in words** (`onboarding/revise.ts`). A `{ type: 'revise', stepId: 'projects', text, projects? }`
+  reply (1 to 500 characters, `ONBOARDING_REQUEST_LIMIT`, with your edits as an answer's `projects`) asks the writer
+  model through the quick calls (`quick.write`, a fixed system prompt, the request, every repository by a short id
+  and the projects as they stand in the user prompt, a JSON schema for the answer) for the whole new list of
+  projects and one sentence to you. Unknown ids, a repository named twice and nameless or empty projects are
+  dropped; the result is the draft's `revision` (the projects as names and paths, and the last 10 turns, shown as
+  the step's `conversation`) and replaces the suggestions in the view and in the answer: a project with exactly the
+  repositories of a suggestion keeps its id, key and folder, a new one gets a fresh key, and one named like an
+  existing project adds to it. A repository filed since drops out. No model answering is the step's `problem`, and
+  the suggestions stay as they were.
 - **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports every login
   `AccountActions.listImports` offers (your Claude Code login and each claude-swap account, Accounts and usage
   limits above) whose email is not already one of your accounts, through the same import Settings uses. An email
@@ -3965,15 +4145,18 @@ have reached.
   has none, so setup never adds a second copy. Each login is tried once per run of setup (`tried`, by origin and
   email): one you remove afterwards is not imported again when you come back to the step. The step lists what it
   imported (`imported`) and why an import failed (`notes`, the import's own message); the accounts themselves, with
-  removing one, signing in again and adding another, are the web's (`/api/accounts/*`). Under `SHINSA_INSPECT`
-  nothing is imported. With no account signed in the step's button says Skip for now.
+  removing one, signing in again and adding another, are the web's (`/api/accounts/*`), and so is Codex's login,
+  which the web shows from the accounts snapshot's `providers` (signed in with `codex login` in a terminal, read
+  again when you come back to the window). Under `SHINSA_INSPECT` nothing is imported. With no Claude account
+  signed in the step's button says Skip for now.
 - **Saving** goes through the same code as the endpoints above: each answer is `POST /setup`'s `applySetup`
   (folders to `config.json`, the rest as `settings.change`), and the last step is `complete`. The `settings.change`
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
   on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
   its receipt while a later answer to the same step is not.
-- **Persistence.** The run of setup lives in `data/onboarding.json` (version 2, written atomically: the step on
-  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem), so a
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 5, written atomically: the step on
+  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem, and the
+  private folders with the picks they came from, and the projects as you changed them in words), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
 - **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
@@ -3991,11 +4174,14 @@ how the tools are checked again.
   steps: { id: StepId; label: string; summary: string | null; reached: boolean }[];
   index: number;                   // the step on screen; steps.length once setup is done
   step: {                          // null once setup is done
-    id: 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+    id: 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';
     title: string;
     description: string;
     multiple: boolean;             // roots: pick several
     options: { value: string; label: string; detail: string | null; chosen: boolean; recommended: boolean }[];
+    groups: { id: 'model' | 'merge' | 'plans'; label: string; options: Option[] }[]; // defaults
+    projects: ProjectSuggestion[]; // projects: { id, name, key, color, projectId, folders, repos }
+    access: string[];              // roots: the folders macOS keeps private, to ask access for
     checks: Check[];               // prerequisites
     ready: boolean;                // prerequisites: every required tool is there
     imported: AccountImport[];     // accounts: what this run imported
@@ -4008,8 +4194,8 @@ how the tools are checked again.
 ```
 
 **`POST /api/onboarding/flow`** with a reply (`answer`, `open` or `restart`): answers with the run. Codes:
-`body_invalid`, `step_invalid`, `values_invalid`, `reply_invalid`, `step_stale`, `step_unreached`,
-`setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
+`body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
+`step_unreached`, `setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
 
 ## The socket
 

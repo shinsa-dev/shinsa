@@ -47,20 +47,6 @@ function CodeStep({
 
   return (
     <>
-      <DialogDescription>
-        A browser window opened to sign in to Claude.
-        {view.url && (
-          <>
-            {' '}
-            If it did not,{' '}
-            <a href={view.url} target='_blank' rel='noreferrer'>
-              open the sign-in page
-            </a>
-            .
-          </>
-        )}{' '}
-        If the page shows a code, paste it here.
-      </DialogDescription>
       <form
         id={formId}
         className='w-full'
@@ -84,6 +70,35 @@ function CodeStep({
       </DialogFooter>
     </>
   );
+}
+
+function LoginDescription({ view }: { view: LoginView }) {
+  switch (view.phase) {
+    case 'starting':
+    case 'finishing':
+      return null;
+    case 'waiting':
+      return (
+        <DialogDescription>
+          A browser window opened to sign in to Claude.
+          {view.url && (
+            <>
+              {' '}
+              If it did not,{' '}
+              <a href={view.url} target='_blank' rel='noreferrer'>
+                open the sign-in page
+              </a>
+              .
+            </>
+          )}{' '}
+          If the page shows a code, paste it here.
+        </DialogDescription>
+      );
+    case 'done':
+      return <DialogDescription>{describeSignedIn(view.email)}</DialogDescription>;
+    case 'failed':
+      return <DialogDescription>{view.message}</DialogDescription>;
+  }
 }
 
 function LoginBody({
@@ -112,22 +127,16 @@ function LoginBody({
       return <CodeStep key={view.loginId} view={view} onSubmitCode={onSubmitCode} />;
     case 'done':
       return (
-        <>
-          <DialogDescription>{describeSignedIn(view.email)}</DialogDescription>
-          <DialogFooter>
-            <Button onClick={onClose}>Done</Button>
-          </DialogFooter>
-        </>
+        <DialogFooter>
+          <Button onClick={onClose}>Done</Button>
+        </DialogFooter>
       );
     case 'failed':
       return (
-        <>
-          <DialogDescription>{view.message}</DialogDescription>
-          <DialogFooter>
-            <CancelButton />
-            <Button onClick={onRetry}>Try again</Button>
-          </DialogFooter>
-        </>
+        <DialogFooter>
+          <CancelButton />
+          <Button onClick={onRetry}>Try again</Button>
+        </DialogFooter>
       );
   }
 }
@@ -156,6 +165,7 @@ export function SignInPrompt({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{LOGIN_TITLE[shown.phase]}</DialogTitle>
+          <LoginDescription view={shown} />
         </DialogHeader>
         <LoginBody view={shown} onClose={onClose} onSubmitCode={onSubmitCode} onRetry={onRetry} />
       </DialogContent>

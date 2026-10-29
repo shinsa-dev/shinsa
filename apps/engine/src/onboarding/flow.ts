@@ -3,6 +3,7 @@ import {
   type AccountImport,
   DomainError,
   type OnboardingFlow,
+  type OnboardingProjectChoice,
   type OnboardingReply,
   type OnboardingStep,
   type OnboardingStepId,
@@ -11,10 +12,12 @@ import { writeJsonFile } from '../config/file.ts';
 import type { JsonObject } from '../http/body.ts';
 import { describeError, log } from '../log/index.ts';
 import type { AccountActions } from './accounts.ts';
+import type { ProjectRevision } from './revise.ts';
+import { PrivateFoldersError } from './roots.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
 
 interface Draft {
-  version: 2;
+  version: 5;
   id: string;
   index: number;
   furthest: number;
@@ -24,16 +27,25 @@ interface Draft {
   imported: AccountImport[];
   notes: string[];
   problem: string | null;
+  access: string[];
+  picked: string[];
+  revision: ProjectRevision | null;
 }
 
 type FlowContext = StepReadContext & {
   save: (patch: SetupPatch, commandId: string) => Promise<void>;
+  createProjects: (choices: OnboardingProjectChoice[] | undefined, commandId: string) => Promise<void>;
 };
 
 interface FlowOptions {
   path: string;
   steps: readonly StepDefinition[];
-  resolveContext: () => FlowContext;
+  resolveContext: (revision: ProjectRevision | null) => FlowContext;
+  reviseProjects: (
+    revision: ProjectRevision | null,
+    text: string,
+    choices: OnboardingProjectChoice[] | undefined
+  ) => Promise<ProjectRevision>;
   accountActions: AccountActions;
   isCompleted: () => boolean;
   complete: () => Promise<void>;
@@ -42,18 +54,26 @@ interface FlowOptions {
 
 const MAX_VALUES = 50;
 
+const MAX_PROJECT_REPOS = 400;
+
 function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<Draft>;
   return (
-    draft.version === 2 &&
+    draft.version === 5 &&
     typeof draft.id === 'string' &&
     typeof draft.index === 'number' &&
     typeof draft.furthest === 'number' &&
     typeof draft.saves === 'number' &&
     Array.isArray(draft.tried) &&
     Array.isArray(draft.imported) &&
-    Array.isArray(draft.notes)
+    Array.isArray(draft.notes) &&
+    Array.isArray(draft.access) &&
+    Array.isArray(draft.picked) &&
+    (draft.revision === null ||
+      (typeof draft.revision === 'object' &&
+        Array.isArray(draft.revision.projects) &&
+        Array.isArray(draft.revision.seen)))
   );
 }
 
@@ -79,6 +99,26 @@ function parseStepId(value: unknown, steps: readonly StepDefinition[]) {
   return step.id;
 }
 
+function isProjectChoice(value: unknown): value is OnboardingProjectChoice {
+  if (!value || typeof value !== 'object') return false;
+  const choice = value as Partial<OnboardingProjectChoice>;
+  return (
+    typeof choice.id === 'string' &&
+    typeof choice.name === 'string' &&
+    Array.isArray(choice.repos) &&
+    choice.repos.length <= MAX_PROJECT_REPOS &&
+    choice.repos.every((repo) => typeof repo === 'string')
+  );
+}
+
+function parseProjectChoices(value: unknown) {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.length > MAX_VALUES || !value.every(isProjectChoice)) {
+    throw new DomainError('projects_invalid', 'Send each project as its id, name and repositories.');
+  }
+  return value;
+}
+
 function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition[]): OnboardingReply {
   if (fields.type === 'restart') return { type: 'restart' };
   if (fields.type === 'open') return { type: 'open', stepId: parseStepId(fields.stepId, steps) };
@@ -93,7 +133,14 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
     ) {
       throw new DomainError('values_invalid', 'Pick at least one option.');
     }
-    return { type: 'answer', stepId, values: values as string[] };
+    const projects = parseProjectChoices(fields.projects);
+    return { type: 'answer', stepId, values: values as string[], ...(projects ? { projects } : {}) };
+  }
+  if (fields.type === 'revise') {
+    const stepId = parseStepId(fields.stepId, steps);
+    if (typeof fields.text !== 'string') throw new DomainError('request_invalid', 'Say what to change.');
+    const projects = parseProjectChoices(fields.projects);
+    return { type: 'revise', stepId, text: fields.text, ...(projects ? { projects } : {}) };
   }
   throw new DomainError('reply_invalid', 'Answer a step, open one or start again.');
 }
@@ -129,7 +176,11 @@ export class OnboardingSetup {
       if (index !== draft.index) {
         throw new DomainError('step_stale', 'That step is no longer open. Answer the step on screen.');
       }
-      await this.#answer(draft, reply.stepId, reply.values);
+      if (reply.type === 'revise') {
+        await this.#revise(draft, reply.stepId, reply.text, reply.projects);
+        return this.#present(draft);
+      }
+      await this.#answer(draft, reply.stepId, reply.values, reply.projects);
       return this.#present(draft);
     });
   }
@@ -154,7 +205,7 @@ export class OnboardingSetup {
 
   #start(): Draft {
     const draft: Draft = {
-      version: 2,
+      version: 5,
       id: Bun.randomUUIDv7(),
       index: 0,
       furthest: 0,
@@ -164,6 +215,9 @@ export class OnboardingSetup {
       imported: [],
       notes: [],
       problem: null,
+      access: [],
+      picked: [],
+      revision: null,
     };
     this.#draft = draft;
     this.#write(draft);
@@ -183,18 +237,55 @@ export class OnboardingSetup {
     draft.index = index;
     draft.furthest = Math.max(draft.furthest, index);
     draft.problem = null;
+    draft.access = [];
+    draft.picked = [];
     this.#write(draft);
   }
 
-  async #answer(draft: Draft, stepId: OnboardingStepId, values: string[]) {
-    const step = this.#options.steps[draft.index] as StepDefinition;
-    const context = this.#options.resolveContext();
-    const commandId = `setup:${draft.id}:${stepId}:${draft.saves}`;
+  async #revise(
+    draft: Draft,
+    stepId: OnboardingStepId,
+    text: string,
+    projects: OnboardingProjectChoice[] | undefined
+  ) {
+    if (stepId !== 'projects') {
+      throw new DomainError('revise_invalid', 'Only the suggested projects can be changed in words.');
+    }
     try {
-      await step.answer(values, { ...context, save: (patch) => context.save(patch, commandId) });
+      draft.revision = await this.#options.reviseProjects(draft.revision, text, projects);
+      draft.problem = null;
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
       draft.problem = error.message;
+    }
+    this.#write(draft);
+  }
+
+  async #answer(
+    draft: Draft,
+    stepId: OnboardingStepId,
+    values: string[],
+    projects: OnboardingProjectChoice[] | undefined
+  ) {
+    const step = this.#options.steps[draft.index] as StepDefinition;
+    const context = this.#options.resolveContext(draft.revision);
+    const commandId = `setup:${draft.id}:${stepId}:${draft.saves}`;
+    try {
+      await step.answer(
+        values,
+        {
+          ...context,
+          save: (patch) => context.save(patch, commandId),
+          createProjects: (choices) => context.createProjects(choices, commandId),
+        },
+        projects
+      );
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
+      const refused = error instanceof PrivateFoldersError;
+      draft.problem = refused ? null : error.message;
+      draft.access = refused ? error.folders : [];
+      draft.picked = refused ? error.picked : [];
       this.#write(draft);
       return;
     }
@@ -236,7 +327,7 @@ export class OnboardingSetup {
 
   async #present(draft: Draft): Promise<OnboardingFlow> {
     const { steps } = this.#options;
-    const context = this.#options.resolveContext();
+    const context = this.#options.resolveContext(draft.revision);
     const definition = steps[draft.index];
     if (definition?.id === 'accounts') await this.#importAccounts(draft, context);
     const entries = await Promise.all(
@@ -268,14 +359,16 @@ export class OnboardingSetup {
   ): Promise<OnboardingStep | null> {
     if (!definition) return null;
     const answered = draft.revisit || draft.index < draft.furthest;
-    const view = await definition.view(context, answered);
+    const view = await definition.view(context, answered, draft.picked);
     const accounts = definition.id === 'accounts';
     return {
       id: definition.id,
       ...view,
       imported: accounts ? draft.imported : [],
       notes: accounts ? draft.notes : [],
+      conversation: definition.id === 'projects' ? (draft.revision?.turns ?? []) : [],
       problem: draft.problem,
+      access: draft.access,
     };
   }
 }

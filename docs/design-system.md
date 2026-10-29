@@ -142,8 +142,8 @@ description (always) and adjacent icon buttons; `gap-1` popup list padding and i
 controls; `gap-2` icon to label in rows and controls in one set; `p-2.5` popover padding; `p-3` card inset;
 `p-4` dialog padding; `gap-6` section to section. The parent owns spacing, never a child's margin.
 
-**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, the default), `'md'` 16px (14px+ text, 26/30
-controls), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
+**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, every button, the default), `'md'` 16px (14px+ text,
+`lg` and `icon` buttons, 26/30 inputs and selects), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
 
 **Motion and timing.** State 0ms. Movement 200ms on `cubic-bezier(0.22, 1, 0.36, 1)`. Menus and popovers 200ms,
 tooltips 150ms, dialogs 150ms in and 100ms out (`DIALOG_MOTION`), ⌘K 75ms (`COMMAND_MOTION`). Every tooltip opens
@@ -900,11 +900,11 @@ An icon on either side of a button or badge trims that side's padding by 2px, so
 | --- | --- | --- | --- | --- | --- |
 | Button `xs` | 22 | 8 (`px-2`) | 6 | 4 | `sm` 14 |
 | Button `sm` | 24 | 8 | 6 | 4 | `sm` 14 |
-| Button `default` | 26 | 10 (`px-2.5`) | 8 | 6 | `md` 16 |
-| Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `md` 16 |
+| Button `default` | 26 | 10 (`px-2.5`) | 8 | 6 | `sm` 14 |
+| Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `sm` 14 |
 | Button with a chevron as its icon | as size | 5 on the chevron's side (`pr-[5px]` / `pl-[5px]`) | | 2 (`gap-0.5`) | `sm` 14 |
 | `Input` `sm` / default | 24 / 26 | 8 / 10 | | | |
-| `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` / `md` |
+| `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` 14 |
 | Menu, select, command row | 24 | 8 start (`pl-2`); select row 28 end (`pr-7`) for the check | | 6 | `sm` 14 |
 | Tab (default track) | 22 inside a 26 track | 8 (`px-2`) | | 6 | `sm` |
 | `Badge` `sm` / default | 18 / 20 | 6 / 8 | 4 on the icon side (2px trimmed) | 4 | `sm` 14 |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, every button (icon-only ones too), every select, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: default inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -1390,7 +1390,7 @@ Every click and hover lands in the frame it happens, as in a Mac app. A hover, p
 | Spotlight | holds 1.5s, fades over 600ms | | `useSpotlight`: the row you jumped to keeps a `primary-a1` wash, then lets go |
 | Focused or selected flash | 500ms | default | A chat line's `bg` and outline (`transition-[background-color,outline-color] duration-500`), a review note's outline, a review card's `bg-primary-a1` |
 | Chat text swap | in 360ms after 80ms, out 240ms | `cubic-bezier(0.23, 1, 0.32, 1)` | The live card's latest line: in from 0.625rem below with 2px blur, out to 0.625rem above |
-| Onboarding step | 220ms | `cubic-bezier(0.23, 1, 0.32, 1)` | A step enters from 0.5rem (from the left when you went back) with a fade; nothing leaves, so two steps never overlap |
+| Onboarding step | 420ms | `cubic-bezier(0.32, 0.72, 0, 1)` | The step you leave slides out to the left as the next slides in from the right (the other way back), the column's full width with no fade of their own; the track masks its 24px edges. The first step has no entry |
 | Image viewer | 240ms open and close; swaps 200ms slide 10px or 150ms fade | `cubic-bezier(0.22, 1, 0.36, 1)`; swaps `cubic-bezier(0.23, 1, 0.32, 1)` | The flight from a thumbnail, backdrop and chrome fades; `SHRUNK` 0.96 |
 | Toast | shake 350ms `cubic-bezier(0.36, 0.07, 0.19, 0.97)`; bump 300ms `ease-out`; loader out 200ms; result icon in 240ms `cubic-bezier(0.22, 1, 0.36, 1)` | | Sonner (stacking keeps Sonner's own 500ms) |
 | Update button | 200ms | | Scales in: `animate-in fade-in-0 zoom-in-95 duration-200` |
@@ -1431,12 +1431,18 @@ Keyframes used by the app stylesheet:
 .chat-swap-in { animation: chat-swap-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both; }
 .chat-swap-out { animation: chat-swap-out 240ms cubic-bezier(0.23, 1, 0.32, 1) both; }
 
-@keyframes onboarding-in { from { opacity: 0; transform: translateX(var(--onboarding-shift)); } }
-.onboarding-in, .onboarding-in-back { animation: onboarding-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both; }
-.onboarding-in { --onboarding-shift: 0.5rem; }
-.onboarding-in-back { --onboarding-shift: -0.5rem; }
+@keyframes onboarding-in { from { transform: translateX(var(--onboarding-from)); } }
+@keyframes onboarding-out { to { transform: translateX(var(--onboarding-to)); } }
+.onboarding-track { mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent); }
+.onboarding-in, .onboarding-in-back { animation: onboarding-in 360ms cubic-bezier(0.4, 0, 0.2, 1) both; will-change: transform; }
+.onboarding-out, .onboarding-out-back { animation: onboarding-out 360ms cubic-bezier(0.4, 0, 0.2, 1) both; will-change: transform; pointer-events: none; }
+.onboarding-in { --onboarding-from: calc(100% + 1.5rem); }
+.onboarding-in-back { --onboarding-from: calc(-100% - 1.5rem); }
+.onboarding-out { --onboarding-to: calc(-100% - 1.5rem); }
+.onboarding-out-back { --onboarding-to: calc(100% + 1.5rem); }
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-in, .onboarding-in-back { --onboarding-shift: 0; animation-duration: 160ms; }
+  .onboarding-in, .onboarding-in-back, .onboarding-out, .onboarding-out-back { --onboarding-from: 0; --onboarding-to: 0; animation-duration: 1ms; }
+  .onboarding-out, .onboarding-out-back { visibility: hidden; }
 }
 
 @keyframes bk-toast-shake { 0%, 100% { translate: 0 0; } 25% { translate: -2px 0; } 50% { translate: 2px 0; } 75% { translate: -1px 0; } }
@@ -1714,8 +1720,8 @@ group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflo
 
 | `size` | Classes | Height | Side padding | Padding on the icon's side | Type | Icon |
 | --- | --- | --- | --- | --- | --- | --- |
-| `sm` | `h-4.5 rounded-full px-1.5 text-2xs [--icon-size:var(--icon-size-sm)]` | 18px | 6px | `pl-1` / `pr-1`: 4px | 12px medium | 14px |
-| `default` | `h-5 rounded-full px-2 text-2xs [--icon-size:var(--icon-size-sm)]` | 20px | 8px | `pl-1.5` / `pr-1.5`: 6px | 12px medium | 14px |
+| `sm` | `h-4.5 rounded-full px-1.5 text-2xs` | 18px | 6px | `pl-1` / `pr-1`: 4px | 12px medium | 14px |
+| `default` | `h-5 rounded-full px-2 text-2xs` | 20px | 8px | `pl-1.5` / `pr-1.5`: 6px | 12px medium | 14px |
 
 Icon-to-text gap is 4px (`gap-1`). The icon side trims 2px because a glyph's box carries empty space; trimmed, it sits optically level with the text edge. The corner is fully round.
 
@@ -1833,15 +1839,15 @@ There is no open-popup style: a trigger whose menu is open looks like the button
 
 | `size` | Classes | Height | Side padding | Icon side | Gap | Type | Corner | Icon |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 16px |
-| `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 16px |
-| `icon-2xs` | `size-4.5 rounded-sm px-0 [--icon-size:var(--icon-size-sm)]` | 18×18 | 0 | | | | 5px | 14px |
-| `icon-xs` | `size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 22×22 | 0 | | | | 6px | 14px |
-| `icon-sm` | `size-6 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 24×24 | 0 | | | | 6px | 14px |
-| `icon` | `size-6.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]` | 26×26 | 0 | | | | 7px | 16px |
-| `icon-lg` | `size-7.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]` | 30×30 | 0 | | | | 7px | 16px |
+| `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
+| `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
+| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 14px |
+| `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 14px |
+| `icon-2xs` | `size-4.5 rounded-sm px-0` | 18×18 | 0 | | | | 5px | 14px |
+| `icon-xs` | `size-5.5 rounded-control-sm px-0` | 22×22 | 0 | | | | 6px | 14px |
+| `icon-sm` | `size-6 rounded-control-sm px-0` | 24×24 | 0 | | | | 6px | 14px |
+| `icon` | `size-6.5 rounded-control px-0` | 26×26 | 0 | | | | 7px | 14px |
+| `icon-lg` | `size-7.5 rounded-control px-0` | 30×30 | 0 | | | | 7px | 14px |
 
 With a chevron icon beside a label, the chevron side is 5px and the gap 2px at every size. `icon-2xs` exists only for a close mark inside a 24px row (a terminal tab). Every size is the same at every viewport width.
 
@@ -3286,7 +3292,7 @@ Select                          (Root; provides open state and items)
 **Trigger classes:**
 
 - Base: `group/select-trigger relative isolate flex w-fit cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap font-medium text-fg-4`
-- `size='default'`: `corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)]`
+- `size='default'`: `corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)]`
 - `size='sm'`: `corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs [--icon-size:var(--icon-size-sm)]`
 - Fill layer (the fill lives on `::before` so it can deflate on press): `before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:content-[''] enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)`
 - `variant='default'`: `before:bg-input enabled:active:before:bg-input-hover/80 enabled:hover:before:bg-input-hover/80 aria-expanded:before:bg-input-hover/80`
@@ -5807,16 +5813,16 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 | --- | --- | --- | --- | --- |
 | `xs` | 22 | `h-5.5 gap-1 rounded-control-sm px-2 text-xs` | `sm` 14 | dense inline: hover-revealed row actions, actions in a nested card, a shelf's Add |
 | `sm` | 24 | `h-6 gap-1 rounded-control-sm px-2 text-xs` | `sm` 14 | header strips, toolbars, section-label actions, popovers, composer footers, the top bar |
-| `default` | 26 | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs` | `md` 16 | card bodies, dialog footers, a form's submit |
-| `lg` | 30 | `h-7.5 gap-1.5 rounded-control px-3 text-sm` | `md` 16 | the rare primary call to action on an empty page |
+| `default` | 26 | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs` | `sm` 14 | card bodies, dialog footers, a form's submit |
+| `lg` | 30 | `h-7.5 gap-1.5 rounded-control px-3 text-sm` | `sm` 14 | the rare primary call to action on an empty page |
 | `icon-2xs` | 18 | `size-4.5 rounded-sm` | `sm` | a close mark inside a 24px row (a terminal tab) |
 | `icon-xs` | 22 | `size-5.5 rounded-control-sm` | `sm` | a chevron box on a card band, a code block's copy |
 | `icon-sm` | 24 | `size-6 rounded-control-sm` | `sm` | `•••` triggers, the dialog close X, strip icon actions |
-| `icon` | 26 | `size-6.5 rounded-control` | `md` | icon actions beside `default` buttons |
-| `icon-lg` | 30 | `size-7.5 rounded-control` | `md` | beside `lg` |
+| `icon` | 26 | `size-6.5 rounded-control` | `sm` | icon actions beside `default` buttons |
+| `icon-lg` | 30 | `size-7.5 rounded-control` | `sm` | beside `lg` |
 
 - An icon on either side of a label trims that side's padding by 2px (`data-[icon=inline-start]:pl-1.5` at `xs`/`sm`, `pl-2` at `default`, `pl-2.5` at `lg`) so the glyph sits optically level with the text edge. A chevron trims to 5px and pulls 2px closer (`gap-0.5`).
-- Pass icons through the `icon` prop (`icon='IconPlusMedium'`, or `{ name, position: 'inline-end' }`). The size sets the glyph; a call site never sizes, colours or fades a button's icon.
+- Pass icons through the `icon` prop (`icon='IconPlusMedium'`, or `{ name, position: 'inline-end' }`). Every size draws its icons and its spinner at 14px (`sm`), and a default select's chevron matches; a call site never sizes, colours or fades a button's icon.
 - Every control in one row shares one height.
 - **Actions that don't fit lose their labels, not their buttons.** A row or card's actions with no room for labels go icon-only at the matching icon size, each with an `aria-label` and a delayed tooltip, never into a `…` overflow menu. An overflow menu is for secondary actions, not for narrow ones.
 - **Pending is `loading`.** The button keeps its colours and width, swaps its leading icon for a `Spinner` (or adds one when it has no icon), sets `aria-busy` and ignores presses and keys, so it can't fire twice. It is never `disabled`, and never fades.
@@ -6823,7 +6829,7 @@ Example: "(icon) Round 2 · Handle logout too · In progress", followed by a hai
 - Open and close are one run in reverse: backdrop and chrome fade over 240ms on `cubic-bezier(0.22, 1, 0.36, 1)` while the image, opaque the whole way, flies between its thumbnail and the window on the same curve and duration. The flight is one transform keeping the aspect (translate plus a single scale, never a stretch) onto the thumbnail's drawn box (its `object-fit` box) with a `clip-path` inset to what the thumbnail shows, each corner rounded like the thumbnail's (or its clipping card's) corner. Closing starts from where the image is (zoom and pan included) and lands on the thumbnail of the image open now, measured at that moment; the thumbnail stays hidden until the image lands and shows in that frame. With no thumbnail in view, the image fades while shrinking to 96% in place, and opens the same way. The open waits for the portal to mount. A recording, and anything under reduced motion, only fades. A recording never morphs: it mounts at its fitted size (from the thumbnail's `videoWidth` or a hidden probe), with width and height set, so its controls lay out once at the right width.
 - Zoom: click or double-click toggles between fit and the larger of 100% and twice the fitted size, around the pointer; wheel and pinch zoom toward the pointer; drag pans while zoomed; `+` (or `=`) and `-` step by 1.5x and `0` returns to fit.
 - Stepping (on-screen arrows and arrow keys) moves through the images of one message or tool group, or item by item in evidence. Stepping is a cross-fade, never the open run again: the incoming image appears at its own fitted size from the first frame (size from its thumbnail, or held until loaded while the outgoing stays), fades in over the outgoing, which fades out as it was; both move 10px in the direction of travel over 200ms on `cubic-bezier(0.23, 1, 0.32, 1)`; zoom and pan reset to fit at once. Switching parts of one comparison does not slide: the incoming part fades in over 150ms on top of the outgoing, which stays opaque under it when they share a rect, so the stage never dims. Under reduced motion every swap is the 150ms fade with no slide. A press during a swap takes over from where the images are, with no queued or stacked animation.
-- Chrome: Close, Previous, Next are `Button` `outline` `icon` (26px, 16px glyph), with shortcut hints (Esc, ←, →). The bar at the bottom: `rounded-popup bg-popover shadow-3`, `h-8`, `text-xs`, `popover-foreground`, never a pill, with the caption (truncating), "2 of 5" (items, not files), the zoom level, and on a comparison a segmented choice of its parts. While there is more than one image it keeps one width (`w-xl`), so text swaps without moving it. Close button, Esc or a click on the backdrop closes.
+- Chrome: Close, Previous, Next are `Button` `outline` `icon` (26px, 14px glyph), with shortcut hints (Esc, ←, →). The bar at the bottom: `rounded-popup bg-popover shadow-3`, `h-8`, `text-xs`, `popover-foreground`, never a pill, with the caption (truncating), "2 of 5" (items, not files), the zoom level, and on a comparison a segmented choice of its parts. While there is more than one image it keeps one width (`w-xl`), so text swaps without moving it. Close button, Esc or a click on the backdrop closes.
 
 Example: clicking a screenshot thumbnail in a tool row flies it to fill the window; the right arrow cross-fades to the next screenshot sliding 10px.
 
@@ -7118,10 +7124,10 @@ Shinsa's controls run one step denser than the Application register's. Read ever
 | Tab lists | `default` and `ghost` 26; `underline` 32, with no size prop |
 | Menu, select and command rows | 24 |
 | `Badge` | 18 (`sm`), 20 (default) |
-| Glyphs | `sm` (14px) in `xs` and `sm` controls, rows and badges; `md` (16px) from `default` up |
+| Glyphs | `sm` (14px) in every button and select, rows and badges; `md` (16px) in `default` inputs |
 
 - Example: a Settings row action is a `secondary` `sm` button (24px, 14px glyph); a step's footer buttons are
-  `default` (26px, 16px glyph).
+  `default` (26px, 14px glyph).
 
 #### Fields are filled, never bordered
 
@@ -7493,7 +7499,12 @@ style of its own.
   `max-w-64 text-fg-3 text-xs` `Truncate`) and "Go to Home" (primary, arrow at its end).
 - No folder path or other machine-specific value is ever written into the UI code; the ones on screen come from the
   server.
-- Example: Shinsa's six-step setup (Folders, Model, Merging, Plans, Accounts, Tools).
+- **Ask before you need it, and never as an error**: a permission the app needs only for some choices (a folder the
+  system keeps private) is a card above the list naming it, with the way to allow it, Check again and Leave it out;
+  the choices stay as picked, and coming back to the window checks again by itself.
+- **Suggest, then let them edit**: what the app can work out (projects from repositories) is shown worked out and
+  kept, each row with a name to change and a box to untick, and the primary button counts what will be made ("Create 6 projects").
+- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Accounts, Tools).
 
 #### Pick-one and pick-many option lists
 
@@ -7506,9 +7517,8 @@ list rows.
 - The recommended option has a quiet `Badge size='sm'` "Recommended" after its label (`gap-1.5`).
 - Pick-one: the chosen option is marked with the accent `SelectedMark` (`IconCheckmark1`, `size='sm'`,
   `text-primary-text`, labelled "Selected") in a 20px slot at the row's end (`self-center`), as a select or menu
-  marks its value. Clicking answers at once and moves on, a spinner (`sm`, `text-fg-2`) in the mark's slot while it
-  saves. Nothing starts chosen on an unanswered step, so there is no Continue until the user goes back to an answered
-  one, where the answer is marked and Continue keeps it.
+  marks its value. The recommended option starts chosen, so one Continue keeps it; several pick-one lists can share a
+  step, each under its section label, and a click moves only its own list's mark.
 - Pick-many: a `filled` `sm` `Checkbox` in the 20px leading slot, the defaults already checked; the last row can be
   an add field (`sm` `Input` + `secondary` `sm` "Add folder" with `IconPlusMedium`, disabled while empty) that adds
   the typed value checked. Continue is disabled with nothing checked.
@@ -10653,7 +10663,7 @@ Apply every line to any component you build or touch. When a line and a section 
 
 - Heights: 18 (`icon-2xs`, `Badge sm`), 20 (`Badge`, `Kbd`, switch track), 22 (`xs`, `icon-xs`), 24 (`sm`, `icon-sm`, menu, select and command rows, section labels, the `line` header), 26 (`default`, `icon`, `Input`, `SelectTrigger`, `default` and `ghost` tab lists), 28 (one-line list rows, the `strip` header, info popover rows), 30 (`lg`, `icon-lg`), 32 (`underline` tab list, the `block` header), 36 (card header bands, toolbars), 40 (settings rows, the command input row).
 - Never hand-set a height on a control, strip or row; the primitive owns it. Every control in one row shares one height.
-- Icons: `sm` 14 in `xs`/`sm` controls, rows and badges; `md` 16 from `default` up; `lg` 20 for empty-state figures and full-page waits. No other size.
+- Icons: `sm` 14 in every button and select, rows and badges; `md` 16 in `default` inputs; `lg` 20 for empty-state figures and full-page waits. No other size.
 
 **Spacing**
 

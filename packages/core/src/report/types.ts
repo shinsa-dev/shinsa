@@ -119,12 +119,50 @@ export interface ReportTesting {
   manual: ManualTestStep[];
 }
 
+export interface WatchdogSource {
+  server: string;
+  data: string;
+}
+
+export interface WatchdogSourceRequest {
+  data: string;
+  evidence: string;
+  suggestions: string[];
+}
+
+export type WatchdogStart = 'merge' | 'production';
+
+export interface WatchdogSpec {
+  title: string;
+  check: string;
+  source: WatchdogSource | null;
+  sourceRequest: WatchdogSourceRequest | null;
+  firstCheckMinutes: number | null;
+  maxGapHours: number | null;
+  forHours: number | null;
+  startsOn: WatchdogStart;
+  productionCheck: string | null;
+}
+
+export interface WatchIssue {
+  title: string;
+  request: string;
+}
+
+export interface WatchReport {
+  live: boolean | null;
+  healthy: boolean;
+  summary: string;
+  issue: WatchIssue | null;
+}
+
 export interface ReportWalkthrough {
   approach: string;
   flow: string;
   risks: ReportRisk[];
   testing: ReportTesting;
   steps?: MergeStep[];
+  watchdogs?: WatchdogSpec[];
 }
 
 export type ReportWalkthroughRevision = Partial<ReportWalkthrough>;

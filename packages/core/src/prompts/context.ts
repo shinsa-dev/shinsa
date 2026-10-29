@@ -189,7 +189,7 @@ export const PROPOSAL_RULE = [
   'The human decides whether this task turns into that change, so propose one only when it is clearly worth doing. Leave it out otherwise.',
 ].join('\n');
 
-const ROUND_STATE: Record<Round['status'], string> = {
+export const ROUND_STATE: Record<Round['status'], string> = {
   waiting: 'waiting to start',
   active: 'in progress',
   shipped: 'its pull request is open',
@@ -203,7 +203,7 @@ export function resolveRequest(task: Task) {
   return round.number > 1 ? round.request : task.request;
 }
 
-function describeRoundPullRequest(round: Round) {
+export function describeRoundPullRequest(round: Round) {
   return round.pullRequest ? `, pull request #${round.pullRequest.number}` : '';
 }
 

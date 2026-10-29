@@ -101,7 +101,23 @@ describe('the other orchestration tools', () => {
   test('a courier task is a request that stands on its own', () => {
     expect(validateCourierTask({ request: 'Do it.', this_task_waits: true, repository: 'admin' })).toEqual({
       ok: true,
-      value: { request: 'Do it.', requestKey: null, repository: 'admin', thisTaskWaits: true },
+      value: {
+        request: 'Do it.',
+        requestKey: null,
+        repository: 'admin',
+        forkFrom: null,
+        thisTaskWaits: true,
+      },
+    });
+    expect(validateCourierTask({ request: 'Fix it in Safari.', fork_from: 'LOC-3' })).toEqual({
+      ok: true,
+      value: {
+        request: 'Fix it in Safari.',
+        requestKey: null,
+        repository: null,
+        forkFrom: 'LOC-3',
+        thisTaskWaits: false,
+      },
     });
     expect(validateCourierTask({})).toEqual({ ok: false, errors: ['request is required.'] });
   });

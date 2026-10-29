@@ -223,6 +223,7 @@ if (group === 'pr' && command === 'view') {
   console.log(
     JSON.stringify({
       number: pull.number,
+      title: pull.title,
       url: `https://github.com/acme/app/pull/${pull.number}`,
       state: pull.state,
       mergeable: pull.mergeable,

@@ -341,6 +341,11 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   }
   if ('compaction' in fields) patch.compaction = readChoice(fields, 'compaction', COMPACTION_MODES);
   if ('fastMode' in fields) patch.fastMode = readBoolean(fields, 'fastMode');
+  if ('watchdogHours' in fields) patch.watchdogHours = readInteger(fields, 'watchdogHours');
+  if ('watchdogFirstCheckMinutes' in fields) {
+    patch.watchdogFirstCheckMinutes = readInteger(fields, 'watchdogFirstCheckMinutes');
+  }
+  if ('watchdogMaxGapHours' in fields) patch.watchdogMaxGapHours = readInteger(fields, 'watchdogMaxGapHours');
   return patch;
 }
 
@@ -356,6 +361,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.waitsOn === undefined ? {} : { waitsOn: readList(fields, 'waitsOn', readId) }),
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
+    ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
   };
 }
 
@@ -575,6 +581,26 @@ function readScheduleWrite(fields: Fields): UserCommand {
   };
 }
 
+function readWatchSourceWrite(fields: Fields): UserCommand {
+  return {
+    type: 'watch_source.write',
+    projectId: readId(fields, 'projectId'),
+    server: readText(fields, 'server', MAX_ID),
+    data: readText(fields, 'data', MAX_NOTE),
+    repoIds: fields.repoIds === undefined ? [] : readList(fields, 'repoIds', readId),
+  };
+}
+
+function readWatchdogConnect(fields: Fields): UserCommand {
+  return {
+    type: 'watchdog.connect',
+    taskId: readId(fields, 'taskId'),
+    watchdogId: readId(fields, 'watchdogId'),
+    server: readText(fields, 'server', MAX_ID),
+    data: readText(fields, 'data', MAX_NOTE),
+  };
+}
+
 function readMemoryWrite(fields: Fields): UserCommand {
   return {
     type: 'memory.write',
@@ -629,6 +655,18 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'schedule.enable': readScheduleEnable,
   'schedule.remove': (fields) => ({ type: 'schedule.remove', scheduleId: readId(fields, 'scheduleId') }),
   'schedule.write': readScheduleWrite,
+  'watchdog.stop': (fields) => ({
+    type: 'watchdog.stop',
+    taskId: readId(fields, 'taskId'),
+    watchdogId: readId(fields, 'watchdogId'),
+  }),
+  'watchdog.connect': readWatchdogConnect,
+  'watch_source.write': readWatchSourceWrite,
+  'watch_source.remove': (fields) => ({
+    type: 'watch_source.remove',
+    projectId: readId(fields, 'projectId'),
+    server: readText(fields, 'server', MAX_ID),
+  }),
   'memory.write': readMemoryWrite,
   'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
   'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),

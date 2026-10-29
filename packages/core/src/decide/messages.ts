@@ -83,6 +83,7 @@ const STAGE_EFFECT: Record<TaskStage, StageEffect> = {
   researching: 'restart_step',
   investigating: 'restart_step',
   operating: 'restart_step',
+  watching: 'restart_step',
   awaiting_proposal: 'decline_proposal',
   awaiting_operation: 'operation_notes',
   checking: 'fix',

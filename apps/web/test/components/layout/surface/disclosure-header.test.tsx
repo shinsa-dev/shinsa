@@ -28,6 +28,7 @@ const ROW_DISCLOSURES: Record<string, string> = {
   'components/evidence/evidence-text.tsx': 'Show the output of a test or check run, a button in its caption',
   'components/task/heading.tsx': 'the request under the title is itself the button',
   'components/settings/agents.tsx': 'the inline Per role toggle',
+  'components/onboarding/projects.tsx': 'the inline Repositories toggle at the end of a suggested project',
   'components/settings/mcp-server-row.tsx': 'a settings row with a leading chevron, not a header',
 };
 

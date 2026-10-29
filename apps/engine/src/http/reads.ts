@@ -241,6 +241,7 @@ export function createReadRoutes(engine: Engine, transcripts: Transcripts): Read
       result: task.result ?? null,
       findings: task.findings,
       mergeSteps: listMergeSteps(task),
+      watchdogs: task.watchdogs ?? [],
       gates: listOpenGates(state, task.id),
       waitsOn: listWaitsOn(state, task).map((other) => ({ id: other.id, title: other.title })),
       runs: listTaskRuns(state, task.id).map(resolveRunView),

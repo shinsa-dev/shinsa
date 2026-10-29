@@ -86,7 +86,8 @@ src/
 │                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
 │                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
 │                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
-│                        base of every timer that fires from state) and MonitorClock (monitors.ts)
+│                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
+│                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
 │   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or
@@ -173,7 +174,9 @@ src/
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
+├── git/                 refs (assertRefName, slugify), conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
+│                        resolveCommitType from a branch, serializeConventionalSubject: the commit and pull request
+│                        subjects), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
 │                        PushError: a failed push typed as hook, network, non_fast_forward or other by
 │                        classifyPushFailure; hasPrePushHook, core.hooksPath and husky's stubs followed; the output's
 │                        tail), update.ts (updateOntoBase: fetch the base, merge it in when the branch lacks it, or
@@ -216,14 +219,17 @@ src/
 │                        (docs/engine.md → Test coverage of the change)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
+│                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,
+│                        without running git); discover.ts (scans the home folder for the folders that hold repositories),
 │                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
 │                        (setup verification before a task's first agent)
-├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional), the setup
-│                        steps: the fixed list, what each shows and saves (steps.ts), the run of setup, going back,
-│                        its saved state and the Claude logins it imports (flow.ts), the accounts it reads and the
-│                        imports it runs (accounts.ts)
+├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
+│                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
+│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
+│                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
+│                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
+│                        back, its saved state and the Claude logins it imports (flow.ts), the accounts it reads and
+│                        the imports it runs (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts

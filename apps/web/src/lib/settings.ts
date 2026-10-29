@@ -19,6 +19,7 @@ import {
   resolveMeterWindow,
   resolveModelLabel,
   resolveProviderLabel,
+  resolveWatchdogDefaults,
   resolveWeeklyPercent,
   type Settings,
   type UsageRate,
@@ -161,6 +162,64 @@ export const FIX_ROUND_ITEMS: SettingItem<string>[] = [
     icon: 'IconArrowsRepeat' as const,
   })),
 ];
+
+type WatchdogSettingKey = 'watchdogHours' | 'watchdogFirstCheckMinutes' | 'watchdogMaxGapHours';
+
+interface WatchdogSettingField {
+  key: WatchdogSettingKey;
+  title: string;
+  choices: number[];
+  unit: 'h' | 'min';
+  current: (defaults: ReturnType<typeof resolveWatchdogDefaults>) => number;
+}
+
+export const WATCHDOG_SETTINGS_TITLE = 'Watchdogs';
+
+export const WATCHDOG_SETTING_FIELDS: WatchdogSettingField[] = [
+  {
+    key: 'watchdogHours',
+    title: 'Watch for',
+    choices: [24, 48, 72, 120, 168],
+    unit: 'h',
+    current: (d) => d.hours,
+  },
+  {
+    key: 'watchdogFirstCheckMinutes',
+    title: 'First check after',
+    choices: [10, 15, 30, 60],
+    unit: 'min',
+    current: (d) => d.firstCheckMinutes,
+  },
+  {
+    key: 'watchdogMaxGapHours',
+    title: 'Longest gap between checks',
+    choices: [1, 2, 4, 6, 12],
+    unit: 'h',
+    current: (d) => d.maxGapHours,
+  },
+];
+
+function describeAmount(value: number, unit: 'h' | 'min') {
+  if (unit === 'min') return `${value} minutes`;
+  return value === 1 ? '1 hour' : `${value} hours`;
+}
+
+export function listWatchdogSettingItems(
+  field: WatchdogSettingField,
+  settings: Settings
+): SettingItem<string>[] {
+  const current = field.current(resolveWatchdogDefaults(settings));
+  const values = [...new Set([...field.choices, current])].sort((a, b) => a - b);
+  return values.map((value) => ({
+    value: String(value),
+    label: describeAmount(value, field.unit),
+    icon: 'IconClock',
+  }));
+}
+
+export function resolveWatchdogSettingValue(field: WatchdogSettingField, settings: Settings) {
+  return String(field.current(resolveWatchdogDefaults(settings)));
+}
 
 export const MERGE_ITEMS: SettingItem<Settings['mergeMethod']>[] = [
   { value: 'squash', label: 'Squash', icon: 'IconCommits' },
