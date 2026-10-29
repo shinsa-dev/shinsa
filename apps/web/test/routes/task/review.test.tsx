@@ -152,7 +152,7 @@ function reviewing(overrides: Partial<Task> = {}, gateType: 'review' | 'merge' |
     reviewSummary: 'I ran the retry against a server that **drops** the first call.',
     findings: [
       {
-        severity: 'suggestion',
+        severity: 'optional',
         file: 'src/other.ts',
         line: 1,
         message: 'Name the constant.',
@@ -256,7 +256,7 @@ describe('the Review tab', () => {
     expect(screen.getByText('bun lint')).toBeDefined();
     expect(screen.getByText('Suggested fix')).toBeDefined();
     expect(
-      screen.getByText('Found 1 blocking finding and 1 suggestion. A signal for you, never the approval.')
+      screen.getByText('Found 2 findings: 1 blocking, 1 optional. A signal for you, never the approval.')
     ).toBeDefined();
     expect(screen.getByText('drops')).toBeDefined();
     expect(screen.queryByText('Changed files the review does not point at')).toBeNull();

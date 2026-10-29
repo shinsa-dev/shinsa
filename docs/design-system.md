@@ -197,7 +197,7 @@ a UI change.
   first; the console read on every page; never claim what was not seen working.
 - **A review proves every blocking finding** (`file:line`, what breaks, how it was seen), runs what CI runs, judges
   earlier comments as valid, stale or a nitpick, leads with the verdict, and says nothing about what is fine. Taste
-  is a suggestion; UI work without evidence is blocking.
+  is optional; UI work without evidence is blocking.
 
 ### The checklist
 
@@ -8382,7 +8382,7 @@ Row class:
 - The place is a link into the workbench at those lines (with the spot key so it washes there; "Open in Code" on hover) when the task has a repository.
 - Body (under `border-border border-t`): the task diff narrowed to hunks around the lines with 2 lines of context, the lines themselves washed `primary-a1`. If the change does not reach them, the file at head around them as unchanged lines. A long removal before replaced lines shows only as many removed lines as the point marks new ones, plus two; a pure removal shows whole.
 - An optional "why" under it: markdown, `border-border border-t px-2 py-1.5 text-fg-3 text-xs`.
-- Starts open only for a blocking finding; suggestions and spots start folded. The fold is remembered.
+- Starts open for a Blocking or Should fix finding; Optional findings and spots start folded. The fold is remembered.
 - A finding with a snippet drops its separate place chip: the snippet header is the place.
 
 #### Code block and its action corner
@@ -9287,8 +9287,9 @@ change works, it sends `walkthrough` with only the parts that changed, each whol
 
 At most 12 findings, one per problem, most severe first, each anchored to a `file` and `line`/`end`. `blocking` is a
 bug, a missed requirement, a broken rule, a check the change makes fail, a test that encodes the old behaviour or
-passes either way, or UI work without evidence of the changed flow; everything else is a `suggestion`, and taste is
-never blocking. A check that fails because of the change is always a blocking finding; one already failing on the
+passes either way, or UI work without evidence of the changed flow. `should_fix` is not proven broken but worth holding
+the merge for (an unhandled edge case, untested logic that decides something, a duplicated helper); it reaches the human
+with Fix chosen. `optional` is taste or polish, shown with Dismiss chosen. Taste is never blocking. A check that fails because of the change is always a blocking finding; one already failing on the
 base branch is not the change's and does not count against it. Each finding has a `title` (what is wrong, a few words), a `message` (what is wrong and why it matters) and,
 when known, a `fix` (a sentence or a short code block). A `summary` of one or two sentences says what was checked and
 the overall view. `disagreements` names a judgement call by its number with the `reason` and what the reviewer would
@@ -10768,7 +10769,7 @@ the report. A reviewer is a signal for the person who decides, never the approva
 | Wrong | Right |
 | --- | --- |
 | "Looks good to me." | "Blocking: the empty state uses a green checkmark (`queue.tsx:88`); `bun lint:conventions` fails on it." |
-| A blocking finding on a spacing taste | A suggestion, with the scale step it should use |
+| A blocking finding on a spacing taste | An optional finding, with the scale step it should use |
 
 ## Appendix A. The kit stylesheet
 

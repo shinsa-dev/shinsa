@@ -12,7 +12,7 @@ import type { ReviewTarget } from '@/lib/review/targets.ts';
 
 function finding(overrides: Partial<ReviewFinding>): ReviewFinding {
   return {
-    severity: 'suggestion',
+    severity: 'optional',
     file: 'a.ts',
     line: 4,
     end: null,
@@ -51,7 +51,7 @@ describe('listFindingNotes', () => {
       )
     ).toEqual([
       ['finding:0', 8, 'Blocking', 'This drops errors.'],
-      ['finding:3', 4, 'Suggestion', 'Consider a guard.'],
+      ['finding:3', 4, 'Optional', 'Consider a guard.'],
     ]);
   });
 });

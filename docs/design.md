@@ -45,7 +45,7 @@ Only these, and they win over anything below:
    notice rows and context meter, the schedule and notification rows, the MCP, plugin and skill
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
    chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
-   a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
+   a blocking finding, an optional finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
    Checks list in each state (`routes/ui/checks.tsx`, on `routes/ui/sample-checks.ts`: running, all passed,
    failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
    pull request, a linked test, the plan's Checks, check activity and Always run before review), the
@@ -1232,9 +1232,11 @@ Only these, and they win over anything below:
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
       "Or write your own answer."
     - **Review verdicts** (`finding-verdicts.tsx`): each finding opens on `NoteHead` (34, The review card): a
-      full-width row with the severity in `red-text` or `fg-2` (the file as a mono chip when there is no snippet) over
-      the title on the left and the Fix / Dismiss `Choice` on the right, then the message, the file row and the
-      suggested fix full width below; blocking findings start on Fix. The primary action follows the verdicts:
+      full-width row with the severity in its tone's text (Blocking `red-text`, Should fix `amber-text`, Optional `fg-2`;
+      the file as a mono chip when there is no snippet) over the title on the left and the Fix / Dismiss `Choice` on
+      the right, then the message, the file row and the suggested fix full width below. Blocking and Should fix
+      findings start on Fix and Optional ones on Dismiss (`SEVERITY_VERDICT`, `lib/review/findings.ts`), so the default
+      is the reviewer's ranking. The primary action follows the verdicts:
       "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip says so, 13),
       Approve changes when all are dismissed. The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
@@ -2143,7 +2145,7 @@ Only these, and they win over anything below:
       (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go
       into the round's next commit, and the agent hears which files you edited (`docs/engine.md` → Your edits).
     - **Inline.** Findings sit under their last line as the review card (`ReviewNote`, 34) in its compact form: the
-      author (Agent review), the tone (Blocking red, Suggestion amber), the title, the message as markdown and the
+      author (Agent review), the tone (Blocking red, Should fix amber, Optional neutral), the title, the message as markdown and the
       suggested fix, with no snippet or place (the line above is the place); at a review gate the row of its label and
       title carries the same Fix / Dismiss `Choice` on its right as the Review tab and the Overview (`NoteHead`,
       `components/review/verdict-choice.tsx`, on the
@@ -2239,8 +2241,8 @@ Only these, and they win over anything below:
       lead with a label (a spot's attention). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
       two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
       them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
-      header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
-      (`startsOpen`); a suggestion's and every spot's stay folded.
+      header, so a finding with a snippet drops its place chip. A finding's snippet starts open when it starts
+      on Fix (`startsOpen`: Blocking and Should fix); an Optional one's and every spot's stay folded.
 34. **Review is the technical read; the Overview is the decision** (`routes/task/review.tsx`,
     `components/review/note.tsx`, `lib/review/report.ts`, since 2026-10-25; the deep read since 2026-10-26). Review is
     a task tab of its own, after Overview and before Code: Overview, Review, Code, Chat. It shows once there is something
@@ -2420,7 +2422,7 @@ Only these, and they win over anything below:
         open and remembers a fold (`task:<id>:review:card:<point>`, 40), and a card you jump to (J and K, the
         index, `?spot=`) opens again. Under the bar, 12px in: a judgement
         call's call (`text-xs` medium `fg-4`), then the body as markdown (`fg-3` under the call, `fg-4` without).
-      - **A finding** (Blocking, Suggestion, a dismissed one in Everything else) has no bar. It opens on the head every
+      - **A finding** (Blocking, Should fix, Optional, a dismissed one in Everything else) has no bar. It opens on the head every
         finding has (`NoteHead`, `components/text/note-head.tsx`, the Overview's too): one full-width row,
         `justify-between`, with the label line (`text-2xs`: Agent review in `fg-2`, the tag as a dot and label) and
         the title (`text-xs` medium `fg-4`) stacked on the left and Fix / Dismiss on the right at a review gate,

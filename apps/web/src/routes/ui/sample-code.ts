@@ -107,7 +107,7 @@ export const SAMPLE_CODE_FINDINGS: ReviewFinding[] = [
     fix: 'Skip spots without a file:\n\n```ts\nif (!spot.file) continue;\n```',
   },
   {
-    severity: 'suggestion',
+    severity: 'optional',
     file: SAMPLE_CODE_PATH,
     line: 42,
     end: 43,

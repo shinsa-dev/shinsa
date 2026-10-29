@@ -5,7 +5,7 @@ import { FindingText } from '@/components/text/finding-text.tsx';
 import { createTask } from '../../support/state.ts';
 
 describe('a finding’s code', () => {
-  it('opens for a blocking finding and stays folded for any other', () => {
+  it('opens for a finding that starts on Fix and stays folded for an optional one', () => {
     const pending = spyOn(globalThis, 'fetch').mockImplementation(
       (() => new Promise<Response>(() => undefined)) as unknown as typeof fetch
     );
@@ -25,14 +25,24 @@ describe('a finding’s code', () => {
           task={task}
         />
         <FindingText
-          finding={{ severity: 'suggestion', file: 'src/b.ts', line: 7, end: null, message: 'Rename it.' }}
+          finding={{ severity: 'should_fix', file: 'src/c.ts', line: 2, end: null, message: 'Handle empty.' }}
+          task={task}
+        />
+        <FindingText
+          finding={{ severity: 'optional', file: 'src/b.ts', line: 7, end: null, message: 'Rename it.' }}
           task={task}
         />
       </TooltipProvider>
     );
-    expect(view.getByRole('button', { name: 'Collapse code' }).getAttribute('aria-expanded')).toBe('true');
+    expect(
+      view
+        .getAllByRole('button', { name: 'Collapse code' })
+        .map((button) => button.getAttribute('aria-expanded'))
+    ).toEqual(['true', 'true']);
+    expect(view.getByText('Should fix').className).toContain('text-amber-text');
+    expect(view.getByText('Optional').className).toContain('text-fg-2');
     expect(view.getByRole('button', { name: 'Expand code' }).getAttribute('aria-expanded')).toBe('false');
-    expect(view.getAllByText('Reading the lines')).toHaveLength(1);
+    expect(view.getAllByText('Reading the lines')).toHaveLength(2);
     expect(view.getByText('The loop skips the last item')).toBeDefined();
     expect(view.getByText('Suggested fix')).toBeDefined();
     view.unmount();

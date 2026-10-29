@@ -49,7 +49,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | check-in | A monitor's next look at what it waits for | `Monitor.nextCheckAt`, `monitor.check_in_now` | "Check in now", "Check-in 2 of 10" |
 | setup verification | Shinsa verifying the repository, the default branch and the workspace before a task's first agent | `config.verify`, `VERIFYING_SETUP`, gate type `configuration` | "Setup incomplete", "Verify again" |
 | review | Reading a change: the agent review (the reviewer, on its own session, soft gate) or your review (hard gate) | steps `agent_review`, `your_review` | Agent review, Review |
-| finding | One problem the reviewer reports, blocking or a suggestion, at a file and line | `ReviewFinding` | finding |
+| finding | One problem the reviewer reports at a file and line, ranked blocking, should fix or optional | `ReviewFinding` | finding |
 | diagnosis | What an investigation hands over: what it found and why | `report_diagnosis`, `TaskResult` step `investigate` | Diagnosis |
 | judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |

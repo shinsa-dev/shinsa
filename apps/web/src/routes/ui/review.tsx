@@ -90,7 +90,7 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='A finding · the same card on NoteHead, no bar: a blocking finding and a suggestion, label and title on the left, Fix / Dismiss on the right, the suggested fix below'>
+      <Specimen label='A finding · the same card on NoteHead, no bar: a blocking finding and an optional one, label and title on the left, Fix / Dismiss on the right, the suggested fix below'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
           {FINDINGS.map((item) => (
             <ReviewNote

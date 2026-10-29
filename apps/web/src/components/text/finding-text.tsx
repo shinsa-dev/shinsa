@@ -6,8 +6,14 @@ import { CHIP } from '@/components/layout/surface/card.ts';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { SuggestedFix } from '@/components/text/inset-note.tsx';
 import { NoteHead } from '@/components/text/note-head.tsx';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { hashDisclosurePart, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { describeFindingPlace, SEVERITY_LABEL } from '@/lib/review/findings.ts';
+import {
+  describeFindingPlace,
+  SEVERITY_LABEL,
+  SEVERITY_TONE,
+  SEVERITY_VERDICT,
+} from '@/lib/review/findings.ts';
 
 export function FindingText({
   finding,
@@ -29,9 +35,7 @@ export function FindingText({
       <NoteHead
         label={
           <>
-            <span className={severity === 'blocking' ? 'text-red-text' : 'text-fg-2'}>
-              {SEVERITY_LABEL[severity]}
-            </span>
+            <span className={TONE_TEXT[SEVERITY_TONE[severity]]}>{SEVERITY_LABEL[severity]}</span>
             {where && !snippet && <Truncate className={cn(CHIP, 'font-mono')}>{where}</Truncate>}
           </>
         }
@@ -52,7 +56,7 @@ export function FindingText({
             path={snippet.path}
             start={snippet.line}
             end={finding.end ?? snippet.line}
-            startsOpen={severity === 'blocking'}
+            startsOpen={SEVERITY_VERDICT[severity] === 'fix'}
           />
         </div>
       )}
