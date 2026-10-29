@@ -17,7 +17,7 @@ import {
   splitMessageAttachments,
   type Task,
 } from '@shinsa/core';
-import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
+import { describeTool, isHandover, readString, type ToolDescription } from '@/lib/chat/tool-describe.ts';
 
 type MessageStatus = 'delivering' | 'noted' | 'undelivered';
 
@@ -432,14 +432,34 @@ interface TurnClose {
   endedAt: number;
 }
 
-function isTurnHandOver(item: TimelineItem) {
+function isTurnHandOver(item: TimelineItem): item is TimelineItemOf<'handover'> {
   return item.kind === 'handover' && item.call.tool.kind === 'shinsa' && isHandOverTool(item.call.tool.name);
 }
 
+function listHandedOverTexts(handOvers: TimelineItemOf<'handover'>[]) {
+  return handOvers.flatMap(({ call }) => {
+    const args = call.tool.kind === 'shinsa' ? call.tool.args : null;
+    return ['answer', 'diagnosis', 'report', 'outcome'].flatMap((key) => {
+      const text = readString(args, key);
+      return text ? [text.trim()] : [];
+    });
+  });
+}
+
+function repeatsHandOver(reply: TimelineItemOf<'agent'>, handOvers: TimelineItemOf<'handover'>[]) {
+  const text = reply.text.trim();
+  return listHandedOverTexts(handOvers).some((handed) => handed.includes(text));
+}
+
 function selectReply(body: TimelineItem[], quiet: boolean) {
-  if (body.some(isTurnHandOver)) return null;
-  const agents = body.filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
-  return agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
+  const handOvers = body.filter(isTurnHandOver);
+  const last = handOvers.at(-1);
+  const agents = body
+    .slice(last ? body.indexOf(last) + 1 : 0)
+    .filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
+  const reply =
+    agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
+  return reply && !repeatsHandOver(reply, handOvers) ? reply : null;
 }
 
 function isRejectedHandover(item: TimelineItem): item is TimelineItemOf<'handover'> {

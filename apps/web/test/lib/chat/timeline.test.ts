@@ -712,7 +712,7 @@ describe('resolveTurns', () => {
     expect(turn?.outcomes.map((item) => item.call.callId)).toEqual(['1', '2']);
   });
 
-  it('shows every hand-over once: words around it fold into the work, never a second reply', () => {
+  it('keeps the last reply after any hand-over in the chat, outside the fold', () => {
     for (const name of [
       'answer',
       'report_diagnosis',
@@ -727,18 +727,51 @@ describe('resolveTurns', () => {
       const items = resolveTimeline(
         [
           createAgentEntry('Looking at the projects', 'interim', 1),
-          createCallEntry('1', shinsaTool(name, { answer: 'I know of one project.' }), 2),
-          createAgentEntry('My answer is posted above: I know of one project.', 'final', 3),
+          createCallEntry('1', shinsaTool(name, { summary: 'Filed it as its own task.' }), 2),
+          createAgentEntry('You could not see it because I never accepted it.', 'final', 3),
+        ],
+        []
+      );
+      const [turn] = resolveTurns(items, finished, 500);
+      expect(turn?.reply?.text).toBe('You could not see it because I never accepted it.');
+      expect(turn?.outcomes.map((item) => item.call.tool.kind === 'shinsa' && item.call.tool.name)).toEqual([
+        name,
+      ]);
+      expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
+    }
+  });
+
+  it('folds a reply that repeats the text its hand-over card already shows', () => {
+    for (const [name, key] of [
+      ['answer', 'answer'],
+      ['report_diagnosis', 'diagnosis'],
+      ['submit_report', 'report'],
+      ['report_outcome', 'outcome'],
+    ] as const) {
+      const items = resolveTimeline(
+        [
+          createCallEntry('1', shinsaTool(name, { [key]: 'I know of one project.\n\nIt is shinsa.' }), 1),
+          createAgentEntry('  I know of one project.  ', 'final', 2),
         ],
         []
       );
       const [turn] = resolveTurns(items, finished, 500);
       expect(turn?.reply).toBeNull();
-      expect(turn?.outcomes.map((item) => item.call.tool.kind === 'shinsa' && item.call.tool.name)).toEqual([
-        name,
-      ]);
-      expect(turn?.work.map((item) => item.kind)).toEqual(['agent', 'agent']);
+      expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
     }
+  });
+
+  it('keeps words written before a hand-over in the fold when nothing follows it', () => {
+    const items = resolveTimeline(
+      [
+        createAgentEntry('Looking at the projects', 'interim', 1),
+        createCallEntry('1', shinsaTool('complete_phase', { summary: 'Done.' }), 2),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.reply).toBeNull();
+    expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
   });
 
   it('keeps the reply under a question or suggested tasks, which are not the step’s hand-over', () => {
