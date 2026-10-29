@@ -325,18 +325,18 @@
   }
 }
 
-.onboarding-track {
+.onboarding-track[data-moving] {
   mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
 }
 
 .onboarding-in,
 .onboarding-in-back {
-  animation: onboarding-in 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: onboarding-in 320ms linear both;
 }
 
 .onboarding-out,
 .onboarding-out-back {
-  animation: onboarding-out 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: onboarding-out 320ms linear both;
   pointer-events: none;
 }
 

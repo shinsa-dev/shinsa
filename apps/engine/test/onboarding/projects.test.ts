@@ -17,7 +17,13 @@ async function createRepo(folder: string, name: string, remote: string | null) {
   return realpathSync(path);
 }
 
-async function setup() {
+interface AskCall {
+  system: string;
+  prompt: Record<string, unknown>;
+}
+
+async function setup(answers: unknown[] = []) {
+  const asked: AskCall[] = [];
   const root = realpathSync(createTempDir());
   const config = createTestConfig(root, { roots: [] });
   const engine = new Engine(new EventLog(config.databasePath));
@@ -37,12 +43,25 @@ async function setup() {
     store,
     roots,
     resolveLogin: () => Promise.resolve('jane'),
+    ask: <T>(system: string, prompt: string) => {
+      asked.push({ system, prompt: JSON.parse(prompt) as Record<string, unknown> });
+      return Promise.resolve((answers.shift() ?? null) as T | null);
+    },
     run: () => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false }),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),
     accountActions: { listImports: () => Promise.resolve([]), importAccount: () => Promise.resolve() },
   });
-  return { root, engine, onboarding, acme, projects, repos };
+  return { root, engine, onboarding, acme, projects, repos, asked };
+}
+
+function revise(onboarding: Onboarding, text: unknown, projects?: OnboardingProjectChoice[]) {
+  return onboarding.setup.reply({
+    type: 'revise',
+    stepId: 'projects',
+    text,
+    ...(projects ? { projects } : {}),
+  });
 }
 
 function answerFolders(world: Awaited<ReturnType<typeof setup>>) {
@@ -166,7 +185,7 @@ describe('the projects step', () => {
     const again = await world.onboarding.setup.reply({ type: 'open', stepId: 'projects' });
     expect(again.step).toMatchObject({
       projects: [],
-      description: 'Every repository in your folders already belongs to a project.',
+      description: 'Shinsa set these up from your folders. Change them any time in Settings.',
       submitLabel: 'Continue',
     });
   });
@@ -265,5 +284,172 @@ describe('the projects step', () => {
         world.onboarding.setup.reply({ type: 'answer', stepId: 'projects', values: ['continue'], projects })
       ).rejects.toMatchObject({ code: 'projects_invalid' });
     }
+  });
+});
+
+describe('changing the suggested projects in words', () => {
+  test('sends the request with every repository by id, and shows the new projects and the reply', async () => {
+    const world = await setup([
+      {
+        reply: 'I gave api a project of its own.',
+        projects: [
+          { name: 'API', repos: ['r1'] },
+          { name: 'Acme', repos: ['r2', 'r1'] },
+          { name: 'Personal', repos: ['r3', 'r4', 'r9', 3] },
+          { name: ' ', repos: ['r3'] },
+        ],
+      },
+    ]);
+    await answerFolders(world);
+    const flow = await revise(world.onboarding, '  give api its own project ');
+    expect(world.asked[0]?.system).toContain('Return the whole new list of projects');
+    expect(world.asked[0]?.prompt).toEqual({
+      request: 'give api its own project',
+      repositories: [
+        { id: 'r1', name: 'api', path: world.repos.api },
+        { id: 'r2', name: 'web', path: world.repos.web },
+        { id: 'r3', name: 'notes', path: world.repos.notes },
+        { id: 'r4', name: 'scratch', path: world.repos.scratch },
+      ],
+      projects: [
+        { name: 'Acme', repos: ['r1', 'r2'] },
+        { name: 'Personal', repos: ['r3', 'r4'] },
+      ],
+    });
+    expect(flow.step).toMatchObject({
+      id: 'projects',
+      problem: null,
+      conversation: [{ request: 'give api its own project', reply: 'I gave api a project of its own.' }],
+    });
+    expect(
+      flow.step?.projects.map((project) => [project.id, project.name, project.repos.map((r) => r.name)])
+    ).toEqual([
+      ['revised:0', 'API', ['api']],
+      ['revised:1', 'Acme', ['web']],
+      ['personal', 'Personal', ['notes', 'scratch']],
+    ]);
+    await answerProjects(world.onboarding);
+    expect(listProjects(world.engine)).toEqual([
+      { name: 'API', key: 'API', folders: [], repos: ['api'] },
+      { name: 'Acme', key: 'ACM', folders: [], repos: ['web'] },
+      { name: 'Personal', key: 'PER', folders: [], repos: ['notes', 'scratch'] },
+    ]);
+  });
+
+  test('works from your edits, keeps a renamed project with the same repositories, and adds to an existing project', async () => {
+    const world = await setup([
+      {
+        reply: 'Renamed Acme.',
+        projects: [
+          { name: 'Acme Corp', repos: ['r1', 'r2'] },
+          { name: 'Old', repos: ['r3'] },
+        ],
+      },
+      { reply: 'Done.', projects: [{ name: 'Acme Corp', repos: ['r1', 'r2'] }] },
+    ]);
+    await world.engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Old', color: 'green', key: 'OLD' },
+    });
+    await answerFolders(world);
+    const flow = await revise(world.onboarding, 'rename acme', [
+      { id: 'owner:acme', name: ' Acme Inc ', repos: [world.repos.api, world.repos.web] },
+      { id: 'personal', name: '', repos: [world.repos.notes] },
+      { id: 'owner:gone', name: 'Gone', repos: [] },
+    ]);
+    expect(world.asked[0]?.prompt.projects).toEqual([
+      { name: 'Acme Inc', repos: ['r1', 'r2'] },
+      { name: 'Personal', repos: ['r3'] },
+    ]);
+    expect(
+      flow.step?.projects.map((project) => [project.id, project.name, project.folders, project.projectId])
+    ).toEqual([
+      ['owner:acme', 'Acme Corp', [world.acme], null],
+      ['revised:1', 'Old', [], expect.any(String)],
+    ]);
+    const again = await revise(world.onboarding, 'drop old');
+    expect(again.step?.conversation.map((turn) => turn.reply)).toEqual(['Renamed Acme.', 'Done.']);
+    expect(again.step?.projects.map((project) => project.name)).toEqual(['Acme Corp']);
+  });
+
+  test('says why it could not change them, and keeps the projects as they were', async () => {
+    const world = await setup([{ reply: 'x', projects: 'none' }, { projects: [] }]);
+    await answerFolders(world);
+    for (const [text, problem] of [
+      ['   ', 'Say what to change about the projects.'],
+      ['x'.repeat(501), 'Keep the request to 500 characters or fewer.'],
+      ['split it', 'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'],
+      ['split it', 'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'],
+      ['split it', 'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'],
+    ] as const) {
+      const flow = await revise(world.onboarding, text);
+      expect(flow.step).toMatchObject({ problem, conversation: [] });
+      expect(flow.step?.projects.map((project) => project.name)).toEqual(['Acme', 'Personal']);
+    }
+    await expect(revise(world.onboarding, 3)).rejects.toMatchObject({ code: 'request_invalid' });
+    await expect(
+      world.onboarding.setup.reply({ type: 'revise', stepId: 'roots', text: 'x' })
+    ).rejects.toMatchObject({ code: 'step_stale' });
+  });
+
+  test('only the projects step takes a request', async () => {
+    const world = await setup();
+    await expect(
+      world.onboarding.setup.reply({ type: 'revise', stepId: 'roots', text: 'x' })
+    ).rejects.toMatchObject({ code: 'revise_invalid' });
+  });
+
+  test('a repository filed since the request is dropped from the revised projects', async () => {
+    const world = await setup([
+      {
+        reply: 'Split.',
+        projects: [
+          { name: 'Solo', repos: ['r1'] },
+          { name: 'Rest', repos: ['r2'] },
+        ],
+      },
+    ]);
+    await answerFolders(world);
+    await revise(world.onboarding, 'split');
+    await world.engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Elsewhere', color: 'red', key: 'EL' },
+    });
+    const elsewhere = Object.values(world.engine.state.projects)[0];
+    await world.engine.dispatch({
+      type: 'repo.register',
+      repo: {
+        path: world.repos.api,
+        name: 'api',
+        defaultBranch: 'main',
+        remote: 'github.com/acme/api',
+        checkCommands: [],
+      },
+      projectName: null,
+      projectId: elsewhere?.id ?? null,
+    });
+    const flow = await world.onboarding.setup.resolve();
+    expect(flow.step?.projects.map((project) => project.name)).toEqual(['Rest']);
+  });
+});
+
+describe('the projects already set up', () => {
+  test('going back after creating them shows each project with its repositories', async () => {
+    const world = await setup();
+    await answerFolders(world);
+    await answerProjects(world.onboarding);
+    const back = await world.onboarding.setup.reply({ type: 'open', stepId: 'projects' });
+    expect(back.step).toMatchObject({
+      projects: [],
+      title: 'Your projects',
+      description: 'Shinsa set these up from your folders. Change them any time in Settings.',
+      submitLabel: 'Continue',
+    });
+    expect(
+      back.step?.filed.map((project) => [project.name, project.key, project.repos.map((r) => r.name)])
+    ).toEqual([
+      ['Acme', 'ACM', ['api', 'web']],
+      ['Personal', 'PER', ['notes', 'scratch']],
+    ]);
   });
 });

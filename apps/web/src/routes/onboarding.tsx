@@ -22,7 +22,7 @@ const ACCOUNT_ACTIONS = {
 };
 
 function OnboardingContent() {
-  const { flow, failure, pending, direction, answer, open, refresh, retry } = useOnboardingFlow();
+  const { flow, failure, pending, direction, answer, revise, open, refresh, retry } = useOnboardingFlow();
   const accounts = useAccounts();
   const status = useOnboardingStatus();
   if (failure) {
@@ -72,6 +72,7 @@ function OnboardingContent() {
             }}
             actions={{
               answer: (stepId, values, key, projects) => void answer(stepId, values, key, projects),
+              revise,
               open: openStep,
               refresh: () => void refresh(),
               openPrivacy: () => void requestPrivacySettings(),

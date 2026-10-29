@@ -3953,7 +3953,18 @@ have reached.
   `project.write` with its suggested key and colour (its folder only when no repository was left out, so a folder
   never files one back in), and each repository is registered in it through `createProjectChanges().upsertRepo`,
   with ids from the answer's command id. A stale suggestion id, an empty or long name, or no repositories left is
-  the step's `problem`.
+  the step's `problem`. The step also lists the projects already made with repositories in the chosen folders
+  (`filed`), so coming back to it after making them shows them.
+- **Projects change in words** (`onboarding/revise.ts`). A `{ type: 'revise', stepId: 'projects', text, projects? }`
+  reply (1 to 500 characters, `ONBOARDING_REQUEST_LIMIT`, with your edits as an answer's `projects`) asks the writer
+  model through the quick calls (`quick.write`, a fixed system prompt, the request, every repository by a short id
+  and the projects as they stand in the user prompt, a JSON schema for the answer) for the whole new list of
+  projects and one sentence to you. Unknown ids, a repository named twice and nameless or empty projects are
+  dropped; the result is the draft's `revision` (the projects as names and paths, and the last 10 turns, shown as
+  the step's `conversation`) and replaces the suggestions in the view and in the answer: a project with exactly the
+  repositories of a suggestion keeps its id, key and folder, a new one gets a fresh key, and one named like an
+  existing project adds to it. A repository filed since drops out. No model answering is the step's `problem`, and
+  the suggestions stay as they were.
 - **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports every login
   `AccountActions.listImports` offers (your Claude Code login and each claude-swap account, Accounts and usage
   limits above) whose email is not already one of your accounts, through the same import Settings uses. An email
@@ -3970,9 +3981,9 @@ have reached.
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
   on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
   its receipt while a later answer to the same step is not.
-- **Persistence.** The run of setup lives in `data/onboarding.json` (version 4, written atomically: the step on
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 5, written atomically: the step on
   screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem, and the
-  private folders with the picks they came from), so a
+  private folders with the picks they came from, and the projects as you changed them in words), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
 - **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before

@@ -1119,10 +1119,12 @@ Only these, and they win over anything below:
       "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
       The first step you open, and the finished page when you load it, are simply there. Moving to another step
       slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
-      (the other way when you go back), both the full width of the column and 420ms on the drawer ease
-      (`cubic-bezier(0.32, 0.72, 0, 1)`), and neither fades on its own: the track masks its 24px edges (the column's
-      padding, so nothing at rest is faded), so a step fades only as it crosses the edge. The step leaving is `inert`
-      and goes when its slide ends. Under reduced motion the steps swap at once.
+      (the other way when you go back), both the full width of the column and 320ms at one speed (`linear`, so the
+      slide never slows at its end), and neither fades on its own: only while a step moves (`data-moving`) does the
+      track mask its 24px edges, the column's padding, so a step fades only as it crosses the edge and nothing at
+      rest is ever masked. The track's one column is `minmax(0, 1fr)`, so a long line truncates inside the column
+      instead of widening the step past the track's clip. The step leaving is `inert` and goes when its slide ends.
+      Under reduced motion the steps swap at once.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
       like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
@@ -1140,7 +1142,13 @@ Only these, and they win over anything below:
       ios, pwn and 26 more"). A quiet Repositories button opens the project's repositories as checkbox rows, to leave
       one out ("2 of 3 repositories"). The primary button counts what you keep ("Create 6 projects", "Create the
       project", "Continue without projects"), is off while a kept project has no name, and shows its spinner while the
-      projects are made; the rows are locked meanwhile.
+      projects are made; the rows are locked meanwhile. Under the list a second card takes a change in words
+      (`OnboardingProjectsChat`): each request in `text-xs` `fg-3` over the reply in `fg-4`, then a `sm` field ("Ask
+      for a change, like …") with a secondary Ask button (the sparkle), which sends the request with your edits and
+      shows its spinner; the box clears once the change is made and keeps your words when it is not. The projects you
+      already made are a read-only card (`OnboardingFiledProjects`: the dot, the name, and the count, folder and first
+      repositories), under an "Already set up" `SectionLabel` when new suggestions are shown above it, and alone when
+      you come back to the step after making them.
     - **Folders** pick several: the found folders with their repository counts, each with a `sm` `Checkbox` in the
       row's icon slot, the folders you chose already checked (the one with the most repositories on a first run), and
       as the card's last row a `sm` path field with a secondary Add folder (Settings → Repository folders' row), which

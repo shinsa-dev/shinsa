@@ -9,6 +9,7 @@ import {
 import type { ProjectChanges } from '../projects/routes.ts';
 import { type LoginResolver, listLocalRepos, readOriginRemote } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { applyRevision, type ProjectRevision } from './revise.ts';
 
 export interface ProjectSetup {
   engine: Engine;
@@ -46,13 +47,41 @@ function listSuggestionRepos(engine: Engine, roots: string[]): SuggestionRepo[] 
   return [...repos.values()];
 }
 
-export async function listProjectSuggestions(setup: ProjectSetup, roots: string[]) {
+export async function listProjectSuggestions(
+  setup: ProjectSetup,
+  roots: string[],
+  revision: ProjectRevision | null
+) {
   const { engine } = setup;
-  return resolveProjectSuggestions({
+  const projects = Object.values(engine.state.projects);
+  const suggestions = resolveProjectSuggestions({
     roots,
     repos: listSuggestionRepos(engine, roots),
     login: await setup.resolveLogin(),
-    projects: Object.values(engine.state.projects),
+    projects,
+  });
+  return applyRevision(suggestions, revision, projects);
+}
+
+export function listFiledProjects(engine: Engine, roots: string[]): ProjectSuggestion[] {
+  const repos = Object.values(engine.state.repos).filter((repo) => isInside(repo.path, roots));
+  return Object.values(engine.state.projects).flatMap((project) => {
+    const filed = repos
+      .filter((repo) => repo.projectId === project.id)
+      .map((repo) => ({ path: repo.path, name: repo.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (filed.length === 0) return [];
+    return [
+      {
+        id: project.id,
+        name: project.name,
+        key: project.key,
+        color: project.color,
+        projectId: project.id,
+        folders: project.folders,
+        repos: filed,
+      },
+    ];
   });
 }
 
@@ -103,9 +132,10 @@ export async function createChosenProjects(
   setup: ProjectSetup,
   roots: string[],
   choices: OnboardingProjectChoice[] | undefined,
-  commandId: string
+  commandId: string,
+  revision: ProjectRevision | null
 ) {
-  const suggestions = await listProjectSuggestions(setup, roots);
+  const suggestions = await listProjectSuggestions(setup, roots, revision);
   const chosen = resolveChoices(suggestions, choices);
   for (const { suggestion, name, repos } of chosen) {
     const complete = repos.length === suggestion.repos.length;

@@ -72,6 +72,8 @@ export interface OnboardingStep {
   checks: OnboardingCheck[];
   ready: boolean;
   projects: ProjectSuggestion[];
+  filed: ProjectSuggestion[];
+  conversation: OnboardingProjectTurn[];
   imported: AccountImport[];
   notes: string[];
   problem: string | null;
@@ -86,6 +88,13 @@ export interface OnboardingFlow {
   revisit: boolean;
 }
 
+export interface OnboardingProjectTurn {
+  request: string;
+  reply: string;
+}
+
+export const ONBOARDING_REQUEST_LIMIT = 500;
+
 export interface OnboardingProjectChoice {
   id: string;
   name: string;
@@ -99,6 +108,7 @@ export type OnboardingReply =
       values: string[];
       projects?: OnboardingProjectChoice[];
     }
+  | { type: 'revise'; stepId: OnboardingStepId; text: string; projects?: OnboardingProjectChoice[] }
   | { type: 'open'; stepId: OnboardingStepId }
   | { type: 'restart' };
 

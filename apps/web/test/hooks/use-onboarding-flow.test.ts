@@ -87,6 +87,27 @@ describe('useOnboardingFlow', () => {
     expect(fake.requests.filter((request) => request.method === 'POST')).toHaveLength(2);
   });
 
+  it('sends a change in words to the projects step, staying where it is', async () => {
+    const projects = createFlow(createStep({ id: 'projects' }));
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: projects },
+      'POST /api/onboarding/flow': { answer: projects },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+    });
+    const { result } = renderHook(() => useOnboardingFlow());
+    await waitFor(() => expect(result.current.flow).not.toBeNull());
+    await act(async () => {
+      expect(await result.current.revise('split acme', [{ id: 'a', name: 'A', repos: ['/a'] }])).toBe(true);
+    });
+    expect(result.current.direction).toBe('none');
+    expect(fake.requests.find((request) => request.method === 'POST')?.body).toEqual({
+      type: 'revise',
+      stepId: 'projects',
+      text: 'split acme',
+      projects: [{ id: 'a', name: 'A', repos: ['/a'] }],
+    });
+  });
+
   it('shows a refused reply as a toast and stays on the step', async () => {
     fake = startFakeOnboarding({
       'GET /api/onboarding/flow': { answer: createFlow(createStep()) },

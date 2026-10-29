@@ -94,6 +94,8 @@ export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingS
     options: [],
     groups: overrides.id === undefined || overrides.id === 'defaults' ? createDefaultGroups() : [],
     projects: [],
+    filed: [],
+    conversation: [],
     access: [],
     checks: [],
     ready: true,

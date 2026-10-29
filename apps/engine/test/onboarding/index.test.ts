@@ -25,6 +25,7 @@ function setup(run?: CommandRunner) {
     store,
     roots,
     resolveLogin: () => Promise.resolve(null),
+    ask: () => Promise.resolve(null),
     run: run ?? (() => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false })),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),

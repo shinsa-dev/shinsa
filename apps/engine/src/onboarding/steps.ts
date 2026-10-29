@@ -34,6 +34,7 @@ interface StepContext {
   projectCount: number;
   suggestRoots: () => Promise<RootSuggestions>;
   suggestProjects: () => Promise<ProjectSuggestion[]>;
+  listFiledProjects: () => ProjectSuggestion[];
   listModels: () => Promise<AgentModel[]>;
   listAccounts: AccountSource;
   checkPrerequisites: () => Promise<PrerequisiteReport>;
@@ -50,6 +51,7 @@ interface StepView {
   options: OnboardingOption[];
   groups: OnboardingChoiceGroup[];
   projects: ProjectSuggestion[];
+  filed: ProjectSuggestion[];
   checks: OnboardingCheck[];
   ready: boolean;
   submitLabel: string;
@@ -85,6 +87,7 @@ function createView(view: Partial<StepView> & Pick<StepView, 'title' | 'descript
     options: [],
     groups: [],
     projects: [],
+    filed: [],
     checks: [],
     ready: true,
     submitLabel: 'Continue',
@@ -151,20 +154,23 @@ const PROJECTS: StepDefinition = {
   label: 'Projects',
   view: async (context) => {
     const projects = await context.suggestProjects();
+    const filed = context.listFiledProjects();
     if (projects.length === 0) {
       return createView({
         title: 'Your projects',
         description:
-          context.projectCount > 0
-            ? 'Every repository in your folders already belongs to a project.'
+          filed.length > 0
+            ? 'Shinsa set these up from your folders. Change them any time in Settings.'
             : 'Shinsa found no repositories in these folders yet. It files each one in a project the first time it works there.',
+        filed,
       });
     }
     return createView({
       title: 'Shinsa sorted your repositories into projects',
       description:
-        'Grouped by GitHub owner and folder. Rename a project or leave out what you do not want; you can change them later in Settings.',
+        'Grouped by GitHub owner and folder. Rename or leave out what you do not want, or ask for a change in your own words.',
       projects,
+      filed,
       submitLabel: projects.length === 1 ? 'Create the project' : `Create ${projects.length} projects`,
     });
   },

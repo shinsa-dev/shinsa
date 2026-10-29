@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { OnboardingFlow } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { closeSignIn } from '@/lib/connection/accounts.ts';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { createAccount, createProviderLogin, createSnapshot } from '../support/accounts.ts';
@@ -122,15 +122,19 @@ describe('the setup page', () => {
     renderPage();
     const heading = await screen.findByRole('heading', { name: 'How should agents work?' });
     expect(heading.closest('.onboarding-in')).toBeNull();
+    const track = heading.closest('.onboarding-track') as HTMLElement;
+    expect(track.hasAttribute('data-moving')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     const next = await screen.findByRole('heading', { name: 'Accounts' });
     expect(next.closest('.onboarding-in')).not.toBeNull();
+    expect(track.hasAttribute('data-moving')).toBe(true);
     const leaving = screen.getByText('How should agents work?').closest('.onboarding-out') as HTMLElement;
     expect(leaving.hasAttribute('inert')).toBe(true);
     fireEvent.animationEnd(leaving.firstElementChild as HTMLElement);
     expect(screen.getByText('How should agents work?')).toBeTruthy();
     fireEvent.animationEnd(leaving);
     await waitFor(() => expect(screen.queryByText('How should agents work?')).toBeNull());
+    expect(track.hasAttribute('data-moving')).toBe(false);
   });
 
   it('a click changes only its own group’s pick, and nothing is sent until Continue', async () => {
@@ -456,6 +460,87 @@ describe('the setup page', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     });
     expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
+  });
+
+  it('asks for a change in words with your edits, clears the box once it is done, and shows the reply', async () => {
+    const revised = createStep({
+      ...PROJECTS,
+      projects: [
+        {
+          ...(PROJECTS.projects[0] as (typeof PROJECTS.projects)[number]),
+          id: 'revised:0',
+          name: 'Acme Corp',
+        },
+      ],
+      conversation: [{ request: 'rename acme', reply: 'I renamed Acme to Acme Corp.' }],
+      submitLabel: 'Create the project',
+    });
+    serve(createFlow(PROJECTS), [() => createFlow(revised)]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Create Personal' }));
+    const box = screen.getByRole('textbox', { name: 'Change the projects' });
+    expect((screen.getByRole('button', { name: 'Ask' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(box, { target: { value: '  rename acme ' } });
+    fireEvent.submit(box);
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        {
+          type: 'revise',
+          stepId: 'projects',
+          text: 'rename acme',
+          projects: [{ id: 'owner:acme', name: 'Acme', repos: ['/Users/me/Acme/api', '/Users/me/Acme/web'] }],
+        },
+      ])
+    );
+    expect(await screen.findByText('I renamed Acme to Acme Corp.')).toBeTruthy();
+    expect((screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).value).toBe('');
+    expect((screen.getAllByRole('textbox', { name: 'Project name' })[0] as HTMLInputElement).value).toBe(
+      'Acme Corp'
+    );
+    expect(screen.getByRole('button', { name: /Create the project/ })).toBeTruthy();
+  });
+
+  it('keeps what you typed when the change could not be made', async () => {
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: createFlow(PROJECTS) },
+      'POST /api/onboarding/flow': { status: 500, answer: { error: { code: 'x', message: 'No model.' } } },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+    });
+    renderPage();
+    const box = await screen.findByRole('textbox', { name: 'Change the projects' });
+    fireEvent.change(box, { target: { value: 'split acme' } });
+    fireEvent.submit(box);
+    await waitFor(() => expect(sentReplies()).toHaveLength(1));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).disabled
+      ).toBe(false)
+    );
+    expect((screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).value).toBe(
+      'split acme'
+    );
+    fireEvent.change(box, { target: { value: '   ' } });
+    fireEvent.submit(box);
+    expect(sentReplies()).toHaveLength(1);
+  });
+
+  it('going back after the projects were made lists them, and with new ones too says which are set up', async () => {
+    const filed = PROJECTS.projects.map((project) => ({ ...project, projectId: project.id }));
+    serve(
+      createFlow(
+        createStep({ ...PROJECTS, projects: [], filed, title: 'Your projects', submitLabel: 'Continue' })
+      )
+    );
+    renderPage();
+    const list = await screen.findByRole('list', { name: 'Projects already set up' });
+    expect(within(list).getByText('Acme')).toBeTruthy();
+    expect(within(list).getByText('2 repositories · ~/Acme · api, web')).toBeTruthy();
+    expect(screen.queryByText('Already set up')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Change the projects' })).toBeNull();
+    cleanup();
+    serve(createFlow(createStep({ ...PROJECTS, filed: filed.slice(1) })));
+    renderPage();
+    expect(await screen.findByText('Already set up')).toBeTruthy();
   });
 
   it('creates every suggested project with one press when you change nothing', async () => {

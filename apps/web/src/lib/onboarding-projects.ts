@@ -87,3 +87,12 @@ export function describeProjectSummary(
   const detail = describeProjectDetail(project, draft, userHome);
   return withPreview ? `${detail} · ${describeRepoPreview(project.repos)}` : detail;
 }
+
+export function resolveProjectsSignature(projects: ProjectSuggestion[]) {
+  return projects.map((project) => `${project.id}:${project.name}:${project.repos.length}`).join('|');
+}
+
+export function describeFiledSummary(project: ProjectSuggestion, userHome: string) {
+  const [draft] = createProjectDrafts([project]);
+  return describeProjectSummary(project, draft as ProjectDraft, userHome, true);
+}

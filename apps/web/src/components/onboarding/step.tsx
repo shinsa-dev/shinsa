@@ -11,6 +11,7 @@ import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ErrorLine } from '@/components/chat/turn-detail.tsx';
+import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { OnboardingAccess } from '@/components/onboarding/access.tsx';
 import {
   type OnboardingAccountActions,
@@ -21,6 +22,7 @@ import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OnboardingDefaults } from '@/components/onboarding/defaults.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
 import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
+import { OnboardingFiledProjects, OnboardingProjectsChat } from '@/components/onboarding/projects-chat.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
 import { useWindowReturn } from '@/hooks/use-window-return.ts';
@@ -29,6 +31,7 @@ import {
   listChosenValues,
   listReadableRoots,
   REFRESH_KEY,
+  REVISE_KEY,
   resolveFolderOptions,
   resolveSubmitValues,
   resolveToggledRoots,
@@ -40,6 +43,7 @@ import {
   isProjectsReady,
   type ProjectDraft,
   resolveProjectChoices,
+  resolveProjectsSignature,
   updateProjectDraft,
 } from '@/lib/onboarding-projects.ts';
 
@@ -53,6 +57,7 @@ export interface OnboardingStepActions {
     key?: string,
     projects?: OnboardingProjectChoice[]
   ) => void;
+  revise: (text: string, projects: OnboardingProjectChoice[]) => Promise<boolean>;
   open: (stepId: OnboardingStepId) => void;
   refresh: () => void;
 }
@@ -180,13 +185,27 @@ function StepBody({
 }) {
   if (step.id === 'projects') {
     return (
-      <OnboardingProjects
-        projects={step.projects}
-        drafts={drafts.list}
-        disabled={pending !== null}
-        userHome={userHome}
-        onChange={drafts.onChange}
-      />
+      <>
+        <OnboardingProjects
+          projects={step.projects}
+          drafts={drafts.list}
+          disabled={pending !== null}
+          userHome={userHome}
+          onChange={drafts.onChange}
+        />
+        {step.projects.length > 0 && (
+          <OnboardingProjectsChat
+            conversation={step.conversation}
+            busy={pending === REVISE_KEY}
+            disabled={pending !== null}
+            onSend={(text) => actions.revise(text, resolveProjectChoices(step.projects, drafts.list))}
+          />
+        )}
+        {step.filed.length > 0 && step.projects.length > 0 && (
+          <SectionLabel className='-mb-2'>Already set up</SectionLabel>
+        )}
+        <OnboardingFiledProjects projects={step.filed} userHome={userHome} />
+      </>
     );
   }
   if (step.id === 'roots') {
@@ -354,6 +373,12 @@ export function OnboardingStepView({
 }) {
   const [values, setValues] = React.useState(() => listChosenValues(step));
   const [drafts, setDrafts] = React.useState(() => createProjectDrafts(step.projects));
+  const signature = resolveProjectsSignature(step.projects);
+  const [draftedFor, setDraftedFor] = React.useState(signature);
+  if (draftedFor !== signature) {
+    setDraftedFor(signature);
+    setDrafts(createProjectDrafts(step.projects));
+  }
   const waiting = step.access.length > 0 || step.id === 'prerequisites' || step.id === 'accounts';
   useWindowReturn(() => {
     if (pending !== null) return;

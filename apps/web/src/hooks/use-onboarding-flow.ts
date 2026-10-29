@@ -8,7 +8,13 @@ import { toast } from '@shinsa/ui/components/sonner';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { replyToOnboarding, requestOnboardingFlow } from '@/lib/connection/onboarding.ts';
-import { REFRESH_KEY, resolveStepDirection, type StepDirection, SUBMIT_KEY } from '@/lib/onboarding.ts';
+import {
+  REFRESH_KEY,
+  REVISE_KEY,
+  resolveStepDirection,
+  type StepDirection,
+  SUBMIT_KEY,
+} from '@/lib/onboarding.ts';
 import { replaceRoute } from '@/router.ts';
 
 export function useOnboardingFlow() {
@@ -71,6 +77,8 @@ export function useOnboardingFlow() {
       key = SUBMIT_KEY,
       projects?: OnboardingProjectChoice[]
     ) => send({ type: 'answer', stepId, values, ...(projects ? { projects } : {}) }, key),
+    revise: (text: string, projects: OnboardingProjectChoice[]) =>
+      send({ type: 'revise', stepId: 'projects', text, projects }, REVISE_KEY),
     open: (stepId: OnboardingStepId) => send({ type: 'open', stepId }, `open:${stepId}`),
     refresh: () => run(REFRESH_KEY, requestOnboardingFlow),
     retry: () => setAttempt(attempt + 1),

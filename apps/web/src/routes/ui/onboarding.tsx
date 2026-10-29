@@ -33,6 +33,8 @@ function createSampleStep(
     options: [],
     groups: [],
     projects: [],
+    filed: [],
+    conversation: [],
     access: [],
     checks: [],
     ready: true,
@@ -113,7 +115,13 @@ const PROJECTS = createSampleStep({
   id: 'projects',
   title: 'Shinsa sorted your repositories into projects',
   description:
-    'Grouped by GitHub owner and folder. Rename a project or leave out what you do not want; you can change them later in Settings.',
+    'Grouped by GitHub owner and folder. Rename or leave out what you do not want, or ask for a change in your own words.',
+  conversation: [
+    {
+      request: 'Give the iOS app its own project',
+      reply: 'I moved paywall-ios into a new Superwall iOS project.',
+    },
+  ],
   submitLabel: 'Create 3 projects',
   projects: [
     {
@@ -257,6 +265,7 @@ const ACTIONS = {
   open: () => void acknowledgeSample(),
   refresh: () => void acknowledgeSample(),
   openPrivacy: () => void acknowledgeSample(),
+  revise: () => acknowledgeSample(),
 };
 
 const SAMPLE_PROVIDERS: ProviderLogin[] = [

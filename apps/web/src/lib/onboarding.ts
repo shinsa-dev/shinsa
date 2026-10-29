@@ -186,6 +186,8 @@ export const REFRESH_KEY = 'refresh';
 
 export const ACCESS_KEY = 'access';
 
+export const REVISE_KEY = 'revise';
+
 export function describeAccessTitle(access: string[], userHome: string) {
   const names = access.map((path) => resolveDisplayPath(path, userHome));
   return `macOS keeps ${describeList(names, 'and')} private`;

@@ -12,11 +12,12 @@ import { writeJsonFile } from '../config/file.ts';
 import type { JsonObject } from '../http/body.ts';
 import { describeError, log } from '../log/index.ts';
 import type { AccountActions } from './accounts.ts';
+import type { ProjectRevision } from './revise.ts';
 import { PrivateFoldersError } from './roots.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
 
 interface Draft {
-  version: 4;
+  version: 5;
   id: string;
   index: number;
   furthest: number;
@@ -28,6 +29,7 @@ interface Draft {
   problem: string | null;
   access: string[];
   picked: string[];
+  revision: ProjectRevision | null;
 }
 
 type FlowContext = StepReadContext & {
@@ -38,7 +40,12 @@ type FlowContext = StepReadContext & {
 interface FlowOptions {
   path: string;
   steps: readonly StepDefinition[];
-  resolveContext: () => FlowContext;
+  resolveContext: (revision: ProjectRevision | null) => FlowContext;
+  reviseProjects: (
+    revision: ProjectRevision | null,
+    text: string,
+    choices: OnboardingProjectChoice[] | undefined
+  ) => Promise<ProjectRevision>;
   accountActions: AccountActions;
   isCompleted: () => boolean;
   complete: () => Promise<void>;
@@ -53,7 +60,7 @@ function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<Draft>;
   return (
-    draft.version === 4 &&
+    draft.version === 5 &&
     typeof draft.id === 'string' &&
     typeof draft.index === 'number' &&
     typeof draft.furthest === 'number' &&
@@ -62,7 +69,9 @@ function isDraft(value: unknown): value is Draft {
     Array.isArray(draft.imported) &&
     Array.isArray(draft.notes) &&
     Array.isArray(draft.access) &&
-    Array.isArray(draft.picked)
+    Array.isArray(draft.picked) &&
+    (draft.revision === null ||
+      (typeof draft.revision === 'object' && Array.isArray(draft.revision.projects)))
   );
 }
 
@@ -125,6 +134,12 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
     const projects = parseProjectChoices(fields.projects);
     return { type: 'answer', stepId, values: values as string[], ...(projects ? { projects } : {}) };
   }
+  if (fields.type === 'revise') {
+    const stepId = parseStepId(fields.stepId, steps);
+    if (typeof fields.text !== 'string') throw new DomainError('request_invalid', 'Say what to change.');
+    const projects = parseProjectChoices(fields.projects);
+    return { type: 'revise', stepId, text: fields.text, ...(projects ? { projects } : {}) };
+  }
   throw new DomainError('reply_invalid', 'Answer a step, open one or start again.');
 }
 
@@ -159,6 +174,10 @@ export class OnboardingSetup {
       if (index !== draft.index) {
         throw new DomainError('step_stale', 'That step is no longer open. Answer the step on screen.');
       }
+      if (reply.type === 'revise') {
+        await this.#revise(draft, reply.stepId, reply.text, reply.projects);
+        return this.#present(draft);
+      }
       await this.#answer(draft, reply.stepId, reply.values, reply.projects);
       return this.#present(draft);
     });
@@ -184,7 +203,7 @@ export class OnboardingSetup {
 
   #start(): Draft {
     const draft: Draft = {
-      version: 4,
+      version: 5,
       id: Bun.randomUUIDv7(),
       index: 0,
       furthest: 0,
@@ -196,6 +215,7 @@ export class OnboardingSetup {
       problem: null,
       access: [],
       picked: [],
+      revision: null,
     };
     this.#draft = draft;
     this.#write(draft);
@@ -220,6 +240,25 @@ export class OnboardingSetup {
     this.#write(draft);
   }
 
+  async #revise(
+    draft: Draft,
+    stepId: OnboardingStepId,
+    text: string,
+    projects: OnboardingProjectChoice[] | undefined
+  ) {
+    if (stepId !== 'projects') {
+      throw new DomainError('revise_invalid', 'Only the suggested projects can be changed in words.');
+    }
+    try {
+      draft.revision = await this.#options.reviseProjects(draft.revision, text, projects);
+      draft.problem = null;
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
+      draft.problem = error.message;
+    }
+    this.#write(draft);
+  }
+
   async #answer(
     draft: Draft,
     stepId: OnboardingStepId,
@@ -227,7 +266,7 @@ export class OnboardingSetup {
     projects: OnboardingProjectChoice[] | undefined
   ) {
     const step = this.#options.steps[draft.index] as StepDefinition;
-    const context = this.#options.resolveContext();
+    const context = this.#options.resolveContext(draft.revision);
     const commandId = `setup:${draft.id}:${stepId}:${draft.saves}`;
     try {
       await step.answer(
@@ -286,7 +325,7 @@ export class OnboardingSetup {
 
   async #present(draft: Draft): Promise<OnboardingFlow> {
     const { steps } = this.#options;
-    const context = this.#options.resolveContext();
+    const context = this.#options.resolveContext(draft.revision);
     const definition = steps[draft.index];
     if (definition?.id === 'accounts') await this.#importAccounts(draft, context);
     const entries = await Promise.all(
@@ -325,6 +364,7 @@ export class OnboardingSetup {
       ...view,
       imported: accounts ? draft.imported : [],
       notes: accounts ? draft.notes : [],
+      conversation: definition.id === 'projects' ? (draft.revision?.turns ?? []) : [],
       problem: draft.problem,
       access: draft.access,
     };

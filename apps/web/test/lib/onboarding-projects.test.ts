@@ -2,10 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import type { ProjectSuggestion } from '@shinsa/core';
 import {
   createProjectDrafts,
+  describeFiledSummary,
   describeProjectSummary,
   describeProjectsSubmit,
   isProjectsReady,
   resolveProjectChoices,
+  resolveProjectsSignature,
   resolveToggledRepo,
   updateProjectDraft,
 } from '@/lib/onboarding-projects.ts';
@@ -93,5 +95,14 @@ describe('the suggested projects you edit', () => {
       '4 of 5 repositories'
     );
     expect(describeProjectSummary(personalProject, personal, '/u', true)).toBe('1 repository · notes');
+  });
+
+  it('names the suggestions by id, name and size, so a change in words gives fresh drafts', () => {
+    const [acmeProject] = PROJECTS as [ProjectSuggestion];
+    expect(resolveProjectsSignature(PROJECTS)).toBe('owner:acme:Acme:5|personal:Personal:1');
+    expect(resolveProjectsSignature([{ ...acmeProject, name: 'Acme Corp' }])).toBe('owner:acme:Acme Corp:5');
+    expect(describeFiledSummary(acmeProject, '/u')).toBe(
+      '5 repositories · ~/code · api, web, docs and 2 more'
+    );
   });
 });

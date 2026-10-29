@@ -98,6 +98,7 @@ function setup(options: Setup = {}) {
       store,
       roots,
       resolveLogin: () => Promise.resolve(null),
+      ask: () => Promise.resolve(null),
       run: options.run ?? ALL_OK,
       models: { listModels: () => Promise.resolve(options.models ?? MODELS) },
       accounts: () => Promise.resolve([...accounts]),
@@ -456,7 +457,7 @@ describe('the saved setup', () => {
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
     expect(warn).toHaveBeenCalledTimes(3);
     warn.mockRestore();
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 4, index: 0 });
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 5, index: 0 });
   });
 
   test('in inspect mode it shows the first step, writes nothing and imports nothing', async () => {
