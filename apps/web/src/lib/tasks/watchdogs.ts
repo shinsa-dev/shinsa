@@ -27,6 +27,11 @@ function formatHours(ms: number) {
   return `${Math.max(1, Math.ceil(ms / HOUR_MS))} h`;
 }
 
+function formatDuration(ms: number) {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  return minutes < 60 ? `${minutes} min` : formatHours(ms);
+}
+
 function formatMinutes(minutes: number) {
   return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
 }
@@ -36,27 +41,48 @@ export function describeWatchdogSchedule(watchdog: Watchdog) {
   return `First check after ${formatMinutes(watchdog.firstCheckMinutes)}, then up to every ${formatMinutes(watchdog.maxGapMinutes)}, for ${formatMinutes(watchdog.forMinutes)}${start}`;
 }
 
-export function describeWatchdogProgress(state: ShinsaState, watchdog: Watchdog, now: number) {
+export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
   const checks = formatCount(watchdog.checks.length, 'check', 'checks');
+  switch (watchdog.status) {
+    case 'needs_source':
+    case 'awaiting_production':
+      return 'Not started';
+    case 'watching':
+      return `${formatHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
+    case 'passed':
+    case 'tripped':
+    case 'stopped':
+      return checks;
+  }
+}
+
+function describeLastCheck(watchdog: Watchdog) {
+  return watchdog.checks.at(-1)?.summary ?? null;
+}
+
+export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, now: number) {
+  const last = describeLastCheck(watchdog);
   switch (watchdog.status) {
     case 'needs_source':
       return 'Starts once you connect a data source.';
     case 'awaiting_production':
       if (watchdog.runId) return 'Checking whether the change is live in production.';
-      return 'Starts once the change is live in production.';
+      return last
+        ? `Starts once the change is live in production. ${last}`
+        : 'Starts once the change is live in production.';
     case 'watching':
-      if (watchdog.runId) return `Checking now · ${checks} so far`;
-      return `${formatHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
+      if (watchdog.runId) return 'Checking now.';
+      if (!last) return `First check in ${formatDuration((watchdog.nextCheckAt ?? now) - now)}.`;
+      return last;
     case 'passed':
-      return `Passed after ${checks}, nothing wrong.`;
+      return `Held up for ${formatMinutes(watchdog.forMinutes)} with nothing wrong.`;
     case 'tripped': {
       const fork = watchdog.forkTaskId ? state.tasks[watchdog.forkTaskId] : undefined;
-      return fork
-        ? `Filed [${fork.handle ?? fork.title}](shinsa://task/${fork.id}) to fix it.`
-        : 'Found an issue.';
+      const filed = fork ? ` Filed [${fork.handle ?? fork.title}](shinsa://task/${fork.id}) to fix it.` : '';
+      return `${last ?? 'Found an issue.'}${filed}`;
     }
     case 'stopped':
-      return `Stopped after ${checks}.`;
+      return `Stopped after ${formatCount(watchdog.checks.length, 'check', 'checks')}.`;
   }
 }
 

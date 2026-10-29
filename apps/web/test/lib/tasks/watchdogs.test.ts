@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { HOUR_MS, type Watchdog } from '@shinsa/core';
 import {
   connectWatchdog,
-  describeWatchdogProgress,
+  describeWatchdogMeta,
   describeWatchdogSchedule,
+  describeWatchdogSummary,
   describeWatchSource,
   isWatchedTask,
   removeWatchSource,
@@ -68,32 +69,39 @@ describe('describing a watchdog', () => {
         })
       )
     ).toBe('First check after 30 min, then up to every 6 h, for 72 h once live in production');
-    expect(describeWatchdogProgress(state, createWatchdog({ status: 'awaiting_production' }), NOW)).toBe(
+    const summary = (overrides: Partial<Watchdog>) =>
+      describeWatchdogSummary(state, createWatchdog(overrides), NOW);
+    expect(summary({ status: 'needs_source' })).toBe('Starts once you connect a data source.');
+    expect(summary({ status: 'awaiting_production', checks: [] })).toBe(
       'Starts once the change is live in production.'
     );
+    expect(summary({ status: 'awaiting_production' })).toBe(
+      'Starts once the change is live in production. Fine.'
+    );
+    expect(summary({ status: 'awaiting_production', runId: 'r' })).toBe(
+      'Checking whether the change is live in production.'
+    );
+    expect(summary({})).toBe('Fine.');
+    expect(summary({ runId: 'r' })).toBe('Checking now.');
+    expect(summary({ checks: [], nextCheckAt: NOW + 20 * 60_000 })).toBe('First check in 20 min.');
+    expect(summary({ checks: [], nextCheckAt: NOW + 3 * HOUR_MS })).toBe('First check in 3 h.');
+    expect(summary({ checks: [], nextCheckAt: null })).toBe('First check in 1 min.');
+    expect(summary({ status: 'passed' })).toBe('Held up for 48 h with nothing wrong.');
     expect(
-      describeWatchdogProgress(state, createWatchdog({ status: 'awaiting_production', runId: 'r' }), NOW)
-    ).toBe('Checking whether the change is live in production.');
-    expect(describeWatchdogProgress(state, createWatchdog(), NOW)).toBe('31 h left · 1 check');
-    expect(describeWatchdogProgress(state, createWatchdog({ runId: 'r' }), NOW)).toBe(
-      'Checking now · 1 check so far'
-    );
-    expect(describeWatchdogProgress(state, createWatchdog({ endsAt: null }), NOW)).toBe('1 h left · 1 check');
-    expect(describeWatchdogProgress(state, createWatchdog({ status: 'needs_source' }), NOW)).toBe(
-      'Starts once you connect a data source.'
-    );
-    expect(describeWatchdogProgress(state, createWatchdog({ status: 'passed', checks: [] }), NOW)).toBe(
-      'Passed after 0 checks, nothing wrong.'
-    );
-    expect(describeWatchdogProgress(state, createWatchdog({ status: 'tripped', forkTaskId: 'f' }), NOW)).toBe(
-      'Filed [SW-9](shinsa://task/f) to fix it.'
-    );
-    expect(describeWatchdogProgress(state, createWatchdog({ status: 'tripped' }), NOW)).toBe(
-      'Found an issue.'
-    );
-    expect(describeWatchdogProgress(state, createWatchdog({ status: 'stopped' }), NOW)).toBe(
-      'Stopped after 1 check.'
-    );
+      summary({
+        status: 'tripped',
+        forkTaskId: 'f',
+        checks: [{ at: NOW, healthy: false, summary: 'Errors in Safari.' }],
+      })
+    ).toBe('Errors in Safari. Filed [SW-9](shinsa://task/f) to fix it.');
+    expect(summary({ status: 'tripped', checks: [] })).toBe('Found an issue.');
+    expect(summary({ status: 'stopped' })).toBe('Stopped after 1 check.');
+    const meta = (overrides: Partial<Watchdog>) => describeWatchdogMeta(createWatchdog(overrides), NOW);
+    expect(meta({})).toBe('31 h left · 1 check');
+    expect(meta({ endsAt: null })).toBe('1 h left · 1 check');
+    expect(meta({ status: 'needs_source' })).toBe('Not started');
+    expect(meta({ status: 'awaiting_production' })).toBe('Not started');
+    expect(meta({ status: 'passed', checks: [] })).toBe('0 checks');
     expect(WATCHDOG_STATUS.tripped).toEqual({ label: 'Found an issue', tone: 'red' });
   });
 

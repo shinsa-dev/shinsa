@@ -85,15 +85,22 @@ describe('the watchdogs panel', () => {
     expect(screen.getByText(/1 watchdog · 31 h left/)).toBeTruthy();
     const row = rowOf('Checkout latency');
     expect(within(row).getByText('Watching')).toBeTruthy();
-    expect(row.textContent).toContain(
-      'First check after 6 h, then up to every 6 h, for 48 h · maple · 31 h left · 1 check'
-    );
-    expect(row.textContent).toContain('Last check: p95 is 210 ms.');
+    expect(row.textContent).toContain('31 h left · 1 check');
+    expect(row.textContent).toContain('p95 is 210 ms.');
+    expect(row.textContent).not.toContain('First check after');
     expect(within(rowOf('Done one')).queryByRole('button', { name: 'Stop' })).toBeNull();
     fireEvent.click(within(row).getByRole('button', { name: 'Stop' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'watchdog.stop', taskId: 't', watchdogId: 'w1' }])
     );
+  });
+
+  it('shows what a watchdog checks and how often in a card on its title', async () => {
+    renderPanel([watchdog({})]);
+    const title = within(rowOf('Checkout latency')).getByRole('button', { name: 'Checkout latency' });
+    fireEvent.focus(title);
+    expect(await screen.findByText('p95 of POST /checkout under 400 ms.')).toBeTruthy();
+    expect(screen.getByText('First check after 6 h, then up to every 6 h, for 48 h · maple')).toBeTruthy();
   });
 
   it('links the task a watchdog filed when it found an issue', async () => {

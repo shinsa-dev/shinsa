@@ -5,14 +5,16 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
+import { InfoHeader, InfoPopover } from '@/components/overlays/info-popover.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import {
   connectWatchdog,
-  describeWatchdogProgress,
+  describeWatchdogMeta,
   describeWatchdogSchedule,
+  describeWatchdogSummary,
   resolveWatchingReason,
   stopWatchdog,
   WATCHDOG_STATUS,
@@ -88,21 +90,32 @@ function WatchdogRow({
   const { busy, run } = useBusy<'stop'>();
   const status = WATCHDOG_STATUS[watchdog.status];
   const active = isWatchdogActive(watchdog);
-  const last = watchdog.checks.at(-1);
   return (
     <li className='flex flex-col gap-2 py-2.5 first:pt-0 last:pb-0'>
       <div className='flex items-start gap-3'>
         <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
-          <div className='flex items-baseline gap-2'>
-            <span className='font-medium text-fg-4 leading-5'>{watchdog.title}</span>
+          <div className='flex min-w-0 items-baseline gap-2'>
+            <InfoPopover
+              render={
+                <button
+                  type='button'
+                  className='min-w-0 cursor-default truncate text-left font-medium text-fg-4 leading-5 outline-none'
+                />
+              }
+              trigger={watchdog.title}
+              className='w-80'
+            >
+              <InfoHeader
+                title={<Markdown text={watchdog.check} className='text-fg-4 text-xs' />}
+                description={`${describeWatchdogSchedule(watchdog)}${watchdog.source ? ` · ${watchdog.source.server}` : ''}`}
+              />
+            </InfoPopover>
             <span className={cn('shrink-0', TONE_TEXT[status.tone])}>{status.label}</span>
+            <span className='ml-auto shrink-0 text-2xs text-fg-2 tabular-nums'>
+              {describeWatchdogMeta(watchdog, now)}
+            </span>
           </div>
-          <Markdown text={watchdog.check} className='text-fg-3 text-xs' />
-          <Markdown
-            text={`${describeWatchdogSchedule(watchdog)}${watchdog.source ? ` · \`${watchdog.source.server}\`` : ''} · ${describeWatchdogProgress(state, watchdog, now)}`}
-            className='text-2xs text-fg-2'
-          />
-          {last && <Markdown text={`Last check: ${last.summary}`} className='text-2xs text-fg-3' />}
+          <Markdown text={describeWatchdogSummary(state, watchdog, now)} className='text-fg-3 text-xs' />
         </div>
         {active && (
           <Button
