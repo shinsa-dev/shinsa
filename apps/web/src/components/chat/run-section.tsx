@@ -32,6 +32,8 @@ const SECTION_EDGES =
 const SKIPPED_OFFSCREEN =
   'supports-[overflow-anchor:auto]:[content-visibility:auto] supports-[overflow-anchor:auto]:[contain-intrinsic-block-size:auto_600px]';
 
+const PAINT_ROOM = '-mx-0.5 mt-1.5 px-0.5 pt-0.5';
+
 const NO_MESSAGES: HumanMessage[] = [];
 
 const NO_EVIDENCE: never[] = [];
@@ -215,7 +217,7 @@ export const RunSection = React.memo(function RunSectionView({
           'corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl',
           SECTION_EDGES,
           SKIPPED_OFFSCREEN,
-          'mt-2',
+          PAINT_ROOM,
           SELECTED_WASH
         )}
       >
