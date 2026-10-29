@@ -411,6 +411,10 @@ describe('resolveGroupPhrase', () => {
     expect(resolveGroupPhrase(['report_watch'])).toBe('Reported the watchdog check');
   });
 
+  it('names a read of a data source the agent reported', () => {
+    expect(resolveGroupPhrase(['report_intake'])).toBe('Reported the read of the data source');
+  });
+
   it('counts each kind of step in the order it first appeared', () => {
     expect(resolveGroupPhrase(['command', 'read', 'command', 'read', 'command'])).toBe(
       'Ran 3 commands and read 2 files'

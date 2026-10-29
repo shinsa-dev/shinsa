@@ -21,6 +21,7 @@ function schedule(id: string, createdAt: number): Schedule {
     text: 'Go',
     trigger: { kind: 'interval', everyMinutes: 5 },
     target: { kind: 'task', taskId: 't' },
+    source: null,
     timeZone: 'UTC',
     enabled: true,
     nextRunAt: null,

@@ -60,7 +60,7 @@ export type RunRole =
   | 'investigator'
   | 'researcher';
 
-export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch';
+export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch' | 'intake';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 

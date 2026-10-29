@@ -80,6 +80,8 @@ function resolveAgentHeadline(
       return done ? 'Reported the outcome' : 'Running the operation';
     case 'watch':
       return done ? 'Checked a watchdog' : 'Checking a watchdog';
+    case 'intake':
+      return done ? 'Read a data source' : 'Reading a data source';
   }
 }
 

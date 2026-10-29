@@ -3,10 +3,12 @@ import {
   COMPOSABLE_STEPS,
   type DeliveringStep,
   PROTOCOL_LIMITS,
+  SCHEDULE_LIMITS,
   SHAPE_LIMITS,
   type ShinsaEvent,
   STEP_SCHEMA,
   validateDelivery,
+  validateIntakeReport,
   validateReshape,
   validateWatchReport,
 } from '@shinsa/core';
@@ -128,6 +130,21 @@ export const SHAPE_TOOL_SPECS = {
       required: ['summary'],
     },
   },
+  report_intake: {
+    name: 'report_intake',
+    description:
+      'Report a read of an automation’s data source, then stop without restating it: what you read, the tasks you filed with `file_report` and what you skipped.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary: limitedText(
+          'What you read, what you filed and what you skipped, with the counts.',
+          SCHEDULE_LIMITS.intakeSummary
+        ),
+      },
+      required: ['summary'],
+    },
+  },
   reshape_task: {
     name: 'reshape_task',
     description:
@@ -183,6 +200,11 @@ export async function handleShapeTool(name: string, input: Record<string, unknow
   if (name === 'report_watch') {
     const watch = assertProtocol(validateWatchReport(input));
     await call.dispatch({ type: 'agent.report_watch', runId, attemptId, ...watch });
+    return HANDED_OVER;
+  }
+  if (name === 'report_intake') {
+    const intake = assertProtocol(validateIntakeReport(input));
+    await call.dispatch({ type: 'agent.report_intake', runId, attemptId, ...intake });
     return HANDED_OVER;
   }
   if (name === 'reshape_task') {

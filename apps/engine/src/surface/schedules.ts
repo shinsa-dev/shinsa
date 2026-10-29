@@ -168,6 +168,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
       text: readValue(values, 'message') || null,
       trigger: resolveTrigger(values, Date.now()),
       target: await resolveTarget(client, values),
+      source: null,
       enabled: typeof values.enabled === 'boolean' ? values.enabled : null,
       maxRuns: typeof values.maxRuns === 'number' ? values.maxRuns : null,
       timeZone: await resolveTimeZone(client, values),

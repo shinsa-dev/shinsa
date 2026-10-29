@@ -84,6 +84,7 @@ describe('writing a schedule', () => {
       text: 'Tidy the logs',
       trigger: { kind: 'once', at: NOW + 5 * MINUTE_MS },
       target: { kind: 'new_task', repoId: 'repo-1', priority: 'high', mode: 'ask' },
+      source: null,
       enabled: false,
       maxRuns: 1,
       timeZone: MACHINE_ZONE,

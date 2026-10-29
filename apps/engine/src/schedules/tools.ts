@@ -125,6 +125,7 @@ async function writeSchedule(
     text: request.text,
     trigger: request.trigger,
     target: request.target,
+    source: request.source,
     enabled: request.enabled,
     maxRuns: request.maxRuns,
     timeZone: request.timeZone ?? existing?.timeZone ?? context.timeZone,

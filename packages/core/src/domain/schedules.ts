@@ -21,6 +21,11 @@ export type ScheduleTarget =
   | { kind: 'new_task'; repoId: string | null; priority: TaskPriority; mode: TaskMode }
   | { kind: 'task'; taskId: string };
 
+export interface ScheduleSource {
+  projectId: string;
+  server: string;
+}
+
 export type ScheduleRunOutcome = 'sent' | 'skipped' | 'failed';
 
 export interface ScheduleRun {
@@ -41,6 +46,7 @@ export interface Schedule {
   text: string;
   trigger: ScheduleTrigger;
   target: ScheduleTarget;
+  source: ScheduleSource | null;
   timeZone: string;
   enabled: boolean;
   nextRunAt: number | null;
@@ -80,6 +86,7 @@ export const SCHEDULE_LIMITS = {
   secretLabel: 80,
   secretReason: 300,
   detail: 300,
+  intakeSummary: 1_000,
   reference: 200,
   timeZone: 60,
   runAt: 60,

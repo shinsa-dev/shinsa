@@ -137,6 +137,7 @@ export function createSampleSchedule(
     text: 'Check the nightly build and fix what broke.',
     trigger: { kind: 'interval', everyMinutes: 60 },
     target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
+    source: null,
     timeZone: 'UTC',
     enabled: true,
     nextRunAt: now + 40 * MINUTE,

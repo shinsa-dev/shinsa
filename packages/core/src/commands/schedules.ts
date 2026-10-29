@@ -1,4 +1,10 @@
-import type { ScheduleTarget, ScheduleTrigger, TaskMode, TaskPriority } from '../domain/index.ts';
+import type {
+  ScheduleSource,
+  ScheduleTarget,
+  ScheduleTrigger,
+  TaskMode,
+  TaskPriority,
+} from '../domain/index.ts';
 
 export type ScheduleTargetInput =
   | { kind: 'new_task'; priority: TaskPriority; mode: TaskMode }
@@ -14,6 +20,7 @@ export type ScheduleUserCommand =
       text: string | null;
       trigger: ScheduleTrigger | null;
       target: ScheduleTarget | null;
+      source: ScheduleSource | null;
       enabled: boolean | null;
       maxRuns: number | null;
       timeZone: string;
@@ -28,11 +35,13 @@ export type ScheduleAgentCommand =
       text: string | null;
       trigger: ScheduleTrigger | null;
       target: ScheduleTargetInput | null;
+      source: string | null;
       enabled: boolean | null;
       maxRuns: number | null;
       timeZone: string;
     }
-  | { type: 'agent.delete_schedule'; runId: string; scheduleId: string };
+  | { type: 'agent.delete_schedule'; runId: string; scheduleId: string }
+  | { type: 'agent.report_intake'; runId: string; summary: string };
 
 export type ScheduleSystemCommand =
   | { type: 'schedule.fire'; scheduleId: string; dueAt: number }

@@ -730,6 +730,7 @@ describe('writing a schedule from Settings', () => {
       text: null,
       trigger: null,
       target: null,
+      source: null,
       enabled: null,
       maxRuns: null,
       timeZone: 'Europe/Berlin',
@@ -741,6 +742,7 @@ describe('writing a schedule from Settings', () => {
         text: 'Check the build.',
         trigger: null,
         target: null,
+        source: null,
         enabled: false,
         maxRuns: 3,
       })

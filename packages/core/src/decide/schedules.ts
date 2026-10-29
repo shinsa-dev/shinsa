@@ -11,6 +11,7 @@ import {
   type Schedule,
   type ScheduleCreator,
   type ScheduleRun,
+  type ScheduleSource,
   type ScheduleTarget,
   type ScheduleTrigger,
   type Task,
@@ -19,6 +20,13 @@ import { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun } from '../
 import { listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
+import {
+  assertIntakeTarget,
+  findProjectSource,
+  isIntakeBusy,
+  selectProjectSource,
+  startIntake,
+} from './intake.ts';
 import { messageTask } from './messages.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
@@ -30,6 +38,8 @@ const HEADER_NAME = /^[A-Za-z0-9-]+$/;
 const PLACEHOLDER = /\{\{[^{}]+\}\}/;
 
 const STILL_LIVE = 'The last run was still going, so this one was skipped.';
+
+const INTAKE_BUSY = 'The task was at work, so this read was skipped.';
 
 interface Delivery {
   text: string;
@@ -171,7 +181,7 @@ function resolveName(name: string | null, text: string) {
 
 type ScheduleBody = Pick<
   Schedule,
-  'name' | 'text' | 'trigger' | 'target' | 'enabled' | 'maxRuns' | 'timeZone'
+  'name' | 'text' | 'trigger' | 'target' | 'source' | 'enabled' | 'maxRuns' | 'timeZone'
 >;
 
 type ScheduleWrite = Pick<
@@ -211,19 +221,37 @@ function resolveMaxRuns(command: ScheduleWrite, existing: Schedule | null) {
   return maxRuns;
 }
 
+function resolveWrittenName(command: ScheduleWrite, existing: Schedule | null, text: string) {
+  const named = command.name?.trim() ? resolveName(command.name, text) : existing?.name;
+  return named ?? resolveName(null, text);
+}
+
+function assertSourceTarget(decider: Decider, source: ScheduleSource | null, target: ScheduleTarget) {
+  if (!source) return;
+  if (target.kind === 'new_task') {
+    throw new DomainError(
+      'source_target',
+      'A schedule that reads a data source runs in one task, never a new task on each run. Name a task, or leave the target out.'
+    );
+  }
+  assertIntakeTarget(decider, source, target.taskId);
+}
+
 function resolveWrittenBody(
   decider: Decider,
   command: ScheduleWrite,
   existing: Schedule | null,
-  target: ScheduleTarget
+  target: ScheduleTarget,
+  source: ScheduleSource | null
 ): ScheduleBody {
+  assertSourceTarget(decider, source, target);
   const text = resolveText(command, existing);
-  const named = command.name?.trim() ? resolveName(command.name, text) : existing?.name;
   return {
-    name: named ?? resolveName(null, text),
+    name: resolveWrittenName(command, existing, text),
     text,
     trigger: resolveTrigger(command, existing, decider.context.now),
     target,
+    source,
     enabled: command.enabled ?? existing?.enabled ?? true,
     maxRuns: resolveMaxRuns(command, existing),
     timeZone: command.timeZone,
@@ -237,7 +265,32 @@ function resolveBody(
   existing: Schedule | null
 ): ScheduleBody {
   const target = command.target ? resolveTarget(decider, command.target, task) : existing?.target;
-  return resolveWrittenBody(decider, command, existing, target ?? { kind: 'task', taskId: task.id });
+  return resolveWrittenBody(
+    decider,
+    command,
+    existing,
+    target ?? { kind: 'task', taskId: task.id },
+    resolveAgentSource(decider, command, task, existing)
+  );
+}
+
+function resolveAgentSource(
+  decider: Decider,
+  command: CommandOf<'agent.set_schedule'>,
+  task: Task,
+  existing: Schedule | null
+) {
+  const server = command.source?.trim();
+  if (!server) return existing?.source ?? null;
+  if (!task.projectId) {
+    throw new DomainError(
+      'project_required',
+      'This task belongs to no project, so there is no data source to read. Ask the human to add one in Settings → Projects.'
+    );
+  }
+  const source = { projectId: task.projectId, server };
+  findProjectSource(decider, source);
+  return source;
 }
 
 function isNewTrigger(existing: Schedule | null, body: ScheduleBody) {
@@ -332,13 +385,44 @@ function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTa
   return target;
 }
 
-function selectWrittenTarget(
+function resolveUserSource(
   decider: Decider,
   command: CommandOf<'schedule.write'>,
   existing: Schedule | null
 ) {
+  if (!command.source) return existing?.source ?? null;
+  const source = { projectId: command.source.projectId, server: command.source.server.trim() };
+  findProjectSource(decider, source);
+  return source;
+}
+
+function createIntakeTask(
+  decider: Decider,
+  command: CommandOf<'schedule.write'>,
+  source: ScheduleSource
+): ScheduleTarget {
+  const found = findProjectSource(decider, source);
+  const name = resolveWrittenName(command, null, resolveText(command, null));
+  const taskId = createTask(decider, {
+    type: 'task.create',
+    request: `Check that you can read ${found.data} through the MCP server \`${found.server}\` for the automation “${name}”, and answer with what you found there. On each of its runs, the automation asks you to read it again and file a task for each new report.`,
+    repoId: null,
+    projectId: source.projectId,
+    priority: 'normal',
+    mode: 'ask',
+  });
+  return { kind: 'task', taskId };
+}
+
+function selectWrittenTarget(
+  decider: Decider,
+  command: CommandOf<'schedule.write'>,
+  existing: Schedule | null,
+  source: ScheduleSource | null
+) {
   if (command.target) return resolveUserTarget(decider, command.target);
   if (existing) return existing.target;
+  if (source) return createIntakeTask(decider, command, source);
   throw new DomainError(
     'schedule_invalid',
     'Say what it does: start a new task in a repository, or message a task.'
@@ -352,11 +436,13 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
     throw new DomainError('schedule_not_found', `No schedule ${command.scheduleId}.`);
   }
   if (!existing) assertScheduleRoom(decider, null);
+  const source = resolveUserSource(decider, command, existing);
   const body = resolveWrittenBody(
     decider,
     command,
     existing,
-    selectWrittenTarget(decider, command, existing)
+    selectWrittenTarget(decider, command, existing, source),
+    source
   );
   emitWritten(decider, existing, body, { kind: 'you' });
 }
@@ -402,6 +488,9 @@ export function removeSchedule(decider: Decider, command: CommandOf<'schedule.re
 }
 
 function selectGoneReason(decider: Decider, schedule: Schedule) {
+  if (schedule.source && !selectProjectSource(decider, schedule.source)) {
+    return 'Its data source was removed from the project.';
+  }
   const target = schedule.target;
   if (target.kind === 'new_task') {
     if (target.repoId !== null && !decider.state.repos[target.repoId]) return 'Its repository was removed.';
@@ -448,6 +537,11 @@ function recordRun(
   });
 }
 
+function isScheduleBusy(decider: Decider, schedule: Schedule) {
+  if (!schedule.source || schedule.target.kind !== 'task') return false;
+  return isIntakeBusy(decider, decider.task(schedule.target.taskId));
+}
+
 function resolveFollowing(schedule: Schedule, now: number) {
   return resolveNextRun(schedule.trigger, now, schedule.timeZone);
 }
@@ -468,6 +562,12 @@ function send(decider: Decider, schedule: Schedule, text: string) {
     );
     return { taskId, runId: null };
   }
+  if (schedule.source) {
+    return {
+      taskId: target.taskId,
+      runId: startIntake(decider, schedule, decider.task(target.taskId), text),
+    };
+  }
   messageTask(decider, { type: 'task.message', taskId: target.taskId, text }, schedule.id);
   return { taskId: target.taskId, runId: resolveLatestRun(decider, target.taskId) };
 }
@@ -484,6 +584,12 @@ function runSchedule(decider: Decider, schedule: Schedule, delivery: Delivery) {
   }
   if (delivery.skipWhenLive && isPreviousLive(decider, schedule)) {
     recordRun(decider, schedule, { outcome: 'skipped', taskId: null, detail: STILL_LIVE }, delivery, {
+      nextRunAt: resolveFollowing(schedule, now),
+    });
+    return;
+  }
+  if (isScheduleBusy(decider, schedule)) {
+    recordRun(decider, schedule, { outcome: 'skipped', taskId: null, detail: INTAKE_BUSY }, delivery, {
       nextRunAt: resolveFollowing(schedule, now),
     });
     return;

@@ -9,6 +9,7 @@ import {
   type RoundShipping,
 } from '../domain/rounds.ts';
 import type {
+  ScheduleSource,
   ScheduleTarget,
   ScheduleTrigger,
   WebhookEncoding,
@@ -567,6 +568,13 @@ function readScheduleTarget(value: unknown): ScheduleTarget | null {
   };
 }
 
+function readScheduleSource(value: unknown): ScheduleSource | null {
+  if (value === null || value === undefined) return null;
+  const fields = readObject(value, 'source');
+  readKnownKeys(fields, ['projectId', 'server'], 'A source');
+  return { projectId: readId(fields, 'projectId'), server: readText(fields, 'server', MAX_ID) };
+}
+
 function readScheduleWrite(fields: Fields): UserCommand {
   return {
     type: 'schedule.write',
@@ -575,6 +583,7 @@ function readScheduleWrite(fields: Fields): UserCommand {
     text: readNullableText(fields, 'text'),
     trigger: readTrigger(fields.trigger),
     target: readScheduleTarget(fields.target),
+    source: readScheduleSource(fields.source),
     enabled: fields.enabled === null || fields.enabled === undefined ? null : readBoolean(fields, 'enabled'),
     maxRuns: fields.maxRuns === null || fields.maxRuns === undefined ? null : readCount(fields, 'maxRuns'),
     timeZone: readId(fields, 'timeZone'),

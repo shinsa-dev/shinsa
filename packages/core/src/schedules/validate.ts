@@ -18,6 +18,7 @@ export interface ScheduleRequest {
   text: string | null;
   trigger: ScheduleTrigger | null;
   target: ScheduleTargetInput | null;
+  source: string | null;
   enabled: boolean | null;
   maxRuns: number | null;
   timeZone: string | null;
@@ -152,11 +153,17 @@ export function validateScheduleRequest(
     text: reader.optionalText(input.message, 'message', SCHEDULE_LIMITS.text),
     trigger,
     target: readTarget(reader, input),
+    source: reader.optionalText(input.source, 'source', SCHEDULE_LIMITS.reference),
     enabled: readEnabled(reader, input.enabled),
     maxRuns: reader.optionalCount(input.max_runs, 'max_runs', SCHEDULE_LIMITS.maxRuns),
     timeZone: reader.optionalText(input.time_zone, 'time_zone', SCHEDULE_LIMITS.timeZone),
     secretRef,
   });
+}
+
+export function validateIntakeReport(input: Record<string, unknown>): Validation<{ summary: string }> {
+  const reader = new Reader();
+  return reader.result({ summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.intakeSummary) });
 }
 
 export function validateSecretRequest(

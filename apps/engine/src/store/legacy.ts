@@ -65,6 +65,8 @@ const WATCH_CI_LOG_VERSION = 5;
 
 const NO_GITBUTLER_LOG_VERSION = 6;
 
+const SCHEDULE_SOURCE_LOG_VERSION = 7;
+
 const GITBUTLER_EVENT_TYPES = [
   'repo.registered',
   'repo.updated',
@@ -80,6 +82,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < WEEKLY_READINGS_LOG_VERSION ? ['run.metered'] : []),
     ...(version < WATCH_CI_LOG_VERSION ? ['pull_request.watched'] : []),
     ...(version < NO_GITBUTLER_LOG_VERSION ? GITBUTLER_EVENT_TYPES : []),
+    ...(version < SCHEDULE_SOURCE_LOG_VERSION ? ['schedule.written'] : []),
   ];
 }
 
@@ -131,6 +134,11 @@ function resolveRepo(event: Payload) {
   return { ...event, repo: { ...event.repo, workspace: DEFAULT_WORKSPACE_MODE } };
 }
 
+function resolveSchedule(event: Payload) {
+  if (!isRecord(event.schedule) || 'source' in event.schedule) return event;
+  return { ...event, schedule: { ...event.schedule, source: null } };
+}
+
 function resolveGate(event: Payload) {
   if (!isRecord(event.gate) || event.gate.cause !== 'workspace_update') return event;
   return { ...event, gate: withoutKeys(event.gate, ['cause']) };
@@ -180,6 +188,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return { ...event, walkthrough: resolveWalkthrough(event.walkthrough) };
     case 'run.metered':
       return withoutKeys(event, ['weeklyPercent']);
+    case 'schedule.written':
+      return resolveSchedule(event);
     case 'pull_request.watched':
       if (!isRecord(event.watch) || 'ciAbsent' in event.watch) return event;
       return { ...event, watch: { ...event.watch, ciAbsent: false } };

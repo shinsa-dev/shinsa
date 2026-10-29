@@ -24,6 +24,7 @@ describe('reading set_schedule', () => {
         text: null,
         trigger: null,
         target: null,
+        source: null,
         enabled: null,
         maxRuns: null,
         timeZone: null,

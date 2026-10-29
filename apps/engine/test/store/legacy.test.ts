@@ -245,11 +245,18 @@ describe('a walkthrough’s testing as a plain list', () => {
       'run.metered',
       'pull_request.watched',
       ...gitbutler,
+      'schedule.written',
     ]);
-    expect(listLegacyEventTypes(3)).toEqual(['run.metered', 'pull_request.watched', ...gitbutler]);
-    expect(listLegacyEventTypes(4)).toEqual(['pull_request.watched', ...gitbutler]);
-    expect(listLegacyEventTypes(5)).toEqual(gitbutler);
-    expect(listLegacyEventTypes(6)).toEqual([]);
+    expect(listLegacyEventTypes(3)).toEqual([
+      'run.metered',
+      'pull_request.watched',
+      ...gitbutler,
+      'schedule.written',
+    ]);
+    expect(listLegacyEventTypes(4)).toEqual(['pull_request.watched', ...gitbutler, 'schedule.written']);
+    expect(listLegacyEventTypes(5)).toEqual([...gitbutler, 'schedule.written']);
+    expect(listLegacyEventTypes(6)).toEqual(['schedule.written']);
+    expect(listLegacyEventTypes(7)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -265,7 +272,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(6);
+    expect(readStoredLog(path).version).toBe(7);
   });
 });
 
@@ -290,7 +297,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(6);
+    expect(stored.version).toBe(7);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);
@@ -317,6 +324,26 @@ describe('a pull request watch from before it knew whether a head has CI', () =>
           watch: { ...watch, ciAbsent: false },
           changes: [],
         },
+      },
+    ]);
+  });
+});
+
+describe('a schedule from before it could read a data source', () => {
+  const schedule = { id: 's1', name: 'Nightly', target: { kind: 'task', taskId: TASK } };
+
+  test('reads none, and one that names its source keeps it', () => {
+    const source = { projectId: 'p1', server: 'slack' };
+    expect(
+      rewrite(
+        { type: 'schedule.written', schedule },
+        { type: 'schedule.written', schedule: { ...schedule, source } }
+      )
+    ).toEqual([
+      {
+        seq: 1,
+        type: 'schedule.written',
+        event: { type: 'schedule.written', schedule: { ...schedule, source: null } },
       },
     ]);
   });

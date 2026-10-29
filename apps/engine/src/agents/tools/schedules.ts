@@ -72,6 +72,12 @@ export const SCHEDULE_TOOL_SPECS = {
           maxLength: L.reference,
           description: 'Message this task instead of your own. find_tasks lists them.',
         },
+        source: {
+          type: 'string',
+          maxLength: L.reference,
+          description:
+            'Read this data source of the project (its server) on each run and file a task for each new report, in this task or task_id, never with new_task.',
+        },
         in_minutes: {
           type: 'integer',
           minimum: 1,
