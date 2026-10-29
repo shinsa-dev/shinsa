@@ -59,7 +59,7 @@ function OnboardingContent() {
         userHome={status?.paths.userHome ?? ''}
         accounts={{ list: accounts?.accounts ?? null, actions: ACCOUNT_ACTIONS }}
         actions={{
-          answer: (stepId, values, key) => void answer(stepId, values, key),
+          answer: (stepId, values, key, projects) => void answer(stepId, values, key, projects),
           open: openStep,
           refresh: () => void refresh(),
         }}

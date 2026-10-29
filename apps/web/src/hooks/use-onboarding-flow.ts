@@ -1,4 +1,9 @@
-import type { OnboardingFlow, OnboardingReply, OnboardingStepId } from '@shinsa/core';
+import type {
+  OnboardingFlow,
+  OnboardingProjectChoice,
+  OnboardingReply,
+  OnboardingStepId,
+} from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
@@ -60,8 +65,12 @@ export function useOnboardingFlow() {
     failure,
     pending,
     direction,
-    answer: (stepId: OnboardingStepId, values: string[], key = SUBMIT_KEY) =>
-      send({ type: 'answer', stepId, values }, key),
+    answer: (
+      stepId: OnboardingStepId,
+      values: string[],
+      key = SUBMIT_KEY,
+      projects?: OnboardingProjectChoice[]
+    ) => send({ type: 'answer', stepId, values, ...(projects ? { projects } : {}) }, key),
     open: (stepId: OnboardingStepId) => send({ type: 'open', stepId }, `open:${stepId}`),
     refresh: () => run(REFRESH_KEY, requestOnboardingFlow),
     retry: () => setAttempt(attempt + 1),

@@ -1,4 +1,10 @@
-import type { AccountSummary, OnboardingFlow, OnboardingStep, OnboardingStepId } from '@shinsa/core';
+import type {
+  AccountSummary,
+  OnboardingFlow,
+  OnboardingProjectChoice,
+  OnboardingStep,
+  OnboardingStepId,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -7,6 +13,7 @@ import { ErrorLine } from '@/components/chat/turn-detail.tsx';
 import { type OnboardingAccountActions, OnboardingAccounts } from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
+import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
@@ -19,11 +26,24 @@ import {
   type StepDirection,
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
+import {
+  createProjectDrafts,
+  describeProjectsSubmit,
+  isProjectsReady,
+  type ProjectDraft,
+  resolveProjectChoices,
+  updateProjectDraft,
+} from '@/lib/onboarding-projects.ts';
 
 export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-6';
 
 export interface OnboardingStepActions {
-  answer: (stepId: OnboardingStepId, values: string[], key?: string) => void;
+  answer: (
+    stepId: OnboardingStepId,
+    values: string[],
+    key?: string,
+    projects?: OnboardingProjectChoice[]
+  ) => void;
   open: (stepId: OnboardingStepId) => void;
   refresh: () => void;
 }
@@ -100,6 +120,11 @@ function FoldersBody({
   );
 }
 
+interface ProjectDrafts {
+  list: ProjectDraft[];
+  onChange: (id: string, patch: Partial<ProjectDraft>) => void;
+}
+
 function StepBody({
   step,
   values,
@@ -107,6 +132,7 @@ function StepBody({
   userHome,
   accounts,
   actions,
+  drafts,
   onChange,
   autoFocus,
 }: {
@@ -116,9 +142,21 @@ function StepBody({
   userHome: string;
   accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
+  drafts: ProjectDrafts;
   onChange: (values: string[]) => void;
   autoFocus: boolean;
 }) {
+  if (step.id === 'projects') {
+    return (
+      <OnboardingProjects
+        projects={step.projects}
+        drafts={drafts.list}
+        disabled={pending !== null}
+        userHome={userHome}
+        onChange={drafts.onChange}
+      />
+    );
+  }
   if (step.id === 'roots') {
     return (
       <FoldersBody
@@ -192,10 +230,29 @@ function StepAction({
   );
 }
 
+function resolveSubmit(step: OnboardingStep, values: string[], drafts: ProjectDraft[]) {
+  const submitValues = resolveSubmitValues(step, values);
+  if (step.id !== 'projects' || step.projects.length === 0) {
+    return {
+      values: submitValues,
+      label: step.submitLabel,
+      ready: submitValues.length > 0,
+      projects: undefined,
+    };
+  }
+  return {
+    values: submitValues,
+    label: describeProjectsSubmit(step.projects, drafts),
+    ready: isProjectsReady(step.projects, drafts),
+    projects: resolveProjectChoices(step.projects, drafts),
+  };
+}
+
 function StepFooter({
   flow,
   step,
   values,
+  drafts,
   pending,
   accounts,
   actions,
@@ -204,13 +261,14 @@ function StepFooter({
   flow: OnboardingFlow;
   step: OnboardingStep;
   values: string[];
+  drafts: ProjectDraft[];
   pending: string | null;
   accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
   onClose?: () => void;
 }) {
   const previous = flow.steps[flow.index - 1];
-  const submitValues = resolveSubmitValues(step, values);
+  const submit = resolveSubmit(step, values, drafts);
   const choosing = step.options.length > 0 && !step.multiple;
   return (
     <>
@@ -236,11 +294,11 @@ function StepFooter({
         {(!choosing || values.length > 0) && (
           <Button
             icon={{ name: 'IconArrowRight', position: 'inline-end' }}
-            disabled={submitValues.length === 0 || (pending !== null && pending !== SUBMIT_KEY)}
+            disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
             loading={pending === SUBMIT_KEY}
-            onClick={() => actions.answer(step.id, submitValues)}
+            onClick={() => actions.answer(step.id, submit.values, SUBMIT_KEY, submit.projects)}
           >
-            {step.submitLabel}
+            {submit.label}
           </Button>
         )}
       </div>
@@ -270,6 +328,7 @@ export function OnboardingStepView({
   autoFocus?: boolean;
 }) {
   const [values, setValues] = React.useState(() => listChosenValues(step));
+  const [drafts, setDrafts] = React.useState(() => createProjectDrafts(step.projects));
   return (
     <OnboardingSection
       title={step.title}
@@ -280,6 +339,7 @@ export function OnboardingStepView({
           flow={flow}
           step={step}
           values={values}
+          drafts={drafts}
           pending={pending}
           accounts={accounts}
           actions={actions}
@@ -294,6 +354,7 @@ export function OnboardingStepView({
         userHome={userHome}
         accounts={accounts}
         actions={actions}
+        drafts={{ list: drafts, onChange: (id, patch) => setDrafts(updateProjectDraft(drafts, id, patch)) }}
         onChange={setValues}
         autoFocus={autoFocus}
       />

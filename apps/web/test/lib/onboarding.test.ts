@@ -43,19 +43,20 @@ describe('the setup lock', () => {
 
 describe('the steps', () => {
   it('counts the step you are on, and the last one once setup is done', () => {
-    expect(describeStepPosition(createFlow(createStep()))).toBe('Step 3 of 6');
-    expect(describeStepPosition(createFlow(null))).toBe('Step 6 of 6');
+    expect(describeStepPosition(createFlow(createStep()))).toBe('Step 4 of 7');
+    expect(describeStepPosition(createFlow(null))).toBe('Step 7 of 7');
   });
 
   it('names the step you are on for a narrow window, and only the count once setup is done', () => {
-    expect(describeStepHeading(createFlow(createStep()))).toBe('Step 3 of 6: Merging');
-    expect(describeStepHeading(createFlow(null))).toBe('Step 6 of 6');
+    expect(describeStepHeading(createFlow(createStep()))).toBe('Step 4 of 7: Merging');
+    expect(describeStepHeading(createFlow(null))).toBe('Step 7 of 7');
   });
 
   it('checks the answered steps along the top, with the answer as the hint, and holds back the ones not reached', () => {
     const items = listStepperItems(createFlow(createStep({ id: 'model' })));
-    expect(items.slice(0, 3)).toEqual([
+    expect(items.slice(0, 4)).toEqual([
       { value: 'roots', label: 'Folders', hint: 'Folders answer', checked: true, disabled: false },
+      { value: 'projects', label: 'Projects', hint: 'Projects answer', checked: true, disabled: false },
       { value: 'model', label: 'Model', hint: undefined, checked: false, disabled: false },
       { value: 'merge', label: 'Merging', hint: undefined, checked: false, disabled: true },
     ]);
@@ -69,10 +70,10 @@ describe('the steps', () => {
 
   it('marks each step done, current, reached ahead of you or not reached yet', () => {
     const flow = createFlow(createStep({ id: 'model' }));
-    const [folders, model, merge] = flow.steps;
-    expect(resolveStepState(folders as never, 0, 1)).toBe('done');
-    expect(resolveStepState(model as never, 1, 1)).toBe('current');
-    expect(resolveStepState(merge as never, 2, 1)).toBe('upcoming');
+    const [folders, , model, merge] = flow.steps;
+    expect(resolveStepState(folders as never, 0, 2)).toBe('done');
+    expect(resolveStepState(model as never, 2, 2)).toBe('current');
+    expect(resolveStepState(merge as never, 3, 2)).toBe('upcoming');
     expect(resolveStepState({ id: 'merge', label: 'Merging', summary: null, reached: true }, 2, 1)).toBe(
       'ahead'
     );
@@ -92,6 +93,7 @@ describe('the steps', () => {
   it('lists what you set up, leaving out the steps without an answer to show', () => {
     expect(listSetupSummary(createFlow(createStep({ id: 'plans' })))).toEqual([
       { id: 'roots', label: 'Folders', summary: 'Folders answer' },
+      { id: 'projects', label: 'Projects', summary: 'Projects answer' },
       { id: 'model', label: 'Model', summary: 'Model answer' },
       { id: 'merge', label: 'Merging', summary: 'Merging answer' },
     ]);

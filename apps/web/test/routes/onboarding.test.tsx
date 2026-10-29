@@ -38,6 +38,36 @@ const ROOTS = createStep({
   ],
 });
 
+const PROJECTS = createStep({
+  id: 'projects',
+  title: 'Shinsa sorted your repositories into projects',
+  options: [],
+  submitLabel: 'Create 2 projects',
+  projects: [
+    {
+      id: 'owner:acme',
+      name: 'Acme',
+      key: 'ACM',
+      color: 'green',
+      projectId: null,
+      folders: ['/Users/me/Acme'],
+      repos: [
+        { path: '/Users/me/Acme/api', name: 'api' },
+        { path: '/Users/me/Acme/web', name: 'web' },
+      ],
+    },
+    {
+      id: 'personal',
+      name: 'Personal',
+      key: 'PER',
+      color: 'blue',
+      projectId: null,
+      folders: [],
+      repos: [{ path: '/Users/me/code/notes', name: 'notes' }],
+    },
+  ],
+});
+
 function serve(first: OnboardingFlow, replies: ((body: unknown) => OnboardingFlow)[] = []) {
   fake = startFakeOnboarding({
     'GET /api/onboarding/flow': { answer: first },
@@ -292,5 +322,73 @@ describe('the setup page', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     });
     expect(await screen.findByRole('heading', { name: 'How should pull requests be merged?' })).toBeTruthy();
+  });
+
+  it('creates every suggested project with one press when you change nothing', async () => {
+    serve(createFlow(PROJECTS), [() => createFlow(createStep())]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Create 2 projects/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        {
+          type: 'answer',
+          stepId: 'projects',
+          values: ['continue'],
+          projects: [
+            { id: 'owner:acme', name: 'Acme', repos: ['/Users/me/Acme/api', '/Users/me/Acme/web'] },
+            { id: 'personal', name: 'Personal', repos: ['/Users/me/code/notes'] },
+          ],
+        },
+      ])
+    );
+  });
+
+  it('sends a renamed project without the repository you left out, and skips one you untick', async () => {
+    serve(createFlow(PROJECTS), [() => createFlow(createStep())]);
+    renderPage();
+    const [acme] = await screen.findAllByRole('textbox', { name: 'Project name' });
+    fireEvent.change(acme as HTMLElement, { target: { value: 'Acme Corp' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create Personal' }));
+    const [toggle] = screen.getAllByRole('button', { name: /Repositories/ });
+    fireEvent.click(toggle as HTMLElement);
+    expect(screen.getByText('2 repositories · ~/Acme')).toBeTruthy();
+    fireEvent.click(screen.getByText('web'));
+    expect(screen.getByText('1 of 2 repositories')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Keep api' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Keep api' }));
+    fireEvent.click(screen.getByRole('button', { name: /Hide/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Create the project/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        {
+          type: 'answer',
+          stepId: 'projects',
+          values: ['continue'],
+          projects: [{ id: 'owner:acme', name: 'Acme Corp', repos: ['/Users/me/Acme/api'] }],
+        },
+      ])
+    );
+  });
+
+  it('cannot create a project you emptied the name of, and with every project left out continues without', async () => {
+    serve(createFlow(PROJECTS));
+    renderPage();
+    const [acme] = await screen.findAllByRole('textbox', { name: 'Project name' });
+    fireEvent.change(acme as HTMLElement, { target: { value: ' ' } });
+    expect(screen.getByRole('button', { name: /Create 2 projects/ }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create this project' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create Personal' }));
+    expect(screen.getByRole('button', { name: /Continue without projects/ }).hasAttribute('disabled')).toBe(
+      false
+    );
+  });
+
+  it('with nothing to suggest it shows the step’s own Continue', async () => {
+    serve(createFlow(createStep({ ...PROJECTS, projects: [], submitLabel: 'Continue' })));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'projects', values: ['continue'] }])
+    );
   });
 });

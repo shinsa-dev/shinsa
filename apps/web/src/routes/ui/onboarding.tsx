@@ -84,6 +84,47 @@ const FOLDERS = createSampleStep({
   ],
 });
 
+function createSampleRepos(folder: string, names: string[]) {
+  return names.map((name) => ({ path: `${USER_HOME}/${folder}/${name}`, name }));
+}
+
+const PROJECTS = createSampleStep({
+  id: 'projects',
+  title: 'Shinsa sorted your repositories into projects',
+  description:
+    'Grouped by GitHub owner and folder. Rename a project or leave out what you do not want; you can change them later in Settings.',
+  submitLabel: 'Create 3 projects',
+  projects: [
+    {
+      id: 'owner:superwall',
+      name: 'Superwall',
+      key: 'SUP',
+      color: 'sky',
+      projectId: null,
+      folders: [`${USER_HOME}/Superwall`],
+      repos: createSampleRepos('Superwall', ['paywall-next', 'ios', 'android', 'docs', 'web']),
+    },
+    {
+      id: 'owner:buzzkit-dev',
+      name: 'Buzzkit',
+      key: 'BUZ',
+      color: 'orange',
+      projectId: null,
+      folders: [],
+      repos: createSampleRepos('Developer', ['buzzkit', 'buzzkit-ios']),
+    },
+    {
+      id: 'personal',
+      name: 'Personal',
+      key: 'PER',
+      color: 'blue',
+      projectId: null,
+      folders: [],
+      repos: createSampleRepos('Developer', ['dotfiles', 'notes', 'website']),
+    },
+  ],
+});
+
 const MERGE = createSampleStep({
   id: 'merge',
   title: 'How should pull requests be merged?',
@@ -190,6 +231,9 @@ export function OnboardingSpecimens() {
     <>
       <Specimen label='Folders · several at once, the one with the most repositories picked, more by path'>
         <StepSpecimen step={FOLDERS} />
+      </Specimen>
+      <Specimen label='Projects · suggested from the folders, all kept; rename one, untick it or open its repositories'>
+        <StepSpecimen step={PROJECTS} />
       </Specimen>
       <Specimen label='One answer · gone back to, your answer picked and Continue keeps it; run again from Settings'>
         <StepSpecimen step={MERGE} revisit />
