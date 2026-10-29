@@ -56,7 +56,7 @@ describe('Settings tabs', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent)
-    ).toEqual(['General', 'Stats', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
+    ).toEqual(['General', 'Statistics', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
     for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
       expect(screen.getByText(section)).toBeTruthy();
@@ -129,30 +129,33 @@ describe('Settings stats', () => {
       closedAt: mergedAt,
       rounds: [createRound({ number: 1, endedAt: mergedAt, pullRequest })],
     });
-    await renderSettings('/settings?tab=stats', createShinsaState({ tasks: [task] }));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Stats');
+    await renderSettings('/settings?tab=statistics', createShinsaState({ tasks: [task] }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Statistics');
     expect(screen.getByText('Pull requests merged')).toBeTruthy();
-    expect(screen.getByText('+40 −2 in 3 files')).toBeTruthy();
+    expect(screen.getByText('+40 −2')).toBeTruthy();
+    expect(screen.getByText('Lines changed in 3 files')).toBeTruthy();
     expect(screen.getByText('1 day')).toBeTruthy();
     const graph = screen.getByRole('img', { name: '1 pull request merged in the last year' });
-    const cells = graph.querySelectorAll('span:not(.invisible)');
-    fireEvent.pointerOver([...cells].at(-1) as Element);
-    expect(screen.getByText(/^1 pull request merged on /)).toBeTruthy();
-    fireEvent.pointerOut(graph, { relatedTarget: document.body });
-    expect(screen.getAllByText('1 pull request merged in the last year').length).toBeGreaterThan(0);
+    const cells = graph.querySelectorAll('[data-day]');
+    fireEvent.pointerEnter([...cells].at(-1) as Element);
+    expect(within(screen.getByRole('status')).getByText('1 pull request')).toBeTruthy();
+    fireEvent.pointerLeave(graph);
+    expect(screen.queryByRole('status')).toBeNull();
     const chart = screen.getByRole('img', { name: 'Pull requests merged over time' });
-    chart.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect;
+    chart.getBoundingClientRect = () => ({ left: 0, width: 100, height: 160 }) as DOMRect;
     fireEvent.pointerMove(chart, { clientX: 100 });
-    expect(screen.getByText(/: 1 pull request$/)).toBeTruthy();
-    fireEvent.pointerOut(chart, { relatedTarget: document.body });
-    expect(screen.queryByText(/: 1 pull request$/)).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: '90 days' }));
+    expect(within(screen.getByRole('status')).getByText('1 pull request')).toBeTruthy();
+    fireEvent.pointerLeave(chart);
+    expect(screen.queryByRole('status')).toBeNull();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Statistics range' }));
     await settle();
-    expect(location.search).toBe('?tab=stats&range=90');
-    expect(screen.getAllByText(/^Week of /)).toHaveLength(4);
-    fireEvent.click(screen.getByRole('tab', { name: '30 days' }));
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    const ninety = within(list).getByRole('option', { name: 'Last 90 days' });
+    fireEvent.pointerDown(ninety, { pointerType: 'mouse' });
+    fireEvent.click(ninety);
     await settle();
-    expect(location.search).toBe('?tab=stats');
+    expect(location.search).toBe('?tab=statistics&range=90');
+    expect(screen.getAllByText('Last 90 days').length).toBeGreaterThan(0);
   });
 
   it('shows where the tokens went, the tasks that used the most and where to save', async () => {
@@ -183,7 +186,7 @@ describe('Settings stats', () => {
         usage: { inputTokens: 10, outputTokens: 10, cacheReadTokens: 80, cacheWriteTokens: 0, costUsd: null },
       }),
     ];
-    await renderSettings('/settings?tab=stats', createShinsaState({ tasks: [task], runs }));
+    await renderSettings('/settings?tab=statistics', createShinsaState({ tasks: [task], runs }));
     expect(screen.getByText('Token usage')).toBeTruthy();
     expect(screen.getAllByText('$2.00').length).toBeGreaterThan(1);
     expect(screen.getByText('Building')).toBeTruthy();
@@ -194,15 +197,18 @@ describe('Settings stats', () => {
     expect(screen.getByText('gone')).toBeTruthy();
     expect(screen.getByText('Only 13% of the prompt came from the cache')).toBeTruthy();
     const chart = screen.getByRole('img', { name: 'Tokens over time' });
-    const bars = chart.querySelectorAll('[data-bar]');
-    fireEvent.pointerEnter([...bars].at(-1) as Element);
-    expect(screen.getByText(/: 405k tokens$/)).toBeTruthy();
+    chart.getBoundingClientRect = () => ({ left: 0, width: 100, height: 160 }) as DOMRect;
+    fireEvent.pointerMove(chart, { clientX: 99 });
+    const readout = screen.getByRole('status');
+    expect(within(readout).getByText('Total')).toBeTruthy();
+    expect(within(readout).getByText('405k')).toBeTruthy();
+    expect(within(readout).getByText('Cache read')).toBeTruthy();
     fireEvent.pointerLeave(chart);
-    expect(screen.queryByText(/: 405k tokens$/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('says so when no agent ran and nothing stands out', async () => {
-    await renderSettings('/settings?tab=stats', createShinsaState({}));
+    await renderSettings('/settings?tab=statistics', createShinsaState({}));
     expect(screen.getAllByText('No agent runs')).toHaveLength(4);
     expect(screen.getByText('Nothing stands out in this range.')).toBeTruthy();
   });

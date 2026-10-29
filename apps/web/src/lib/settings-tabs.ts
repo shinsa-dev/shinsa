@@ -7,7 +7,7 @@ import { VERSIONS_SECTION } from '@/lib/versions.ts';
 
 export type SettingsTabId =
   | 'general'
-  | 'stats'
+  | 'statistics'
   | 'agents'
   | 'accounts'
   | 'projects'
@@ -26,9 +26,9 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
     label: 'General',
     sections: ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', UPDATES_SECTION],
   },
-  stats: {
-    id: 'stats',
-    label: 'Stats',
+  statistics: {
+    id: 'statistics',
+    label: 'Statistics',
     sections: [SHIPPING_SECTION, USAGE_SECTION],
   },
   agents: {

@@ -1,6 +1,6 @@
 import type { Stats, StatsDay } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
-import { formatDayLabel, formatShortDay, parseDayKey } from './days.ts';
+import { formatShortDay, parseDayKey } from './days.ts';
 
 export type ShippingLevel = 0 | 1 | 2 | 3 | 4;
 
@@ -60,12 +60,8 @@ export function resolveShippingGrid(days: StatsDay[]): ShippingGrid {
   return { weeks, months };
 }
 
-export function describeShippingCell(cell: ShippingCell) {
-  const count =
-    cell.pullRequests === 0
-      ? 'No pull requests'
-      : formatCount(cell.pullRequests, 'pull request', 'pull requests');
-  return `${count} merged on ${formatDayLabel(cell.day)}`;
+export function formatPullRequests(count: number) {
+  return count === 0 ? 'No pull requests' : formatCount(count, 'pull request', 'pull requests');
 }
 
 export function describeShippingYear(stats: Stats) {
@@ -93,10 +89,6 @@ export function listShippingPoints(days: StatsDay[]): ShippingPoint[] {
   return points;
 }
 
-export function describeShippingPoint(point: ShippingPoint) {
-  return `${point.label}: ${formatCount(point.pullRequests, 'pull request', 'pull requests')}`;
-}
-
 function formatNumber(value: number) {
   return value.toLocaleString('en-US');
 }
@@ -119,9 +111,9 @@ export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {
     },
     {
       key: 'lines',
-      label: 'Lines changed',
+      label: `Lines changed in ${formatCount(total.changedFiles, 'file', 'files')}`,
       value: formatNumber(total.additions + total.deletions),
-      detail: `+${formatNumber(total.additions)} −${formatNumber(total.deletions)} in ${formatCount(total.changedFiles, 'file', 'files')}`,
+      detail: `+${formatNumber(total.additions)} −${formatNumber(total.deletions)}`,
     },
     {
       key: 'streak',

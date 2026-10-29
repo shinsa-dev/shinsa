@@ -15,6 +15,7 @@ import {
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatTokenCount } from '@/lib/format/money.ts';
+import { resolveChartMax } from './chart.ts';
 import { formatShortDay } from './days.ts';
 import type { ShippingTile } from './shipping.ts';
 import { WEEKLY_AFTER_DAYS } from './shipping.ts';
@@ -31,7 +32,7 @@ export interface TokenBar {
   label: string;
   from: string;
   tokens: number;
-  segments: { kind: TokenKind; share: number }[];
+  segments: { kind: TokenKind; tokens: number }[];
 }
 
 export interface BreakdownRow {
@@ -61,7 +62,7 @@ export const USAGE_SECTION = 'Token usage';
 
 export const TOP_TASKS = 8;
 
-export const TOP_SAVINGS = 8;
+const TOP_SAVINGS = 8;
 
 export const TOKEN_KINDS: readonly { kind: TokenKind; label: string }[] = [
   { kind: 'cacheReadTokens', label: 'Cache read' },
@@ -141,18 +142,14 @@ export function listTokenPoints(days: StatsDay[]): TokenPoint[] {
 }
 
 export function listTokenBars(points: TokenPoint[]): { bars: TokenBar[]; max: number } {
-  const max = Math.max(0, ...points.map((point) => point.usage.tokens));
+  const max = resolveChartMax(points.map((point) => point.usage.tokens));
   const bars = points.map((point) => ({
     label: point.label,
     from: point.from,
     tokens: point.usage.tokens,
-    segments: TOKEN_KINDS.map(({ kind }) => ({ kind, share: max === 0 ? 0 : point.usage[kind] / max })),
+    segments: TOKEN_KINDS.map(({ kind }) => ({ kind, tokens: point.usage[kind] })),
   }));
   return { bars, max };
-}
-
-export function describeTokenBar(bar: TokenBar) {
-  return `${bar.label}: ${formatTokenCount(bar.tokens)} tokens`;
 }
 
 function listRows<Key extends string>(

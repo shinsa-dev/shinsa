@@ -9,7 +9,6 @@ import {
 } from '@shinsa/core';
 import { listCalendarDays, resolveDayKey } from '@/lib/stats/days.ts';
 import {
-  describeTokenBar,
   formatPercent,
   listBreakdowns,
   listSavingRows,
@@ -87,13 +86,13 @@ describe('usage', () => {
     const { bars, max } = listTokenBars(quarter);
     expect(max).toBe(20_000);
     expect(bars.at(-1)?.segments).toEqual([
-      { kind: 'cacheReadTokens', share: 0.6 },
-      { kind: 'cacheWriteTokens', share: 0.1 },
-      { kind: 'inputTokens', share: 0.1 },
-      { kind: 'outputTokens', share: 0.2 },
+      { kind: 'cacheReadTokens', tokens: 12_000 },
+      { kind: 'cacheWriteTokens', tokens: 2_000 },
+      { kind: 'inputTokens', tokens: 2_000 },
+      { kind: 'outputTokens', tokens: 4_000 },
     ]);
-    expect(describeTokenBar(bars.at(-1) as (typeof bars)[number])).toMatch(/^Week of .+: 20k tokens$/);
-    expect(listTokenBars(listTokenPoints(statsOf(['2026-11-30']).days)).bars[0]?.segments[0]?.share).toBe(0);
+    expect(bars.at(-1)?.label).toMatch(/^Week of /);
+    expect(listTokenBars(listTokenPoints(statsOf(['2026-11-30']).days)).max).toBe(4);
   });
 
   it('labels the breakdowns by kind of work, role and model, with each one’s share', () => {

@@ -1681,11 +1681,11 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 
 #### AreaChart
 
-**For:** a count over time where the shape matters more than each value: pull requests merged per day or per week on Settings → Stats. One series, in the accent.
+**For:** a count over time where the shape matters more than each value: pull requests merged per day or per week on Settings → Statistics. One series, in the accent.
 
 **Not for:** several series (a stacked bar per day, as the token chart draws), a single number (a stat tile), or a part of a whole.
 
-**Wraps:** a plain `<svg>`; the caller computes the path data (`resolveAreaGeometry` in `apps/web/src/lib/stats/chart.ts`) and the point under the pointer (`resolveNearestIndex`).
+**Wraps:** a plain `<svg aria-hidden>` that draws the data only; the caller computes the path data (`resolveAreaGeometry` in `apps/web/src/lib/stats/chart.ts`, a monotone curve that never overshoots a peak) and lays the grid, the crosshair, the point under the pointer and its `ChartTooltip` over it (`ChartPlot` in `apps/web/src/components/settings/stats/chart-plot.tsx`).
 
 **Props:**
 
@@ -1693,18 +1693,25 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 | --- | --- | --- |
 | `width`, `height` | required | The drawing's own units; the chart stretches to its box (`preserveAspectRatio='none'`). |
 | `line`, `area` | required | SVG path data for the line and the closed area under it. |
-| `guide` | `null` | The x of a vertical guide line, the point under the pointer. |
-| `aria-label` | required | What the chart shows, in one sentence. |
-| `onPointerMove`, `onPointerLeave`, `className` | | |
+| `className` | | The caller sizes it, usually `absolute inset-0` over its plot. |
 
 **Markup and classes:**
 
-- `<svg data-slot='area-chart' role='img'>`: `block w-full overflow-visible` + `className`; the caller gives the height (`h-30` on Stats).
-- The area: `fill-primary-a2`.
-- The guide: a 1px `stroke-fg-1` line, `vector-effect: non-scaling-stroke`.
-- The line: 1.5px `stroke-primary`, round joins and caps, `vector-effect: non-scaling-stroke`, so strokes keep their width however the chart stretches.
+- `<svg data-slot='area-chart'>`: `block size-full overflow-visible` + `className`.
+- The area: a vertical gradient of `--primary` from 24% to nothing at the baseline.
+- The line: 2px `stroke-primary`, round joins and caps, `vector-effect: non-scaling-stroke`, so it keeps its width however the chart stretches.
 
-**In Shinsa** the label above the chart reads the hovered point ("Week of Oct 6: 3 pull requests") and otherwise says what the chart shows; the peak and 0 sit to its left, the first and last dates under it, all in `text-2xs text-fg-2`.
+**In Shinsa** the plot has three hairline grid lines (the top of a readable scale, its middle and 0, the baseline a step darker) with their values in a gutter to the left, up to five dates under it, and on hover a 1px `bg-fg-1` crosshair, an 8px accent dot ringed in the card colour and a `ChartTooltip` above the point.
+
+#### ChartTooltip
+
+**For:** the readout a chart shows under the pointer: a day in the contribution graph, a point on an area chart, a bar of a stacked chart. **Not for:** anything with a trigger element (use `Hint` or `useTooltipTrigger`, which wait `TOOLTIP_DELAY`); a chart's readout follows the pointer at once.
+
+**Wraps:** a `div role='status'` the chart places itself, in pixels from its own top left corner (the chart's box is `relative`); it centres above its point and hugs an edge within 88px of it.
+
+**Parts:** `ChartTooltip` (`x`, `y`, `width`, children), `ChartTooltipTitle` (what the point is, `text-fg-2`), `ChartTooltipRow` (`swatch`: a short line key in the series' fill, `label`, and `value`, which leads in `font-medium text-fg-4 tabular-nums`).
+
+**Markup and classes:** the page tooltip's chip (`rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4`, `shadow-2`), `pointer-events-none`, 10px above its point.
 
 #### Badge
 

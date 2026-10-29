@@ -1,16 +1,27 @@
 import { cn } from '@shinsa/ui/lib/utils';
 import { INSET } from '@/components/layout/surface/card.ts';
+import type { ShippingTile } from '@/lib/stats/shipping.ts';
 
-export function StatTile({ label, value, detail }: { label: string; value: string; detail: string | null }) {
+export const STAT_PANEL = cn(INSET, 'bg-bg-a1');
+
+function StatTile({ tile }: { tile: ShippingTile }) {
   return (
-    <div className={cn(INSET, 'flex min-w-0 flex-col gap-1 bg-bg-a1 px-3 py-2.5')}>
-      <span className='truncate text-2xs text-fg-2'>{label}</span>
-      <span className='truncate font-semibold text-2xl text-fg-4'>{value}</span>
-      <span className='truncate text-2xs text-fg-2'>{detail ?? ' '}</span>
+    <div className='flex min-w-0 flex-col gap-1 bg-card px-3 py-2'>
+      <span className='truncate text-2xs text-fg-2'>{tile.label}</span>
+      <span className='flex min-w-0 items-baseline gap-1.5'>
+        <span className='shrink-0 font-medium text-base text-fg-4 leading-6'>{tile.value}</span>
+        {tile.detail && <span className='truncate text-2xs text-fg-2'>{tile.detail}</span>}
+      </span>
     </div>
   );
 }
 
-export function StatTiles({ children }: { children: React.ReactNode }) {
-  return <div className='grid grid-cols-2 gap-1.5 md:grid-cols-4'>{children}</div>;
+export function StatTiles({ tiles }: { tiles: ShippingTile[] }) {
+  return (
+    <div className={cn(STAT_PANEL, 'grid grid-cols-2 gap-px overflow-hidden bg-border md:grid-cols-4')}>
+      {tiles.map((tile) => (
+        <StatTile key={tile.key} tile={tile} />
+      ))}
+    </div>
+  );
 }

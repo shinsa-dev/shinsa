@@ -1,6 +1,6 @@
 import { MINUTE_MS, resolveStats, type ShinsaState } from '@shinsa/core';
 import * as React from 'react';
-import { Choice } from '@/components/controls/choice.tsx';
+import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import {
   DEFAULT_STATS_RANGE,
@@ -24,7 +24,7 @@ import { updateSearchParams, useSearchParam } from '@/router.ts';
 import { SettingsGroup } from '../group.tsx';
 import { ShippingChart } from './shipping-chart.tsx';
 import { ShippingGraph } from './shipping-graph.tsx';
-import { StatTile, StatTiles } from './stat-tile.tsx';
+import { StatTiles } from './stat-tile.tsx';
 import { UsageChart } from './usage-chart.tsx';
 import { Breakdown, Savings, TopTasks } from './usage-tables.tsx';
 
@@ -35,8 +35,21 @@ function useStatsRange() {
   return [range, choose] as const;
 }
 
-export function StatsSettings({ state }: { state: ShinsaState }) {
+export function StatisticsRange() {
   const [range, chooseRange] = useStatsRange();
+  return (
+    <SelectField<`${StatsRange}`>
+      label='Statistics range'
+      items={STATS_RANGES}
+      value={`${range}`}
+      onValueChange={(next) => chooseRange(parseStatsRange(next))}
+      size='sm'
+    />
+  );
+}
+
+export function StatisticsSettings({ state }: { state: ShinsaState }) {
+  const [range] = useStatsRange();
   const minute = useMinute();
   const day = resolveDayKey(minute * MINUTE_MS);
   const year = React.useMemo(
@@ -47,32 +60,18 @@ export function StatsSettings({ state }: { state: ShinsaState }) {
     () => resolveStats(state, resolveRangeWindow(parseDayKey(day).getTime(), range)),
     [state.tasks, state.runs, day, range]
   );
+  const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';
   return (
     <>
-      <Choice<`${StatsRange}`>
-        label='Stats range'
-        items={STATS_RANGES.map((entry) => ({ value: entry.value, label: entry.label }))}
-        value={`${range}`}
-        onValueChange={(next) => chooseRange(parseStatsRange(next))}
-        className='self-start'
-      />
       <SettingsGroup title={SHIPPING_SECTION} className='gap-1.5'>
-        <StatTiles>
-          {listShippingTiles(stats, year).map((tile) => (
-            <StatTile key={tile.key} label={tile.label} value={tile.value} detail={tile.detail} />
-          ))}
-        </StatTiles>
+        <StatTiles tiles={listShippingTiles(stats, year)} />
         <ShippingGraph year={year} />
-        <ShippingChart days={stats.days} />
+        <ShippingChart days={stats.days} aside={rangeLabel} />
       </SettingsGroup>
-      <SettingsGroup title={USAGE_SECTION} className='gap-3'>
-        <StatTiles>
-          {listUsageTiles(stats).map((tile) => (
-            <StatTile key={tile.key} label={tile.label} value={tile.value} detail={tile.detail} />
-          ))}
-        </StatTiles>
+      <SettingsGroup title={USAGE_SECTION} className='gap-1.5'>
+        <StatTiles tiles={listUsageTiles(stats)} />
         <UsageChart days={stats.days} />
-        <div className='grid gap-3 md:grid-cols-3'>
+        <div className='grid gap-1.5 md:grid-cols-3'>
           {listBreakdowns(stats).map((breakdown) => (
             <Breakdown key={breakdown.key} title={breakdown.title} rows={breakdown.rows} />
           ))}

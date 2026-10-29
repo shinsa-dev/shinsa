@@ -2,9 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { resolveStats, type Stats, type StatsDay } from '@shinsa/core';
 import { listCalendarDays, resolveDayKey } from '@/lib/stats/days.ts';
 import {
-  describeShippingCell,
-  describeShippingPoint,
   describeShippingYear,
+  formatPullRequests,
   listShippingPoints,
   listShippingTiles,
   resolveShippingGrid,
@@ -40,12 +39,8 @@ describe('shipping', () => {
   });
 
   it('says what a day and the year shipped', () => {
-    expect(describeShippingCell({ day: '2026-11-02', pullRequests: 0, level: 0 })).toStartWith(
-      'No pull requests merged on'
-    );
-    expect(describeShippingCell({ day: '2026-11-02', pullRequests: 1, level: 4 })).toStartWith(
-      '1 pull request merged on'
-    );
+    expect(formatPullRequests(0)).toBe('No pull requests');
+    expect(formatPullRequests(1)).toBe('1 pull request');
     const year = statsOf([]);
     expect(describeShippingYear({ ...year, total: { ...year.total, pullRequests: 3 } })).toBe(
       '3 pull requests merged in the last year'
@@ -64,9 +59,7 @@ describe('shipping', () => {
     expect(weekly).toHaveLength(13);
     expect(weekly.at(-1)).toMatchObject({ from: '2026-11-24', pullRequests: 3 });
     expect(weekly[0]).toMatchObject({ from: '2026-09-02', pullRequests: 4 });
-    expect(describeShippingPoint(weekly.at(-1) as (typeof weekly)[number])).toMatch(
-      /^Week of .+: 3 pull requests$/
-    );
+    expect(weekly.at(-1)?.label).toMatch(/^Week of /);
   });
 
   it('tiles the range totals and the streak of the year', () => {
@@ -86,7 +79,7 @@ describe('shipping', () => {
     expect(listShippingTiles(stats, year)).toEqual([
       { key: 'pull-requests', label: 'Pull requests merged', value: '1,200', detail: null },
       { key: 'tasks', label: 'Tasks finished', value: '4', detail: null },
-      { key: 'lines', label: 'Lines changed', value: '1,520', detail: '+1,500 −20 in 1 file' },
+      { key: 'lines', label: 'Lines changed in 1 file', value: '1,520', detail: '+1,500 −20' },
       { key: 'streak', label: 'Shipping streak', value: '1 day', detail: 'Longest 9 days' },
     ]);
   });

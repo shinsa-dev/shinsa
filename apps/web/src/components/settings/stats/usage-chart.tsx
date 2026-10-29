@@ -1,74 +1,94 @@
 import type { StatsDay } from '@shinsa/core';
+import { ChartTooltipRow, ChartTooltipTitle } from '@shinsa/ui/components/chart-tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { formatTokenCount } from '@/lib/format/money.ts';
-import {
-  describeTokenBar,
-  listTokenBars,
-  listTokenPoints,
-  TOKEN_KINDS,
-  type TokenBar,
-  type TokenKind,
-} from '@/lib/stats/usage.ts';
+import { listAxisIndexes } from '@/lib/stats/chart.ts';
+import { formatShortDay } from '@/lib/stats/days.ts';
+import { listTokenBars, listTokenPoints, TOKEN_KINDS, type TokenKind } from '@/lib/stats/usage.ts';
+import { ChartPanel, ChartPlot } from './chart-plot.tsx';
 
 const KIND_FILL: Record<TokenKind, string> = {
-  cacheReadTokens: 'bg-primary-a2',
-  cacheWriteTokens: 'bg-primary-a3',
-  inputTokens: 'bg-primary-a4',
-  outputTokens: 'bg-primary-4',
+  cacheReadTokens: 'bg-primary/30',
+  cacheWriteTokens: 'bg-primary/60',
+  inputTokens: 'bg-primary',
+  outputTokens: 'bg-fg-3',
 };
 
 const CHART_LABEL = 'Tokens over time';
 
+function TokenLegend() {
+  return TOKEN_KINDS.map(({ kind, label }) => (
+    <span key={kind} className='inline-flex items-center gap-1'>
+      <span className={cn('size-2 rounded-xs', KIND_FILL[kind])} />
+      {label}
+    </span>
+  ));
+}
+
 export function UsageChart({ days }: { days: StatsDay[] }) {
   const { bars, max } = React.useMemo(() => listTokenBars(listTokenPoints(days)), [days]);
-  const [hovered, setHovered] = React.useState<TokenBar | null>(null);
+  const labels = listAxisIndexes(bars.length).map((index) => ({
+    index,
+    label: formatShortDay(bars[index]?.from ?? ''),
+  }));
   return (
-    <div className='flex flex-col gap-2 px-2 py-1.5'>
-      <span className='text-fg-4 text-xs'>{hovered ? describeTokenBar(hovered) : CHART_LABEL}</span>
-      <div className='flex gap-2'>
-        <div className='flex h-30 shrink-0 flex-col justify-between text-right text-2xs text-fg-2 tabular-nums'>
-          <span>{formatTokenCount(max)}</span>
-          <span>0</span>
-        </div>
-        <div className='flex min-w-0 flex-1 flex-col gap-1'>
-          <div
-            role='img'
-            aria-label={CHART_LABEL}
-            className='flex h-30 items-end gap-px'
-            onPointerLeave={() => setHovered(null)}
-          >
-            {bars.map((bar) => (
+    <ChartPanel title={CHART_LABEL} aside={<TokenLegend />}>
+      <ChartPlot
+        label={CHART_LABEL}
+        layout='bands'
+        count={bars.length}
+        max={max}
+        values={bars.map((bar) => bar.tokens)}
+        formatTick={formatTokenCount}
+        labels={labels}
+        readout={(index) => {
+          const bar = bars[index];
+          if (!bar) return null;
+          return (
+            <>
+              <ChartTooltipTitle>{bar.label}</ChartTooltipTitle>
+              <ChartTooltipRow label='Total' value={formatTokenCount(bar.tokens)} />
+              {[...bar.segments].reverse().map((segment) => (
+                <ChartTooltipRow
+                  key={segment.kind}
+                  swatch={KIND_FILL[segment.kind]}
+                  label={TOKEN_KINDS.find((entry) => entry.kind === segment.kind)?.label}
+                  value={formatTokenCount(segment.tokens)}
+                />
+              ))}
+            </>
+          );
+        }}
+      >
+        {(hovered) => (
+          <div className='absolute inset-0 flex items-end gap-1'>
+            {bars.map((bar, index) => (
               <div
                 key={bar.from}
                 data-bar={bar.from}
-                className='flex h-full min-w-0 flex-1 flex-col-reverse'
-                onPointerEnter={() => setHovered(bar)}
+                className={cn(
+                  'flex h-full min-w-0 flex-1 justify-center transition-opacity duration-150',
+                  hovered !== null && hovered !== index && 'opacity-40'
+                )}
               >
-                {bar.segments.map((segment) => (
-                  <span
-                    key={segment.kind}
-                    className={cn('w-full', KIND_FILL[segment.kind])}
-                    style={{ height: `${segment.share * 100}%` }}
-                  />
-                ))}
+                <div
+                  className='flex w-full max-w-6 flex-col-reverse self-end overflow-hidden rounded-t-xs'
+                  style={{ height: `${(bar.tokens / max) * 100}%` }}
+                >
+                  {bar.segments.map((segment) => (
+                    <span
+                      key={segment.kind}
+                      className={cn('w-full shrink-0', KIND_FILL[segment.kind])}
+                      style={{ height: `${bar.tokens === 0 ? 0 : (segment.tokens / bar.tokens) * 100}%` }}
+                    />
+                  ))}
+                </div>
               </div>
             ))}
           </div>
-          <div className='flex justify-between text-2xs text-fg-2'>
-            <span>{bars[0]?.label}</span>
-            <span>{bars.at(-1)?.label}</span>
-          </div>
-        </div>
-      </div>
-      <div className='flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-2xs text-fg-2'>
-        {TOKEN_KINDS.map(({ kind, label }) => (
-          <span key={kind} className='inline-flex items-center gap-1'>
-            <span className={cn('size-2.5 rounded-xs', KIND_FILL[kind])} />
-            {label}
-          </span>
-        ))}
-      </div>
-    </div>
+        )}
+      </ChartPlot>
+    </ChartPanel>
   );
 }
