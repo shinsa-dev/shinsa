@@ -440,7 +440,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `log.listEffectStatuses()`, or are fixed: `run.execute:<runId>`, `run.cancel:<runId>`), a deferred the fake
   resolves, `until(condition)` for another process or the file system, or `spyOn(log, …)` for a failure that is only
   logged. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
-- **A test file that starts the whole server** (`test/e2e/`) sets `setDefaultTimeout(30_000)`: alone it takes a
+- **A test file that starts the whole server** (`test/e2e/`), or drives a pull request through many fake `gh` calls
+  (`test/runtime/effects.test.ts`, which gives those waits 25 s), sets `setDefaultTimeout(30_000)`: alone it takes a
   second, but `bun run test` runs every workspace at once and Bun's own 5 s limit then fails it at random.
 - **Scripted agents are keyed by what a run does**: `FakeAgents.queue` and `of` take the round agent's purpose
   (`plan`, `build`, `fix`, `operate`, read from the live run through `agents.state`, or from the prompt and the
