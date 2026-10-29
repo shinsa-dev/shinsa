@@ -39,7 +39,7 @@ describe('which Shinsa is running', () => {
 
   test('health is ok without damaged entries and counts the uptime from the start', () => {
     const instance = createServerInstance('a'.repeat(40), 1_000);
-    const idle = { busy: false, restart: null };
+    const idle = { busy: false, working: 0, restart: null, restartBy: null };
     expect(resolveHealth({ seq: 9, problems: [] }, '/data', instance, idle, 61_000)).toEqual({
       ok: true,
       seq: 9,
@@ -47,7 +47,9 @@ describe('which Shinsa is running', () => {
       ...instance,
       protocol: ENGINE_PROTOCOL,
       busy: false,
+      working: 0,
       restart: null,
+      restartBy: null,
       dataDir: '/data',
       uptimeMs: 60_000,
     });

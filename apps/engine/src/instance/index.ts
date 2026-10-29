@@ -27,5 +27,6 @@ export {
   isEngineBusy,
   RESTART_DRAIN_MS,
   type RestartDrain,
+  resolveEngineActivity,
 } from './restart.ts';
 export { isStartedByService, SERVICE_MARKER } from './service.ts';

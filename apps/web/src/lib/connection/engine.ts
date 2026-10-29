@@ -6,6 +6,8 @@ import {
 } from '@shinsa/core';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { requestJson } from '@/lib/connection/http.ts';
+import { formatCount } from '@/lib/format/count.ts';
+import { formatClock } from '@/lib/format/time.ts';
 
 export type EngineAction = 'restart_now' | 'restart_idle' | 'update_app';
 
@@ -23,7 +25,7 @@ export interface EngineView {
 
 export const ENGINE_ACTION_LABEL: Record<EngineAction, string> = {
   restart_now: 'Restart now',
-  restart_idle: 'When agents are idle',
+  restart_idle: 'When agents hand over',
   update_app: 'Update Shinsa',
 };
 
@@ -33,8 +35,13 @@ function describeRestarting(version: string) {
   return `Restarting the engine into Shinsa ${version}. Agents pick up where they were.`;
 }
 
-function describeWaiting(version: string) {
-  return `The engine restarts into Shinsa ${version} once agents are idle.`;
+function describeWaiting(version: string, health: ServerHealth) {
+  const agents = health.working
+    ? formatCount(health.working, 'working agent hands', 'working agents hand')
+    : null;
+  const when = agents ? `once the ${agents} over` : 'once the working agents hand over';
+  const latest = health.restartBy ? `, by ${formatClock(health.restartBy)} at the latest` : '';
+  return `Shinsa ${version} is installed. The engine moves to it ${when}${latest}. New steps wait until then.`;
 }
 
 export function resolveEngineView(
@@ -58,7 +65,7 @@ export function resolveEngineView(
   }
   if (health.restart === 'idle') {
     return {
-      banner: { tone: 'info', text: describeWaiting(build.version), actions: ['restart_now'] },
+      banner: { tone: 'info', text: describeWaiting(build.version, health), actions: ['restart_now'] },
       automatic: null,
       key,
     };
@@ -71,7 +78,7 @@ export function resolveEngineView(
     };
   }
   if (fit.required) {
-    const text = `Shinsa ${build.version} needs its engine restarted.`;
+    const text = `Shinsa ${build.version} needs its engine restarted. Restarting now pauses working agents for a moment, then they carry on.`;
     return {
       banner: { tone: 'warning', text, actions: ['restart_now', 'restart_idle'] },
       automatic: null,
@@ -79,7 +86,7 @@ export function resolveEngineView(
     };
   }
   return {
-    banner: { tone: 'info', text: describeWaiting(build.version), actions: ['restart_now'] },
+    banner: { tone: 'info', text: describeWaiting(build.version, health), actions: ['restart_now'] },
     automatic: 'idle',
     key,
   };

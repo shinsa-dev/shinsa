@@ -117,10 +117,14 @@ Shinsa.app/Contents/
   between the interface and the engine breaks (an HTTP route, a socket message, the state's shape), so most releases
   keep it. The page compares the two and acts:
   - **Same protocol, older engine:** it asks the engine to restart once agents are idle (`POST /api/engine/restart`
-    with `when: idle`); with nothing mid-turn that is at once. The banner says "The engine restarts into Shinsa 0.5.0
-    once agents are idle", with **Restart now**.
+    with `when: idle`); with nothing mid-turn that is at once. Otherwise the engine drains: it holds new steps back,
+    restarts as soon as the working agents hand over and starts the held steps on the new version, or at the latest
+    after 15 minutes, when the agents still working resume their sessions (`docs/engine.md` → Health). `/api/health`
+    reports the agents it waits for (`working`) and the latest restart (`restartBy`), and the banner says "Shinsa
+    0.5.0 is installed. The engine moves to it once the 2 working agents hand over, by 2:32 PM at the latest. New
+    steps wait until then.", with **Restart now**.
   - **New protocol, older engine:** with nothing mid-turn it restarts the engine at once; otherwise the banner asks:
-    **Restart now** (runs resume on their own sessions afterwards) or **When agents are idle**.
+    **Restart now** (runs resume on their own sessions afterwards) or **When agents hand over**.
   - **An engine on a newer protocol** (an app put back to an older version): the banner asks you to update the app,
     with **Update Shinsa**. A newer engine on the same protocol only gets the header's Update button.
   - The engine restarts itself through launchd (`launchctl kickstart -k`, as `shinsa restart`), and only

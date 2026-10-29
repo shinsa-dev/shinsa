@@ -26,7 +26,7 @@ import {
   UPDATES_LABEL,
   UPDATES_SECTION,
 } from '@/lib/updates.ts';
-import { SETTING_ROW, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
+import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
 
 export interface UpdateActions {
   check: () => void;
@@ -100,6 +100,7 @@ export function UpdatesGroup({
           </div>
         )}
       </div>
+      <p className={cn(ROW_INSET, 'py-2 text-2xs text-fg-2')}>{UPDATES_LABEL.agents}</p>
       <div className={SETTING_ROW}>
         <RowText title={UPDATES_LABEL.channel} detail={describeChannelDetail(app.channel)} />
         <SelectField<UpdateChannel>

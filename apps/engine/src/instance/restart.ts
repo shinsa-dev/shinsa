@@ -1,5 +1,6 @@
 import { DomainError, type EngineRestartWhen, listLiveRuns, type ShinsaState } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
+import type { EngineActivity } from './install.ts';
 
 interface RestartSource {
   readonly state: ShinsaState;
@@ -25,8 +26,12 @@ export type EngineRestartPending = 'idle' | null;
 
 export const RESTART_DRAIN_MS = 15 * 60_000;
 
+function countWorkingRuns(state: ShinsaState, isHeld: (runId: string) => boolean) {
+  return listLiveRuns(state).filter((run) => run.status === 'running' && !isHeld(run.id)).length;
+}
+
 export function isEngineBusy(state: ShinsaState, isHeld: (runId: string) => boolean = () => false) {
-  return listLiveRuns(state).some((run) => run.status === 'running' && !isHeld(run.id));
+  return countWorkingRuns(state, isHeld) > 0;
 }
 
 export class EngineRestarter {
@@ -51,9 +56,12 @@ export class EngineRestarter {
     return this.#deadlineAt;
   }
 
+  isHeld(runId: string) {
+    return this.#options.drain?.isHeld(runId) ?? false;
+  }
+
   #isBusy(state: ShinsaState) {
-    const drain = this.#options.drain;
-    return isEngineBusy(state, drain ? (runId) => drain.isHeld(runId) : undefined);
+    return isEngineBusy(state, (runId) => this.isHeld(runId));
   }
 
   async request(when: EngineRestartWhen) {
@@ -117,6 +125,16 @@ export class EngineRestarter {
     this.#pending = null;
     this.#options.drain?.releaseHeldRuns();
   }
+}
+
+export function resolveEngineActivity(state: ShinsaState, restarter?: EngineRestarter): EngineActivity {
+  const working = countWorkingRuns(state, (runId) => restarter?.isHeld(runId) ?? false);
+  return {
+    busy: working > 0,
+    working,
+    restart: restarter?.pending ?? null,
+    restartBy: restarter?.deadlineAt ?? null,
+  };
 }
 
 export const EXIT_RESTART = 75;

@@ -4026,7 +4026,7 @@ says hello counts as no desktop.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, working, restart, restartBy, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
 (`resolveHealth`, `apps/engine/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
 which Shinsa answered: `version` is the engine package's version, `commit` the checkout's `HEAD` (null outside a git
 checkout), `installPath` the folder holding `apps/engine`, and `startedAt` and `uptimeMs` count from when the server
@@ -4041,7 +4041,9 @@ and the next line is never glued onto it (`readChatEntries`).
 
 `protocol` is `ENGINE_PROTOCOL` (`packages/core/src/protocol/engine.ts`), raised only when the contract between the
 interface and the engine breaks; `busy` is whether an agent run is mid-turn (`isEngineBusy`: a live run with status
-`running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
+`running`, not counting a run held for the restart), `working` how many such runs there are, `restart` is `idle`
+while the engine waits for them to end before restarting, and `restartBy` the time it restarts at the latest (null
+when no restart waits; `resolveEngineActivity`). **`POST
 /api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
 75 for launchd to start it again, and answers `{ restarting }` before it goes. Waiting for idle drains the engine
 (`EngineRestarter`, `RestartDrain`): the supervisor holds back every new run (`holdNewRuns`; a turn that carries a

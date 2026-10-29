@@ -587,8 +587,8 @@ Only these, and they win over anything below:
       dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
-      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts for a moment and agents keep
-      working."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
+      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and
+      the engine moves to the new version once they hand over."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
@@ -1593,10 +1593,11 @@ Only these, and they win over anything below:
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
       banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
       (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
-      ("The engine restarts into Shinsa 0.5.0 once agents are idle."), the orange triangle when you must act ("Shinsa
-      0.5.0 needs its engine restarted."), and `sm` buttons at the end, the last `primary` as macOS orders them: one
-      alone (Restart now, Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents are idle
-      `primary`. No dismiss: it goes when
+      ("Shinsa 0.5.0 is installed. The engine moves to it once the 2 working agents hand over, by 2:32 PM at the
+      latest. New steps wait until then.", from `working` and `restartBy` in `/api/health`), the orange triangle when
+      you must act ("Shinsa 0.5.0 needs its engine restarted. Restarting now pauses working agents for a moment, then
+      they carry on."), and `sm` buttons at the end, the last `primary` as macOS orders them: one alone (Restart now,
+      Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents hand over `primary`. No dismiss: it goes when
       the versions match. `/ui` shows `EngineCard` in its three states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
@@ -1613,7 +1614,9 @@ Only these, and they win over anything below:
       update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
-      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: a select
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Under it, a wrapping `2xs` `fg-2`
+      line says the one thing people fear about updating: "Updating or quitting the app never stops your agents. The
+      engine keeps running and moves to the new version once the working agents hand over." Update channel: a select
       of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
       "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
       pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests

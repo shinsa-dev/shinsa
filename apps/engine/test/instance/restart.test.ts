@@ -5,6 +5,7 @@ import {
   EXIT_RESTART,
   isEngineBusy,
   type RestartDrain,
+  resolveEngineActivity,
 } from '../../src/instance/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
@@ -65,6 +66,32 @@ describe('isEngineBusy', () => {
     });
     expect(isEngineBusy(stub.state)).toBe(true);
     expect(isEngineBusy(stub.state, (runId) => runId === 'live')).toBe(false);
+  });
+});
+
+describe('resolveEngineActivity', () => {
+  test('counts the working agents, leaving out held ones, and says when a restart comes at the latest', async () => {
+    jest.useFakeTimers();
+    const { drain, held } = createDrain();
+    const { stub, restarter } = createRestarter({ drain });
+    stub.update((state) => {
+      state.runs.live = createRun({ id: 'live' });
+      state.runs.next = createRun({ id: 'next' });
+    });
+    expect(resolveEngineActivity(stub.state)).toEqual({
+      busy: true,
+      working: 2,
+      restart: null,
+      restartBy: null,
+    });
+    held.add('next');
+    await restarter.request('idle');
+    expect(resolveEngineActivity(stub.state, restarter)).toEqual({
+      busy: true,
+      working: 1,
+      restart: 'idle',
+      restartBy: 61_000,
+    });
   });
 });
 
