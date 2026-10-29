@@ -2572,10 +2572,13 @@ Only these, and they win over anything below:
     - **The footer is always there** (`PANEL_FOOTER`, 41px with its hairline, 8px in on every side, measured: each
       24px button 8px from the footer's top, bottom and sides): Manage (`IconSettingsSliderHor`, disabled while the
       popover lists no service), Add… (`IconPlusMedium`, disabled when there is no project to add to) and, at its
-      end, Terminal, which goes to the Terminal page. With no services the body is the kit's `EmptyState` (`sm`,
-      `IconServer`): "No services in ‹project› yet" (or "No services yet"), "A service is a command you keep running
-      for a project, like its dev server.", with the footer's Add… to add some, and Create a project… in the empty
-      state itself when there is no project. The rows tick every second, since the running time is in them.
+      end, Terminal, which goes to the Terminal page. **A project with no services opens on what was found**
+      (`resolveShownServicesView`'s `found` view): Add services itself, titled "No services in ‹project› yet" with
+      "These were found in its folders. Each runs in a terminal of its own.", the recommended ones ticked and no
+      Back, so a new project's services are one press away. Only when nothing is found, or there is no project, is
+      the body the kit's `EmptyState` (`sm`, `IconServer`): "No services in ‹project› yet" (or "No services yet"),
+      "A service is a command you keep running for a project, like its dev server.", with the footer's Add… to add
+      some, and Create a project… in the empty state itself when there is no project. The rows tick every second, since the running time is in them.
     - **Everything happens in the popover, never in a dialog.** Adding, editing and removing services are views of
       the same popover (`lib/terminal/services-panel.ts`: `reduceServicesPanel` moves between the list, Manage, Add
       services, the custom form and a service's form, and `resolveShownServicesView` falls back to the list when a
@@ -2592,7 +2595,13 @@ Only these, and they win over anything below:
       slot, `outline` like Manage's, the name over the command in mono and its folder by the project's place, "bun run dev in
       shop/apps/api"); and last Custom service… (`IconPlusMedium`). The recommended ones start ticked, so the common
       case is one press of the primary "Add 2 services" (disabled at none) beside Back; what you already added is not
-      listed. While it reads, "Looking for services" after 300ms. Once added, the popover is the list again.
+      listed. While it reads, "Looking for services" after 300ms. **Then an AI check**: the list shows as soon as
+      the scan answers, and the popover asks again with `refine=1` (`docs/engine.md` → Services → Refined by a quick
+      call), "Checking names and ports with AI" under the list (`LoadingLine`, 2xs) meanwhile. When it answers, its
+      list replaces the scan's, names, commands (a `--port $PORT` where the server needs one) and preview URLs
+      included, which Add services sends; the ticks become its recommendations, unless you changed them, in which
+      case each keeps its place in the list (`resolveSuggestionPicks`). When it fails the scan's list stays, and you
+      can tick and add at any point. Once added, the popover is the list again.
     - **The form** (Custom service…, "Add a service"; or a service's, "Edit ‹name›") is short: Name, Folder (a
       select of the project's repositories and folders, never a typed path), Command and Preview URL (optional,
       `http://localhost:{port}` as its placeholder, the note "Where Open takes you. Shinsa puts the run's port where

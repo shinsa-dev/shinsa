@@ -4,6 +4,7 @@ import {
   canStartAll,
   createServiceDraft,
   describeAddServices,
+  describeFoundServices,
   describeNoSuggestions,
   describeRemoveServices,
   describeServiceClose,
@@ -38,6 +39,7 @@ import {
   resolveServicesProjects,
   resolveShownErrors,
   resolveSuggestionKey,
+  resolveSuggestionPicks,
   SERVICE_GLYPHS,
   selectServicePreview,
   serializeServiceEnv,
@@ -67,6 +69,8 @@ const WEB = {
   command: 'bun run dev',
   source: 'package' as const,
   recommended: true,
+  previewUrl: null,
+  portVariable: 'PORT',
 };
 
 const LATER = NOW + SERVICE_LIMITS.startingMs + 1;
@@ -433,6 +437,10 @@ describe('the service form', () => {
 
   it('words the forms for adding and editing, and the confirmations', () => {
     expect(resolveServiceForm('add', 'api')).toMatchObject({ title: 'Add services', done: 'Added api.' });
+    expect(describeFoundServices('Shop')).toEqual({
+      title: 'No services in Shop yet',
+      description: 'These were found in its folders. Each runs in a terminal of its own.',
+    });
     expect(resolveServiceForm('custom', '')).toMatchObject({
       title: 'Add a service',
       description: 'Name the command that starts it and the folder it runs in.',
@@ -493,6 +501,28 @@ describe('the service form', () => {
         portVariable: 'PORT',
       },
     ]);
+    const refined = { ...WEB, previewUrl: 'http://localhost:{port}', portVariable: 'WEB_PORT' };
+    expect(listPickedInputs([refined], picked)[0]).toMatchObject({
+      previewUrl: 'http://localhost:{port}',
+      portVariable: 'WEB_PORT',
+    });
+  });
+
+  it('ticks what the AI check recommends, unless you changed the ticks, which then follow their place in the list', () => {
+    const all = { ...WEB, name: 'all', cwd: '/shop', recommended: false };
+    const refined = [
+      { ...WEB, command: 'bun run dev --port $PORT', recommended: false },
+      { ...all, recommended: true },
+    ];
+    const [web, checkedAll] = refined.map(resolveSuggestionKey) as [string, string];
+    expect(resolveSuggestionPicks(null, [], [WEB, all])).toEqual([resolveSuggestionKey(WEB)]);
+    expect(resolveSuggestionPicks([WEB, all], [resolveSuggestionKey(WEB)], refined)).toEqual([checkedAll]);
+    expect(resolveSuggestionPicks([WEB, all], [resolveSuggestionKey(all)], refined)).toEqual([checkedAll]);
+    expect(resolveSuggestionPicks([WEB, all], [], refined)).toEqual([]);
+    expect(
+      resolveSuggestionPicks([WEB, all], [resolveSuggestionKey(WEB), resolveSuggestionKey(all)], refined)
+    ).toEqual([web, checkedAll]);
+    expect(resolveSuggestionPicks([WEB, all], [], refined.slice(1))).toEqual([checkedAll]);
   });
 
   it('words the add button, the toast and the empty list', () => {

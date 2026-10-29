@@ -52,7 +52,7 @@ import {
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
-import { Terminals, type TerminalsOptions } from './terminals/index.ts';
+import { ServiceRefiner, Terminals, type TerminalsOptions } from './terminals/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
 import {
@@ -223,6 +223,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     instance,
     transcripts: services.transcripts,
     terminals: services.terminals,
+    refiner: new ServiceRefiner(services.quick.classify),
     evidence: services.evidence,
     models,
     providers: services.providers,

@@ -186,7 +186,7 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
     'For logic, write the test that fails without your change and passes with it, make sure one of the checks runs it (add one with `check_changes` when none does), and link that check with `attach_evidence` (`kind: "test"`, `check`: its id). Shinsa runs it and shows its command, outcome and output; never paste test output as evidence.',
     describeCoverageForPhase(repo),
     last
-      ? 'Before the review, give the human a live preview: call `list_services`, start each service that shows this change with `run_service` and leave it running, then attach the preview URL it reports, with the path to the screen to check, as `preview` evidence (`url`, a `title` naming the screen). Name that link in How to test. Skip this when the project has no service that shows the change.'
+      ? 'Before the review, give the human a live preview: call `list_services`, start each service that shows this change with `run_service` and leave it running, then attach the preview URL it reports, with the path to the screen to check, as `preview` evidence (`url`, a `title` naming the screen). Name that link in How to test. When no service shows the change, add the one that would with `add_service` first.'
       : '',
     last && kinds.length > 0
       ? 'Attach all of it before you call `complete_phase`: Shinsa refuses the last phase until each kind is there.'

@@ -73,13 +73,21 @@ describe('the Services popover’s views', () => {
 
   it('shows a view only when it has what it needs, else the list', () => {
     const add = createServicesPanel('add', 'shop');
-    expect(resolveShownServicesView(add, true, false)).toBe('add');
-    expect(resolveShownServicesView(add, false, false)).toBe('list');
-    expect(resolveShownServicesView(run(add, { type: 'custom' }), true, false)).toBe('custom');
+    expect(resolveShownServicesView(add, true, false, false)).toBe('add');
+    expect(resolveShownServicesView(add, false, false, false)).toBe('list');
+    expect(resolveShownServicesView(run(add, { type: 'custom' }), true, false, false)).toBe('custom');
     const edit = run(createServicesPanel('manage', null), { type: 'edit', serviceId: 'api' });
-    expect(resolveShownServicesView(edit, false, true)).toBe('edit');
-    expect(resolveShownServicesView(edit, false, false)).toBe('list');
-    expect(resolveShownServicesView(createServicesPanel('manage', null), true, true)).toBe('list');
+    expect(resolveShownServicesView(edit, false, true, false)).toBe('edit');
+    expect(resolveShownServicesView(edit, false, false, false)).toBe('list');
+    expect(resolveShownServicesView(createServicesPanel('manage', null), true, true, false)).toBe('list');
+  });
+
+  it('shows what was found when the project has no services yet, unless managing or nothing can be added', () => {
+    const list = createServicesPanel('list', null);
+    expect(resolveShownServicesView(list, true, false, true)).toBe('found');
+    expect(resolveShownServicesView(list, false, false, true)).toBe('list');
+    expect(resolveShownServicesView(createServicesPanel('manage', null), true, false, true)).toBe('list');
+    expect(resolveShownServicesView(createServicesPanel('add', 'shop'), true, false, true)).toBe('add');
   });
 
   it('sizes the list to what it lists and keeps the forms at one height while they change', () => {
@@ -87,6 +95,7 @@ describe('the Services popover’s views', () => {
     expect(resolveServicesPanelHeight('add')).toBe('fixed');
     expect(resolveServicesPanelHeight('custom')).toBe('fixed');
     expect(resolveServicesPanelHeight('edit')).toBe('fixed');
+    expect(resolveServicesPanelHeight('found')).toBe('fixed');
   });
 
   it('hands a request from the command menu to the popover, even one made before it was there', () => {

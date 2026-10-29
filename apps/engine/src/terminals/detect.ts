@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import type { ServiceSource, ServiceSuggestion } from '@shinsa/core';
+import { SERVICE_PORT_VARIABLE, type ServiceSource, type ServiceSuggestion } from '@shinsa/core';
 
 interface PackageFile {
   name: string | null;
@@ -205,7 +205,7 @@ function createSuggestion(
   source: ServiceSource,
   recommended = true
 ): ServiceSuggestion {
-  return { name, cwd, command, source, recommended };
+  return { name, cwd, command, source, recommended, previewUrl: null, portVariable: SERVICE_PORT_VARIABLE };
 }
 
 function listWorkspacePatterns(root: string, file: PackageFile) {

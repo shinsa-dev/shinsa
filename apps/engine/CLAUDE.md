@@ -102,7 +102,7 @@ src/
 │   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
-│   │                    the task's own service runs (services.ts: `list_services` and `run_service`),
+│   │                    the task's own service runs and the services it adds (services.ts: `list_services`, `run_service`, `add_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
 │   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
@@ -267,7 +267,8 @@ src/
 │                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
 │                        store.ts (data/terminals/: the terminals, their screens and services.json), detect.ts (the
 │                        services found in a project's folders: workspace scripts, Deno, bin/dev and Procfile lines, each
-│                        Compose service, Cargo, Go, Django, make),
+│                        Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the quick call
+│                        that names them, adds a port flag and a preview URL, cached per project),
 │                        routes.ts (/api/terminals, the foreground check, /api/services with its batch add, and /ws/terminals/<id>),
 │                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
 │                        services: add, update, remove, start, stop, restart, a run per task, closing a task's
