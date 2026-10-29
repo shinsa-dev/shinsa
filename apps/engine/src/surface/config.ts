@@ -377,7 +377,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         kind: 'choice',
         choices: WORKSPACE_MODES,
         description:
-          'Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it.',
+          'Where agents work: worktrees (a worktree each) or main_checkout (one task at a time in the checkout). Only the human changes it.',
       },
       {
         name: 'coverage',

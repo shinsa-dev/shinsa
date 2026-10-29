@@ -14,6 +14,7 @@ import { NowCard } from '@/components/overview/now-card.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
+import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -141,6 +142,7 @@ export function OverviewTab({
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           <PostMergePanel state={state} task={task} gate={gate} />
+          <WatchdogsPanel state={state} task={task} />
           {resolveResultPlace(state, task, gate) === 'panel' && <ResultPanel task={task} />}
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <SuggestionsPanel task={task} />
@@ -166,7 +168,7 @@ export function OverviewTab({
           placeholder={hint.placeholder}
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}
-          dock={<MessageQueue task={task} />}
+          dock={<MessageQueue state={state} task={task} />}
         />
       )}
     </div>

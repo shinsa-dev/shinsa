@@ -106,7 +106,7 @@ function resolveHead(repo: Repo, task: Task, worktree: string | null, signal?: A
 }
 
 export function resolveTaskCheckout(task: Pick<Task, 'workspace' | 'worktreePath'>) {
-  if (task.workspace === 'gitbutler' || !task.worktreePath) return null;
+  if (!task.worktreePath) return null;
   return existsSync(task.worktreePath) ? task.worktreePath : null;
 }
 

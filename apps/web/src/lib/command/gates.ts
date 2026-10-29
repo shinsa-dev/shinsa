@@ -171,7 +171,7 @@ function listFailureCommands(state: ShinsaState, gate: Gate): Command[] {
       label: resolveRetryLabel(state, gate),
       hint: gate.title,
       icon: 'IconArrowRotateClockwise',
-      keywords: ['retry', 'resume', 'again', 'restart', 'paused', 'update', 'but pull'],
+      keywords: ['retry', 'resume', 'again', 'restart', 'paused'],
       run: () => void replyToGate(gate, resolveRetryReply(gate)),
     },
     {

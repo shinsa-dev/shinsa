@@ -27,7 +27,7 @@ import type {
   TaskSize,
   WeeklyReading,
 } from '../domain/index.ts';
-import type { PullRequestRemark, ShippingStep, ShippingStepKind } from '../domain/pull-requests.ts';
+import type { PullRequestRemark, RepoCi, ShippingStep, ShippingStepKind } from '../domain/pull-requests.ts';
 import type {
   CheckChangeHandOver,
   CodeSpot,
@@ -46,8 +46,10 @@ import type {
   DelegationSystemCommand,
   DelegationUserCommand,
 } from './delegations.ts';
+import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+import type { WatchdogAgentCommand, WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
   request: string;
@@ -90,6 +92,7 @@ export type UserCommand =
       waitsOn?: string[];
       mode?: TaskMode;
       account?: RunAccount | null;
+      forkOf?: string;
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
@@ -100,6 +103,7 @@ export type UserCommand =
   | { type: 'round.ship'; taskId: string; number: number; shipping: RoundShipping }
   | { type: 'round.update'; taskId: string; number: number; request: string }
   | { type: 'round.remove'; taskId: string; number: number }
+  | { type: 'round.send'; taskId: string; number: number }
   | {
       type: 'gate.answer';
       gateId: string;
@@ -120,7 +124,9 @@ export type UserCommand =
   | { type: 'usage_wait.change'; taskId: string; autoResume: boolean }
   | { type: 'usage_wait.resume_now'; taskId: string }
   | DelegationUserCommand
-  | ScheduleUserCommand;
+  | ScheduleUserCommand
+  | WatchdogUserCommand
+  | MemoryUserCommand;
 
 type AgentCommand =
   | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
@@ -218,7 +224,9 @@ type AgentCommand =
     ))
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
-  | ScheduleAgentCommand;
+  | ScheduleAgentCommand
+  | WatchdogAgentCommand
+  | MemoryAgentCommand;
 
 type SystemCommand =
   | {
@@ -241,8 +249,6 @@ type SystemCommand =
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }
   | { type: 'worktree.gone'; taskId: string }
-  | { type: 'task.stack'; taskId: string; branch: string }
-  | { type: 'task.record_conflict'; taskId: string; branch: string }
   | { type: 'task.record_edit'; taskId: string; path: string; changed: boolean }
   | { type: 'task.commit_edits'; taskId: string; treeHash: string | null }
   | {
@@ -251,7 +257,6 @@ type SystemCommand =
       overlaps: { taskId: string; paths: string[] }[];
       from: string;
     }
-  | { type: 'task.record_workspace_update'; taskId: string; guidance: string | null }
   | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider: string }
   | {
       type: 'run.end';
@@ -282,6 +287,7 @@ type SystemCommand =
       pullRequest: PullRequest;
       remarks?: PullRequestRemark[] | null;
       viewer?: string | null;
+      ci?: RepoCi;
     }
   | { type: 'pull_request.read_failed'; taskId: string; detail: string }
   | {
@@ -325,7 +331,8 @@ type SystemCommand =
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
   | DelegationSystemCommand
-  | ScheduleSystemCommand;
+  | ScheduleSystemCommand
+  | WatchdogSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };
 

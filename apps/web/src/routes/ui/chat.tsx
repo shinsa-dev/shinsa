@@ -1,3 +1,4 @@
+import { serializeAttachments } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ChatLine, DetailRail, ExpandRow, FoldLine } from '@/components/chat/chat-line.tsx';
@@ -29,6 +30,7 @@ import { createSampleDelegations } from './sample-delegations.ts';
 import { createOverviewScene } from './sample-overview.ts';
 import {
   acknowledgeSample,
+  createSampleMergeQueueState,
   createSampleQueueTask,
   createSampleRoundsTask,
   createSampleRun,
@@ -148,6 +150,10 @@ function RoundSpecimens({ now }: { now: number }) {
 function QueueSpecimens({ now }: { now: number }) {
   const [one] = React.useState(() => createSampleQueueTask(now, 1));
   const [several] = React.useState(() => createSampleQueueTask(now, 3));
+  const [state] = React.useState(() => createSampleState({ tasks: [one, several] }));
+  const [atMerge] = React.useState(() => createSampleMergeQueueState(now));
+  const merging = Object.values(atMerge.tasks)[0];
+  const sample = { onUpdate: acknowledgeSample, onSend: acknowledgeSample, onRemove: acknowledgeSample };
   return (
     <>
       <Specimen label='MessageQueue · one queued message, docked above the composer'>
@@ -156,15 +162,22 @@ function QueueSpecimens({ now }: { now: number }) {
             placeholder='Tell the agent something.'
             submitLabel='Send message'
             onSubmit={acknowledgeSample}
-            dock={<MessageQueue task={one} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />}
+            dock={<MessageQueue state={state} task={one} {...sample} />}
           />
         </div>
       </Specimen>
-      <Specimen label='MessageQueue · several queued messages, each one editable and removable until it sends'>
+      <Specimen label='MessageQueue · several queued messages, each one editable, removable or sent now until it sends'>
         <div className='w-full max-w-xl'>
-          <MessageQueue task={several} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />
+          <MessageQueue state={state} task={several} {...sample} />
         </div>
       </Specimen>
+      {merging && (
+        <Specimen label='MessageQueue · a round queued while round 2 waits at the merge gate: it starts only after the merge, so Send now gives it to round 2 instead'>
+          <div className='w-full max-w-xl'>
+            <MessageQueue state={atMerge} task={merging} {...sample} />
+          </div>
+        </Specimen>
+      )}
     </>
   );
 }
@@ -296,6 +309,10 @@ export function ChatSpecimens() {
   );
 }
 
+const SAMPLE_SCREENSHOT = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#f4f4f5"/><rect width="320" height="36" fill="#e4e4e7"/><rect x="16" y="12" width="80" height="12" rx="3" fill="#a1a1aa"/><rect x="16" y="28" width="120" height="16" rx="3" fill="#3b82f6"/><rect x="16" y="64" width="288" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="88" width="220" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="112" width="250" height="12" rx="3" fill="#d4d4d8"/></svg>'
+)}`;
+
 const DELIVERY_REPLAY_MS = 2_400;
 
 function DeliveryReplay() {
@@ -318,6 +335,50 @@ function SampleMessages() {
   return (
     <div className='flex w-full max-w-xl flex-col gap-2'>
       <UserMessage persistId={sample('delivered')} text='Use the cheaper plan.' />
+      <UserMessage
+        persistId={sample('attachments')}
+        text={serializeAttachments('The header overlaps the toolbar here, and the log is attached.', [
+          {
+            kind: 'image',
+            name: 'settings.png',
+            url: SAMPLE_SCREENSHOT,
+            path: '/Users/you/Desktop/settings.png',
+            mimeType: 'image/png',
+            size: 48_213,
+          },
+          {
+            kind: 'file',
+            name: 'checks.txt',
+            url: '/api/attachments/sample/checks.txt',
+            path: '/Users/you/Desktop/checks.txt',
+            mimeType: 'text/plain',
+            size: 1_204,
+          },
+        ])}
+      />
+      <UserMessage
+        persistId={sample('files')}
+        text={serializeAttachments(
+          '',
+          [
+            ['Payments spec.pdf', 'application/pdf', 1_830_000],
+            ['Q3 revenue.xlsx', null, 284_000],
+            ['Launch deck.key', null, 12_400_000],
+            ['Brief.docx', null, 96_000],
+            ['build-logs.zip', 'application/zip', 4_200_000],
+            ['paywall.ts', 'text/plain', 3_400],
+            ['walkthrough.mp4', 'video/mp4', 22_100_000],
+            ['notes.txt', 'text/plain', 820],
+          ].map(([name, mimeType, size]) => ({
+            kind: 'file' as const,
+            name: String(name),
+            url: `/api/attachments/sample/${name}`,
+            path: `/Users/you/Desktop/${name}`,
+            mimeType: mimeType === null ? null : String(mimeType),
+            size: Number(size),
+          }))
+        )}
+      />
       <UserMessage
         persistId={sample('delivering')}
         text='Also add search to the settings page.'
@@ -371,7 +432,7 @@ function ChatSpecimenList() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, delivering at half opacity with the blue light going round (one line, several lines, then delivered on a loop), noted with no reply, not delivered'>
+      <Specimen label='UserMessage · delivered, with attachments, every kind of file, delivering at half opacity with the blue light going round (one line, several lines, then delivered on a loop), noted with no reply, not delivered'>
         <SampleMessages />
       </Specimen>
       <QueueSpecimens now={now} />

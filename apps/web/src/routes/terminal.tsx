@@ -51,7 +51,9 @@ import { describeFindKey } from '@/lib/terminal/keys.ts';
 import {
   describeServiceClose,
   describeStartAll,
+  listProjectServiceRuns,
   listStoppedServices,
+  openServicePreview,
   resolveActiveService,
 } from '@/lib/terminal/services.ts';
 import {
@@ -172,8 +174,9 @@ function ProjectTerminals({
   const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
   const terminals = listProjectTerminals(snapshot, project.id);
   const services = listProjectServices(snapshot, project.id, Date.now());
+  const runs = listProjectServiceRuns(snapshot, project.id, Date.now());
   const active = resolveActiveTerminal(terminals, useSearchParam('terminal'));
-  const activeService = resolveActiveService(services, active);
+  const activeService = resolveActiveService(runs, active);
   const stopped = listStoppedServices(services);
   const views = useKeptViews(snapshot, active, mac);
   const activeView = views.find((view) => view.id === active?.id) ?? null;
@@ -196,7 +199,7 @@ function ProjectTerminals({
   };
   const askToClose = async (terminal: TerminalInfo) => {
     if (terminal.status !== 'running') return close(terminal);
-    const service = services.find((view) => view.terminal?.id === terminal.id);
+    const service = runs.find((view) => view.terminal?.id === terminal.id);
     if (service)
       return closing.show({
         terminal,
@@ -218,8 +221,8 @@ function ProjectTerminals({
     return renameTerminal(terminal.id, name);
   };
   const restart = (terminal: TerminalInfo) => {
-    const service = services.find((view) => view.terminal?.id === terminal.id);
-    if (service) void startService(service.service.id);
+    const service = runs.find((view) => view.terminal?.id === terminal.id);
+    if (service) void startService(service.service.id, service.taskId);
     else void restartTerminal(terminal.id);
     selectTerminalView(terminal.id)?.focus();
   };
@@ -252,9 +255,9 @@ function ProjectTerminals({
         restart,
         rename,
         close: (terminal) => void askToClose(terminal),
-        startService: (view) => void startService(view.service.id),
-        stopService: (view) => void stopService(view.service.id),
-        restartService: (view) => void restartService(view.service.id),
+        startService: (view) => void startService(view.service.id, view.taskId),
+        stopService: (view) => void stopService(view.service.id, view.taskId),
+        restartService: (view) => void restartService(view.service.id, view.taskId),
       },
     })
   );
@@ -268,7 +271,8 @@ function ProjectTerminals({
         {terminals.length > 0 && (
           <TerminalTabs
             terminals={terminals}
-            services={services}
+            tasks={state.tasks}
+            services={runs}
             activeId={active?.id ?? null}
             renamingId={renaming}
             onSelect={select}
@@ -341,9 +345,10 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
     <span className='flex shrink-0 items-center gap-px border-border border-s ps-1.5'>
       <ServiceRunButtons
         view={view}
-        onStart={() => void startService(view.service.id)}
-        onStop={() => void stopService(view.service.id)}
-        onRestart={() => void restartService(view.service.id)}
+        onStart={() => void startService(view.service.id, view.taskId)}
+        onStop={() => void stopService(view.service.id, view.taskId)}
+        onRestart={() => void restartService(view.service.id, view.taskId)}
+        onPreview={() => openServicePreview(view)}
       />
     </span>
   );

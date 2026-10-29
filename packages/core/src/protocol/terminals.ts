@@ -24,6 +24,7 @@ export interface TerminalInfo {
   place: TerminalPlaceKind;
   taskId: string | null;
   serviceId: string | null;
+  port: number | null;
   status: TerminalStatus;
   exitCode: number | null;
   startedAt: number;

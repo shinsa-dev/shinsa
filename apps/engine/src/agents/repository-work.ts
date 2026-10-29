@@ -1,14 +1,13 @@
 import {
   listRepositoryWork,
   type RepositoryFiles,
-  resolvePullRequestBase,
+  resolveRoundBase,
   serializeRepositoryWork,
   type Task,
 } from '@shinsa/core';
 import { listChangedFiles } from '../git/changed-files.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
-import type { LedgerStore } from '../workspaces/ledger.ts';
 
 interface Overlap {
   taskId: string;
@@ -28,11 +27,9 @@ function listOverlaps(files: Map<string, Set<string>>, taskId: string): Overlap[
 
 export class RepositoryWork {
   readonly #engine: Engine;
-  readonly #ledgers: LedgerStore;
 
-  constructor(engine: Engine, ledgers: LedgerStore) {
+  constructor(engine: Engine) {
     this.#engine = engine;
-    this.#ledgers = ledgers;
   }
 
   async describe(taskId: string, signal?: AbortSignal) {
@@ -83,13 +80,7 @@ export class RepositoryWork {
     const repo = task.repoId ? state.repos[task.repoId] : undefined;
     if (!repo) return null;
     try {
-      const changed = await listChangedFiles(repo, task, resolvePullRequestBase(state, task), signal);
-      if (task.workspace !== 'gitbutler') return changed;
-      const ledger = this.#ledgers.read(repo.id);
-      const owned = Object.entries(ledger.owners)
-        .filter(([, owner]) => owner.taskId === task.id)
-        .map(([path]) => path);
-      return [...new Set([...changed, ...owned])].sort();
+      return await listChangedFiles(repo, task, resolveRoundBase(task), signal);
     } catch (error) {
       log.warn('[RepositoryWork] Could not list the files a task changed', {
         taskId: task.id,

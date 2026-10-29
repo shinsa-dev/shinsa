@@ -301,9 +301,8 @@ describe('the CI stage', () => {
 });
 
 describe('resolveBaseBranch', () => {
-  it('is the stacked branch, the pull request’s base or the repository’s default branch', () => {
+  it('is the pull request’s base or the repository’s default branch', () => {
     const state = { repos: { repo: REPO } };
-    expect(resolveBaseBranch(state, task({ stackedOn: { taskId: 'a', branch: 'feature' } }))).toBe('feature');
     expect(
       resolveBaseBranch(state, task({ pullRequest: createPullRequest({ number: 1, base: 'next' }) }))
     ).toBe('next');

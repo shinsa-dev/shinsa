@@ -172,6 +172,11 @@ function describeProcessEnd(head: string) {
   return head;
 }
 
+export function appendStderr(text: string, stderr: string) {
+  if (!stderr || text.includes(STDERR_MARK)) return text;
+  return `${text}${STDERR_MARK}${stderr}`;
+}
+
 export function cleanProcessError(text: string) {
   const at = text.indexOf(STDERR_MARK);
   if (at === -1) return describeProcessEnd(text);

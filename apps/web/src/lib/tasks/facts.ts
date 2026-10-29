@@ -1,4 +1,4 @@
-import type { Task } from '@shinsa/core';
+import type { ShinsaState, Task } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatSince } from '@/lib/format/time.ts';
 
@@ -15,4 +15,15 @@ export function describePullRequestFact(pullRequest: NonNullable<Task['pullReque
     notes.push({ text: formatCount(pullRequest.unresolvedComments, 'comment', 'comments'), tone: 'amber' });
   }
   return notes;
+}
+
+export function listForkSources(state: ShinsaState, task: Task) {
+  const source = task.forkOf ? state.tasks[task.forkOf] : undefined;
+  return source ? [source] : [];
+}
+
+export function listForks(state: ShinsaState, task: Task) {
+  return Object.values(state.tasks)
+    .filter((candidate) => candidate.forkOf === task.id)
+    .sort((a, b) => a.createdAt - b.createdAt);
 }

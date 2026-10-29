@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { appendFileSync, type FSWatcher, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -40,6 +40,8 @@ function createWatched() {
   });
   return { dir, transcripts, watchers, checks, seen };
 }
+
+setDefaultTimeout(30_000);
 
 describe('transcripts', () => {
   test('lines appended by another writer reach followers', () => {

@@ -34,6 +34,8 @@ const QUEUE = createShinsaState({
   gates: [createGate({ id: 'g-review', taskId: 'review', type: 'review' })],
 });
 
+const NO_PREVIEW = { previewUrl: null, portVariable: 'PORT' };
+
 function running(id: string): ServiceView {
   return resolveServiceView(
     createService({ id }),
@@ -55,6 +57,7 @@ function createHandlers() {
     restart: record('restart'),
     startAll: (project) => calls.push(`start all ${project.name}`),
     open: record('open'),
+    preview: record('preview'),
   };
   return { calls, handlers };
 }
@@ -198,6 +201,56 @@ describe('the Services popover', () => {
     expect(screen.getByRole('button', { name: 'Terminal' })).toBeTruthy();
   });
 
+  it('lists a service’s runs in tasks under it, each opening, stopping or starting that task’s run', () => {
+    const forTask = resolveServiceView(
+      createService({ id: 'api' }),
+      createTerminal({ id: 't-fix', serviceId: 'api', taskId: 'fix', startedAt: NOW }),
+      LATER
+    );
+    const failed = resolveServiceView(
+      createService({ id: 'api' }),
+      createTerminal({
+        id: 't-cart',
+        serviceId: 'api',
+        taskId: 'cart',
+        status: 'exited',
+        exitCode: 1,
+        endedAt: NOW,
+      }),
+      LATER
+    );
+    const { calls } = renderPanel([
+      {
+        project: SHOP,
+        views: [stopped('api')],
+        runs: {
+          api: [
+            { view: forTask, label: 'SH-4 Fix the cart' },
+            { view: failed, label: 'SH-7 Show the total' },
+          ],
+        },
+      },
+    ]);
+    expect(screen.getByText('SH-4 Fix the cart')).toBeTruthy();
+    expect(screen.getByText('Failed with code 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api for SH-4 Fix the cart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop api' }));
+    const starts = screen.getAllByRole('button', { name: 'Start api' });
+    for (const start of starts) fireEvent.click(start);
+    expect(calls).toEqual(['open api', 'stop api', 'start api', 'start api']);
+    const guide = (label: string) =>
+      (screen.getByText(label).closest('[data-highlight-item]') as HTMLElement).querySelector('span');
+    expect(guide('SH-4 Fix the cart')?.className).toContain('bottom-0');
+    expect(guide('SH-7 Show the total')?.className).toContain('h-1/2');
+    const parent = screen.getByText('api').closest('[data-highlight-item]') as HTMLElement;
+    expect(parent.querySelector(':scope > span[aria-hidden]')?.className).toContain('top-7.5');
+    const shop = screen.getByText('Shop').closest('section') as HTMLElement;
+    expect(shop.hasAttribute('data-folded')).toBe(false);
+    fireEvent.click(shop.querySelector('[data-disclosure-header]') as HTMLElement);
+    expect(shop.hasAttribute('data-folded')).toBe(true);
+    expect(shop.parentElement?.className).toContain('has-[>section:last-of-type[data-folded]]:pb-1.5');
+  });
+
   it('draws each project as the compact queue draws a section, the play button in the column of the rows’ buttons', () => {
     renderPanel([{ project: SHOP, views: [running('api'), stopped('web'), stopped('docs')] }]);
     const shop = screen.getByText('Shop').closest('section') as HTMLElement;
@@ -214,7 +267,9 @@ describe('the Services popover', () => {
     const shared = classes(queueHeader).filter((name) => !/^(h-|pe-|\[|outline-none$)/.test(name));
     expect(classes(header)).toEqual(expect.arrayContaining(shared));
     expect(classes(header.children[1] ?? null)).toEqual(classes(queueHeader.children[1] ?? null));
-    expect(header.className).toContain('pe-1');
+    expect(header.className).toMatch(/(^| )pe-1( |$)/);
+    const row = within(shop).getByText('api').closest('[data-highlight-item]') as HTMLElement;
+    expect(row.className).toMatch(/(^| )pe-1( |$)/);
     const chevron = header.querySelector('[data-disclosure-chevron]') as HTMLElement;
     expect(chevron.className).toContain('group-hover/disclosure:opacity-100');
     const play = within(shop).getByRole('button', { name: 'Start all services in Shop' });
@@ -275,7 +330,11 @@ describe('the Services popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add 1 service' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent).toEqual([
-      ['add', 'shop', [{ name: 'web', cwd: `${ROOT}/apps/web`, command: 'bun run dev', env: {} }]],
+      [
+        'add',
+        'shop',
+        [{ name: 'web', cwd: `${ROOT}/apps/web`, command: 'bun run dev', env: {}, ...NO_PREVIEW }],
+      ],
     ]);
     expect(await screen.findByRole('button', { name: 'Manage' })).toBeTruthy();
   });
@@ -320,9 +379,62 @@ describe('the Services popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent).toEqual([
-      ['addOne', 'shop', { name: 'worker', cwd: ROOT, command: 'bun worker.ts', env: { PORT: '4000' } }],
+      [
+        'addOne',
+        'shop',
+        { name: 'worker', cwd: ROOT, command: 'bun worker.ts', env: { PORT: '4000' }, ...NO_PREVIEW },
+      ],
     ]);
     expect(await screen.findByRole('button', { name: 'Manage' })).toBeTruthy();
+  });
+
+  it('adds a preview URL among the main fields and a port variable under Advanced, opening Advanced for its problem', async () => {
+    const { sent } = renderPanel([{ project: SHOP, views: [] }], { mode: 'add' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Custom service…' }));
+    expect(screen.queryByRole('textbox', { name: 'Port variable' })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'web' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Command' }), { target: { value: 'next dev' } });
+    const preview = screen.getByRole('textbox', { name: 'Preview URL' });
+    fireEvent.change(preview, { target: { value: 'localhost:{port}' } });
+    fireEvent.blur(preview);
+    expect(
+      screen.getByText('Give an http or https address, with {port} where the run’s port goes.')
+    ).toBeTruthy();
+    fireEvent.change(preview, { target: { value: 'http://localhost:{port}/shop' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Advanced' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Port variable' }), { target: { value: '1PORT' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Advanced' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
+    expect(await screen.findByText('Use letters, digits and _, not starting with a digit.')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Port variable' }), {
+      target: { value: 'WEB_PORT' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual([
+      'addOne',
+      'shop',
+      {
+        name: 'web',
+        cwd: ROOT,
+        command: 'next dev',
+        env: {},
+        previewUrl: 'http://localhost:{port}/shop',
+        portVariable: 'WEB_PORT',
+      },
+    ]);
+  });
+
+  it('opens a running service’s preview from its row, and offers none without a URL', () => {
+    const web = resolveServiceView(
+      createService({ id: 'web', previewUrl: 'http://localhost:{port}' }),
+      createTerminal({ id: 't-web', serviceId: 'web', port: 4321, startedAt: NOW }),
+      LATER
+    );
+    const { calls } = renderPanel([{ project: SHOP, views: [web, running('api')] }]);
+    expect(screen.queryByRole('button', { name: 'Open api' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open web' }));
+    expect(calls).toEqual(['preview web']);
   });
 
   it('goes back from the custom form to what was found', async () => {

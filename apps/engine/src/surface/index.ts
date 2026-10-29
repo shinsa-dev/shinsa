@@ -11,11 +11,13 @@ import { CONFIG_SPECS } from './config.ts';
 import { EXTENSION_SPECS } from './extensions.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
+import { MEMORY_SPECS } from './memory.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
 import { SERVICE_SPECS } from './services.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
 import { SYSTEM_SPECS } from './system.ts';
 import { TASK_SPECS } from './tasks.ts';
+import { WATCHDOG_SPECS } from './watchdogs.ts';
 import { WORK_SPECS } from './work.ts';
 
 export { type CommandReceipt, resolveCommandKey, type SurfaceClient } from './client.ts';
@@ -51,10 +53,12 @@ export const SURFACE: SurfaceSpec[] = [
   ...GATE_SPECS,
   ...WORK_SPECS,
   ...SCHEDULE_SPECS,
+  ...MEMORY_SPECS,
   ...CONFIG_SPECS,
   ...SYSTEM_SPECS,
   ...SERVICE_SPECS,
   ...EXTENSION_SPECS,
+  ...WATCHDOG_SPECS,
   COMMAND_SPEC,
 ];
 
@@ -179,6 +183,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['runs', 'Snooze or dismiss the warning that an agent has gone quiet.'],
       ['delegations', 'List the work a step handed to other agents, or stop it.'],
       ['suggestions', 'Accept, keep or dismiss the follow-up tasks agents suggest.'],
+      ['watchdogs', 'Stop a watchdog on a merged change, or connect the data source it waits for.'],
     ],
   },
   {
@@ -186,9 +191,19 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
     groups: [['schedules', 'List, create, pause, resume or delete schedules, and manage webhook URLs.']],
   },
   {
+    title: 'Choose what agents remember',
+    groups: [
+      [
+        'memory',
+        'List the rules every agent follows, write or remove one, and keep the ones agents propose.',
+      ],
+    ],
+  },
+  {
     title: 'Set up projects, repositories and accounts',
     groups: [
       ['projects', 'Group repositories and folders into projects, with a key for task handles.'],
+      ['sources', 'List, add or remove the data sources a project’s watchdogs read.'],
       ['focus', 'Show only one project’s work, for a while or until you clear it.'],
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],
       ['folders', 'Choose the folders Shinsa searches for repositories.'],

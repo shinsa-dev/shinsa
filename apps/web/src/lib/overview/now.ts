@@ -18,8 +18,10 @@ import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { describeChecksPassed } from '@/lib/tasks/checks.ts';
+import { describeConflict } from '@/lib/tasks/now.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
+import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export type NowTarget = 'review' | 'changes' | 'agent';
 
@@ -40,6 +42,8 @@ const SETTLED_TITLE: Partial<Record<Task['stage'], string>> = {
   cancelled: 'Cancelled.',
 };
 
+const WATCHED_TITLE = 'Merged. Its watchdogs keep watching the change.';
+
 export function resolveNowTitle(
   task: Task,
   waitsOn: Task[],
@@ -49,8 +53,9 @@ export function resolveNowTitle(
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
   if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
+  if (!run && isWatchedTask(task)) return WATCHED_TITLE;
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
-  return capitalise(task.stageReason);
+  return describeConflict(task) ?? capitalise(task.stageReason);
 }
 
 export function describeFollowUpNote(step: DeliveringStep, role: Run['role'] | null) {
@@ -121,4 +126,10 @@ export function listFeedLines(entries: ChatEntry[], limit: number) {
   const latest = lines.at(-1);
   if (latest?.label) lines[lines.length - 1] = { ...latest, label: resolvePresentVerb(latest.label) };
   return lines;
+}
+
+export function resolveLatestActivity(entries: ChatEntry[]) {
+  const [line] = listFeedLines(entries, 1);
+  if (!line) return null;
+  return [line.label, line.text].filter(Boolean).join(' ');
 }

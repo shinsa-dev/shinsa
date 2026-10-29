@@ -13,6 +13,8 @@ import {
   isStepReached,
   type LabelFold,
   resolveLabelFold,
+  resolveStageNote,
+  resolveStepStatusLabel,
   resolveSteps,
   SHAPING_LABEL,
   SHAPING_NOTE,
@@ -49,10 +51,10 @@ function StepMark({ status }: { status: StepStatus }) {
       </span>
     );
   }
-  return <span className='size-4 shrink-0 rounded-full border-2 border-bg-a3' />;
+  return <span className='size-4 shrink-0 rounded-full border border-bg-a3' />;
 }
 
-function StepItem({ step, fold }: { step: Step; fold: LabelFold }) {
+function StepItem({ step, fold, note }: { step: Step; fold: LabelFold; note: string | null }) {
   const emphasised = step.status === 'current' || step.status === 'waiting';
   return (
     <Tooltip>
@@ -80,7 +82,9 @@ function StepItem({ step, fold }: { step: Step; fold: LabelFold }) {
             </>
           }
           value={
-            <span className={TONE_TEXT[STEP_STATUS_TONE[step.status]]}>{STEP_STATUS_LABEL[step.status]}</span>
+            <span className={TONE_TEXT[STEP_STATUS_TONE[step.status]]}>
+              {resolveStepStatusLabel(step, note)}
+            </span>
           }
         />
         {step.detail.map((line) => (
@@ -91,7 +95,7 @@ function StepItem({ step, fold }: { step: Step; fold: LabelFold }) {
   );
 }
 
-export function ProgressTrack({ progress }: { progress: TaskProgress }) {
+export function ProgressTrack({ progress, note = null }: { progress: TaskProgress; note?: string | null }) {
   const steps = resolveSteps(progress);
   return (
     <ol aria-label='Progress' className='flex w-full min-w-0 items-center gap-1.5'>
@@ -103,7 +107,7 @@ export function ProgressTrack({ progress }: { progress: TaskProgress }) {
               className={cn('h-px min-w-2 flex-1', isStepReached(step) ? 'bg-green-4' : 'bg-bg-a3')}
             />
           )}
-          <StepItem step={step} fold={resolveLabelFold(step, steps)} />
+          <StepItem step={step} fold={resolveLabelFold(step, steps)} note={note} />
         </React.Fragment>
       ))}
     </ol>
@@ -112,7 +116,8 @@ export function ProgressTrack({ progress }: { progress: TaskProgress }) {
 
 export function TaskTrack({ task }: { task: Task }) {
   const shaping = resolveShapeState(task);
-  if (shaping === 'settled') return <ProgressTrack progress={resolveTaskProgress(task)} />;
+  if (shaping === 'settled')
+    return <ProgressTrack progress={resolveTaskProgress(task)} note={resolveStageNote(task)} />;
   return (
     <ol aria-label='Progress' className='flex self-start'>
       <Hint label={SHAPING_LABEL} detail={SHAPING_NOTE[shaping]}>

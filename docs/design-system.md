@@ -142,8 +142,8 @@ description (always) and adjacent icon buttons; `gap-1` popup list padding and i
 controls; `gap-2` icon to label in rows and controls in one set; `p-2.5` popover padding; `p-3` card inset;
 `p-4` dialog padding; `gap-6` section to section. The parent owns spacing, never a child's margin.
 
-**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, the default), `'md'` 16px (14px+ text, 26/30
-controls), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
+**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, every button, the default), `'md'` 16px (14px+ text,
+`lg` and `icon` buttons, 26/30 inputs and selects), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
 
 **Motion and timing.** State 0ms. Movement 200ms on `cubic-bezier(0.22, 1, 0.36, 1)`. Menus and popovers 200ms,
 tooltips 150ms, dialogs 150ms in and 100ms out (`DIALOG_MOTION`), ⌘K 75ms (`COMMAND_MOTION`). Every tooltip opens
@@ -900,11 +900,11 @@ An icon on either side of a button or badge trims that side's padding by 2px, so
 | --- | --- | --- | --- | --- | --- |
 | Button `xs` | 22 | 8 (`px-2`) | 6 | 4 | `sm` 14 |
 | Button `sm` | 24 | 8 | 6 | 4 | `sm` 14 |
-| Button `default` | 26 | 10 (`px-2.5`) | 8 | 6 | `md` 16 |
-| Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `md` 16 |
+| Button `default` | 26 | 10 (`px-2.5`) | 8 | 6 | `sm` 14 |
+| Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `sm` 14 |
 | Button with a chevron as its icon | as size | 5 on the chevron's side (`pr-[5px]` / `pl-[5px]`) | | 2 (`gap-0.5`) | `sm` 14 |
 | `Input` `sm` / default | 24 / 26 | 8 / 10 | | | |
-| `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` / `md` |
+| `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` 14 |
 | Menu, select, command row | 24 | 8 start (`pl-2`); select row 28 end (`pr-7`) for the check | | 6 | `sm` 14 |
 | Tab (default track) | 22 inside a 26 track | 8 (`px-2`) | | 6 | `sm` |
 | `Badge` `sm` / default | 18 / 20 | 6 / 8 | 4 on the icon side (2px trimmed) | 4 | `sm` 14 |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, every button (icon-only ones too), every select, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: default inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -1390,7 +1390,7 @@ Every click and hover lands in the frame it happens, as in a Mac app. A hover, p
 | Spotlight | holds 1.5s, fades over 600ms | | `useSpotlight`: the row you jumped to keeps a `primary-a1` wash, then lets go |
 | Focused or selected flash | 500ms | default | A chat line's `bg` and outline (`transition-[background-color,outline-color] duration-500`), a review note's outline, a review card's `bg-primary-a1` |
 | Chat text swap | in 360ms after 80ms, out 240ms | `cubic-bezier(0.23, 1, 0.32, 1)` | The live card's latest line: in from 0.625rem below with 2px blur, out to 0.625rem above |
-| Onboarding step | 220ms | `cubic-bezier(0.23, 1, 0.32, 1)` | A step enters from 0.5rem (from the left when you went back) with a fade; nothing leaves, so two steps never overlap |
+| Onboarding step | 420ms | `cubic-bezier(0.32, 0.72, 0, 1)` | The step you leave slides out to the left as the next slides in from the right (the other way back), the column's full width with no fade of their own; the track masks its 24px edges. The first step has no entry |
 | Image viewer | 240ms open and close; swaps 200ms slide 10px or 150ms fade | `cubic-bezier(0.22, 1, 0.36, 1)`; swaps `cubic-bezier(0.23, 1, 0.32, 1)` | The flight from a thumbnail, backdrop and chrome fades; `SHRUNK` 0.96 |
 | Toast | shake 350ms `cubic-bezier(0.36, 0.07, 0.19, 0.97)`; bump 300ms `ease-out`; loader out 200ms; result icon in 240ms `cubic-bezier(0.22, 1, 0.36, 1)` | | Sonner (stacking keeps Sonner's own 500ms) |
 | Update button | 200ms | | Scales in: `animate-in fade-in-0 zoom-in-95 duration-200` |
@@ -1431,23 +1431,29 @@ Keyframes used by the app stylesheet:
 .chat-swap-in { animation: chat-swap-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both; }
 .chat-swap-out { animation: chat-swap-out 240ms cubic-bezier(0.23, 1, 0.32, 1) both; }
 
-@keyframes onboarding-in { from { opacity: 0; transform: translateX(var(--onboarding-shift)); } }
-.onboarding-in, .onboarding-in-back { animation: onboarding-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both; }
-.onboarding-in { --onboarding-shift: 0.5rem; }
-.onboarding-in-back { --onboarding-shift: -0.5rem; }
+@keyframes onboarding-in { from { transform: translateX(var(--onboarding-from)); } }
+@keyframes onboarding-out { to { transform: translateX(var(--onboarding-to)); } }
+.onboarding-track { mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent); }
+.onboarding-in, .onboarding-in-back { animation: onboarding-in 360ms cubic-bezier(0.4, 0, 0.2, 1) both; will-change: transform; }
+.onboarding-out, .onboarding-out-back { animation: onboarding-out 360ms cubic-bezier(0.4, 0, 0.2, 1) both; will-change: transform; pointer-events: none; }
+.onboarding-in { --onboarding-from: calc(100% + 1.5rem); }
+.onboarding-in-back { --onboarding-from: calc(-100% - 1.5rem); }
+.onboarding-out { --onboarding-to: calc(-100% - 1.5rem); }
+.onboarding-out-back { --onboarding-to: calc(100% + 1.5rem); }
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-in, .onboarding-in-back { --onboarding-shift: 0; animation-duration: 160ms; }
+  .onboarding-in, .onboarding-in-back, .onboarding-out, .onboarding-out-back { --onboarding-from: 0; --onboarding-to: 0; animation-duration: 1ms; }
+  .onboarding-out, .onboarding-out-back { visibility: hidden; }
 }
 
 @keyframes bk-toast-shake { 0%, 100% { translate: 0 0; } 25% { translate: -2px 0; } 50% { translate: 2px 0; } 75% { translate: -1px 0; } }
 @keyframes bk-toast-bump { 0%, 100% { scale: 1; } 50% { scale: 1.015; } }
 [data-sonner-toast].bk-toast-shake { animation: bk-toast-shake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
 [data-sonner-toast].bk-toast-bump { animation: bk-toast-bump 0.3s ease-out; }
-[data-sonner-toast].bk-toast .sonner-loader { transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+[data-sonner-toast].bk-toast .sonner-loader { width: 100%; height: 100%; transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 [data-sonner-toast].bk-toast .sonner-loader[data-visible="false"] { opacity: 0; transform: scale(0.85) translate(-50%, -50%); }
 @keyframes bk-toast-icon-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
-  transform: none; transform-origin: center; animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: none; transform-origin: center; animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 ```
 
@@ -1714,8 +1720,8 @@ group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflo
 
 | `size` | Classes | Height | Side padding | Padding on the icon's side | Type | Icon |
 | --- | --- | --- | --- | --- | --- | --- |
-| `sm` | `h-4.5 rounded-full px-1.5 text-2xs [--icon-size:var(--icon-size-sm)]` | 18px | 6px | `pl-1` / `pr-1`: 4px | 12px medium | 14px |
-| `default` | `h-5 rounded-full px-2 text-2xs [--icon-size:var(--icon-size-sm)]` | 20px | 8px | `pl-1.5` / `pr-1.5`: 6px | 12px medium | 14px |
+| `sm` | `h-4.5 rounded-full px-1.5 text-2xs` | 18px | 6px | `pl-1` / `pr-1`: 4px | 12px medium | 14px |
+| `default` | `h-5 rounded-full px-2 text-2xs` | 20px | 8px | `pl-1.5` / `pr-1.5`: 6px | 12px medium | 14px |
 
 Icon-to-text gap is 4px (`gap-1`). The icon side trims 2px because a glyph's box carries empty space; trimmed, it sits optically level with the text edge. The corner is fully round.
 
@@ -1833,15 +1839,15 @@ There is no open-popup style: a trigger whose menu is open looks like the button
 
 | `size` | Classes | Height | Side padding | Icon side | Gap | Type | Corner | Icon |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 16px |
-| `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 16px |
-| `icon-2xs` | `size-4.5 rounded-sm px-0 [--icon-size:var(--icon-size-sm)]` | 18×18 | 0 | | | | 5px | 14px |
-| `icon-xs` | `size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 22×22 | 0 | | | | 6px | 14px |
-| `icon-sm` | `size-6 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 24×24 | 0 | | | | 6px | 14px |
-| `icon` | `size-6.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]` | 26×26 | 0 | | | | 7px | 16px |
-| `icon-lg` | `size-7.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]` | 30×30 | 0 | | | | 7px | 16px |
+| `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
+| `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
+| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 14px |
+| `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 14px |
+| `icon-2xs` | `size-4.5 rounded-sm px-0` | 18×18 | 0 | | | | 5px | 14px |
+| `icon-xs` | `size-5.5 rounded-control-sm px-0` | 22×22 | 0 | | | | 6px | 14px |
+| `icon-sm` | `size-6 rounded-control-sm px-0` | 24×24 | 0 | | | | 6px | 14px |
+| `icon` | `size-6.5 rounded-control px-0` | 26×26 | 0 | | | | 7px | 14px |
+| `icon-lg` | `size-7.5 rounded-control px-0` | 30×30 | 0 | | | | 7px | 14px |
 
 With a chevron icon beside a label, the chevron side is 5px and the gap 2px at every size. `icon-2xs` exists only for a close mark inside a 24px row (a terminal tab). Every size is the same at every viewport width.
 
@@ -3286,7 +3292,7 @@ Select                          (Root; provides open state and items)
 **Trigger classes:**
 
 - Base: `group/select-trigger relative isolate flex w-fit cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap font-medium text-fg-4`
-- `size='default'`: `corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)]`
+- `size='default'`: `corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)]`
 - `size='sm'`: `corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs [--icon-size:var(--icon-size-sm)]`
 - Fill layer (the fill lives on `::before` so it can deflate on press): `before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:content-[''] enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)`
 - `variant='default'`: `before:bg-input enabled:active:before:bg-input-hover/80 enabled:hover:before:bg-input-hover/80 aria-expanded:before:bg-input-hover/80`
@@ -3568,7 +3574,7 @@ The live card uses `duration={240}`; the default 180ms is for popup content.
 
 Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='sm'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
 
-**Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet):
+**Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet). Unlayered is not enough: sonner appends its `<style>` to `<head>` when its module runs, after the app's stylesheet `<link>` in a production build (the dev server injects ours later, which hides this), so a tie in specificity goes to sonner. **Every rule that replaces one of sonner's must be strictly more specific than it:** the toast's parts are scoped under `[data-sonner-toast][data-styled="true"].bk-toast` (0,4,0), one step above sonner's `[data-sonner-toast][data-styled=true] [data-icon]` (0,3,0). `packages/ui/test/styles/toast-cascade.test.ts` reads sonner's injected stylesheet and fails on any toast rule that only ties.
 
 ```css
 [data-sonner-toast][data-styled="true"].bk-toast {
@@ -3590,29 +3596,30 @@ Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconC
 /* With an action: the button sits against the right edge. 34px toast, 24px button → 5px. */
 [data-sonner-toast][data-styled="true"].bk-toast:has([data-content] + *) { padding-right: 5px; }
 [data-sonner-toast][data-styled="true"].bk-toast:has([data-description]):has([data-content] + *) { padding-right: 10px; }
-[data-sonner-toast].bk-toast [data-content] { gap: 0; flex: 1 1 auto; min-width: 0; }
+[data-sonner-toast][data-styled="true"].bk-toast [data-content] { gap: 0; flex: 1 1 auto; min-width: 0; }
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   color: var(--fg-2); margin-top: 6px; font-size: var(--text-2xs); line-height: 1.2;
 }
-[data-sonner-toast].bk-toast [data-icon] {
+[data-sonner-toast][data-styled="true"].bk-toast [data-icon] {
   width: 14px; height: 14px; flex-shrink: 0;
   margin: 0 -2px 0 0;   /* the 8px gap less 2px: 6px to the text, as a menu row; the action stays 8px away */
   display: flex; align-items: center; justify-content: center; position: relative;
 }
-[data-sonner-toast].bk-toast [data-icon] > svg { margin: 0; }
+[data-sonner-toast][data-styled="true"].bk-toast [data-icon] svg { margin: 0; }   /* sonner's -1px nudge, the loader's svg too */
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-title],
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;   /* glyph edges line up with flex alignment */
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
+[data-sonner-toast][data-styled="true"].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
 ```
 
 So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
 
-**Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot.
+**Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot. It takes the box's full size (sonner's `left: 50%` would shrink it to 13px and leave the spinner half a pixel off). The result icon's animation fills `both`: sonner hides a promise toast's icon with `opacity: 0` and only its own fade-in (replaced here) brings it back, so without the fill a settled loading toast shows no icon.
 
 ```css
 [data-sonner-toast].bk-toast .sonner-loader {
+  width: 100%; height: 100%;
   transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 [data-sonner-toast].bk-toast .sonner-loader[data-visible="false"] {
@@ -3621,7 +3628,7 @@ So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px 
 @keyframes bk-toast-icon-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
   transform: none; transform-origin: center;
-  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 ```
 
@@ -4596,7 +4603,7 @@ button ("3 need you"); the connection status; a `flex-1` spacer; the Update butt
 `me-0.5`); the usage menu; the Focus menu (hidden below 640px, `max-sm:hidden`). On `/onboarding` only the home link,
 the connection status and Update show. Every widget that reads live state sits in `ErrorBoundary size='icon'`.
 
-**Shelf rail (`Rail`).** `<nav className='flex h-full w-full select-none flex-col bg-sidebar [--glyph-ring:var(--color-sidebar)]'>`:
+**Shelf rail (`Rail`).** `<nav className='flex h-full w-full select-none flex-col bg-sidebar'>`:
 
 1. Top row `data-window-drag` `flex h-11 shrink-0 items-center gap-2 desktop:ps-20 ps-3.5 pe-2`: `HomeLink`, connection
    status, spacer, Update, usage menu (not on `/onboarding`), the ⌘K button.
@@ -4621,15 +4628,12 @@ turns `bg-primary-4` on hover and press. Its `Hint` follows the pointer down the
 side): "Resize the sidebar · Double-click to reset" (the qualifier muted). Props: `label?`, `edge = 'right'`,
 `onPointerDown`, `onDoubleClick` (resets the width).
 
-`--glyph-ring` is set to the surface colour (`--color-sidebar`, `--color-popover`) so a pulse dot on a tile cuts a
-ring of the background around itself.
-
 #### CompactSections, CompactSection, COMPACT_POPOVER
 
 A popover list grouped in sections: the queue button's popover, the sidebar's compact queue, the Services popover.
 Never build a look-alike.
 
-- `COMPACT_POPOVER` = `max-h-(--available-height) w-80 gap-0 p-0 [--glyph-ring:var(--color-popover)]`: 320px wide, as
+- `COMPACT_POPOVER` = `max-h-(--available-height) w-80 gap-0 p-0`: 320px wide, as
   tall as its content up to the room under the trigger, then it scrolls. (The Services popover, `SERVICES_PANEL`, is
   `COMPACT_POPOVER` plus `flex w-88 max-w-[calc(100vw-1rem)] flex-col overflow-hidden`: 352px, never wider than the
   window less 16px; a view of it that needs a fixed height takes `h-[min(var(--available-height),28rem)]`, 448px at
@@ -5075,7 +5079,7 @@ link tiles, service rows.
 - Never a border on a tile.
 - `GateGlyph({ gate })` and `TaskGlyph({ state, task })` resolve icon, tone and label from the status resolver.
   `WorkingGlyph({ task })` adds a `Pulse` at the tile's corner:
-  `pointer-events-none absolute -top-px -right-px ring-(--glyph-ring) ring-2`, inside
+  `pointer-events-none absolute -top-px -right-px`, inside
   `relative grid size-5 shrink-0 place-items-center`.
 
 ```tsx
@@ -5809,16 +5813,16 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 | --- | --- | --- | --- | --- |
 | `xs` | 22 | `h-5.5 gap-1 rounded-control-sm px-2 text-xs` | `sm` 14 | dense inline: hover-revealed row actions, actions in a nested card, a shelf's Add |
 | `sm` | 24 | `h-6 gap-1 rounded-control-sm px-2 text-xs` | `sm` 14 | header strips, toolbars, section-label actions, popovers, composer footers, the top bar |
-| `default` | 26 | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs` | `md` 16 | card bodies, dialog footers, a form's submit |
-| `lg` | 30 | `h-7.5 gap-1.5 rounded-control px-3 text-sm` | `md` 16 | the rare primary call to action on an empty page |
+| `default` | 26 | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs` | `sm` 14 | card bodies, dialog footers, a form's submit |
+| `lg` | 30 | `h-7.5 gap-1.5 rounded-control px-3 text-sm` | `sm` 14 | the rare primary call to action on an empty page |
 | `icon-2xs` | 18 | `size-4.5 rounded-sm` | `sm` | a close mark inside a 24px row (a terminal tab) |
 | `icon-xs` | 22 | `size-5.5 rounded-control-sm` | `sm` | a chevron box on a card band, a code block's copy |
 | `icon-sm` | 24 | `size-6 rounded-control-sm` | `sm` | `•••` triggers, the dialog close X, strip icon actions |
-| `icon` | 26 | `size-6.5 rounded-control` | `md` | icon actions beside `default` buttons |
-| `icon-lg` | 30 | `size-7.5 rounded-control` | `md` | beside `lg` |
+| `icon` | 26 | `size-6.5 rounded-control` | `sm` | icon actions beside `default` buttons |
+| `icon-lg` | 30 | `size-7.5 rounded-control` | `sm` | beside `lg` |
 
 - An icon on either side of a label trims that side's padding by 2px (`data-[icon=inline-start]:pl-1.5` at `xs`/`sm`, `pl-2` at `default`, `pl-2.5` at `lg`) so the glyph sits optically level with the text edge. A chevron trims to 5px and pulls 2px closer (`gap-0.5`).
-- Pass icons through the `icon` prop (`icon='IconPlusMedium'`, or `{ name, position: 'inline-end' }`). The size sets the glyph; a call site never sizes, colours or fades a button's icon.
+- Pass icons through the `icon` prop (`icon='IconPlusMedium'`, or `{ name, position: 'inline-end' }`). Every size draws its icons and its spinner at 14px (`sm`), and a default select's chevron matches; a call site never sizes, colours or fades a button's icon.
 - Every control in one row shares one height.
 - **Actions that don't fit lose their labels, not their buttons.** A row or card's actions with no room for labels go icon-only at the matching icon size, each with an `aria-label` and a delayed tooltip, never into a `…` overflow menu. An overflow menu is for secondary actions, not for narrow ones.
 - **Pending is `loading`.** The button keeps its colours and width, swaps its leading icon for a `Spinner` (or adds one when it has no icon), sets `aria-busy` and ignores presses and keys, so it can't fire twice. It is never `disabled`, and never fades.
@@ -6532,7 +6536,7 @@ Example: in a hand-over card, the header's 14px icon and the 20px numbered step 
 - The current row is `aria-current` and `data-active="true"`; the highlight rests on it. In a compact list it scrolls itself into view (`block: 'nearest'`).
 - Long lists render progressively: the first 24 rows, then the rest.
 
-Example: a Home queue row is a 20px gate tile, the task title over "SW-142 · Changes to review", and "2h" at the right.
+Example: a Home queue row is a 20px stage tile, the task title over one line reading "SW-142 · Building", five dots (two green, a blue pulse, two hollow) and "Running bun test apps/web" shimmering, and "2h" at the right.
 
 #### Sliding highlight
 
@@ -6551,11 +6555,12 @@ Example: moving the pointer down Home's In progress card, one grey block glides 
 - Every section holds only the focus project's tasks: the focus is the filter; to see other work, switch focus. Only a search of every task reaches past it.
 - A task shows in one section only. Sections that summarise (Recently finished, Recent conversations) leave out tasks another section holds, but not the tasks the page's guide names; their own counts (five at most) are picked after that.
 - Wide (Home): under the composer, each section a `text-2xs` label over a `rounded-xl` list card; each row a 20px gate or stage tile, title, status line, age. The guide above summarises these sections; a task it names is still listed in its section.
+- A queue row is a small overview card on two lines: the title, then one summary line laid out across the row: the handle and status (the stage, not "Waiting to check in again", which the row's tile already shows), a mini track, then what is happening. The mini track is the task's steps as 6px dots joined by 8px hairlines (`h-px w-2`), `bg-green-4` done, a blue pulse current, `bg-amber-4` waiting on you, a dashed `fg-2` ring skipped, a `bg-a3` ring not started; one image labelled "Step 4 of 7: Build 1/2", no tooltip per dot. After it, while an agent works and no decision is open, the agent's latest action in the present tense, shimmering (still when the run is paused); otherwise the current step's count when it has one and the status does not already name the step ("Checks 2/5"), and nothing more. No static description or stage reason: the status and the dots already say it. While the steps can still change a spinner stands in for the dots, then the planning agent's latest action or "Working out the steps".
 - Home order: greeting, guide, composer, then Needs you, In progress, Recently finished (merged or done in the last 24 hours, five at most), Recent conversations (latest agent message of five tasks, opening their chat), Waiting on another task. Reason: what needs you, what is moving, what just happened, then the long tail, so a long list never pushes the timely ones off screen.
 - Compact (sidebar and queue popover): collapsible `h-6` headers, the whole header folds. Header: `w-full gap-2 rounded-control ps-1.5 pe-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`; a 14px section icon in its tone in a 20px slot; the title truncating; the count in `font-normal tabular-nums`; the chevron shown only on hover (`opacity-0 group-hover/disclosure:opacity-100`) 6px after the count (`gap-1.5`), 5px from the header's top and bottom, never at the header's end: the chevron belongs to what it folds, and the end is where a section's action goes. Section: `flex flex-col border-border border-t px-2 py-1.5`, no top border on the first; rows `pt-0.5` below the header; the same rows as wide without the age; empty text `py-1 ps-8.5 pe-2.5 text-2xs text-fg-2`.
 - Open and closed state is shared by sidebar and popover through `localStorage` (key per section). A section can always be collapsed, including the one holding the task on screen. Until you have toggled a section yourself it opens when it holds the task on screen; after that your choice wins everywhere.
 - Queue popover: `max-h-(--available-height) w-80 gap-0 p-0` (320px, as tall as its content up to the room under the button, then it scrolls), list inset 6px more at the top (`pt-1.5`) so the first header's icon is as far from the top as from the side.
-- Status tiles with a pulse ring use `--glyph-ring` set to the surface colour (`[--glyph-ring:var(--color-card)]` on a card, `var(--color-popover)` in a popover) so the pulse's 2px ring cuts cleanly into the tile.
+- A status tile under a pulse is masked (`PULSE_CUTOUT`, a radial-gradient `mask-image` 2px wider than the dot), so the cut is transparent and stays clean on any surface, hovered rows included. Never a ring in the surface colour: it shows as a box when the row's hover wash changes the background.
 
 Example: the "3 need you" popover shows Needs you, In progress and a folded Waiting section, each header a 12px grey label with a coloured 14px icon, the current task's row highlighted.
 
@@ -6583,7 +6588,7 @@ Example: "Plan to approve" is a purple tile with a document glyph in the queue, 
 #### Status tiles, glyphs and the pulse
 
 - Status tile: `corner-superellipse/1.125 inline-grid shrink-0 place-items-center rounded-control-sm` plus the tone's surface, a 14px icon in the tone's text colour. Sizes: `md` 20px (`size-5`, it is the icon slot), `sm` 18px (`size-4.5`, inline and in popover rows). A labelled tile is `role='img'` with `aria-label`, and gets a tooltip: the label in its tone, then " · detail" muted, in one `whitespace-nowrap` span. An unlabelled tile is `aria-hidden`.
-- A working glyph is a tile with a pulse in its top right (`absolute -top-px -right-px ring-2 ring-(--glyph-ring)`), tooltip "Building · Agent working".
+- A working glyph is a tile with a pulse in its top right (`absolute -top-px -right-px`, the tile masked by `PULSE_CUTOUT`), tooltip "Building · Agent working".
 - Pulse: a 6px dot (`relative flex size-1.5 shrink-0`), a ping layer `absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:animate-none` in the tone's fill, over a solid `relative size-full rounded-full` in the same fill. Blue for working, amber for waiting.
 - Each status has its own icon; a gate's status takes the gate's glyph, each wait its own (snooze clock, gauge for a usage limit, agents for delegations, hourglass for another task), each stage its own (hammer for building, eye with sparkle for agent review, check circle for done). In a facts row the icon is the tone's text colour at 70% and the label stays `fg-2`; a working agent adds the pulse after the label.
 - A task's kind is not shown as a fact: the task's steps and screens already show it.
@@ -6804,7 +6809,7 @@ Example: "(chevron) Worked for 3m · 14 steps" over the agent's final paragraph,
 - Attachments sit above the bubble: images as a large thumbnail strip (`max-w-4/5 justify-end`), other files as chips (`CARD`, `h-10 max-w-64 gap-2 p-1 pr-3`, a 32px `rounded-lg bg-muted` icon box with a 16px icon, name `text-xs fg-4` over meta `text-2xs fg-2`, `gap-px`), wrapping `gap-2`.
 - Acting never moves you: approving, merging, answering, replying or cancelling stays on the page and confirms with a toast. There is no previous/next stepper; the queue and the command menu move between items.
 - A sent message shows at once, and while it is delivered (on its way to the server, then routed into the task) the bubble stays at full opacity and a blue light travels around its border: a 1px ring over the border (`message-delivery`), a conic gradient of `primary-4` (both themes) with a soft tail turning once every 2.4s, only `transform`. No text line. It fades in; when the message is delivered the light fades out over 400ms on the strong ease-out. Under reduced motion the ring is a still `primary-4` border. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
-- A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass) over one row per message (`text-xs fg-3`, three lines at most, a pencil and a cross 1px apart). The pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
+- A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass; while round 2 waits for you it names what you do first: "Sends after you merge round 2.") over one row per message (`text-xs fg-3`, three lines at most, an up arrow, a pencil and a cross 1px apart). The arrow sends it now, to the round in progress, as a message; the pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
 - A deep link to a run scrolls to it and washes it: `outline-2 outline-transparent transition-[background-color,outline-color] duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1`, the 2px outline outside the box so the wash wraps full-width content instead of sitting flush; it fades with the wash. Because the run's box hugs its content, the wash is the same 2px on all four sides.
 
 Example: you type "also handle logout", it appears at once right-aligned with a light circling its border, which fades once the agent has it. "Then add a logout page" while round 2 works goes to the queue above the composer instead, and joins the chat when round 3 starts.
@@ -6820,11 +6825,11 @@ Example: "(icon) Round 2 · Handle logout too · In progress", followed by a hai
 #### Image viewer
 
 - One viewer opens every image (attachments, tool results, evidence) and plays recordings (controls, autoplay, no zoom or pan).
-- Backdrop `black/85`; image fitted to the window, never upscaled. It is laid out under the dark theme so its chrome reads the same on black in both themes.
+- Backdrop `black/85`; image fitted to the window, never upscaled. An image that knows the width it was taken at (an evidence shot's width in CSS pixels) is laid out at that width, so a 2x screenshot keeps two file pixels to a CSS pixel and stays sharp on a Retina screen; its 100% is that size. It is laid out under the dark theme so its chrome reads the same on black in both themes.
 - Open and close are one run in reverse: backdrop and chrome fade over 240ms on `cubic-bezier(0.22, 1, 0.36, 1)` while the image, opaque the whole way, flies between its thumbnail and the window on the same curve and duration. The flight is one transform keeping the aspect (translate plus a single scale, never a stretch) onto the thumbnail's drawn box (its `object-fit` box) with a `clip-path` inset to what the thumbnail shows, each corner rounded like the thumbnail's (or its clipping card's) corner. Closing starts from where the image is (zoom and pan included) and lands on the thumbnail of the image open now, measured at that moment; the thumbnail stays hidden until the image lands and shows in that frame. With no thumbnail in view, the image fades while shrinking to 96% in place, and opens the same way. The open waits for the portal to mount. A recording, and anything under reduced motion, only fades. A recording never morphs: it mounts at its fitted size (from the thumbnail's `videoWidth` or a hidden probe), with width and height set, so its controls lay out once at the right width.
 - Zoom: click or double-click toggles between fit and the larger of 100% and twice the fitted size, around the pointer; wheel and pinch zoom toward the pointer; drag pans while zoomed; `+` (or `=`) and `-` step by 1.5x and `0` returns to fit.
 - Stepping (on-screen arrows and arrow keys) moves through the images of one message or tool group, or item by item in evidence. Stepping is a cross-fade, never the open run again: the incoming image appears at its own fitted size from the first frame (size from its thumbnail, or held until loaded while the outgoing stays), fades in over the outgoing, which fades out as it was; both move 10px in the direction of travel over 200ms on `cubic-bezier(0.23, 1, 0.32, 1)`; zoom and pan reset to fit at once. Switching parts of one comparison does not slide: the incoming part fades in over 150ms on top of the outgoing, which stays opaque under it when they share a rect, so the stage never dims. Under reduced motion every swap is the 150ms fade with no slide. A press during a swap takes over from where the images are, with no queued or stacked animation.
-- Chrome: Close, Previous, Next are `Button` `outline` `icon` (26px, 16px glyph), with shortcut hints (Esc, ←, →). The bar at the bottom: `rounded-popup bg-popover shadow-3`, `h-8`, `text-xs`, `popover-foreground`, never a pill, with the caption (truncating), "2 of 5" (items, not files), the zoom level, and on a comparison a segmented choice of its parts. While there is more than one image it keeps one width (`w-xl`), so text swaps without moving it. Close button, Esc or a click on the backdrop closes.
+- Chrome: Close, Previous, Next are `Button` `outline` `icon` (26px, 14px glyph), with shortcut hints (Esc, ←, →). The bar at the bottom: `rounded-popup bg-popover shadow-3`, `h-8`, `text-xs`, `popover-foreground`, never a pill, with the caption (truncating), "2 of 5" (items, not files), the zoom level, and on a comparison a segmented choice of its parts. While there is more than one image it keeps one width (`w-xl`), so text swaps without moving it. Close button, Esc or a click on the backdrop closes.
 
 Example: clicking a screenshot thumbnail in a tool row flies it to fill the window; the right arrow cross-fades to the next screenshot sliding 10px.
 
@@ -7119,10 +7124,10 @@ Shinsa's controls run one step denser than the Application register's. Read ever
 | Tab lists | `default` and `ghost` 26; `underline` 32, with no size prop |
 | Menu, select and command rows | 24 |
 | `Badge` | 18 (`sm`), 20 (default) |
-| Glyphs | `sm` (14px) in `xs` and `sm` controls, rows and badges; `md` (16px) from `default` up |
+| Glyphs | `sm` (14px) in every button and select, rows and badges; `md` (16px) in `default` inputs |
 
 - Example: a Settings row action is a `secondary` `sm` button (24px, 14px glyph); a step's footer buttons are
-  `default` (26px, 16px glyph).
+  `default` (26px, 14px glyph).
 
 #### Fields are filled, never bordered
 
@@ -7494,7 +7499,12 @@ style of its own.
   `max-w-64 text-fg-3 text-xs` `Truncate`) and "Go to Home" (primary, arrow at its end).
 - No folder path or other machine-specific value is ever written into the UI code; the ones on screen come from the
   server.
-- Example: Shinsa's six-step setup (Folders, Model, Merging, Plans, Accounts, Tools).
+- **Ask before you need it, and never as an error**: a permission the app needs only for some choices (a folder the
+  system keeps private) is a card above the list naming it, with the way to allow it, Check again and Leave it out;
+  the choices stay as picked, and coming back to the window checks again by itself.
+- **Suggest, then let them edit**: what the app can work out (projects from repositories) is shown worked out and
+  kept, each row with a name to change and a box to untick, and the primary button counts what will be made ("Create 6 projects").
+- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Accounts, Tools).
 
 #### Pick-one and pick-many option lists
 
@@ -7507,9 +7517,8 @@ list rows.
 - The recommended option has a quiet `Badge size='sm'` "Recommended" after its label (`gap-1.5`).
 - Pick-one: the chosen option is marked with the accent `SelectedMark` (`IconCheckmark1`, `size='sm'`,
   `text-primary-text`, labelled "Selected") in a 20px slot at the row's end (`self-center`), as a select or menu
-  marks its value. Clicking answers at once and moves on, a spinner (`sm`, `text-fg-2`) in the mark's slot while it
-  saves. Nothing starts chosen on an unanswered step, so there is no Continue until the user goes back to an answered
-  one, where the answer is marked and Continue keeps it.
+  marks its value. The recommended option starts chosen, so one Continue keeps it; several pick-one lists can share a
+  step, each under its section label, and a click moves only its own list's mark.
 - Pick-many: a `filled` `sm` `Checkbox` in the 20px leading slot, the defaults already checked; the last row can be
   an add field (`sm` `Input` + `secondary` `sm` "Add folder" with `IconPlusMedium`, disabled while empty) that adds
   the typed value checked. Continue is disabled with nothing checked.
@@ -7630,7 +7639,7 @@ A progress strip lists only the steps this process takes, in order, and stays on
 
 - Steps are 16px marks (done: `grid size-4 shrink-0 place-items-center rounded-full bg-green-4/29` with a
   `text-green-text` check, the one green check in Shinsa: every other checkmark is the accent; current: `bg-primary-a3` with a blue pulse; waiting on you: `bg-amber-a3` with a `size-1.5 rounded-full bg-amber-4` dot; skipped:
-  `IconCircleDotted` `text-fg-2`; not reached: `size-4 rounded-full border-2 border-bg-a3`), joined by
+  `IconCircleDotted` `text-fg-2`; not reached: `size-4 rounded-full border border-bg-a3`), joined by
   `h-px min-w-2 flex-1` connectors (`bg-green-4` once the step is done or skipped, else `bg-bg-a3`) in
   `flex w-full min-w-0 items-center gap-1.5`.
 - A strip of more than 6 steps (the Pre-merge and Post-merge steps count twice, for their long labels) folds the
@@ -8835,7 +8844,7 @@ Mistakes that were made before and must not come back:
   and select items, ⌘K commands, field labels, placeholders, table headers, badges, tooltips, toasts, empty
   states, dialog titles, status labels. Capitalise the first word and proper nouns only: "All tasks", "Agent
   usage", "Pre-merge steps", "Run in terminal", "Add a Claude account".
-- **Proper nouns keep their casing**: Shinsa, GitHub, GitButler, Claude, Claude Code, Codex, macOS, Finder,
+- **Proper nouns keep their casing**: Shinsa, GitHub, Claude, Claude Code, Codex, macOS, Finder,
   Electron, Ghostty, Terminal.app, Desk, Shelf. A product's own term keeps its owner's casing.
 - **Acronyms stay upper**: CI, MCP, PR, ID, URL, API, SDK, JSON, CLI. Write "ID", never "Id" or "id"; "MCPs" for
   the plural.
@@ -10655,7 +10664,7 @@ Apply every line to any component you build or touch. When a line and a section 
 
 - Heights: 18 (`icon-2xs`, `Badge sm`), 20 (`Badge`, `Kbd`, switch track), 22 (`xs`, `icon-xs`), 24 (`sm`, `icon-sm`, menu, select and command rows, section labels, the `line` header), 26 (`default`, `icon`, `Input`, `SelectTrigger`, `default` and `ghost` tab lists), 28 (one-line list rows, the `strip` header, info popover rows), 30 (`lg`, `icon-lg`), 32 (`underline` tab list, the `block` header), 36 (card header bands, toolbars), 40 (settings rows, the command input row).
 - Never hand-set a height on a control, strip or row; the primitive owns it. Every control in one row shares one height.
-- Icons: `sm` 14 in `xs`/`sm` controls, rows and badges; `md` 16 from `default` up; `lg` 20 for empty-state figures and full-page waits. No other size.
+- Icons: `sm` 14 in every button and select, rows and badges; `md` 16 in `default` inputs; `lg` 20 for empty-state figures and full-page waits. No other size.
 
 **Spacing**
 

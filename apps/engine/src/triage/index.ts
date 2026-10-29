@@ -2,6 +2,7 @@ import {
   isTaskSettled,
   listProjectRepos,
   type Project,
+  resolveRoundTitle,
   resolveTaskProject,
   resolveTaskShape,
   type ShinsaState,
@@ -22,7 +23,7 @@ import {
   resolveDecisionProperty,
 } from '../agents/quick/decide.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
-import { slugify } from '../git/index.ts';
+import { BRANCH_PATTERN, COMMIT_TYPES, slugify } from '../git/index.ts';
 import { type LocalRepo, listLocalRepos, resolveContainingRepo } from '../repos/index.ts';
 import { parseAnswerText, SHAPE_QUESTION } from './decisions.ts';
 
@@ -72,8 +73,6 @@ const WHY_LIMIT = 120;
 
 const TITLE_LIMIT = 60;
 
-const BRANCH_PATTERN = /^[a-z]+\/[a-z0-9-]+$/;
-
 export const NO_REPOSITORY = 'none';
 
 export const REPOSITORY_RULE = `Never pick a repository only because it is the only one listed or because it was worked on recently; pick one when the request names it or clearly needs its code. "The repo", "the code" or "the project" alone names none. A request that names a repository that is not listed gets "${NO_REPOSITORY}".`;
@@ -85,7 +84,7 @@ const TRIAGE_SYSTEM = [
   `repo: the exact name of the repository the work belongs in, or "${NO_REPOSITORY}".`,
   `Answer "${NO_REPOSITORY}" when the request needs no repository: a greeting, small talk, a general question, a question about the state Shinsa keeps (its tasks, projects or settings, or what it knows) rather than code, or planning that names no code.`,
   REPOSITORY_RULE,
-  'branch: <type>/<short-kebab-slug>, type one of feat, fix, chore, refactor, docs.',
+  `branch: <type>/<short-kebab-slug>, type one of ${COMMIT_TYPES.join(', ')}, the conventional commit type of the work.`,
   'The decisions: answer each only with its options.',
   `Each field ending in _why says in one plain sentence of at most ${WHY_LIMIT} characters why you answered its decision that way.`,
 ].join('\n');
@@ -401,7 +400,7 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
   const candidates = bound ? [bound] : offered;
   const asks = resolveAsks(task);
   const size = resolveFallbackSize(task);
-  const title = task.request.split('\n')[0]?.slice(0, TITLE_LIMIT).trim() || 'Untitled task';
+  const title = resolveRoundTitle(task.request).slice(0, TITLE_LIMIT).trim() || 'Untitled task';
   const open = listOpenTasks(state, task, pool.project);
   return {
     task,

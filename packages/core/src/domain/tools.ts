@@ -12,13 +12,17 @@ export const SHINSA_TOOL_NAMES = [
   'find_tasks',
   'read_task',
   'list_repository_work',
+  'list_services',
+  'run_service',
   'note',
   'wait_for',
   'suggest_tasks',
+  'remember',
   'answer',
   'report_diagnosis',
   'submit_report',
   'report_outcome',
+  'report_watch',
   'reshape_task',
   'delegate_task',
   'delegation_status',
@@ -43,6 +47,7 @@ const HAND_OVER_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
   'report_diagnosis',
   'submit_report',
   'report_outcome',
+  'report_watch',
   'reshape_task',
 ]);
 
@@ -55,6 +60,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'complete_phase',
     'complete_fix',
     'report_outcome',
+    'report_watch',
     'ask',
     'attach_evidence',
     'remove_evidence',
@@ -62,9 +68,21 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'note',
     'wait_for',
     'suggest_tasks',
+    'remember',
+    'list_services',
+    'run_service',
   ],
-  reviewer: ['report_review', 'attach_evidence', 'remove_evidence', 'find_tasks', 'note', 'suggest_tasks'],
-  answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
+  reviewer: [
+    'report_review',
+    'attach_evidence',
+    'remove_evidence',
+    'find_tasks',
+    'note',
+    'suggest_tasks',
+    'list_services',
+    'run_service',
+  ],
+  answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember'],
   investigator: [
     'report_diagnosis',
     'ask',
@@ -74,8 +92,11 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'note',
     'wait_for',
     'suggest_tasks',
+    'remember',
+    'list_services',
+    'run_service',
   ],
-  researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
+  researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember'],
 };
 
 export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> = {
@@ -83,6 +104,7 @@ export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> =
   build: ['complete_phase'],
   fix: ['complete_fix'],
   operate: ['report_outcome'],
+  watch: ['report_watch'],
 };
 
 const DELEGATE_TOOLS: readonly ShinsaToolName[] = [

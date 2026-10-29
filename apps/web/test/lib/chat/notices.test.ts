@@ -179,6 +179,26 @@ describe('a notice row', () => {
         'The Claude session could not be resumed, so a new one started from the transcript. 1 entry carried over.',
     });
   });
+  it('says a fork started from the source task’s transcript when its session could not be copied', () => {
+    expect(
+      resolveNoticeLine({
+        kind: 'handoff',
+        key: 'n',
+        at: 0,
+        reason: 'fork',
+        fromProvider: 'Claude',
+        toProvider: 'Claude',
+        totalEntries: 3,
+        includedEntries: 3,
+      })
+    ).toEqual({
+      icon: 'IconArrowRotateClockwise',
+      label: 'Forked from the transcript',
+      meta: null,
+      detail:
+        'The session of the task this one was forked from could not be copied, so a new one started from its transcript. All 3 entries carried over.',
+    });
+  });
 });
 
 describe('the row of what a run loaded', () => {

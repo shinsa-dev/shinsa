@@ -6,6 +6,12 @@ export {
   stashEdits,
   writeMergeHead,
 } from './commit.ts';
+export {
+  BRANCH_PATTERN,
+  COMMIT_TYPES,
+  resolveCommitType,
+  serializeConventionalSubject,
+} from './conventional.ts';
 export { resolveCommitDiff, resolveWorkingDiff } from './diff.ts';
 export {
   createIsolatedWorktree,
@@ -14,7 +20,6 @@ export {
   resolveIsolatedPath,
 } from './isolation.ts';
 export {
-  createPushError,
   hasPrePushHook,
   PushError,
   pushBranch,
@@ -22,7 +27,7 @@ export {
   runPush,
 } from './push.ts';
 export { assertRefName, slugify } from './refs.ts';
-export { inspectRepo, resolveRepoRoot } from './repo.ts';
+export { inspectRepo, resolveRepoRemote, resolveRepoRoot } from './repo.ts';
 export { updateOntoBase } from './update.ts';
 export {
   createWorktree,

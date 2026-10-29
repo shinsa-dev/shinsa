@@ -29,6 +29,7 @@ import { holdForBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { planDelivery, releaseWaits, settleDelegation, waitForDelegations } from './delegations.ts';
 import { resolveRecoveryFingerprint } from './fingerprints.ts';
+import { missWatchCheck, moveWatchCheck } from './watchdogs.ts';
 
 const MAX_RECOVERIES = 1;
 
@@ -63,6 +64,7 @@ const PURPOSE_REFUSAL: Record<RunPurpose, string> = {
   build: 'You are building a phase: hand it over with `complete_phase`.',
   fix: 'You are fixing the work: hand the fix over with `complete_fix`.',
   operate: 'You are running the operation: report how it went with `report_outcome`.',
+  watch: 'You are checking a watchdog: report what you found with `report_watch`.',
 };
 
 const ROLE_REFUSAL: Partial<Record<RunRole, string>> = {
@@ -80,7 +82,7 @@ function assertPurpose(run: Run, tool: ShinsaToolName) {
   throw new DomainError('wrong_step', PURPOSE_REFUSAL[run.purpose]);
 }
 
-function assertTool(run: Run, tool: ShinsaToolName) {
+export function assertRunTool(run: Run, tool: ShinsaToolName) {
   if (hasTool(run, tool)) {
     assertPurpose(run, tool);
     return;
@@ -102,7 +104,7 @@ export function findCurrentRun(decider: Decider, runId: string, tool: ShinsaTool
   if (run.endedAt !== null) throw new DomainError('run_over', 'This step is already over. End your turn.');
   const task = decider.task(run.taskId);
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished. End your turn.');
-  assertTool(run, tool);
+  assertRunTool(run, tool);
   return { run, task };
 }
 
@@ -131,6 +133,8 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   if (failure?.class === 'usage_limit' && waitForUsageReset(decider, run, failure)) return;
   if (failure?.class === 'auth' && requestSignIn(decider, run, failure)) return;
   const recovery = failure ? FAILURE_RECOVERY[failure.class] : RESUME;
+  const givesUp = recovery.mode === 'pause' || task.recoveries >= MAX_RECOVERIES;
+  if (givesUp && missWatchCheck(decider, run.id, why)) return;
   if (recovery.mode === 'pause') {
     decider.fail(task.id, recovery.title, `${why} Retry starts the step again.`, run.id);
     return;
@@ -143,13 +147,19 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   const role = run.role;
   const fresh = recovery.mode === 'fresh';
   const nudge = fresh ? resolveFreshSessionNudge(why) : resolveRecoveryNudge(why);
-  decider.startRun(decider.task(task.id), role, `${run.rolePrompt ?? run.prompt ?? ''}${nudge}`, {
-    resumeFrom: fresh ? null : decider.resumableFrom(run),
-    purpose: run.purpose ?? null,
-    phaseIndex: run.phaseIndex ?? null,
-    monitorId: run.monitorId ?? null,
-    account: run.account ?? null,
-  });
+  const next = decider.startRun(
+    decider.task(task.id),
+    role,
+    `${run.rolePrompt ?? run.prompt ?? ''}${nudge}`,
+    {
+      resumeFrom: fresh ? null : decider.resumableFrom(run),
+      purpose: run.purpose ?? null,
+      phaseIndex: run.phaseIndex ?? null,
+      monitorId: run.monitorId ?? null,
+      account: run.account ?? null,
+    }
+  );
+  moveWatchCheck(decider, run.id, next.id);
 }
 
 function describeStop(outcome: RunOutcome, summary: string | null) {

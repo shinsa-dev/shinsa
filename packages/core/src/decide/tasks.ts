@@ -25,11 +25,12 @@ import {
   resolveTaskWorkspace,
 } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
-import { assertStackKept, changeDependencies, resolveDependencies } from './dependencies.ts';
+import { changeDependencies, resolveDependencies } from './dependencies.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { retryTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
+import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
 
 function assertRepo(decider: Decider, repoId: string | null) {
   if (repoId !== null && !decider.state.repos[repoId]) {
@@ -63,6 +64,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   assertRepo(decider, command.repoId);
   const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []);
   const projectId = resolveCreatedProject(decider, command);
+  if (command.forkOf !== undefined) decider.task(command.forkOf);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
@@ -81,6 +83,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.mode === 'ask' ? { mode: 'ask' as const } : {}),
     auto,
     ...(command.account ? { account: command.account } : {}),
+    ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...lineage,
   });
   if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by: 'you' });
@@ -154,12 +157,12 @@ export function prioritizeTask(decider: Decider, command: CommandOf<'task.priori
 export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
-  assertStackKept(decider, task, command.waitsOn);
   changeDependencies(decider, task.id, resolveDependencies(decider, task, command.waitsOn), 'you');
 }
 
 export function cancelTask(decider: Decider, command: CommandOf<'task.cancel'>) {
   settleTask(decider, command.taskId, 'cancelled', 'cancelled by you', 'you');
+  stopAllWatchdogs(decider, command.taskId);
 }
 
 function assertNothingOpen(task: Task) {
@@ -190,9 +193,13 @@ function assertNoShippedRoundOpen(task: Task) {
 
 export function completeTask(decider: Decider, command: CommandOf<'task.complete'>) {
   const task = decider.task(command.taskId);
-  if (decider.context.onBehalf) assertNothingOpen(task);
+  if (decider.context.onBehalf) {
+    assertNothingOpen(task);
+    assertNoWatchdogsLeft(task);
+  }
   assertNoShippedRoundOpen(task);
   assertNoMergeStepsLeft(task);
+  stopAllWatchdogs(decider, task.id);
   if (isTaskResting(task)) {
     decider.stage(task.id, 'done', 'marked done by you', 'you');
     decider.requestBriefing(task.id);

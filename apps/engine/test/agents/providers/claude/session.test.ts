@@ -5,16 +5,20 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
 import { AsyncQueue } from '../../../../src/agents/providers/claude/async-queue.ts';
+import { appendStderr } from '../../../../src/agents/providers/claude/classify.ts';
 import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable.ts';
 import type { EunoeLink, EunoeListener } from '../../../../src/agents/providers/claude/index.ts';
+import type { ClaudeProcess } from '../../../../src/agents/providers/claude/process.ts';
 import { startClaudeSession } from '../../../../src/agents/providers/claude/session.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
 import { SHINSA_INSTRUCTIONS } from '../../../../src/agents/providers/instructions.ts';
 import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
+import { log } from '../../../../src/log/index.ts';
 import { overrideEnv, until } from '../../../helpers/index.ts';
 import {
   createFakeQuery,
   createFakeRuntime,
+  emit,
   type FakeQueryControls,
   sdkMessage,
 } from '../../../helpers/query.ts';
@@ -134,6 +138,21 @@ describe('starting a session', () => {
       resume: 'sess-0',
       disallowedTools: ['Edit', 'Write', 'NotebookEdit'],
     });
+  });
+
+  test('a fork resumes the source session as a copy, and only a resume can fork', async () => {
+    const forked = startScripted(createInput({ resume: 'sess-0', fork: true }).input);
+    forked.messages.push(success('ok'));
+    await forked.session.done;
+    expect(forked.calls[0]?.options).toMatchObject({ resume: 'sess-0', forkSession: true });
+    const fresh = startScripted(createInput({ fork: true }).input);
+    fresh.messages.push(success('ok'));
+    await fresh.session.done;
+    expect(fresh.calls[0]?.options).not.toHaveProperty('forkSession');
+    const resumed = startScripted(createInput({ resume: 'sess-0' }).input);
+    resumed.messages.push(success('ok'));
+    await resumed.session.done;
+    expect(resumed.calls[0]?.options).not.toHaveProperty('forkSession');
   });
 
   test('the round agent keeps one tool list: planning refuses edits through a hook, building has none', async () => {
@@ -544,6 +563,142 @@ describe('how a turn ends', () => {
       undelivered: ['and more'],
     });
     expect(session.steer('ignored')).toBe(false);
+  });
+});
+
+interface FakeProcess {
+  process: ClaudeProcess;
+  terminated: () => number;
+}
+
+function createFakeProcess(stderr = ''): FakeProcess {
+  let terminated = 0;
+  return {
+    process: {
+      spawn: () => {
+        throw new Error('not spawned in tests');
+      },
+      readStderr: () => stderr,
+      terminate: () => {
+        terminated += 1;
+        return Promise.resolve();
+      },
+    },
+    terminated: () => terminated,
+  };
+}
+
+function startWedged(controls: FakeQueryControls = {}, child = createFakeProcess()) {
+  const messages = new AsyncQueue<SDKMessage>();
+  const fake = createFakeQuery(() => messages, {
+    close: () => messages.close(),
+    ...controls,
+  });
+  const { input, sessions } = createInput();
+  const session = startClaudeSession(input, {
+    runtime: createFakeRuntime(fake.query),
+    contextTimeoutMs: 20,
+    exitGraceMs: 20,
+    interruptTimeoutMs: 20,
+    createProcess: () => child.process,
+    now: () => 1_000,
+  });
+  return { session, messages, child, sessions };
+}
+
+describe('a process that outlives its turn', () => {
+  test('a process still running after its turn ended is stopped, and the turn keeps its outcome', async () => {
+    const warn = spyOn(log, 'warn');
+    try {
+      const { session, messages, child } = startWedged();
+      messages.push(init);
+      messages.push(success('Handed over.'));
+      expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Handed over.' });
+      expect(child.terminated()).toBe(1);
+      expect(warn).toHaveBeenCalledWith(
+        '[Claude] The agent’s process did not exit after its turn, so Shinsa stopped it',
+        { cwd: '/work' }
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('a stream that breaks when the stopped process goes away still ends the turn as it finished', async () => {
+    const broken = Promise.withResolvers<IteratorResult<SDKMessage>>();
+    const results = [success('Done.')];
+    const fake = createFakeQuery(
+      () => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () => {
+            const next = results.shift();
+            return next ? Promise.resolve({ value: next, done: false }) : broken.promise;
+          },
+        }),
+      }),
+      { close: () => broken.reject(new Error('Claude Code process terminated by signal SIGKILL')) }
+    );
+    const child = createFakeProcess();
+    const session = startClaudeSession(createInput().input, {
+      runtime: createFakeRuntime(fake.query),
+      contextTimeoutMs: 20,
+      exitGraceMs: 20,
+      createProcess: () => child.process,
+      now: () => 1_000,
+    });
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Done.' });
+    expect(child.terminated()).toBe(1);
+  });
+
+  test('a process that exits on its own in time is left alone', async () => {
+    const child = createFakeProcess();
+    const fake = createFakeQuery(() => emit(init, success('Quick.')));
+    const session = startClaudeSession(createInput().input, {
+      runtime: createFakeRuntime(fake.query),
+      contextTimeoutMs: 20,
+      exitGraceMs: 20,
+      createProcess: () => child.process,
+      now: () => 1_000,
+    });
+    expect(await session.done).toMatchObject({ outcome: 'completed' });
+    await Bun.sleep(40);
+    expect(child.terminated()).toBe(0);
+  });
+
+  test('cancel stops the process when the interrupt never answers', async () => {
+    const { session, messages, child, sessions } = startWedged({
+      interrupt: () => new Promise(() => undefined),
+    });
+    messages.push(init);
+    await until('the session to start', () => sessions.length === 1);
+    await session.cancel();
+    expect(child.terminated()).toBe(1);
+    expect(await session.done).toMatchObject({ outcome: 'cancelled' });
+  });
+
+  test('a process that dies on its own reports what it printed on stderr', async () => {
+    const child = createFakeProcess('Error: Invalid API key');
+    const fake = createFakeQuery(() => ({
+      [Symbol.asyncIterator]: () => ({
+        next: () => Promise.reject(new Error('Claude Code process exited with code 1')),
+      }),
+    }));
+    const session = startClaudeSession(createInput().input, {
+      runtime: createFakeRuntime(fake.query),
+      createProcess: () => child.process,
+    });
+    expect(await session.done).toMatchObject({
+      outcome: 'failed',
+      summary: 'Claude Code stopped unexpectedly (exit code 1). It printed: Error: Invalid API key',
+    });
+  });
+
+  test('stderr the SDK already reported is not added twice', () => {
+    const reported = 'Claude Code process exited with code 1. stderr: boom';
+    expect(appendStderr(reported, 'boom')).toBe(reported);
+    expect(appendStderr('Claude Code process exited with code 1', '')).toBe(
+      'Claude Code process exited with code 1'
+    );
   });
 });
 

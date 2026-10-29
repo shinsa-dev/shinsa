@@ -128,7 +128,7 @@ describe('help text', () => {
       'Create a task. Shinsa classifies it, plans it and builds it.',
       '',
       'Usage',
-      '  shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--ask] [--after <list>] [--account <text>] [--json]',
+      '  shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--ask] [--after <list>] [--fork-from <text>] [--account <text>] [--json]',
     ]);
     expect(usage[5]).toBe('Arguments');
     expect(usage[6]).toBe(

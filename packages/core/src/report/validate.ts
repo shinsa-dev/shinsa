@@ -7,9 +7,13 @@ import {
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
   isEvidenceKey,
+  MEMORY_LIMITS,
+  MEMORY_SCOPES,
+  type MemoryScope,
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
   SHAPE_LIMITS,
+  WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
 import type { EvidenceItemKind } from '../domain/types.ts';
 import { createTesting, isWebUrl, MANUAL_TEST_TARGETS, parseTestFile } from './testing.ts';
@@ -43,6 +47,11 @@ import type {
   ReviewHandOver,
   SuggestedTask,
   WaitHandOver,
+  WatchdogSource,
+  WatchdogSourceRequest,
+  WatchdogSpec,
+  WatchdogStart,
+  WatchReport,
 } from './types.ts';
 
 export const PROTOCOL_LIMITS = {
@@ -73,6 +82,21 @@ export const PROTOCOL_LIMITS = {
   mergeStepTitle: 80,
   mergeStepDetail: 400,
   mergeStepCommand: 400,
+  watchdogs: 5,
+  watchdogTitle: 80,
+  watchdogCheck: 600,
+  watchdogServer: 128,
+  watchdogData: 200,
+  watchdogEvidence: 300,
+  watchdogSuggestions: 4,
+  watchdogSuggestion: 160,
+  watchdogFirstCheckMinutes: WATCHDOG_SETTING_LIMITS.firstCheckMinutes,
+  watchdogMaxGapHours: WATCHDOG_SETTING_LIMITS.maxGapHours,
+  watchdogForHours: WATCHDOG_SETTING_LIMITS.hours,
+  watchdogProductionCheck: 400,
+  watchSummary: 600,
+  watchIssueTitle: 80,
+  watchIssueRequest: 2_000,
   disagreements: 8,
   disagreement: 280,
   goal: 300,
@@ -130,6 +154,8 @@ export const ATTACHED_EVIDENCE_KINDS: readonly [EvidenceItemKind, ...EvidenceIte
   ...EVIDENCE_KINDS,
   'comparison',
 ];
+
+export const WATCHDOG_STARTS: readonly [WatchdogStart, ...WatchdogStart[]] = ['merge', 'production'];
 
 export const MERGE_STEP_TIMINGS: readonly [MergeStepTiming, ...MergeStepTiming[]] = [
   'pre_merge',
@@ -403,6 +429,113 @@ function readMergeSteps(reader: Reader, value: unknown) {
   return steps;
 }
 
+function readWatchdogSource(reader: Reader, value: unknown, path: string): WatchdogSource | null {
+  if (!isGiven(value)) return null;
+  const record = reader.record(value, path);
+  return {
+    server: reader.text(record.server, `${path}.server`, PROTOCOL_LIMITS.watchdogServer),
+    data: reader.text(record.data, `${path}.data`, PROTOCOL_LIMITS.watchdogData),
+  };
+}
+
+function readSourceRequest(reader: Reader, value: unknown, path: string): WatchdogSourceRequest | null {
+  if (!isGiven(value)) return null;
+  const record = reader.record(value, path);
+  const suggestions = readTextList(
+    reader,
+    record.suggestions,
+    `${path}.suggestions`,
+    PROTOCOL_LIMITS.watchdogSuggestions,
+    PROTOCOL_LIMITS.watchdogSuggestion
+  );
+  if (suggestions.length === 0) {
+    reader.errors.push(
+      `${path}.suggestions needs at least 1 server to connect, by name and where it comes from.`
+    );
+  }
+  return {
+    data: reader.text(record.data, `${path}.data`, PROTOCOL_LIMITS.watchdogData),
+    evidence: reader.text(record.evidence, `${path}.evidence`, PROTOCOL_LIMITS.watchdogEvidence),
+    suggestions,
+  };
+}
+
+function readWatchdog(reader: Reader, raw: unknown, path: string): WatchdogSpec {
+  const record = reader.record(raw, path);
+  const source = readWatchdogSource(reader, record.source, `${path}.source`);
+  const sourceRequest = readSourceRequest(reader, record.source_request, `${path}.source_request`);
+  if ((source === null) === (sourceRequest === null)) {
+    reader.errors.push(
+      `${path} needs exactly one of source (a server that has the data) or source_request (what to connect).`
+    );
+  }
+  return {
+    title: reader.text(record.title, `${path}.title`, PROTOCOL_LIMITS.watchdogTitle),
+    check: reader.text(record.check, `${path}.check`, PROTOCOL_LIMITS.watchdogCheck),
+    source,
+    sourceRequest,
+    firstCheckMinutes: reader.optionalCount(
+      record.first_check_minutes,
+      `${path}.first_check_minutes`,
+      PROTOCOL_LIMITS.watchdogFirstCheckMinutes
+    ),
+    maxGapHours: reader.optionalCount(
+      record.max_gap_hours,
+      `${path}.max_gap_hours`,
+      PROTOCOL_LIMITS.watchdogMaxGapHours
+    ),
+    forHours: reader.optionalCount(record.for_hours, `${path}.for_hours`, PROTOCOL_LIMITS.watchdogForHours),
+    ...readWatchdogStart(reader, record, path),
+  };
+}
+
+function readWatchdogStart(reader: Reader, record: Record<string, unknown>, path: string) {
+  const startsOn = isGiven(record.starts)
+    ? reader.pick(record.starts, `${path}.starts`, WATCHDOG_STARTS)
+    : 'merge';
+  const productionCheck = reader.optionalText(
+    record.production_check,
+    `${path}.production_check`,
+    PROTOCOL_LIMITS.watchdogProductionCheck
+  );
+  if (startsOn === 'production' && productionCheck === null) {
+    reader.errors.push(
+      `${path}.production_check is required when it starts on production: how to tell the merged change is live there.`
+    );
+  }
+  return { startsOn, productionCheck: startsOn === 'production' ? productionCheck : null };
+}
+
+function readWatchdogs(reader: Reader, value: unknown) {
+  const watchdogs = reader
+    .list(value, 'walkthrough.watchdogs', PROTOCOL_LIMITS.watchdogs)
+    .map((raw, index) => readWatchdog(reader, raw, `walkthrough.watchdogs[${index}]`));
+  watchdogs.forEach((watchdog, index) => {
+    const first = watchdogs.findIndex((other) => other.title === watchdog.title);
+    if (first < index) {
+      reader.errors.push(
+        `walkthrough.watchdogs[${index}].title repeats walkthrough.watchdogs[${first}]; give each watchdog its own title.`
+      );
+    }
+    if (
+      watchdog.firstCheckMinutes !== null &&
+      watchdog.forHours !== null &&
+      watchdog.firstCheckMinutes > watchdog.forHours * 60
+    ) {
+      reader.errors.push(
+        `walkthrough.watchdogs[${index}] checks first after ${watchdog.firstCheckMinutes} minutes but watches for only ${watchdog.forHours} hours; check at least once in the window.`
+      );
+    }
+  });
+  return watchdogs;
+}
+
+function resolveGivenWatchdogs(reader: Reader, value: unknown, empty: boolean) {
+  if (!isGiven(value)) return {};
+  const watchdogs = readWatchdogs(reader, value);
+  return watchdogs.length > 0 || empty ? { watchdogs } : {};
+}
+
 function isGiven(value: unknown) {
   return value !== undefined && value !== null;
 }
@@ -416,6 +549,7 @@ function readWalkthrough(reader: Reader, value: unknown): ReportWalkthrough | nu
     risks: readRisks(reader, record.risks),
     testing: readTesting(reader, record.testing),
     ...resolveGivenSteps(reader, record.steps, false),
+    ...resolveGivenWatchdogs(reader, record.watchdogs, false),
   };
 }
 
@@ -436,10 +570,11 @@ function readWalkthroughRevision(reader: Reader, value: unknown): ReportWalkthro
     ...(isGiven(record.risks) ? { risks: readRisks(reader, record.risks) } : {}),
     ...(isGiven(record.testing) ? { testing: readTesting(reader, record.testing) } : {}),
     ...resolveGivenSteps(reader, record.steps, true),
+    ...resolveGivenWatchdogs(reader, record.watchdogs, true),
   };
   if (Object.keys(revision).length === 0) {
     reader.errors.push(
-      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them.'
+      'walkthrough needs at least one of approach, flow, risks, testing, steps or watchdogs. Leave it out when the fix changes none of them.'
     );
   }
   return revision;
@@ -873,6 +1008,17 @@ export function validateSuggestions(input: Record<string, unknown>): Validation<
   return reader.result(tasks);
 }
 
+export function validateMemoryProposal(
+  input: Record<string, unknown>
+): Validation<{ scope: MemoryScope; text: string; why: string }> {
+  const reader = new Reader();
+  return reader.result({
+    scope: reader.pick(input.scope, 'scope', MEMORY_SCOPES),
+    text: reader.text(input.text, 'text', MEMORY_LIMITS.text),
+    why: reader.text(input.why, 'why', MEMORY_LIMITS.why),
+  });
+}
+
 function readProposal(reader: Reader, value: unknown): ChangeProposalInput | null {
   if (value === undefined || value === null) return null;
   const fields = reader.record(value, 'propose_change');
@@ -909,6 +1055,34 @@ function readSteps(reader: Reader, value: unknown) {
   return reader
     .list(value, 'steps', COMPOSABLE_STEPS.length, 1)
     .map((step, index) => reader.pick(step, `steps[${index}]`, PIPELINE_STEP_NAMES));
+}
+
+export function validateWatchReport(input: Record<string, unknown>): Validation<WatchReport> {
+  const reader = new Reader();
+  const live = isGiven(input.live) ? reader.flag(input.live, 'live') : null;
+  const issue = isGiven(input.issue) ? reader.record(input.issue, 'issue') : null;
+  const healthy = live === false || reader.flag(input.healthy, 'healthy');
+  if (live === false) {
+    if (issue)
+      reader.errors.push('A change that is not live in production yet has no issue. Leave issue out.');
+  } else if (input.healthy === undefined)
+    reader.errors.push('healthy is required: true when nothing is wrong.');
+  else if (healthy && issue) {
+    reader.errors.push('A healthy check has no issue. Leave issue out, or set healthy to false.');
+  } else if (!healthy && !issue) {
+    reader.errors.push('An unhealthy check needs issue: a title and the request for the task that fixes it.');
+  }
+  return reader.result({
+    live,
+    healthy,
+    summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.watchSummary),
+    issue: issue
+      ? {
+          title: reader.text(issue.title, 'issue.title', PROTOCOL_LIMITS.watchIssueTitle),
+          request: reader.text(issue.request, 'issue.request', PROTOCOL_LIMITS.watchIssueRequest),
+        }
+      : null,
+  });
 }
 
 export function validateReshape(input: Record<string, unknown>): Validation<ReshapeHandOver> {

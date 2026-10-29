@@ -11,6 +11,8 @@ import {
 } from '@shinsa/core';
 import {
   type ForegroundReader,
+  type PortPicker,
+  pickFreePort,
   readForegroundProgram,
   resolveLoginShell,
   resolveServiceCommand,
@@ -19,7 +21,7 @@ import {
   spawnTerminalProcess,
   type TerminalSpawner,
 } from './pty.ts';
-import { resolveServicePlaceIn } from './routes.ts';
+import { resolveServiceRunIn } from './routes.ts';
 import { TerminalSession, type TerminalViewer } from './session.ts';
 import { TerminalStore } from './store.ts';
 
@@ -33,6 +35,7 @@ export interface TerminalsOptions {
   env?: Env;
   spawn?: TerminalSpawner;
   readForeground?: ForegroundReader;
+  pickPort?: PortPicker;
   now?: () => number;
   newId?: () => string;
   notifyMs?: number;
@@ -46,11 +49,19 @@ export interface TerminalStart {
   taskId: string | null;
 }
 
+export interface ServiceRun {
+  cwd: string;
+  place: TerminalPlaceKind;
+  taskId: string | null;
+}
+
 export interface ServiceInput {
   name: string;
   cwd: string;
   command: string;
   env: Record<string, string>;
+  previewUrl: string | null;
+  portVariable: string;
 }
 
 type Listener = (snapshot: TerminalsSnapshot) => void;
@@ -177,13 +188,36 @@ export class Terminals {
     if (this.#sessions.get(session.info.id) === session) this.#store.writeScreen(session.info.id, screen);
   }
 
+  #takenPorts(session: TerminalSession) {
+    return new Set(
+      [...this.#sessions.values()]
+        .filter((each) => each !== session && each.running)
+        .flatMap((each) => (each.info.port === null ? [] : [each.info.port]))
+    );
+  }
+
+  #resolvePort(session: TerminalSession, service: ServiceDefinition) {
+    const yours = session.info.taskId === null;
+    if (yours && !service.previewUrl) return null;
+    const own = Number(service.env[service.portVariable]);
+    if (yours && Number.isInteger(own) && own > 0) return own;
+    return (this.#options.pickPort ?? pickFreePort)(session.info.port, this.#takenPorts(session));
+  }
+
+  #resolveServiceEnv(session: TerminalSession, service: ServiceDefinition, env: Record<string, string>) {
+    const port = this.#resolvePort(session, service);
+    session.info = { ...session.info, port };
+    if (port === null) return { ...env, ...service.env };
+    return { ...env, ...service.env, [service.portVariable]: String(port) };
+  }
+
   #start(session: TerminalSession) {
     const env = resolveTerminalEnv(this.#env, this.#options.version);
     const shell = resolveLoginShell(this.#env);
     const service = session.info.serviceId ? this.#services.get(session.info.serviceId) : undefined;
     session.start({
       command: service ? resolveServiceCommand(shell, service.command) : resolveShellCommand(shell),
-      env: service ? { ...env, ...service.env } : env,
+      env: service ? this.#resolveServiceEnv(session, service, env) : env,
       spawn: this.#options.spawn ?? spawnTerminalProcess,
       now: this.#now(),
     });
@@ -205,6 +239,7 @@ export class Terminals {
       name: service?.name ?? null,
       title: null,
       serviceId: service?.id ?? null,
+      port: null,
       status: 'running',
       exitCode: null,
       startedAt: this.#now(),
@@ -291,8 +326,16 @@ export class Terminals {
     return service;
   }
 
-  #serviceSession(id: string) {
-    return [...this.#sessions.values()].find((session) => session.info.serviceId === id) ?? null;
+  #serviceSession(id: string, taskId: string | null) {
+    return (
+      [...this.#sessions.values()].find(
+        (session) => session.info.serviceId === id && session.info.taskId === taskId
+      ) ?? null
+    );
+  }
+
+  #serviceSessions(id: string) {
+    return [...this.#sessions.values()].filter((session) => session.info.serviceId === id);
   }
 
   #saveServices() {
@@ -317,8 +360,7 @@ export class Terminals {
     this.#assertWritable();
     const service = { ...this.findService(id), ...input };
     this.#services.set(id, service);
-    const session = this.#serviceSession(id);
-    if (session) session.info = { ...session.info, name: service.name };
+    for (const session of this.#serviceSessions(id)) session.info = { ...session.info, name: service.name };
     this.#saveServices();
     this.#changed();
     return service;
@@ -328,45 +370,57 @@ export class Terminals {
     this.#assertWritable();
     for (const id of ids) this.findService(id);
     for (const id of ids) {
-      const session = this.#serviceSession(id);
-      if (session) this.#closeSession(session);
+      for (const session of this.#serviceSessions(id)) this.#closeSession(session);
       this.#services.delete(id);
     }
     this.#saveServices();
     this.#changed();
   }
 
-  startService(id: string, place: TerminalPlaceKind) {
+  startService(id: string, run: ServiceRun) {
     this.#assertWritable();
     const service = this.findService(id);
-    const session = this.#serviceSession(id);
-    if (!session)
-      return this.#open({ projectId: service.projectId, cwd: service.cwd, place, taskId: null }, service);
+    const session = this.#serviceSession(id, run.taskId);
+    if (!session) return this.#open({ projectId: service.projectId, ...run }, service);
     if (session.running) return session.info;
-    session.info = { ...session.info, cwd: service.cwd, place };
+    session.info = { ...session.info, cwd: run.cwd, place: run.place };
     this.#start(session);
     this.#changed();
     return session.info;
   }
 
-  async stopService(id: string) {
+  async stopService(id: string, taskId: string | null) {
     this.#assertWritable();
     this.findService(id);
-    await this.#serviceSession(id)?.stop();
+    await this.#serviceSession(id, taskId)?.stop();
     this.#changed();
   }
 
-  async restartService(id: string, place: TerminalPlaceKind) {
-    await this.stopService(id);
-    return this.startService(id, place);
+  async restartService(id: string, run: ServiceRun) {
+    await this.stopService(id, run.taskId);
+    return this.startService(id, run);
+  }
+
+  async readServiceOutput(id: string, taskId: string | null, lines: number) {
+    return (await this.#serviceSession(id, taskId)?.readOutput(lines)) ?? [];
+  }
+
+  closeTaskServices(taskId: string) {
+    const sessions = [...this.#sessions.values()].filter(
+      (session) => session.info.serviceId && session.info.taskId === taskId
+    );
+    if (sessions.length === 0) return;
+    for (const session of sessions) this.#closeSession(session);
+    this.#changed();
   }
 
   resumeServices(state: ShinsaState) {
     if (this.#options.readOnly) return;
     for (const terminalId of this.#resumable) {
-      const service = this.#services.get(this.#sessions.get(terminalId)?.info.serviceId ?? '');
-      const place = service ? resolveServicePlaceIn(state, service, this.home) : null;
-      if (service && place) this.startService(service.id, place);
+      const info = this.#sessions.get(terminalId)?.info;
+      const service = this.#services.get(info?.serviceId ?? '');
+      const run = info && service ? resolveServiceRunIn(state, service, info.taskId, this.home) : null;
+      if (service && run) this.startService(service.id, run);
     }
     this.#resumable.clear();
   }

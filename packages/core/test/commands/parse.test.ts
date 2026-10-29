@@ -128,6 +128,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          forkOf: 't0',
         },
         {
           type: 'task.create',
@@ -137,6 +138,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          forkOf: 't0',
         },
       ],
       [
@@ -198,6 +200,10 @@ describe('parseUserCommand', () => {
       [
         { type: 'round.remove', taskId: 't1', number: 2 },
         { type: 'round.remove', taskId: 't1', number: 2 },
+      ],
+      [
+        { type: 'round.send', taskId: 't1', number: 2 },
+        { type: 'round.send', taskId: 't1', number: 2 },
       ],
       [
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
@@ -688,6 +694,14 @@ describe('schedules and idle compaction from Settings', () => {
     ).toThrow('compactionLeadMinutes must be a whole number.');
   });
 
+  test('takes the watchdog defaults: how long, the first check and the longest gap', () => {
+    const patch = { watchdogHours: 72, watchdogFirstCheckMinutes: 30, watchdogMaxGapHours: 6 };
+    expect(parseUserCommand({ type: 'settings.change', patch })).toEqual({ type: 'settings.change', patch });
+    expect(() => parseUserCommand({ type: 'settings.change', patch: { watchdogHours: 'long' } })).toThrow(
+      'watchdogHours must be a whole number.'
+    );
+  });
+
   test('takes the compaction choice and the fast mode switch, and refuses anything else', () => {
     expect(
       parseUserCommand({ type: 'settings.change', patch: { compaction: 'eunoe_default', fastMode: false } })
@@ -875,6 +889,32 @@ describe('writing a schedule from Settings', () => {
     ['a name past the limit', { name: 'x'.repeat(201) }, 'name is longer than 200 characters.'],
   ])('refuses %s', (_name, fields, message) => {
     expect(() => parsed(fields)).toThrow(message);
+  });
+});
+
+describe('memory commands', () => {
+  test('reads a rule to write, with or without its id and project', () => {
+    expect(parseUserCommand({ type: 'memory.write', text: 'Keep plans short.' })).toEqual({
+      type: 'memory.write',
+      memoryId: null,
+      projectId: null,
+      text: 'Keep plans short.',
+    });
+    expect(
+      parseUserCommand({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' })
+    ).toEqual({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' });
+  });
+
+  test('reads keeping and removing a rule by its id', () => {
+    expect(parseUserCommand({ type: 'memory.accept', memoryId: 'm1' })).toEqual({
+      type: 'memory.accept',
+      memoryId: 'm1',
+    });
+    expect(parseUserCommand({ type: 'memory.remove', memoryId: 'm1' })).toEqual({
+      type: 'memory.remove',
+      memoryId: 'm1',
+    });
+    expect(() => parseUserCommand({ type: 'memory.write', text: 3 })).toThrow('text must be text.');
   });
 });
 

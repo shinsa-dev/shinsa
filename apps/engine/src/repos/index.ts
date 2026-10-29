@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { Repo } from '@shinsa/core';
-import { inspectRepo, resolveRepoRoot } from '../git/index.ts';
+import { inspectRepo, resolveRepoRemote, resolveRepoRoot } from '../git/index.ts';
 import { GITHUB_TIMEOUT_MS } from '../github/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
@@ -34,7 +34,7 @@ function selectLocalRepo(path: string, name: string): LocalRepo | null {
   }
 }
 
-export function listLocalRepos(roots: string[]): LocalRepo[] {
+export function listLocalRepos(roots: string[], limit = MAX_LOCAL_REPOS): LocalRepo[] {
   const found = new Map<string, LocalRepo>();
   for (const root of roots) {
     for (const entry of readDirectory(root)) {
@@ -42,7 +42,7 @@ export function listLocalRepos(roots: string[]): LocalRepo[] {
       if (repo && !found.has(repo.path)) found.set(repo.path, repo);
     }
   }
-  return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, MAX_LOCAL_REPOS);
+  return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, limit);
 }
 
 export function createLoginResolver(cwd: string): LoginResolver {
@@ -84,6 +84,18 @@ async function resolveFallbackProjectName(
   return await resolveProjectName(remote, resolveLogin);
 }
 
+async function recordRepoRemote(engine: Engine, repo: Repo, remote: string) {
+  await engine.dispatch({ type: 'repo.update', repoId: repo.id, patch: { remote } });
+  return engine.state.repos[repo.id] ?? repo;
+}
+
+export async function syncRepoRemote(engine: Engine, repo: Repo) {
+  if (repo.remote) return repo;
+  const remote = await resolveRepoRemote(repo.path);
+  if (!remote) return repo;
+  return recordRepoRemote(engine, repo, remote);
+}
+
 function selectRepoByPath(engine: Engine, path: string) {
   return Object.values(engine.state.repos).find((repo) => repo.path === path) ?? null;
 }
@@ -97,6 +109,7 @@ export async function upsertRepo(
 ): Promise<Repo> {
   const candidate = await inspectRepo(path);
   const known = selectRepoByPath(engine, candidate.path);
+  if (known && !known.remote && candidate.remote) return recordRepoRemote(engine, known, candidate.remote);
   if (known) return known;
   const projectName = await resolveFallbackProjectName(engine, candidate.remote, resolveLogin, projectId);
   await engine.dispatch(
@@ -127,5 +140,6 @@ export async function listCandidateRepos(roots: string[], origin: string | null)
 }
 
 export { createDiscoverer, discoverRoots } from './discover.ts';
+export { readOriginRemote } from './remote.ts';
 export { type Discoverer, type RootSource, Roots } from './roots.ts';
 export { verifySetup } from './setup.ts';

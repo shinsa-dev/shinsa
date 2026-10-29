@@ -1,3 +1,4 @@
+import { splitMessageAttachments } from '../chat/attachments.ts';
 import { isTaskSettled } from './stages.ts';
 import type { PipelineStep } from './steps.ts';
 import type { PullRequest, Task } from './types.ts';
@@ -62,7 +63,9 @@ type ShippingSource = RoundSource & Pick<Task, 'closedAt' | 'fixFor' | 'pushPend
 const SHIPPED_STAGES: ReadonlySet<Task['stage']> = new Set<Task['stage']>(['shipping', 'awaiting_merge']);
 
 export function resolveRoundTitle(text: string) {
-  return text.trim().split('\n', 1)[0]?.slice(0, ROUND_LIMITS.title) ?? '';
+  const { text: body, attachments } = splitMessageAttachments(text);
+  const line = body.split('\n', 1)[0] || attachments.map((attachment) => attachment.name).join(', ');
+  return line.slice(0, ROUND_LIMITS.title);
 }
 
 function resolveFirstRound(task: RoundSource): Round {

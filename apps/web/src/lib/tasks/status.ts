@@ -13,6 +13,7 @@ import { STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
 import { ROADMAP_GROUP, resolveRoadmapGroup } from '@/lib/tasks/roadmap.ts';
+import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export interface Status {
   label: string;
@@ -56,6 +57,8 @@ const GATE_STATUS: Record<GateType, Status> = {
   post_merge: { label: 'Post-merge', tone: 'amber' },
 };
 
+const RESOLVING_CONFLICTS = 'Resolving conflicts';
+
 const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'blue' };
 
 const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 'blue' };
@@ -80,10 +83,20 @@ export function resolveGateStatus(gate: Gate): Status {
   return GATE_STATUS[gate.type];
 }
 
+const WATCHING: Status = { label: 'Watching', tone: 'blue' };
+
 function isWaitingForDelegations(state: ShinsaState, task: Task) {
   return listActiveRuns(state, task.id).some(
     (run) => run.status === 'waiting' && (run.waitingOn?.delegations.length ?? 0) > 0
   );
+}
+
+export function isResolvingConflicts(task: Task) {
+  return task.stage === 'fixing' && (task.fixFor === 'conflict' || task.fixFor === 'update');
+}
+
+export function resolveStageLabel(task: Task) {
+  return isResolvingConflicts(task) ? RESOLVING_CONFLICTS : STAGE_LABEL[task.stage];
 }
 
 export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
@@ -92,13 +105,20 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   const before = gate?.type === 'merge' ? describePreMergeStatus(task) : null;
   if (before) return { label: before, tone: 'amber' };
   if (gate) return resolveGateStatus(gate);
+  if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;
   if (isWaitingForDelegations(state, task)) return WAITING_FOR_DELEGATIONS;
   if (task.stage !== 'waiting_on_tasks' && resolveRoadmapGroup(state, task) === 'waiting') {
     return { label: ROADMAP_GROUP.waiting.title, tone: ROADMAP_GROUP.waiting.tone };
   }
-  return { label: STAGE_LABEL[task.stage], tone: STAGE_TONE[task.stage] };
+  return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
+}
+
+export function resolveRowStatus(state: ShinsaState, task: Task): Status {
+  const status = resolveTaskStatus(state, task);
+  if (status !== WAITING_TO_CHECK_IN) return status;
+  return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
 }
 
 const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
@@ -117,6 +137,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
   investigating: 'IconMagnifyingGlass',
   researching: 'IconBook',
   operating: 'IconConsole',
+  watching: 'IconRadar',
   awaiting_proposal: GATE_GLYPH.proposal.icon,
   awaiting_operation: GATE_GLYPH.operation.icon,
   merged: 'IconMerged',
@@ -127,6 +148,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
 export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName {
   const gate = selectLeadGate(state, task);
   if (gate) return resolveGateGlyph(gate).icon;
+  if (isWatchedTask(task)) return 'IconRadar';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
   if (task.usageWait?.status === 'armed') return 'IconGauge';
   if (isWaitingForDelegations(state, task)) return 'IconAgents';

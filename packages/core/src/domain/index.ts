@@ -49,12 +49,26 @@ export {
   selectEvidenceItem,
 } from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export {
+  isMemoryOf,
+  MEMORY_LIMITS,
+  MEMORY_SCOPES,
+  type MemoryEntry,
+  type MemoryScope,
+  type MemoryStatus,
+  resolveMemoryText,
+} from './memory.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
 export {
   describeOverlaps,
   listNewOverlapPaths,
   type OverlapNote,
 } from './overlaps.ts';
+export {
+  type ProjectSuggestion,
+  resolveProjectSuggestions,
+  type SuggestionRepo,
+} from './project-suggestions.ts';
 export {
   formatTaskHandle,
   isProjectKey,
@@ -114,8 +128,11 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
+  WATCHDOG_DEFAULTS,
+  WATCHDOG_SETTING_LIMITS,
 } from './settings.ts';
 export {
   type AutoChoice,
@@ -231,8 +248,20 @@ export {
   validateVerification,
 } from './verification.ts';
 export {
+  isSourceForRepo,
+  isWatchdogActive,
+  isWatchdogScheduled,
+  listActiveWatchdogs,
+  listRepoWatchSources,
+  selectWatchingRun,
+  WATCHDOG_LIMITS,
+  type Watchdog,
+  type WatchdogCheck,
+  type WatchdogStatus,
+  type WatchSource,
+} from './watchdogs.ts';
+export {
   type ApprovalPath,
-  canUseGitButler,
   DEFAULT_WORKSPACE_MODE,
   describeHumanEdits,
   isSettingUpWorkspace,
@@ -243,5 +272,4 @@ export {
   WORKSPACE_MODES,
   WORKSPACE_SETUP_REASON,
   type WorkspaceMode,
-  type WorkspaceSupport,
 } from './workspaces.ts';

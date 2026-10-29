@@ -119,6 +119,8 @@ async function buildProjectChoice(client: Parameters<SurfaceSpec['run']>[0], val
 async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['run']>[0]) {
   const account = await resolveOptionalAccount(client, readValue(values, 'account'));
   const waitsOn = await findTaskIds(client, readList(values, 'after'));
+  const forkFrom = readValue(values, 'forkFrom');
+  const [forkOf] = await findTaskIds(client, forkFrom ? [forkFrom] : []);
   return {
     type: 'task.create' as const,
     request: readValue(values, 'request'),
@@ -128,6 +130,7 @@ async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['r
     ...(values.planFirst ? { planFirst: true } : {}),
     ...(values.ask ? { mode: 'ask' as const } : {}),
     ...(waitsOn.length > 0 ? { waitsOn } : {}),
+    ...(forkOf ? { forkOf } : {}),
     ...(account ? { account } : {}),
   };
 }
@@ -246,6 +249,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'Only answer a question: no changes, branch or pull request.',
       },
       { name: 'after', kind: 'list', description: 'Tasks it waits on before it starts.' },
+      {
+        name: 'forkFrom',
+        kind: 'text',
+        description: 'A task to fork: the new task’s agent starts from a copy of its conversation.',
+      },
       { name: 'account', kind: 'text', description: 'Run it on this Claude account (id or email).' },
     ],
     build: buildTaskCreate,
@@ -359,6 +367,28 @@ export const TASK_SPECS: SurfaceSpec[] = [
       number: values.round as number,
     }),
     done: () => 'Removed the queued round.',
+  }),
+  defineCommand({
+    path: ['rounds', 'send'],
+    summary: 'Send a queued round to the current round now, as a message, instead of waiting.',
+    command: 'round.send',
+    humanOnly: true,
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'round',
+        kind: 'integer',
+        positional: 'one',
+        required: true,
+        description: 'The number of a round that waits to start, from `shinsa tasks show`.',
+      },
+    ],
+    build: async (values, client) => ({
+      type: 'round.send',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      number: values.round as number,
+    }),
+    done: () => 'Sent the queued round to the current round.',
   }),
   defineCommand({
     path: ['tasks', 'retry'],

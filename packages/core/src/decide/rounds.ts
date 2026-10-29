@@ -6,6 +6,7 @@ import {
   isTaskClosed,
   isTaskResting,
   listQueuedRounds,
+  type PipelineStep,
   type PullRequest,
   ROUND_LIMITS,
   type Round,
@@ -40,20 +41,51 @@ interface RoundBranch {
   onto: number | null;
 }
 
-const FALLBACK_BRANCH = 'shinsa/task';
+const FALLBACK_BRANCH = 'chore/shinsa-task';
+
+export type RoundRelease = 'now' | 'finish' | 'approve' | 'approve_and_merge' | 'merge';
+
+function hasOpenGate(state: ShinsaState, task: Task, type: 'review' | 'merge') {
+  return listOpenGates(state, task.id).some((gate) => gate.type === type);
+}
+
+function isMergedBeforeNextRound(task: Task) {
+  return resolveOperationTiming(resolveTaskPipeline(task)) === 'post_merge';
+}
 
 function isAtMergeGate(state: ShinsaState, task: Task) {
   return (
-    task.stage === 'awaiting_merge' &&
-    listOpenGates(state, task.id).some((gate) => gate.type === 'merge') &&
-    resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge'
+    task.stage === 'awaiting_merge' && hasOpenGate(state, task, 'merge') && !isMergedBeforeNextRound(task)
   );
 }
 
-function isAtRest(state: ShinsaState, task: Task, next: Round) {
+function isShippedThroughPullRequest(pipeline: readonly PipelineStep[]) {
+  return pipeline.includes('pull_request');
+}
+
+function isAtRest(state: ShinsaState, task: Task, pipeline: readonly PipelineStep[]) {
   if (isTaskClosed(task)) return false;
   if (isTaskResting(task)) return true;
-  return next.pipeline.includes('pull_request') && isAtMergeGate(state, task);
+  return isShippedThroughPullRequest(pipeline) && isAtMergeGate(state, task);
+}
+
+export function resolveRoundRelease(
+  state: ShinsaState,
+  task: Task,
+  pipeline: readonly PipelineStep[]
+): RoundRelease {
+  if (isAtRest(state, task, pipeline)) return 'now';
+  if (isTaskClosed(task)) return 'finish';
+  if (task.stage === 'awaiting_merge' && hasOpenGate(state, task, 'merge')) return 'merge';
+  if (task.stage !== 'awaiting_review' || !hasOpenGate(state, task, 'review')) return 'finish';
+  return isShippedThroughPullRequest(pipeline) && !isMergedBeforeNextRound(task)
+    ? 'approve'
+    : 'approve_and_merge';
+}
+
+export function isHeldByYourDecision(state: ShinsaState, task: Task, pipeline: readonly PipelineStep[]) {
+  const release = resolveRoundRelease(state, task, pipeline);
+  return release !== 'now' && release !== 'finish';
 }
 
 export function queueRound(decider: Decider, taskId: string, input: RoundRequest) {
@@ -138,7 +170,7 @@ function startRound(decider: Decider, task: Task, round: Round) {
 export function startQueuedRounds(decider: Decider) {
   for (const task of Object.values(decider.state.tasks)) {
     const [next] = listQueuedRounds(task);
-    if (!next || !isAtRest(decider.state, task, next)) continue;
+    if (!next || !isAtRest(decider.state, task, next.pipeline)) continue;
     startRound(decider, task, next);
   }
 }
@@ -178,7 +210,7 @@ export function changeRoundShipping(decider: Decider, command: CommandOf<'round.
   });
 }
 
-function findWaitingRound(task: Task, number: number) {
+export function findWaitingRound(task: Task, number: number) {
   if (isTaskClosed(task)) throw new DomainError('task_settled', 'This task is finished.');
   const round = resolveTaskRounds(task).find((candidate) => candidate.number === number);
   if (!round) throw new DomainError('round_not_found', `This task has no round ${number}.`);

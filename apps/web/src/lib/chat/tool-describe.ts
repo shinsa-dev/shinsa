@@ -27,10 +27,12 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'report_review',
   'ask',
   'suggest_tasks',
+  'remember',
   'answer',
   'report_diagnosis',
   'submit_report',
   'report_outcome',
+  'report_watch',
   'reshape_task',
 ]);
 
@@ -132,10 +134,12 @@ type PlainShinsaTool =
   | 'report_review'
   | 'read_task'
   | 'list_repository_work'
+  | 'list_services'
   | 'answer'
   | 'report_diagnosis'
   | 'submit_report'
   | 'report_outcome'
+  | 'report_watch'
   | 'delegation_status'
   | 'delegation_cancel'
   | 'list_schedules'
@@ -148,10 +152,12 @@ const PLAIN_SHINSA: Record<PlainShinsaTool, { icon: IconName; verb: string }> = 
   report_review: { icon: 'IconShieldCheck', verb: 'Reported the review' },
   read_task: { icon: 'IconFileText', verb: 'Read a task' },
   list_repository_work: { icon: 'IconFolders', verb: 'Listed the other work in the repository' },
+  list_services: { icon: 'IconServer', verb: 'Listed the task’s services' },
   answer: { icon: 'IconSend', verb: 'Handed over the answer' },
   report_diagnosis: { icon: 'IconSend', verb: 'Reported the diagnosis' },
   submit_report: { icon: 'IconSend', verb: 'Wrote the report' },
   report_outcome: { icon: 'IconSend', verb: 'Reported the outcome' },
+  report_watch: { icon: 'IconSend', verb: 'Reported the watchdog check' },
   delegation_status: { icon: 'IconAgents', verb: 'Checked a delegation' },
   delegation_cancel: { icon: 'IconCircleX', verb: 'Stopped a delegation' },
   list_schedules: { icon: 'IconClock', verb: 'Listed the schedules' },
@@ -223,12 +229,26 @@ function describeShinsaMessage(
       const count = readList(args, 'tasks').length;
       return plain('IconLightbulbGlow', `Suggested ${formatCount(count, 'task', 'tasks')}`);
     }
+    case 'remember':
+      return plain('IconLightbulbGlow', 'Proposed a rule to remember:', readString(args, 'text'));
     case 'delegation_answer':
       return plain('IconBubbleText', 'Answered a delegated agent:', readString(args, 'answer'));
     case 'request_secret':
       return plain('IconShieldCheck', 'Asked you for a secret:', readString(args, 'label'));
+    case 'run_service':
+      return plain(
+        'IconServer',
+        SERVICE_VERBS[readString(args, 'action') ?? ''] ?? 'Ran a service:',
+        readString(args, 'service')
+      );
   }
 }
+
+const SERVICE_VERBS: Record<string, string> = {
+  start: 'Started a service:',
+  stop: 'Stopped a service:',
+  restart: 'Restarted a service:',
+};
 
 function describeShinsa(name: ShinsaToolName, args: ChatToolArgs): ToolDescription {
   if (!isPlainShinsaTool(name)) return describeShinsaWork(name, args);
@@ -378,13 +398,18 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
     count === 1
       ? 'listed the other work in the repository'
       : `listed the other work in the repository ${count} times`,
+  list_services: (count) =>
+    count === 1 ? 'listed the task’s services' : `listed the task’s services ${count} times`,
+  run_service: (count) => `ran ${formatCount(count, 'service', 'services')}`,
   note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',
+  remember: (count) => (count === 1 ? 'proposed a rule to remember' : `proposed ${count} rules to remember`),
   answer: () => 'handed over the answer',
   report_diagnosis: () => 'reported the diagnosis',
   submit_report: () => 'wrote the report',
   report_outcome: () => 'reported the outcome',
+  report_watch: () => 'reported the watchdog check',
   reshape_task: () => 'changed the kind of task',
   delegate_task: (count) => `started ${formatCount(count, 'delegation', 'delegations')}`,
   delegation_status: (count) => (count === 1 ? 'checked a delegation' : `checked delegations ${count} times`),

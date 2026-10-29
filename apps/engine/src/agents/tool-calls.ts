@@ -1,12 +1,12 @@
 import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import {
+  assertRunTool,
   type CommandOf,
   isDelegatedRun,
   isTaskSettled,
   resolveCurrentRound,
   type ShinsaCommand,
   type ShinsaEvent,
-  selectStackTarget,
   serializeTaskReferences,
   validateEvidenceRemoval,
   validateFixHandOver,
@@ -19,7 +19,6 @@ import type { Engine } from '../runtime/engine.ts';
 import type { ScheduleToolCall } from '../schedules/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
 import type { Workspaces } from '../workspaces/index.ts';
-import { LedgerStore } from '../workspaces/ledger.ts';
 import { awaitDelegation } from './delegations.ts';
 import { assertProtocol, HANDED_OVER, readString, resolveCommitMessage, storeEvidence } from './handover.ts';
 import { createManageClient, isSurfaceTool, type ManageAccess, readSurfaceToolCall } from './manage/index.ts';
@@ -27,6 +26,7 @@ import type { ProviderRegistry } from './providers/index.ts';
 import type { Questions } from './questions.ts';
 import { resolveTaskReading } from './reading.ts';
 import { RepositoryWork } from './repository-work.ts';
+import { handleServiceTool, type TaskServiceRunner } from './services.ts';
 import { handleOrchestrationTool } from './tools/orchestration.ts';
 import { handleProcessTool } from './tools/process.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -49,7 +49,7 @@ interface ToolCallsOptions {
   minuteMs: number;
   manage: ManageAccess | null;
   workspaces: Workspaces;
-  dataDir: string;
+  services: TaskServiceRunner | null;
 }
 
 interface ToolCall {
@@ -74,7 +74,7 @@ export class ToolCalls {
 
   constructor(options: ToolCallsOptions) {
     this.#options = options;
-    this.#work = new RepositoryWork(options.engine, new LedgerStore(options.dataDir));
+    this.#work = new RepositoryWork(options.engine);
   }
 
   handle(name: string, call: ToolCall): Promise<string> {
@@ -104,6 +104,9 @@ export class ToolCalls {
         return this.#work.describe(this.#findCurrent(runId, attemptId).task.id, signal);
       case 'note':
         return this.#note(call, dispatch);
+      case 'list_services':
+      case 'run_service':
+        return this.#runServiceTool(name, call);
       default:
         if (isSurfaceTool(name)) return this.#manage(name, call);
         return this.#handleOther(name, call, dispatch);
@@ -139,17 +142,10 @@ export class ToolCalls {
     const { run, task } = this.#findCurrent(call.runId, call.attemptId);
     const repo = task.repoId ? this.#options.engine.state.repos[task.repoId] : undefined;
     if (!task.worktreePath || !repo) return dispatch({ ...command, treeHash: null });
-    const { engine, workspaces } = this.#options;
-    const commit = await workspaces
+    const commit = await this.#options.workspaces
       .resolve(task)
-      .commit(
-        repo,
-        task,
-        resolveCommitMessage(task, run),
-        (branch) => selectStackTarget(engine.state, task, branch) !== null
-      );
+      .commit(repo, task, resolveCommitMessage(task, run));
     try {
-      if (commit.stackedOn) await dispatch({ type: 'task.stack', taskId: task.id, branch: commit.stackedOn });
       await this.#work.recordOverlaps(task.id, [], call.signal);
       return await dispatch({ ...command, treeHash: commit.treeHash, files: commit.files });
     } catch (error) {
@@ -220,6 +216,19 @@ export class ToolCalls {
     const taskId = readString(input, 'task_id');
     if (!taskId) return Promise.reject(new Error('task_id is required.'));
     return Promise.resolve(resolveTaskReading(engine.state, transcripts, taskId));
+  }
+
+  async #runServiceTool(name: 'list_services' | 'run_service', { runId, attemptId, input }: ToolCall) {
+    const { engine, services } = this.#options;
+    const { run, task } = this.#findCurrent(runId, attemptId);
+    assertRunTool(run, name);
+    if (!services) throw new Error(`${name} is not available while Shinsa runs without terminals.`);
+    return await handleServiceTool(name, input, {
+      state: engine.state,
+      task,
+      runner: services,
+      now: Date.now(),
+    });
   }
 
   async #note({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {

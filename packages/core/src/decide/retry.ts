@@ -2,12 +2,12 @@ import { isPausingGate } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import { retryChecks } from './checks.ts';
-import { UPDATING_WORKSPACE, updateWorkspace } from './conflicts.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
+import { restartWatchCheck } from './watchdogs.ts';
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
@@ -56,8 +56,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       return;
     case 'shipping':
       decider.cancelRuns(taskId);
-      if (task.stageReason === UPDATING_WORKSPACE) updateWorkspace(decider, taskId, guidance);
-      else requestPush(decider, taskId);
+      requestPush(decider, taskId);
       return;
     case 'awaiting_merge':
       decider.cancelRuns(taskId);
@@ -74,6 +73,9 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       return;
     case 'operating':
       startOperation(decider, taskId, guidance);
+      return;
+    case 'watching':
+      restartWatchCheck(decider, task, guidance);
       return;
     case 'awaiting_proposal':
     case 'awaiting_operation':

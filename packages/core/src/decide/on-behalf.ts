@@ -3,7 +3,17 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
-type OnBehalfCommand = Exclude<UserCommand, { type: 'gate.answer' | 'merge_step.tick' }>;
+type HumanOnlyType = 'gate.answer' | 'merge_step.tick' | 'memory.write' | 'memory.accept' | 'memory.remove';
+
+const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
+  'gate.answer',
+  'merge_step.tick',
+  'memory.write',
+  'memory.accept',
+  'memory.remove',
+]);
+
+type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;
 
 type Describe<T extends OnBehalfCommand['type']> = (state: ShinsaState, command: CommandOf<T>) => string;
 
@@ -52,6 +62,8 @@ const DESCRIPTIONS: Descriptions = {
     `Changed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
   'round.remove': (state, command) =>
     `Removed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
+  'round.send': (state, command) =>
+    `Sent queued round ${command.number} of ${quoteTask(state, command.taskId)} to its current round`,
   'suggestion.keep': (state, command) =>
     `Kept a split-off of ${quoteTask(state, command.taskId)} as its next round`,
   'monitor.check_in_now': (state, command) =>
@@ -79,6 +91,13 @@ const DESCRIPTIONS: Descriptions = {
   'schedule.remove': () => 'Deleted a schedule',
   'schedule.write': (_state, command) =>
     command.scheduleId ? 'Changed a schedule' : `Saved the schedule “${command.name ?? 'Schedule'}”`,
+  'watchdog.stop': (state, command) => `Stopped a watchdog of ${quoteTask(state, command.taskId)}`,
+  'watchdog.connect': (state, command) =>
+    `Connected ${command.server} to a watchdog of ${quoteTask(state, command.taskId)}`,
+  'watch_source.write': (state, command) =>
+    `Saved ${command.server} as a data source of ${state.projects[command.projectId]?.name ?? 'a project'}`,
+  'watch_source.remove': (state, command) =>
+    `Removed ${command.server} from the data sources of ${state.projects[command.projectId]?.name ?? 'a project'}`,
 };
 
 function selectCreatedTask(decider: Decider) {
@@ -87,7 +106,7 @@ function selectCreatedTask(decider: Decider) {
 }
 
 function isOnBehalfCommand(command: ShinsaCommand): command is OnBehalfCommand {
-  return isUserCommand(command) && command.type !== 'gate.answer' && command.type !== 'merge_step.tick';
+  return isUserCommand(command) && !HUMAN_ONLY_TYPES.has(command.type);
 }
 
 function selectActionTask(decider: Decider, command: OnBehalfCommand) {

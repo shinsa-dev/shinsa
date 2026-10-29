@@ -41,6 +41,10 @@ interface FakeState {
   calls: string[][];
   mergeQueue?: boolean;
   failReads?: number;
+  workflows?: Record<string, string>;
+  requiredChecks?: string[];
+  rulesetChecks?: string[];
+  baseChecks?: boolean;
 }
 
 const path = Bun.env.FAKE_GH_STATE || '/dev/null';
@@ -219,6 +223,7 @@ if (group === 'pr' && command === 'view') {
   console.log(
     JSON.stringify({
       number: pull.number,
+      title: pull.title,
       url: `https://github.com/acme/app/pull/${pull.number}`,
       state: pull.state,
       mergeable: pull.mergeable,
@@ -265,6 +270,12 @@ if (group === 'pr' && command === 'merge') {
     save();
     process.exit(1);
   }
+  const match = flag('--match-head-commit');
+  if (match && match !== headSha(pull.head)) {
+    save();
+    console.error('GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)');
+    process.exit(1);
+  }
   if (state.mergeQueue) {
     pull.queue = { state: 'QUEUED', position: 1 };
   } else {
@@ -273,6 +284,39 @@ if (group === 'pr' && command === 'merge') {
   }
   pull.mergedWith = args[3] ?? null;
   save();
+  process.exit(0);
+}
+if (group === 'api' && command === 'graphql' && args.some((arg) => arg.startsWith('workflows='))) {
+  save();
+  const entries = Object.entries(state.workflows ?? {}).map(([name, text]) => ({ name, object: { text } }));
+  console.log(
+    JSON.stringify({
+      repository: {
+        workflows: state.workflows ? { entries } : null,
+        base: { statusCheckRollup: state.baseChecks ? { state: 'SUCCESS' } : null },
+      },
+    })
+  );
+  process.exit(0);
+}
+if (group === 'api' && command?.includes('/rules/branches/')) {
+  save();
+  const rules = (state.rulesetChecks ?? []).map((context) => ({
+    type: 'required_status_checks',
+    parameters: { required_status_checks: [{ context }] },
+  }));
+  console.log(JSON.stringify(rules));
+  process.exit(0);
+}
+if (group === 'api' && command?.includes('/branches/')) {
+  save();
+  const contexts = state.requiredChecks ?? [];
+  console.log(
+    JSON.stringify({
+      name: command.split('/branches/')[1],
+      protection: contexts.length > 0 ? { enabled: true, required_status_checks: { contexts } } : { enabled: false },
+    })
+  );
   process.exit(0);
 }
 if (group === 'api' && command === 'graphql') {

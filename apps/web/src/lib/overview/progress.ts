@@ -1,4 +1,12 @@
-import type { DisplayPhase, DisplayPhaseStatus, ShapeState, TaskProgress } from '@shinsa/core';
+import {
+  capitalise,
+  type DisplayPhase,
+  type DisplayPhaseStatus,
+  type FixReason,
+  type ShapeState,
+  type Task,
+  type TaskProgress,
+} from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped';
@@ -42,6 +50,17 @@ export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
   waiting: 'amber',
   pending: 'neutral',
 };
+
+const CONFLICT_FIXES: ReadonlySet<FixReason | null> = new Set(['conflict', 'update']);
+
+export function resolveStageNote(task: Pick<Task, 'stage' | 'fixFor' | 'stageReason'>) {
+  if (task.stage !== 'fixing' || !CONFLICT_FIXES.has(task.fixFor) || !task.stageReason) return null;
+  return capitalise(task.stageReason);
+}
+
+export function resolveStepStatusLabel(step: Step, note: string | null) {
+  return step.status === 'current' && note ? note : STEP_STATUS_LABEL[step.status];
+}
 
 function toStepStatus(status: DisplayPhaseStatus): StepStatus {
   return status === 'active' ? 'current' : status;
@@ -88,6 +107,25 @@ export function resolveSteps(progress: TaskProgress): Step[] {
 
 export function isStepReached(step: Step) {
   return step.status === 'done' || step.status === 'skipped';
+}
+
+export function selectCurrentStep(steps: Step[]) {
+  return steps.find((step) => step.status === 'current' || step.status === 'waiting') ?? null;
+}
+
+export function describeStep(step: Step) {
+  return step.count ? `${step.label} ${step.count}` : step.label;
+}
+
+export function describeStepCount(step: Step | null, status: string) {
+  if (!step?.count || status.split(' · ')[0] === step.label) return null;
+  return describeStep(step);
+}
+
+export function describeTrackPosition(steps: Step[]) {
+  const current = selectCurrentStep(steps);
+  if (current) return `Step ${steps.indexOf(current) + 1} of ${steps.length}: ${describeStep(current)}`;
+  return `${steps.filter(isStepReached).length} of ${steps.length} steps done`;
 }
 
 const LONG_STRIP = 6;

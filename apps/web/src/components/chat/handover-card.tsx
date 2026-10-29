@@ -244,6 +244,18 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
   );
 }
 
+function RememberCard({ args }: { args: ChatToolArgs }) {
+  const why = readString(args, 'why');
+  return (
+    <Card icon='IconLightbulbGlow' title='Proposed a rule to remember' meta='In Settings → Memory'>
+      <div className='flex flex-col gap-px text-xs'>
+        <InlineMarkdown text={readString(args, 'text') ?? ''} className='selectable font-medium text-fg-4' />
+        {why && <InlineMarkdown text={why} className='text-fg-3' />}
+      </div>
+    </Card>
+  );
+}
+
 function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArgs; field: string }) {
   const proposal = readProposedChange(args);
   return (
@@ -330,6 +342,8 @@ export function HandoverCard({
       return <AskCard call={call} args={tool.args} delegated={Boolean(run.delegation)} />;
     case 'suggest_tasks':
       return <SuggestionsCard args={tool.args} />;
+    case 'remember':
+      return <RememberCard args={tool.args} />;
     case 'answer':
       return <DeliveryCard title='Handed over the answer' args={tool.args} field='answer' />;
     case 'report_diagnosis':
@@ -338,6 +352,8 @@ export function HandoverCard({
       return <DeliveryCard title='Wrote the report' args={tool.args} field='report' />;
     case 'report_outcome':
       return <DeliveryCard title='Reported the outcome' args={tool.args} field='outcome' />;
+    case 'report_watch':
+      return <DeliveryCard title='Reported the watchdog check' args={tool.args} field='summary' />;
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
     case 'attach_evidence':
@@ -345,6 +361,8 @@ export function HandoverCard({
     case 'find_tasks':
     case 'read_task':
     case 'list_repository_work':
+    case 'list_services':
+    case 'run_service':
     case 'note':
     case 'wait_for':
       return <InsetToolRow call={call} live={live} />;

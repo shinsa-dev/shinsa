@@ -43,7 +43,6 @@ export function listWorkspaceMarks(state: ShinsaState) {
       return 'waited for the checkout';
     }
     if (task.workspace === 'main_checkout' && task.worktreePath !== null) return 'worked in the checkout';
-    if (task.workspace === 'gitbutler' && task.worktreePath !== null) return 'worked on a GitButler branch';
     return null;
   });
 }

@@ -16,7 +16,6 @@ import {
   type Progress,
   type Terminal,
 } from '../../src/terminal/index.ts';
-import { needsButSetup, readButVersion } from '../../src/workspaces/but.ts';
 import { createConfigAt } from './config.ts';
 import { createTempDir } from './temp.ts';
 
@@ -53,17 +52,6 @@ export interface TestRepo {
   path: string;
   origin: string;
   repo: Repo;
-}
-
-export async function startGitButler(path: string) {
-  const version = await readButVersion();
-  if (version !== null && needsButSetup(version)) await runCommandOrThrow(['but', 'setup', '--json'], path);
-}
-
-export async function startParallelBranches(path: string) {
-  await startGitButler(path);
-  for (const branch of ['side/one', 'side/two'])
-    await runCommandOrThrow(['but', 'branch', 'new', branch, '--json'], path);
 }
 
 export async function createGitRepo(
@@ -104,9 +92,9 @@ export async function until(
   predicate: () => boolean | Promise<boolean>,
   timeoutMs = 5_000
 ) {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = performance.now() + timeoutMs;
   while (!(await predicate())) {
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
+    if (performance.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
     await Bun.sleep(10);
   }
 }
@@ -153,6 +141,8 @@ export function createTestOnboarding(engine: Engine, config: ServerConfig, run: 
       config,
       store,
       roots,
+      resolveLogin: () => Promise.resolve(null),
+      ask: () => Promise.resolve(null),
       run,
       models: { listModels: () => Promise.resolve([]) },
       accounts: () => Promise.resolve([]),

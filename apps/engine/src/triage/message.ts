@@ -104,6 +104,25 @@ const WORKING_KIND_QUESTION: ChoiceQuestion = {
   },
 };
 
+const GATE_STAGES: Partial<Record<Task['stage'], string>> = {
+  awaiting_review: 'review',
+  awaiting_merge: 'merge',
+};
+
+function createGateKindQuestion(decision: string): ChoiceQuestion {
+  return {
+    type: 'choice',
+    instructions: `The work of the current round is finished and waits for the human to ${decision} it. Nothing else is in progress. What is this message?`,
+    criteria: {
+      acknowledge: ACKNOWLEDGE,
+      feedback: `about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script), something to check, or a question about it`,
+      new_round:
+        'the next piece of work after this round: a new idea or an extension of the same goal that is a code change of its own, not something needed to try or finish this round',
+      separate_task: SEPARATE_TASK,
+    },
+  };
+}
+
 const MESSAGE_SHAPE_QUESTION: ChoiceQuestion = {
   ...SHAPE_QUESTION,
   instructions:
@@ -149,7 +168,9 @@ const ROUND_STATE: Record<RoundStatus, string> = {
 const RESULT_EXCERPT = 400;
 
 function resolveKindQuestion(task: Task) {
-  return isTaskResting(task) ? RESTING_KIND_QUESTION : WORKING_KIND_QUESTION;
+  if (isTaskResting(task)) return RESTING_KIND_QUESTION;
+  const decision = GATE_STAGES[task.stage];
+  return decision ? createGateKindQuestion(decision) : WORKING_KIND_QUESTION;
 }
 
 function resolveMessageSchema(kind: ChoiceQuestion): JsonSchema {
@@ -178,6 +199,8 @@ function describeRound(task: Task, round: Round) {
 function describeNow(task: Task) {
   const current = resolveCurrentRound(task);
   if (isTaskResting(task)) return `Now: round ${current.number} is done and nothing is in progress.`;
+  const decision = GATE_STAGES[task.stage];
+  if (decision) return `Now: round ${current.number} is finished and waits for the human to ${decision} it.`;
   return `Now: round ${current.number} is in progress, ${task.stageReason}.`;
 }
 

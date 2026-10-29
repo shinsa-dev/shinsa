@@ -93,6 +93,14 @@ describe('what a prompt says about the work it builds on', () => {
     expect(resolveReviewerPrompt(task, null, [])).toContain('Diff the branch against the default branch');
   });
 
+  test('the reviewer checks that new code follows the patterns around it, blocking when a rule names one', () => {
+    const { task } = tasks();
+    const prompt = resolveReviewerPrompt(task, null, []);
+    expect(prompt).toContain('Check the new code follows the patterns of the code around it');
+    expect(prompt).toContain('It is blocking when the repository’s rules name the pattern.');
+    expect(prompt).toContain('The agent listed no watchdogs for after the merge.');
+  });
+
   test('a phase is told the checks Shinsa runs after it, the repository’s only on the last, and how to change them', () => {
     const { harness, task } = tasks();
     const repo = harness.state.repos[task.repoId ?? ''] ?? null;
@@ -117,6 +125,16 @@ describe('what a prompt says about the work it builds on', () => {
       '`testing` has two parts. `automated`: one or two lines on what the tests cover'
     );
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Later phases build on this one');
+  });
+
+  test('only the last phase asks for a live preview of the project’s services as evidence', () => {
+    const { task } = tasks();
+    const preview = 'Before the review, give the human a live preview: call `list_services`';
+    expect(resolvePhaseInstruction(task, null, 0)).not.toContain(preview);
+    const last = resolvePhaseInstruction(task, null, 1);
+    expect(last).toContain(preview);
+    expect(last).toContain('as `preview` evidence');
+    expect(last).toContain('the local preview you attached');
   });
 
   test('a plan that asks for screenshots gets before shots first and everything before the last phase', () => {
@@ -285,23 +303,6 @@ describe('the answerer prompt', () => {
     expect(prompt).toContain('Your role: answerer.');
     expect(prompt).not.toContain('checked out at');
     expect(prompt).not.toContain('followed up');
-  });
-});
-
-describe('reading another task', () => {
-  test('every step agent is told to read another task with read_task, which never changes it', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    const planner = harness.activeRun(taskId).prompt ?? '';
-    proposePlan(harness, taskId);
-    const builder = harness.activeRun(taskId).prompt ?? '';
-    const answerer = resolveAnswererPrompt(harness.task(taskId), null, null);
-    for (const prompt of [planner, builder, answerer]) {
-      expect(prompt).toContain(
-        'call `read_task` with an id from `find_tasks`. It reads; it never changes the task.'
-      );
-      expect(prompt).toContain('whether an agent works on them now, call `list_repository_work`.');
-    }
   });
 });
 

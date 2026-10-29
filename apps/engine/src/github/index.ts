@@ -10,12 +10,14 @@ import {
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
+  resolveCurrentRound,
   type Settings,
   serializeMergeStepsMarkdown,
   serializeTestingMarkdown,
   type Task,
 } from '@shinsa/core';
-import { assertRefName } from '../git/index.ts';
+import { assertRefName, resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
+import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 
 interface CheckEntry {
@@ -138,6 +140,13 @@ const PULL_REQUEST_FIELDS =
   'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup';
 
 const NO_PULL_REQUEST = /no pull requests found/i;
+
+const COMMIT_SHA = /^[0-9a-f]{7,64}$/i;
+
+function assertCommitSha(sha: string) {
+  if (!COMMIT_SHA.test(sha)) throw new Error(`"${sha}" is not a commit.`);
+  return sha;
+}
 
 interface GhOptions {
   input?: string;
@@ -301,7 +310,16 @@ async function readDetails(
   signal?: AbortSignal
 ): Promise<PullRequestDetails | null> {
   const slug = resolveRepoSlug(repo);
-  if (!slug) return null;
+  if (!slug) {
+    log.warn(
+      '[GitHub] The repository has no GitHub remote, so the pull request is read without its checks and threads',
+      {
+        repo: repo.name,
+        number,
+      }
+    );
+    return null;
+  }
   const output = await runGhOrThrow(
     [
       'api',
@@ -357,17 +375,27 @@ export function readStackedPullRequest(repo: Repo, number: number, signal?: Abor
   return readTarget(repo, String(number), signal);
 }
 
+export function serializePullRequestTitle(task: Task) {
+  return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title, null);
+}
+
+function serializeTaskReference(task: Task) {
+  const link = `\`shinsa://task/${task.id}\``;
+  return task.handle ? `Shinsa task: ${task.handle}, ${link}` : `Shinsa task: ${link}`;
+}
+
 export function serializePullRequestBody(task: Task) {
   const testing = serializeTestingMarkdown(assembleReport(task).walkthrough?.testing);
   const steps = serializeMergeStepsMarkdown(listMergeSteps(task));
   return [
-    task.summary ?? '',
-    testing ? `\n${testing}` : '',
-    steps ? `\n${steps}` : '',
-    task.plan ? `\n<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
+    serializeTaskReference(task),
+    task.summary?.trim() ?? '',
+    testing,
+    steps,
+    task.plan ? `<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
   ]
-    .join('\n')
-    .trim();
+    .filter((part) => part.length > 0)
+    .join('\n\n');
 }
 
 export async function createPullRequest(
@@ -390,7 +418,7 @@ export async function createPullRequest(
       '--base',
       assertRefName(baseBranch ?? repo.defaultBranch),
       '--title',
-      task.title,
+      serializePullRequestTitle(task),
       '--body-file',
       '-',
     ],
@@ -404,12 +432,29 @@ export async function retargetPullRequest(repo: Repo, number: number, base: stri
   await runGhOrThrow(['pr', 'edit', String(number), '--base', assertRefName(base)], repo.path, { signal });
 }
 
-export async function mergePullRequest(
+async function resolveMergeMessage(
   repo: Repo,
   number: number,
   method: Settings['mergeMethod'],
   signal?: AbortSignal
 ) {
+  if (method === 'rebase') return [];
+  const output = await runGhOrThrow(['pr', 'view', String(number), '--json', 'title'], repo.path, { signal });
+  const title = (JSON.parse(output) as { title?: string }).title?.trim();
+  return title ? ['--subject', `${title} (#${number})`, '--body', ''] : [];
+}
+
+export async function mergePullRequest(
+  repo: Repo,
+  number: number,
+  method: Settings['mergeMethod'],
+  headSha: string | null,
+  signal?: AbortSignal
+) {
   if (!MERGE_METHODS.has(method)) throw new Error(`"${method}" is not a merge method.`);
-  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`], repo.path, { signal });
+  const guard = headSha ? ['--match-head-commit', assertCommitSha(headSha)] : [];
+  const message = await resolveMergeMessage(repo, number, method, signal);
+  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`, ...guard, ...message], repo.path, {
+    signal,
+  });
 }

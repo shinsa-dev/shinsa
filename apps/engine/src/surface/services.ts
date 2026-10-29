@@ -1,6 +1,8 @@
 import {
   DomainError,
+  isServiceActive,
   listProjectServices,
+  listServiceTaskRuns,
   type ServiceState,
   type ServiceView,
   type TerminalInfo,
@@ -9,7 +11,7 @@ import {
 import { type Display, describeMark, describeTable, PLAIN_DISPLAY, type Tone } from '../terminal/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
-import { type ProjectsRead, selectProject } from './resolve.ts';
+import { type ProjectsRead, resolveOptionalTaskId, selectProject } from './resolve.ts';
 import { defineAction, encode, readValue, type SurfaceSpec } from './spec.ts';
 
 const PROJECT_FIELD: FieldSpec = {
@@ -29,6 +31,12 @@ const SERVICE_FIELDS: FieldSpec[] = [
   { ...PROJECT_FIELD, description: 'The project the service belongs to, when two have one by that name.' },
 ];
 
+const TASK_RUN_FIELD: FieldSpec = {
+  name: 'task',
+  kind: 'text',
+  description: 'Run it for this task, in its worktree: its handle (SW-142), id or exact title.',
+};
+
 const STATE_TONES: Record<ServiceState, Tone> = {
   stopped: 'dim',
   starting: 'accent',
@@ -40,6 +48,7 @@ const STATE_TONES: Record<ServiceState, Tone> = {
 interface ServicesRead {
   projects: ProjectsRead['projects'];
   views: ServiceView[];
+  taskRuns: Map<string, ServiceView[]>;
 }
 
 async function readServices(client: SurfaceClient, projectRef: string): Promise<ServicesRead> {
@@ -57,23 +66,36 @@ async function readServices(client: SurfaceClient, projectRef: string): Promise<
   const views = projects
     .filter((each) => !project || each.id === project.id)
     .flatMap((each) => listProjectServices(snapshot, each.id, now));
-  return { projects, views };
+  const taskRuns = new Map(
+    views.map((view) => [view.service.id, listServiceTaskRuns(snapshot, view.service.id, now)])
+  );
+  return { projects, views, taskRuns };
 }
 
 function describeState(view: ServiceView) {
   return view.state === 'failed' && view.exitCode !== null ? `failed (code ${view.exitCode})` : view.state;
 }
 
-function formatServices({ projects, views }: ServicesRead, display: Display) {
+function describeTaskRuns(runs: ServiceView[]) {
+  const active = runs.filter(isServiceActive).length;
+  return active === 0 ? '' : `${active} running`;
+}
+
+function formatServices({ projects, views, taskRuns }: ServicesRead, display: Display) {
   if (views.length === 0) return 'No services. Add one from Services at the top of Shinsa.';
   const names = new Map(projects.map((project) => [project.id, project.name]));
   const rows = views.map((view) => [
     { text: view.service.name, tone: 'bold' as const },
     names.get(view.service.projectId) ?? '',
     { text: describeState(view), tone: STATE_TONES[view.state] },
+    describeTaskRuns(taskRuns.get(view.service.id) ?? []),
+    isServiceActive(view) ? (view.url ?? '') : '',
     { text: view.service.command, tone: 'dim' as const },
   ]);
-  return describeTable(display, { headers: ['Service', 'Project', 'State', 'Command'], rows }).join('\n');
+  return describeTable(display, {
+    headers: ['Service', 'Project', 'State', 'Tasks', 'Preview', 'Command'],
+    rows,
+  }).join('\n');
 }
 
 async function findServiceView(client: SurfaceClient, values: Values) {
@@ -102,14 +124,20 @@ function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: stri
     path: ['services', action],
     summary,
     humanOnly: true,
-    fields: SERVICE_FIELDS,
+    fields: [...SERVICE_FIELDS, TASK_RUN_FIELD],
     act: async (client, values, display) => {
       const { service } = await findServiceView(client, values);
+      const taskRef = readValue(values, 'task');
+      const taskId = await resolveOptionalTaskId(client, taskRef);
       const data = await client.post<TerminalsSnapshot & { terminal?: TerminalInfo }>(
         `/api/services/${encode(service.id)}/${action}`,
-        {}
+        taskId ? { taskId } : {}
       );
-      return { data, text: describeMark(display.style, 'success', 'check', `${done} ${service.name}.`) };
+      const scope = taskId ? ` for ${taskRef}` : '';
+      return {
+        data,
+        text: describeMark(display.style, 'success', 'check', `${done} ${service.name}${scope}.`),
+      };
     },
   });
 }
@@ -117,13 +145,14 @@ function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: stri
 export const SERVICE_SPECS: SurfaceSpec[] = [
   {
     path: ['services', 'list'],
-    summary: 'List your services in Shinsa: what each runs, in which project, and whether it is running.',
+    summary:
+      'List your services in Shinsa: what each runs, in which project, whether it is running and its preview URL.',
     access: 'read',
     humanOnly: true,
     fields: [PROJECT_FIELD],
     run: async (client, values, display = PLAIN_DISPLAY) => {
-      const { projects, views } = await readServices(client, readValue(values, 'project'));
-      return { data: { services: views }, text: formatServices({ projects, views }, display) };
+      const read = await readServices(client, readValue(values, 'project'));
+      return { data: { services: read.views }, text: formatServices(read, display) };
     },
   },
   defineServiceAction('start', 'Start a service in its terminal, as Start does in Shinsa.', 'Started'),

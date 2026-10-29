@@ -101,6 +101,7 @@ interface SessionRecord {
   readOnly: boolean;
   prompt: string;
   resume: string | null;
+  fork: boolean;
   sessionId: string;
   model: string | null;
   cwd: string;
@@ -127,6 +128,9 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   },
   operate: async (agent) => {
     await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
+  },
+  watch: async (agent) => {
+    await agent.call('report_watch', { healthy: true, summary: 'The greeting still renders.' });
   },
   planner: async (agent) => {
     agent.say('Read the code; nothing to add.');
@@ -289,7 +293,8 @@ export class FakeAgents {
   start = (input: AgentSessionInput): AgentSession => {
     const state = input.role === 'agent' ? (this.state?.() ?? null) : null;
     const run = state ? selectAgentRun(state, input) : null;
-    const sessionId = input.resume ?? `session-${++this.#counter}-${Bun.randomUUIDv7()}`;
+    const sessionId =
+      input.resume && !input.fork ? input.resume : `session-${++this.#counter}-${Bun.randomUUIDv7()}`;
     const placement = resolvePlacement(input, run, this.#placements.get(sessionId) ?? null);
     this.#remember(sessionId, placement);
     const { key } = placement;
@@ -303,6 +308,7 @@ export class FakeAgents {
       readOnly: input.readOnly,
       prompt: input.prompt,
       resume: input.resume,
+      fork: input.fork === true,
       sessionId,
       model: input.model,
       cwd: input.cwd,
@@ -434,6 +440,7 @@ interface GitHubState {
   defaultChecks: FakePullRequest['checks'];
   pulls: FakePullRequest[];
   calls: string[][];
+  workflows?: Record<string, string>;
 }
 
 export class FakeGitHub {
@@ -459,6 +466,10 @@ export class FakeGitHub {
 
   get calls() {
     return this.#read().calls;
+  }
+
+  configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows'>>) {
+    this.#write({ ...this.#read(), ...patch });
   }
 
   update(number: number, patch: Partial<FakePullRequest>) {
@@ -679,7 +690,7 @@ export class World {
 
   async createTask(
     request = 'Add the greeting files',
-    options: { priority?: Task['priority']; waitsOn?: string[]; shape?: TaskShape } = {}
+    options: { priority?: Task['priority']; waitsOn?: string[]; shape?: TaskShape; forkOf?: string } = {}
   ) {
     const before = new Set(Object.keys(this.state.tasks));
     if (options.shape) this.#shapes.set(request, options.shape);
@@ -689,6 +700,7 @@ export class World {
       repoId: this.repoId,
       priority: options.priority,
       waitsOn: options.waitsOn,
+      ...(options.forkOf ? { forkOf: options.forkOf } : {}),
     });
     const taskId = Object.keys(this.state.tasks).find((id) => !before.has(id));
     if (!taskId) throw new Error('task was not created');
@@ -696,9 +708,9 @@ export class World {
   }
 
   async until(describe: string, predicate: () => boolean, timeoutMs = 15_000) {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = performance.now() + timeoutMs;
     while (!predicate()) {
-      if (Date.now() > deadline) {
+      if (performance.now() > deadline) {
         const tasks = Object.values(this.state.tasks).map(
           (task) =>
             `${task.title}: ${task.stage} (${task.stageReason}) gates=${this.gates(task.id)

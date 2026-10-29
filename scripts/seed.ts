@@ -6,6 +6,7 @@ import { EventLog } from '../apps/engine/src/store/index.ts';
 import type {
   CodeSpot,
   Gate,
+  MemoryEntry,
   PipelineStep,
   PlanDocument,
   Project,
@@ -1454,6 +1455,7 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     priority: task.priority ?? 'normal',
     planFirst: task.planFirst ?? false,
     origin: null,
+    ...(task.forkOf ? { forkOf: task.forkOf } : {}),
     ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
     auto: task.auto ?? CHOSEN_BY_YOU,
   });
@@ -1834,12 +1836,50 @@ function pushTask(task: SeedTask, push: Push) {
   pushTaskGate(task, push, clock);
 }
 
+function createSeedRule(
+  at: number,
+  id: string,
+  text: string,
+  overrides: Partial<MemoryEntry> = {}
+): MemoryEntry {
+  return {
+    id,
+    projectId: null,
+    text,
+    why: null,
+    status: 'kept',
+    taskId: null,
+    runId: null,
+    createdAt: at,
+    updatedAt: at,
+    ...overrides,
+  };
+}
+
+function pushSeedMemory(start: number, push: (at: number, event: ShinsaEventInput) => void) {
+  const kept = [
+    createSeedRule(start, 'memory-dashes', 'Never use em dashes in UI copy or messages.'),
+    createSeedRule(start + 1, 'memory-terse', 'Keep hand-overs short: lead with the result, no recap.'),
+    createSeedRule(start + 2, 'memory-swift', 'Keep the Swift SDK’s public API source compatible.', {
+      projectId: 'project-basket',
+    }),
+  ];
+  for (const entry of kept) push(entry.createdAt, { type: 'memory.written', entry });
+  const proposal = createSeedRule(NOW - 2 * HOUR, 'memory-plans', 'Keep plans to three phases or fewer.', {
+    status: 'proposed',
+    projectId: 'project-basket',
+    why: 'You asked for a shorter plan twice on the checkout redesign.',
+  });
+  push(proposal.createdAt, { type: 'memory.proposed', entry: proposal });
+}
+
 function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
   const timeline: Timeline = [];
   const push = (at: number, event: ShinsaEventInput) => timeline.push({ at, event });
   const start = NOW - 10 * DAY;
   for (const project of projects) push(start, { type: 'project.written', project });
   for (const repo of repos) push(start, { type: 'repo.registered', repo });
+  pushSeedMemory(start, push);
 
   push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
@@ -4083,6 +4123,200 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       ageHours: 50,
       pullRequest: { number: 339, checks: 'passing' },
       merged: true,
+      extra: listDocsGateWatchdogs(),
+    },
+    {
+      id: 'task-docs-safari',
+      request:
+        'The framework docs show a blank page in Safari 17\n\nSince #339 merged, Maple shows Safari 17 throwing `TypeError: undefined is not an object` on `/docs/framework` 41 times, and Chrome and Firefox none. The page renders nothing for those visitors. Find the cause and fix it so the page works in Safari 17.\n\nFound by the watchdog “Docs errors in Safari and Chrome” of SW-2 after its change merged.',
+      title: 'Fix the blank framework docs page in Safari 17',
+      repo: docs,
+      size: 'small',
+      priority: 'high',
+      stage: 'planning',
+      reason: 'planning the phases',
+      branch: 'fix/docs-safari-blank',
+      ageHours: 0.3,
+      forkOf: 'task-docs-gate',
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
+    },
+  ];
+}
+
+function listDocsGateWatchdogs(): ShinsaEventInput[] {
+  const mergedAt = NOW - 30 * HOUR;
+  const base = {
+    round: 1,
+    sourceRequest: null,
+    runId: null,
+    forkTaskId: null,
+    armedAt: mergedAt,
+    awaitingSince: null,
+    startedAt: mergedAt,
+  };
+  const tripped = 'watchdog-docs-errors';
+  return [
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: tripped,
+        title: 'Docs errors in Safari and Chrome',
+        check: 'No new client errors from /docs/framework in any browser since the merge.',
+        source: { server: 'maple', data: 'OpenTelemetry traces and logs of the docs site and the API' },
+        firstCheckMinutes: 30,
+        maxGapMinutes: 6 * 60,
+        forMinutes: 72 * 60,
+        startsOn: 'merge',
+        productionCheck: null,
+        status: 'watching',
+        endsAt: mergedAt + 72 * HOUR,
+        nextCheckAt: NOW - HOUR,
+        checks: [
+          { at: mergedAt + 30 * MINUTE, healthy: true, summary: 'No client errors from /docs/framework.' },
+          { at: mergedAt + 90 * MINUTE, healthy: true, summary: 'No client errors from /docs/framework.' },
+        ],
+        endedAt: null,
+      },
+    },
+    {
+      type: 'watchdog.checked',
+      taskId: 'task-docs-gate',
+      watchdogId: tripped,
+      check: {
+        at: NOW - HOUR,
+        healthy: false,
+        summary:
+          'Safari 17 threw `TypeError: undefined is not an object` on `/docs/framework` 41 times since 03:10; Chrome and Firefox threw none.',
+      },
+      status: 'tripped',
+      nextCheckAt: null,
+      forkTaskId: 'task-docs-safari',
+    },
+    {
+      type: 'watch_source.written',
+      projectId: 'project-superwall',
+      source: {
+        server: 'maple',
+        data: 'OpenTelemetry traces and logs of the docs site and the API',
+        repoIds: [],
+        addedBy: 'you',
+        addedAt: NOW - 9 * DAY,
+      },
+    },
+    {
+      type: 'watch_source.written',
+      projectId: 'project-superwall',
+      source: {
+        server: 'composio-slack',
+        data: 'The #support channel in Slack',
+        repoIds: ['repo-docs'],
+        addedBy: 'agent',
+        addedAt: mergedAt,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-traffic',
+        title: 'Framework docs traffic',
+        check: 'Requests to /docs/framework keep returning 200, and the 404 rate stays under 0.5%.',
+        source: { server: 'maple', data: 'OpenTelemetry traces and logs of the docs site and the API' },
+        firstCheckMinutes: 30,
+        maxGapMinutes: 6 * 60,
+        forMinutes: 72 * 60,
+        startsOn: 'merge',
+        productionCheck: null,
+        status: 'watching',
+        endsAt: mergedAt + 72 * HOUR,
+        nextCheckAt: mergedAt + 31.5 * HOUR,
+        checks: [0.5, 1.5, 3.5, 7.5, 13.5, 19.5, 25.5].map((hours) => ({
+          at: mergedAt + hours * HOUR,
+          healthy: true,
+          summary: `${Math.round(180 + hours * 40)} requests since the last check, all 200; 404 rate 0.1%.`,
+        })),
+        endedAt: null,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-support',
+        title: 'Support messages about the docs',
+        check: 'No message in #support says the framework docs ask for access or are blank.',
+        source: { server: 'composio-slack', data: 'The #support channel in Slack' },
+        firstCheckMinutes: 30,
+        maxGapMinutes: 12 * 60,
+        forMinutes: 24 * 60,
+        startsOn: 'merge',
+        productionCheck: null,
+        status: 'passed',
+        endsAt: mergedAt + 24 * HOUR,
+        nextCheckAt: null,
+        checks: [12, 24].map((hours) => ({
+          at: mergedAt + hours * HOUR,
+          healthy: true,
+          summary: 'No message in #support mentions the framework docs since the merge.',
+        })),
+        endedAt: mergedAt + 24 * HOUR,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-production',
+        title: 'Docs on the production site',
+        check:
+          'superwall.com/docs/framework serves the page to visitors who are not signed in, with no access prompt.',
+        source: { server: 'maple', data: 'OpenTelemetry traces and logs of the docs site and the API' },
+        firstCheckMinutes: 15,
+        maxGapMinutes: 4 * 60,
+        forMinutes: 72 * 60,
+        startsOn: 'production',
+        productionCheck:
+          'The production deployment of the docs site on Vercel includes the merge commit of #339.',
+        status: 'awaiting_production',
+        awaitingSince: mergedAt,
+        startedAt: null,
+        endsAt: null,
+        nextCheckAt: NOW + 20 * MINUTE,
+        checks: [],
+        endedAt: null,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-search',
+        title: 'Docs search clicks',
+        check: 'Search clicks on the framework pages do not drop below last week’s daily average.',
+        source: null,
+        sourceRequest: {
+          data: 'Product analytics events from the docs site',
+          evidence: '`src/analytics.ts` sends `docs_search_click` to PostHog.',
+          suggestions: ['PostHog’s official MCP server', 'Composio’s PostHog toolkit'],
+        },
+        firstCheckMinutes: 30,
+        maxGapMinutes: 12 * 60,
+        forMinutes: 48 * 60,
+        startsOn: 'merge',
+        productionCheck: null,
+        status: 'needs_source',
+        startedAt: null,
+        endsAt: null,
+        nextCheckAt: null,
+        checks: [],
+        endedAt: null,
+      },
     },
   ];
 }

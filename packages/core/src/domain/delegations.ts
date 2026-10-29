@@ -65,7 +65,7 @@ export interface RunWait {
   reason: string;
 }
 
-export type TaskCreatorKind = 'courier' | 'split';
+export type TaskCreatorKind = 'courier' | 'split' | 'watchdog';
 
 export interface TaskCreator {
   kind: TaskCreatorKind;
@@ -113,7 +113,7 @@ export function isReadOnlyRole(role: RunRole) {
 }
 
 export function isReadOnlyRun(run: Pick<Run, 'role' | 'purpose'>) {
-  return isReadOnlyRole(run.role) || run.purpose === 'plan';
+  return isReadOnlyRole(run.role) || run.purpose === 'plan' || run.purpose === 'watch';
 }
 
 export function resolveDelegationStatus(run: Run & { delegation: RunDelegation }): DelegationStatus {

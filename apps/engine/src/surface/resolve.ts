@@ -7,6 +7,7 @@ import {
   type Project,
   type Repo,
   type RunAccount,
+  type Watchdog,
 } from '@shinsa/core';
 import type { resolveTaskView } from '../http/reads.ts';
 import type { SurfaceClient } from './client.ts';
@@ -27,6 +28,7 @@ export interface TaskDetail {
   task: TaskView;
   gates: Gate[];
   mergeSteps: MergeStepView[];
+  watchdogs: Watchdog[];
   text: string;
   suggestions: { id: string; title: string; why: string; status: string; waitsOnThis: boolean }[];
 }
@@ -70,6 +72,22 @@ export async function findMergeStep(client: SurfaceClient, ref: string, step: st
     steps.length === 0
       ? `“${detail.task.title}” has no steps around the merge.`
       : `“${detail.task.title}” has no step ${step}. \`shinsa tasks show\` lists its steps, numbered from 1.`
+  );
+}
+
+export async function findWatchdog(client: SurfaceClient, ref: string, watchdog: string) {
+  const detail = await readTask(client, ref);
+  const watchdogs = detail.watchdogs;
+  const wanted = watchdog.trim().toLowerCase();
+  const found =
+    watchdogs[Number(wanted) - 1] ??
+    watchdogs.find((candidate) => candidate.id === watchdog || candidate.title.toLowerCase() === wanted);
+  if (found) return { taskId: detail.task.id, watchdog: found };
+  throw new DomainError(
+    'watchdog_not_found',
+    watchdogs.length === 0
+      ? `“${detail.task.title}” has no watchdogs.`
+      : `“${detail.task.title}” has no watchdog ${watchdog}. \`shinsa tasks show\` lists them, numbered from 1.`
   );
 }
 
@@ -126,6 +144,11 @@ export async function resolveOptionalAccount(client: SurfaceClient, ref: string)
 export async function resolveOptionalRepoId(client: SurfaceClient, ref: string) {
   if (!ref) return null;
   return await findRepoId(client, ref);
+}
+
+export async function resolveOptionalTaskId(client: SurfaceClient, ref: string) {
+  if (!ref) return null;
+  return await findTaskId(client, ref);
 }
 
 export async function resolveOptionalProjectId(client: SurfaceClient, ref: string) {

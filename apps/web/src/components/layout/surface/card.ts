@@ -2,6 +2,10 @@ import { TONE_EDGE, TONE_WASH, type Tone } from '@/lib/format/tone.ts';
 
 export const CARD = 'corner-superellipse/1.125 rounded-xl border border-border bg-card';
 
+export const ATTACHMENT_CORNER = 'corner-superellipse/1.125 rounded-xl';
+
+export const ATTACHMENT_TILE_CORNER = 'corner-superellipse/1.125 rounded-sm';
+
 const INSET_SHAPE = 'corner-superellipse/1.125 rounded-lg border';
 
 export const INSET = `${INSET_SHAPE} ${TONE_EDGE.neutral}`;

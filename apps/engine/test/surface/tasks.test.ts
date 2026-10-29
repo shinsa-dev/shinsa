@@ -267,6 +267,14 @@ describe('tasks create', () => {
     ]);
   });
 
+  test('forks the task it names, found by its handle', async () => {
+    const fake = createFakeClient(TASKS);
+    await runSpec(fake, ['tasks', 'create', 'fix it in Safari', '--fork-from', 'fix']);
+    expect(fake.sent).toEqual([
+      { type: 'task.create', request: 'fix it in Safari', repoId: null, forkOf: 'task-123' },
+    ]);
+  });
+
   test('an unknown repository or account is refused before anything is sent', async () => {
     const fake = createFakeClient(TASKS);
     await expect(runSpec(fake, ['tasks', 'create', 'x', '--repo', 'web'])).rejects.toThrow(
@@ -306,6 +314,11 @@ describe('the task commands', () => {
       ['rounds', 'remove', 'fix', '3'],
       { type: 'round.remove', taskId: 'task-123', number: 3 },
       'Removed the queued round.',
+    ],
+    [
+      ['rounds', 'send', 'fix', '2'],
+      { type: 'round.send', taskId: 'task-123', number: 2 },
+      'Sent the queued round to the current round.',
     ],
     [['tasks', 'retry', 'fix'], { type: 'task.retry', taskId: 'task-123' }, 'Retrying.'],
     [

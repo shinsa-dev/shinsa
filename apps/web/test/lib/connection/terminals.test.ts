@@ -143,7 +143,14 @@ describe('changing terminals', () => {
 
 describe('services', () => {
   const API = createService({ id: 'api' });
-  const INPUT = { name: 'api', cwd: API.cwd, command: 'bun run dev', env: { PORT: '4000' } };
+  const INPUT = {
+    name: 'api',
+    cwd: API.cwd,
+    command: 'bun run dev',
+    env: { PORT: '4000' },
+    previewUrl: 'http://localhost:{port}/',
+    portVariable: 'PORT',
+  };
 
   it('reads what runs in front of a shell and what the engine found to suggest', async () => {
     let fetch = serve({ program: 'vim' });
@@ -166,7 +173,15 @@ describe('services', () => {
     expect(await requestServiceAdd('shop', INPUT)).toEqual(API);
     expect(readCall(fetch)).toEqual({
       url: '/api/services',
-      body: { projectId: 'shop', name: 'api', path: API.cwd, command: 'bun run dev', env: { PORT: '4000' } },
+      body: {
+        projectId: 'shop',
+        name: 'api',
+        path: API.cwd,
+        command: 'bun run dev',
+        env: { PORT: '4000' },
+        previewUrl: 'http://localhost:{port}/',
+        portVariable: 'PORT',
+      },
     });
     expect(connection.selectTerminals()?.services).toEqual([API]);
     fetch = serve({ added: [API], ...createTerminalsSnapshot([], [API]) });
@@ -175,7 +190,16 @@ describe('services', () => {
       url: '/api/services/batch',
       body: {
         projectId: 'shop',
-        services: [{ name: 'api', path: API.cwd, command: 'bun run dev', env: { PORT: '4000' } }],
+        services: [
+          {
+            name: 'api',
+            path: API.cwd,
+            command: 'bun run dev',
+            env: { PORT: '4000' },
+            previewUrl: 'http://localhost:{port}/',
+            portVariable: 'PORT',
+          },
+        ],
       },
     });
     fetch = serve(createTerminalsSnapshot([], [API]));
@@ -200,6 +224,20 @@ describe('services', () => {
     ]);
     expect(readCall(fetch, 1).body).toEqual({ projectId: 'shop' });
     expect(readCall(fetch, 2).body).toEqual({ ids: ['api', 'web'] });
+  });
+
+  it('starts, restarts and stops a service’s run for a task, naming the task', async () => {
+    const terminal = createTerminal({ id: 'svc', serviceId: 'api', taskId: 'fix' });
+    const fetch = serve({ terminal, ...createTerminalsSnapshot([terminal], [API]) });
+    await startService('api', 'fix');
+    await restartService('api', 'fix');
+    await stopService('api', 'fix');
+    expect([0, 1, 2].map((index) => readCall(fetch, index).body)).toEqual([
+      { taskId: 'fix' },
+      { taskId: 'fix' },
+      { taskId: 'fix' },
+    ]);
+    expect(readCall(fetch, 2).url).toEndWith('/api/stop');
   });
 
   it('opens a service’s terminal on its tab', () => {

@@ -42,19 +42,20 @@ src/
 │                        the steps around the merge on the merge gate, a merged task and the Review tab, ticking in place; samples.ts also has the toast every action
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
-│                        task (header, facts with why each was chosen, menus, composer, review draft, the
+│                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
+│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares), review draft, the
 │                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
-│                        result panels, the Rounds panel and its round headers, progress track), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
+│                        result panels, the Rounds panel and its round headers, progress track, mini-track.tsx: the track as dots for a queue row), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
 │                        live card, handover, delegation and notice rows, the context meter, message-queue.tsx:
-│                        the queued messages docked above the composer), review (merge-steps.tsx: the steps around the
+│                        the queued messages docked above the composer, file-card.tsx: FileCard, the one card a non-image attachment is in a message and in a composer, a grey bordered tile with the kind's icon from lib/chat/attachments.ts; it and every image attachment take the composer card's corner, ATTACHMENT_CORNER, and its tile ATTACHMENT_TILE_CORNER, 4px in), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
 │                        testing.tsx: the Review tab's How to test, what the tests cover and the steps to try with their targets;
-│                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and NoteHead with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
+│                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and NoteHead with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue (row-summary.tsx: a row's summary line, the handle and status, the mini track and the agent's latest action or the current step's count), home (guide,
 │                        new task, recently finished and recent conversations), roadmap, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
@@ -65,7 +66,7 @@ src/
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, accounts, checks, finished),
+│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts, checks, finished),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
 │                        services (menu.tsx: Services beside Tasks and in the rail, its popover (SERVICES_PANEL, the
 │                        queue popover's COMPACT_POPOVER: the list as tall as its content, the forms at one height)
@@ -78,6 +79,7 @@ src/
 │                        fields with Environment under Advanced and when a field shows its problem; service-row.tsx: a
 │                        service's row, tile and run buttons (Restart and Stop 1px apart, as on the Terminal page),
 │                        and Manage's row, which a press ticks (an outline Checkbox), with its bare edit button;
+│                        task-menu.tsx: a task's Services fact (beside its other facts) and popover, its runs in the task's worktree;
 │                        use-service-actions.ts: the row handlers and the panel's server calls), errors (boundary.tsx: ErrorBoundary, which catches a
 │                        render error, logs it and resets on its resetKey; fallback.tsx: ErrorFallback, the page, inline
 │                        and icon looks with Try again, Reload and Copy details), focus (menu.tsx: the Focus menu and
@@ -123,7 +125,8 @@ src/
     │                    start has no prompt and a fix its focus), selectors.ts (useShinsaSelector, useTask, useRun,
     │                    useGate: render again only when the part read changes), commands.ts
     │                    (sendCommandWithToast, requestWithToast, copyText), http.ts (requestJson: a JSON
-    │                    request whose refusal becomes the server's message), code.ts (the Code tab's reads: refs, paths, tree, blob,
+    │                    request whose refusal becomes the server's message), attachments.ts (requestAttachmentUpload: a
+    │                    file you attach, as base64 to POST /api/attachments, and the files of a paste or drop), code.ts (the Code tab's reads: refs, paths, tree, blob,
     │                    search and diff, cached by commit in a bounded least-recently-used cache, the last answer shown
     │                    while a newer version loads, never read again for an unrelated task event, and requestFileWrite, the one
     │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / Finder), onboarding.ts
@@ -152,7 +155,8 @@ src/
     │                    provider's sign-in block: its header, state, the fix, the sign-in command), sign-in.ts (resolveSignInProvider: the Sign in gate's provider),
     │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
     │                    60 s while watched and the page is visible)
-    ├── chat/            Transcript → timeline → turns, tool descriptions and output, run roles and headlines,
+    ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
+    │                    limits, what is ready, whether it can send), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
     │                    the transcript's blocks and the window of them rendered (window.ts), prefetch.ts (a
@@ -215,11 +219,13 @@ src/
     │                    results, which run now, Shinsa's latest output per check, the pull request's CI checks, the
     │                    summaries; the row a linked test or check renders as),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
-    │                    rounds, a round's track and pull request, how a round ships), status and tone per task,
+    │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
     │                    roadmap groups and chains, next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
-    │                    queued messages and whether a started round is still delivering (message-queue.ts), the
+    │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or
+    │                    approve when the round waits for you, from core's resolveRoundRelease), Send now (round.send)
+    │                    and whether a started round is still delivering (message-queue.ts), the
     │                    messages on their way to the server (outbox.ts, read with hooks/use-outbox.ts), process
     │                    actions (process.ts), suggested tasks, cost (cost.ts: the facts row's cost control and its
     │                    popover, the one place a task's cost shows, and a limit's Allow another), pull request facts, branch and request text,
@@ -243,12 +249,11 @@ src/
     ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings and Terminal, each rendered
     │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
     └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
-        checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
-        not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,
-        useWorkspaceSupport over GET /api/repos/workspaces), coverage.ts (a repository's test coverage setting, Auto / Custom /
+        checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
+        changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, secrets.ts,
-        onboarding.ts, baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
+        onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start and priority),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
@@ -289,7 +294,7 @@ called there.
   landed, so a repeated message stays delivering until it lands too. In the inbox it is still delivering, then
   delivered, noted (needs no reply) or not delivered with the reason (`listHumanMessages` in `lib/chat/timeline.ts`,
   `describeMessageStatus` in `lib/tasks/messages.ts`), or, when it asked for new work while a round runs, queued
-  above the composer as a waiting round you can edit or remove (`lib/tasks/message-queue.ts`,
+  above the composer as a waiting round you can send now to the current round, edit or remove (`lib/tasks/message-queue.ts`,
   `components/chat/message-queue.tsx`; `docs/engine.md` → Rounds).
 - **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
   imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders

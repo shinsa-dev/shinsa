@@ -99,10 +99,21 @@ function servicePath(id: string, action: string) {
   return `/api/services/${encodeURIComponent(id)}/${action}`;
 }
 
+function serializeServiceInput(input: ServiceInput) {
+  return {
+    name: input.name,
+    path: input.cwd,
+    command: input.command,
+    env: input.env,
+    previewUrl: input.previewUrl,
+    portVariable: input.portVariable,
+  };
+}
+
 export async function requestServiceAdd(projectId: string, input: ServiceInput) {
   const { service, ...snapshot } = await requestJson<TerminalsSnapshot & { service: ServiceDefinition }>(
     '/api/services',
-    { projectId, name: input.name, path: input.cwd, command: input.command, env: input.env }
+    { projectId, ...serializeServiceInput(input) }
   );
   connection.replaceTerminals(snapshot);
   return service;
@@ -113,12 +124,7 @@ export async function requestServicesAdd(projectId: string, inputs: ServiceInput
     '/api/services/batch',
     {
       projectId,
-      services: inputs.map((input) => ({
-        name: input.name,
-        path: input.cwd,
-        command: input.command,
-        env: input.env,
-      })),
+      services: inputs.map(serializeServiceInput),
     }
   );
   connection.replaceTerminals(snapshot);
@@ -126,37 +132,36 @@ export async function requestServicesAdd(projectId: string, inputs: ServiceInput
 }
 
 export function requestServiceUpdate(id: string, input: ServiceInput) {
-  return requestTerminals(servicePath(id, 'update'), {
-    name: input.name,
-    path: input.cwd,
-    command: input.command,
-    env: input.env,
-  });
+  return requestTerminals(servicePath(id, 'update'), serializeServiceInput(input));
 }
 
 export function requestServicesRemove(ids: string[]) {
   return requestTerminals('/api/services/remove', { ids });
 }
 
-async function requestServiceRun(id: string, action: 'start' | 'restart') {
+function resolveRunBody(taskId: string | null) {
+  return taskId ? { taskId } : {};
+}
+
+async function requestServiceRun(id: string, action: 'start' | 'restart', taskId: string | null) {
   const { terminal, ...snapshot } = await requestJson<TerminalsSnapshot & { terminal: TerminalInfo }>(
     servicePath(id, action),
-    {}
+    resolveRunBody(taskId)
   );
   connection.replaceTerminals(snapshot);
   return terminal;
 }
 
-export function startService(id: string) {
-  return requestWithToast(() => requestServiceRun(id, 'start'));
+export function startService(id: string, taskId: string | null = null) {
+  return requestWithToast(() => requestServiceRun(id, 'start', taskId));
 }
 
-export function restartService(id: string) {
-  return requestWithToast(() => requestServiceRun(id, 'restart'));
+export function restartService(id: string, taskId: string | null = null) {
+  return requestWithToast(() => requestServiceRun(id, 'restart', taskId));
 }
 
-export function stopService(id: string) {
-  return requestWithToast(() => requestTerminals(servicePath(id, 'stop'), {}));
+export function stopService(id: string, taskId: string | null = null) {
+  return requestWithToast(() => requestTerminals(servicePath(id, 'stop'), resolveRunBody(taskId)));
 }
 
 export function startAllServices(projectId: string) {

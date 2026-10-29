@@ -9,8 +9,6 @@ interface ForbiddenCommand {
 
 const GIT = String.raw`\bgit(?:\s+(?:-[cC]\s+\S+|--[\w-]+(?:=\S+)?))*\s+`;
 
-const BUT = String.raw`(?:^|[;&|(\n]|\$\()\s*(?:\w+=\S*\s+)*but(?:\s+(?:-C\s+\S+|--[\w-]+(?:=\S+)?))*\s+`;
-
 function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -67,13 +65,6 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
         `${GIT}(checkout|switch)\\s+(-[a-zA-Z]\\s+)?${escapeRegExp(defaultBranch)}(?![\\w./-])`
       ),
       reason: 'Stay on the task branch.',
-    },
-    {
-      pattern: new RegExp(
-        `${BUT}(?!(?:status|diff|show|help|resolve\\s+(?:conflicts|apply|status))(?![\\w-])|-)`
-      ),
-      reason:
-        'In a GitButler workspace Shinsa commits, pushes and moves branches, and only the human updates it. Read it with `but status`, `but diff` and `but show`, and resolve a conflicted commit in place with `but resolve conflicts` and `but resolve apply`.',
     },
   ];
 }

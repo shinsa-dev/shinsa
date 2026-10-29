@@ -96,7 +96,6 @@ function TranscriptBlockView({
           run={block.run}
           task={task}
           messages={byRun.get(block.run.id) ?? NO_MESSAGES}
-          first={block.first}
           waiting={waiting && block.run.endedAt === null}
           rerun={block.run.id === rerunId}
         />
@@ -202,7 +201,7 @@ export function ChatTab({
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}
           aside={<ContextMeter runIds={runs.map((run) => run.id)} />}
-          dock={<MessageQueue task={task} />}
+          dock={<MessageQueue state={state} task={task} />}
         />
       )}
     </div>

@@ -37,6 +37,7 @@ import {
   createTask,
   type StubEngine,
 } from '../helpers/state.ts';
+import { createInfo } from '../terminals/fakes.ts';
 
 type Broker = NonNullable<SupervisorOptions['accounts']>;
 
@@ -58,7 +59,7 @@ interface FakeSession {
 }
 
 function createSessions(
-  options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean } = {}
+  options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean; wedged?: boolean } = {}
 ) {
   const started: FakeSession[] = [];
   const startSession = (input: AgentSessionInput): AgentSession => {
@@ -78,6 +79,7 @@ function createSessions(
         },
         cancel: () => {
           fake.cancelled = true;
+          if (options.wedged) return new Promise<void>(() => undefined);
           done.resolve({ outcome: 'cancelled', summary: null });
           return options.cancelFails ? Promise.reject(new Error('already gone')) : Promise.resolve();
         },
@@ -646,6 +648,81 @@ describe('one agent at a time in a worktree', () => {
   });
 });
 
+describe('a session that never settles', () => {
+  test('a run whose session ignores its cancel stops holding the worktree, so the next run starts', async () => {
+    const wedged = createSessions({ wedged: true });
+    const healthy = createSessions();
+    let started = 0;
+    const warn = spyOn(log, 'warn');
+    const { supervisor } = setup(withTask(createTempDir(), [createRun(), createRun({ id: 'run-2' })]), {
+      startSession: (input) => {
+        started += 1;
+        return started === 1 ? wedged.startSession(input) : healthy.startSession(input);
+      },
+      quiesceMs: 20,
+      stopMs: 20,
+    });
+    try {
+      void supervisor.execute('run-1');
+      await until('the first session', () => wedged.started.length === 1);
+      const second = supervisor.execute('run-2');
+      await until('the second session', () => healthy.started.length === 1);
+      expect(wedged.started[0]?.cancelled).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        '[Runs] A run did not stop in time, so Shinsa stopped waiting for it',
+        {
+          runId: 'run-1',
+          taskId: 'task-1',
+        }
+      );
+      healthy.started[0]?.finish();
+      await second;
+      await supervisor.quiesce('task-1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('cancelling a run returns even when its session never answers', async () => {
+    const sessions = createSessions({ wedged: true });
+    const { supervisor } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      stopMs: 20,
+    });
+    void supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.cancel('run-1');
+    expect(sessions.started[0]?.cancelled).toBe(true);
+  });
+
+  test('a shutdown with a session that never settles still finishes', async () => {
+    const sessions = createSessions({ wedged: true });
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      stopMs: 20,
+    });
+    void supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.interruptForShutdown();
+    expect(sessions.started[0]?.cancelled).toBe(true);
+    expect(dispatched.filter((command) => command.type === 'run.interrupt')).toHaveLength(1);
+  });
+
+  test('a run dispatched while Shinsa stops is marked to resume on the next engine instead of starting', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched, commandIds } = setup(
+      withTask(createTempDir(), [createRun({ continuations: [1, 2] })]),
+      { startSession: sessions.startSession }
+    );
+    await supervisor.interruptForShutdown();
+    await supervisor.execute('run-1');
+    expect(sessions.started).toHaveLength(0);
+    const index = dispatched.findIndex((command) => command.type === 'run.interrupt');
+    expect(dispatched[index]).toEqual({ type: 'run.interrupt', runId: 'run-1', attemptId: null });
+    expect(commandIds[index]).toBe('run.interrupt:run-1:0:2');
+  });
+});
+
 describe('steering, cancelling and recovering', () => {
   test('a message reaches a live session, otherwise it is delivered to the task', async () => {
     const sessions = createSessions();
@@ -868,7 +945,7 @@ describe('questions', () => {
 });
 
 describe('hand-overs', () => {
-  async function handOverSetup(patch?: (state: ShinsaState) => void) {
+  async function handOverSetup(patch?: (state: ShinsaState) => void, options: SupervisorOptions = {}) {
     const { path } = await createGitRepo({ remote: false });
     const sessions = createSessions();
     const context = setup(
@@ -876,7 +953,7 @@ describe('hand-overs', () => {
         withTask(path)(state);
         patch?.(state);
       },
-      { startSession: sessions.startSession }
+      { startSession: sessions.startSession, ...options }
     );
     const running = context.supervisor.execute('run-1');
     await until('the session', () => sessions.started.length === 1);
@@ -1001,6 +1078,40 @@ describe('hand-overs', () => {
     expect(call('launch_rockets')).rejects.toThrow('Unknown tool launch_rockets.');
     done();
     await running;
+  });
+
+  test('the service tools reach the task’s own runs, and only for the roles that have them', async () => {
+    const services = {
+      home: '/home',
+      snapshot: () => ({ terminals: [], services: [], home: '/home' }),
+      startService: () => createInfo(),
+      stopService: () => Promise.resolve(),
+      restartService: () => Promise.resolve(createInfo()),
+      readServiceOutput: () => Promise.resolve([]),
+    };
+    const agent = await handOverSetup(undefined, { services });
+    expect(await agent.call('list_services')).toBe(
+      'The project has no services. The human adds them in Shinsa under Services.'
+    );
+    agent.done();
+    await agent.running;
+    const answerer = await handOverSetup(
+      (state) => {
+        state.runs['run-1'] = createRun({ role: 'answerer', purpose: undefined });
+      },
+      { services }
+    );
+    expect(answerer.call('run_service', { service: 'api', action: 'start' })).rejects.toThrow(
+      'You are answering: hand the answer over with `answer`.'
+    );
+    answerer.done();
+    await answerer.running;
+    const without = await handOverSetup();
+    expect(without.call('list_services')).rejects.toThrow(
+      'not available while Shinsa runs without terminals'
+    );
+    without.done();
+    await without.running;
   });
 
   test('a hand-over core refuses leaves no commit behind, and the edits stay in the worktree', async () => {
@@ -1271,7 +1382,7 @@ describe('resume fallback', () => {
     expect(lost.sessions.started[0]?.input.resume).toBeNull();
     expect(checked).toBe(0);
     const sessionless = restoreSetup(() => undefined, {
-      capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false } },
+      capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false, fork: false } },
     });
     await runOnce(sessionless);
     expect(sessionless.sessions.started[0]?.input.prompt).toContain('<handoff_transcript>');
@@ -1313,7 +1424,7 @@ describe('resume fallback', () => {
     const plain = restoreSetup(() => undefined, {
       capabilities: {
         ...CLAUDE_CAPABILITIES,
-        sessions: { resume: false, inspect: false },
+        sessions: { resume: false, inspect: false, fork: false },
         contextHandoff: false,
       },
     });
@@ -2011,7 +2122,7 @@ describe('holding new runs for a restart', () => {
       { type: 'run.interrupt', runId: 'run-1', attemptId: null },
       { type: 'run.interrupt', runId: 'run-2', attemptId: null },
     ]);
-    expect(warnings).toHaveBeenCalledWith('[Runs] Could not mark a held run to start after the restart', {
+    expect(warnings).toHaveBeenCalledWith('[Runs] Could not mark a run to resume after the restart', {
       runId: 'run-2',
       error: 'engine stopped',
     });

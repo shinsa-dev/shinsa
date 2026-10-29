@@ -122,7 +122,7 @@ afterEach(() => {
 });
 
 describe('ChatTab', () => {
-  it('folds a finished run into one worked row, with the hand-over as its reply and the words after it inside', () => {
+  it('folds a finished run into one worked row, with the words after the hand-over under it in the chat', () => {
     const task = createTask({ id: 'task-1' });
     pushTranscript('run-1', workEntries());
     const view = renderChat(createShinsaState({ tasks: [task], runs: [finishedRun()] }), task);
@@ -130,7 +130,7 @@ describe('ChatTab', () => {
     expect(row.textContent).toBe('Worked for 3m · 6 steps');
     expect(row.getAttribute('aria-expanded')).toBe('false');
     expect(view.getByText('Handed over the phase')).toBeTruthy();
-    expect(view.queryByText('The login form is done.')).toBeNull();
+    expect(view.getByText('The login form is done.')).toBeTruthy();
     expect(view.queryByText('Looking around the code first.')).toBeNull();
     expect(view.queryByText(/Read 2 files/)).toBeNull();
   });
@@ -141,7 +141,6 @@ describe('ChatTab', () => {
     const view = renderChat(createShinsaState({ tasks: [task], runs: [finishedRun()] }), task);
     fireEvent.click(view.getByRole('button', { name: /Worked for/ }));
     expect(view.getByText('Looking around the code first.')).toBeTruthy();
-    expect(view.getByText('The login form is done.')).toBeTruthy();
     expect(view.getByText('Brief from Shinsa')).toBeTruthy();
     const group = view.getByRole('button', { name: 'Read 2 files and ran 3 commands' });
     expect(group.getAttribute('aria-expanded')).toBe('false');

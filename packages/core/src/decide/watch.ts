@@ -1,10 +1,14 @@
 import type {
   CiRun,
   PullRequest,
+  PullRequestCi,
   PullRequestRemark,
   PullRequestWatch,
   PullRequestWatchChange,
+  RepoCi,
+  Task,
 } from '../domain/index.ts';
+import { MINUTE_MS } from '../domain/time.ts';
 
 export const PULL_REQUEST_WATCH_WAKE_LIMIT = 10;
 
@@ -16,7 +20,9 @@ const SNIPPET_LENGTH = 200;
 
 const WATCH_EPOCH = '1970-01-01T00:00:00.000Z';
 
-interface PullRequestWatchReport {
+export const CI_GRACE_MS = 1.5 * MINUTE_MS;
+
+export interface PullRequestWatchReport {
   changes: PullRequestWatchChange[];
   next: PullRequestWatch;
   exhausted: boolean;
@@ -34,7 +40,22 @@ export function createPullRequestWatch(startedAt: number): PullRequestWatch {
     conflicting: false,
     wakes: 0,
     stopped: null,
+    ciAbsent: false,
   };
+}
+
+export function resolvePullRequestCi(
+  task: Task,
+  watch: PullRequestWatch,
+  repo: RepoCi,
+  now: number
+): PullRequestCi {
+  return { repo, since: task.pushedAt ?? watch.startedAt, now };
+}
+
+function isCiAbsent(ci: PullRequestCi | null) {
+  if (!ci || ci.repo === 'required') return false;
+  return ci.repo === 'none' || ci.now - ci.since >= CI_GRACE_MS;
 }
 
 function isFailedCheck(check: CiRun) {
@@ -97,7 +118,8 @@ export function evaluatePullRequestWatch(
   watch: PullRequestWatch,
   pullRequest: PullRequest,
   remarks: PullRequestRemark[] | null,
-  viewer: string | null
+  viewer: string | null,
+  ci: PullRequestCi | null = null
 ): PullRequestWatchReport {
   const headSha = pullRequest.headSha ?? null;
   const headMoved = headSha !== watch.headSha;
@@ -107,6 +129,7 @@ export function evaluatePullRequestWatch(
   if (read.fresh.length > 0) changes.push({ kind: 'remarks', remarks: read.fresh });
   if (pullRequest.mergeable === false && !watch.conflicting) changes.push({ kind: 'conflicting' });
   const conflicting = pullRequest.mergeable === null ? watch.conflicting : pullRequest.mergeable === false;
+  const ciAbsent = pullRequest.checks === 'none' && ((!headMoved && watch.ciAbsent) || isCiAbsent(ci));
 
   const commentsOnly = changes.length > 0 && changes.every((change) => change.kind === 'remarks');
   const progress = headMoved || (changes.length > 0 && !commentsOnly);
@@ -124,6 +147,7 @@ export function evaluatePullRequestWatch(
       conflicting,
       wakes,
       stopped: watch.stopped,
+      ciAbsent,
     },
     exhausted: commentsOnly && wakes >= PULL_REQUEST_WATCH_WAKE_LIMIT,
   };
@@ -144,7 +168,8 @@ export function isSamePullRequestWatch(left: PullRequestWatch, right: PullReques
     joinList(left.remarkIds) === joinList(right.remarkIds) &&
     left.conflicting === right.conflicting &&
     left.wakes === right.wakes &&
-    left.stopped === right.stopped
+    left.stopped === right.stopped &&
+    left.ciAbsent === right.ciAbsent
   );
 }
 
@@ -180,18 +205,21 @@ export function hasFixableChange(changes: PullRequestWatchChange[]) {
   return changes.some((change) => change.kind !== 'checks_passed');
 }
 
+function isUnnamed(pullRequest: PullRequest) {
+  const checksUnnamed = !pullRequest.checkRuns && pullRequest.checks === 'failing';
+  const threadsUnnamed = !pullRequest.unresolvedThreads && pullRequest.unresolvedComments > 0;
+  return checksUnnamed || threadsUnnamed;
+}
+
 function resolveSignatureParts(pullRequest: PullRequest, watch: PullRequestWatch) {
-  const checks = pullRequest.checkRuns
-    ? pullRequest.checkRuns.filter(isFailedCheck).map((check) => `check:${check.name}`)
-    : [pullRequest.checks === 'failing' ? 'checks:failing' : ''];
-  const threads = pullRequest.unresolvedThreads
-    ? pullRequest.unresolvedThreads.map((id) => `thread:${id}`)
-    : [pullRequest.unresolvedComments > 0 ? `threads:${pullRequest.unresolvedComments}` : ''];
+  const checks = (pullRequest.checkRuns ?? []).filter(isFailedCheck).map((check) => `check:${check.name}`);
+  const threads = (pullRequest.unresolvedThreads ?? []).map((id) => `thread:${id}`);
   const conflict = watch.conflicting || pullRequest.mergeable === false ? 'conflict' : '';
   return [...checks, ...threads, conflict].filter(Boolean);
 }
 
 export function resolvePullRequestSignature(pullRequest: PullRequest, watch: PullRequestWatch) {
+  if (isUnnamed(pullRequest)) return null;
   const parts = resolveSignatureParts(pullRequest, watch);
   if (parts.length === 0) return null;
   return [...new Set(parts)].sort().join('\n');

@@ -24,4 +24,13 @@ describe('describeRequest', () => {
     expect(describeRequest(createTask({ id: 't', request: 'x'.repeat(160) }))?.long).toBe(false);
     expect(describeRequest(createTask({ id: 't', request: 'First line\nSecond line' }))?.long).toBe(true);
   });
+
+  it('leaves attached files out of the request it shows', () => {
+    const block = '<attachments><attachment path="/d/a.png" /></attachments>';
+    expect(describeRequest(createTask({ id: 't', request: `Fix the header\n\n${block}` }))).toEqual({
+      text: 'Fix the header',
+      long: false,
+    });
+    expect(describeRequest(createTask({ id: 't', request: block }))).toBeNull();
+  });
 });

@@ -33,7 +33,7 @@ import {
   selectGroup,
   selectMemberInPlace,
 } from './catalog.ts';
-import { type Env, expandDefinition, HEADLESS_BROWSER_ENV, isFields } from './definitions.ts';
+import { type Env, expandDefinition, isFields, resolveBrowserEnv } from './definitions.ts';
 import { type DiscoveryPaths, discoverServers, listClaudePlugins } from './discover.ts';
 import { createServerCheck, type ServerCheck } from './health.ts';
 import {
@@ -501,7 +501,7 @@ export class Extensions {
   async #resolveDefinition(group: ServerGroup, member: CatalogServer = group.lead) {
     const definition = expandDefinition(member.definition, this.#env);
     if (definition.transport === 'stdio') {
-      return { ...definition, env: { ...definition.env, ...HEADLESS_BROWSER_ENV } };
+      return { ...definition, env: resolveBrowserEnv(definition.env, definition.args) };
     }
     if (!definition.url) return definition;
     const signedIn = this.#selectSignedIn(group) ?? member;

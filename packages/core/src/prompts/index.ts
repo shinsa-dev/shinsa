@@ -1,15 +1,12 @@
 export {
   resolveChecksFixPrompt,
   resolveCodeFence,
-  resolveConflictFixPrompt,
-  resolveConflictSteer,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
   resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
-  resolveWorkspaceUpdatedFixPrompt,
 } from './fixes.ts';
 export { type FixFocus, resolveFixFocus } from './focus.ts';
 export { resolveFollowUpPrompt } from './follow-up.ts';
@@ -58,3 +55,4 @@ export {
   selectSessionCwd,
 } from './session.ts';
 export { resolveMonitorPrompt } from './waits.ts';
+export { resolveWatchPrompt } from './watchdogs.ts';

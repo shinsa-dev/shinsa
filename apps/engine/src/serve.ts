@@ -42,7 +42,13 @@ import {
   type LoginResolver,
   Roots,
 } from './repos/index.ts';
-import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './runtime/index.ts';
+import {
+  EffectRunner,
+  Engine,
+  MonitorClock,
+  type StateClockOptions,
+  WatchdogClock,
+} from './runtime/index.ts';
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
@@ -135,8 +141,16 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     baseUrl: () => address.url,
     ...(options.timeZone ? { timeZone: options.timeZone } : {}),
   });
+  const terminals = new Terminals({
+    dataDir: config.dataDir,
+    home: config.userHome,
+    version: instance.version,
+    readOnly: config.inspect,
+    ...options.terminals,
+  });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
+    services: terminals,
     extensions,
     ...(options.idle ? { idle: options.idle } : {}),
     ...(options.compaction ? { compaction: options.compaction } : {}),
@@ -152,13 +166,6 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     },
   });
   const briefings = new Briefings(engine, { ask: quick.write });
-  const terminals = new Terminals({
-    dataDir: config.dataDir,
-    home: config.userHome,
-    version: instance.version,
-    readOnly: config.inspect,
-    ...options.terminals,
-  });
   terminals.resumeServices(engine.state);
   const inbox = new MessageInbox(engine, classify.message);
   const roots = new Roots(
@@ -191,13 +198,19 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     providers,
     eunoe,
     models: options.models ?? providers.resolve(engine.state.settings.defaultProvider),
-    clocks: [new MonitorClock(engine), new UsageResumeClock(engine), new SilenceWatch(engine, transcripts)],
+    clocks: [
+      new MonitorClock(engine),
+      new WatchdogClock(engine),
+      new UsageResumeClock(engine),
+      new SilenceWatch(engine, transcripts),
+    ],
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       resolveLogin,
       roots,
+      services: terminals,
     }),
   };
 }
@@ -219,6 +232,8 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       config,
       store,
       roots,
+      resolveLogin: services.resolveLogin,
+      ask: services.quick.write,
       models,
       run: options.runPrerequisite,
       accounts: options.accounts ?? onboardingAccounts.source,

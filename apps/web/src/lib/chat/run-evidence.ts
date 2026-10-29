@@ -14,5 +14,7 @@ export function resolveCallImages(call: ToolCall, evidence: Evidence[]): (string
   if (call.tool.kind !== 'shinsa' || call.tool.name !== 'attach_evidence') return call.images;
   const title = readString(call.tool.args, 'title');
   const match = evidence.find((item) => item.title === title && IMAGE_URI.test(item.uri));
-  return match ? [{ src: match.uri, caption: match.title }, ...call.images] : call.images;
+  return match
+    ? [{ src: match.uri, caption: match.title, width: match.width ?? null }, ...call.images]
+    : call.images;
 }

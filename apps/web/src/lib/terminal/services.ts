@@ -1,21 +1,27 @@
 import {
   isServiceActive,
   isServiceEnvKey,
+  isServicePreviewUrl,
   listProjectServices,
+  listServiceTaskRuns,
+  listTaskServices,
   type Project,
   resolveFocusProject,
   resolveServicesSummary,
   SERVICE_LIMITS,
+  SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceState,
   type ServiceSuggestion,
   type ServiceView,
   type ShinsaState,
+  type Task,
   type TerminalInfo,
   type TerminalPlace,
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { formatCount } from '@/lib/format/count.ts';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -41,9 +47,43 @@ export const SERVICES_ICON: IconName = 'IconServer';
 
 export const SERVICES_ACTIVE_ICON: IconName = 'IconServerFilled';
 
+export interface TaskServiceRun {
+  view: ServiceView;
+  label: string;
+}
+
 export interface ServiceGroup {
   project: Project;
   views: ServiceView[];
+  runs?: Record<string, TaskServiceRun[]>;
+}
+
+export function describeTaskRunLabel(task: Pick<Task, 'handle' | 'title'> | undefined) {
+  if (!task) return 'A finished task';
+  return task.handle ? `${task.handle} ${task.title}` : task.title;
+}
+
+export function listTaskServiceRuns(
+  snapshot: TerminalsSnapshot | null,
+  serviceId: string,
+  tasks: Record<string, Task>,
+  now: number
+): TaskServiceRun[] {
+  return listServiceTaskRuns(snapshot, serviceId, now)
+    .filter((view) => isServiceActive(view) || view.state === 'failed')
+    .map((view) => ({ view, label: describeTaskRunLabel(tasks[view.taskId ?? '']) }));
+}
+
+export function describeTaskServices(task: Pick<Task, 'handle'>) {
+  return {
+    title: task.handle ? `Services for ${task.handle}` : 'Services for this task',
+    description: 'Each runs in this task’s worktree, beside your own run.',
+  };
+}
+
+export function listProjectServiceRuns(snapshot: TerminalsSnapshot | null, projectId: string, now: number) {
+  const main = listProjectServices(snapshot, projectId, now);
+  return [...main, ...main.flatMap((view) => listServiceTaskRuns(snapshot, view.service.id, now))];
 }
 
 export function describeServiceState(view: ServiceView, now: number) {
@@ -54,11 +94,56 @@ export function describeServiceState(view: ServiceView, now: number) {
   return label;
 }
 
+export function selectServicePreview(view: ServiceView) {
+  return isServiceActive(view) ? view.url : null;
+}
+
+export function listTaskPreviews(
+  state: ShinsaState,
+  snapshot: TerminalsSnapshot | null,
+  task: Task,
+  now: number
+) {
+  return listTaskServices(state, snapshot, task, now).filter((view) => selectServicePreview(view) !== null);
+}
+
+function resolveOrigin(url: string) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function listUnattachedPreviews(views: ServiceView[], attached: readonly string[]) {
+  const origins = new Set(attached.map(resolveOrigin));
+  return views.filter((view) => !origins.has(resolveOrigin(selectServicePreview(view) ?? '')));
+}
+
+export function describeServicePreview(view: ServiceView, label: string | null = null) {
+  return label ? `Open ${view.service.name} for ${label}` : `Open ${view.service.name}`;
+}
+
+export function openServicePreview(view: ServiceView) {
+  const url = selectServicePreview(view);
+  if (url) window.open(url, '_blank', 'noopener');
+}
+
 export function describeServicesTrigger(views: ServiceView[]): { label: string; tone: Tone } {
   const { running, starting, failed } = resolveServicesSummary(views);
   if (failed > 0) return { label: `${failed} failed`, tone: 'red' };
   if (starting > 0) return { label: `${starting} starting`, tone: 'blue' };
   if (running > 0) return { label: `${running} running`, tone: 'neutral' };
+  return { label: 'Services', tone: 'neutral' };
+}
+
+export function describeTaskServicesFact(views: ServiceView[]): { label: string; tone: Tone } {
+  const { running, starting, failed } = resolveServicesSummary(views);
+  if (failed > 0) return { label: `${formatCount(failed, 'service', 'services')} failed`, tone: 'red' };
+  if (starting > 0)
+    return { label: `${formatCount(starting, 'service', 'services')} starting`, tone: 'blue' };
+  if (running > 0)
+    return { label: `${formatCount(running, 'service', 'services')} running`, tone: 'neutral' };
   return { label: 'Services', tone: 'neutral' };
 }
 
@@ -111,11 +196,15 @@ export function resolveServicesProjects(state: ShinsaState, current: string | nu
 export function listServiceGroups(
   snapshot: TerminalsSnapshot | null,
   projects: Project[],
-  now: number
+  now: number,
+  tasks: Record<string, Task> = {}
 ): ServiceGroup[] {
   return projects.flatMap((project) => {
     const views = listProjectServices(snapshot, project.id, now);
-    return views.length > 0 || projects.length === 1 ? [{ project, views }] : [];
+    const runs = Object.fromEntries(
+      views.map((view) => [view.service.id, listTaskServiceRuns(snapshot, view.service.id, tasks, now)])
+    );
+    return views.length > 0 || projects.length === 1 ? [{ project, views, runs }] : [];
   });
 }
 
@@ -130,6 +219,8 @@ export interface ServiceDraft {
   path: string;
   command: string;
   env: string;
+  previewUrl: string;
+  portVariable: string;
 }
 
 export type ServiceField = keyof ServiceDraft;
@@ -143,8 +234,15 @@ export function serializeServiceEnv(env: Record<string, string>) {
 }
 
 export function createServiceDraft(from: ServiceDefinition | null): ServiceDraft {
-  if (!from) return { name: '', path: '', command: '', env: '' };
-  return { name: from.name, path: from.cwd, command: from.command, env: serializeServiceEnv(from.env) };
+  if (!from) return { name: '', path: '', command: '', env: '', previewUrl: '', portVariable: '' };
+  return {
+    name: from.name,
+    path: from.cwd,
+    command: from.command,
+    env: serializeServiceEnv(from.env),
+    previewUrl: from.previewUrl ?? '',
+    portVariable: from.portVariable === SERVICE_PORT_VARIABLE ? '' : from.portVariable,
+  };
 }
 
 export function parseServiceEnv(text: string): { env: Record<string, string> } | { error: string } {
@@ -180,8 +278,14 @@ export function validateServiceDraft(
   if (!command) errors.command = 'Give the command that starts it.';
   const parsed = parseServiceEnv(draft.env);
   if ('error' in parsed) errors.env = parsed.error;
+  const previewUrl = draft.previewUrl.trim() || null;
+  if (previewUrl && (previewUrl.length > SERVICE_LIMITS.previewUrl || !isServicePreviewUrl(previewUrl)))
+    errors.previewUrl = 'Give an http or https address, with {port} where the run’s port goes.';
+  const portVariable = draft.portVariable.trim() || SERVICE_PORT_VARIABLE;
+  if (!isServiceEnvKey(portVariable))
+    errors.portVariable = 'Use letters, digits and _, not starting with a digit.';
   if (Object.keys(errors).length > 0 || 'error' in parsed) return { ok: false, errors };
-  return { ok: true, input: { name, cwd: path, command, env: parsed.env } };
+  return { ok: true, input: { name, cwd: path, command, env: parsed.env, previewUrl, portVariable } };
 }
 
 export interface ServiceFolder {
@@ -230,7 +334,14 @@ export function togglePick(picked: string[], key: string) {
 export function listPickedInputs(suggestions: ServiceSuggestion[], picked: string[]): ServiceInput[] {
   return suggestions
     .filter((each) => picked.includes(resolveSuggestionKey(each)))
-    .map((each) => ({ name: each.name, cwd: each.cwd, command: each.command, env: {} }));
+    .map((each) => ({
+      name: each.name,
+      cwd: each.cwd,
+      command: each.command,
+      env: {},
+      previewUrl: null,
+      portVariable: SERVICE_PORT_VARIABLE,
+    }));
 }
 
 export function listAllPicks(suggestions: ServiceSuggestion[], picked: string[]) {
@@ -294,6 +405,16 @@ export const SERVICE_FIELDS: Record<
     label: 'Environment',
     placeholder: 'PORT=4000',
     note: 'One NAME=value a line, added to your shell’s environment.',
+  },
+  previewUrl: {
+    label: 'Preview URL',
+    placeholder: 'http://localhost:{port}',
+    note: 'Where Open takes you. Shinsa puts the run’s port where {port} is.',
+  },
+  portVariable: {
+    label: 'Port variable',
+    placeholder: SERVICE_PORT_VARIABLE,
+    note: 'Each task’s run gets a free port in it, so the command must listen on it.',
   },
 };
 

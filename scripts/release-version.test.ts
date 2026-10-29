@@ -127,16 +127,28 @@ describe('resolveReleasePlan', () => {
 });
 
 describe('resolveReleasePlan for a canary', () => {
-  it('builds the patch after the newest stable or beta, counting that version’s canaries', () => {
+  it('takes the version of the newest beta, counting that version’s canaries', () => {
     expect(resolveReleasePlan({ tags: TAGS, channel: 'canary', bump: 'major' })).toEqual({
       channel: 'canary',
-      version: '1.10.1-canary.1',
-      tag: 'v1.10.1-canary.1',
+      version: '1.10.0-canary.1',
+      tag: 'v1.10.0-canary.1',
       prerelease: true,
       lastStable: '1.2.0',
       notesStartTag: null,
     });
-    const canaries = ['v1.2.0', 'v1.2.1-canary.1', 'v1.2.1-canary.2', 'v1.2.0-canary.7'];
+    const betas = ['v1.0.0-beta.4', 'v1.0.0-beta.5', 'v1.0.0-canary.1', 'v1.0.0-canary.2'];
+    expect(resolveReleasePlan({ tags: betas, channel: 'canary', bump: 'patch' })).toEqual({
+      channel: 'canary',
+      version: '1.0.0-canary.3',
+      tag: 'v1.0.0-canary.3',
+      prerelease: true,
+      lastStable: null,
+      notesStartTag: 'v1.0.0-canary.2',
+    });
+  });
+
+  it('takes the patch after the newest stable release when no beta is above it', () => {
+    const canaries = ['v1.2.0', 'v1.2.0-beta.3', 'v1.2.1-canary.1', 'v1.2.1-canary.2', 'v1.2.0-canary.7'];
     expect(resolveReleasePlan({ tags: canaries, channel: 'canary', bump: 'patch' })).toEqual({
       channel: 'canary',
       version: '1.2.1-canary.3',
@@ -147,22 +159,29 @@ describe('resolveReleasePlan for a canary', () => {
     });
   });
 
-  it('starts at 0.0.1 and moves above every beta and stable release as they ship', () => {
+  it('starts at 0.0.1 and follows each beta and stable release as they ship', () => {
     expect(resolveReleasePlan({ tags: [], channel: 'canary', bump: 'patch' }).version).toBe('0.0.1-canary.1');
+    expect(resolveReleasePlan({ tags: ['v1.0.0-beta.5'], channel: 'canary', bump: 'patch' }).version).toBe(
+      '1.0.0-canary.1'
+    );
     const tags = ['v1.2.0', 'v1.2.1-canary.4'];
     const beta = [...tags, 'v1.3.0-beta.1'];
     expect(resolveReleasePlan({ tags: beta, channel: 'canary', bump: 'patch' }).version).toBe(
-      '1.3.1-canary.1'
+      '1.3.0-canary.1'
     );
     const patch = [...tags, 'v1.2.1-beta.1'];
     expect(resolveReleasePlan({ tags: patch, channel: 'canary', bump: 'patch' }).version).toBe(
-      '1.2.2-canary.1'
+      '1.2.1-canary.5'
     );
-    const stable = [...beta, 'v1.3.1-canary.2', 'v1.3.0'];
+    const stable = [...beta, 'v1.3.0-canary.2', 'v1.3.0'];
     expect(resolveReleasePlan({ tags: stable, channel: 'canary', bump: 'patch' })).toMatchObject({
-      version: '1.3.1-canary.3',
-      notesStartTag: 'v1.3.1-canary.2',
+      version: '1.3.1-canary.1',
+      notesStartTag: 'v1.3.0-canary.2',
     });
+    const hotfix = [...stable, 'v1.4.0-beta.1', 'v1.4.0-canary.3', 'v1.3.1'];
+    expect(resolveReleasePlan({ tags: hotfix, channel: 'canary', bump: 'patch' }).version).toBe(
+      '1.4.0-canary.4'
+    );
   });
 
   it('never counts a canary as the last stable release or the base of a beta', () => {

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
-import { DomainError } from '@shinsa/core';
+import { DomainError, describeList, resolveDisplayPath } from '@shinsa/core';
 
 const MAX_ROOTS = 50;
 
@@ -19,15 +19,31 @@ function isPrivacyRefusal(error: unknown) {
   return code === 'EPERM' || code === 'EACCES';
 }
 
-function assertReadable(root: string, entry: string, read: (path: string) => unknown) {
+export const PRIVACY_SETTINGS_URL =
+  'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
+
+export class PrivateFoldersError extends DomainError {
+  readonly folders: string[];
+  readonly picked: string[];
+
+  constructor(folders: string[], picked: string[], userHome: string) {
+    const names = folders.map((folder) => resolveDisplayPath(folder, userHome));
+    super(
+      'roots_private',
+      `macOS keeps ${describeList(names, 'and')} private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.`
+    );
+    this.folders = folders;
+    this.picked = picked;
+  }
+}
+
+function isReadable(root: string, read: (path: string) => unknown) {
   try {
     read(root);
+    return true;
   } catch (error) {
     if (!isPrivacyRefusal(error)) throw error;
-    throw new DomainError(
-      'roots_unreadable',
-      `Shinsa cannot read ${entry}. macOS keeps Desktop, Documents and Downloads private: turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then choose it again.`
-    );
+    return false;
   }
 }
 
@@ -43,6 +59,8 @@ export function resolveChosenRoots(
     throw new DomainError('roots_invalid', `Choose at most ${MAX_ROOTS} folders.`);
   }
   const roots: string[] = [];
+  const refused: string[] = [];
+  const picked: string[] = [];
   for (const entry of value) {
     if (typeof entry !== 'string' || entry.trim().length === 0) {
       throw new DomainError('roots_invalid', 'Each folder must be a path.');
@@ -52,8 +70,11 @@ export function resolveChosenRoots(
     const root = resolve(path);
     if (!isDirectory(root))
       throw new DomainError('roots_invalid', `${entry} is not a folder on this machine.`);
-    assertReadable(root, entry, read);
-    if (!roots.includes(root)) roots.push(root);
+    if (picked.includes(root)) continue;
+    picked.push(root);
+    if (isReadable(root, read)) roots.push(root);
+    else refused.push(root);
   }
+  if (refused.length > 0) throw new PrivateFoldersError(refused, picked, userHome);
   return roots;
 }

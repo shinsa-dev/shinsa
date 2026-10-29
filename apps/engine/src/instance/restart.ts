@@ -139,11 +139,40 @@ export function resolveEngineActivity(state: ShinsaState, restarter?: EngineRest
 
 export const EXIT_RESTART = 75;
 
+export const STOP_DEADLINE_MS = 30_000;
+
+export type StopOutcome = 'stopped' | 'failed' | 'timed_out';
+
+export async function stopWithin(
+  stop: () => Promise<void>,
+  deadlineMs = STOP_DEADLINE_MS
+): Promise<StopOutcome> {
+  const deadline = Promise.withResolvers<StopOutcome>();
+  const timer = setTimeout(() => deadline.resolve('timed_out'), deadlineMs);
+  const stopping = stop().then(
+    () => 'stopped' as const,
+    (error: unknown) => {
+      log.error('[Engine] Could not stop cleanly', { error: describeError(error) });
+      return 'failed' as const;
+    }
+  );
+  try {
+    const outcome = await Promise.race([stopping, deadline.promise]);
+    if (outcome === 'timed_out') {
+      log.error('[Engine] Did not stop in time, so it exits anyway', { deadlineMs });
+    }
+    return outcome;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface LaunchdRestart {
   byService: boolean;
   stop: () => Promise<void>;
   drain?: RestartDrain;
   exit?: (code: number) => void;
+  deadlineMs?: number;
 }
 
 export function createLaunchdRestarter(source: RestartSource, launchd: LaunchdRestart) {
@@ -152,7 +181,7 @@ export function createLaunchdRestarter(source: RestartSource, launchd: LaunchdRe
     isService: () => Promise.resolve(launchd.byService),
     drain: launchd.drain,
     restart: async () => {
-      await launchd.stop();
+      await stopWithin(launchd.stop, launchd.deadlineMs);
       exit(EXIT_RESTART);
     },
   });

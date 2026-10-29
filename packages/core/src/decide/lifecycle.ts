@@ -2,11 +2,13 @@ import {
   hasStep,
   isOfCurrentRound,
   isTaskSettled,
+  listRepoWatchSources,
   needsRepository,
   PLAN_GATE_RULE,
   type PlanGateReason,
   type ReviewEscalation,
   resolveTaskPipeline,
+  resolveWatchdogDefaults,
   type Task,
 } from '../domain/index.ts';
 import type { ShinsaEffectKind } from '../effects/index.ts';
@@ -19,9 +21,7 @@ import {
 import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies } from '../state/queries.ts';
-import { startHeldConflictFix } from './conflicts.ts';
 import { type Decider, quoteTitles } from './decider.ts';
-import { unstackTasksOn } from './dependencies.ts';
 import { proceedAfterSetup } from './shapes.ts';
 import { holdForCheckout } from './workspaces.ts';
 
@@ -37,7 +37,6 @@ const SETTLED_EFFECTS: ShinsaEffectKind[] = [
   'pull_request.open',
   'pull_request.push',
   'pull_request.watch',
-  'workspace.update',
 ];
 
 function countPhases(task: Task) {
@@ -114,7 +113,10 @@ export function startPhase(decider: Decider, taskId: string, index: number, addi
     decider.emit({ type: 'phase.updated', taskId, index, status: 'active' });
   }
   const task = decider.task(taskId);
-  const instruction = resolvePhaseInstruction(task, decider.repoOf(task), index) + addition;
+  const sources = listRepoWatchSources(decider.projectOf(task), task.repoId);
+  const defaults = resolveWatchdogDefaults(decider.state.settings);
+  const instruction =
+    resolvePhaseInstruction(task, decider.repoOf(task), index, sources, defaults) + addition;
   decider.startRun(task, 'agent', resolveAgentPrompt(instruction), {
     purpose: 'build',
     phaseIndex: index,
@@ -143,7 +145,6 @@ export function startReview(decider: Decider, taskId: string) {
 }
 
 export function openReviewGate(decider: Decider, taskId: string, escalation: ReviewEscalation | null = null) {
-  if (startHeldConflictFix(decider, taskId)) return;
   const report = assembleReport(decider.task(taskId));
   decider.emit({ type: 'work.submitted', taskId, summary: report.headline, report });
   decider.stage(
@@ -177,7 +178,6 @@ export function settleTask(
   if (task.worktreePath) decider.run({ kind: 'worktree.remove', taskId });
   decider.run({ kind: 'scratch.remove', taskId });
   decider.requestBriefing(taskId);
-  if (task.pullRequest?.state !== 'merged') unstackTasksOn(decider, taskId);
   for (const dependent of Object.values(decider.state.tasks)) {
     if (!dependent.waitsOn.includes(taskId)) continue;
     if (dependent.stage === 'shipping' || dependent.stage === 'awaiting_merge') {

@@ -10,6 +10,7 @@ export {
   selectRootRun,
 } from './delegations.ts';
 export type { StateChanges } from './draft.ts';
+export { listKeptMemory, listMemory } from './memory.ts';
 export {
   applyEvent,
   briefingKey,
@@ -34,12 +35,9 @@ export {
   listPendingDependencies,
   listProjectRepos,
   listRunningRuns,
-  resolvePullRequestBase,
   resolveTaskProject,
   resolveTaskWorkspace,
   selectCheckoutHolder,
-  selectStackedOnTask,
-  selectStackTarget,
   selectTaskByHandle,
   selectTaskByReference,
 } from './queries.ts';

@@ -10,6 +10,7 @@ import {
   SERVICE_MARKER,
   ServerRunningError,
   type ShinsaBundle,
+  stopWithin,
 } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type Shinsa, startShinsa } from '../serve.ts';
@@ -125,19 +126,19 @@ export function createWakeEngine(
   };
 }
 
+export async function stopForSignal(
+  signal: string,
+  stop: () => Promise<void>,
+  exit: (code: number) => void = (code) => process.exit(code),
+  deadlineMs?: number
+) {
+  log.info('[Serve] Stopping', { signal });
+  const outcome = await stopWithin(stop, deadlineMs);
+  exit(outcome === 'failed' ? 1 : 0);
+}
+
 function stopOnSignal(stop: () => Promise<void>) {
-  for (const signal of SHUTDOWN_SIGNALS) {
-    process.once(signal, () => {
-      log.info('[Serve] Stopping', { signal });
-      stop().then(
-        () => process.exit(0),
-        (error: unknown) => {
-          log.error('[Serve] Could not stop cleanly', { error: describeError(error) });
-          process.exit(1);
-        }
-      );
-    });
-  }
+  for (const signal of SHUTDOWN_SIGNALS) process.once(signal, () => void stopForSignal(signal, stop));
 }
 
 export function trimEngineLog(path: string, maxBytes = ENGINE_LOG_MAX_BYTES) {

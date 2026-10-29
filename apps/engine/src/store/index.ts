@@ -1,4 +1,11 @@
 export {
+  ATTACHMENT_LIMIT_BYTES,
+  ATTACHMENT_REQUEST_LIMIT_BYTES,
+  ATTACHMENT_ROUTE,
+  AttachmentStore,
+  readAttachmentUpload,
+} from './attachments.ts';
+export {
   type CancelledEffect,
   type CommandReceipt,
   EventLog,

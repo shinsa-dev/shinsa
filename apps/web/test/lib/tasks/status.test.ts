@@ -2,8 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import { type Gate, listMergeSteps, type Task } from '@shinsa/core';
 import {
   ATTENTION,
+  isResolvingConflicts,
   resolveGateGlyph,
   resolveGateStatus,
+  resolveRowStatus,
+  resolveStageLabel,
   resolveTaskGlyph,
   resolveTaskMenuIcon,
   resolveTaskStatus,
@@ -175,6 +178,29 @@ describe('resolveTaskStatus', () => {
     });
   });
 
+  it('names the stage in a queue row while the agent waits to check in, and the status otherwise', () => {
+    const monitor = {
+      id: 'm',
+      runId: 'r',
+      role: 'agent' as const,
+      phaseIndex: 0,
+      notes: 'n',
+      armedAt: 0,
+      nextCheckAt: 1,
+      timeoutAt: 2,
+      attempts: 0,
+      maxAttempts: 1,
+      status: 'armed' as const,
+    };
+    const waiting = createTask({ id: 't', stage: 'building', monitor });
+    expect(resolveRowStatus(createShinsaState({ tasks: [waiting] }), waiting)).toEqual({
+      label: 'Building',
+      tone: 'blue',
+    });
+    const { state, task } = withGate({ type: 'review' });
+    expect(resolveRowStatus(state, task)).toEqual(resolveGateStatus(gate({ type: 'review' })));
+  });
+
   it('shows a sign-in gate as sign in needed in orange, in the paused group', () => {
     const signIn = gate({ type: 'sign_in' });
     expect(resolveGateGlyph(signIn)).toEqual({ icon: 'IconUserKey', tone: 'orange' });
@@ -254,6 +280,28 @@ describe('resolveTaskStatus', () => {
     });
     const merged = createTask({ id: 'm', stage: 'merged' });
     expect(resolveTaskStatus(createShinsaState({ tasks: [merged] }), merged).label).toBe('Merged');
+  });
+
+  it('says a task fixing a conflict with its base is resolving conflicts, and any other fix is fixing', () => {
+    for (const fixFor of ['conflict', 'update'] as const) {
+      const task = createTask({
+        id: 't',
+        stage: 'fixing',
+        fixFor,
+        stageReason: 'resolving conflicts with main',
+      });
+      expect(isResolvingConflicts(task)).toBe(true);
+      expect(resolveStageLabel(task)).toBe('Resolving conflicts');
+      expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
+        label: 'Resolving conflicts',
+        tone: 'blue',
+      });
+    }
+    const checks = createTask({ id: 'c', stage: 'fixing', fixFor: 'pull_request' });
+    expect(isResolvingConflicts(checks)).toBe(false);
+    expect(resolveTaskStatus(createShinsaState({ tasks: [checks] }), checks).label).toBe('Fixing');
+    const shipping = createTask({ id: 's', stage: 'shipping', fixFor: 'conflict' });
+    expect(resolveStageLabel(shipping)).toBe('Pull request');
   });
 });
 

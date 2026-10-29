@@ -1,4 +1,6 @@
 import {
+  type FixReason,
+  isWatchdogActive,
   needsRepository,
   type PipelineStep,
   type Round,
@@ -110,7 +112,7 @@ const WAITING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
 
 const HAND_OVER_KEYS: ReadonlySet<DisplayKey> = new Set<DisplayKey>(['pre-merge', 'post-merge']);
 
-const FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>(['merged', 'done']);
+const FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>(['merged', 'done', 'watching']);
 
 function hasSetupStep(task: Task, pipeline: readonly PipelineStep[]) {
   if (pipeline[0] === 'plan') return false;
@@ -151,13 +153,17 @@ function resolveStepsKey(task: Task, keys: DisplayKey[]): DisplayKey | null {
   return null;
 }
 
+function isPullRequestFix(reason: FixReason | null) {
+  return reason === 'pull_request' || reason === 'conflict' || reason === 'update';
+}
+
 function isBuilding(task: Task) {
   const reported = new Set(task.phaseReports.map((report) => report.index)).size;
   return reported < (task.plan?.document?.phases.length ?? 0);
 }
 
 function resolveStageKey(task: Task, keys: DisplayKey[]) {
-  if (task.stage === 'fixing' && task.fixFor === 'pull_request') return 'pull-request';
+  if (task.stage === 'fixing' && isPullRequestFix(task.fixFor)) return 'pull-request';
   const steps = resolveStepsKey(task, keys);
   if (steps) return steps;
   const key = STAGE_DISPLAY[task.stage];
@@ -257,6 +263,25 @@ function resolvePlanPhases(task: Task, status: DisplayPhaseStatus): DisplayPhase
   });
 }
 
+function resolveWatchPhase(task: Task): DisplayPhase[] {
+  const round = resolveCurrentRound(task).number;
+  const watchdogs = (task.watchdogs ?? []).filter((watchdog) => watchdog.round === round);
+  if (watchdogs.length === 0) return [];
+  const total = watchdogs.length;
+  const done = watchdogs.filter((watchdog) => !isWatchdogActive(watchdog)).length;
+  const status: DisplayPhaseStatus = done === total ? 'done' : 'active';
+  return [
+    {
+      key: 'watch',
+      title: 'Watching',
+      detail: `${done} of ${total} done`,
+      status,
+      planned: false,
+      count: { done, total },
+    },
+  ];
+}
+
 export function resolveTaskProgress(task: Task): TaskProgress {
   const keys = listDisplayKeys(task);
   const current = resolveCurrentIndex(task, keys);
@@ -265,7 +290,7 @@ export function resolveTaskProgress(task: Task): TaskProgress {
     if (key === 'build') return resolvePlanPhases(task, status);
     return [resolveDisplayPhase(task, key, status, index === current)];
   });
-  return summarizeProgress(phases);
+  return summarizeProgress([...phases, ...resolveWatchPhase(task)]);
 }
 
 const ROUND_STEP_STATUS: Record<RoundStatus, (key: DisplayKey) => DisplayPhaseStatus> = {

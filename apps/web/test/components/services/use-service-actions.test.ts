@@ -40,7 +40,14 @@ describe('useServiceActions', () => {
     act(() => handlers.open(running, SHOP));
     expect(left).toHaveBeenCalledTimes(1);
     expect(actions.listPlaces('shop')).toEqual([]);
-    const input = { name: 'api', cwd: '/code', command: 'bun dev', env: {} };
+    const input = {
+      name: 'api',
+      cwd: '/code',
+      command: 'bun dev',
+      env: {},
+      previewUrl: null,
+      portVariable: 'PORT',
+    };
     await act(async () => {
       expect(await actions.listSuggestions('shop')).toEqual([]);
       expect(await actions.add('shop', [input])).toBe(true);

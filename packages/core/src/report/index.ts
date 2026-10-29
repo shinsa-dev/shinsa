@@ -57,6 +57,7 @@ export {
   validateEvidence,
   validateEvidenceRemoval,
   validateFixHandOver,
+  validateMemoryProposal,
   validatePhaseHandOver,
   validatePlanHandOver,
   validateQuestion,
@@ -64,4 +65,6 @@ export {
   validateReview,
   validateSuggestions,
   validateWait,
+  validateWatchReport,
+  WATCHDOG_STARTS,
 } from './validate.ts';

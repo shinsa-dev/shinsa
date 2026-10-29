@@ -21,7 +21,19 @@ function assertCanWait(run: Run) {
   );
 }
 
-function spawnTask(decider: Decider, source: Task, request: string, creator: TaskCreator, parent: boolean) {
+interface SpawnOptions {
+  parent: boolean;
+  forkOf?: string;
+}
+
+function spawnTask(
+  decider: Decider,
+  source: Task,
+  request: string,
+  creator: TaskCreator,
+  options: SpawnOptions
+) {
+  const { parent } = options;
   return createTask(
     decider,
     {
@@ -30,6 +42,7 @@ function spawnTask(decider: Decider, source: Task, request: string, creator: Tas
       repoId: source.repoId,
       priority: source.priority,
       origin: source.origin,
+      ...(options.forkOf ? { forkOf: options.forkOf } : {}),
     },
     { createdBy: creator, ...(parent ? { parentTaskId: source.id, shape: 'change' as const } : {}) }
   );
@@ -48,7 +61,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
     command.repoId ? { ...task, repoId: command.repoId } : task,
     command.request,
     { kind: 'courier', taskId: task.id, runId: run.id, requestKey: command.requestKey },
-    false
+    { parent: false, ...(command.forkOf ? { forkOf: command.forkOf } : {}) }
   );
   if (command.thisWaits) waitOn(decider, decider.task(task.id), [createdId]);
 }
@@ -65,7 +78,13 @@ export function splitTask(decider: Decider, command: CommandOf<'agent.split_task
   }
   const requestKey = `plan:${version}`;
   const taskIds = command.requests.map((request) =>
-    spawnTask(decider, task, request, { kind: 'split', taskId: task.id, runId: run.id, requestKey }, true)
+    spawnTask(
+      decider,
+      task,
+      request,
+      { kind: 'split', taskId: task.id, runId: run.id, requestKey },
+      { parent: true }
+    )
   );
   decider.emit({
     type: 'task.split',

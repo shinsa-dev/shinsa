@@ -78,7 +78,7 @@ web ──WebSocket──► shinsa engine
   role has which tool is `listToolNames` (`packages/core/src/domain/tools.ts`), tabled in `docs/protocol.md` → Agent
   tools. Every task agent also has the command surface as tools (`tasks_done`, `tasks_prioritize`…) but the human-only
   specs: what it does to another task is logged as on your behalf from its task (`docs/engine.md` → Agents manage
-  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/engine/src/agents/policy.ts` (no commit, push, rebase, `git pull` without `--no-rebase`, `reset --hard`, `gh pr create|merge`, checkout of the default branch, a `but` command beyond reads and in-place conflict resolution, a human-only `shinsa` command, or a whole test suite), through a PreToolUse hook for Claude and command approvals for Codex.
+  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/engine/src/agents/policy.ts` (no commit, push, rebase, `git pull` without `--no-rebase`, `reset --hard`, `gh pr create|merge`, checkout of the default branch, a human-only `shinsa` command, or a whole test suite), through a PreToolUse hook for Claude and command approvals for Codex.
 - **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
   takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
 - **Some decisions are human-only**: closing any gate, the settings in `HUMAN_ONLY_SETTINGS` and a repository's

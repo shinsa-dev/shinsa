@@ -2,9 +2,12 @@ import { statSync } from 'node:fs';
 import {
   DomainError,
   isServiceEnvKey,
+  isServicePreviewUrl,
   listTerminalPlaces,
   parseTerminalClientFrame,
+  resolveTaskServiceCwd,
   SERVICE_LIMITS,
+  SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
   type ShinsaState,
@@ -16,7 +19,7 @@ import type { ServerWebSocket } from 'bun';
 import { type JsonObject, readJsonObject } from '../http/body.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { listServiceSuggestions } from './detect.ts';
-import type { ServiceInput, TerminalStart, Terminals, TerminalViewer } from './index.ts';
+import type { ServiceInput, ServiceRun, TerminalStart, Terminals, TerminalViewer } from './index.ts';
 
 export interface TerminalRoute {
   method: 'GET' | 'POST';
@@ -45,6 +48,11 @@ function readText(body: JsonObject, field: string, limit: number) {
 
 function readOptionalText(body: JsonObject, field: string, limit: number) {
   return body[field] === undefined || body[field] === null ? null : readText(body, field, limit);
+}
+
+async function readTaskId(request: Request) {
+  if (!request.body) return null;
+  return readOptionalText(await readJsonObject(request), 'taskId', 200);
 }
 
 function isFolder(path: string) {
@@ -110,6 +118,26 @@ function readEnv(body: JsonObject) {
   return env;
 }
 
+function readPreviewUrl(body: JsonObject) {
+  const url = readOptionalText(body, 'previewUrl', SERVICE_LIMITS.previewUrl)?.trim() || null;
+  if (url !== null && !isServicePreviewUrl(url))
+    throw new DomainError(
+      'service_preview_invalid',
+      'Give the preview as an http or https URL, with {port} where the run’s port goes.'
+    );
+  return url;
+}
+
+function readPortVariable(body: JsonObject) {
+  const name = readOptionalText(body, 'portVariable', 200)?.trim() || SERVICE_PORT_VARIABLE;
+  if (!isServiceEnvKey(name))
+    throw new DomainError(
+      'service_env_invalid',
+      `“${name}” is not a variable name: use letters, digits and _, not starting with a digit.`
+    );
+  return name;
+}
+
 function readServiceInput(
   body: JsonObject,
   others: ServiceDefinition[],
@@ -127,7 +155,14 @@ function readServiceInput(
     throw new DomainError('terminal_place_missing', `The folder ${cwd} is not there anymore.`);
   const command = readText(body, 'command', SERVICE_LIMITS.command).trim();
   if (!command) throw new DomainError('body_invalid', 'Give the service a command to run.');
-  return { name, cwd, command, env: readEnv(body) };
+  return {
+    name,
+    cwd,
+    command,
+    env: readEnv(body),
+    previewUrl: readPreviewUrl(body),
+    portVariable: readPortVariable(body),
+  };
 }
 
 function readServiceBatch(
@@ -183,8 +218,23 @@ function resolveBrowserRefusal(request: Request) {
   return request.headers.get('origin') === null ? BROWSER_ONLY : null;
 }
 
-export function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
+function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
   return resolveServicePlace(listTerminalPlaces(state, service.projectId), service.cwd, home);
+}
+
+export function resolveServiceRunIn(
+  state: ShinsaState,
+  service: ServiceDefinition,
+  taskId: string | null,
+  home: string
+): ServiceRun | null {
+  if (taskId === null) {
+    const place = resolveServicePlaceIn(state, service, home);
+    return place ? { cwd: service.cwd, place, taskId: null } : null;
+  }
+  const task = state.tasks[taskId];
+  const cwd = task ? resolveTaskServiceCwd(state, service, task) : null;
+  return cwd === null ? null : { cwd, place: 'worktree', taskId };
 }
 
 export function readTerminalSocketId(pathname: string) {
@@ -201,8 +251,12 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
       if (refusal) throw new DomainError('browser_only', refusal);
       return respond((await handler(match, await readJsonObject(request))) ?? terminals.snapshot());
     };
-  const open = (handler: (match: RegExpExecArray) => unknown) => async (match: RegExpExecArray) =>
-    respond((await handler(match)) ?? terminals.snapshot());
+  const withTask =
+    (handler: (match: RegExpExecArray, taskId: string | null) => unknown) =>
+    async (match: RegExpExecArray, request: Request) => {
+      const taskId = await readTaskId(request);
+      return respond((await handler(match, taskId)) ?? terminals.snapshot());
+    };
   const id = (match: RegExpExecArray) => decodeURIComponent(match[1] ?? '');
   const projectOf = (projectId: string) => {
     if (!engine.state.projects[projectId])
@@ -212,17 +266,21 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
   const others = (projectId: string, except: string | null) =>
     terminals.snapshot().services.filter((each) => each.projectId === projectId && each.id !== except);
   const placeOf = (service: ServiceDefinition) => resolveServicePlaceIn(engine.state, service, home);
-  const servicePlace = (serviceId: string) => {
-    const place = placeOf(terminals.findService(serviceId));
-    if (!place)
+  const serviceRun = (serviceId: string, taskId: string | null): ServiceRun => {
+    const service = terminals.findService(serviceId);
+    if (taskId !== null && !engine.state.tasks[taskId])
+      throw new DomainError('task_not_found', 'That task is not there anymore.');
+    const run = resolveServiceRunIn(engine.state, service, taskId, home);
+    if (!run)
       throw new DomainError(
         'service_place_invalid',
-        'This service’s folder is no longer in its project. Edit it to run it somewhere else.'
+        taskId === null
+          ? 'This service’s folder is no longer in its project. Edit it to run it somewhere else.'
+          : `${service.name} cannot run for this task: its folder is not in the task’s repository, or the task has no worktree of its own.`
       );
-    const { cwd } = terminals.findService(serviceId);
-    if (!isFolder(cwd))
-      throw new DomainError('terminal_place_missing', `The folder ${cwd} is not there anymore.`);
-    return place;
+    if (!isFolder(run.cwd))
+      throw new DomainError('terminal_place_missing', `The folder ${run.cwd} is not there anymore.`);
+    return run;
   };
   return [
     {
@@ -283,7 +341,7 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
         projectOf(projectId);
         for (const service of others(projectId, null)) {
           const place = placeOf(service);
-          if (place) terminals.startService(service.id, place);
+          if (place) terminals.startService(service.id, { cwd: service.cwd, place, taskId: null });
         }
         return respond(terminals.snapshot());
       },
@@ -302,23 +360,23 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
     {
       method: 'POST',
       pattern: /^\/api\/services\/([^/]+)\/start$/,
-      respond: open((match) => ({
-        terminal: terminals.startService(id(match), servicePlace(id(match))),
+      respond: withTask((match, taskId) => ({
+        terminal: terminals.startService(id(match), serviceRun(id(match), taskId)),
         ...terminals.snapshot(),
       })),
     },
     {
       method: 'POST',
       pattern: /^\/api\/services\/([^/]+)\/stop$/,
-      respond: open(async (match) => {
-        await terminals.stopService(id(match));
+      respond: withTask(async (match, taskId) => {
+        await terminals.stopService(id(match), taskId);
       }),
     },
     {
       method: 'POST',
       pattern: /^\/api\/services\/([^/]+)\/restart$/,
-      respond: open(async (match) => ({
-        terminal: await terminals.restartService(id(match), servicePlace(id(match))),
+      respond: withTask(async (match, taskId) => ({
+        terminal: await terminals.restartService(id(match), serviceRun(id(match), taskId)),
         ...terminals.snapshot(),
       })),
     },

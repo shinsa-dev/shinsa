@@ -12,6 +12,7 @@ import {
   PROTOCOL_LIMITS,
   type ShinsaToolName,
   VERIFICATION_RULES,
+  WATCHDOG_STARTS,
 } from '@shinsa/core';
 import { ORCHESTRATION_TOOL_SPECS } from './orchestration.ts';
 import { CHANGE_SUMMARY_SPEC, CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process.ts';
@@ -158,6 +159,79 @@ const WALKTHROUGH_PARTS = {
         ),
       },
       required: ['when', 'kind', 'title', 'detail'],
+    },
+  },
+  watchdogs: {
+    type: 'array',
+    description:
+      'Checks that watch the change after it merges, when something outside the tests can show it broke (logs, traces, errors, analytics, support messages). Each runs as a read-only turn of this conversation on its interval, and an issue it finds becomes a task forked from this one. Leave it out when nothing after the merge would show more than the tests did.',
+    maxItems: L.watchdogs,
+    items: {
+      type: 'object',
+      properties: {
+        title: limitedText('What it watches, in a few words. Unique in the list.', L.watchdogTitle),
+        check: limitedText(
+          'What to look at and what counts as an issue, with the numbers: "p95 of POST /checkout under 400 ms".',
+          L.watchdogCheck
+        ),
+        source: {
+          type: 'object',
+          description:
+            'An MCP server you have that holds the data. Leave it out when none does and give source_request.',
+          properties: {
+            server: limitedText('The MCP server, by name.', L.watchdogServer),
+            data: limitedText('What it holds that this check reads.', L.watchdogData),
+          },
+          required: ['server', 'data'],
+        },
+        source_request: {
+          type: 'object',
+          description: 'When no server you have holds the data: what the human should connect.',
+          properties: {
+            data: limitedText('The data the check needs.', L.watchdogData),
+            evidence: limitedText(
+              'Where the code sends that data: the file and the service.',
+              L.watchdogEvidence
+            ),
+            suggestions: textList(
+              'Servers the human could connect, by name and where they come from (an official MCP server, Composio).',
+              L.watchdogSuggestions,
+              L.watchdogSuggestion
+            ),
+          },
+          required: ['data', 'evidence', 'suggestions'],
+        },
+        first_check_minutes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.watchdogFirstCheckMinutes,
+          description:
+            'Minutes from the change going live to the first check. Left out, the setting’s default.',
+        },
+        max_gap_hours: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.watchdogMaxGapHours,
+          description:
+            'The longest gap between checks; each gap doubles up to it. Left out, the setting’s default.',
+        },
+        for_hours: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.watchdogForHours,
+          description: 'Hours it watches once the change is live. Left out, the setting’s default.',
+        },
+        starts: {
+          type: 'string',
+          enum: [...WATCHDOG_STARTS],
+          description: 'merge (the default) when merging deploys it; production when it goes live later.',
+        },
+        production_check: limitedText(
+          'With starts production: how to tell the merged change is live in production.',
+          L.watchdogProductionCheck
+        ),
+      },
+      required: ['title', 'check'],
     },
   },
 };
@@ -599,6 +673,30 @@ export const TOOL_SPECS = {
     description:
       'List the other open tasks in the repository this task works in, as ready shinsa:// markdown links: each with its stage, its branch, what that branch is stacked on, the files it changed (committed or not) and whether an agent works on it now. Use it before you change files another task may be changing. It only reads.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  list_services: {
+    name: 'list_services',
+    description:
+      'List the project’s services this task can run (its dev servers and the like), each with its command, the folder in this task’s worktree and whether it runs for this task. Name one in `service` to read the last lines of its output. It only reads.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'A service’s name, to read its output.' },
+      },
+    },
+  },
+  run_service: {
+    name: 'run_service',
+    description:
+      'Start, stop or restart one of the project’s services for this task only, in its own terminal in this task’s worktree; never the human’s own run or another task’s. Two runs of one service may want the same port: when it fails, read its output with `list_services`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'The service’s name, from list_services.' },
+        action: { type: 'string', enum: ['start', 'stop', 'restart'] },
+      },
+      required: ['service', 'action'],
+    },
   },
   note: {
     name: 'note',

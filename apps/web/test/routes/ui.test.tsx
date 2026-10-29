@@ -75,6 +75,8 @@ describe('the /ui gallery', () => {
       'The change merged. Run the operation now?',
       'Checks',
       'The agent asked for your approval.',
+      'Resolving conflicts with main',
+      'Resolving conflicts',
     ]) {
       expect(overview.getAllByText(text).length).toBeGreaterThan(0);
     }
@@ -136,8 +138,11 @@ describe('the /ui gallery', () => {
     const shinsa = findSection('shinsa');
     expect(shinsa.getByRole('button', { name: 'Rebase' }).getAttribute('aria-pressed')).toBeNull();
     const setup = findSection('shinsa-setup');
-    expect(setup.getByRole('heading', { name: 'Where do you keep your repositories?' })).toBeTruthy();
-    expect(setup.getByRole('option', { name: /~\/Developer/ }).getAttribute('aria-selected')).toBe('true');
+    expect(setup.getAllByRole('heading', { name: 'Where do you keep your repositories?' })).toHaveLength(2);
+    expect(setup.getAllByRole('option', { name: /~\/Developer/ })[0]?.getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    expect(setup.getByText('macOS keeps ~/Documents private')).toBeTruthy();
     expect(setup.getByRole('option', { name: /Squash/ }).getAttribute('aria-selected')).toBe('true');
     expect(setup.getByText('Added')).toBeTruthy();
     expect(setup.getByText('Not signed in.')).toBeTruthy();
@@ -165,7 +170,9 @@ describe('the /ui gallery', () => {
     const setup = findSection('shinsa-setup');
     fireEvent.click(setup.getByRole('option', { name: /Rebase/ }));
     fireEvent.click(setup.getAllByRole('button', { name: /Back/ })[0] as HTMLElement);
-    fireEvent.click(setup.getByRole('button', { name: 'Check again' }));
+    for (const check of setup.getAllByRole('button', { name: 'Check again' })) fireEvent.click(check);
+    fireEvent.click(setup.getByRole('button', { name: 'Open System Settings' }));
+    fireEvent.click(setup.getByRole('button', { name: 'Leave it out' }));
     fireEvent.click(setup.getByRole('button', { name: 'Add account' }));
     fireEvent.click(setup.getByRole('button', { name: /Go to Home/ }));
     fireEvent.click(

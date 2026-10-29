@@ -28,10 +28,12 @@ import {
   InfoRow,
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
+import { TaskServicesFact } from '@/components/services/task-menu.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
+import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
@@ -42,18 +44,12 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
-import { describePullRequestFact, describeStarted } from '@/lib/tasks/facts.ts';
+import { describePullRequestFact, describeStarted, listForkSources, listForks } from '@/lib/tasks/facts.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
-
-const FACT =
-  'inline-flex h-6 min-w-0 shrink-0 items-center gap-1.5 rounded-control-sm px-1.5 text-fg-2 text-xs';
-
-const FACT_INTERACTIVE =
-  'corner-superellipse/1.125 cursor-pointer outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4';
 
 function FactPopover({
   trigger,
@@ -432,6 +428,7 @@ export function TaskFacts({
       <PullRequestFact state={state} task={task} />
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
+      <TaskServicesFact state={state} task={task} />
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />
       <CostFact state={state} task={task} />
@@ -444,6 +441,8 @@ export function TaskFacts({
         verb='Unblocks'
         tasks={listDependents(state, task.id)}
       />
+      <RelatedFact state={state} icon='IconFork' verb='Forked from' tasks={listForkSources(state, task)} />
+      <RelatedFact state={state} icon='IconFork' verb='Forked into' tasks={listForks(state, task)} />
     </div>
   );
 }
