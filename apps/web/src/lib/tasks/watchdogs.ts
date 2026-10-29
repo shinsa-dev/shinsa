@@ -117,7 +117,8 @@ export function connectWatchdog(task: Task, watchdog: Watchdog, server: string, 
   );
 }
 
-export const WATCH_SOURCE_HINT = 'A data source watchdogs read after a merge';
+export const WATCH_SOURCE_HINT =
+  'A data source agents can read, such as logs, analytics or a support channel';
 
 export function describeWatchSource(state: ShinsaState, source: WatchSource) {
   const repos = source.repoIds.map((id) => state.repos[id]?.name ?? id);
