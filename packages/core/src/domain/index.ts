@@ -65,6 +65,11 @@ export {
   type OverlapNote,
 } from './overlaps.ts';
 export {
+  type ProjectSuggestion,
+  resolveProjectSuggestions,
+  type SuggestionRepo,
+} from './project-suggestions.ts';
+export {
   formatTaskHandle,
   isProjectKey,
   NO_PROJECT_KEY,
