@@ -9,6 +9,7 @@ import {
   resolveRoundTitle,
   selectShippingTarget,
   type Task,
+  toRoundPullRequest,
 } from '../../src/index.ts';
 
 function round(number: number, overrides: Partial<Round> = {}): Round {
@@ -123,5 +124,31 @@ describe('rounds', () => {
     expect(isTaskResting({ stage: 'done', closedAt: 5 })).toBe(false);
     expect(isTaskClosed({ stage: 'cancelled' })).toBe(true);
     expect(isTaskResting({ stage: 'building' })).toBe(false);
+  });
+
+  test('a round keeps what its pull request changed only when GitHub gave one', () => {
+    const read = {
+      number: 4,
+      url: 'u',
+      state: 'merged' as const,
+      checks: 'passing' as const,
+      unresolvedComments: 0,
+      mergeable: true,
+      updatedAt: 1,
+    };
+    const changes = { additions: 40, deletions: 12, changedFiles: 3 };
+    expect(toRoundPullRequest({ ...read, changes })).toEqual({
+      number: 4,
+      url: 'u',
+      state: 'merged',
+      base: null,
+      changes,
+    });
+    expect(toRoundPullRequest({ ...read, changes: null })).toEqual({
+      number: 4,
+      url: 'u',
+      state: 'merged',
+      base: null,
+    });
   });
 });

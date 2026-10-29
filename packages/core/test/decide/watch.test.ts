@@ -330,6 +330,9 @@ describe('comparing watches and pull requests', () => {
     expect(isSamePullRequest(read, { ...read, updatedAt: 99 })).toBe(true);
     expect(isSamePullRequest(read, { ...read, checks: 'failing' })).toBe(false);
     expect(isSamePullRequest(read, { ...read, mergeQueue: { state: 'queued', position: 1 } })).toBe(false);
+    expect(
+      isSamePullRequest(read, { ...read, changes: { additions: 3, deletions: 1, changedFiles: 2 } })
+    ).toBe(false);
   });
 });
 

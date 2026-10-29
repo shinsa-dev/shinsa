@@ -231,6 +231,12 @@ export interface Focus {
   until: number | null;
 }
 
+export interface PullRequestChanges {
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+}
+
 export interface PullRequest {
   number: number;
   url: string;
@@ -246,6 +252,7 @@ export interface PullRequest {
   mergeQueue?: MergeQueueEntry | null;
   queueRemoval?: string | null;
   mergeCommit?: string | null;
+  changes?: PullRequestChanges | null;
 }
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped';

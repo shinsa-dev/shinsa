@@ -5,6 +5,7 @@ import {
   type MergeQueueEntry,
   type MergeQueueState,
   type PullRequest,
+  type PullRequestChanges,
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
@@ -33,6 +34,9 @@ interface PullRequestView {
   headRefOid?: string;
   mergeCommit?: { oid: string } | null;
   statusCheckRollup: CheckEntry[] | null;
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
 }
 
 interface Login {
@@ -134,7 +138,7 @@ const COMMENT_FIELDS = 'totalCount nodes{id author{login} createdAt lastEditedAt
 const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
 
 const PULL_REQUEST_FIELDS =
-  'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup';
+  'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup,additions,deletions,changedFiles';
 
 const NO_PULL_REQUEST = /no pull requests found/i;
 
@@ -270,6 +274,12 @@ function resolveQueueRemoval(pull: PullRequestDetails['repository']['pullRequest
   return /^[A-Z_]+$/.test(reason) ? reason.toLowerCase().replaceAll('_', ' ') : reason;
 }
 
+function resolvePullRequestChanges(view: PullRequestView): PullRequestChanges | null {
+  const { additions, deletions, changedFiles } = view;
+  if (additions === undefined || deletions === undefined || changedFiles === undefined) return null;
+  return { additions, deletions, changedFiles };
+}
+
 export function serializePullRequest(
   view: PullRequestView,
   details: PullRequestDetails | null,
@@ -293,6 +303,7 @@ export function serializePullRequest(
     mergeable: view.mergeable === 'MERGEABLE' ? true : view.mergeable === 'CONFLICTING' ? false : null,
     headSha: view.headRefOid ?? null,
     mergeCommit: view.mergeCommit?.oid ?? null,
+    changes: resolvePullRequestChanges(view),
     updatedAt: now,
     ...(checkRuns ? { checkRuns } : {}),
     ...(pull
