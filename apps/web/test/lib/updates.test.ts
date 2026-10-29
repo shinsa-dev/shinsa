@@ -27,7 +27,7 @@ describe('the Updates settings', () => {
       'New versions first, as pre-releases, and every stable release once it is newer than yours.'
     );
     expect(describeChannelDetail('canary')).toBe(
-      'The newest tested main, built every three hours. Less tested than Beta.'
+      'Every merge into main once its tests pass. Less tested than Beta.'
     );
   });
 

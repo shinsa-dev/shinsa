@@ -3,8 +3,8 @@
 Shinsa ships as one Mac app (`apps/desktop`) that carries its engine, interface and `shinsa` command, all under one
 version (`docs/plans/app-plan.md` → Versions and updates). A release is a GitHub release of `shinsa-dev/shinsa`
 made by the Release workflow (`.github/workflows/release.yml`); nothing is bumped by hand, since the version lives
-in the tag. There are three channels: **Stable** and **Beta**, cut by hand, and **Canary**, built every three hours from
-the newest `main` that passes the tests. All three are builds of the same app, Shinsa (`studio.overclock.shinsa`), so you switch
+in the tag. There are three channels: **Stable** and **Beta**, cut by hand, and **Canary**, built from every merge to
+`main` that passes the tests. All three are builds of the same app, Shinsa (`studio.overclock.shinsa`), so you switch
 between them in Settings → General → Updates and Shinsa updates itself in place, with the same data and engine.
 
 ## Running a release
@@ -17,13 +17,12 @@ gh workflow run release.yml -f channel=stable -f bump=minor
 ```
 
 The first releases use `bump=major`: betas `1.0.0-beta.N`, then `1.0.0` (The first releases, below). A canary needs
-no run: every three hours the newest `main` commit whose Test workflow passed makes one when the app changed (Canary
-builds, below); `gh workflow run release.yml -f channel=canary` makes one of the current `main` by hand, tested or
-not.
+no run: every merge to `main` whose Test workflow passes makes one (Canary builds, below); `gh workflow run
+release.yml -f channel=canary` makes one of the current `main` by hand, tested or not.
 
 | Input | Values | Default |
 |---|---|---|
-| `channel` | `stable`: a normal GitHub release, marked latest. `beta`: a GitHub pre-release of the next version. `canary`: a GitHub pre-release of `main`, as the build every three hours makes | `beta` |
+| `channel` | `stable`: a normal GitHub release, marked latest. `beta`: a GitHub pre-release of the next version. `canary`: a GitHub pre-release of `main`, as a merge makes | `beta` |
 | `bump` | `patch`, `minor` or `major`: which part of the **last stable** version goes up; a canary ignores it | `patch` |
 
 The workflow first decides, on Ubuntu (`trigger`), whether to build and which commit: a run by hand always builds
@@ -54,35 +53,32 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
 
 ## Canary builds
 
-Every three hours the newest tested `main` is built and published as a canary when it changes the app, signed and
-notarized like any release, so the Canary channel is never more than a few hours behind the newest tested `main`.
-One build per window instead of one per merge keeps the macOS minutes and the release feed small when merges come in
-bursts. The rules, all in `.github/workflows/release.yml`:
+Every merge to `main` that passes the tests builds and publishes a canary, signed and notarized like any release, so
+the newest tested `main` is always what the Canary channel installs. The rules, all in `.github/workflows/release.yml`:
 
-- **What starts one.** The Release workflow runs on a `schedule` (`17 */3 * * *`, UTC, off the hour when GitHub's
-  scheduler is busiest). The `trigger` job asks GitHub for the newest successful Test run of a push to `main`
-  (`gh run list --workflow test.yml --branch main --event push --status success`, which needs `actions: read`), and
-  every later job checks out that run's `headSha`, the commit Test passed, and tags it (`gh release create
-  --target`). A commit whose Test failed, was cancelled or did not run (Test skips a change only to docs) is never
-  built; the canary waits for the next commit that passes.
-- **What it skips.** A commit already in the newest canary makes no canary (`git merge-base --is-ancestor`, reason
-  `released`), so a quiet window, or a newer commit whose Test failed, builds nothing. A change that touches only
-  `docs/`, `apps/marketing/`, a Markdown file at the root, a `CLAUDE.md`, `.claude/` or `.github/assets/` (none of
-  them is in the app) makes no canary either. Both rules are in `scripts/release-canary.ts` (`CANARY_IGNORED_PATHS`
-  and `resolveCanaryDecision` in `scripts/release-version.ts`, tested at 100%): it compares the commit with the
-  newest canary tag, so everything merged since the last canary is in the next one. The first canary always builds.
-  The decision and the files are in the run's summary.
-- **Overlaps.** The `mac` job of a canary is in the concurrency group `release-canary` with `cancel-in-progress`, so a
-  newer canary, scheduled or by hand, cancels one still building; stable and beta builds keep their own group,
-  `release`, and are never cancelled. The group is on the job, not the workflow, so a Release run that decides not to
-  build never cancels a canary in progress. A run cancelled while it uploads can leave a draft release behind; the
-  next canary takes the same version (a draft has no tag), so it deletes that draft before it publishes.
+- **What starts one.** The Release workflow runs on `workflow_run` of Test: when Test finishes, the `trigger` job goes
+  on only if it succeeded on a push to `main` of this repository (`conclusion == 'success'`, `event == 'push'`,
+  `head_branch == 'main'`), and every later job checks out that run's `head_sha`, the commit Test passed, and tags it
+  (`gh release create --target`). A failed or cancelled Test makes no canary.
+- **What it skips.** A change that touches only `docs/`, `apps/marketing/`, a Markdown file at the root, a
+  `CLAUDE.md`, `.claude/` or `.github/assets/` (none of them is in the app) makes no canary. `workflow_run` has no
+  `paths-ignore`, so the rule moved into `scripts/release-canary.ts` (`CANARY_IGNORED_PATHS` and
+  `resolveCanaryDecision` in `scripts/release-version.ts`, tested at 100%): it compares the commit with the newest
+  canary tag, not only with its parent, so a merge whose canary was cancelled by the next one still reaches a canary
+  when the next one changes only docs. The first canary always builds. The decision and the files are in the run's
+  summary.
+- **Rapid merges.** The `mac` job of a canary is in the concurrency group `release-canary` with `cancel-in-progress`,
+  so a newer tested merge cancels the canary still building for an older one; stable and beta builds keep their own
+  group, `release`, and are never cancelled. The group is on the job, not the workflow, so a Release run that decides
+  not to build (Test failed, or only docs changed) never cancels a canary in progress. A run cancelled while it uploads
+  can leave a draft release behind; the next canary takes the same version (a draft has no tag), so it deletes that
+  draft before it publishes.
 - **Loops.** The workflow pushes nothing itself: `gh release create` makes the tag through the API, a tag is not a
   push to `main`, and GitHub never starts a workflow from its own token's events.
-- **Notes.** The generated notes start at the previous canary's tag, so they list everything merged since it.
+- **Notes.** The generated notes start at the previous canary's tag, so they list what this merge brought.
 - **How many are kept.** Five. GitHub's release feed, which electron-updater and the site's fallback read, lists only
-  the newest 10 releases, so canaries left alone would push every beta and stable release out of it within ten
-  builds and leave the Beta channel with nothing to find. `scripts/release-prune.ts` deletes the older canary
+  the newest 10 releases, so a canary on every merge would push every beta and stable release out of it within ten
+  merges and leave the Beta channel with nothing to find. `scripts/release-prune.ts` deletes the older canary
   releases with their tags (`gh release delete --cleanup-tag`), and `scripts/release-upload.ts` deletes their disk
   images from R2. Only `vX.Y.Z-canary.N` tags are ever touched (`listStaleCanaries` in `scripts/release-version.ts`).
 

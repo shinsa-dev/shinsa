@@ -295,11 +295,6 @@ describe('which commits of main get a canary', () => {
       'v1.3.1-canary.2',
       Array.from({ length: 7 }, (_, index) => `apps/web/src/${index}.ts`)
     );
-    const released = resolveCanaryDecision('v1.3.1-canary.2', ['apps/web/src/main.tsx'], true);
-    expect(released).toEqual({ build: false, reason: 'released', base: 'v1.3.1-canary.2', files: [] });
-    expect(describeCanaryDecision(released)).toBe(
-      'No canary: the newest tested commit is already in v1.3.1-canary.2.'
-    );
     expect(describeCanaryDecision(many)).toBe(
       'Building a canary: since v1.3.1-canary.2, `apps/web/src/0.ts`, `apps/web/src/1.ts`, `apps/web/src/2.ts`, `apps/web/src/3.ts`, `apps/web/src/4.ts` and 2 more changed.'
     );

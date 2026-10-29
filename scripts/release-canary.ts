@@ -17,13 +17,8 @@ async function listChangedFiles(from: string | null) {
     .filter(Boolean);
 }
 
-async function isReleased(from: string | null) {
-  if (!from) return false;
-  return (await $`git merge-base --is-ancestor ${head} ${from}`.nothrow().quiet()).exitCode === 0;
-}
-
 const changed = await listChangedFiles(base);
-const decision = resolveCanaryDecision(base, changed, await isReleased(base));
+const decision = resolveCanaryDecision(base, changed);
 const summary = describeCanaryDecision(decision);
 
 if (Bun.env.GITHUB_OUTPUT) appendFileSync(Bun.env.GITHUB_OUTPUT, `build=${decision.build}\n`);

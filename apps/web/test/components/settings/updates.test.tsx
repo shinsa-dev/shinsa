@@ -73,7 +73,7 @@ describe('the Updates settings', () => {
     expect(screen.getByText('Downloading 1.3.1-canary.5… 42%')).toBeTruthy();
     expect(screen.getByText('Canary channel · Updates install when you quit Shinsa')).toBeTruthy();
     expect(
-      screen.getByText('The newest tested main, built every three hours. Less tested than Beta.')
+      screen.getByText('Every merge into main once its tests pass. Less tested than Beta.')
     ).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Update channel' })).toBeTruthy();
   });

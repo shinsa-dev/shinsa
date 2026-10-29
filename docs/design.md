@@ -1702,8 +1702,8 @@ Only these, and they win over anything below:
       engine keeps running and moves to the new version once the working agents hand over." Update channel: a select
       of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
       "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
-      pre-releases, and every stable release once it is newer than yours." or "The newest tested main, built every
-      three hours. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
+      pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
+      pass. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
       place with the same data and engine. ⌘K's Change a setting has Update channel with the same three in the app.
       `/ui` → Settings shows Stable up to date, Beta with an update ready, a beta switched to Stable offered the
       latest stable, Canary downloading the next canary, a downloaded beta being prepared, and a beta restarting to

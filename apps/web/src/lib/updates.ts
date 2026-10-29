@@ -31,7 +31,7 @@ export const UPDATE_CHANNEL_ITEMS = [CHANNEL_ITEM.stable, CHANNEL_ITEM.beta, CHA
 const CHANNEL_DETAIL: Record<UpdateChannel, string> = {
   stable: 'Releases only. Coming from a beta or a canary, you can go back to the latest stable.',
   beta: 'New versions first, as pre-releases, and every stable release once it is newer than yours.',
-  canary: 'The newest tested main, built every three hours. Less tested than Beta.',
+  canary: 'Every merge into main once its tests pass. Less tested than Beta.',
 };
 
 export function parseUpdateChannel(value: string): UpdateChannel {
