@@ -204,7 +204,9 @@ src/
 │                    DELEGATION_ISOLATIONS, MERGE_STEP_TIMINGS, MERGE_STEP_KINDS) and validate*, the delegation and courier
 │                    requests (orchestration.ts), plan changes between versions, Markdown, assembleReport, the steps
 │                    around the merge with their ticks (merge-steps.ts: listMergeSteps, resolveMergeStepKey), how to
-│                    test the change (testing.ts: MANUAL_TEST_TARGETS, parseTestFile, listTestingLines), the
+│                    test the change (testing.ts: MANUAL_TEST_TARGETS, parseTestFile, listTestingLines), the pull request
+│                    description (pull-request.ts: serializePullRequestMarkdown, replacePullRequestBlock,
+│                    listPullRequestEvidence, resolvePublicUrl, resolveShinsaTaskUrl), the
 │                    checklist shape every list you tick shares (checklist.ts: ChecklistItem, Checklist,
 │                    resolveChecklistProgress, listOpenChecklistItems)
 ├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking, a task as text for

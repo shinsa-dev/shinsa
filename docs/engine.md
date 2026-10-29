@@ -2323,7 +2323,7 @@ keeps beside its events (`store/event-log.ts`).
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
   `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`,
-  `:task.commit_edits:<tree>`, and `<effect key>:effect.fail` when it gives up; the
+  `:task.commit_edits:<tree>`, `:<attempt>:evidence.record_uploads:<evidence ids>`, and `<effect key>:effect.fail` when it gives up; the
   push names each report after its attempt too (`<effect key>:<attempt>:pull_request.record_step:<step>`,
   `:<attempt>:pull_request.record_update_conflict`, `:<attempt>:pull_request.record_hook_failure`), so a retry shows its
   steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
@@ -2478,12 +2478,51 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
   characters (`serializeConventionalSubject`); a title already written as `type(scope)!: …` has that prefix
   replaced, never doubled. A fix commits as `fix: <what it fixed>`. One subject line, no body.
 - **The pull request** is titled the same way from the current round's title, kept whole (`serializePullRequestTitle`,
-  so a later round's pull request carries its own), and its description opens with the task it came from,
-  ``Shinsa task: LOC-22, `shinsa://task/<id>` `` (the handle, then the link as code: GitHub drops links of other
-  schemes, so it is there to copy), then the summary, how to test it, the steps around the merge and the plan.
+  so a later round's pull request carries its own). Its description is the review in small, so a teammate on GitHub
+  sees what you see in Shinsa (The pull request description, below).
 - **The merge commit.** A squash or merge passes `--subject "<the pull request's title on GitHub> (#N)"` and an empty
   `--body`, so the default branch gets one conventional line and a title you edit on GitHub before merging is kept; a
   rebase keeps the branch's own commits, which are already conventional.
+
+## The pull request description
+
+The description is one block Shinsa writes between `<!-- shinsa:start -->` and `<!-- shinsa:end -->`
+(`serializePullRequestMarkdown`, `packages/core/src/report/pull-request.ts`, pure), in this order: a note naming the
+task (handle and title) with a link to open it in Shinsa, the summary, How it works (the walkthrough's approach, its
+flow folded away), Evidence, Checks (a table of each check with ✓, ✗ or –, the count that passed and the
+changed-line coverage when it was measured), What changed (each phase's summary with its critical and high spots),
+the judgement calls with the options turned down, the risks, How to test (the tests and the steps to try), the steps
+around the merge, the plan folded away, and a one-line footer linking shinsa.dev.
+
+- **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to `https://shinsa.dev/open?task=<id>`
+  (`resolveShinsaTaskUrl`), a static page of the site (`apps/marketing/src/pages/open.astro`) whose button opens
+  `shinsa://task/<id>` in the Mac app and which offers the download to anyone without it. The page never opens the
+  app by itself: browsers refuse an external scheme without a click.
+- **Evidence.** The current round's evidence of the task, as items (`listPullRequestEvidence`), without linked tests
+  and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part
+  (Before, After or the part's label); a comparison with a recording lists its parts in turn, since GitHub plays a
+  video only from a link on a line of its own; a screenshot is an image and a recording that link; a note's text
+  folds into `<details>`; a preview is its link. A piece needs an address GitHub can reach (`resolvePublicUrl`: its
+  upload, else its own http or https address unless it is on this machine); one without is a line linking to the
+  task in Shinsa instead.
+- **Uploads.** The engine uploads every screenshot and recording stored under `/api/evidence/` that has no such
+  address (`apps/engine/src/github/description.ts`, `PullRequestDescriptions`) as a GitHub user attachment, the same
+  kind of file a person drags into a pull request: `gh api` posts the file to
+  `https://uploads.github.com/user-attachments/assets` with its name, content type and the repository's numeric id
+  (read once per repository, `resolveRepositoryId`), with `gh`'s own sign-in, and gets back a
+  `https://github.com/user-attachments/assets/<uuid>` address, visible to whoever can see the repository
+  (`uploadAttachment`). PNG, JPEG, GIF and WebP up to 10 MB and MP4, MOV and WebM up to 100 MB go up; anything else
+  stays in Shinsa. The endpoint is not documented, so a failure (the id, an upload) is logged and that piece is linked
+  to Shinsa: an upload never stops a pull request from opening. The addresses are recorded with
+  `evidence.record_uploads` (`evidence.uploaded`, `Evidence.uploadUrl`), so a piece goes up once. Nothing is
+  committed to the repository.
+- **When it is written.** Opening the pull request writes it as the body (`--body-file -`). Every later push to the
+  open pull request writes it again (`writePullRequestBlock`): it reads the body, replaces only the marked block
+  (`replacePullRequestBlock`), so what a person wrote around it stays, and edits the pull request only when the body
+  changed. A body without the markers is replaced whole. A failed rewrite is logged; the push stands.
+- **The size limit.** GitHub takes 65,536 characters. Over that, whole sections go in this order: the plan, the
+  flow, the evidence, What changed, the judgement calls, the risks, How it works, Checks, How to test; the note, the
+  summary, the steps around the merge and the footer stay. Only when that is not enough is the block cut, with `…`.
 
 ## The pull request watch
 

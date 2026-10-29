@@ -1,0 +1,36 @@
+---
+import Button from '../components/ui/Button.astro';
+import Site from '../layouts/Site.astro';
+import { site } from '../lib/site';
+---
+
+<Site title='Open a task · Shinsa' description={site.description} noindex>
+  <section class='flex min-h-[60svh] flex-col items-center justify-center gap-4 px-6 py-24 text-center'>
+    <h1 class='font-medium text-3xl text-fg-4 tracking-tight'>Open this task in Shinsa</h1>
+    <p class='max-w-xl text-fg-2'>
+      This pull request was planned, built and checked in Shinsa. The task lives in the Shinsa of the person who
+      opened it, with the full review, the evidence and the agents' work.
+    </p>
+    <p class='max-w-xl text-fg-2' data-open-missing hidden>This link does not name a task.</p>
+    <div class='flex flex-wrap items-center justify-center gap-2'>
+      <Button href='shinsa://' icon='IconArrowUpRight' class='data-[missing]:hidden'>Open in Shinsa</Button>
+      <Button href={site.downloadUrl} variant='outline'>Download Shinsa</Button>
+    </div>
+    <p class='text-fg-2 text-sm'>
+      New to Shinsa? <a class='text-primary hover:underline' href='/'>See how it works</a>.
+    </p>
+  </section>
+</Site>
+
+<script>
+  import { resolveTaskLink } from '../lib/open';
+
+  const link = resolveTaskLink(window.location.search);
+  const button = document.querySelector<HTMLAnchorElement>('a[href="shinsa://"]');
+  if (link && button) {
+    button.href = link;
+  } else {
+    button?.setAttribute('data-missing', '');
+    document.querySelector('[data-open-missing]')?.removeAttribute('hidden');
+  }
+</script>

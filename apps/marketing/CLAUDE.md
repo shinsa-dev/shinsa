@@ -80,7 +80,9 @@ src/
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
-  pages/                    index, 404, og.png, llms.txt and design.md; public/ holds the
+  pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: its button opens
+                            `shinsa://task/<id>` from `?task=`, lib/open.ts, and it offers the download; left out of
+                            the sitemap), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket

@@ -17,9 +17,9 @@ export const PULL_REQUEST_BLOCK_START = '<!-- shinsa:start -->';
 
 export const PULL_REQUEST_BLOCK_END = '<!-- shinsa:end -->';
 
-export const PULL_REQUEST_BODY_LIMIT = 65_536;
+const PULL_REQUEST_BODY_LIMIT = 65_536;
 
-export const SHINSA_SITE_URL = 'https://shinsa.dev';
+const SHINSA_SITE_URL = 'https://shinsa.dev';
 
 const LOCAL_HOST = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?:[:/]|$)/i;
 
