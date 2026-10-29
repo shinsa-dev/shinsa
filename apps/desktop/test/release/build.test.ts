@@ -41,10 +41,11 @@ describe('the Shinsa build', () => {
   const build = readConfig('electron-builder.yml');
 
   it('is the one app every channel builds, so a canary or a beta updates Shinsa in place', () => {
-    expect(readdirSync(desktopDir).filter((name) => name.startsWith('electron-builder.'))).toEqual([
-      'electron-builder.shared.yml',
-      'electron-builder.yml',
-    ]);
+    expect(
+      readdirSync(desktopDir)
+        .filter((name) => name.startsWith('electron-builder.'))
+        .sort()
+    ).toEqual(['electron-builder.shared.yml', 'electron-builder.yml']);
     for (const key of ['appId', 'productName', 'extraFiles', 'protocols'] as const)
       expect(shared[key]).toBeUndefined();
     const { appId, appName, scheme } = APP_IDENTITY;
