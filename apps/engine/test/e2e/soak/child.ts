@@ -6,6 +6,7 @@ import {
   listOpenGates,
   type ShinsaCommand,
   type ShinsaState,
+  type Task,
   type TaskStage,
 } from '@shinsa/core';
 import type { ModelSource } from '../../../src/agents/index.ts';
@@ -50,6 +51,22 @@ const CANCEL_STAGES: TaskStage[] = ['planning', 'building', 'checking', 'reviewi
 
 const cancelAt = CANCEL_STAGES[Number(Bun.env.SOAK_CANCEL_STAGE ?? 0) % CANCEL_STAGES.length];
 
+const STAGES_BEFORE_SHIPPING: TaskStage[] = [
+  'planning',
+  'awaiting_plan',
+  'building',
+  'checking',
+  'reviewing',
+  'fixing',
+  'awaiting_review',
+];
+
+function isDueForCancel(task: Task) {
+  if (task.request !== CANCEL_INTENT) return false;
+  const reached = STAGES_BEFORE_SHIPPING.indexOf(task.stage);
+  return reached >= STAGES_BEFORE_SHIPPING.indexOf(cancelAt ?? 'planning');
+}
+
 function send(id: string, command: ShinsaCommand) {
   if (sent.some((entry) => entry.id === id)) return;
   sent.push({ id, command });
@@ -77,6 +94,8 @@ function isCrashPause(gate: Gate) {
 function answerGates() {
   for (const gate of listOpenGates(shinsa.engine.state)) {
     if (gate.type === 'failure' && !isCrashPause(gate)) continue;
+    const task = shinsa.engine.state.tasks[gate.taskId];
+    if (task && isDueForCancel(task)) continue;
     const decision = gate.type === 'question' ? 'reply' : 'approve';
     send(`client:answer:${gate.id}`, {
       type: 'gate.answer',
@@ -89,7 +108,7 @@ function answerGates() {
 
 function cancelOnCue() {
   for (const task of Object.values(shinsa.engine.state.tasks)) {
-    if (task.request !== CANCEL_INTENT || task.stage !== cancelAt) continue;
+    if (!isDueForCancel(task)) continue;
     send(`client:cancel:${task.id}`, { type: 'task.cancel', taskId: task.id });
   }
 }

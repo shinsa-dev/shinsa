@@ -34,6 +34,8 @@ import { createRepo, createRound, createStubEngine, createTask } from '../helper
 
 setDefaultTimeout(30_000);
 
+const GH_WAIT_MS = 25_000;
+
 const restores: (() => void)[] = [];
 
 afterEach(() => {
@@ -1025,7 +1027,7 @@ describe('pull requests', () => {
       `${context.key}:1:pull_request.record_step:opening`,
     ]);
     expect(dispatched[3]).toMatchObject({ remarks: [], viewer: 'shinsa-user' });
-    await until('the follow-up sync', () => dispatched.length === 5);
+    await until('the follow-up sync', () => dispatched.length === 5, GH_WAIT_MS);
     expect(readGitHub().pulls).toHaveLength(1);
     await runner.stop();
   });
@@ -1483,7 +1485,7 @@ describe('watching pull requests', () => {
     expect(readGitHub().calls.filter((call) => call[1] === 'view')).toHaveLength(1);
     runner.startWatching();
     runner.startWatching();
-    await until('a watched sync', () => dispatched.length >= 2);
+    await until('a watched sync', () => dispatched.length >= 2, GH_WAIT_MS);
     await runner.stop();
     await runner.stop();
   });
@@ -1494,7 +1496,7 @@ describe('watching pull requests', () => {
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'shipping', pullRequest: PULL }, repo));
     const sync = runner.syncAll();
-    await until('the read to start', () => readPid() > 0);
+    await until('the read to start', () => readPid() > 0, GH_WAIT_MS);
     await runner.stop();
     await sync;
     expect(isRunning(readPid())).toBe(false);
@@ -1509,14 +1511,14 @@ describe('watching pull requests', () => {
     const spawn = spyOn(Bun, 'spawn');
     restores.push(() => spawn.mockRestore());
     const older = runner.syncPullRequest('task-1');
-    await until('the older read', () => readGitHub().calls.some((call) => call[1] === 'graphql'));
+    await until('the older read', () => readGitHub().calls.some((call) => call[1] === 'graphql'), GH_WAIT_MS);
     readGitHub.change((state) => {
       state.pulls[0] = { ...state.pulls[0], checks: 'passing' };
     });
     const spawned = spawn.mock.calls.length;
     const newer = runner.syncPullRequest('task-1');
     if (spawn.mock.calls.length > spawned) {
-      await until('the newer read to be recorded', () => records(dispatched).length === 1);
+      await until('the newer read to be recorded', () => records(dispatched).length === 1, GH_WAIT_MS);
     }
     release();
     await Promise.all([older, newer]);
@@ -1541,8 +1543,8 @@ describe('watching pull requests', () => {
           message === '[Watch] Pull request sync failed' &&
           (fields as { taskId?: string } | undefined)?.taskId === taskId
       );
-    await until('the follow-up sync to fail', () => failed('task-1'));
-    await until('the interval sync to fail', () => failed(undefined));
+    await until('the follow-up sync to fail', () => failed('task-1'), GH_WAIT_MS);
+    await until('the interval sync to fail', () => failed(undefined), GH_WAIT_MS);
     await runner.stop();
   });
 });

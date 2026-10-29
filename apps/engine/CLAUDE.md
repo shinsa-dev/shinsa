@@ -76,7 +76,9 @@ src/
 │                        the state snapshot (snapshot.ts: verifySnapshot, resolveStateVersion, a hash of
 │                        @shinsa/core's source) and EvidenceStore (evidence.ts: attached evidence under
 │                        `<task id>/round-<n>/`, chat tool images at the top, all served under /api/evidence by
-│                        http/evidence.ts, immutable and in byte ranges)
+│                        http/evidence.ts, immutable and in byte ranges, and AttachmentStore (attachments.ts: the files you
+│                        attach to a request or message, `<UUIDv7>/<file name>`, uploaded by POST /api/attachments and
+│                        served under it the same way)
 ├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -309,8 +311,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **The HTTP surface is for this machine only.** Every route goes through `http/guard.ts` (what it checks, and the
   routes that skip part of it, are `docs/engine.md` → Who can change Shinsa). `parseUserCommand` (core) is the single
   gate for commands from outside: it accepts only `UserCommand` types and checks each field by field; never add an
-  allowlist of your own. A socket message needs a string `id` or `runId`; request bodies are capped at 8 MB and read as
-  JSON through `http/body.ts`; files are read through `resolveInside` (real paths, so a symlink cannot leave the
+  allowlist of your own. A socket message needs a string `id` or `runId`; request bodies are capped at 8 MB (an
+  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`), by `Content-Length` and again by the bytes `http/body.ts` reads as JSON; files are read through `resolveInside` (real paths, so a symlink cannot leave the
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
   (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are
@@ -440,7 +442,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `log.listEffectStatuses()`, or are fixed: `run.execute:<runId>`, `run.cancel:<runId>`), a deferred the fake
   resolves, `until(condition)` for another process or the file system, or `spyOn(log, …)` for a failure that is only
   logged. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
-- **A test file that starts the whole server** (`test/e2e/`) sets `setDefaultTimeout(30_000)`: alone it takes a
+- **A test file that starts the whole server** (`test/e2e/`), or drives a pull request through many fake `gh` calls
+  (`test/runtime/effects.test.ts`, which gives those waits 25 s), sets `setDefaultTimeout(30_000)`: alone it takes a
   second, but `bun run test` runs every workspace at once and Bun's own 5 s limit then fails it at random.
 - **Scripted agents are keyed by what a run does**: `FakeAgents.queue` and `of` take the round agent's purpose
   (`plan`, `build`, `fix`, `operate`, read from the live run through `agents.state`, or from the prompt and the

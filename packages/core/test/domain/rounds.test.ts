@@ -50,6 +50,14 @@ describe('rounds', () => {
     expect(formatRoundLabel({ number: 3 })).toBe('round 3');
     expect(resolveRoundTitle(`  ${'x'.repeat(100)}\nmore`)).toHaveLength(80);
     expect(resolveRoundTitle('Add search\nand filters')).toBe('Add search');
+    expect(
+      resolveRoundTitle(
+        '<attachments><attachment path="/x/a.png" /><attachment path="/x/b.txt" /></attachments>'
+      )
+    ).toBe('a.png, b.txt');
+    expect(resolveRoundTitle('Fix this\n\n<attachments><attachment path="/x/a.png" /></attachments>')).toBe(
+      'Fix this'
+    );
   });
 
   test('a stacked round targets the branch below it only while that pull request is open', () => {
