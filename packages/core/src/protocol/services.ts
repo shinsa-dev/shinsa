@@ -81,6 +81,7 @@ export function isServiceEnvKey(key: string) {
 }
 
 export function isServicePreviewUrl(url: string) {
+  if (!url.includes(PORT_PLACEHOLDER)) return false;
   try {
     const { protocol } = new URL(url.replaceAll(PORT_PLACEHOLDER, '1'));
     return protocol === 'http:' || protocol === 'https:';
@@ -93,9 +94,7 @@ export function resolveServiceUrl(
   service: Pick<ServiceDefinition, 'previewUrl'>,
   terminal: Pick<TerminalInfo, 'port'> | null
 ) {
-  if (!service.previewUrl) return null;
-  if (!service.previewUrl.includes(PORT_PLACEHOLDER)) return service.previewUrl;
-  if (!terminal?.port) return null;
+  if (!(service.previewUrl && terminal?.port)) return null;
   return service.previewUrl.replaceAll(PORT_PLACEHOLDER, String(terminal.port));
 }
 

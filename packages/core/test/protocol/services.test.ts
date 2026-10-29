@@ -250,23 +250,27 @@ describe('resolveServiceUrl', () => {
     expect(resolveServiceUrl(preview, terminal({}))).toBeNull();
     expect(resolveServiceUrl(preview, null)).toBeNull();
   });
-
-  it('keeps a preview URL with no placeholder as it is', () => {
-    const fixed = service('docs', { previewUrl: 'https://docs.test/start' });
-    expect(resolveServiceUrl(fixed, null)).toBe('https://docs.test/start');
-  });
 });
 
 describe('isServicePreviewUrl', () => {
-  it('takes an http or https URL, with or without the port placeholder', () => {
+  it('takes an http or https URL with the port placeholder', () => {
     expect(
-      ['http://localhost:{port}/a', 'https://shop.test', 'http://127.0.0.1:{port}'].map(isServicePreviewUrl)
+      ['http://localhost:{port}/a', 'https://shop.test:{port}', 'http://127.0.0.1:{port}'].map(
+        isServicePreviewUrl
+      )
     ).toEqual([true, true, true]);
   });
 
+  it('refuses a URL with no port placeholder, which would point every run at one server', () => {
+    expect(['http://localhost:3000', 'https://shop.test/start'].map(isServicePreviewUrl)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
   it('refuses anything else', () => {
-    expect(['localhost:{port}', 'file:///etc/hosts', 'javascript:alert(1)', ''].map(isServicePreviewUrl)).toEqual(
-      [false, false, false, false]
-    );
+    expect(
+      ['localhost:{port}', 'file:///etc/hosts', 'javascript:alert(1)', ''].map(isServicePreviewUrl)
+    ).toEqual([false, false, false, false]);
   });
 });

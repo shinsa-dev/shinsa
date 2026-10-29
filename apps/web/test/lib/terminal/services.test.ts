@@ -381,6 +381,10 @@ describe('the service form', () => {
     expect(
       validateServiceDraft({ ...draft, previewUrl: `http://a.test/${'x'.repeat(SERVICE_LIMITS.previewUrl)}` })
     ).toMatchObject({ ok: false, errors: { previewUrl: expect.any(String) } });
+    expect(validateServiceDraft({ ...draft, previewUrl: 'http://localhost:3000' })).toMatchObject({
+      ok: false,
+      errors: { previewUrl: 'Give an http or https address, with {port} where the run’s port goes.' },
+    });
     expect(
       validateServiceDraft({
         ...draft,

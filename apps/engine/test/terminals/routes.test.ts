@@ -425,6 +425,9 @@ describe('services over HTTP', () => {
     const many = Object.fromEntries(Array.from({ length: 51 }, (_, index) => [`K${index}`, 'v']));
     expect(await refusal({ ...service, env: many })).toBe('body_invalid');
     expect(await refusal({ ...service, previewUrl: 'localhost:{port}' })).toBe('service_preview_invalid');
+    expect(await refusal({ ...service, previewUrl: 'http://localhost:3000' })).toBe(
+      'service_preview_invalid'
+    );
     expect(await refusal({ ...service, previewUrl: 'x'.repeat(2001) })).toBe('body_invalid');
     expect(await refusal({ ...service, portVariable: '1PORT' })).toBe('service_env_invalid');
     expect(await refusal({ ...service, projectId: 'nope' })).toBe('project_not_found');

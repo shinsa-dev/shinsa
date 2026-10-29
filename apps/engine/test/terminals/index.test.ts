@@ -452,6 +452,7 @@ describe('parseStoredService', () => {
     expect(parseStoredService({ ...service, env: [] })).toBeNull();
     expect(parseStoredService({ ...service, env: null })).toBeNull();
     expect(parseStoredService({ ...service, previewUrl: 'file:///etc' })).toBeNull();
+    expect(parseStoredService({ ...service, previewUrl: 'http://localhost:3000' })).toBeNull();
     expect(parseStoredService({ ...service, previewUrl: 3 })).toBeNull();
     expect(parseStoredService({ ...service, portVariable: 'A-B' })).toBeNull();
     const preview = { ...service, previewUrl: 'http://localhost:{port}', portVariable: 'APP_PORT' };
