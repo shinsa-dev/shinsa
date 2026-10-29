@@ -9,9 +9,9 @@ import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { FileLink } from '@/components/links/file.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
+import { FindingNote } from '@/components/text/finding-note.tsx';
 import { InsetNote, SuggestedFix } from '@/components/text/inset-note.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
-import { NoteHead } from '@/components/text/note-head.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
   type Disclosure,
@@ -90,22 +90,6 @@ function NotePlace({
     <span className='text-2xs'>
       <FileLink task={task} path={place.file} label={describeItemPlace(place)} />
     </span>
-  );
-}
-
-function NoteLabel({ item }: { item: ReviewItem }) {
-  return (
-    <>
-      <span className='shrink-0 text-fg-2'>{resolveNoteHeading(item).author}</span>
-      <span className='shrink-0 text-fg-2'>·</span>
-      <ToneLabel label={item.label} tone={item.tone} />
-      {item.section && (
-        <>
-          <span className='shrink-0 text-fg-2'>·</span>
-          <Truncate className='min-w-0 text-fg-2'>{item.section}</Truncate>
-        </>
-      )}
-    </>
   );
 }
 
@@ -215,9 +199,10 @@ export function ReviewNote({
     >
       {!finding && <NoteBar item={item} disclosure={disclosure} action={action} />}
       {finding && (
-        <div className='flex flex-col gap-2 p-3'>
-          <NoteHead label={<NoteLabel item={item} />} title={item.title} body={item.body} action={action} />
-          <NoteDetails persistId={persistId} task={task} item={item} compact={compact} />
+        <div className='flex flex-col p-3'>
+          <FindingNote label={item.label} tone={item.tone} body={item.body} fix={item.fix} action={action}>
+            <NotePlace persistId={persistId} task={task} item={item} compact={compact} />
+          </FindingNote>
         </div>
       )}
       {!finding && disclosure.open && (

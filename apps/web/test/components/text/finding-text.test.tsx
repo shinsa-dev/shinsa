@@ -43,8 +43,9 @@ describe('a finding’s code', () => {
     expect(view.getByText('Optional').className).toContain('text-fg-2');
     expect(view.getByRole('button', { name: 'Expand code' }).getAttribute('aria-expanded')).toBe('false');
     expect(view.getAllByText('Reading the lines')).toHaveLength(2);
-    expect(view.getByText('The loop skips the last item')).toBeDefined();
-    expect(view.getByText('Suggested fix')).toBeDefined();
+    expect(view.queryByText('The loop skips the last item')).toBeNull();
+    expect(view.getByText('Off by one.')).toBeDefined();
+    expect(view.getByText('Proposed fix')).toBeDefined();
     view.unmount();
     pending.mockRestore();
   });

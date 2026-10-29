@@ -201,7 +201,7 @@ describe('the Review tab', () => {
       reviewDisagreements: [{ call: 'Three tries', reason: 'Two is enough here.' }],
     });
     renderReview(state, task);
-    expect(await screen.findAllByText('The retry never ends')).toBeDefined();
+    expect(await screen.findAllByText('The loop never stops when the call keeps failing.')).toBeDefined();
     expect(document.body.textContent).toContain('Retries a failed request three times.');
     expect(
       screen.getByText(
@@ -254,7 +254,7 @@ describe('the Review tab', () => {
     expect(screen.getByText('Drop the first call and watch it retry.')).toBeDefined();
     expect(screen.getByText('1 of 2 failed')).toBeDefined();
     expect(screen.getByText('bun lint')).toBeDefined();
-    expect(screen.getByText('Suggested fix')).toBeDefined();
+    expect(screen.getByText('Proposed fix')).toBeDefined();
     expect(
       screen.getByText('Found 2 findings: 1 blocking, 1 optional. A signal for you, never the approval.')
     ).toBeDefined();
@@ -268,7 +268,7 @@ describe('the Review tab', () => {
   it('pins every point to the top as one line that opens the whole list, grouped by chapter', async () => {
     const { task, state } = reviewing();
     renderReview(state, task);
-    await screen.findAllByText('The retry never ends');
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
     const index = screen.getByRole('button', { name: 'Every point' });
     expect(index.textContent).toBe('Every point6');
     fireEvent.click(index);
@@ -291,7 +291,7 @@ describe('the Review tab', () => {
   it('follows the point you scroll to, once you take over from the jump', async () => {
     const { task, state } = reviewing();
     renderReview(state, task, '&spot=0%3A1');
-    await screen.findAllByText('The retry never ends');
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
     const viewport = document.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement;
     const keys = [...document.querySelectorAll('[data-review-item]')].map((item) =>
       item.getAttribute('data-review-item')
@@ -333,7 +333,7 @@ describe('the Review tab', () => {
   it('steps through every stop in reading order with J and K, and keeps the place in the URL', async () => {
     const { task, state } = reviewing();
     renderReview(state, task);
-    await screen.findAllByText('The retry never ends');
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
     expect(screen.queryByRole('button', { name: 'Next point' })).toBeNull();
     const press = (key: string) =>
       act(() => {
@@ -387,7 +387,7 @@ describe('the Review tab', () => {
       'merge'
     );
     renderReview(state, task);
-    await screen.findAllByText('The retry never ends');
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
     const items = [...document.querySelectorAll('[data-review-item]')].map((item) =>
       item.getAttribute('data-review-item')
     );
@@ -452,7 +452,7 @@ describe('the Review tab', () => {
       return new Response('no terminal here', { status: 500 });
     }) as typeof fetch;
     renderReview({ ...state, projects: { shop: createProject({ id: 'shop' }) } }, task);
-    await screen.findAllByText('The retry never ends');
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
     expect(screen.getByText('Covered by tests')).toBeDefined();
     expect(screen.getByText('Unit tests cover a dropped call and a call that keeps failing.')).toBeDefined();
     expect(screen.getByText('Building')).toBeDefined();

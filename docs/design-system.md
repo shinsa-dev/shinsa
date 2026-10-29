@@ -5040,19 +5040,19 @@ A labelled note nested in a card (a disagreement, a warning, a suggested fix).
   with an icon, `gap-px` without. Label row `flex items-center gap-1.5 text-2xs` in `TONE_TEXT[tone]` with a 14px
   icon; body `Markdown` in `text-fg-4 text-xs`.
 - A toned note takes its tone's edge, never the grey hairline.
-- `SuggestedFix({ text })` = `InsetNote label='Suggested fix' icon='IconBandage'`, neutral.
+- `SuggestedFix({ text })` = `InsetNote label='Proposed fix'`, neutral, no icon.
 
 ```tsx
 <InsetNote tone='orange' icon='IconEyeSparkle' label='The agent review disagrees' text={reason} />
 ```
 
-#### NoteHead
+#### FindingNote
 
-The head every finding and review card opens on: `flex min-w-0 flex-col gap-px text-xs`; a top row
-`flex min-w-0 items-start justify-between gap-3` with label (`flex min-w-0 items-center gap-1.5 text-2xs`) over title
-(`InlineMarkdown`, `font-medium text-fg-4 leading-5`) left and the action (`flex shrink-0 items-center gap-1.5`,
-Fix / Dismiss) right; then the body `Markdown`, `text-fg-3` under a title, `text-fg-4` without one. Props: `label`,
-`title`, `body`, `action?`.
+The one finding layout, the issue and the proposed fix only: `flex min-w-0 flex-1 flex-col gap-2 text-xs`; a top row
+`flex min-w-0 items-start justify-between gap-3` with the severity (`text-2xs font-medium` in `TONE_TEXT[tone]`, no
+dot, then an optional place chip) over the issue (`Markdown`, `text-fg-4`) left and the action
+(`flex shrink-0 items-center gap-1.5`, Fix / Dismiss) right; then the children (the snippet) and `SuggestedFix`.
+Props: `label`, `tone`, `place?`, `body`, `fix`, `action?`, `children?`. No title and no author.
 
 #### FilePath, DiffStats, TaskHandle
 
@@ -8486,8 +8486,8 @@ Row class:
 
 - One card for every point and every comment anywhere, picked by what it is:
 - A point or comment: opens on a header bar: 36px `bg-bg-a1` band, disclosure header `strip='band'`, box chevron right. Icon slot holds the author's icon (Agent `IconAgent`, You `IconBubbleText`). Then what the card is (`text-xs` medium `fg-4`): the point's short title (never an "Agent" label, since every point is the agent's); "You" on your comment. Then the tag (dot and label), the section (`text-2xs` `fg-2`, truncated), and an action before the chevron (Remove on a comment). The whole bar folds the card ("Collapse judgement call"); clicking the action does not. Starts open, remembers its fold, and reopens when jumped to. Body 12px in: a judgement call's call (`text-xs` medium `fg-4`), then markdown (`fg-3` under a call, `fg-4` without).
-- A finding: no bar, never folds, so its verdict is always in view. A full-width `justify-between` head row: label line (`text-2xs`: "Agent review" `fg-2`, the tag) over the title (`text-xs` medium `fg-4`) on the left, Fix / Dismiss on the right aligned to the row's top; body full width below.
-- Both then show full width: Why it matters, Also considered, the disagreement, the snippet (open, header linking into code with the point's key), the suggested fix on an inset note headed "Suggested fix" (`IconBandage`).
+- A finding: no bar, never folds, so its verdict is always in view. Only the issue and the proposed fix (`FindingNote`): a full-width `justify-between` head row with the severity in its tone's text (no dot, no author) over the message (`text-xs` `fg-4`) on the left, Fix / Dismiss on the right aligned to the row's top; then the snippet and the proposed fix. The reviewer's title is left out.
+- A point or comment then shows full width: Why it matters, Also considered, the disagreement, the snippet (open, header linking into code with the point's key), the proposed fix on an inset note headed "Proposed fix".
 - There is one finding layout with Fix / Dismiss; never a variant with the toggle in a header band.
 - In the code editor the same card is compact: no snippet, no place.
 
