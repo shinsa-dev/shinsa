@@ -2426,10 +2426,11 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
   (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one; a later round's branch
   is the first one plus `-round-<n>`, and core's last resort is `chore/shinsa-task`.
 - **Commits.** A phase commits as `<type>: <phase title>`, its type the branch's prefix (`resolveCommitType`, `feat`
-  when the prefix is not a type), its subject lower-cased, never repeating the type and at most 72 characters
-  (`serializeConventionalSubject`); a fix commits as `fix: <what it fixed>`. One subject line, no body.
-- **The pull request** is titled the same way from the current round's title (`serializePullRequestTitle`, so a later
-  round's pull request carries its own), and its description opens with the task it came from,
+  when the prefix is not a type), its subject lower-cased, never repeating the type, and cut at a word to at most 72
+  characters (`serializeConventionalSubject`); a title already written as `type(scope)!: …` has that prefix
+  replaced, never doubled. A fix commits as `fix: <what it fixed>`. One subject line, no body.
+- **The pull request** is titled the same way from the current round's title, kept whole (`serializePullRequestTitle`,
+  so a later round's pull request carries its own), and its description opens with the task it came from,
   ``Shinsa task: LOC-22, `shinsa://task/<id>` `` (the handle, then the link as code: GitHub drops links of other
   schemes, so it is there to copy), then the summary, how to test it, the steps around the merge and the plan.
 - **The merge commit.** A squash or merge passes `--subject "<the pull request's title on GitHub> (#N)"` and an empty

@@ -273,6 +273,13 @@ describe('serializePullRequest', () => {
       rounds: [round(1, 'Add the export', 'merged'), round(2, 'Export to CSV too', 'active')],
     });
     expect(serializePullRequestTitle(later)).toBe('feat: export to CSV too');
+    const long = 'Let the export also write CSV files and remember the last folder you chose';
+    expect(serializePullRequestTitle(createTask({ branch: 'feat/export', title: long }))).toBe(
+      `feat: l${long.slice(1)}`
+    );
+    expect(serializePullRequestTitle(createTask({ branch: 'feat/search', title: 'feat: add search' }))).toBe(
+      'feat: add search'
+    );
   });
 
   test('the body carries the summary and the plan', () => {

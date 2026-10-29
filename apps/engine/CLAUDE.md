@@ -172,7 +172,9 @@ src/
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
+├── git/                 refs (assertRefName, slugify), conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
+│                        resolveCommitType from a branch, serializeConventionalSubject: the commit and pull request
+│                        subjects), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
 │                        PushError: a failed push typed as hook, network, non_fast_forward or other by
 │                        classifyPushFailure; hasPrePushHook, core.hooksPath and husky's stubs followed; the output's
 │                        tail), update.ts (updateOntoBase: fetch the base, merge it in when the branch lacks it, or

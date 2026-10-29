@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { lowerFirst } from '@shinsa/core';
 import {
   BRANCH_PATTERN,
   resolveCommitType,
@@ -18,6 +19,22 @@ describe('conventional commit naming', () => {
     expect(serializeConventionalSubject('feat', ' Add search ')).toBe('feat: add search');
     expect(serializeConventionalSubject('fix', 'Fixes the tab scroll')).toBe('fix: the tab scroll');
     expect(serializeConventionalSubject('chore', 'x'.repeat(100))).toHaveLength(SUBJECT_LIMIT);
+  });
+
+  test('a long subject is cut at a word, or kept whole without a limit', () => {
+    const title = 'Let the export also write CSV files and remember the last folder you chose for them';
+    expect(serializeConventionalSubject('feat', title)).toBe(
+      'feat: let the export also write CSV files and remember the last folder'
+    );
+    expect(serializeConventionalSubject('feat', title, null)).toBe(`feat: ${lowerFirst(title)}`);
+  });
+
+  test('a title that is already conventional never repeats its prefix', () => {
+    expect(serializeConventionalSubject('feat', 'feat: add search')).toBe('feat: add search');
+    expect(serializeConventionalSubject('feat', 'Fix(web)!: drop the old export')).toBe(
+      'feat: drop the old export'
+    );
+    expect(serializeConventionalSubject('docs', 'Note: setup needs gh')).toBe('docs: note: setup needs gh');
   });
 
   test('a branch is a known type, a slash and a kebab slug', () => {

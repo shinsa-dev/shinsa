@@ -366,7 +366,7 @@ export function readStackedPullRequest(repo: Repo, number: number, signal?: Abor
 }
 
 export function serializePullRequestTitle(task: Task) {
-  return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title);
+  return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title, null);
 }
 
 function serializeTaskReference(task: Task) {
