@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import type { Evidence } from '@shinsa/core';
+import type { Evidence, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EVIDENCE_EMPTY, EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { refreshHealth } from '@/lib/connection/health.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { createEvidence, createRun, createShinsaState, createTask, NOW } from '../../support/state.ts';
+import {
+  createService,
+  createTerminal,
+  createTerminalState,
+  createTerminalsSnapshot,
+} from '../../support/terminals.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -47,6 +54,7 @@ function renderSection(evidence: Evidence[], showEmpty = false) {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  connection.replaceTerminals(createTerminalsSnapshot());
 });
 
 describe('the Evidence section', () => {
@@ -290,5 +298,30 @@ describe('evidence brought up to date', () => {
     renderSection([piece('menu', { title: 'Menu', removedAt: NOW, removedReason: 'Gone.' })]);
     expect(screen.getByText('The agents removed the evidence they attached this round.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Expand Earlier versions' })).toBeTruthy();
+  });
+});
+
+describe('the task’s running services in the Evidence section', () => {
+  it('links each running preview of the task, even before any evidence is attached', () => {
+    const state = createTerminalState();
+    const web = createService({
+      id: 'web',
+      cwd: '/Users/you/Developer/web',
+      previewUrl: 'http://localhost:{port}/',
+    });
+    connection.replaceTerminals(
+      createTerminalsSnapshot(
+        [createTerminal({ id: 'run', serviceId: 'web', taskId: 'fix', port: 4123 })],
+        [web]
+      )
+    );
+    render(
+      <TooltipProvider>
+        <EvidenceSection state={state} task={state.tasks.fix as Task} />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Running for this task')).toBeTruthy();
+    expect(screen.getByText('web').closest('a')?.getAttribute('href')).toBe('http://localhost:4123/');
+    expect(screen.getByText(EVIDENCE_EMPTY)).toBeTruthy();
   });
 });

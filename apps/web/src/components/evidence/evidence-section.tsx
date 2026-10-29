@@ -1,4 +1,4 @@
-import type { Evidence, ShinsaState, Task } from '@shinsa/core';
+import type { Evidence, ServiceView, ShinsaState, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -12,6 +12,7 @@ import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
+import { TaskPreviewLinks, useTaskPreviews } from '@/components/services/task-previews.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
@@ -40,6 +41,18 @@ export const EVIDENCE_EMPTY =
   'No screenshots, recordings or test runs were attached this round. Request changes to ask the agent for them.';
 
 const EVIDENCE_ALL_REMOVED = 'The agents removed the evidence they attached this round.';
+
+export const RUNNING_PREVIEWS = 'Running for this task';
+
+function RunningPreviews({ views }: { views: ServiceView[] }) {
+  if (views.length === 0) return null;
+  return (
+    <section className='flex min-w-0 flex-col gap-1'>
+      <SectionLabel count={views.length > 1 ? views.length : undefined}>{RUNNING_PREVIEWS}</SectionLabel>
+      <TaskPreviewLinks views={views} />
+    </section>
+  );
+}
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
@@ -132,7 +145,7 @@ function CheckLinks({ links }: { links: readonly Evidence[] }) {
   return (
     <span className='flex flex-col gap-px'>
       {notes.map((link) => (
-        <span key={link.id} className='selectable text-2xs text-fg-3'>
+        <span key={link.id} data-facts='' className='selectable text-2xs text-fg-3'>
           {link.detail}
         </span>
       ))}
@@ -239,15 +252,18 @@ function EvidenceBody({
   layout,
   checks,
   persistId,
+  previews,
 }: {
   layout: EvidenceLayout;
   checks: ChecksView | null;
   persistId: DisclosureId;
+  previews: ServiceView[];
 }) {
   const viewer = useImageViewer();
   const earlier = useDisclosure(extendDisclosureId(persistId, 'earlier'), false);
   return (
     <div className='flex flex-col gap-5'>
+      <RunningPreviews views={previews} />
       {layout.count === 0 && <p className='text-fg-2 text-xs'>{EVIDENCE_ALL_REMOVED}</p>}
       {layout.groups.map((group) => (
         <Group key={group.kind} group={group} viewer={viewer} checks={checks} />
@@ -265,14 +281,16 @@ export function EvidencePanel({
   layout,
   persistId,
   checks = null,
+  previews = [],
 }: {
   layout: EvidenceLayout;
   persistId: DisclosureId;
   checks?: ChecksView | null;
+  previews?: ServiceView[];
 }) {
   return (
     <Panel persistId={persistId} title='Evidence' icon='IconImages1' count={layout.count}>
-      <EvidenceBody layout={layout} checks={checks} persistId={persistId} />
+      <EvidenceBody layout={layout} checks={checks} persistId={persistId} previews={previews} />
     </Panel>
   );
 }
@@ -293,14 +311,18 @@ export function EvidenceSection({
     [evidence, runs, task, dataDir]
   );
   const checks = React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task]);
+  const previews = useTaskPreviews(state, task);
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');
   if (layout.count === 0 && layout.earlier.length === 0) {
-    if (!showEmpty) return null;
+    if (!(showEmpty || previews.length > 0)) return null;
     return (
       <Panel persistId={persistId} title='Evidence' icon='IconImages1'>
-        <p className='text-fg-2 text-xs'>{EVIDENCE_EMPTY}</p>
+        <div className='flex flex-col gap-5'>
+          <RunningPreviews views={previews} />
+          <p className='text-fg-2 text-xs'>{EVIDENCE_EMPTY}</p>
+        </div>
       </Panel>
     );
   }
-  return <EvidencePanel layout={layout} persistId={persistId} checks={checks} />;
+  return <EvidencePanel layout={layout} persistId={persistId} checks={checks} previews={previews} />;
 }

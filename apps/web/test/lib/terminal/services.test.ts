@@ -27,6 +27,7 @@ import {
   listServiceGroups,
   listServicePlaces,
   listStoppedServices,
+  listTaskPreviews,
   openServicePreview,
   parseServiceEnv,
   resolveActiveService,
@@ -43,7 +44,12 @@ import {
   validateServiceDraft,
 } from '@/lib/terminal/services.ts';
 import { createProject, createShinsaState, NOW } from '../../support/state.ts';
-import { createService, createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
+import {
+  createService,
+  createTerminal,
+  createTerminalState,
+  createTerminalsSnapshot,
+} from '../../support/terminals.ts';
 
 const API = createService({ id: 'api', env: { PORT: '4000' } });
 
@@ -277,6 +283,31 @@ describe('which services the menu shows', () => {
       'c',
     ]);
     expect(describeTaskRunLabel({ handle: null, title: 'Untriaged' })).toBe('Untriaged');
+  });
+});
+
+describe('a task’s previews', () => {
+  it('lists the task’s running services that have a preview URL, and nothing else', () => {
+    const state = createTerminalState();
+    const task = state.tasks.fix as Task;
+    const web = createService({
+      id: 'web',
+      cwd: '/Users/you/Developer/web',
+      previewUrl: 'http://localhost:{port}/',
+    });
+    const docs = createService({ id: 'docs', cwd: '/Users/you/Developer/web/docs' });
+    const snapshot = createTerminalsSnapshot(
+      [
+        createTerminal({ id: 'mine', serviceId: 'web', port: 4000 }),
+        createTerminal({ id: 'task-web', serviceId: 'web', taskId: 'fix', port: 4123 }),
+        createTerminal({ id: 'task-docs', serviceId: 'docs', taskId: 'fix', port: 4124 }),
+      ],
+      [web, docs]
+    );
+    expect(listTaskPreviews(state, snapshot, task, LATER).map((each) => each.url)).toEqual([
+      'http://localhost:4123/',
+    ]);
+    expect(listTaskPreviews(state, null, task, LATER)).toEqual([]);
   });
 });
 

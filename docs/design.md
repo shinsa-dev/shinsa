@@ -551,6 +551,9 @@ Only these, and they win over anything below:
       (`IconCircleDotted`), Running (the kit's `Spinner` in the accent, while the stage is `checking` and the check is
       in the current run, as core records it in `Task.runningChecks`), Passed with "Passed when re-run alone"
       under it, or "Already failing on main, so it does not block" (a grey `IconCircleXFilled`, "Not blocking").
+      A row with no line under its label (a repository command whose label is its command, a CI run) centres its
+      glyph, label and result on one another; a row with one tops them on its first line (`has-[[data-facts]]`, each
+      second line marked `data-facts`), wherever a check row is drawn: the Checks list, How to test and Evidence.
       **CI** (after the pull request) holds the pull request's checks, each named and linked to its run, "Required"
       or "Optional" beside it. Each stage's header is its title and summary ("All 4 passed", "1 of 4 failed", "Running
       2 checks", "2 passed, 2 not run yet", in the accent, red or blue); the rows sit in one `INSET` with hairlines
@@ -2503,7 +2506,10 @@ Only these, and they win over anything below:
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. A row has no `•••`: editing and removing are Manage's. Measured in the
+      Terminal page's toolbar have the same button. The review links the task's running previews too, without the
+      agent attaching them: Evidence opens with "Running for this task" and How to test with "Open it on this
+      machine", a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's name, its URL;
+      `listTaskPreviews`), there only while the run is active. A row has no `•••`: editing and removing are Manage's. Measured in the
       browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
       24px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the

@@ -23,6 +23,7 @@ import { REVIEW_SELECTED, ReviewNote } from '@/components/review/note.tsx';
 import { PointIndex } from '@/components/review/point-index.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
+import { useTaskPreviews } from '@/components/services/task-previews.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
@@ -192,17 +193,20 @@ function Prose({ text, className }: { text: string; className?: string }) {
 }
 
 function BuiltPart({
+  state,
   task,
   report,
   checks,
   prose,
 }: {
+  state: ShinsaState;
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
   prose: ReviewProseId;
 }) {
   const walkthrough = report.walkthrough;
+  const previews = useTaskPreviews(state, task);
   switch (prose) {
     case 'approach':
     case 'flow':
@@ -223,6 +227,7 @@ function BuiltPart({
           testing={walkthrough?.testing ?? null}
           checks={checks}
           coverage={task.coverage}
+          previews={previews}
         />
       );
     case 'pre_merge':
@@ -234,12 +239,14 @@ function BuiltPart({
 }
 
 function HowItIsBuilt({
+  state,
   task,
   report,
   checks,
   chapter,
   selected,
 }: {
+  state: ShinsaState;
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
@@ -250,7 +257,7 @@ function HowItIsBuilt({
     <Chapter title={chapter.title}>
       {chapter.prose.map((prose) => (
         <Stop key={prose.key} stop={prose.key} selected={selected}>
-          <BuiltPart task={task} report={report} checks={checks} prose={prose.key} />
+          <BuiltPart state={state} task={task} report={report} checks={checks} prose={prose.key} />
         </Stop>
       ))}
     </Chapter>
@@ -513,12 +520,14 @@ function ReviewSummary({
 }
 
 function ReviewChapters({
+  state,
   task,
   report,
   checks,
   chapters,
   selected,
 }: {
+  state: ShinsaState;
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
@@ -530,6 +539,7 @@ function ReviewChapters({
       return (
         <HowItIsBuilt
           key={chapter.id}
+          state={state}
           task={task}
           report={report}
           checks={checks}
@@ -627,7 +637,14 @@ export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
             diff={diffValue}
           />
           <EvidenceSection state={state} task={task} showEmpty />
-          <ReviewChapters task={task} report={report} checks={checks} chapters={chapters} selected={lit} />
+          <ReviewChapters
+            state={state}
+            task={task}
+            report={report}
+            checks={checks}
+            chapters={chapters}
+            selected={lit}
+          />
           <AgentReview
             task={task}
             chapter={chapters.find((chapter) => chapter.id === 'review')}

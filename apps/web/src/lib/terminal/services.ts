@@ -4,6 +4,7 @@ import {
   isServicePreviewUrl,
   listProjectServices,
   listServiceTaskRuns,
+  listTaskServices,
   type Project,
   resolveFocusProject,
   resolveServicesSummary,
@@ -95,6 +96,15 @@ export function describeServiceState(view: ServiceView, now: number) {
 
 export function selectServicePreview(view: ServiceView) {
   return isServiceActive(view) ? view.url : null;
+}
+
+export function listTaskPreviews(
+  state: ShinsaState,
+  snapshot: TerminalsSnapshot | null,
+  task: Task,
+  now: number
+) {
+  return listTaskServices(state, snapshot, task, now).filter((view) => selectServicePreview(view) !== null);
 }
 
 export function describeServicePreview(view: ServiceView, label: string | null = null) {

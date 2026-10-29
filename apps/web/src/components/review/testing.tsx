@@ -3,6 +3,7 @@ import {
   type CoverageFile,
   type ManualTestStep,
   type ReportTesting,
+  type ServiceView,
   selectMeasuredCoverage,
   type Task,
 } from '@shinsa/core';
@@ -13,6 +14,7 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { FileLink } from '@/components/links/file.tsx';
 import { GlyphLabel, InlineMark, SMART_LINK } from '@/components/links/link.tsx';
+import { TaskPreviewLinks } from '@/components/services/task-previews.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import {
@@ -148,12 +150,14 @@ export function TestingPanel({
   testing,
   checks,
   coverage = null,
+  previews = [],
 }: {
   persistId: DisclosurePersistId;
   task: Task;
   testing: ReportTesting | null;
   checks: ChecksView | null;
   coverage?: Coverage | null;
+  previews?: ServiceView[];
 }) {
   const automated = testing?.automated ?? [];
   const manual = testing?.manual ?? [];
@@ -172,6 +176,12 @@ export function TestingPanel({
             task={task}
             coverage={coverage}
           />
+        </div>
+      )}
+      {previews.length > 0 && (
+        <div className='flex flex-col gap-1.5'>
+          <span className={PART_LABEL}>Open it on this machine</span>
+          <TaskPreviewLinks views={previews} />
         </div>
       )}
       {manual.length > 0 && (
