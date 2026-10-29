@@ -85,7 +85,10 @@ Only these, and they win over anything below:
    without scroll timelines, and that clipping element, fall back to the `data-overflow-*` attributes `ScrollArea`
    and `ScrollFade` set on the masked box.
 7. **The task chat follows Kanna's transcript.** One centred column the composer's width; every
-   item is a row box (`py-2 mb-1`, 20px from item to item) on the column's left edge. Agent text is full-width
+   item is a row box (`py-2 mb-1`, 20px from item to item) on the column's left edge. The same 20px is the only gap
+   in a chat: a run's header sits 20px above its first row (`mt-2 mb-3` in `run-section.tsx`) and one run 20px
+   after the last row of the one before (the section's `mb-3` against the next one's `mt-2`); only a round divider
+   takes more. Agent text is full-width
    `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph margins, highlighted code fences in the Code tab's
    `--code-*` colours, 32).
    - **One line anatomy.** Every one-line row in a run is the same chat line (`components/chat/chat-line.tsx`):
@@ -150,12 +153,14 @@ Only these, and they win over anything below:
      "14 steps", and the
      final reply sits under it as the main content (the last interim text when a run has none).
      Hand-over cards (plan, phase, fix, review, question) and errors stay outside the fold; the
-     brief from Shinsa lives inside it. A turn that ends in a hand-over (a plan, phase, fix, review,
-     answer, diagnosis, report, outcome or new set of steps: core's `isHandOverTool`) shows that card
-     as its reply and nothing under it: any text the agent wrote around the hand-over (a "Done." or
-     "My answer is above") folds into the work, so the same reply never shows twice
-     (`resolveTurns` in `lib/chat/timeline.ts`). A question or suggested tasks are not the step's
-     hand-over and keep the reply under them. A message from you starts a new turn with its own fold.
+     brief from Shinsa lives inside it. The last thing the agent wrote stays in the chat, outside the
+     fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
+     outcome or new set of steps: core's `isHandOverTool`) the reply is the text written after the
+     last hand-over, shown directly under the fold and above the card. Text written before the
+     hand-over folds into the work. An answer, diagnosis, report or outcome card is the whole reply, so
+     any words after it fold too and the same reply never shows twice, reworded or not (`selectReply`
+     in `lib/chat/timeline.ts`). A question or suggested tasks are not the step's hand-over and keep
+     the reply. A message from you starts a new turn with its own fold.
    - **The detail** is the full log on a hairline rail under the worked-for row's chevron: interim messages,
      then tool calls as chat lines, the chevron on hover; two or more in a row fold into one row ("Ran 3
      commands and read 2 files"), and an opened row hangs its detail off a hairline rail.
