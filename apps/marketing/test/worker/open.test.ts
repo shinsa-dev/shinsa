@@ -6,7 +6,9 @@ const PAGE = [
   '<html><head><title>Open a task · Shinsa</title></head><body>',
   '<h1><span data-open-title></span></h1>',
   '<p data-open-description></p>',
-  '<a href="shinsa://" data-open-link>Open in Shinsa</a>',
+  '<a href="/download" data-open-task-only>Download Shinsa</a>',
+  '<a href="/download" data-open-missing-only hidden="">Download Shinsa</a>',
+  '<a href="shinsa://" data-open-link data-open-task-only>Open in Shinsa</a>',
   '<p data-open-handle></p>',
   '</body></html>',
 ].join('');
@@ -41,7 +43,9 @@ describe('respondOpen', () => {
     expect(requests).toEqual([url]);
     expect(html).toContain('<title>LOC-28: Fix &lt;b&gt;tabs&lt;/b&gt; · Shinsa</title>');
     expect(html).toContain('<span data-open-title>Fix &lt;b&gt;tabs&lt;/b&gt;</span>');
-    expect(html).toContain('<a href="shinsa://task/id-1" data-open-link>');
+    expect(html).toContain('<a href="shinsa://task/id-1" data-open-link data-open-task-only>');
+    expect(html).toContain('<a href="/download" data-open-task-only>');
+    expect(html).toContain('<a href="/download" data-open-missing-only hidden="">');
     expect(html).toContain('<p data-open-handle>LOC-28</p>');
     expect(html).toContain('<p data-open-description></p>');
     for (const [name, value] of Object.entries(OPEN_HEADERS)) expect(response.headers.get(name)).toBe(value);
@@ -54,7 +58,9 @@ describe('respondOpen', () => {
     expect(html).toContain('<title>Open a task · Shinsa</title>');
     expect(html).toContain(`<span data-open-title>${openTask.missingTitle}</span>`);
     expect(html).toContain(`<p data-open-description>${openTask.missing}</p>`);
-    expect(html).toContain('<a href="shinsa://" data-open-link hidden="">');
+    expect(html).toContain('<a href="shinsa://" data-open-link data-open-task-only hidden="">');
+    expect(html).toContain('<a href="/download" data-open-task-only hidden="">');
+    expect(html).toContain('<a href="/download" data-open-missing-only>');
   });
 
   it('passes through a response that is not the page', async () => {

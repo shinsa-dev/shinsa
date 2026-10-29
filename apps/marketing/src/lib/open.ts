@@ -52,6 +52,14 @@ export interface PendingHeader {
   documentTitle: string | null;
 }
 
+export const OPEN_SHELL: PendingHeader = {
+  title: '',
+  description: '',
+  handle: '',
+  link: 'shinsa://',
+  documentTitle: null,
+};
+
 export function resolvePendingHeader(search: string): PendingHeader {
   const invite = resolveTaskInvite(search);
   if (!invite) {

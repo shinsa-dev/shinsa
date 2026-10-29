@@ -18,7 +18,16 @@ export function rewriteOpenPage(response: Response, search: string) {
     .on('[data-open-link]', {
       element: (element) => {
         if (header.link) element.setAttribute('href', header.link);
-        else element.setAttribute('hidden', '');
+      },
+    })
+    .on('[data-open-task-only]', {
+      element: (element) => {
+        if (!header.link) element.setAttribute('hidden', '');
+      },
+    })
+    .on('[data-open-missing-only]', {
+      element: (element) => {
+        if (!header.link) element.removeAttribute('hidden');
       },
     })
     .on('title', {
