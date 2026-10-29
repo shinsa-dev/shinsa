@@ -432,13 +432,23 @@ interface TurnClose {
   endedAt: number;
 }
 
-function isTurnHandOver(item: TimelineItem) {
+function isTurnHandOver(item: TimelineItem): item is TimelineItemOf<'handover'> {
   return item.kind === 'handover' && item.call.tool.kind === 'shinsa' && isHandOverTool(item.call.tool.name);
 }
 
+function isFullReplyHandOver(item: TimelineItemOf<'handover'>) {
+  const name = selectToolName(item.call);
+  return (
+    name === 'answer' || name === 'report_diagnosis' || name === 'submit_report' || name === 'report_outcome'
+  );
+}
+
 function selectReply(body: TimelineItem[], quiet: boolean) {
-  if (body.some(isTurnHandOver)) return null;
-  const agents = body.filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
+  const last = body.filter(isTurnHandOver).at(-1);
+  if (last && isFullReplyHandOver(last)) return null;
+  const agents = body
+    .slice(last ? body.indexOf(last) + 1 : 0)
+    .filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
   return agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
 }
 

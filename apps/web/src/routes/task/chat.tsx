@@ -96,7 +96,6 @@ function TranscriptBlockView({
           run={block.run}
           task={task}
           messages={byRun.get(block.run.id) ?? NO_MESSAGES}
-          first={block.first}
           waiting={waiting && block.run.endedAt === null}
           rerun={block.run.id === rerunId}
         />
