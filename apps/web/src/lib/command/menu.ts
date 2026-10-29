@@ -1,5 +1,5 @@
 import {
-  isInFocus,
+  isListedInFocus,
   isTaskSettled,
   isWatchHome,
   resolveQueue,
@@ -155,7 +155,7 @@ export function listRecentTasks(
   return recent
     .filter((id) => id !== currentTaskId && !listed.has(id))
     .flatMap((id) => state.tasks[id] ?? [])
-    .filter((task) => isInFocus(state, task, now))
+    .filter((task) => isListedInFocus(state, task, now))
     .slice(0, RECENT_SHOWN);
 }
 

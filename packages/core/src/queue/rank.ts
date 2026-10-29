@@ -59,9 +59,12 @@ export function resolveFocusProject(state: ShinsaState, now: number) {
 }
 
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
-  if (isWatchHome(task)) return false;
   const projectId = resolveFocusProject(state, now);
   return projectId === null || resolveTaskProject(state, task) === projectId;
+}
+
+export function isListedInFocus(state: ShinsaState, task: Task, now: number) {
+  return !isWatchHome(task) && isInFocus(state, task, now);
 }
 
 export function listWaitsOn(state: ShinsaState, task: Task): Task[] {
@@ -134,7 +137,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const working: Task[] = [];
   const waiting: Task[] = [];
   for (const task of Object.values(state.tasks)) {
-    if (tasksWithGates.has(task.id) || !isInFocus(state, task, now)) continue;
+    if (tasksWithGates.has(task.id) || !isListedInFocus(state, task, now)) continue;
     if (listWaitsOn(state, task).length > 0) waiting.push(task);
     else if (isMoving(task, running)) working.push(task);
   }

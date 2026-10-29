@@ -1,4 +1,4 @@
-export { isInFocus, listWaitsOn, resolveFocusProject, resolveQueue } from './rank.ts';
+export { isInFocus, isListedInFocus, listWaitsOn, resolveFocusProject, resolveQueue } from './rank.ts';
 export { resolveSilenceLevel, SILENCE_MINUTES, type SilenceLevel } from './silence.ts';
 export { type StalledReason, selectLeadGate, traceStalledLeaf, type WaitLeaf } from './stalls.ts';
 export { listDecisionOrder, resolveQueueStep } from './step.ts';

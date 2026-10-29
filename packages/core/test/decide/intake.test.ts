@@ -3,7 +3,9 @@ import {
   type CommandOf,
   type DomainError,
   isInFocus,
+  isListedInFocus,
   isWatchHome,
+  resolveQueue,
   resolveReferenceCatalog,
   SCHEDULE_LIMITS,
   type Schedule,
@@ -105,7 +107,10 @@ describe('a schedule that reads a data source', () => {
   test('a watch’s home is off every list, takes no messages and is no other schedule’s target', () => {
     const { harness, taskId } = createIntake();
     const home = harness.task(taskId);
-    expect(isInFocus(harness.state, home, harness.now)).toBe(false);
+    expect(isListedInFocus(harness.state, home, harness.now)).toBe(false);
+    expect(isInFocus(harness.state, home, harness.now)).toBe(true);
+    const queue = resolveQueue(harness.state, harness.now);
+    expect([...queue.working, ...queue.waiting].map((task) => task.id)).not.toContain(taskId);
     expect(resolveReferenceCatalog(harness.state).tasks.map((task) => task.id)).not.toContain(taskId);
     expect(serializeTaskReferences(harness.state, 'Watches')).not.toContain(taskId);
     expect(refusal(() => harness.send({ type: 'task.message', taskId, text: 'Hello?' })).code).toBe(
@@ -135,6 +140,22 @@ describe('a schedule that reads a data source', () => {
     harness.send({ type: 'message.deliver', taskId, text: 'Missed steer.' });
     expect(harness.activeRun(taskId).id).toBe(runId);
     expect(harness.task(taskId).stage).toBe('watching');
+  });
+
+  test('a question a read asks reaches the queue, though its home is on no task list', () => {
+    const { harness, taskId } = createIntake();
+    fire(harness);
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Which channel is #feedback?',
+      context: null,
+    });
+    const queue = resolveQueue(harness.state, harness.now);
+    expect(queue.ready.map((entry) => entry.task.id)).toEqual([taskId]);
+    expect(queue.ready[0]?.gate.type).toBe('question');
+    expect([...queue.working, ...queue.waiting].map((task) => task.id)).not.toContain(taskId);
   });
 
   test('deleting a watch closes its home, at rest or in the middle of a read', () => {
