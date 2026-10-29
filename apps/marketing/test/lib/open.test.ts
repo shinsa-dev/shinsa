@@ -48,6 +48,8 @@ describe('readReviewFragment', () => {
       slug: null,
       branch: null,
       coverage: null,
+      stage: 'shipping' as const,
+      startedAt: 1_700_000_000_000,
     },
     report: { headline: 'H', sections: [], checks: [], judgementCalls: [], walkthrough: null },
     evidence: [],
@@ -63,6 +65,10 @@ describe('readReviewFragment', () => {
     expect(await readReviewFragment('#review=not+base64')).toBeNull();
     expect(await readReviewFragment('#review=AAAA')).toBeNull();
     expect(await readReviewFragment(`#review=${encode({ v: 9 })}`)).toBeNull();
+    const whole = encode(review);
+    for (const cut of [1, 10, Math.floor(whole.length / 2), whole.length - 1]) {
+      expect(await readReviewFragment(`#review=${whole.slice(0, cut)}`)).toBeNull();
+    }
   });
 });
 

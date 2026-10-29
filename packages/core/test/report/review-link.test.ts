@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Evidence, PhaseReport, Task } from '../../src/index.ts';
 import {
+  listReviewPayloadFits,
   parseReviewPayload,
   REVIEW_PAYLOAD_VERSION,
   serializePullRequestMarkdown,
@@ -118,6 +119,8 @@ describe('serializeReviewPayload', () => {
       slug: null,
       branch: task.branch,
       coverage: null,
+      stage: 'shipping',
+      startedAt: task.createdAt,
     });
     expect(serializeReviewPayload({ ...task, pullRequest: null }, []).task.pullRequest).toBeNull();
     expect(payload.report.sections.every((section) => section.spots.length === 0)).toBe(true);
@@ -328,6 +331,8 @@ describe('parseReviewPayload', () => {
       slug: null,
       branch: null,
       coverage: null,
+      stage: 'shipping',
+      startedAt: null,
     });
     const numbered = parseReviewPayload({
       v: REVIEW_PAYLOAD_VERSION,
@@ -405,5 +410,45 @@ describe('the review link in the description', () => {
     const task = reviewedTask();
     const markdown = serializePullRequestMarkdown({ task, evidence: [], notes: {}, review: 'abc-_' });
     expect(markdown).toContain(`&title=Fix+tab+group+scroll#review=abc-_) to see the full review`);
+  });
+});
+
+describe('listReviewPayloadFits', () => {
+  test('shrinks the review step by step, keeping the facts and the checks to the last', () => {
+    const task: Task = {
+      ...reviewedTask(),
+      stage: 'awaiting_merge',
+      reviewSummary: 'Fine.',
+      findings: [{ severity: 'suggestion', file: null, line: null, message: 'Rename it.' }],
+    };
+    const shot = {
+      id: 'e1',
+      itemId: 'i1',
+      kind: 'screenshot' as const,
+      title: 'Tabs',
+      url: 'https://github.com/user-attachments/assets/1',
+      detail: 'Ten tabs fit.',
+      width: 1280,
+      theme: 'light' as const,
+      stage: 'after' as const,
+      label: null,
+    };
+    const payload = { ...serializeReviewPayload(task, []), evidence: [shot] };
+    const fits = listReviewPayloadFits(payload);
+    expect(fits[3]?.evidence).toEqual([{ ...shot, detail: null }]);
+    const sizes = fits.map((fit) => JSON.stringify(fit).length);
+    expect(fits[0]).toBe(payload);
+    expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
+    expect(fits[1]?.report.walkthrough?.flow).toBe('');
+    expect(fits[2]?.review).toBeNull();
+    expect(fits[3]?.report.judgementCalls).toEqual([]);
+    const last = fits.at(-1);
+    expect(last?.task).toEqual(payload.task);
+    expect(last?.report.checks).toEqual(payload.report.checks);
+    expect(last?.report.walkthrough).toBeNull();
+    expect(last?.evidence).toEqual([]);
+    expect(payload.task.stage).toBe('awaiting_merge');
+    expect(serializeReviewPayload({ ...task, stage: 'building' }, []).task.stage).toBe('shipping');
+    expect(parseReviewPayload(JSON.parse(JSON.stringify(last)))).toEqual(last ?? null);
   });
 });

@@ -59,8 +59,9 @@ export function createOpenState(payload: ReviewPayload, now: number): { state: S
     handle: payload.task.handle,
     title: payload.task.title,
     summary: payload.task.summary,
-    stage: 'shipping',
+    stage: payload.task.stage,
     stageReason: 'pull request open',
+    createdAt: payload.task.startedAt ?? now,
     pipeline: payload.review
       ? ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge']
       : ['plan', 'build', 'checks', 'your_review', 'pull_request', 'merge'],

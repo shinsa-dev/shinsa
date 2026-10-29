@@ -71,6 +71,7 @@ export {
   listOpenMergeSteps,
   listPullRequestEvidence,
   listRankedSpots,
+  listReviewPayloadFits,
   listTestingLines,
   MANUAL_TEST_TARGETS,
   MERGE_STEP_KINDS,

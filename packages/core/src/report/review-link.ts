@@ -1,4 +1,4 @@
-import type { Evidence, EvidenceStage, EvidenceTheme, Repo, Task } from '../domain/types.ts';
+import type { Evidence, EvidenceStage, EvidenceTheme, Repo, Task, TaskStage } from '../domain/types.ts';
 import { EVIDENCE_STAGES, EVIDENCE_THEMES } from '../domain/verification.ts';
 import { assembleReport } from './assemble.ts';
 import { listPullRequestEvidence, resolvePublicUrl } from './pull-request.ts';
@@ -54,6 +54,8 @@ export interface ReviewPayload {
     slug: string | null;
     branch: string | null;
     coverage: ReviewPayloadCoverage | null;
+    stage: ReviewPayloadStage;
+    startedAt: number | null;
   };
   report: WorkReport;
   evidence: ReviewPayloadEvidence[];
@@ -68,6 +70,14 @@ interface ReviewPayloadCoverage {
 interface ReviewPayloadVerdict {
   summary: string;
   findings: ReviewFinding[];
+}
+
+type ReviewPayloadStage = Extract<TaskStage, 'shipping' | 'awaiting_merge' | 'merged' | 'done'>;
+
+const REVIEW_PAYLOAD_STAGES: readonly ReviewPayloadStage[] = ['shipping', 'awaiting_merge', 'merged', 'done'];
+
+function resolvePayloadStage(stage: TaskStage): ReviewPayloadStage {
+  return REVIEW_PAYLOAD_STAGES.find((known) => known === stage) ?? 'shipping';
 }
 
 const REPO_SLUG = /^[\w.-]+\/[\w.-]+$/;
@@ -160,6 +170,8 @@ export function serializeReviewPayload(
       slug: resolveRepoSlug(repo?.remote ?? null),
       branch: task.branch,
       coverage: serializeCoverage(task),
+      stage: resolvePayloadStage(task.stage),
+      startedAt: task.createdAt,
     },
     report: {
       ...report,
@@ -347,9 +359,68 @@ export function parseReviewPayload(value: unknown): ReviewPayload | null {
       slug: readMatch(value.task, 'slug', REPO_SLUG),
       branch: readMatch(value.task, 'branch', BRANCH_NAME),
       coverage: parseCoverage(value.task.coverage),
+      stage: readChoice(value.task, 'stage', REVIEW_PAYLOAD_STAGES) ?? 'shipping',
+      startedAt: readNumber(value.task, 'startedAt'),
     },
     report: parseReport(value.report),
     evidence: listFields(value.evidence).flatMap((piece) => parseEvidence(piece) ?? []),
     review: parseVerdict(value.review),
   };
+}
+
+function withoutDetail(payload: ReviewPayload): ReviewPayload {
+  const walkthrough = payload.report.walkthrough;
+  return {
+    ...payload,
+    report: {
+      ...payload.report,
+      judgementCalls: payload.report.judgementCalls.map(({ alternatives: _alternatives, ...call }) => call),
+      walkthrough: walkthrough && { ...walkthrough, flow: '' },
+    },
+  };
+}
+
+function withoutReview(payload: ReviewPayload): ReviewPayload {
+  const walkthrough = payload.report.walkthrough;
+  return {
+    ...payload,
+    review: null,
+    report: {
+      ...payload.report,
+      walkthrough: walkthrough && {
+        ...walkthrough,
+        risks: [],
+        testing: { ...walkthrough.testing, manual: [] },
+      },
+    },
+  };
+}
+
+function withoutReasons(payload: ReviewPayload): ReviewPayload {
+  const walkthrough = payload.report.walkthrough;
+  return {
+    ...payload,
+    evidence: payload.evidence.map((piece) => ({ ...piece, detail: null })),
+    report: {
+      ...payload.report,
+      judgementCalls: [],
+      walkthrough: walkthrough && { ...walkthrough, steps: [], testing: { automated: [], manual: [] } },
+    },
+  };
+}
+
+function withOnlyFacts(payload: ReviewPayload): ReviewPayload {
+  return {
+    ...payload,
+    evidence: [],
+    review: null,
+    report: { ...payload.report, sections: [], judgementCalls: [], walkthrough: null },
+  };
+}
+
+export function listReviewPayloadFits(payload: ReviewPayload): ReviewPayload[] {
+  const lighter = withoutDetail(payload);
+  const bare = withoutReview(lighter);
+  const short = withoutReasons(bare);
+  return [payload, lighter, bare, short, withOnlyFacts(short)];
 }

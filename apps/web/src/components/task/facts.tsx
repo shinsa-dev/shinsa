@@ -421,11 +421,13 @@ export function TaskSharedFacts({
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
+      <StatusFact state={state} task={task} />
       <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} />
       {checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
+      <StartedFact state={state} task={task} />
     </div>
   );
 }

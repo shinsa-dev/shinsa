@@ -160,4 +160,45 @@ describe('serializeReviewLink', () => {
     ]);
     expect(serializeReviewLink({ ...task, summary: randomBytes(40_000).toString('hex') }, [])).toBeNull();
   });
+
+  test('a review too big for a link is shrunk until it fits, and the description stays within GitHub’s limit', async () => {
+    useFakeGitHub();
+    const { store } = createStore();
+    const noise = (bytes: number) => randomBytes(bytes).toString('hex');
+    const walkthrough = {
+      approach: noise(3_000),
+      flow: noise(60_000),
+      risks: Array.from({ length: 40 }, (_, index) => ({
+        title: `Risk ${index}`,
+        risk: noise(400),
+        file: null,
+        line: null,
+        end: null,
+      })),
+      testing: {
+        automated: [noise(200)],
+        manual: Array.from({ length: 30 }, () => ({ action: noise(200), target: null, expect: noise(200) })),
+      },
+    };
+    const task = createTask({
+      handle: 'LOC-28',
+      summary: 'Did it.',
+      reviewSummary: noise(4_000),
+      phaseReports: [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }],
+    });
+    const description = await new PullRequestDescriptions(store).describe(
+      createRepo({ path: createTempDir() }),
+      task,
+      []
+    );
+    expect(description.body.length).toBeLessThanOrEqual(65_536);
+    const encoded = /#review=([\w-]+)\)/.exec(description.body)?.[1] ?? '';
+    expect(encoded.length).toBeGreaterThan(0);
+    expect(encoded.length).toBeLessThanOrEqual(24_000);
+    const payload = parseReviewPayload(
+      JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString())
+    );
+    expect(payload?.task).toMatchObject({ handle: 'LOC-28', title: task.title });
+    expect(payload?.report.walkthrough?.flow ?? '').toBe('');
+  });
 });

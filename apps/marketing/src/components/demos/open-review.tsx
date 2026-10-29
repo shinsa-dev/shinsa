@@ -4,8 +4,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
-import { NowFrame } from '@/components/overview/now-frame.tsx';
+import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
@@ -41,7 +40,11 @@ function OpenHeader({ scene }: { scene: OpenScene }) {
   return (
     <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex shrink-0 flex-col gap-2.5 pb-1')}>
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
-        <PageHeading title={scene.task.title} className='min-w-60 flex-1 py-0.5' />
+        <PageHeading
+          title={scene.task.title}
+          description={<OpenDescription scene={scene} />}
+          className='min-w-60 flex-1 py-0.5'
+        />
         <OpenActions link={scene.link} />
       </div>
       <TaskSharedFacts state={scene.state} task={scene.task} className='min-w-0' />
@@ -49,15 +52,19 @@ function OpenHeader({ scene }: { scene: OpenScene }) {
   );
 }
 
-function OpenSummary({ scene }: { scene: OpenScene }) {
+function OpenDescription({ scene }: { scene: OpenScene }) {
   const { payload } = scene;
   return (
-    <NowFrame
-      eyebrow={<span className='text-primary'>{describePullRequestEyebrow(payload.task.pullRequest)}</span>}
-      title={payload.task.summary ?? payload.report.headline}
-    >
-      <p className='text-fg-3 text-xs'>{openTask.source}</p>
-    </NowFrame>
+    <div className='flex flex-col gap-1'>
+      <p className={PAGE_DESCRIPTION}>
+        <span className='font-medium text-primary'>
+          {describePullRequestEyebrow(payload.task.pullRequest)}
+        </span>
+        {' · '}
+        {payload.task.summary ?? payload.report.headline}
+      </p>
+      <p className='text-2xs text-fg-2'>{openTask.source}</p>
+    </div>
   );
 }
 
@@ -76,7 +83,7 @@ export function OpenReview() {
     <DemoRoot>
       <div className='flex min-h-0 flex-1 flex-col'>
         <OpenHeader scene={scene} />
-        <ReviewTab state={scene.state} task={scene.task} summary={<OpenSummary scene={scene} />} />
+        <ReviewTab state={scene.state} task={scene.task} summary={false} />
       </div>
     </DemoRoot>
   );

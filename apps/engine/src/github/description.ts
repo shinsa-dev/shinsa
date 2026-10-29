@@ -5,7 +5,9 @@ import {
   type Evidence,
   type EvidenceUpload,
   listPullRequestEvidence,
+  listReviewPayloadFits,
   type Repo,
+  type ReviewPayload,
   resolvePublicUrl,
   serializePullRequestMarkdown,
   serializeReviewPayload,
@@ -34,10 +36,16 @@ const ATTACHMENT_TYPES: Record<string, { contentType: string; limit: number }> =
 
 const REVIEW_LINK_LIMIT = 24_000;
 
+function encodeReviewPayload(payload: ReviewPayload) {
+  return deflateRawSync(Buffer.from(JSON.stringify(payload))).toString('base64url');
+}
+
 export function serializeReviewLink(task: Task, evidence: readonly Evidence[], repo: Repo | null = null) {
-  const payload = JSON.stringify(serializeReviewPayload(task, evidence, repo));
-  const encoded = deflateRawSync(Buffer.from(payload)).toString('base64url');
-  return encoded.length <= REVIEW_LINK_LIMIT ? encoded : null;
+  for (const fit of listReviewPayloadFits(serializeReviewPayload(task, evidence, repo))) {
+    const encoded = encodeReviewPayload(fit);
+    if (encoded.length <= REVIEW_LINK_LIMIT) return encoded;
+  }
+  return null;
 }
 
 interface PullRequestDescription {

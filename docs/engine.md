@@ -2509,11 +2509,16 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data it shows the
   task's handle and title and the same two buttons. The data is a compact copy of the review (`serializeReviewPayload`,
   `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
-  task page's header shows that are not private (the repository's name and GitHub slug, the branch, the changed-line
-  coverage; never the status, priority, start time, cost, account or local paths), the walkthrough, the checks without their output, the
+  task page's header shows that are not private (the status, as its stage once the pull request is open: shipping,
+  ready to merge, merged or done; the repository's name and GitHub slug, the branch, the changed-line coverage and when
+  the task started; never the priority, cost, account, agents or local paths), the walkthrough, the checks without their output, the
   judgement calls, the agent review's summary and the findings you have not judged once it ran (a finding you dismissed or sent back is left out; without their code or suggested fix; the page
   shows no agent review when the link carries none) and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
-  `apps/engine/src/github/description.ts`), left out when it is longer than 24,000 characters. It rides in the
+  `apps/engine/src/github/description.ts`), at most 24,000 characters: a longer one is shrunk step by step
+  (`listReviewPayloadFits`: first the flow and the options turned down, then the agent review, the risks and the steps
+  to try, then the judgement calls, the steps around the merge, the tests and the evidence notes, and last everything
+  except the facts and the checks), and left out only when even that is too long. A link the page cannot read whole
+  (cut off, altered, of another version) shows the task's handle and title instead, never a broken page. It rides in the
   fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
   repository's review never leaves the reader's browser; the page reads it back through `parseReviewPayload`, which
   keeps only well-formed fields, drops any check output and keeps only images and recordings on GitHub's own

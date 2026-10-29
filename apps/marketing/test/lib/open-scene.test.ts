@@ -17,6 +17,8 @@ describe('createOpenState', () => {
           slug: 'shinsa-dev/shinsa',
           branch: 'feat/tabs',
           coverage: { covered: 46, executable: 48 },
+          stage: 'awaiting_merge',
+          startedAt: 500,
         },
         report: {
           headline: 'Clamp the width.',
@@ -73,6 +75,8 @@ describe('createOpenState', () => {
     expect(task).toMatchObject({
       repoId: OPEN_REPO_ID,
       branch: 'feat/tabs',
+      stage: 'awaiting_merge',
+      createdAt: 500,
       coverage: { status: 'measured', covered: 46, executable: 48 },
       pullRequest: { number: 23, url: 'https://github.com/shinsa-dev/shinsa/pull/23', state: 'open' },
     });
@@ -112,6 +116,8 @@ describe('createOpenState', () => {
           slug: null,
           branch: null,
           coverage: null,
+          stage: 'shipping',
+          startedAt: null,
         },
         report: { headline: 'H', sections: [], checks: [], judgementCalls: [], walkthrough: null },
         evidence: [],
@@ -120,7 +126,7 @@ describe('createOpenState', () => {
       1_000
     );
     expect(task.pipeline).toContain('agent_review');
-    expect(task).toMatchObject({ repoId: null, pullRequest: null, coverage: null });
+    expect(task).toMatchObject({ repoId: null, pullRequest: null, coverage: null, createdAt: 1_000 });
     expect(task).toMatchObject({ reviewSummary: 'Looks right.', findings: [finding] });
   });
 });
