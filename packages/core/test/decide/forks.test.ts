@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DomainError, type Run } from '../../src/index.ts';
 import {
+  approve,
   completePhase,
   createHarness,
   createTask,
@@ -8,6 +9,8 @@ import {
   linkSession,
   PASSING,
   proposePlan,
+  pullRequest,
+  pushed,
   reachReviewGate,
   readyWorktree,
   shipAndMerge,
@@ -61,6 +64,62 @@ describe('forking a task', () => {
     expect(promptOf(run)).toContain('Everything above this message was the work of the task');
     expect(promptOf(run)).toContain('never change its branch, its worktree or its pull request');
     expect(promptOf(run)).not.toContain('You do not have its conversation');
+  });
+
+  test('a fork of a merged task is told the change is on the default branch, with no worktree to read', () => {
+    const harness = createHarness();
+    const sourceId = mergedSource(harness);
+    const source = harness.task(sourceId);
+    const run = harness.activeRun(forkTask(harness, sourceId));
+    expect(promptOf(run)).toContain(
+      `Its change merged in pull request #${source.pullRequest?.number}, so the default branch this task starts from has it.`
+    );
+    expect(promptOf(run)).not.toContain('Read its code in its worktree');
+  });
+
+  test('a fork of a task still in review copies its session and points at its unmerged branch and worktree', () => {
+    const harness = createHarness();
+    const sourceId = createTask(harness);
+    harness.send({
+      type: 'run.link',
+      runId: harness.activeRun(sourceId).id,
+      sessionId: 'open-session',
+      provider: 'claude',
+    });
+    reachReviewGate(harness, sourceId);
+    const source = harness.task(sourceId);
+    expect(source.stage).toBe('awaiting_review');
+    const run = harness.activeRun(forkTask(harness, sourceId));
+    expect(run.fork).toMatchObject({ taskId: sourceId, sessionId: 'open-session' });
+    expect(promptOf(run)).toContain(
+      `Its change is not merged yet: it is on branch ${source.branch}, not on the default branch this task starts from, so this worktree does not have it.`
+    );
+    expect(promptOf(run)).toContain(`Read its code in its worktree, \`${source.worktreePath}\``);
+  });
+
+  test('a fork of a task whose pull request is open names the branch and the pull request', () => {
+    const harness = createHarness();
+    const sourceId = createTask(harness);
+    reachReviewGate(harness, sourceId);
+    approve(harness, sourceId);
+    pushed(harness, sourceId);
+    harness.send({ type: 'pull_request.record', taskId: sourceId, pullRequest: pullRequest({ number: 77 }) });
+    const source = harness.task(sourceId);
+    expect(source.pullRequest?.state).toBe('open');
+    expect(promptOf(harness.activeRun(forkTask(harness, sourceId)))).toContain(
+      `it is on branch ${source.branch} in pull request #77, not on the default branch this task starts from`
+    );
+  });
+
+  test('a fork of a fork copies the middle task’s own session, never the first one’s', () => {
+    const harness = createHarness();
+    const firstId = mergedSource(harness, 'first-session');
+    const middleId = forkTask(harness, firstId);
+    linkSession(harness, middleId, 'middle-session');
+    const lastId = forkTask(harness, middleId, 'Firefox users cannot open it either');
+    expect(harness.activeRun(lastId).fork).toMatchObject({ taskId: middleId, sessionId: 'middle-session' });
+    expect(harness.task(lastId).forkOf).toBe(middleId);
+    expect(promptOf(harness.activeRun(lastId))).toContain(`task ${harness.task(middleId).handle}`);
   });
 
   test('once the fork has a session of its own, every later run resumes that one', () => {
@@ -127,7 +186,15 @@ describe('forking a task', () => {
     expect(promptOf(run)).toContain('This task carries on from the task');
     expect(promptOf(run)).toContain('Its request:\nAdd tab groups');
     expect(promptOf(run)).toContain('- Round 1: Add tab groups (in progress)');
-    expect(promptOf(run)).toContain('Read it with `read_task` when you need more.');
+    expect(promptOf(run)).toContain(
+      `Its change is not merged yet: it is on branch ${harness.task(sourceId).branch}, not on the default branch this task starts from, so this worktree does not have it.`
+    );
+    expect(promptOf(run)).toContain(
+      `Read its code in its worktree, \`${harness.task(sourceId).worktreePath}\`, when you need it, but never change anything there.`
+    );
+    expect(promptOf(run)).toContain(
+      `Read the task itself with \`read_task\` (id ${sourceId}) when you need more.`
+    );
   });
 
   test('a source session on another provider, or one the provider lost, is described instead of forked', () => {

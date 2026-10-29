@@ -64,4 +64,22 @@ describe('forking a task', () => {
     await w.until('the attempt is recorded', () => (w.state.runs[run?.id ?? '']?.attempts?.length ?? 0) > 0);
     expect(w.state.runs[run?.id ?? '']?.attempts?.[0]?.handoff).toMatchObject({ reason: 'fork' });
   });
+
+  test('a restart while the fork plans resumes the fork’s own copy, never the source session', async () => {
+    const { w, source, sessionId } = await answeredSource();
+    w.agents.queue('plan', (agent) => agent.hang());
+    const forked = await w.createTask('Show the greeting in Safari too', { forkOf: source });
+    await w.until('the fork to start planning', () => listTaskSessions(w, forked).length === 1);
+    const [copy] = listTaskSessions(w, forked);
+    expect(copy).toMatchObject({ resume: sessionId, fork: true });
+    await w.restartGracefully();
+    await w.untilGate(forked, 'review');
+    const [, resumed] = listTaskSessions(w, forked);
+    expect(resumed).toMatchObject({ key: 'plan', resume: copy?.sessionId, fork: false });
+    expect(listTaskSessions(w, forked).filter((session) => session.fork)).toHaveLength(1);
+    expect(listTaskSessions(w, forked).some((session) => !session.fork && session.resume === sessionId)).toBe(
+      false
+    );
+    expect(w.task(source).stage).toBe('done');
+  });
 });

@@ -322,3 +322,20 @@ describe('Claude and Codex together', () => {
     expect(codex.log.find((entry) => entry.tool === 'delegate_task')).toMatchObject({ isError: false });
   });
 });
+
+describe('forking on Codex', () => {
+  test('a task forked from a Codex task starts on a forked thread and keeps its own thread after that', async () => {
+    const { w, codex } = await open();
+    const source = await w.createTask();
+    await w.untilStage(source, 'awaiting_review');
+    const sourceThread = listRuns(w, source)[0]?.sessionId ?? '';
+    const forked = await w.createTask('Show the greeting in Safari too', { forkOf: source });
+    await w.untilStage(forked, 'awaiting_review');
+    expect(codex.requests('thread/fork').map((params) => params.threadId)).toEqual([sourceThread]);
+    const [first, ...later] = listRuns(w, forked).filter((run) => run.role === 'agent');
+    expect(first?.fork).toMatchObject({ taskId: source, sessionId: sourceThread });
+    expect(first?.sessionId).not.toBe(sourceThread);
+    for (const run of later) expect(run.sessionId).toBe(first?.sessionId);
+    expect(listRuns(w, source).filter((run) => run.role === 'agent').length).toBe(3);
+  });
+});

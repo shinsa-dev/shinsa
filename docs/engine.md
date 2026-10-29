@@ -312,8 +312,13 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   lost. The house rules are not sent again when the source session has them, and the first turn says where the
   fork works (`resolveMovedNote`): its own worktree, not the source's.
   Its prompt ends with what happened (`resolveForkNote`): everything above was the source task's work, that task stays
-  as it is, and from here on the agent works on this task only, with its own request. The system prompt and tools are
-  the same, so the copy keeps the source's prompt-cache prefix (Caching).
+  as it is, and from here on the agent works on this task only, with its own request. It also says where the source's
+  code is (`describeForkPlace`): merged in its pull request, so the default branch the fork starts from has it, or not
+  merged yet, on its branch and open pull request, so the fork's worktree does not; while it is unmerged, the source's
+  worktree to read (never to change); and the source's id for `read_task`. A fork only ever copies a session, never a
+  worktree or a branch. A fork of a fork copies the middle task's own session, and a restart while the fork's first
+  run plans resumes the fork's copy, never the source. The system prompt and tools are the same, so the copy keeps the
+  source's prompt-cache prefix (Caching).
 - **No session to copy, a brief instead.** When the source has no session, its session is on another provider than
   the run's, or the provider lost it, or the fork's own session once existed and can no longer go on (a context
   overflow), the run starts fresh and its prompt ends with the source's brief (`describeForkSource`): the source's
