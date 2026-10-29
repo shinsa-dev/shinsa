@@ -1,4 +1,10 @@
-import type { AccountSummary, OnboardingFlow, OnboardingStep, OnboardingStepId } from '@shinsa/core';
+import type {
+  AccountSummary,
+  OnboardingFlow,
+  OnboardingStep,
+  OnboardingStepId,
+  ProviderLogin,
+} from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { OnboardingFinished } from '@/components/onboarding/finished.tsx';
@@ -198,8 +204,8 @@ const DEFAULTS = createSampleStep({
 
 const ACCOUNTS = createSampleStep({
   id: 'accounts',
-  title: 'Which Claude accounts can agents use?',
-  description: 'Agents work under these. When one runs out of usage, Shinsa moves the work to the next.',
+  title: 'Which accounts can agents use?',
+  description: 'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
   imported: [{ origin: 'cswap', email: 'agents@superwall.com', plan: null }],
   notes: ['claude-swap did not hand over side@superwall.com. Sign in to it instead.'],
 });
@@ -252,9 +258,22 @@ const ACTIONS = {
   openPrivacy: () => void acknowledgeSample(),
 };
 
+const SAMPLE_PROVIDERS: ProviderLogin[] = [
+  {
+    provider: 'codex',
+    label: 'Codex',
+    status: 'signed_out',
+    method: null,
+    version: '0.50.0',
+    detail: 'Not logged in',
+    fix: 'Sign in with `codex login`.',
+  },
+];
+
 const ACCOUNT_ACTIONS = {
   signIn: () => void acknowledgeSample(),
   remove: () => void acknowledgeSample(),
+  copy: () => void acknowledgeSample(),
 };
 
 function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit?: boolean }) {
@@ -267,9 +286,13 @@ function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit
         flow={flow}
         step={step}
         pending={null}
-        direction='forward'
         userHome={USER_HOME}
-        accounts={{ list: accounts, actions: ACCOUNT_ACTIONS }}
+        accounts={{
+          list: accounts,
+          providers: SAMPLE_PROVIDERS,
+          actions: ACCOUNT_ACTIONS,
+          refresh: () => void acknowledgeSample(),
+        }}
         actions={ACTIONS}
         onClose={revisit ? () => void acknowledgeSample() : undefined}
         autoFocus={false}

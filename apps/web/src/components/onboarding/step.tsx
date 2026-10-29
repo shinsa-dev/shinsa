@@ -4,6 +4,7 @@ import type {
   OnboardingProjectChoice,
   OnboardingStep,
   OnboardingStepId,
+  ProviderLogin,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Input } from '@shinsa/ui/components/input';
@@ -11,7 +12,11 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ErrorLine } from '@/components/chat/turn-detail.tsx';
 import { OnboardingAccess } from '@/components/onboarding/access.tsx';
-import { type OnboardingAccountActions, OnboardingAccounts } from '@/components/onboarding/accounts.tsx';
+import {
+  type OnboardingAccountActions,
+  OnboardingAccounts,
+  OnboardingAddAccount,
+} from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OnboardingDefaults } from '@/components/onboarding/defaults.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
@@ -19,7 +24,6 @@ import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
 import { useWindowReturn } from '@/hooks/use-window-return.ts';
-import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
   ACCESS_KEY,
   listChosenValues,
@@ -28,7 +32,6 @@ import {
   resolveFolderOptions,
   resolveSubmitValues,
   resolveToggledRoots,
-  type StepDirection,
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
 import {
@@ -56,7 +59,9 @@ export interface OnboardingStepActions {
 
 export interface OnboardingAccountsView {
   list: AccountSummary[] | null;
+  providers: ProviderLogin[];
   actions: OnboardingAccountActions;
+  refresh: () => void;
 }
 
 function AddFolderField({ onAdd }: { onAdd: (path: string) => void }) {
@@ -212,6 +217,7 @@ function StepBody({
     return (
       <OnboardingAccounts
         accounts={accounts.list}
+        providers={accounts.providers}
         imported={step.imported}
         notes={step.notes}
         actions={accounts.actions}
@@ -234,9 +240,11 @@ function StepAction({
 }) {
   if (step.id === 'accounts') {
     return (
-      <Button variant='secondary' icon='IconUserAdd' onClick={() => accounts.actions.signIn(null)}>
-        {accounts.list?.length === 0 ? 'Sign in to Claude' : ACCOUNT_LABEL.add}
-      </Button>
+      <OnboardingAddAccount
+        accounts={accounts.list}
+        providers={accounts.providers}
+        actions={accounts.actions}
+      />
     );
   }
   if (step.id !== 'prerequisites') return null;
@@ -329,7 +337,6 @@ export function OnboardingStepView({
   flow,
   step,
   pending,
-  direction,
   userHome,
   accounts,
   actions,
@@ -339,7 +346,6 @@ export function OnboardingStepView({
   flow: OnboardingFlow;
   step: OnboardingStep;
   pending: string | null;
-  direction: StepDirection;
   userHome: string;
   accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
@@ -348,17 +354,17 @@ export function OnboardingStepView({
 }) {
   const [values, setValues] = React.useState(() => listChosenValues(step));
   const [drafts, setDrafts] = React.useState(() => createProjectDrafts(step.projects));
-  const waiting = step.access.length > 0 || step.id === 'prerequisites';
+  const waiting = step.access.length > 0 || step.id === 'prerequisites' || step.id === 'accounts';
   useWindowReturn(() => {
     if (pending !== null) return;
-    if (step.id === 'prerequisites') actions.refresh();
+    if (step.id === 'accounts') accounts.refresh();
+    else if (step.id === 'prerequisites') actions.refresh();
     else actions.answer(step.id, listChosenValues(step), ACCESS_KEY);
   }, waiting);
   return (
     <OnboardingSection
       title={step.title}
       description={step.description}
-      direction={direction}
       footer={
         <StepFooter
           flow={flow}

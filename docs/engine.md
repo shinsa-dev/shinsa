@@ -3961,8 +3961,10 @@ have reached.
   has none, so setup never adds a second copy. Each login is tried once per run of setup (`tried`, by origin and
   email): one you remove afterwards is not imported again when you come back to the step. The step lists what it
   imported (`imported`) and why an import failed (`notes`, the import's own message); the accounts themselves, with
-  removing one, signing in again and adding another, are the web's (`/api/accounts/*`). Under `SHINSA_INSPECT`
-  nothing is imported. With no account signed in the step's button says Skip for now.
+  removing one, signing in again and adding another, are the web's (`/api/accounts/*`), and so is Codex's login,
+  which the web shows from the accounts snapshot's `providers` (signed in with `codex login` in a terminal, read
+  again when you come back to the window). Under `SHINSA_INSPECT` nothing is imported. With no Claude account
+  signed in the step's button says Skip for now.
 - **Saving** goes through the same code as the endpoints above: each answer is `POST /setup`'s `applySetup`
   (folders to `config.json`, the rest as `settings.change`), and the last step is `complete`. The `settings.change`
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new

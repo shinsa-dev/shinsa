@@ -1106,9 +1106,8 @@ Only these, and they win over anything below:
     - **The steps along the top** (`OnboardingStepper`, items from `listStepperItems`): one 26px segmented `Choice`
       with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
       slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
-      answered has the accent checkmark before its label (`Choice` items take `checked`) and its answer as the
-      tooltip ("Opus 5.5 · Squash · Plan first"); a step you reached but have not answered again (after going back) is a plain segment;
-      both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
+      answered has no mark, only its answer as the tooltip ("Opus 5.5 · Squash · Plan first"), and so has a step
+      you reached but have not answered again (after going back); both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
       Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 3 of 5: Defaults",
       `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
       height on every step and on the finished page.
@@ -1118,13 +1117,18 @@ Only these, and they win over anything below:
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
       action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
       "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
-      It enters with a 0.5rem slide and a fade (220ms, the strong ease-out; from the left when you went back), only a
-      fade under reduced motion; nothing leaves, so two steps never overlap.
+      The first step you open, and the finished page when you load it, are simply there. Moving to another step
+      slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
+      (the other way when you go back), both the full width of the column and 420ms on the drawer ease
+      (`cubic-bezier(0.32, 0.72, 0, 1)`), and neither fades on its own: the track masks its 24px edges (the column's
+      padding, so nothing at rest is faded), so a step fades only as it crosses the edge. The step leaving is `inert`
+      and goes when its slide ends. Under reduced motion the steps swap at once.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
       like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
-      marked with the accent `SelectedMark` at the row's end, as a select or menu marks the current value. The hover
-      and the keyboard highlight are the menus' one surface, which slides to the row on the movement clock. The first
+      marked with the accent `SelectedMark` at the row's end, centred on the whole row, as a select or menu marks the
+      current value. The hover and the keyboard highlight are the menus' one surface, which slides to the row on the
+      movement clock; in a pick-one list it rests on your pick and slides back to it when the pointer leaves. The first
       list takes focus when the step opens: the arrows, Home and End move the highlight (`aria-activedescendant`) and
       Enter or Space picks, so setup runs from the keyboard alone; these keys belong to the list, not the page (10).
     - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Large tasks, each a
@@ -1149,9 +1153,13 @@ Only these, and they win over anything below:
       card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where it came from
       and its plan in `text-2xs` `fg-2`: "Your Claude Code login · Max plan", "From claude-swap"), "Added" on the ones
       this setup imported, Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
-      words). Until the socket has the accounts the card holds one row with a delayed `LoadingLine`, never "no login
-      found". Add account (Sign in to Claude with none) is in the footer and opens the sign-in dialog. An import that
-      failed is an amber line under the card.
+      words), then Codex's login as a row of its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus
+      plan" or "Not signed in", and the `CopyButton` of `codex login` while it is not). Until the socket has the
+      accounts the card holds one row with a delayed `LoadingLine`, never "no login found". Add account in the footer
+      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, a Codex
+      account copies `codex login` to run in a terminal (off once Codex is signed in, with how it is). Coming back to
+      the window reads the accounts again, so a Codex login you finished in a terminal shows. An import that failed is
+      an amber line under the card.
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
       the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
       command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in

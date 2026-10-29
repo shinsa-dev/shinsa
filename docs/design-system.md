@@ -1390,7 +1390,7 @@ Every click and hover lands in the frame it happens, as in a Mac app. A hover, p
 | Spotlight | holds 1.5s, fades over 600ms | | `useSpotlight`: the row you jumped to keeps a `primary-a1` wash, then lets go |
 | Focused or selected flash | 500ms | default | A chat line's `bg` and outline (`transition-[background-color,outline-color] duration-500`), a review note's outline, a review card's `bg-primary-a1` |
 | Chat text swap | in 360ms after 80ms, out 240ms | `cubic-bezier(0.23, 1, 0.32, 1)` | The live card's latest line: in from 0.625rem below with 2px blur, out to 0.625rem above |
-| Onboarding step | 220ms | `cubic-bezier(0.23, 1, 0.32, 1)` | A step enters from 0.5rem (from the left when you went back) with a fade; nothing leaves, so two steps never overlap |
+| Onboarding step | 420ms | `cubic-bezier(0.32, 0.72, 0, 1)` | The step you leave slides out to the left as the next slides in from the right (the other way back), the column's full width with no fade of their own; the track masks its 24px edges. The first step has no entry |
 | Image viewer | 240ms open and close; swaps 200ms slide 10px or 150ms fade | `cubic-bezier(0.22, 1, 0.36, 1)`; swaps `cubic-bezier(0.23, 1, 0.32, 1)` | The flight from a thumbnail, backdrop and chrome fades; `SHRUNK` 0.96 |
 | Toast | shake 350ms `cubic-bezier(0.36, 0.07, 0.19, 0.97)`; bump 300ms `ease-out`; loader out 200ms; result icon in 240ms `cubic-bezier(0.22, 1, 0.36, 1)` | | Sonner (stacking keeps Sonner's own 500ms) |
 | Update button | 200ms | | Scales in: `animate-in fade-in-0 zoom-in-95 duration-200` |
@@ -1431,12 +1431,18 @@ Keyframes used by the app stylesheet:
 .chat-swap-in { animation: chat-swap-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both; }
 .chat-swap-out { animation: chat-swap-out 240ms cubic-bezier(0.23, 1, 0.32, 1) both; }
 
-@keyframes onboarding-in { from { opacity: 0; transform: translateX(var(--onboarding-shift)); } }
-.onboarding-in, .onboarding-in-back { animation: onboarding-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both; }
-.onboarding-in { --onboarding-shift: 0.5rem; }
-.onboarding-in-back { --onboarding-shift: -0.5rem; }
+@keyframes onboarding-in { from { transform: translateX(var(--onboarding-from)); } }
+@keyframes onboarding-out { to { transform: translateX(var(--onboarding-to)); } }
+.onboarding-track { mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent); }
+.onboarding-in, .onboarding-in-back { animation: onboarding-in 420ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.onboarding-out, .onboarding-out-back { animation: onboarding-out 420ms cubic-bezier(0.32, 0.72, 0, 1) both; pointer-events: none; }
+.onboarding-in { --onboarding-from: calc(100% + 1.5rem); }
+.onboarding-in-back { --onboarding-from: calc(-100% - 1.5rem); }
+.onboarding-out { --onboarding-to: calc(-100% - 1.5rem); }
+.onboarding-out-back { --onboarding-to: calc(100% + 1.5rem); }
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-in, .onboarding-in-back { --onboarding-shift: 0; animation-duration: 160ms; }
+  .onboarding-in, .onboarding-in-back, .onboarding-out, .onboarding-out-back { --onboarding-from: 0; --onboarding-to: 0; animation-duration: 1ms; }
+  .onboarding-out, .onboarding-out-back { visibility: hidden; }
 }
 
 @keyframes bk-toast-shake { 0%, 100% { translate: 0 0; } 25% { translate: -2px 0; } 50% { translate: 2px 0; } 75% { translate: -1px 0; } }

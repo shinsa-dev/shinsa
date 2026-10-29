@@ -40,6 +40,7 @@ describe('useOnboardingFlow', () => {
     });
     const { result } = renderHook(() => useOnboardingFlow());
     await waitFor(() => expect(result.current.flow?.step?.id).toBe('defaults'));
+    expect(result.current.direction).toBe('none');
     let sent: Promise<boolean> = Promise.resolve(false);
     act(() => {
       sent = result.current.answer('defaults', ['merge=rebase'], 'rebase');

@@ -9,10 +9,12 @@ import {
   type OnboardingStatus,
   type OnboardingStep,
   type OnboardingStepEntry,
+  type ProviderLogin,
   type RootSuggestion,
   resolveDisplayPath,
   resolvePlanLabel,
 } from '@shinsa/core';
+import { describeProviderLogin } from '@/lib/accounts/providers.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import type { Route } from '@/router.ts';
 
@@ -63,7 +65,7 @@ export function resolveCheckOutcome(check: OnboardingCheck) {
   return check.optional ? 'skipped' : 'fail';
 }
 
-export type StepDirection = 'forward' | 'back';
+export type StepDirection = 'none' | 'forward' | 'back';
 
 export type HighlightKey = 'ArrowDown' | 'ArrowUp' | 'Home' | 'End';
 
@@ -91,7 +93,8 @@ export function describeStepHeading(flow: OnboardingFlow) {
 }
 
 export function resolveStepDirection(before: number | null, after: number): StepDirection {
-  return before !== null && after < before ? 'back' : 'forward';
+  if (before === null || before === after) return 'none';
+  return after < before ? 'back' : 'forward';
 }
 
 export function listChosenValues(step: OnboardingStep) {
@@ -142,6 +145,21 @@ export function describeAccountSource(account: AccountSummary) {
   return parts.join(' · ');
 }
 
+export function describeProviderSource(login: ProviderLogin) {
+  const plan = login.status === 'signed_in' ? resolvePlanLabel(login.plan ?? null) : null;
+  const title = describeProviderLogin(login).title;
+  return plan ? `${title} · ${plan} plan` : title;
+}
+
+export function resolveProviderChoice(login: ProviderLogin) {
+  const command = login.status === 'signed_in' ? null : describeProviderLogin(login).command;
+  return {
+    label: `${login.label} account`,
+    detail: command ? `Copies ${command} to run in a terminal` : describeProviderSource(login),
+    command,
+  };
+}
+
 export type StepState = 'done' | 'current' | 'ahead' | 'upcoming';
 
 export function resolveStepState(entry: OnboardingStepEntry, index: number, current: number): StepState {
@@ -157,7 +175,6 @@ export function listStepperItems(flow: OnboardingFlow) {
       value: entry.id,
       label: entry.label,
       hint: entry.summary ?? undefined,
-      checked: state === 'done',
       disabled: state === 'upcoming',
     };
   });

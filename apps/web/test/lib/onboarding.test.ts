@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   describeAccessTitle,
   describeAccountSource,
+  describeProviderSource,
   describeStepHeading,
   describeStepPosition,
   isHighlightKey,
@@ -17,12 +18,13 @@ import {
   resolveNextHighlight,
   resolveOnboardingRedirect,
   resolvePickedChoices,
+  resolveProviderChoice,
   resolveStepDirection,
   resolveStepState,
   resolveSubmitValues,
   resolveToggledRoots,
 } from '@/lib/onboarding.ts';
-import { createAccount } from '../support/accounts.ts';
+import { createAccount, createProviderLogin } from '../support/accounts.ts';
 import {
   createFlow,
   createOnboardingStatus,
@@ -55,18 +57,19 @@ describe('the steps', () => {
     expect(describeStepHeading(createFlow(null))).toBe('Step 5 of 5');
   });
 
-  it('checks the answered steps along the top, with the answer as the hint, and holds back the ones not reached', () => {
+  it('lists the steps along the top with no checkmark, the answer as the hint, and holds back the ones not reached', () => {
     const items = listStepperItems(createFlow(createStep()));
     expect(items.slice(0, 4)).toEqual([
-      { value: 'roots', label: 'Folders', hint: 'Folders answer', checked: true, disabled: false },
-      { value: 'projects', label: 'Projects', hint: 'Projects answer', checked: true, disabled: false },
-      { value: 'defaults', label: 'Defaults', hint: undefined, checked: false, disabled: false },
-      { value: 'accounts', label: 'Accounts', hint: undefined, checked: false, disabled: true },
+      { value: 'roots', label: 'Folders', hint: 'Folders answer', disabled: false },
+      { value: 'projects', label: 'Projects', hint: 'Projects answer', disabled: false },
+      { value: 'defaults', label: 'Defaults', hint: undefined, disabled: false },
+      { value: 'accounts', label: 'Accounts', hint: undefined, disabled: true },
     ]);
   });
 
-  it('slides back only when you go to an earlier step', () => {
-    expect(resolveStepDirection(null, 0)).toBe('forward');
+  it('does not slide the first step in, and slides back only when you go to an earlier step', () => {
+    expect(resolveStepDirection(null, 0)).toBe('none');
+    expect(resolveStepDirection(2, 2)).toBe('none');
     expect(resolveStepDirection(1, 2)).toBe('forward');
     expect(resolveStepDirection(3, 1)).toBe('back');
   });
@@ -157,6 +160,25 @@ describe('the accounts step', () => {
     expect(describeAccountSource(createAccount({ id: 'c', origin: 'login', signIn: 'signed_out' }))).toBe(
       'Signed in through Shinsa · Signed out'
     );
+  });
+
+  it('says how Codex is signed in, and offers to copy the command that signs it in or installs it', () => {
+    const signedIn = createProviderLogin({ plan: 'plus' });
+    expect(describeProviderSource(signedIn)).toBe('Signed in with ChatGPT · Plus plan');
+    expect(resolveProviderChoice(signedIn)).toEqual({
+      label: 'Codex account',
+      detail: 'Signed in with ChatGPT · Plus plan',
+      command: null,
+    });
+    const signedOut = createProviderLogin({ status: 'signed_out', fix: 'Sign in with `codex login`.' });
+    expect(describeProviderSource(signedOut)).toBe('Not signed in');
+    expect(resolveProviderChoice(signedOut)).toEqual({
+      label: 'Codex account',
+      detail: 'Copies codex login to run in a terminal',
+      command: 'codex login',
+    });
+    const missing = createProviderLogin({ status: 'not_installed', fix: null });
+    expect(resolveProviderChoice(missing)).toMatchObject({ detail: 'Not installed', command: null });
   });
 
   it('marks the accounts setup imported just now', () => {

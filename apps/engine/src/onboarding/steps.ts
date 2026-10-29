@@ -332,10 +332,10 @@ const ACCOUNTS: StepDefinition = {
     const accounts = await context.listAccounts();
     const signedIn = accounts.some((account) => account.signedIn);
     return createView({
-      title: 'Which Claude accounts can agents use?',
+      title: 'Which accounts can agents use?',
       description: signedIn
-        ? 'Agents work under these. When one runs out of usage, Shinsa moves the work to the next.'
-        : 'Agents need a Claude account to work. Sign in with one, or add it later in Settings.',
+        ? 'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.'
+        : 'Agents need a Claude account or Codex to work. Add one now, or later in Settings.',
       submitLabel: signedIn ? 'Continue' : 'Skip for now',
     });
   },

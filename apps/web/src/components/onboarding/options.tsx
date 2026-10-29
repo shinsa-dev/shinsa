@@ -28,10 +28,10 @@ function OptionText({ option }: { option: OnboardingOption }) {
   );
 }
 
-function OptionEnd({ selected }: { selected: boolean }) {
+function OptionEnd({ selected, lines }: { selected: boolean; lines: boolean }) {
   if (!selected) return null;
   return (
-    <span className={cn(ICON_SLOT, 'self-center')}>
+    <span className={cn(ICON_SLOT, 'h-auto self-stretch', lines && '-mt-1.5 -mb-1')}>
       <SelectedMark />
     </span>
   );
@@ -58,6 +58,8 @@ export function OptionList({
 }) {
   const chosen = options.findIndex((option) => values.includes(option.value));
   const [highlighted, setHighlighted] = React.useState<number | null>(null);
+  const resting = multiple || chosen < 0 ? null : chosen;
+  const shown = highlighted ?? resting;
   const list = React.useRef<HTMLDivElement>(null);
   const id = React.useId();
 
@@ -104,7 +106,7 @@ export function OptionList({
                   role='option'
                   aria-selected={selected}
                   tabIndex={-1}
-                  data-highlighted={index === highlighted || undefined}
+                  data-highlighted={index === shown || undefined}
                   onPointerMove={() => setHighlighted(index)}
                   onClick={() => {
                     if (!disabled) onPick(option.value);
@@ -128,7 +130,7 @@ export function OptionList({
                     </span>
                   )}
                   <OptionText option={option} />
-                  <OptionEnd selected={selected && !multiple} />
+                  <OptionEnd selected={selected && !multiple} lines={Boolean(option.detail)} />
                 </div>
               );
             })}

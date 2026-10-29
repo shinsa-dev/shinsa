@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { OnboardingFlow } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { closeSignIn } from '@/lib/connection/accounts.ts';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
-import { createAccount, createSnapshot } from '../support/accounts.ts';
+import { createAccount, createProviderLogin, createSnapshot } from '../support/accounts.ts';
 import {
   createFlow,
   createOnboardingStatus,
@@ -117,6 +117,22 @@ describe('the setup page', () => {
     ]);
   });
 
+  it('opens on its first step without sliding, then slides the old step out while the next slides in', async () => {
+    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts', title: 'Accounts' }))]);
+    renderPage();
+    const heading = await screen.findByRole('heading', { name: 'How should agents work?' });
+    expect(heading.closest('.onboarding-in')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    const next = await screen.findByRole('heading', { name: 'Accounts' });
+    expect(next.closest('.onboarding-in')).not.toBeNull();
+    const leaving = screen.getByText('How should agents work?').closest('.onboarding-out') as HTMLElement;
+    expect(leaving.hasAttribute('inert')).toBe(true);
+    fireEvent.animationEnd(leaving.firstElementChild as HTMLElement);
+    expect(screen.getByText('How should agents work?')).toBeTruthy();
+    fireEvent.animationEnd(leaving);
+    await waitFor(() => expect(screen.queryByText('How should agents work?')).toBeNull());
+  });
+
   it('a click changes only its own group’s pick, and nothing is sent until Continue', async () => {
     serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts' }))]);
     renderPage();
@@ -131,6 +147,20 @@ describe('the setup page', () => {
         { type: 'answer', stepId: 'defaults', values: ['merge=rebase', 'plans=no'] },
       ])
     );
+  });
+
+  it('the highlight rests on your pick in a pick-one list and goes back to it when the pointer leaves', async () => {
+    serve(createFlow(createStep()));
+    renderPage();
+    const squash = await screen.findByRole('option', { name: /Squash/ });
+    const rebase = screen.getByRole('option', { name: /Rebase/ });
+    expect(squash.getAttribute('data-highlighted')).toBe('true');
+    fireEvent.pointerMove(rebase);
+    expect(rebase.getAttribute('data-highlighted')).toBe('true');
+    expect(squash.getAttribute('data-highlighted')).toBeNull();
+    fireEvent.pointerLeave(screen.getByRole('listbox', { name: 'Merging' }));
+    expect(squash.getAttribute('data-highlighted')).toBe('true');
+    expect(rebase.getAttribute('data-highlighted')).toBeNull();
   });
 
   it('picks from the keyboard: the arrows move through a group and Enter picks one', async () => {
@@ -194,7 +224,13 @@ describe('the setup page', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('lists the Claude accounts with the ones setup imported, and removes one you do not want', async () => {
+  it('lists the Claude accounts and Codex, adds either from Add account, and removes one you do not want', async () => {
+    const codexSignedOut = createProviderLogin({
+      status: 'signed_out',
+      method: null,
+      email: null,
+      fix: 'Sign in with `codex login`.',
+    });
     startFakeServer();
     pushAccounts(
       createSnapshot({
@@ -202,6 +238,7 @@ describe('the setup page', () => {
           createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' }),
           createAccount({ id: 'work', email: 'work@acme.dev', origin: 'cswap', plan: null }),
         ],
+        providers: [codexSignedOut],
       })
     );
     fake = startFakeOnboarding({
@@ -209,7 +246,7 @@ describe('the setup page', () => {
         answer: createFlow(
           createStep({
             id: 'accounts',
-            title: 'Which Claude accounts can agents use?',
+            title: 'Which accounts can agents use?',
             options: [],
             imported: [{ origin: 'cswap', email: 'work@acme.dev', plan: null }],
             notes: ['claude-swap did not hand over side@acme.dev.'],
@@ -221,15 +258,19 @@ describe('the setup page', () => {
       'POST /api/accounts/remove': {
         answer: createSnapshot({
           accounts: [createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' })],
+          providers: [codexSignedOut],
         }),
       },
       'POST /api/accounts/login': { answer: createSnapshot() },
+      'POST /api/accounts/refresh': { answer: createSnapshot() },
     });
     renderPage();
     const work = (await screen.findByText('work@acme.dev')).closest('li') as HTMLElement;
     expect(within(work).getByText('Added')).toBeTruthy();
     expect(within(work).getByText('From claude-swap')).toBeTruthy();
     expect(screen.getByText('claude-swap did not hand over side@acme.dev.')).toBeTruthy();
+    const codex = screen.getByText('Not signed in').closest('li') as HTMLElement;
+    expect(within(codex).getByText('Codex')).toBeTruthy();
     fireEvent.click(within(work).getByRole('button', { name: 'Remove' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Remove account' }));
     await waitFor(() =>
@@ -237,9 +278,22 @@ describe('the setup page', () => {
         accountId: 'work',
       })
     );
+    const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Codex account/ }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith('codex login'));
+    write.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Claude account/ }));
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/login')).toBe(true)
+    );
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() =>
+      expect(fake?.requests.some((request) => request.path === '/api/accounts/refresh')).toBe(true)
     );
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
@@ -267,7 +321,11 @@ describe('the setup page', () => {
     expect(screen.getByRole('button', { name: /Skip for now/ })).toBeTruthy();
     pushAccounts(createSnapshot({ accounts: [] }));
     expect(await screen.findByText('Shinsa found no Claude login on this machine.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sign in to Claude' })).toBeTruthy();
+    pushAccounts(createSnapshot({ accounts: [], providers: [createProviderLogin({ email: 'me@openai.com' })] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    expect(await screen.findByRole('menuitem', { name: /Sign in to Claude/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Codex account/ }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getAllByText(/Signed in with ChatGPT/).length).toBeGreaterThan(0);
   });
 
   it('checks the tools again, finishes setup and shows what you set up with a way home', async () => {

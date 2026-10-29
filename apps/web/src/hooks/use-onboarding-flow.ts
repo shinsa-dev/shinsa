@@ -15,7 +15,7 @@ export function useOnboardingFlow() {
   const [flow, setFlow] = React.useState<OnboardingFlow | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState<string | null>(null);
-  const [direction, setDirection] = React.useState<StepDirection>('forward');
+  const [direction, setDirection] = React.useState<StepDirection>('none');
   const [attempt, setAttempt] = React.useState(0);
   const index = React.useRef<number | null>(null);
 
