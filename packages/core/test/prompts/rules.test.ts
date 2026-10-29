@@ -134,6 +134,17 @@ describe('what the house rules leave to the tools', () => {
     }
   });
 
+  test('the roles that run services keep an attached preview running and are told runs report its URL', () => {
+    for (const role of ['agent', 'reviewer', 'investigator'] as const) {
+      const rules = resolveHouseRules(role);
+      expect(rules).toContain('A run reports its preview URL, on a port of its own.');
+      expect(rules).toContain(
+        'except a preview you attach for the review: it runs until the task is finished.'
+      );
+    }
+    expect(resolveHouseRules('answerer')).not.toContain('preview URL');
+  });
+
   test('the writing rules are one block every role gets once', () => {
     for (const role of ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const) {
       const rules = resolveHouseRules(role);

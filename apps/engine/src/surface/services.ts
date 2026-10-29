@@ -145,7 +145,8 @@ function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: stri
 export const SERVICE_SPECS: SurfaceSpec[] = [
   {
     path: ['services', 'list'],
-    summary: 'List your services in Shinsa: what each runs, in which project, and whether it is running.',
+    summary:
+      'List your services in Shinsa: what each runs, in which project, whether it is running and its preview URL.',
     access: 'read',
     humanOnly: true,
     fields: [PROJECT_FIELD],
