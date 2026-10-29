@@ -14,7 +14,6 @@ export function rewriteOpenPage(response: Response, search: string) {
   const rewriter = new HTMLRewriter()
     .on('[data-open-title]', { element: (element) => void element.setInnerContent(header.title) })
     .on('[data-open-description]', { element: (element) => void element.setInnerContent(header.description) })
-    .on('[data-open-handle]', { element: (element) => void element.setInnerContent(header.handle) })
     .on('[data-open-link]', {
       element: (element) => {
         if (header.link) element.setAttribute('href', header.link);

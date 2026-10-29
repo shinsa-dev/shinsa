@@ -85,7 +85,7 @@ function ReviewDescription({ payload }: { payload: ReviewPayload }) {
   );
 }
 
-function InviteHeader({ header }: { header: PendingHeader }) {
+function InviteHeader({ header, facts }: { header: PendingHeader; facts: React.ReactNode }) {
   return (
     <OpenHeader
       title={<span data-open-title>{header.title}</span>}
@@ -95,11 +95,7 @@ function InviteHeader({ header }: { header: PendingHeader }) {
         </p>
       }
       link={header.link}
-      facts={
-        <p data-open-handle className='text-fg-2 text-xs'>
-          {header.handle}
-        </p>
-      }
+      facts={facts}
     />
   );
 }
@@ -107,7 +103,10 @@ function InviteHeader({ header }: { header: PendingHeader }) {
 function InvitePage({ header }: { header: PendingHeader }) {
   return (
     <>
-      <InviteHeader header={header} />
+      <InviteHeader
+        header={header}
+        facts={header.handle && <p className='text-fg-2 text-xs'>{header.handle}</p>}
+      />
       {header.link && (
         <div className={cn(PAGE_COLUMN, 'pt-6')}>
           <p className={PAGE_DESCRIPTION}>{openTask.unreviewed}</p>
@@ -150,5 +149,5 @@ export function OpenReview() {
   }, [header.link]);
   if (scene) return <ReviewPage scene={scene} />;
   if (read) return <InvitePage header={header} />;
-  return <InviteHeader header={header} />;
+  return <InviteHeader header={header} facts={null} />;
 }

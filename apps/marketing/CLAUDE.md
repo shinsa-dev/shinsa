@@ -88,13 +88,13 @@ src/
                             link's `#review=` fragment (readReviewFragment in lib/open.ts; the task built in
                             lib/open-scene.ts on OPEN_TASK_ID, which the demo server gives no repository;
                             components/demos/open-review.tsx, the page's only content, rendered at build time as the header
-                            with an empty title, handle and description; worker/open.ts fills them, the Open in Shinsa
+                            with an empty title and description and no handle; worker/open.ts fills them, the Open in Shinsa
                             link and the tab's title from the query before the page is sent (resolvePendingHeader), and
                             the island's first render in the browser computes the same header, so hydration matches the
                             Worker's HTML; both Download buttons are rendered and the Worker only toggles `hidden`, so
-                            the first paint is already the header and the review fills in under it). Without a review
-                            the same pinned header stays as painted, with "This link carries no review" under it and no
-                            Review tab, and Download alone and primary under "This link does
+                            the first paint is already the title and buttons, and everything the review adds appears
+                            under them, so nothing painted moves). Without a review the same pinned header stays as
+                            painted, with the handle and "This link carries no review" under it and no Review tab, and Download alone and primary under "This link does
                             not lead to a review" when the link names no task. The page is the window's height and
                             never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the

@@ -9,7 +9,6 @@ const PAGE = [
   '<a href="/download" data-open-task-only>Download Shinsa</a>',
   '<a href="/download" data-open-missing-only hidden="">Download Shinsa</a>',
   '<a href="shinsa://" data-open-link data-open-task-only>Open in Shinsa</a>',
-  '<p data-open-handle></p>',
   '</body></html>',
 ].join('');
 
@@ -46,7 +45,6 @@ describe('respondOpen', () => {
     expect(html).toContain('<a href="shinsa://task/id-1" data-open-link data-open-task-only>');
     expect(html).toContain('<a href="/download" data-open-task-only>');
     expect(html).toContain('<a href="/download" data-open-missing-only hidden="">');
-    expect(html).toContain('<p data-open-handle>LOC-28</p>');
     expect(html).toContain('<p data-open-description></p>');
     for (const [name, value] of Object.entries(OPEN_HEADERS)) expect(response.headers.get(name)).toBe(value);
     expect(response.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
