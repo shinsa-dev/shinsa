@@ -69,6 +69,37 @@ describe('set_schedule', () => {
     expect(reply).toContain('It is paused. Starts a new task.');
   });
 
+  test('a schedule that reads a data source says it reads it in this task', async () => {
+    const base = await createWorld();
+    await base.engine.dispatch({
+      type: 'repo.register',
+      repo: { name: 'web', path: '/code/web', defaultBranch: 'main', remote: null, checkCommands: [] },
+      projectName: 'Paywalls',
+    });
+    const repo = Object.values(base.engine.state.repos).find((candidate) => candidate.name === 'web');
+    const projectId = repo?.projectId ?? '';
+    const reader = await startTask(base.engine, repo?.id ?? '', base.dir, 'Read #feedback');
+    const world = { ...base, ...reader };
+    await world.engine.dispatch({
+      type: 'watch_source.write',
+      projectId,
+      server: 'slack',
+      data: 'The #feedback channel',
+      repoIds: [],
+    });
+    const { tool } = setUp(world);
+    const reply = await tool('set_schedule', {
+      message: 'Bug reports and feature requests.',
+      every_minutes: 60,
+      source: 'slack',
+    });
+    expect(only(world)).toMatchObject({
+      source: { projectId, server: 'slack' },
+      target: { kind: 'task', taskId: reader.taskId },
+    });
+    expect(reply).toEndWith('It reads slack in this task and files a task for each new report.');
+  });
+
   test('a message into another task names it', async () => {
     const world = await createWorld();
     const other = await startTask(world.engine, world.repoId, world.dir, 'Another task');

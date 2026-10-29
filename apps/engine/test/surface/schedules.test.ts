@@ -24,6 +24,10 @@ const RESPONSES = {
   '/api/schedules': { schedules: [schedule()] },
   '/api/repos': { repos: [{ id: 'repo-1', name: 'app' }] },
   '/api/tasks/fix': createTaskDetail(),
+  '/api/projects': {
+    projects: [{ id: 'proj-1', key: 'LOC', name: 'Shinsa', repos: [] }],
+    focus: { projectId: null, until: null },
+  },
 };
 
 async function write(words: string[]) {
@@ -154,6 +158,41 @@ describe('writing a schedule', () => {
     await expect(write(['--in-minutes', '5', '--task', 'fix', '--new-task'])).rejects.toThrow(
       'Give --new-task or --task, not both.'
     );
+  });
+
+  test('reading a data source names the project’s source, with or without a task to read it in', async () => {
+    const { command } = await write(['--every-minutes', '60', '--source', 'slack', '--project', 'LOC']);
+    expect(command).toMatchObject({ target: null, source: { projectId: 'proj-1', server: 'slack' } });
+    const inTask = await write([
+      '--every-minutes',
+      '60',
+      '--source',
+      'slack',
+      '--project',
+      'Shinsa',
+      '--task',
+      'fix',
+    ]);
+    expect(inTask.command).toMatchObject({
+      target: { kind: 'task', taskId: 'task-123' },
+      source: { projectId: 'proj-1', server: 'slack' },
+    });
+    const plain = await write(['--every-minutes', '60', '--task', 'fix']);
+    expect(plain.command).toMatchObject({ source: null });
+  });
+
+  test('a data source needs its project, and a project is only for a data source', async () => {
+    await expect(write(['--every-minutes', '60', '--source', 'slack'])).rejects.toThrow(
+      'Name the project whose data source it reads with --project.'
+    );
+    await expect(write(['--every-minutes', '60', '--project', 'LOC'])).rejects.toThrow(
+      'Give --project only with --source.'
+    );
+    await expect(
+      write(['--every-minutes', '60', '--source', 'slack', '--project', 'nope'])
+    ).rejects.toMatchObject({
+      code: 'project_not_found',
+    });
   });
 });
 

@@ -145,7 +145,7 @@ function resolveDriveFailure(error: unknown): AgentSessionResult {
 
 function resolveRoleCwd(run: Run, task: Task, repo: Repo) {
   const role = run.role;
-  if (role === 'answerer' || run.purpose === 'watch') return repo.path;
+  if (role === 'answerer' || run.purpose === 'watch' || run.purpose === 'intake') return repo.path;
   if (role === 'researcher') return task.worktreePath ?? repo.path;
   return task.worktreePath;
 }

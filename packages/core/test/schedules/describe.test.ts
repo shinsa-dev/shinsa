@@ -55,4 +55,17 @@ describe('describing a target', () => {
       'Messages a task'
     );
   });
+
+  test('a schedule that reads a data source names the source and the task it reads in', () => {
+    const reading = {
+      target: { kind: 'task', taskId: 't' },
+      source: { projectId: 'p', server: 'slack' },
+    } as Schedule;
+    expect(describeScheduleTarget(reading, () => 'Read #feedback')).toBe(
+      'Reads slack and files a task for each new report, in “Read #feedback”'
+    );
+    expect(describeScheduleTarget(reading, () => null)).toBe(
+      'Reads slack and files a task for each new report'
+    );
+  });
 });

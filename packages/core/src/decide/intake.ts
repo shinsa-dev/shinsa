@@ -109,7 +109,7 @@ function resolveSourceReport(command: CommandOf<'agent.file_report'>, scheduleId
   };
 }
 
-function assertForkable(task: Task, forkOf: string | null) {
+function assertForkOfOther(task: Task, forkOf: string | null) {
   if (forkOf !== task.id) return;
   throw new DomainError(
     'fork_intake',
@@ -134,7 +134,7 @@ export function fileReport(decider: Decider, command: CommandOf<'agent.file_repo
       `This report was already filed as ${filed.handle ?? filed.id} “${filed.title}”. Skip it and go on.`
     );
   }
-  assertForkable(task, command.forkOf);
+  assertForkOfOther(task, command.forkOf);
   createTask(
     decider,
     {

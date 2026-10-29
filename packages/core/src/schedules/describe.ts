@@ -44,5 +44,9 @@ export function describeScheduleTarget(schedule: Schedule, titleOf: (taskId: str
     return schedule.target.mode === 'ask' ? 'Asks a new question' : 'Starts a new task';
   }
   const title = titleOf(schedule.target.taskId);
+  if (schedule.source) {
+    const reads = `Reads ${schedule.source.server} and files a task for each new report`;
+    return title ? `${reads}, in “${title}”` : reads;
+  }
   return title ? `Messages “${title}”` : 'Messages a task';
 }

@@ -43,7 +43,7 @@ export const SCHEDULE_TOOL_SPECS = {
   set_schedule: {
     name: 'set_schedule',
     description: [
-      'Do something later, once or on a repeat: send a message into this task (the default), into another task (task_id), or start a new task each time (new_task) in this repository.',
+      'Do something later, once or on a repeat: send a message into this task (the default), into another task (task_id), start a new task each time (new_task) in this repository, or read a data source of the project (source) and file a task for each new report.',
       'Give exactly one of in_minutes, run_at, every_minutes, daily_at or webhook. Pass schedule_id to change or pause one; anything you leave out stays as it was, and a change that keeps the time keeps the next run.',
       'A run is skipped while the last one is still going, a machine that was asleep runs a missed schedule once when it wakes, and daily times follow the wall clock of time_zone.',
       'For a webhook, message is a template: {{body.path}}, {{headers.name}}, {{query.name}} and {{request}} are filled in from each request and marked as untrusted data. The reply gives the URL to hand to the sender.',
