@@ -172,9 +172,8 @@ describe('accounts end to end', () => {
     expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id]);
     expect(world.task(taskId).usageWait?.account).toEqual({ id: bound.id, email: 'b@example.com' });
     await passReset(clock, resetAt);
-    await world.untilStage(taskId, 'building');
-    expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id, bound.id]);
     await world.until('the builder', () => world.agents.of('build').length > 0);
+    expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id, bound.id]);
     expect(world.agents.of('build')[0]?.account).toBe(bound.id);
   });
 
