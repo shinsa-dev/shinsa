@@ -189,6 +189,7 @@ describe('a new pull request whose CI has not started yet', () => {
     await w.answer(gate, 'approve');
     await w.untilStage(taskId, 'merged');
     const merge = w.github.calls.find((call) => call[0] === 'pr' && call[1] === 'merge');
-    expect(merge?.slice(-2)).toEqual(['--match-head-commit', head]);
+    expect(merge?.slice(3, 6)).toEqual(['--squash', '--match-head-commit', head]);
+    expect(merge?.slice(6, 7)).toEqual(['--subject']);
   });
 });
