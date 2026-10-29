@@ -14,15 +14,15 @@ import type {
   WorkReport,
 } from './types.ts';
 
-const CHECK_MARK: Record<ReportCheck['outcome'], string> = { pass: '✓', fail: '✗', skipped: '–' };
+export const CHECK_MARK: Record<ReportCheck['outcome'], string> = { pass: '✓', fail: '✗', skipped: '–' };
 
 const ATTENTION_RANK: Record<Attention, number> = { critical: 0, high: 1, normal: 2 };
 
-function bulletList(items: string[]) {
+export function bulletList(items: string[]) {
   return items.map((item) => `- ${item}`).join('\n');
 }
 
-function describeSection(heading: string, body: string) {
+export function describeSection(heading: string, body: string) {
   return body ? `${heading}\n${body}` : '';
 }
 
@@ -34,7 +34,7 @@ function describePlanCheck(check: PlanCheck) {
   return `${check.label}: \`${check.command}\` (${describePhaseNumbers(check.phases)})`;
 }
 
-const CHECK_NOTE: Record<CheckNote, string> = {
+export const CHECK_NOTE: Record<CheckNote, string> = {
   passed_alone: 'passed when re-run alone',
   fails_on_base: 'already failing on the base branch',
 };

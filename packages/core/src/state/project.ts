@@ -615,6 +615,10 @@ function applyEvidenceRemoved(state: ShinsaState, event: EventOf<'evidence.remov
   });
 }
 
+function applyEvidenceUploaded(state: ShinsaState, event: EventOf<'evidence.uploaded'>) {
+  for (const upload of event.uploads) updateEvidence(state, upload.evidenceId, { uploadUrl: upload.url });
+}
+
 type WorkspaceEvent = Extract<
   ShinsaEvent,
   {
@@ -782,6 +786,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'evidence.removed':
       applyEvidenceRemoved(state, event);
+      break;
+    case 'evidence.uploaded':
+      applyEvidenceUploaded(state, event);
       break;
     case 'pull_request.opened':
     case 'pull_request.updated':

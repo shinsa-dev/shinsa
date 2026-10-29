@@ -4,6 +4,7 @@ import type {
   DeliveringStep,
   EditsApproval,
   Evidence,
+  EvidenceUpload,
   FindingVerdict,
   FixReason,
   Focus,
@@ -235,6 +236,7 @@ type EventBody =
   | { type: 'run.compacted'; runId: string; sessionId: string }
   | { type: 'evidence.attached'; evidence: Evidence; replaces?: string[] }
   | { type: 'evidence.removed'; taskId: string; ids: string[]; reason: string; runId: string }
+  | { type: 'evidence.uploaded'; taskId: string; uploads: EvidenceUpload[] }
   | { type: 'pull_request.opened'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.updated'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.push_requested'; taskId: string }
