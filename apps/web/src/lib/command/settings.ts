@@ -24,7 +24,6 @@ import {
 } from '@/lib/accounts/limits.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
-import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
@@ -95,13 +94,7 @@ import {
   resolveSettingsPath,
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
-import {
-  CANARY_DOWNLOAD_URL,
-  isChannelFixed,
-  parseUpdateChannel,
-  UPDATE_CHANNEL_ITEMS,
-  UPDATES_LABEL,
-} from '@/lib/updates.ts';
+import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate } from '@/router.ts';
@@ -137,6 +130,11 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     keywords: ['compaction', 'compact', 'eunoe', 'fold', 'idle sessions', 'context window'],
   },
   { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'delegations', 'merge'] },
+  {
+    title: 'Memory',
+    icon: 'IconLightbulbGlow',
+    keywords: ['rules', 'remember', 'preferences', 'instructions'],
+  },
   {
     title: VERSIONS_SECTION,
     icon: 'IconArrowDown',
@@ -195,7 +193,6 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
       'colours',
       'where agents work',
       'worktrees',
-      'gitbutler',
       'checkout',
     ],
   },
@@ -450,47 +447,28 @@ function listUsageChoices(
   return choices;
 }
 
-export interface WorkspaceChoices {
-  repos: Repo[];
-  support: WorkspaceSupportMap | null;
-}
-
-function listWorkspaceChoices({ repos, support }: WorkspaceChoices): Command[] {
+function listWorkspaceChoices(repos: Repo[]): Command[] {
   return [...repos]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((repo) => {
       const choice = settingChoice(
         `workspace.${repo.id}`,
         `${WORKSPACE_TITLE} in ${repo.name}`,
-        listWorkspaceItems(repo, support),
+        listWorkspaceItems(),
         resolveRepoWorkspace(repo),
         (value) => void changeWorkspace(repo, value as Parameters<typeof changeWorkspace>[1]),
         true
       );
-      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'gitbutler', 'main checkout'] };
+      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'main checkout'] };
     });
 }
 
 function listChannelChoices(channel: UpdateChannel | null): Command[] {
-  if (!channel || isChannelFixed(channel)) return [];
+  if (!channel) return [];
   return [
     settingChoice('update-channel', UPDATES_LABEL.channel, UPDATE_CHANNEL_ITEMS, channel, (value) =>
       applyDesktopChannel(parseUpdateChannel(value))
     ),
-  ];
-}
-
-function listCanaryCommands(channel: UpdateChannel | null): Command[] {
-  if (!channel || isChannelFixed(channel)) return [];
-  return [
-    {
-      kind: 'link',
-      id: 'settings.canary.download',
-      label: UPDATES_LABEL.downloadCanary,
-      icon: 'IconArrowUpRight',
-      keywords: ['canary', 'update channel', 'main', 'nightly', 'install'],
-      href: CANARY_DOWNLOAD_URL,
-    },
   ];
 }
 
@@ -499,7 +477,7 @@ export function listSettingsSections(
   providers: AgentProviderInfo[],
   notifications: NotificationPreferences,
   snapshot: AccountsSnapshot | null = null,
-  workspaces: WorkspaceChoices = { repos: [], support: null },
+  repos: Repo[] = [],
   explorerSide: ExplorerSide = 'left',
   updateChannel: UpdateChannel | null = null,
   rates: Map<string, UsageRate | null> | null = null
@@ -516,7 +494,7 @@ export function listSettingsSections(
         ...listGroupChoices(settings, providers, snapshot),
         ...listRoleChoices(settings, providers, snapshot),
         ...listUsageChoices(settings, snapshot, rates),
-        ...listWorkspaceChoices(workspaces),
+        ...listWorkspaceChoices(repos),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),
@@ -536,7 +514,6 @@ export function listSettingsSections(
           keywords: ['onboarding', 'setup steps', 'folders', 'start over'],
           run: () => void restartOnboarding(),
         },
-        ...listCanaryCommands(updateChannel),
       ],
     },
   ];

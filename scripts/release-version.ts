@@ -104,9 +104,9 @@ export function resolveReleasePlan({
 
 export function describeReleaseChannel(plan: ReleasePlan) {
   if (plan.channel === 'stable')
-    return `**Stable release.** Shinsa updates itself to ${plan.version} on the Stable and Beta channels, unless it already runs a newer beta. Shinsa Canary stays on canaries.`;
+    return `**Stable release.** Shinsa updates itself to ${plan.version} on the Stable and Beta channels, unless it already runs a newer beta. The Canary channel takes the next canary, built above it.`;
   if (plan.channel === 'canary')
-    return `**Canary build of main.** Shinsa Canary updates itself to it. It is a separate app beside Shinsa, with its own data and engine. Download it at ${CANARY_DOWNLOAD_URL}.`;
+    return `**Canary build of main.** Shinsa on the Canary channel updates itself to it (Settings → General → Updates). Download it at ${CANARY_DOWNLOAD_URL}.`;
   const base = plan.version.replace(/-beta\.\d+$/, '');
   return `**Beta of Shinsa ${base}.** Shinsa on the Beta channel updates itself to it, unless it already runs a newer version (Settings → General → Updates). Download it at ${BETA_DOWNLOAD_URL}.`;
 }

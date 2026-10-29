@@ -31,7 +31,7 @@ describe('settings tabs', () => {
       'Updates',
     ]);
     expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
-    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Versions']);
+    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Memory', 'Versions']);
     expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Projects']);
   });
 

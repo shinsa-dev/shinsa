@@ -1,4 +1,4 @@
-import { isTaskSettled, type ShinsaState, selectStackedOnTask, type Task } from '@shinsa/core';
+import { isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuGroup,
@@ -14,9 +14,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import {
   clearDependencies,
   describeWaitsOnHeading,
-  hasRemovableDependencies,
   listDependencyChoices,
-  resolveDependencyChoiceLabel,
   resolveDependencyLabel,
   toggleDependency,
 } from '@/lib/tasks/dependencies.ts';
@@ -26,7 +24,6 @@ import { navigate, resolveTaskPath } from '@/router.ts';
 export function DependencyItems({ state, task }: { state: ShinsaState; task: Task }) {
   if (isTaskSettled(task)) return null;
   const choices = listDependencyChoices(state, task);
-  const stackedOn = selectStackedOnTask(state, task);
   return (
     <>
       {choices.length > 0 && (
@@ -42,19 +39,18 @@ export function DependencyItems({ state, task }: { state: ShinsaState; task: Tas
                 <DropdownMenuCheckboxItem
                   key={choice.id}
                   checked={task.waitsOn.includes(choice.id)}
-                  disabled={stackedOn?.id === choice.id}
                   onCheckedChange={() => void toggleDependency(task, choice)}
                 >
                   <Icon name={icon.name} className={icon.className} />
-                  <Truncate>{resolveDependencyChoiceLabel(stackedOn, choice)}</Truncate>
+                  <Truncate>{choice.title}</Truncate>
                 </DropdownMenuCheckboxItem>
               );
             })}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       )}
-      {hasRemovableDependencies(task, stackedOn) && (
-        <DropdownMenuItem icon='IconCrossMedium' onClick={() => void clearDependencies(task, stackedOn)}>
+      {task.waitsOn.length > 0 && (
+        <DropdownMenuItem icon='IconCrossMedium' onClick={() => void clearDependencies(task)}>
           Stop waiting
         </DropdownMenuItem>
       )}

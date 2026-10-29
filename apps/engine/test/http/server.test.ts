@@ -120,6 +120,37 @@ describe('request size', () => {
     expect(response.status).toBe(413);
     expect(Object.keys(engine.state.tasks)).toEqual([]);
   });
+
+  test('a body sent without a length is still held to 8 MB once read', async () => {
+    const { base, engine } = await start();
+    const chunks = [
+      Buffer.from('{"type":"task.create","request":"'),
+      Buffer.alloc(9_000_000, 120),
+      Buffer.from('"}'),
+    ];
+    const response = await fetch(`${base}/api/commands`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: new ReadableStream({
+        pull(controller) {
+          const chunk = chunks.shift();
+          if (chunk) controller.enqueue(chunk);
+          else controller.close();
+        },
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('over 8 MB');
+    expect(Object.keys(engine.state.tasks)).toEqual([]);
+  });
+
+  test('an attachment upload may be larger, up to its own limit', async () => {
+    const { post } = await start();
+    const data = Buffer.alloc(6_300_000).toString('base64');
+    const uploaded = await post('/api/attachments', { name: 'big.bin', data });
+    expect(uploaded.status).toBe(200);
+    expect(await uploaded.json()).toMatchObject({ name: 'big.bin', size: 6_300_000 });
+  });
 });
 
 describe('the health endpoint', () => {
@@ -131,7 +162,6 @@ describe('the health endpoint', () => {
       problems: [],
       version: '0.0.0',
       protocol: ENGINE_PROTOCOL,
-      flavor: 'stable',
       busy: false,
       restart: null,
       commit: null,
@@ -352,6 +382,43 @@ describe('read endpoints', () => {
     expect(
       (await call('/api/models', { method: 'POST', headers: { 'content-type': 'application/json' } })).status
     ).toBe(404);
+  });
+
+  test('an uploaded attachment is served back by its id and file name only', async () => {
+    const { call, post } = await start();
+    const response = await post('/api/attachments', {
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      data: Buffer.from('hello').toString('base64'),
+    });
+    const attachment = (await response.json()) as { url: string; path: string; kind: string };
+    expect(attachment.kind).toBe('file');
+    const served = await call(attachment.url);
+    expect(await served.text()).toBe('hello');
+    expect(served.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    expect((await call(attachment.url, { headers: { range: 'bytes=1-2' } })).status).toBe(206);
+    expect((await call('/api/attachments/..%2Fshinsa.sqlite')).status).toBe(404);
+    expect((await post('/api/attachments', { name: 'a.txt', data: '' })).status).toBe(400);
+  });
+
+  test('an uploaded page downloads in a sandbox and an image shows inline, neither can run script', async () => {
+    const { call, post } = await start();
+    const upload = async (name: string, mimeType: string, body: string) => {
+      const response = await post('/api/attachments', {
+        name,
+        mimeType,
+        data: Buffer.from(body).toString('base64'),
+      });
+      return call(((await response.json()) as { url: string }).url);
+    };
+    const page = await upload('report.html', 'text/html', '<script>fetch("/api/commands")</script>');
+    expect(page.headers.get('content-type')).toStartWith('text/html');
+    expect(page.headers.get('content-disposition')).toBe('attachment; filename="report.html"');
+    expect(page.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
+    expect(page.headers.get('x-content-type-options')).toBe('nosniff');
+    const image = await upload('shot.png', 'image/png', 'png bytes');
+    expect(image.headers.get('content-disposition')).toBeNull();
+    expect(image.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
   });
 
   test('evidence is served by its task, round and name only, cached and in ranges', async () => {

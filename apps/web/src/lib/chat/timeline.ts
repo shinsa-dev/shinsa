@@ -14,6 +14,7 @@ import {
   type LoadedExtensions,
   type Run,
   type ShinsaToolName,
+  splitMessageAttachments,
   type Task,
 } from '@shinsa/core';
 import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
@@ -205,15 +206,21 @@ function createToolCall(entry: ChatEntryOf<'tool_call'>): ToolCall {
   };
 }
 
+function resolveEchoKey(text: string) {
+  return splitMessageAttachments(text).text;
+}
+
 function attachEcho(items: TimelineItem[], entry: ChatEntryOf<'user'>) {
   if (entry.attachments.length === 0) return;
+  const key = resolveEchoKey(entry.text);
   const message = items
     .filter(
-      (item): item is TimelineItemOf<'human'> =>
-        item.kind === 'human' && item.text.trim() === entry.text.trim()
+      (item): item is TimelineItemOf<'human'> => item.kind === 'human' && resolveEchoKey(item.text) === key
     )
     .at(-1);
-  if (message && message.attachments.length === 0) message.attachments = entry.attachments;
+  if (!message || message.attachments.length > 0) return;
+  if (splitMessageAttachments(message.text).attachments.length > 0) return;
+  message.attachments = entry.attachments;
 }
 
 function resolveNoticeItems(entry: ChatEntryOf<'notice'>): TimelineItem[] {
@@ -314,7 +321,7 @@ function applyUserEntry(builder: TimelineBuilder, entry: ChatEntryOf<'user'>) {
     builder.seenBrief = true;
     return;
   }
-  if (builder.echoes.has(entry.text.trim())) {
+  if (builder.echoes.has(resolveEchoKey(entry.text))) {
     attachEcho(builder.items, entry);
     return;
   }
@@ -364,7 +371,7 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
   const builder: TimelineBuilder = {
     items: [],
     calls: [],
-    echoes: new Set(messages.map((message) => message.text.trim())),
+    echoes: new Set(messages.map((message) => resolveEchoKey(message.text))),
     seenBrief: false,
     group: null,
   };

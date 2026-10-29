@@ -24,6 +24,7 @@ import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { resolveNowTitle } from '@/lib/overview/now.ts';
 import {
   describeEscalationBody,
   describeReviewTitle,
@@ -152,6 +153,15 @@ export function OverviewSpecimens() {
               onReply={acknowledgeSample}
             />
           ))}
+        </Card>
+      </Specimen>
+      <Specimen label='NowCard · the agent resolving conflicts with main on a pull request that conflicts'>
+        <Card>
+          <NowFrame
+            eyebrow={<Eyebrow state={state} task={tasks.conflict} />}
+            title={resolveNowTitle(tasks.conflict, [], null, runs.conflict)}
+            footer={<TaskTrack task={tasks.conflict} />}
+          />
         </Card>
       </Specimen>
       <Specimen label='SilenceNote · no output for 5 minutes · orange from 15'>

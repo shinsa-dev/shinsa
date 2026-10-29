@@ -33,16 +33,11 @@ describe('parseDeepLink', () => {
   });
 });
 
-describe('Shinsa Canary’s links', () => {
-  it('opens its own scheme, and the shinsa:// links its pages carry', () => {
-    expect(parseDeepLink('shinsa-canary://task/LOC-4', 'shinsa-canary')).toBe('/tasks/LOC-4');
-    expect(parseDeepLink('shinsa://task/LOC-4', 'shinsa-canary')).toBe('/tasks/LOC-4');
+describe('isLinkProtocol', () => {
+  it('opens only shinsa:// links, in any case, on every update channel', () => {
+    expect(isLinkProtocol('SHINSA:')).toBe(true);
+    expect(isLinkProtocol('shinsa-canary:')).toBe(false);
     expect(parseDeepLink('shinsa-canary://task/LOC-4')).toBeNull();
-    expect(isLinkProtocol('SHINSA-CANARY:', 'shinsa-canary')).toBe(true);
-    expect(isLinkProtocol('shinsa-beta:', 'shinsa-canary')).toBe(false);
-    expect(findDeepLink(['/Applications/Shinsa Canary.app', 'shinsa-canary://home'], 'shinsa-canary')).toBe(
-      'shinsa-canary://home'
-    );
     expect(findDeepLink(['/Applications/Shinsa.app', 'shinsa-canary://home'])).toBeNull();
   });
 });

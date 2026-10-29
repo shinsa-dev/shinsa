@@ -220,7 +220,7 @@ describe('describeReleaseChannel', () => {
         notesStartTag: 'v1.2.0',
       })
     ).toBe(
-      '**Stable release.** Shinsa updates itself to 1.3.0 on the Stable and Beta channels, unless it already runs a newer beta. Shinsa Canary stays on canaries.'
+      '**Stable release.** Shinsa updates itself to 1.3.0 on the Stable and Beta channels, unless it already runs a newer beta. The Canary channel takes the next canary, built above it.'
     );
     expect(
       describeReleaseChannel({
@@ -244,7 +244,7 @@ describe('describeReleaseChannel', () => {
         notesStartTag: 'v1.3.1-canary.3',
       })
     ).toBe(
-      `**Canary build of main.** Shinsa Canary updates itself to it. It is a separate app beside Shinsa, with its own data and engine. Download it at ${CANARY_DOWNLOAD_URL}.`
+      `**Canary build of main.** Shinsa on the Canary channel updates itself to it (Settings → General → Updates). Download it at ${CANARY_DOWNLOAD_URL}.`
     );
   });
 });

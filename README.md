@@ -68,11 +68,10 @@ every build is a pre-release.
 
 To get new versions first, take the beta: [shinsa.dev/download/beta](https://shinsa.dev/download/beta) fetches the
 newest release, betas included. Betas update to newer betas and to each stable release once it is newer. For every
-change as it lands, take Shinsa Canary: [shinsa.dev/download/canary](https://shinsa.dev/download/canary) fetches the
-build of the latest merge to `main` that passed the tests. It is a separate app that installs beside Shinsa, with its
-own engine, data (`~/.config/shinsa-canary`), port (7447) and `shinsa-canary` command, and updates only to newer
-canaries, so it never replaces the Shinsa you use. Switch Shinsa between Stable and Beta in Settings → General →
-Updates, where a beta switched to Stable can go back to the latest stable release. All releases are on the
+change as it lands, take the canary: [shinsa.dev/download/canary](https://shinsa.dev/download/canary) fetches the
+build of the latest merge to `main` that passed the tests, and it updates to each newer canary. Switch Shinsa between
+Stable, Beta and Canary in Settings → General → Updates at any time; a beta or canary switched to Stable or Beta can
+go back to the latest version there. All releases are on the
 [releases page](https://github.com/shinsa-dev/shinsa/releases), and how they are made is
 [`docs/release.md`](docs/release.md).
 

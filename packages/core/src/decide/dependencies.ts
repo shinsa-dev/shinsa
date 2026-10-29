@@ -1,12 +1,5 @@
-import type { CommandOf } from '../commands/index.ts';
-import { compareTasks, DomainError, isTaskComplete, isTaskSettled, type Task } from '../domain/index.ts';
-import {
-  isDependencyOf,
-  listOpenGates,
-  listPendingDependencies,
-  selectStackedOnTask,
-  selectStackTarget,
-} from '../state/queries.ts';
+import { compareTasks, DomainError, isTaskComplete, type Task } from '../domain/index.ts';
+import { isDependencyOf, listOpenGates, listPendingDependencies } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
 import { reviewMergeHold } from './pull-requests.ts';
@@ -78,44 +71,6 @@ export function changeDependencies(
     case 'done':
     case 'cancelled':
       return;
-  }
-}
-
-export function stackTask(decider: Decider, command: CommandOf<'task.stack'>) {
-  const task = decider.task(command.taskId);
-  const below = selectStackTarget(decider.state, task, command.branch);
-  if (!below) {
-    throw new DomainError(
-      'stack_refused',
-      `No other open task of this repository works on ${command.branch} without waiting on this one, so this task cannot stack on it.`
-    );
-  }
-  if (task.stackedOn?.taskId !== below.id || task.stackedOn.branch !== command.branch) {
-    decider.emit({ type: 'task.stacked', taskId: task.id, onTaskId: below.id, branch: command.branch });
-  }
-  if (!task.waitsOn.includes(below.id))
-    changeDependencies(decider, task.id, [...task.waitsOn, below.id], 'shinsa');
-}
-
-export function assertStackKept(decider: Decider, task: Task, waitsOn: string[]) {
-  const below = selectStackedOnTask(decider.state, task);
-  if (!below || waitsOn.includes(below.id)) return;
-  throw new DomainError(
-    'dependency_stacked',
-    `This task’s branch is stacked on the branch of “${below.title}”, so it keeps waiting for “${below.title}” to merge. It stops waiting when “${below.title}” merges or is cancelled.`
-  );
-}
-
-export function unstackTasksOn(decider: Decider, taskId: string) {
-  for (const above of Object.values(decider.state.tasks)) {
-    if (above.stackedOn?.taskId !== taskId || isTaskSettled(above)) continue;
-    decider.emit({ type: 'task.unstacked', taskId: above.id, fromTaskId: taskId });
-    changeDependencies(
-      decider,
-      above.id,
-      above.waitsOn.filter((id) => id !== taskId),
-      'shinsa'
-    );
   }
 }
 

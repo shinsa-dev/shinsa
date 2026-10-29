@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import type { CoverageSetting, Repo, Task } from '@shinsa/core';
 import { createWorktree } from '../../src/git/index.ts';
 import { measureTaskCoverage } from '../../src/test-coverage/index.ts';
-import { LedgerStore } from '../../src/workspaces/ledger.ts';
 import { createGitRepo, createTempDir, git, until, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
@@ -56,14 +55,12 @@ function measure(
   task: Partial<Task>,
   coverage: CoverageSetting,
   signal = new AbortController().signal,
-  ledgers = new LedgerStore(createTempDir()),
   commands: string[] = []
 ) {
   return measureTaskCoverage({
     repo: { ...repo, coverage },
     task: createTask({ branch: 'feat/sub', ...task }),
     commands,
-    ledgers,
     baseBranch: null,
     signal,
     timeoutMs: 5_000,
@@ -125,7 +122,6 @@ describe('measuring the changed lines', () => {
       repo: { ...repo, coverage: custom('sleep 5') },
       task: createTask({ branch: 'feat/sub', worktreePath: worktree }),
       commands: [],
-      ledgers: new LedgerStore(createTempDir()),
       baseBranch: null,
       signal: new AbortController().signal,
       timeoutMs: 50,
@@ -150,12 +146,10 @@ describe('measuring the changed lines', () => {
   test('off, Auto with no test among the checks, no checkout or a cancelled run record nothing', async () => {
     const { repo, worktree } = await createChangedWorktree();
     expect(
-      await measure(repo, { worktreePath: worktree }, { mode: 'off' }, undefined, undefined, ['bun test'])
+      await measure(repo, { worktreePath: worktree }, { mode: 'off' }, undefined, ['bun test'])
     ).toBeNull();
     const lint = ['bunx biome check src', 'bun run lint'];
-    expect(
-      await measure(repo, { worktreePath: worktree }, { mode: 'auto' }, undefined, undefined, lint)
-    ).toBeNull();
+    expect(await measure(repo, { worktreePath: worktree }, { mode: 'auto' }, undefined, lint)).toBeNull();
     expect(await measure(repo, { worktreePath: null }, custom('true'))).toBeNull();
     const stopped = new AbortController();
     stopped.abort();
@@ -190,7 +184,7 @@ describe('measuring the changed lines', () => {
       ].join('\n'),
     });
     const commands = ['bun test src/math.test.js', 'bun test --cwd src sub.test.js', 'bunx biome check src'];
-    const coverage = await measure(repo, { worktreePath: worktree }, { mode: 'auto' }, undefined, undefined, [
+    const coverage = await measure(repo, { worktreePath: worktree }, { mode: 'auto' }, undefined, [
       ...commands,
       commands[0] ?? '',
     ]);
@@ -212,109 +206,15 @@ describe('measuring the changed lines', () => {
       'src/math.test.js': "import { test } from 'bun:test';\nimport './math.js';\ntest('loads', () => {});\n",
     });
     const auto = { mode: 'auto' } as const;
-    const none = await measure(repo, { worktreePath: worktree }, auto, undefined, undefined, [
-      'go test ./nothing',
-    ]);
+    const none = await measure(repo, { worktreePath: worktree }, auto, undefined, ['go test ./nothing']);
     expect(none).toMatchObject({
       status: 'unavailable',
       reason: expect.stringContaining('It wrote no report at'),
     });
-    const some = await measure(repo, { worktreePath: worktree }, auto, undefined, undefined, [
+    const some = await measure(repo, { worktreePath: worktree }, auto, undefined, [
       'go test ./nothing',
       'bun test src/math.test.js',
     ]);
     expect(some).toMatchObject({ status: 'measured' });
-  });
-});
-
-const OTHER_HEADER = ['// another task', '// wrote these two lines', ''].join('\n');
-
-const WORKSPACE_LCOV = [
-  'SF:$PWD/src/math.js',
-  'DA:1,0',
-  'DA:2,0',
-  'DA:3,4',
-  'DA:4,4',
-  'DA:5,4',
-  'DA:7,0',
-  'DA:8,0',
-  'end_of_record',
-  'SF:src/other.js',
-  'DA:1,0',
-  'DA:2,0',
-  'end_of_record',
-  'SF:src/stray.js',
-  'DA:1,0',
-  'end_of_record',
-  'SF:src/fresh.js',
-  'DA:1,1',
-  'end_of_record',
-].join('\\n');
-
-async function createGitButlerWorkspace() {
-  const { repo } = await createGitRepo({
-    files: { 'src/math.js': SOURCE, 'src/other.js': 'export const other = 1;\n' },
-  });
-  const path = repo.path;
-  await git(path, 'checkout', '-q', '-b', 'feat/sub', 'main');
-  writeFiles(path, { 'src/math.js': CHANGED });
-  await git(path, 'commit', '-qam', 'feat: sub');
-  await git(path, 'checkout', '-q', '-b', 'feat/other', 'main');
-  writeFiles(path, {
-    'src/math.js': `${OTHER_HEADER}${SOURCE}`,
-    'src/other.js': 'export const other = 2;\n',
-  });
-  await git(path, 'commit', '-qam', 'feat: other');
-  await git(path, 'checkout', '-q', '-b', 'gitbutler/workspace', 'main');
-  await git(path, 'merge', '-q', '--no-edit', 'feat/sub', 'feat/other');
-  writeFiles(path, {
-    'src/fresh.js': 'export const fresh = 1;\n',
-    'src/other.js': 'export const other = 2;\nexport const more = 3;\n',
-    'src/stray.js': 'export const stray = 1;\n',
-  });
-  const ledgers = new LedgerStore(createTempDir());
-  ledgers.write(repo.id, {
-    owners: {
-      'src/fresh.js': { taskId: 'task-1', hash: 'fresh' },
-      'src/other.js': { taskId: 'task-2', hash: 'other' },
-    },
-    baselines: {},
-  });
-  return { repo, ledgers };
-}
-
-describe('measuring a task in a GitButler workspace', () => {
-  test('counts only the task’s own lines, where they sit in the shared checkout, never another task’s', async () => {
-    const { repo, ledgers } = await createGitButlerWorkspace();
-    const command = writeReport(WORKSPACE_LCOV);
-    const task = { worktreePath: repo.path, workspace: 'gitbutler' as const };
-    expect(await measure(repo, task, custom(command), undefined, ledgers)).toEqual({
-      status: 'measured',
-      command,
-      covered: 2,
-      executable: 4,
-      files: [
-        { path: 'src/math.js', covered: 1, executable: 3, uncovered: [[7, 8]] },
-        { path: 'src/fresh.js', covered: 1, executable: 1, uncovered: [] },
-      ],
-    });
-  });
-
-  test('a task with nothing committed yet counts only the files it owns', async () => {
-    const { repo, ledgers } = await createGitButlerWorkspace();
-    await git(repo.path, 'branch', 'feat/empty', 'main');
-    const command = writeReport(WORKSPACE_LCOV);
-    const task = { branch: 'feat/empty', worktreePath: repo.path, workspace: 'gitbutler' as const };
-    expect(await measure(repo, task, custom(command), undefined, ledgers)).toMatchObject({
-      covered: 1,
-      executable: 1,
-      files: [{ path: 'src/fresh.js' }],
-    });
-    const unowned = { ...task, id: 'task-3' };
-    expect(await measure(repo, unowned, custom(command), undefined, ledgers)).toMatchObject({
-      covered: 0,
-      executable: 0,
-      files: [],
-    });
   });
 });

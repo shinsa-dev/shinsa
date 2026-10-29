@@ -1,9 +1,8 @@
 import { resolve } from 'node:path';
-import { type AppFlavor, ENGINE_PROTOCOL } from '@shinsa/core';
+import { ENGINE_PROTOCOL } from '@shinsa/core';
 import enginePackage from '../../package.json' with { type: 'json' };
 import { runCommand } from '../shell/index.ts';
 import { BUNDLE, type ShinsaBundle } from './bundle.ts';
-import { FLAVOR } from './flavor.ts';
 
 export interface ServerInstance {
   version: string;
@@ -28,7 +27,6 @@ export interface EngineActivity {
 export interface ServerHealth extends ServerInstance, EngineActivity {
   ok: boolean;
   protocol: number;
-  flavor: AppFlavor;
   seq: number;
   problems: readonly HealthProblem[];
   dataDir: string;
@@ -40,8 +38,7 @@ export function resolveHealth(
   dataDir: string,
   instance: ServerInstance,
   activity: EngineActivity,
-  now = Date.now(),
-  flavor: AppFlavor = FLAVOR.flavor
+  now = Date.now()
 ): ServerHealth {
   return {
     ok: log.problems.length === 0,
@@ -49,7 +46,6 @@ export function resolveHealth(
     problems: log.problems,
     ...instance,
     protocol: ENGINE_PROTOCOL,
-    flavor,
     ...activity,
     dataDir,
     uptimeMs: Math.max(0, now - instance.startedAt),

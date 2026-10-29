@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   resolveAllowedHosts,
   resolveBodyRefusal,
+  resolveBodySizeRefusal,
   resolveRefusal,
   resolveUpgradeRefusal,
 } from '../../src/http/index.ts';
@@ -59,5 +60,15 @@ describe('resolveUpgradeRefusal', () => {
   test('a WebSocket needs an Origin to check', () => {
     expect(resolveUpgradeRefusal(request({}))).toBe('A WebSocket needs an Origin header.');
     expect(resolveUpgradeRefusal(request({ origin: 'http://localhost:5180' }))).toBeNull();
+  });
+});
+
+describe('resolveBodySizeRefusal', () => {
+  test('refuses a declared length over the limit and takes one at it or without one', () => {
+    expect(resolveBodySizeRefusal(request({}), 8)).toBeNull();
+    expect(resolveBodySizeRefusal(request({ 'content-length': '8' }), 8)).toBeNull();
+    expect(
+      resolveBodySizeRefusal(request({ 'content-length': String(40 * 1024 * 1024) }), 33 * 1024 * 1024)
+    ).toBe('The request body is over 33 MB.');
   });
 });

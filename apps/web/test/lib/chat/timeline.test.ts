@@ -283,6 +283,28 @@ describe('resolveTimeline', () => {
     expect(only(items, 'human').map((item) => item.at)).toEqual([15]);
   });
 
+  it('matches an echo by its text without the attachments block, and never doubles the files', () => {
+    const shot = {
+      kind: 'image' as const,
+      name: 'a.png',
+      url: '/api/attachments/1/a.png',
+      mimeType: null,
+      size: null,
+    };
+    const sent =
+      'Fix this\n\n<attachments>\n<attachment kind="image" path="/d/a.png" url="/api/attachments/1/a.png" />\n</attachments>';
+    const withBlock = only(
+      resolveTimeline([createUserEntry('Fix this', 20, [shot])], [{ at: 15, text: sent }]),
+      'human'
+    );
+    expect(withBlock.map((item) => [item.at, item.attachments])).toEqual([[15, []]]);
+    const plain = only(
+      resolveTimeline([createUserEntry('Fix this', 20, [shot])], [{ at: 15, text: 'Fix this' }]),
+      'human'
+    );
+    expect(plain.map((item) => [item.at, item.attachments])).toEqual([[15, [shot]]]);
+  });
+
   it('groups consecutive tool calls into one row and starts a new group after any other item', () => {
     const items = resolveTimeline(
       [

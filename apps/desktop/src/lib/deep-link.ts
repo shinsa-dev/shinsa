@@ -1,7 +1,6 @@
-import { APP_FLAVORS } from '@shinsa/core';
-import { FLAVOR } from './flavor.ts';
+import { APP_IDENTITY } from '@shinsa/core';
 
-export const URL_SCHEME = FLAVOR.scheme;
+export const URL_SCHEME = APP_IDENTITY.scheme;
 
 const TASK_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 
@@ -30,14 +29,14 @@ function resolveTaskPath(segment: string | undefined) {
   return `/tasks/${encodeURIComponent(reference)}`;
 }
 
-export function parseDeepLink(raw: string, scheme = URL_SCHEME) {
+export function parseDeepLink(raw: string) {
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
     return null;
   }
-  if (!isLinkProtocol(url.protocol, scheme)) return null;
+  if (!isLinkProtocol(url.protocol)) return null;
   const [kind = '', reference, ...rest] = listSegments(url);
   const name = kind.toLowerCase();
   if (name === 'task' && rest.length === 0) return resolveTaskPath(reference);
@@ -45,10 +44,10 @@ export function parseDeepLink(raw: string, scheme = URL_SCHEME) {
   return '/';
 }
 
-export function isLinkProtocol(protocol: string, scheme = URL_SCHEME) {
-  return [scheme, APP_FLAVORS.stable.scheme].some((each) => `${each}:` === protocol.toLowerCase());
+export function isLinkProtocol(protocol: string) {
+  return protocol.toLowerCase() === `${URL_SCHEME}:`;
 }
 
-export function findDeepLink(argv: readonly string[], scheme = URL_SCHEME) {
-  return argv.find((argument) => isLinkProtocol(/^[a-z-]+:/i.exec(argument)?.[0] ?? '', scheme)) ?? null;
+export function findDeepLink(argv: readonly string[]) {
+  return argv.find((argument) => isLinkProtocol(/^[a-z-]+:/i.exec(argument)?.[0] ?? '')) ?? null;
 }

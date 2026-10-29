@@ -13,8 +13,6 @@ import { openReviewGate } from './lifecycle.ts';
 
 const MAX_STALLED_FIXES = 2;
 
-const AUTO_FIX_CEILING = 12;
-
 const MAX_REVIEW_ROUNDS = 3;
 
 const FIX_STAGE_REASON: Record<FixReason, string> = {
@@ -22,10 +20,15 @@ const FIX_STAGE_REASON: Record<FixReason, string> = {
   review: 'fixing review findings',
   you: 'making your changes',
   pull_request: 'fixing the pull request',
-  conflict: 'resolving conflicts',
+  conflict: 'resolving conflicts with the base branch',
   update: 'resolving conflicts with the base branch',
   hook: 'fixing what the pre-push hook found',
 };
+
+function resolveFixStageReason(reason: FixReason, base: string | null) {
+  if (base && (reason === 'conflict' || reason === 'update')) return `resolving conflicts with ${base}`;
+  return FIX_STAGE_REASON[reason];
+}
 
 type FixStop = { reason: Exclude<ReviewEscalationReason, 'rounds'>; stalled: number; limit: number };
 
@@ -50,9 +53,9 @@ export function clearFixLoop(decider: Decider, taskId: string) {
 }
 
 function resolveFixStop(decider: Decider, task: Task, stalled: number): FixStop | null {
-  const limit = decider.state.settings.maxFixRounds ?? AUTO_FIX_CEILING;
-  if (stalled >= MAX_STALLED_FIXES) return { reason: 'stalled', stalled, limit };
-  if (task.fixRounds >= limit) return { reason: 'exhausted', stalled, limit };
+  const limit = decider.state.settings.maxFixRounds;
+  if (stalled >= MAX_STALLED_FIXES) return { reason: 'stalled', stalled, limit: limit ?? 0 };
+  if (limit !== null && task.fixRounds >= limit) return { reason: 'exhausted', stalled, limit };
   return null;
 }
 
@@ -99,7 +102,8 @@ export function startFix(
   taskId: string,
   reason: FixReason,
   prompt: string,
-  signature: string | null
+  signature: string | null,
+  base: string | null = null
 ) {
   const task = decider.task(taskId);
   const stalled = countFixRepeats(task, reason, signature);
@@ -122,7 +126,7 @@ export function startFix(
     stalled,
     treeHash: task.treeHash ?? null,
   });
-  decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
+  decider.stage(taskId, 'fixing', resolveFixStageReason(reason, base));
   const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));
   decider.startRun(
     decider.task(taskId),

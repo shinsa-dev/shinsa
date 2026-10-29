@@ -27,6 +27,7 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'report_review',
   'ask',
   'suggest_tasks',
+  'remember',
   'answer',
   'report_diagnosis',
   'submit_report',
@@ -223,6 +224,8 @@ function describeShinsaMessage(
       const count = readList(args, 'tasks').length;
       return plain('IconLightbulbGlow', `Suggested ${formatCount(count, 'task', 'tasks')}`);
     }
+    case 'remember':
+      return plain('IconLightbulbGlow', 'Proposed a rule to remember:', readString(args, 'text'));
     case 'delegation_answer':
       return plain('IconBubbleText', 'Answered a delegated agent:', readString(args, 'answer'));
     case 'request_secret':
@@ -381,6 +384,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',
+  remember: (count) => (count === 1 ? 'proposed a rule to remember' : `proposed ${count} rules to remember`),
   answer: () => 'handed over the answer',
   report_diagnosis: () => 'reported the diagnosis',
   submit_report: () => 'wrote the report',

@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { HEADLESS_BROWSER_ENV } from '../../../extensions/definitions.ts';
+import { resolveBrowserEnv } from '../../../extensions/definitions.ts';
 import { type ClaudeExecutable, type ExecutableResolver, resolveClaudeExecutable } from './executable.ts';
 
 export type QueryFn = typeof query;
@@ -26,7 +26,7 @@ function resolveClaudeEnv(): Record<string, string | undefined> {
     EUNOE_DIR: _eunoeDir,
     ...env
   } = Bun.env;
-  return { ...env, ...HEADLESS_BROWSER_ENV };
+  return resolveBrowserEnv(env);
 }
 
 export async function resolveClaudeProcess(resolveExecutable: ExecutableResolver) {

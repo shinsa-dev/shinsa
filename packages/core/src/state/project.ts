@@ -5,6 +5,7 @@ import {
   type Focus,
   formatTaskHandle,
   type Gate,
+  type MemoryEntry,
   NO_PROJECT_KEY,
   needsWorktree,
   type OnBehalfAction,
@@ -42,6 +43,7 @@ import { applyDelegationEvent, recordCourierTask, resolveLineage } from './deleg
 import { removeEntry, writeEntry } from './draft.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
@@ -66,6 +68,7 @@ export interface ShinsaState {
   evidence: Record<string, Evidence>;
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
+  memories: Record<string, MemoryEntry>;
   sessionUsage: Record<string, RunUsage>;
   onBehalfActions: OnBehalfAction[];
 }
@@ -88,6 +91,7 @@ export function createState(): ShinsaState {
     evidence: {},
     briefings: {},
     schedules: {},
+    memories: {},
     sessionUsage: {},
     onBehalfActions: [],
   };
@@ -232,7 +236,8 @@ function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
 }
 
 function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
-  const previous = state.tasks[event.taskId]?.stage;
+  const task = state.tasks[event.taskId];
+  const previous = task?.stage;
   const stage = event.stage;
   updateTask(state, event.taskId, event.at, {
     stage,
@@ -241,7 +246,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
   const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
-  const text = answered ? null : describeStage(stage);
+  const text = answered ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
   if (text && previous !== stage) {
     record(state, event.taskId, event.at, { actor: event.by ?? 'shinsa', kind: 'stage', text });
   }
@@ -418,7 +423,6 @@ function applyFixStarted(state: ShinsaState, event: EventOf<'fix.started'>) {
     stalledFixes: event.stalled ?? 0,
     fixFingerprints: listFixFingerprints(task, event),
     ...(fixing && task?.approvedEdits ? { approvedEdits: null } : {}),
-    ...(fixing && event.reason === 'conflict' && task?.heldConflict ? { heldConflict: null } : {}),
   });
   if (fixing) {
     record(state, event.taskId, event.at, {
@@ -730,14 +734,6 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'worktree.removed':
       updateTask(state, event.taskId, event.at, { worktreePath: null });
       break;
-    case 'task.stacked':
-      updateTask(state, event.taskId, event.at, {
-        stackedOn: { taskId: event.onTaskId, branch: event.branch },
-      });
-      break;
-    case 'task.unstacked':
-      updateTask(state, event.taskId, event.at, { stackedOn: undefined });
-      break;
     case 'plan.proposed':
       applyPlanProposed(state, event);
       break;
@@ -843,9 +839,6 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.edits_approved':
       updateTask(state, event.taskId, event.at, { approvedEdits: event.gate });
       break;
-    case 'task.conflict_held':
-      updateTask(state, event.taskId, event.at, { heldConflict: event.branch });
-      break;
     case 'task.suggested':
       applySuggested(state, event);
       break;
@@ -906,6 +899,11 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'schedule.removed':
     case 'schedule.fired':
       applyScheduleEvent(state, event);
+      break;
+    case 'memory.written':
+    case 'memory.proposed':
+    case 'memory.removed':
+      applyMemoryEvent(state, event);
       break;
   }
   return state;

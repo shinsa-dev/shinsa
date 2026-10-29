@@ -1,11 +1,14 @@
-import { resolveTaskProject, type ShinsaState } from '@shinsa/core';
+import { resolveTaskProject, type ShinsaState, serializeAttachments } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shinsa/ui/components/select';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { AttachButton, AttachmentChips, useFileDrop } from '@/components/chat/attachment-chips.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { COMPOSER_FIELD, COMPOSER_FOOTER } from '@/components/layout/surface/card.ts';
 import { ProjectOption } from '@/components/status/project-dot.tsx';
+import { useAttachments } from '@/hooks/use-attachments.ts';
+import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useConnection } from '@/lib/connection/socket.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
@@ -127,7 +130,9 @@ export function NewTaskForm() {
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
   const { choices } = resolveForm(state, chosen);
-  const ready = request.trim().length > 0 && !busy;
+  const attachments = useAttachments();
+  const { dragging, dropProps, onPaste } = useFileDrop(attachments);
+  const ready = canSendDraft(request, attachments.drafts, busy);
   const copy = describeNewTask(isWaitingStart(choices.start));
   const choose = (part: Partial<NewTaskChoices>) => setChosen((current) => ({ ...current, ...part }));
   useNewTaskRequest((draft) => {
@@ -143,19 +148,25 @@ export function NewTaskForm() {
   async function submit() {
     if (!ready) return;
     setBusy(true);
-    const sent = await sendCommandWithToast(createNewTaskCommand(request, choices), copy.done);
+    const sent = await sendCommandWithToast(
+      createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
+      copy.done
+    );
     setBusy(false);
     if (!sent) return;
     setRequest('');
+    attachments.clear();
     setChosen(AUTO_CHOICES);
   }
 
   return (
-    <div className='flex w-full flex-col'>
+    <div {...dropProps} className={cn('flex w-full flex-col', dragging && 'bg-primary-a1')}>
+      <AttachmentChips attachments={attachments} />
       <textarea
         ref={field}
         value={request}
         onChange={(event) => setRequest(event.target.value)}
+        onPaste={onPaste}
         onKeyDown={(event) => {
           if (!isSubmitKey(event)) return;
           event.preventDefault();
@@ -166,6 +177,7 @@ export function NewTaskForm() {
         className={cn(COMPOSER_FIELD, 'max-h-72 min-h-20')}
       />
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
+        <AttachButton attachments={attachments} />
         <NewTaskFields state={state} chosen={chosen} onChoose={choose} />
         <span className='flex-1' />
         <Button size='sm' disabled={!ready} loading={busy} onClick={() => void submit()}>

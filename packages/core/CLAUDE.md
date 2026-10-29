@@ -17,7 +17,8 @@ src/
 │                    call, the one source for decide and prompts; listToolNames, what a session is served: one union
 │                    for the TASK_SESSION_ROLES; isHandOverTool, and PURPOSE_HAND_OVERS: the hand-over each purpose
 │                    of the task's agent may call), the delegation limits, isReadOnlyRole and isReadOnlyRun (the
-│                    agent is read-only while it plans) (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), pull request watch
+│                    agent is read-only while it plans) (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), memory (memory.ts:
+│                    MemoryEntry, MEMORY_LIMITS), pull request watch
 │                    types, time units (time.ts), task shapes (shapes.ts: SHAPE_PIPELINES (the presets),
 │                    validateComposition (the rules checker for the steps the agent composes while it plans), the shape
 │                    of a task, resolveShapeState (whether triage or the agent may still change the steps),
@@ -38,7 +39,7 @@ src/
 │                    canChangeRoundShipping, selectShippingTarget), gates (gates.ts: isPausingGate, isDecisionGate
 │                    for plan, review and merge, isAgentQuestion for a question or a secret), the on-your-behalf record
 │                    (on-behalf.ts: OnBehalfAction), where agents work (workspaces.ts: WORKSPACE_MODES,
-│                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON, canUseGitButler; resolveApprovalPath, what
+│                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON; resolveApprovalPath, what
 │                    approving the review or the merge does with your edits, for decide and the web's toast), the
 │                    files another open task changes too (overlaps.ts: listNewOverlapPaths, describeOverlaps, the
 │                    note the Agent's next turn gets)
@@ -61,13 +62,11 @@ src/
 │                    write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
 │                    behalf marks the activity it records), activity.ts (the wording of a task's activity),
 │                    queries.ts (list*, find/select, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
-│                    resolveTaskProject, selectTaskByReference, selectStackTarget, selectStackedOnTask and
-│                    resolvePullRequestBase for a GitButler task stacked on another's branch), and the folds by
-│                    concern, each an apply*Event:
+│                    resolveTaskProject, selectTaskByReference), and the folds by concern, each an apply*Event:
 │                    runs.ts (attempts, links, lost sessions, metering per attempt with its weekly readings,
 │                    silence, compaction), gates.ts (opened,
 │                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
-│                    delegations.ts, schedules.ts, suggestions.ts, reviews.ts (verdicts), accounts.ts (binding),
+│                    delegations.ts, schedules.ts, suggestions.ts, memory.ts (rules written, proposed, removed), reviews.ts (verdicts), accounts.ts (binding),
 │                    shapes.ts (reshapes, results, proposed changes), project.ts also folds the checks
 │                    (plan.proposed sets Task.checks from the plan's verification; checks.changed applies the
 │                    agent's changes and drops a changed check's result; checks.started sets runningChecks, which
@@ -96,16 +95,18 @@ src/
 │   │                repository's checks)
 │   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection, review escalation
 │   ├── fingerprints.ts  Recovery and fix fingerprints, so prose never resets a budget
-│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues; the
+│   ├── pull-requests.ts  Pushing, reacting to a synced pull request (reactToWatch: a conflict with the base starts a
+│   │                fix in the Agent's session, `fixFor: 'conflict'`, in every workspace), the merge gate (kept for its
+│   │                head, `gate.commit`, while a read of that head needs no fix), merging that head and merge queues; the
 │   │                steps of a push as stage reasons (recordShippingStep), a visible retry (recordPushRetry), a
 │   │                conflict while updating onto the base (recordUpdateConflict, `fixFor: 'update'`) and a pre-push
 │   │                hook rejection (recordHookFailure, `fixFor: 'hook'`; the same failures again open the `push_hook`
 │   │                gate, retryHookFix answers it); after the checks of such a fix the push follows (checks.ts)
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
-│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
-│   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
-│   │                     task on another's branch (stackTask), the lock on that dependency (assertStackKept) and
-│   │                     unstacking the tasks above one that settles without a merge (unstackTasksOn)
+│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
+│   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
+│   │                from the push, resolvePullRequestCi)
+│   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks
 │   ├── merge-steps.ts  The steps around the merge you tick (merge_step.tick, human-only), the merge gate's wait for
 │   │                the ones before it (assertMergeStepsDone), no done while one after it is open
 │   │                (assertNoMergeStepsLeft), and syncMergeSteps (after every command, for the tasks it changed:
@@ -129,6 +130,10 @@ src/
 │   │                superseding an open question; a message sent for you to a task at a gate is only recorded, for
 │   │                its next agent; needsMessageKind (the server classifies such a message first, never at those
 │   │                gates);
+│   │                new work never waits behind your own decision: new_round (or separate_task with no room for a
+│   │                suggestion) that would only start after you approve or merge is delivered as feedback
+│   │                (isHeldByYourDecision); sendQueuedRound (round.send) gives a waiting round to the current one
+│   │                as your message;
 │   │                the inbox: receiveMessage, routeMessage (delivers with the classifier's kind), dropMessage
 │   ├── retry.ts     Retry: restart the current step with a fresh fix budget
 │   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),
@@ -144,18 +149,15 @@ src/
 │   ├── tasks.ts     Creating, triaging, prioritising, cancelling and completing tasks; worktrees
 │   ├── workspaces.ts  Asking for a task's workspace in its repository's mode, and waiting for a main checkout
 │   │                another task holds (holdForCheckout)
-│   ├── conflicts.ts Commits GitButler left conflicted on a task's branch (recordConflict): steer the Agent at work,
-│   │                start a fix (`fixFor: 'conflict'`) at the review gate, the merge gate or while shipping, or
-│   │                hold it (task.conflict_held) for the Agent's next build, fix or operation turn (tellHeldConflict,
-│   │                from Decider.startRun) or the task's next review or merge gate (startHeldConflictFix);
-│   │                a GitButler pull request that conflicts with its base: the Update the workspace gate
-│   │                (askToUpdateWorkspace, `cause: 'workspace_update'`), `but pull` (the workspace.update effect)
-│   │                and the conflict fix after it (recordWorkspaceUpdate)
 │   ├── suggestions.ts  Tasks an agent suggests, accepting and dismissing them, split-offs and keeping one
 │   │                as the next round
+│   ├── memory.ts    The rules agents remember: writing, keeping and removing one (human-only, refused on your behalf),
+│   │                an agent's proposal (agent.remember) and a removed project's rules
 │   ├── rounds.ts    A new round waiting, starting the next one when the current one rests (startQueuedRounds, after
 │   │                every command), its branch and pull request, switching how a round ships, changing or
-│   │                removing a round that waits (updateRound, removeRound)
+│   │                removing a round that waits (updateRound, removeRound, findWaitingRound), and what releases the
+│   │                next round (resolveRoundRelease: now, once the round finishes, or after you approve, approve and
+│   │                merge, or merge; isHeldByYourDecision)
 │   ├── config.ts    Setup verification and its configuration gate
 │   ├── monitors.ts  wait_for: arming, waking and checking a monitor
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
@@ -208,7 +210,9 @@ src/
 ├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking, a task as text for
 │                    an agent (task-detail.ts: serializeTaskDetail, what `read_task` and `tasks_show` read), the
 │                    other open work in a task's repository (repository-work.ts: listRepositoryWork,
-│                    serializeRepositoryWork, what `list_repository_work` reads), and
+│                    serializeRepositoryWork, what `list_repository_work` reads), the `<attachments>` block a
+│                    message or request carries its files in (attachments.ts: splitMessageAttachments,
+│                    serializeAttachments), and
 │                    sentence helpers (text.ts: describeCount, describeList, capitalise, lowerFirst)
 ├── prompts/         House rules and splitting them off a brief (rules.ts) and the delegation rules
 │                    (orchestration-rules.ts), the step catalog, rules and plan parameters the agent reads while it
@@ -222,7 +226,9 @@ src/
 │                    rules for managing Shinsa every role gets (manage.ts, MANAGE_RULES), the follow-up on a finished
 │                    round (follow-up.ts, resolveFollowUpPrompt), the project a fresh
 │                    run is told about, and the repository outside it the task works in, if any (project.ts,
-│                    resolveProjectContext)
+│                    resolveProjectContext), the rules a run is told: all for a fresh session, the new ones for a
+│                    resumed one (memory.ts, resolveMemoryTold), and the writing rules every role gets (rules.ts,
+│                    WRITING_RULES)
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,

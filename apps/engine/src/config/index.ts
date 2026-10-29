@@ -1,8 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { FlavorIdentity } from '@shinsa/core';
+import { APP_IDENTITY } from '@shinsa/core';
 import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
-import { FLAVOR } from '../instance/flavor.ts';
 import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
@@ -16,6 +15,7 @@ export interface ServerConfig {
   databasePath: string;
   worktreesDir: string;
   evidenceDir: string;
+  attachmentsDir: string;
   transcriptsDir: string;
   pluginDir: string;
   webDir: string;
@@ -68,8 +68,8 @@ function resolveEunoe(env: Env): EunoeConfig {
   return { command: env.SHINSA_EUNOE || null, port };
 }
 
-function resolvePortFrom(env: Env, machine: MachineConfig, flavor: FlavorIdentity) {
-  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? flavor.port);
+function resolvePortFrom(env: Env, machine: MachineConfig) {
+  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? APP_IDENTITY.port);
   if (port > 65_535) throw new Error(`SHINSA_PORT must be a port number, not "${port}".`);
   return port;
 }
@@ -78,12 +78,12 @@ function resolveHostname(env: Env, machine: MachineConfig) {
   return env.SHINSA_HOST || machine.hostname || '127.0.0.1';
 }
 
-export function resolveServerAddress(env: Env, flavor: FlavorIdentity = FLAVOR) {
-  const machine = readMachineConfig(resolveShinsaPaths(env, flavor).configPath).config;
+export function resolveServerAddress(env: Env) {
+  const machine = readMachineConfig(resolveShinsaPaths(env).configPath).config;
   const hostname = resolveHostname(env, machine);
   return {
     hostname: WILDCARD_HOSTS.has(hostname) ? '127.0.0.1' : hostname,
-    port: resolvePortFrom(env, machine, flavor),
+    port: resolvePortFrom(env, machine),
   };
 }
 
@@ -93,16 +93,13 @@ function resolveDataPaths(dataDir: string, env: Env) {
     databasePath: join(dataDir, DATABASE_FILE),
     worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
     evidenceDir: join(dataDir, 'evidence'),
+    attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
   };
 }
 
-export function resolveConfig(
-  env: Env,
-  bundle: ShinsaBundle | null = BUNDLE,
-  flavor: FlavorIdentity = FLAVOR
-): ServerConfig {
-  const paths = resolveShinsaPaths(env, flavor);
+export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): ServerConfig {
+  const paths = resolveShinsaPaths(env);
   const read = readMachineConfig(paths.configPath);
   const machine = read.config;
   const hostname = resolveHostname(env, machine);
@@ -117,7 +114,7 @@ export function resolveConfig(
     webDir:
       env.SHINSA_WEB_DIR ||
       (bundle ? resolveBundlePath(bundle, 'web') : resolve(import.meta.dirname, '../../../web/dist')),
-    port: resolvePortFrom(env, machine, flavor),
+    port: resolvePortFrom(env, machine),
     hostname,
     allowedHosts: [
       ...new Set([...LOOPBACK_HOSTS, ...configured, ...readList(env.SHINSA_ALLOWED_HOSTS, ',')]),

@@ -147,7 +147,7 @@ export type GateType =
   | 'sign_in'
   | 'post_merge';
 
-export type GateCause = 'budget' | 'monitor' | 'workspace_update' | 'push_hook';
+export type GateCause = 'budget' | 'monitor' | 'push_hook';
 
 export type EditsApproval = 'review' | 'merge';
 
@@ -370,11 +370,6 @@ export interface UndeliveredMessage {
   reason: string;
 }
 
-export interface TaskStack {
-  taskId: string;
-  branch: string;
-}
-
 export interface TaskOverlap {
   taskId: string;
   paths: string[];
@@ -397,7 +392,6 @@ export interface Task {
   worktreePath: string | null;
   workspace?: WorkspaceMode;
   returnBranch?: string;
-  stackedOn?: TaskStack;
   plan: Plan | null;
   phases: PhaseProgress[];
   planAnswers: string | null;
@@ -410,6 +404,7 @@ export interface Task {
   fixSignature: string | null;
   stalledFixes: number;
   pushedSha?: string | null;
+  pushedAt?: number | null;
   pushedFrom?: string | null;
   pushPending?: boolean;
   recoveries: number;
@@ -460,7 +455,6 @@ export interface Task {
   untoldEdits?: string[];
   overlaps?: TaskOverlap[];
   approvedEdits?: EditsApproval | null;
-  heldConflict?: string | null;
   pushHookFailure?: PushHookFailure | null;
   mergeStepsDone?: string[];
   carriedMergeSteps?: CarriedMergeStep[];

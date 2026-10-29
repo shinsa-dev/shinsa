@@ -68,6 +68,29 @@ describe('the process tools', () => {
     );
   });
 
+  test('remember proposes the rule and lets the agent carry on', async () => {
+    const { sent, call } = createCall();
+    const reply = await handleProcessTool(
+      'remember',
+      { scope: 'global', text: ' Keep plans short. ', why: 'The human said so twice.' },
+      call
+    );
+    expect(reply).toBe('Proposed. The human decides whether agents remember it. Carry on with your step.');
+    expect(sent).toEqual([
+      {
+        type: 'agent.remember',
+        runId: 'run-1',
+        attemptId: 'a-1',
+        scope: 'global',
+        text: 'Keep plans short.',
+        why: 'The human said so twice.',
+      },
+    ]);
+    expect(handleProcessTool('remember', { scope: 'repo', text: 'x', why: 'y' }, call)).rejects.toThrow(
+      'scope must be one of global, project.'
+    );
+  });
+
   test('suggest_tasks hands the follow-ups over and lets the agent carry on', async () => {
     const { sent, call } = createCall();
     const reply = await handleProcessTool(
