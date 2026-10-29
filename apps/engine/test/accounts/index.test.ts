@@ -505,7 +505,7 @@ describe('importing logins', () => {
     world.processes.at(-1)?.exit(0);
     await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
     expect(world.accounts.snapshot().login?.message).toBe(
-      'You signed in as other@example.com, not swap@example.com. Sign in as swap@example.com to add it.'
+      'You signed in as other@example.com, not swap@example.com. Sign in as swap@example.com instead.'
     );
     await until('the account to be removed', () => world.accounts.store.list().length === 0);
     await until('the account to be offered again', () => world.accounts.snapshot().imports.length === 1);
@@ -516,7 +516,7 @@ describe('importing logins', () => {
     world.processes.at(-1)?.exit(0);
     await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
     expect(world.accounts.snapshot().login?.message).toBe(
-      'You signed in as another account, not swap@example.com. Sign in as swap@example.com to add it.'
+      'You signed in as another account, not swap@example.com. Sign in as swap@example.com instead.'
     );
   });
 
@@ -950,6 +950,52 @@ describe('moving a rejected attempt to another account', () => {
     expect(await lease(world)).toMatchObject({ id: 'legacy', configDir: dir });
   });
 
+  test.each(['claude', 'cswap'] as const)(
+    'signing in again to a %s account as another email changes nothing and signs the wrong login out',
+    async (origin) => {
+      const root = createTempDir();
+      writeLegacyAccount(root, origin, 'me@example.com');
+      const world = createWorld({ root });
+      await world.accounts.refresh();
+
+      await world.accounts.startLogin('legacy');
+      const dir = world.accounts.store.find('legacy').configDir as string;
+      world.statuses.set(dir, { loggedIn: true, email: 'other@example.com' });
+      world.processes.at(-1)?.exit(0);
+      await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
+      const message =
+        'You signed in as other@example.com, not me@example.com. Sign in as me@example.com instead.';
+      expect(world.accounts.snapshot().login?.message).toBe(message);
+      expect(world.accounts.store.find('legacy')).toMatchObject({ origin, email: 'me@example.com' });
+      expect(world.accounts.snapshot().accounts[0]).toMatchObject({
+        signIn: 'signed_out',
+        signInDetail: message,
+      });
+      expect(
+        world.calls.some((call) => call.command[2] === 'logout' && call.env.CLAUDE_CONFIG_DIR === dir)
+      ).toBe(true);
+      expect(dispatched(world).some((command) => command.type === 'account.signed_in')).toBe(false);
+
+      await world.accounts.startLogin('legacy');
+      world.statuses.set(dir, { loggedIn: true, email: 'ME@example.com' });
+      world.processes.at(-1)?.exit(0);
+      await until('the sign-in to finish', () => world.accounts.logins.current()?.phase === 'done');
+      expect(world.accounts.store.find('legacy')).toMatchObject({ origin: 'login', configDir: dir });
+    }
+  );
+
+  test('signing in again to your own account as another email keeps the account and its email', async () => {
+    const world = createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    await world.accounts.startLogin(a.id);
+    world.statuses.set(a.configDir as string, { loggedIn: true, email: 'b@example.com' });
+    world.processes.at(-1)?.exit(0);
+    await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
+    expect(world.accounts.store.find(a.id)).toMatchObject({ origin: 'login', email: 'a@example.com' });
+    expect(world.accounts.store.list()).toHaveLength(1);
+    expect(world.accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
+  });
+
   test('a login another process refreshed meanwhile is tried once more on the same account', async () => {
     const world = createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
@@ -1311,7 +1357,7 @@ describe('when the outside world fails', () => {
     missing = false;
     const warn = spyOn(log, 'warn');
     await accounts.remove(account.id);
-    expect(warn).toHaveBeenCalledWith('[Accounts] Could not sign a removed account out', {
+    expect(warn).toHaveBeenCalledWith('[Accounts] Could not sign an account’s folder out', {
       accountId: account.id,
       code: 1,
     });

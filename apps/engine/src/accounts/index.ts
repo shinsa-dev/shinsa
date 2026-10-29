@@ -588,11 +588,14 @@ export class Accounts {
       return { ok: false, message: 'Sign-in finished, but Claude still reports this account as signed out.' };
     }
     const isNew = this.#newLogins.has(accountId);
-    if (isNew && account.email && status.email?.toLowerCase() !== account.email.toLowerCase()) {
-      return {
-        ok: false,
-        message: `You signed in as ${status.email ?? 'another account'}, not ${account.email}. Sign in as ${account.email} to add it.`,
-      };
+    if (account.email && status.email?.toLowerCase() !== account.email.toLowerCase()) {
+      const message = `You signed in as ${status.email ?? 'another account'}, not ${account.email}. Sign in as ${account.email} instead.`;
+      if (!isNew) {
+        await this.#signOutFolder(account);
+        this.#signIns.set(accountId, { signIn: 'signed_out', detail: message });
+        this.#changed();
+      }
+      return { ok: false, message };
     }
     const twin = this.store.selectByIdentity(status, accountId);
     if (twin && isNew) {
@@ -683,17 +686,22 @@ export class Accounts {
     return this.snapshot();
   }
 
-  async #forget(accountId: string) {
-    const account = this.store.find(accountId);
-    if (account.configDir) {
-      const claude = await this.#resolveClaude();
-      const result = await this.#run([claude, 'auth', 'logout'], this.#config.userHome, {
-        env: resolveAccountEnv(account.configDir),
-        timeoutMs: STATUS_TIMEOUT_MS,
+  async #signOutFolder(account: StoredAccount) {
+    if (!account.configDir) return;
+    const claude = await this.#resolveClaude();
+    const result = await this.#run([claude, 'auth', 'logout'], this.#config.userHome, {
+      env: resolveAccountEnv(account.configDir),
+      timeoutMs: STATUS_TIMEOUT_MS,
+    });
+    if (!result.ok)
+      log.warn('[Accounts] Could not sign an account’s folder out', {
+        accountId: account.id,
+        code: result.code,
       });
-      if (!result.ok)
-        log.warn('[Accounts] Could not sign a removed account out', { accountId, code: result.code });
-    }
+  }
+
+  async #forget(accountId: string) {
+    await this.#signOutFolder(this.store.find(accountId));
     this.store.remove(accountId);
     this.limits.remove(accountId);
     this.#signIns.delete(accountId);

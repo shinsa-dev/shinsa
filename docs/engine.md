@@ -3680,7 +3680,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   or `claude-swap` when `cswap` is missing, cached 10 minutes) whose email is not an account, as a sign-in: `POST
   /api/accounts/import` with `{ origin: 'cswap', email }` starts one (Signing in, above) for a new `login` account
   that carries that email, and a sign-in as anyone else fails ("You signed in as a@example.com, not b@example.com.
-  Sign in as b@example.com to add it.") and the account is removed again, and the entry is offered once more. A
+  Sign in as b@example.com instead.") and the account is removed again, and the entry is offered once more. A
   fresh sign-in is a login of its own, with its own refresh token, so Shinsa, Claude Code and claude-swap each
   refresh theirs, as two machines do. claude-swap is only ever asked for its list. An email that is already an
   account is refused (`account_exists`).
@@ -3692,7 +3692,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   give Shinsa a login of its own."), without asking `claude auth status`, which still says signed in for a dead
   copy; it is never a candidate for a lease, so a task bound to it runs on the default login, as for a removed
   account; and a changed stored login never counts as working again. Signing in to it again gives it a folder when
-  it has none (`AccountStore.createFolder`) and makes it a `login` account, which works as any other.
+  it has none (`AccountStore.createFolder`) and makes it a `login` account, which works as any other. Signing in
+  again to any account with an email must be as that email: a sign-in as anyone else fails with the same message,
+  signs the folder out again (`claude auth logout`) so the wrong login is not kept, and leaves the account as it was
+  (its email, its origin, signed out with that message), so it never becomes another login or a duplicate.
 - **One login, one account** (`isSameIdentity`, `AccountStore.resolveDuplicates` in `accounts/store.ts`). A login is
   its email and organization, compared without case; an organization that is not known yet matches any, and the same
   email in another organization is another login. A shared login (above) can be the same login as an account you
