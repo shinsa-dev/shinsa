@@ -5,6 +5,7 @@ import {
   type Round,
   type Run,
   type Schedule,
+  SHAPE_PIPELINES,
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
@@ -231,6 +232,34 @@ export function createSampleQueueTask(now: number, count: number): Task {
       ...waiting,
     ],
   });
+}
+
+export function createSampleMergeQueueState(now: number): ShinsaState {
+  const queued = createSampleQueueTask(now, 1);
+  const task: Task = {
+    ...queued,
+    id: 'sample-queue-merge',
+    stage: 'awaiting_merge',
+    stageReason: 'waiting for your merge',
+    rounds: (queued.rounds ?? []).map((round) =>
+      round.status === 'waiting'
+        ? {
+            ...round,
+            title: 'Start the dev server',
+            request: 'Can you start the dev server so I can test the UI?',
+            pipeline: [...SHAPE_PIPELINES.operation],
+          }
+        : round
+    ),
+  };
+  const gate = createSampleGate(now, {
+    id: 'sample-queue-merge-gate',
+    taskId: task.id,
+    type: 'merge',
+    title: 'Merge the pull request',
+    round: 2,
+  });
+  return createSampleState({ tasks: [task], gates: [gate] });
 }
 
 export function createSampleRoundsTask(now: number): Task {

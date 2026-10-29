@@ -16,7 +16,7 @@ const TASK_EFFECTS: ShinsaEffect[] = [
   { kind: 'config.verify', taskId: 't' },
   { kind: 'pull_request.open', taskId: 't' },
   { kind: 'pull_request.push', taskId: 't' },
-  { kind: 'pull_request.merge', taskId: 't' },
+  { kind: 'pull_request.merge', taskId: 't', headSha: null },
   { kind: 'pull_request.watch', taskId: 't' },
 ];
 

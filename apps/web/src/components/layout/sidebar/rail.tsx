@@ -25,7 +25,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
   }
 
   return (
-    <nav className='flex h-full w-full select-none flex-col bg-sidebar [--glyph-ring:var(--color-sidebar)]'>
+    <nav className='flex h-full w-full select-none flex-col bg-sidebar'>
       <div data-window-drag className='flex h-11 shrink-0 items-center gap-2 desktop:ps-20 ps-3.5 pe-2'>
         <HomeLink onNavigate={onNavigate} />
         <ErrorBoundary size='icon' resetKey={resetKey}>

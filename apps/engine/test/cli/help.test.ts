@@ -47,9 +47,9 @@ describe('shinsa help', () => {
     expect(USAGE).not.toMatch(/\bserve\b/);
     expect(USAGE).not.toContain('shinsa engine');
     expect(USAGE).not.toContain('keeps it running');
-    expect(
-      describeHelp(PLAIN_DISPLAY, { version: '0.5.0', commit: 'a'.repeat(40), flavor: 'stable' })
-    ).toStartWith('Shinsa hands coding work to agents and brings back only the decisions. (0.5.0 (aaaaaaa))');
+    expect(describeHelp(PLAIN_DISPLAY, { version: '0.5.0', commit: 'a'.repeat(40) })).toStartWith(
+      'Shinsa hands coding work to agents and brings back only the decisions. (0.5.0 (aaaaaaa))'
+    );
   });
 
   test('in a terminal headings are bold, commands take the accent and arguments are dim', () => {

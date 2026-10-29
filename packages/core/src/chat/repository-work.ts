@@ -1,6 +1,6 @@
 import { isTaskSettled, resolveRoundBase, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { listActiveRuns, selectStackedOnTask } from '../state/queries.ts';
+import { listActiveRuns } from '../state/queries.ts';
 import { STAGE_WORDS, serializeReference } from './references.ts';
 
 const WORK_LIMIT = 20;
@@ -22,15 +22,9 @@ function describeTask(task: Task) {
   return `${task.handle ? `${task.handle} ` : ''}[${task.title}](${serializeReference({ kind: 'task', id: task.id })})`;
 }
 
-function describeStack(state: ShinsaState, task: Task, current: Task) {
-  const below = selectStackedOnTask(state, task);
-  const parts: string[] = [];
-  if (below)
-    parts.push(below.id === current.id ? 'stacked on this task' : `stacked on ${describeTask(below)}`);
-  if (selectStackedOnTask(state, current)?.id === task.id) parts.push('this task is stacked on it');
+function describeRoundBase(task: Task) {
   const round = resolveRoundBase(task);
-  if (round) parts.push(`this round is stacked on branch ${round}`);
-  return parts;
+  return round ? `this round is stacked on branch ${round}` : '';
 }
 
 function describeFiles(paths: readonly string[]) {
@@ -55,7 +49,7 @@ function describeWork(state: ShinsaState, task: Task, current: Task, files: Repo
     describeTask(task),
     STAGE_WORDS[task.stage],
     task.branch ? `branch ${task.branch}` : '',
-    ...describeStack(state, task, current),
+    describeRoundBase(task),
     running ? 'an agent is working on it now' : 'no agent is working on it now',
   ];
   return [`- ${parts.filter(Boolean).join(' · ')}`, describeChanged(files, task, current)].join('\n');

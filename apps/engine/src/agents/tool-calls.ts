@@ -7,7 +7,6 @@ import {
   resolveCurrentRound,
   type ShinsaCommand,
   type ShinsaEvent,
-  selectStackTarget,
   serializeTaskReferences,
   validateEvidenceRemoval,
   validateFixHandOver,
@@ -20,7 +19,6 @@ import type { Engine } from '../runtime/engine.ts';
 import type { ScheduleToolCall } from '../schedules/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
 import type { Workspaces } from '../workspaces/index.ts';
-import { LedgerStore } from '../workspaces/ledger.ts';
 import { awaitDelegation } from './delegations.ts';
 import { assertProtocol, HANDED_OVER, readString, resolveCommitMessage, storeEvidence } from './handover.ts';
 import { createManageClient, isSurfaceTool, type ManageAccess, readSurfaceToolCall } from './manage/index.ts';
@@ -51,7 +49,6 @@ interface ToolCallsOptions {
   minuteMs: number;
   manage: ManageAccess | null;
   workspaces: Workspaces;
-  dataDir: string;
   services: TaskServiceRunner | null;
 }
 
@@ -77,7 +74,7 @@ export class ToolCalls {
 
   constructor(options: ToolCallsOptions) {
     this.#options = options;
-    this.#work = new RepositoryWork(options.engine, new LedgerStore(options.dataDir));
+    this.#work = new RepositoryWork(options.engine);
   }
 
   handle(name: string, call: ToolCall): Promise<string> {
@@ -145,17 +142,10 @@ export class ToolCalls {
     const { run, task } = this.#findCurrent(call.runId, call.attemptId);
     const repo = task.repoId ? this.#options.engine.state.repos[task.repoId] : undefined;
     if (!task.worktreePath || !repo) return dispatch({ ...command, treeHash: null });
-    const { engine, workspaces } = this.#options;
-    const commit = await workspaces
+    const commit = await this.#options.workspaces
       .resolve(task)
-      .commit(
-        repo,
-        task,
-        resolveCommitMessage(task, run),
-        (branch) => selectStackTarget(engine.state, task, branch) !== null
-      );
+      .commit(repo, task, resolveCommitMessage(task, run));
     try {
-      if (commit.stackedOn) await dispatch({ type: 'task.stack', taskId: task.id, branch: commit.stackedOn });
       await this.#work.recordOverlaps(task.id, [], call.signal);
       return await dispatch({ ...command, treeHash: commit.treeHash, files: commit.files });
     } catch (error) {

@@ -8,8 +8,7 @@ const FIX_OPENINGS: readonly (readonly [string, FixFocus])[] = [
   ['The agent review found', 'review'],
   ['The human looked at the work', 'changes'],
   ['Pull request #', 'pull_request'],
-  ['GitButler left', 'conflicts'],
-  ['Your pull request conflicted', 'conflicts'],
+  ['The pull request conflicts with', 'conflicts'],
   ['The branch was being updated onto', 'conflicts'],
   ["The repository's pre-push hook", 'push_hook'],
 ];

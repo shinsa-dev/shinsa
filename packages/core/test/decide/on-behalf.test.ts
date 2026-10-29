@@ -457,6 +457,11 @@ describe('the summary of each action', () => {
     expect(lastAction(harness).summary).toBe('Changed queued round 2 of “Fix tab group scroll”');
     actOnBehalf(harness, { type: 'round.remove', taskId, number: 2 });
     expect(lastAction(harness).summary).toBe('Removed queued round 2 of “Fix tab group scroll”');
+    harness.send({ type: 'task.message', taskId, text: 'Also the scrollbar.', kind: 'new_round' });
+    actOnBehalf(harness, { type: 'round.send', taskId, number: 2 });
+    expect(lastAction(harness).summary).toBe(
+      'Sent queued round 2 of “Fix tab group scroll” to its current round'
+    );
     harness.send({ type: 'task.message', taskId, text: 'Rename the settings page.', kind: 'separate_task' });
     const split = harness.task(taskId).suggestions?.find((suggestion) => suggestion.splitOff)?.id ?? '';
     actOnBehalf(harness, { type: 'suggestion.keep', taskId, suggestionId: split });

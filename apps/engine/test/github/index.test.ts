@@ -16,7 +16,7 @@ import {
   serializePullRequest,
   serializePullRequestBody,
 } from '../../src/github/index.ts';
-import { createGitRepo, createTempDir, overrideEnv } from '../helpers/index.ts';
+import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 
 let restore: (() => void) | null = null;
@@ -416,6 +416,28 @@ describe('the gh calls', () => {
     }
   });
 
+  test('merging names the commit you approved, and GitHub refuses it once the branch moved on', async () => {
+    const { repo, path } = await createGitRepo({ remote: false });
+    const head = (await git(path, 'rev-parse', 'HEAD')).trim();
+    const branch = (await git(path, 'branch', '--show-current')).trim();
+    const github = useFakeGitHub([
+      { ...pull, head: branch },
+      { ...pull, number: 8, head: branch },
+    ]);
+    const restoreOrigin = overrideEnv({ FAKE_GH_ORIGIN: path });
+    try {
+      await expect(mergePullRequest(repo, 7, 'squash', 'c0ffee0')).rejects.toThrow(
+        'Head branch was modified'
+      );
+      await mergePullRequest(repo, 8, 'squash', head);
+    } finally {
+      restoreOrigin();
+    }
+    const calls = github.read().calls.filter((call) => call[1] === 'merge');
+    expect(calls.at(-1)).toEqual(['pr', 'merge', '8', '--squash', '--match-head-commit', head]);
+    expect(github.read().pulls.map((entry) => entry.state)).toEqual(['OPEN', 'MERGED']);
+  });
+
   test('opening reuses an open pull request, otherwise creates one against the right base', async () => {
     const github = useFakeGitHub([pull]);
     const { repo, path } = await createGitRepo({ remote: false });
@@ -451,13 +473,16 @@ describe('the gh calls', () => {
     const github = useFakeGitHub([pull]);
     const { repo } = await createGitRepo({ remote: false });
     await retargetPullRequest(repo, 7, 'develop');
-    await mergePullRequest(repo, 7, 'squash');
+    await mergePullRequest(repo, 7, 'squash', null);
     expect(github.read().pulls[0]).toMatchObject({
       base: 'develop',
       state: 'MERGED',
       mergedWith: '--squash',
     });
-    await expect(mergePullRequest(repo, 7, '--admin' as 'squash')).rejects.toThrow('is not a merge method');
+    await expect(mergePullRequest(repo, 7, '--admin' as 'squash', null)).rejects.toThrow(
+      'is not a merge method'
+    );
+    await expect(mergePullRequest(repo, 7, 'squash', '--admin')).rejects.toThrow('is not a commit');
     await expect(retargetPullRequest(repo, 7, '--evil')).rejects.toThrow('is not a branch name');
   });
 });

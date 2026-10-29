@@ -2,8 +2,11 @@ import {
   type AccountsSnapshot,
   createSettings,
   KNOWN_AGENT_PROVIDERS,
+  type MemoryEntry,
+  type Project,
   type ProviderLogin,
   type Settings,
+  type ShinsaState,
 } from '@shinsa/core';
 import * as React from 'react';
 import { type AccountActions, AccountsGroup } from '@/components/settings/accounts.tsx';
@@ -11,6 +14,7 @@ import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
+import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
 import { PluginsGroup } from '@/components/settings/plugins.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
@@ -19,6 +23,7 @@ import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
+import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
@@ -88,7 +93,7 @@ const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; u
     update: { status: 'downgrade', version: '1.2.0' },
   },
   {
-    label: 'UpdatesGroup · Shinsa Canary, the next canary downloading',
+    label: 'UpdatesGroup · Canary, the next canary downloading',
     version: '1.3.1-canary.4',
     channel: 'canary',
     update: { status: 'downloading', version: '1.3.1-canary.5', percent: 42 },
@@ -205,6 +210,50 @@ function createScheduleScene(now: number) {
   return { state: createSampleState({ tasks: [task], schedules }), schedules };
 }
 
+const SAMPLE_MEMORY_ACTIONS: MemoryActions = {
+  write: acknowledgeSample,
+  keep: acknowledgeSample,
+  remove: acknowledgeSample,
+};
+
+function createMemoryScene(now: number): ShinsaState {
+  const project: Project = {
+    id: 'shinsa',
+    name: 'Shinsa',
+    color: 'blue',
+    key: 'SW',
+    description: '',
+    folders: [],
+  };
+  const rule = (id: string, text: string, overrides: Partial<MemoryEntry> = {}): MemoryEntry => ({
+    id,
+    projectId: null,
+    text,
+    why: null,
+    status: 'kept',
+    taskId: null,
+    runId: null,
+    createdAt: now - HOUR,
+    updatedAt: now - HOUR,
+    ...overrides,
+  });
+  const entries = [
+    rule('proposed', 'Keep plans to three phases or fewer.', {
+      status: 'proposed',
+      projectId: 'shinsa',
+      why: 'You asked for a shorter plan twice on “Add the export”.',
+    }),
+    rule('dashes', 'Never use em dashes in UI copy or messages.'),
+    rule('terse', 'Keep hand-overs short: lead with the result, no recap.'),
+    rule('bun', 'Run the focused test file before the whole suite.', { projectId: 'shinsa' }),
+  ];
+  return {
+    ...createSampleState({ tasks: [] }),
+    projects: { shinsa: project },
+    memories: Object.fromEntries(entries.map((entry) => [entry.id, entry])),
+  };
+}
+
 function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }) {
   const [settings, setSettings] = React.useState(initial);
   return (
@@ -228,9 +277,20 @@ export function SettingsSpecimens() {
   const [scenes] = React.useState(() => createAccountScenes(now));
   const [extensions] = React.useState(() => createSampleExtensions(now));
   const [versions] = React.useState(createSampleVersions);
+  const [memory] = React.useState(() => createMemoryScene(now));
   const settings = createSettings();
   return (
     <>
+      <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>
+        <div className='w-full max-w-xl'>
+          <MemorySettings state={memory} actions={SAMPLE_MEMORY_ACTIONS} />
+        </div>
+      </Specimen>
+      <Specimen label='MemorySettings · nothing remembered yet'>
+        <div className='w-full max-w-xl'>
+          <MemorySettings state={createSampleState({ tasks: [] })} actions={SAMPLE_MEMORY_ACTIONS} />
+        </div>
+      </Specimen>
       <ModelsSpecimen
         label='ModelsGroup · Task agents on Opus, Quick jobs on Sonnet; Per role folded'
         initial={settings}

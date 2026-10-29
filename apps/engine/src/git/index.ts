@@ -14,7 +14,6 @@ export {
   resolveIsolatedPath,
 } from './isolation.ts';
 export {
-  createPushError,
   hasPrePushHook,
   PushError,
   pushBranch,

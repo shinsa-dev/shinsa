@@ -52,36 +52,6 @@ describe('the command guard', () => {
     }
   });
 
-  test('in a GitButler workspace the agent only reads and resolves conflicted commits in place', () => {
-    for (const command of [
-      'but commit -b feat/x -m x',
-      'but push feat/x',
-      'but pull',
-      'but resolve 1a2b3c4',
-      'but resolve finish',
-      'but resolve --ai',
-      'cd app && but move feat/x --above fix/y',
-      'but --json unapply feat/x',
-      'but -C /tmp/app discard nk',
-      'git status; but undo',
-    ]) {
-      expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
-    }
-    for (const command of [
-      'but status --json',
-      'but diff',
-      'but show feat/x',
-      'but --json resolve conflicts feat/x',
-      "printf 'a\\n' | but resolve apply a.txt:1 --commit feat/x",
-      'but resolve apply a.txt --commit feat/x --theirs',
-      'but resolve status',
-      'but --help',
-      'echo "nothing but tests"',
-    ]) {
-      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
-    }
-  });
-
   test('keeps the agent off the default branch, whatever characters its name has', () => {
     expect(denied('git checkout main')).toBe(true);
     expect(denied('git switch -c main')).toBe(true);
@@ -161,7 +131,7 @@ describe('the command guard', () => {
       'shinsa repos update app --checks "bun test"',
       'shinsa repos update app --name web --checks lint',
       'shinsa repos update app --checks=lint',
-      'shinsa repos update app --workspace gitbutler',
+      'shinsa repos update app --workspace worktrees',
       'shinsa repos update app --workspace=main_checkout',
       'shinsa repos update app --coverage off',
       'shinsa repos update app --coverage-command="make cover"',

@@ -19,7 +19,7 @@ directly**: the file saves to the task's working copy as you type and goes into 
 - **Direct editing (2026-10-25), replacing suggested changes.** The editor at Head of the branch or the Working copy
   of an open task is editable with no mode; each pause saves through `POST /api/tasks/<id>/file` with the text it
   expects on disk (a 409 hands back the disk's text, merged with your unsaved edit when the lines differ), through
-  each workspace strategy (`writeEdit`; GitButler records the path as the task's in its ledger). Core keeps
+  each workspace strategy (`writeEdit`). Core keeps
   `editedPaths` and `untoldEdits`: the agent is steered at once and told again in its next turn; approving the review
   with edits no hand-over took commits them and runs the checks again, and approving the merge with them pushes them
   and merges once CI passes (`docs/engine.md` → Your edits). Suggestions are gone

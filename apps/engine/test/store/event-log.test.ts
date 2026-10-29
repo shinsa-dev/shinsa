@@ -132,7 +132,7 @@ describe('EventLog', () => {
       log,
       [{ type: 'project.removed', projectId: 'a' }],
       [
-        { kind: 'pull_request.merge', taskId: 't1' },
+        { kind: 'pull_request.merge', taskId: 't1', headSha: null },
         { kind: 'pull_request.watch', taskId: 't1' },
         { kind: 'pull_request.watch', taskId: 't1' },
       ],

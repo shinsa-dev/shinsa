@@ -8,6 +8,8 @@ import { SecretStore } from '../../src/secrets/store.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
 
+const RETINA = { PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI' };
+
 let fake: FakeMcpHttp | null = null;
 
 afterEach(async () => {
@@ -398,7 +400,7 @@ describe('checking servers', () => {
     extensions.updatePluginChoice('docs@market', false);
     const snapshot = await extensions.check();
     expect(checked.map((definition) => definition.command)).toEqual(['npx', 'node']);
-    expect(checked[0]?.env).toEqual({ ROOT: machine.userHome, PLAYWRIGHT_MCP_HEADLESS: 'true' });
+    expect(checked[0]?.env).toEqual({ ...RETINA, ROOT: machine.userHome, PLAYWRIGHT_MCP_HEADLESS: 'true' });
     expect(findServer(snapshot.servers, 'claude:files').status).toEqual({
       state: 'connected',
       error: null,
@@ -560,7 +562,7 @@ describe('what an agent run loads', () => {
     );
     const session = await extensions.resolveSession({ repoPath: machine.repo, project: null });
     const browser = session.servers.find((server) => server.name === 'browser');
-    expect(browser?.definition.env).toEqual({ PLAYWRIGHT_MCP_HEADLESS: 'true' });
+    expect(browser?.definition.env).toEqual({ ...RETINA, PLAYWRIGHT_MCP_HEADLESS: 'true' });
     const linear = session.servers.find((server) => server.name === 'linear');
     expect(linear?.definition.env).toEqual({});
   });
@@ -583,11 +585,13 @@ describe('what an agent run loads', () => {
     writeFile(join(other, '.mcp.json'), database('postgres://other'));
     const inOther = await extensions.resolveSession({ repoPath: other, project: null });
     expect(inOther.servers.find((server) => server.name === 'db')?.definition.env).toEqual({
+      ...RETINA,
       DATABASE_URL: 'postgres://other',
       PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
     const inApp = await extensions.resolveSession({ repoPath: machine.repo, project: null });
     expect(inApp.servers.find((server) => server.name === 'db')?.definition.env).toEqual({
+      ...RETINA,
       DATABASE_URL: 'postgres://app',
       PLAYWRIGHT_MCP_HEADLESS: 'true',
     });

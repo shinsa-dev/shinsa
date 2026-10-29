@@ -43,9 +43,7 @@ src/
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
-│                        source), flavor.ts (FLAVOR: Shinsa or Shinsa Canary, baked in by build-engine.ts from
-│                        SHINSA_FLAVOR as SHINSA_BUILD_FLAVOR; it picks the data folder, port, job label and link
-│                        scheme), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
+│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
 │                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
@@ -56,9 +54,9 @@ src/
 │                        plugins, services, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
-├── config/              paths.ts (where ~/.config/shinsa, or ~/.config/shinsa-canary for Shinsa Canary, config.json and data/ are), file.ts (config.json: read
+├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
 │                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json, the port
-│                        defaulting to the flavor's: 7446, 7447 for Shinsa Canary; package.json's dev and start
+│                        defaulting to core's APP_IDENTITY: 7446; package.json's dev and start
 │                        scripts pin 5180 so a checkout never meets the Mac app's engine; every SHINSA_*
 │                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (instance/service.ts) and the
 │                        SHINSA_BUILD_* a compiled engine carries (instance/bundle.ts); prepareDataDir)
@@ -187,19 +185,13 @@ src/
 │                        `--raw --numstat`, the patches of the small files only, or of the files named), changed-files.ts (the
 │                        files a task's branch committed since its base plus what its checkout has not committed)
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
-│                        (types.ts: prepare, claim, commit, push, remove, writeEdit, listConflicted, update: `but
-│                        pull` for GitButler only, syncBase: the merge of the base before a push, skipped in
-│                        GitButler), worktrees.ts,
-│                        main-checkout.ts and gitbutler.ts (a branch per task through `but`, one writing agent at a
-│                        time, stacked on another task's branch when its commit needs that branch's lines, taken out
-│                        of its stack before it is unapplied, never pushed while a commit on it is conflicted:
-│                        ConflictedBranchError), but.ts (the
-│                        `but` runner, readButVersion, needsButSetup for 0.22, isGitButlerReady,
-│                        isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
-│                        data/workspaces/), lock.ts (WorkspaceLock), index.ts (Workspaces.resolve, the setup check's
-│                        describeWorkspaceProblem, listWorkspaceSupport for GET /api/repos/workspaces)
+│                        (types.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
+│                        before a push), worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, the setup
+│                        check's describeWorkspaceProblem)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
-│                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
+│                        checks, comments, threads, the reader and the merge queue), create, retarget, merge (only
+│                        the approved head, `--match-head-commit`); ci.ts: whether a repository has CI for a base
+│                        (readRepoCi: workflows, the base commit's checks, required checks; RepoCiCache)
 ├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
 │                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
 │                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after
@@ -217,8 +209,7 @@ src/
 ├── test-coverage/       Changed-line coverage, once before review, from the tests among the task's checks: detect.ts
 │                        (resolveCoverageRun: a test check's command run again with its runner's coverage report in a
 │                        temporary folder; resolveCoverageDetection for Settings), index.ts
-│                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base (in a
-│                        GitButler workspace only the task's branch and the files the ledger says it owns), and
+│                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base, and
 │                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
@@ -240,7 +231,9 @@ src/
 │                        it the request names (resolveCandidatePool); repositories are listed by name, never by recent
 │                        use; resolveRepoProject files a repository triage registers. message.ts:
 │                        the message classifier (nothing to do, feedback or a follow-up, a new round with its kind of
-│                        work, or another task, as a typed decision read against each round's outcome) and
+│                        work, or another task, as a typed decision read against each round's outcome, asked one of
+│                        three ways: nothing in progress, a round in progress, or a round finished and waiting for
+│                        your review or merge, where anything about that round is feedback) and
 │                        routeUserCommand, which the socket and POST /api/commands send every command through: your
 │                        message is accepted into the task's inbox at once (message.receive) and inbox.ts
 │                        (MessageInbox) classifies and routes it after, one task at a time and in order:
@@ -271,8 +264,7 @@ src/
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
                          page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),
                          static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the
-                         Code tab's routes: refs, paths, tree, blob, raw images, search and diff; a GitButler task's
-                         working copy is the files it owns in the ledger, from disk, over its branch), edits.ts (POST
+                         Code tab's routes: refs, paths, tree, blob, raw images, search and diff), edits.ts (POST
                          /api/tasks/<id>/file: saving a file you edit, against the text the editor expects on disk)
 ```
 
@@ -335,9 +327,12 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `agents/providers/claude/guard.ts`. The rules themselves are in
   `agents/policy.ts`, so every provider enforces the same ones; a run is read-only by core's `isReadOnlyRun` (a
   read-only role, or the task's agent while it plans), which reaches the provider as `AgentSessionInput.readOnly`.
-- **No browser an agent starts opens a window.** Every stdio MCP server a run or a health check starts, and the
-  `claude` and `codex` processes themselves, get `HEADLESS_BROWSER_ENV` (`extensions/definitions.ts`:
-  `PLAYWRIGHT_MCP_HEADLESS=true`, which `@playwright/mcp` reads; without it the server is headed on a Mac).
+- **No browser an agent starts opens a window, and its screenshots are Retina sharp.** Every stdio MCP server a run
+  or a health check starts, and the `claude` and `codex` processes themselves, get `resolveBrowserEnv`
+  (`extensions/definitions.ts`): `PLAYWRIGHT_MCP_HEADLESS=true`, which `@playwright/mcp` reads (without it the server
+  is headed on a Mac), and `PLAYWRIGHT_MCP_DEVICE=Desktop Chrome HiDPI`, a device scale factor of 2, so a screenshot
+  taken with `scale: "device"` has two pixels per CSS pixel. The device is left out when the server already chooses
+  one or attaches to a browser (a device, mobile, CDP or extension option in its environment or arguments).
 - **One session per task, two kinds of access.** The task's agent plans, builds every phase, fixes, runs the
   operation and answers, investigates or researches in later rounds as separate runs on one resumed session, so its
   access changes between turns without changing its prompt-cache prefix (`docs/engine.md` → Caching): Claude keeps
@@ -360,9 +355,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   runs of its task that registered before it (60 s, then they are cancelled). Checks and pushes wait for all of them.
 - **Workspaces go through their strategy.** Making, committing in, pushing and removing a task's checkout goes through
   `Workspaces.resolve(task)` (`workspaces/`), never through `git/` directly, and every place shares the one
-  `Workspaces` the supervisor owns (`runs.workspaces`), since the GitButler claim and ledger live in it. A run that
-  can write claims its task's checkout before its session starts (`#claimWorkspace`); only GitButler makes it wait.
-  Nothing Shinsa runs in a GitButler workspace may `git commit` or switch its branch: that takes it out of GitButler.
+  `Workspaces` the supervisor owns (`runs.workspaces`).
 - **The two-hour clock stops while a question is open**, counted per question, so parallel `ask` calls cannot
   double-count the pause or leave a stray timer.
 - **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`), then stops
@@ -422,10 +415,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `FAKE_LOGIN_SHELL_HANG`, `FAKE_LOGIN_SHELL_SILENT` and `FAKE_LOGIN_SHELL_LOG` hang, fail or record the call,
   `FAKE_LOGIN_SHELL_EXEC_INTERACTIVE` prints nothing for `-lic`, as a `.zshrc` that execs fish does; a fake fish
   in `test/helpers/fish`, off the `PATH`, that `FAKE_FISH_SILENT` fails and `FAKE_FISH_LOG` records);
-  `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` and a `but` that runs the real GitButler CLI
-  with its own `HOME` (`FAKE_BUT_HOME`, so tests never touch your GitButler projects; `FAKE_BUT_MISSING` makes it
-  missing and `FAKE_BUT_VERSION` makes `but --version` report that version; the GitButler tests need `but` 0.22 or
-  newer installed, and set a repository up with `startGitButler`, which runs `but setup` only for 0.22) (every
+  `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` (every
   config's `eunoe.command`,
   `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last

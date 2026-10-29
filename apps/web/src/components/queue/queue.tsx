@@ -7,9 +7,8 @@ import { CompactSection, CompactSections } from '@/components/layout/compact-sec
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
-import { TaskMeta } from '@/components/status/text.tsx';
-import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -59,7 +58,7 @@ export function WideSection({
         {title}
       </SectionLabel>
       {disclosure.open && (
-        <div className={cn(CARD, 'p-1 [--glyph-ring:var(--color-card)]')}>
+        <div className={cn(CARD, 'p-1')}>
           {count === 0 ? (
             <p className='p-2.5 text-2xs text-fg-2'>{empty}</p>
           ) : (
@@ -126,12 +125,7 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
-      meta={
-        <>
-          <TaskHandlePrefix task={item.task} />
-          <TaskMeta state={state} task={item.task} />
-        </>
-      }
+      summary={<RowSummary state={state} task={item.task} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
         navigate(resolveTaskPath(item.task));

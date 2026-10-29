@@ -20,7 +20,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   agents: {
     id: 'agents',
     label: 'Agents',
-    sections: [MODELS_TITLE, 'Engine', VERSIONS_SECTION],
+    sections: [MODELS_TITLE, 'Engine', 'Memory', VERSIONS_SECTION],
   },
   accounts: {
     id: 'accounts',
