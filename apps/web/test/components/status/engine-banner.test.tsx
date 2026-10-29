@@ -55,7 +55,7 @@ describe('the engine banner', () => {
   it('lets you choose when agents are working and the protocol changed', async () => {
     await showEngine({ version: '0.4.0', protocol: 1, busy: true }, { restarting: false });
     expect(listRestarts()).toEqual([]);
-    const idle = screen.getByRole('button', { name: 'When agents are idle' });
+    const idle = screen.getByRole('button', { name: 'When agents hand over' });
     expect(idle.className).toContain('before:bg-primary');
     expect(screen.getByRole('button', { name: 'Restart now' }).className).not.toContain('before:bg-primary');
     fireEvent.click(idle);
@@ -97,7 +97,7 @@ describe('the update button', () => {
     expect(screen.queryByRole('button', { name: 'Update' })).toBeNull();
     act(() => desktop?.changeUpdate({ status: 'ready', version: '0.6.0' }));
     expect(await findTooltipText(screen.getByRole('button', { name: 'Update' }))).toBe(
-      'Shinsa 0.6.0 is ready. The app restarts for a moment and agents keep working.'
+      'Shinsa 0.6.0 is ready. Only the app restarts: agents keep working, and the engine moves to the new version once they hand over.'
     );
     view.unmount();
     render(<UpdateButton />);

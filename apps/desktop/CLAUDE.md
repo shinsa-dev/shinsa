@@ -2,8 +2,8 @@
 
 Shinsa for Mac: an Electron window around the engine, never the other way round. The engine (`shinsa engine`, from the
 bundle) runs on its own as a launchd job the app registers; the app finds it, loads the UI from its URL and adds only what a page cannot do:
-the Dock badge, notifications that open the task, `shinsa://` links, the menu and the window. Quitting the app never
-stops the server. What it looks like and how it behaves is `docs/design.md` → Where Shinsa differs, 31; the plan
+the Dock badge, notifications that open the task, `shinsa://` links, the menu, the menu bar item and the window.
+Quitting the app never stops the server. What it looks like and how it behaves is `docs/design.md` → Where Shinsa differs, 31; the plan
 behind it is `docs/plans/desktop-plan.md`.
 
 ## Layout
@@ -14,8 +14,10 @@ src/
 │                   notice.ts (checks a notification the page sends), navigation.ts (what stays in the window, what
 │                   opens in the browser, the permissions the page gets, the Go menu's Back and Forward steps:
 │                   resolveHistoryStep), server-url.ts (which server to load),
-│                   health.ts (GET /api/health, with or without `version`), bounds.ts (window place on connected
-│                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels),
+│                   health.ts (GET /api/health, with or without `version`, and how many agents are `working`),
+│                   tray.ts (the menu bar item's status line, its count and its menu, parseTrayQueue for
+│                   GET /api/queue), bounds.ts (window place on connected displays), service.ts (starting
+│                   the service), bridge.ts (the bridge's types and IPC channels),
 │                   dev-bundle.ts (the app's name, its userData folder, and the renamed Electron.app `bun run dev`
 │                   runs), update.ts (the updater's states, its menu item, notice and answers, the go-back
 │                   dialog, which download a channel switch discards, where macOS stages one), update-channel.ts
@@ -24,9 +26,11 @@ src/
 │                   window-close.ts (whether closing the window closes it or hides it)
 ├── main/           The Electron glue, kept thin and outside coverage: index.ts (single instance, deep links,
 │                   connecting to the server, its first health check sent before the app is ready, IPC, the
-│                   session's permissions), window.ts (MainWindow: hide on close, navigation, Back and Forward,
+│                   session's permissions), window.ts (MainWindow: hide on close, the Dock icon with it,
+│                   navigation, Back and Forward,
 │                   the waiting page; V8's code cache without the heat check), menu.ts (the app menu, with Go:
-│                   Back ⌘[, Forward ⌘], Home ⇧⌘H), notifications.ts, server.ts (health, starting
+│                   Back ⌘[, Forward ⌘], Home ⇧⌘H), tray.ts (StatusTray: the menu bar item, updated with each
+│                   engine check), notifications.ts, server.ts (health and the queue, starting
 │                   the service in the login shell), prefs.ts (window bounds, the update channel and the version you
 │                   chose to stay on in userData/prefs.json),
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours), update-log.ts
@@ -35,7 +39,7 @@ src/
                     updateBadge, notify, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
                     onWindowState, onUpdate) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
-static/waiting.html The "Shinsa is not running" page
+static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
                     all written by scripts/icon.ts; the engine's job in LaunchAgents/
 scripts/            build.ts (bundles main and preload), dev.ts, icon.ts, dmg-background.ts
@@ -125,7 +129,7 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
 | `bun run build` | Bundles `src/main` and `src/preload` to `dist/` (`scripts/build.ts`) |
 | `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
 | `bun run package` | Builds the web app and the engine (`SHINSA_VERSION` sets its version), then `release/mac-arm64/Shinsa.app` with the engine and its job inside, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
-| `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo (`scripts/icon.ts`) |
+| `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo, and the menu bar item's `static/trayTemplate.png` and `@2x` (`scripts/icon.ts`) |
 | `bun run dmg-background` | Writes the disk image backgrounds, `resources/dmg/background-stable.png`, `background-beta.png`, `background-canary.png` and their `@2x` (`scripts/dmg-background.ts`) |
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |

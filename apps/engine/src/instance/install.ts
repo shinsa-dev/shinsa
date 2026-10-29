@@ -21,7 +21,9 @@ interface HealthProblem {
 
 export interface EngineActivity {
   busy: boolean;
+  working: number;
   restart: 'idle' | null;
+  restartBy: number | null;
 }
 
 export interface ServerHealth extends ServerInstance, EngineActivity {

@@ -20,7 +20,7 @@ import {
   createReadOnlyError,
   createServerInstance,
   type EngineRestarter,
-  isEngineBusy,
+  resolveEngineActivity,
   resolveHealth,
   type ServerInstance,
 } from '../instance/index.ts';
@@ -220,10 +220,12 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       respond: () =>
         Promise.resolve(
           respondJson(
-            resolveHealth({ seq: engine.state.seq, problems: engine.problems }, config.dataDir, instance, {
-              busy: isEngineBusy(engine.state),
-              restart: restarter?.pending ?? null,
-            })
+            resolveHealth(
+              { seq: engine.state.seq, problems: engine.problems },
+              config.dataDir,
+              instance,
+              resolveEngineActivity(engine.state, restarter)
+            )
           )
         ),
     },

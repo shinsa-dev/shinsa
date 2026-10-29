@@ -44,7 +44,8 @@ src/
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
 │                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
-│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
+│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or after draining:
+│                        new runs held until the working ones hand over, 15 minutes at most)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),

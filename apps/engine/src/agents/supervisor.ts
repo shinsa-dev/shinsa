@@ -190,8 +190,10 @@ export class RunSupervisor {
   readonly #extensions: SessionExtensionSource | null;
   readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
+  readonly #held = new Set<string>();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
+  #holding: (() => void) | null = null;
 
   constructor(
     engine: Engine,
@@ -255,6 +257,12 @@ export class RunSupervisor {
     if (!run || run.endedAt !== null || this.#active.has(runId)) return;
     if (this.#shuttingDown) {
       await this.#markInterrupted(runId, null);
+      return;
+    }
+    if (this.#holding && override === null && delivery === null) {
+      if (this.#held.has(runId)) return;
+      this.#held.add(runId);
+      this.#holding();
       return;
     }
     const task = state.tasks[run.taskId];
@@ -857,13 +865,41 @@ export class RunSupervisor {
     await settleWithin(Promise.allSettled([active.session?.cancel()]), this.#stopMs);
   }
 
+  holdNewRuns(onHeld: () => void) {
+    this.#holding = onHeld;
+  }
+
+  releaseHeldRuns() {
+    this.#holding = null;
+    const held = [...this.#held];
+    this.#held.clear();
+    for (const runId of held) {
+      this.execute(runId).catch((error: unknown) => {
+        log.error('[Runs] Could not start a run held for the restart', {
+          runId,
+          error: describeError(error),
+        });
+      });
+    }
+  }
+
+  isHeld(runId: string) {
+    return this.#held.has(runId);
+  }
+
   async interruptForShutdown() {
     this.#shuttingDown = true;
     const compacting = this.#compaction.stop();
+    await this.#interruptHeld();
     const live = [...this.#active.entries()];
     for (const [runId, active] of live) await this.#markInterrupted(runId, active.attemptId);
     for (const [, active] of live) stopActiveRun(active);
     await this.#stopWithin(live, Promise.allSettled([compacting, ...live.map(([, active]) => active.done)]));
+  }
+
+  async #interruptHeld() {
+    for (const runId of this.#held) await this.#markInterrupted(runId, null);
+    this.#held.clear();
   }
 
   resolveQuestion(gateId: string) {
