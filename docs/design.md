@@ -150,12 +150,12 @@ Only these, and they win over anything below:
      "14 steps", and the
      final reply sits under it as the main content (the last interim text when a run has none).
      Hand-over cards (plan, phase, fix, review, question) and errors stay outside the fold; the
-     brief from Shinsa lives inside it. The last thing the agent wrote always stays in the chat, outside
-     the fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
+     brief from Shinsa lives inside it. The last thing the agent wrote stays in the chat, outside the
+     fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
      outcome or new set of steps: core's `isHandOverTool`) the reply is the text written after the
-     last hand-over, under its card. Text written before the hand-over folds into the work, and so does
-     a reply the card already shows (one contained in an answer's, diagnosis's, report's or outcome's
-     own text), so the same words never show twice (`selectReply` in `lib/chat/timeline.ts`). A
+     last hand-over, under its card. Text written before the hand-over folds into the work. An answer,
+     diagnosis, report or outcome card is the whole reply, so any words after it fold too and the same
+     reply never shows twice, reworded or not (`selectReply` in `lib/chat/timeline.ts`). A
      question or suggested tasks are not the step's hand-over and keep the reply under them. A message
      from you starts a new turn with its own fold.
    - **The detail** is the full log on a hairline rail under the worked-for row's chevron: interim messages,

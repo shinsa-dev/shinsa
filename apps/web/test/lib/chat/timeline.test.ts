@@ -712,12 +712,8 @@ describe('resolveTurns', () => {
     expect(turn?.outcomes.map((item) => item.call.callId)).toEqual(['1', '2']);
   });
 
-  it('keeps the last reply after any hand-over in the chat, outside the fold', () => {
+  it('keeps the last reply after a hand-over whose card is a summary, outside the fold', () => {
     for (const name of [
-      'answer',
-      'report_diagnosis',
-      'submit_report',
-      'report_outcome',
       'propose_plan',
       'complete_phase',
       'complete_fix',
@@ -741,7 +737,7 @@ describe('resolveTurns', () => {
     }
   });
 
-  it('folds a reply that repeats the text its hand-over card already shows', () => {
+  it('folds the words after a hand-over whose card is the whole reply, even reworded', () => {
     for (const [name, key] of [
       ['answer', 'answer'],
       ['report_diagnosis', 'diagnosis'],
@@ -750,8 +746,12 @@ describe('resolveTurns', () => {
     ] as const) {
       const items = resolveTimeline(
         [
-          createCallEntry('1', shinsaTool(name, { [key]: 'I know of one project.\n\nIt is shinsa.' }), 1),
-          createAgentEntry('  I know of one project.  ', 'final', 2),
+          createCallEntry(
+            '1',
+            shinsaTool(name, { [key]: 'Critical first; inside a rank, the order written.' }),
+            1
+          ),
+          createAgentEntry('Critical first; inside one rank, the order written.', 'final', 2),
         ],
         []
       );
