@@ -3358,7 +3358,12 @@ refuses, and the run fails as `context_window_full`.
 
 **Restart continuation.** `startShinsa().stop()` calls `RunSupervisor.interruptForShutdown` before anything else:
 every live run is marked (`run.interrupt` → `run.interrupted`, skipped for a run waiting on your answer) and its
-session cancelled, and no `run.end` is sent, so the run stays open. Then it stops the pull request syncs and every
+session cancelled, and no `run.end` is sent, so the run stays open. It waits at most `stopMs` (15 s) for the
+sessions to settle, so one that ignores its cancel cannot hold the shutdown, and a run whose `run.execute` arrives
+while the engine stops is marked the same way instead of starting, so the next engine continues it as cut off by the
+shutdown. The whole stop has a deadline (`stopWithin`, `STOP_DEADLINE_MS`, 30 s): a restart exits with 75 once it
+passes or the stop fails, and a stop on SIGTERM or SIGINT exits 0 (1 when the stop failed), so a hung session never
+leaves the engine half shut. Then it stops the pull request syncs and every
 running effect (their `AbortSignal` fires, so a check, push or `gh` command is killed, not left running beside the one
 the next boot requeues) and waits for them before it closes the log. On boot `RunSupervisor.recover` asks core to
 continue each running run, oldest first (`run.continue`). Core declines a run waiting on your answer (the answer
@@ -3993,7 +3998,10 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   version.
 - **By hand** (`apps/engine/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
   kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
-  stopped until a start, the app, a command that needs it or the next login), `shinsa restart` is `launchctl
+  stopped until a start, the app, a command that needs it or the next login; an engine still answering after 40 s,
+  past its own 30 s stop deadline, gets `launchctl kill SIGKILL`, which `KeepAlive` answers with a fresh engine, and
+  the command says so; one that exits with an error on SIGTERM is restarted by `KeepAlive` too, which the command
+  sees as a new pid and reports without a SIGKILL), `shinsa restart` is `launchctl
   kickstart -k` and `shinsa restart --when-idle` is `POST /api/engine/restart` with `when: idle`; each waits up to
   20 s for the engine to answer, stop answering or answer with a new pid. All three refuse, with
   `engine_unmanaged`, from a `shinsa` that is not a bundled build, with `engine_not_installed` when launchd has no

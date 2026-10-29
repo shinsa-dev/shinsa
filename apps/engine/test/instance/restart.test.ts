@@ -4,6 +4,7 @@ import {
   EngineRestarter,
   EXIT_RESTART,
   isEngineBusy,
+  stopWithin,
 } from '../../src/instance/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
@@ -161,6 +162,46 @@ describe('createLaunchdRestarter', () => {
       expect(exit).toHaveBeenCalledWith(EXIT_RESTART);
     } finally {
       exit.mockRestore();
+    }
+  });
+
+  test('a stop that hangs or fails still exits with the restart code, so launchd brings the engine back', async () => {
+    const stub = createStubEngine();
+    const error = spyOn(log, 'error');
+    try {
+      for (const stop of [
+        () => new Promise<void>(() => undefined),
+        () => Promise.reject(new Error('stuck')),
+      ]) {
+        const exited = Promise.withResolvers<number>();
+        const restarter = createLaunchdRestarter(stub.engine, {
+          byService: true,
+          stop,
+          exit: (code) => exited.resolve(code),
+          deadlineMs: 20,
+        });
+        await restarter.request('now');
+        expect(await exited.promise).toBe(EXIT_RESTART);
+      }
+      expect(error).toHaveBeenCalledWith('[Engine] Did not stop in time, so it exits anyway', {
+        deadlineMs: 20,
+      });
+      expect(error).toHaveBeenCalledWith('[Engine] Could not stop cleanly', { error: 'stuck' });
+    } finally {
+      error.mockRestore();
+    }
+  });
+});
+
+describe('stopWithin', () => {
+  test('says whether the stop finished, failed or ran past its deadline', async () => {
+    const error = spyOn(log, 'error');
+    try {
+      expect(await stopWithin(() => Promise.resolve(), 20)).toBe('stopped');
+      expect(await stopWithin(() => Promise.reject(new Error('no')), 20)).toBe('failed');
+      expect(await stopWithin(() => new Promise<void>(() => undefined), 20)).toBe('timed_out');
+    } finally {
+      error.mockRestore();
     }
   });
 });

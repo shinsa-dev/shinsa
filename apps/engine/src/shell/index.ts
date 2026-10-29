@@ -43,6 +43,41 @@ export function killProcessGroup(pid: number) {
   }
 }
 
+function killProcess(pid: number) {
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error) {
+    if (readErrorCode(error) === 'ESRCH') return;
+    log.warn('[Shell] Could not stop a process', { pid, error: describeError(error) });
+  }
+}
+
+export function listDescendants(table: string, root: number) {
+  const children = new Map<number, number[]>();
+  for (const line of table.split('\n')) {
+    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+    if (!pid || ppid === undefined || Number.isNaN(ppid)) continue;
+    children.set(ppid, [...(children.get(ppid) ?? []), pid]);
+  }
+  const found: number[] = [];
+  const queue = [root];
+  for (let parent = queue.shift(); parent !== undefined; parent = queue.shift()) {
+    for (const child of children.get(parent) ?? []) {
+      if (found.includes(child) || child === root) continue;
+      found.push(child);
+      queue.push(child);
+    }
+  }
+  return found;
+}
+
+export async function killProcessTree(pid: number) {
+  const table = await runCommand(['ps', '-A', '-o', 'pid=,ppid='], process.cwd(), { timeoutMs: 5_000 });
+  const descendants = table.ok ? listDescendants(table.stdout, pid) : [];
+  killProcessGroup(pid);
+  for (const child of descendants) killProcess(child);
+}
+
 function spawn(command: string[], cwd: string, options: CommandOptions) {
   try {
     return Bun.spawn(command, {
