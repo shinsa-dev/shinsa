@@ -4000,7 +4000,8 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
   stopped until a start, the app, a command that needs it or the next login; an engine still answering after 40 s,
   past its own 30 s stop deadline, gets `launchctl kill SIGKILL`, which `KeepAlive` answers with a fresh engine, and
-  the command says so), `shinsa restart` is `launchctl
+  the command says so; one that exits with an error on SIGTERM is restarted by `KeepAlive` too, which the command
+  sees as a new pid and reports without a SIGKILL), `shinsa restart` is `launchctl
   kickstart -k` and `shinsa restart --when-idle` is `POST /api/engine/restart` with `when: idle`; each waits up to
   20 s for the engine to answer, stop answering or answer with a new pid. All three refuse, with
   `engine_unmanaged`, from a `shinsa` that is not a bundled build, with `engine_not_installed` when launchd has no

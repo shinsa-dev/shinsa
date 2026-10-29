@@ -51,6 +51,8 @@ const ENGINE_WAIT_MS = 20_000;
 
 const ENGINE_STOP_WAIT_MS = STOP_DEADLINE_MS + 10_000;
 
+type EngineStop = 'stopped' | 'replaced' | 'forced';
+
 const ENGINE_POLL_MS = 250;
 
 export const ENGINE_STOPPED =
@@ -160,26 +162,38 @@ export async function startEngine(io: EngineIo) {
 
 export async function stopEngine(io: EngineIo) {
   await assertEngineJob(io);
-  if (!(await readHealth(io.base))) {
+  const before = await readHealth(io.base);
+  if (!before) {
     writeOutcome(io, 'dim', 'dot', 'The engine is not running.', '');
     return;
   }
-  const before = await readHealth(io.base);
-  const isGone = async () => {
+  const readStop = async (): Promise<EngineStop | null> => {
     const answer = await readHealth(io.base);
-    return answer && answer.pid === before?.pid ? null : true;
+    if (!answer) return 'stopped';
+    return answer.pid === before.pid ? null : 'replaced';
   };
   const target = resolveEngineTarget(io.uid);
-  const { result: forced, took } = await withProgress(io, 'Stopping the engine', async () => {
+  const { result: stop, took } = await withProgress(io, 'Stopping the engine', async () => {
     await runLaunchctl(io, ['kill', 'SIGTERM', target]);
-    if (await waitFor(io, isGone, ENGINE_STOP_WAIT_MS)) return false;
+    const clean = await waitFor(io, readStop, ENGINE_STOP_WAIT_MS);
+    if (clean) return clean;
     await runLaunchctl(io, ['kill', 'SIGKILL', target]);
-    if (await waitFor(io, isGone)) return true;
+    if (await waitFor(io, readStop)) return 'forced';
     throw new Error(
       `The engine is still running after ${describeWait(io, ENGINE_STOP_WAIT_MS)} and a forced stop. \`shinsa logs\` shows why.`
     );
   });
-  if (forced) {
+  if (stop === 'replaced') {
+    writeOutcome(
+      io,
+      'warning',
+      'dot',
+      `The engine did not stop cleanly in ${took}, so launchd started a fresh one.`,
+      'Runs it cut off resume there. `shinsa logs` shows why it failed to stop.'
+    );
+    return;
+  }
+  if (stop === 'forced') {
     writeOutcome(
       io,
       'warning',
