@@ -7,6 +7,7 @@ import {
   listLocalRepos,
   resolveContainingRepo,
   resolveProjectName,
+  syncRepoRemote,
   upsertRepo,
 } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -88,6 +89,32 @@ describe('upsertRepo', () => {
     const concurrent = await Promise.all([upsertRepo(engine, path, login), upsertRepo(engine, path, login)]);
     expect(concurrent[0].id).toBe(concurrent[1].id);
     expect(Object.keys(engine.state.repos)).toHaveLength(1);
+  });
+
+  test('a repository registered before it had an origin gets its remote once origin exists', async () => {
+    const { path } = await createGitRepo({ remote: false });
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const login = () => Promise.resolve(null);
+    const first = await upsertRepo(engine, path, login);
+    expect(first.remote).toBeNull();
+    expect(await syncRepoRemote(engine, first)).toBe(first);
+    await git(path, 'remote', 'add', 'origin', 'git@github.com:acme/app.git');
+    const again = await upsertRepo(engine, path, login);
+    expect(again).toMatchObject({ id: first.id, remote: 'github.com/acme/app' });
+    expect(engine.state.repos[first.id]?.remote).toBe('github.com/acme/app');
+    await git(path, 'remote', 'set-url', 'origin', 'https://github.com/acme/other.git');
+    expect((await upsertRepo(engine, path, login)).remote).toBe('github.com/acme/app');
+  });
+
+  test('syncing a repository fills in a missing remote from origin and leaves a known one alone', async () => {
+    const { path } = await createGitRepo({ remote: false });
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const repo = await upsertRepo(engine, path, () => Promise.resolve(null));
+    await git(path, 'remote', 'add', 'origin', 'https://github.com/acme/app.git');
+    const synced = await syncRepoRemote(engine, repo);
+    expect(synced).toMatchObject({ id: repo.id, remote: 'github.com/acme/app' });
+    await git(path, 'remote', 'set-url', 'origin', 'https://github.com/acme/other.git');
+    expect(await syncRepoRemote(engine, synced)).toBe(synced);
   });
 
   test('a registration that does not land is an error', async () => {

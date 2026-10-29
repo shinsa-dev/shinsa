@@ -347,9 +347,12 @@ describe('what a fix round is keyed to', () => {
     );
   });
 
-  test('a pull request read without names falls back to its totals', () => {
-    const coarse = pullRequest({ checks: 'failing', unresolvedComments: 2 });
-    expect(resolvePullRequestSignature(coarse, watch())).toBe('checks:failing\nthreads:2');
+  test('a pull request read without names keys nothing, since its totals cannot tell two failures apart', () => {
+    expect(resolvePullRequestSignature(pullRequest({ checks: 'failing' }), watch())).toBeNull();
+    expect(resolvePullRequestSignature(pullRequest({ unresolvedComments: 2 }), watch())).toBeNull();
+    const halfNamed = detail({ checkRuns: [check('lint', 'failure')], unresolvedThreads: undefined });
+    expect(resolvePullRequestSignature({ ...halfNamed, unresolvedComments: 1 }, watch())).toBeNull();
+    expect(resolvePullRequestSignature(pullRequest({ mergeable: false }), watch())).toBe('conflict');
   });
 
   test('changes kept in the log list at most ten items with a total and short comment bodies', () => {
