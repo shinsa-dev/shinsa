@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": ["ditto"],
   "workspaces": {
     ".": {
       "entry": ["scripts/*.ts", "scripts/perf/*.ts", "scripts/seed-media/*.ts", "scripts/screenshots/*.ts"]
