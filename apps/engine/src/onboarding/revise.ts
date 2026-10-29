@@ -12,7 +12,7 @@ import {
 import type { JsonSchema } from '../agents/providers/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
 
-export interface RevisedProject {
+interface RevisedProject {
   name: string;
   repos: string[];
 }
