@@ -5,6 +5,7 @@ import {
   describeVersion,
   type ServerHealth,
   type ShinsaBundle,
+  STOP_DEADLINE_MS,
 } from '../instance/index.ts';
 import {
   type Display,
@@ -48,6 +49,8 @@ const HEALTH_TIMEOUT_MS = 1000;
 
 const ENGINE_WAIT_MS = 20_000;
 
+const ENGINE_STOP_WAIT_MS = STOP_DEADLINE_MS + 10_000;
+
 const ENGINE_POLL_MS = 250;
 
 export const ENGINE_STOPPED =
@@ -88,13 +91,13 @@ async function withProgress<T>(io: EngineIo, text: string, work: () => Promise<T
   }
 }
 
-function describeWait(io: EngineControl) {
-  const seconds = Math.ceil((io.waitMs ?? ENGINE_WAIT_MS) / 1000);
+function describeWait(io: EngineControl, fallbackMs = ENGINE_WAIT_MS) {
+  const seconds = Math.ceil((io.waitMs ?? fallbackMs) / 1000);
   return `${seconds} second${seconds === 1 ? '' : 's'}`;
 }
 
-async function waitFor<T>(io: EngineControl, check: () => Promise<T | null>) {
-  const deadline = Date.now() + (io.waitMs ?? ENGINE_WAIT_MS);
+async function waitFor<T>(io: EngineControl, check: () => Promise<T | null>, fallbackMs = ENGINE_WAIT_MS) {
+  const deadline = Date.now() + (io.waitMs ?? fallbackMs);
   while (Date.now() < deadline) {
     const found = await check();
     if (found !== null) return found;
@@ -161,13 +164,31 @@ export async function stopEngine(io: EngineIo) {
     writeOutcome(io, 'dim', 'dot', 'The engine is not running.', '');
     return;
   }
-  const { took } = await withProgress(io, 'Stopping the engine', async () => {
-    await runLaunchctl(io, ['kill', 'SIGTERM', resolveEngineTarget(io.uid)]);
-    const stopped = await waitFor(io, async () => ((await readHealth(io.base)) ? null : true));
-    if (!stopped) {
-      throw new Error(`The engine is still stopping after ${describeWait(io)}. \`shinsa logs\` shows why.`);
-    }
+  const before = await readHealth(io.base);
+  const isGone = async () => {
+    const answer = await readHealth(io.base);
+    return answer && answer.pid === before?.pid ? null : true;
+  };
+  const target = resolveEngineTarget(io.uid);
+  const { result: forced, took } = await withProgress(io, 'Stopping the engine', async () => {
+    await runLaunchctl(io, ['kill', 'SIGTERM', target]);
+    if (await waitFor(io, isGone, ENGINE_STOP_WAIT_MS)) return false;
+    await runLaunchctl(io, ['kill', 'SIGKILL', target]);
+    if (await waitFor(io, isGone)) return true;
+    throw new Error(
+      `The engine is still running after ${describeWait(io, ENGINE_STOP_WAIT_MS)} and a forced stop. \`shinsa logs\` shows why.`
+    );
   });
+  if (forced) {
+    writeOutcome(
+      io,
+      'warning',
+      'dot',
+      `Forced the engine to stop in ${took}.`,
+      'It did not stop on its own, so launchd starts a fresh one. Runs it cut off resume there. `shinsa logs` shows what held it.'
+    );
+    return;
+  }
   writeOutcome(
     io,
     'success',

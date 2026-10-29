@@ -206,8 +206,35 @@ describe('shinsa stop', () => {
     const running = startFakeEngine();
     const stuck = createEngineIo(running.base, null, { waitMs: 600 });
     await expect(stopEngine(stuck.io)).rejects.toThrow(
-      'The engine is still stopping after 1 second. `shinsa logs` shows why.'
+      'The engine is still running after 1 second and a forced stop. `shinsa logs` shows why.'
     );
+    expect(stuck.calls.slice(1)).toEqual([
+      ['kill', 'SIGTERM', TARGET],
+      ['kill', 'SIGKILL', TARGET],
+    ]);
+  });
+
+  test('an engine that ignores the clean stop is killed, and launchd starts a fresh one', async () => {
+    const { engine, base } = startFakeEngine();
+    const { io, out, calls } = createEngineIo(base, engine, {
+      waitMs: 600,
+      launchctl: (args) => {
+        calls.push(args);
+        if (args[1] === 'SIGKILL') engine.pid = 300;
+        return Promise.resolve({ ok: true, output: args[0] === 'print' ? 'state = running' : '' });
+      },
+    });
+    await stopEngine(io);
+    expect(calls).toEqual([
+      ['print', TARGET],
+      ['kill', 'SIGTERM', TARGET],
+      ['kill', 'SIGKILL', TARGET],
+    ]);
+    expect(out).toEqual([
+      expect.stringMatching(
+        /^Forced the engine to stop in \d+(?:ms|\.\ds)\. It did not stop on its own, so launchd starts a fresh one\. Runs it cut off resume there\. `shinsa logs` shows what held it\.$/
+      ),
+    ]);
   });
 });
 
