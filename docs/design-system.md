@@ -7966,7 +7966,8 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 
 **Rules**
 
-- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; View has Reload ⌘R, zoom and full screen; Go has Back ⌘[, Forward ⌘] and Home ⇧⌘H, as in Finder and Safari. No other app-level shortcut and no menu bar (status) icon.
+- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; View has Reload ⌘R, zoom and full screen; Go has Back ⌘[, Forward ⌘] and Home ⇧⌘H, as in Finder and Safari. No other app-level shortcut.
+- A menu bar (status) item shows while the app runs: the product mark as a template image with the count of decisions waiting beside it, and a menu with the engine's state, what needs you and what is working (each task opens its page), Open and Quit, Quit saying the engine and its agents keep running.
 - Back and Forward step through the page's own history and never onto the engine's waiting page.
 - A focused code editor keeps ⌘[ and ⌘] for outdent and indent: the page sees the key before the menu does.
 - Closing the window hides it; the page keeps its socket, so badges and notifications continue. The Dock icon or Window → (app name) brings it back. ⌘Q quits the app and never stops the background engine.

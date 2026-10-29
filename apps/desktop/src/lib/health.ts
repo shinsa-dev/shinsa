@@ -3,6 +3,7 @@ import { APP_IDENTITY } from '@shinsa/core';
 export interface ServerHealth {
   version: string | null;
   working: number;
+  updating: boolean;
 }
 
 function parseCount(value: unknown) {
@@ -11,9 +12,13 @@ function parseCount(value: unknown) {
 
 export function parseHealth(value: unknown): ServerHealth | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { ok, version, working } = value as Record<string, unknown>;
+  const { ok, version, working, restart } = value as Record<string, unknown>;
   if (typeof ok !== 'boolean') return null;
-  return { version: typeof version === 'string' && version ? version : null, working: parseCount(working) };
+  return {
+    version: typeof version === 'string' && version ? version : null,
+    working: parseCount(working),
+    updating: restart === 'idle',
+  };
 }
 
 export function parseHealthText(text: string) {

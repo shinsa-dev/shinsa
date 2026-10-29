@@ -15,8 +15,9 @@ src/
 │                   opens in the browser, the permissions the page gets, the Go menu's Back and Forward steps:
 │                   resolveHistoryStep), server-url.ts (which server to load),
 │                   health.ts (GET /api/health, with or without `version`, and how many agents are `working`),
-│                   tray.ts (the menu bar item's status line and menu), bounds.ts (window place on connected
-│                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels),
+│                   tray.ts (the menu bar item's status line, its count and its menu, parseTrayQueue for
+│                   GET /api/queue), bounds.ts (window place on connected displays), service.ts (starting
+│                   the service), bridge.ts (the bridge's types and IPC channels),
 │                   dev-bundle.ts (the app's name, its userData folder, and the renamed Electron.app `bun run dev`
 │                   runs), update.ts (the updater's states, its menu item, notice and answers, the go-back
 │                   dialog, which download a channel switch discards, where macOS stages one), update-channel.ts
@@ -29,7 +30,7 @@ src/
 │                   navigation, Back and Forward,
 │                   the waiting page; V8's code cache without the heat check), menu.ts (the app menu, with Go:
 │                   Back ⌘[, Forward ⌘], Home ⇧⌘H), tray.ts (StatusTray: the menu bar item, updated with each
-│                   engine check), notifications.ts, server.ts (health, starting
+│                   engine check), notifications.ts, server.ts (health and the queue, starting
 │                   the service in the login shell), prefs.ts (window bounds, the update channel and the version you
 │                   chose to stay on in userData/prefs.json),
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours), update-log.ts

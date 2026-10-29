@@ -18,7 +18,7 @@ const ICONSET_SIZES = [16, 32, 128, 256, 512];
 
 const BODY_INK = { top: '#fbfbfa', bottom: '#e7e7e5' };
 
-const TRAY = { canvas: 18, mark: 16 };
+const TRAY = { canvas: 18, mark: 14 };
 
 const desktopDir = resolve(import.meta.dirname, '..');
 

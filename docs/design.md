@@ -1832,11 +1832,17 @@ Only these, and they win over anything below:
       size and place are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own
       (Settings… ⌘, opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no
       other shortcut.
-    - **The menu bar item** shows while the app runs (`main/tray.ts`, its text in `lib/tray.ts`): the Shinsa mark as
-      a template image (`static/trayTemplate.png`, written by `scripts/icon.ts`), so macOS draws it in the menu
-      bar's own colour. Its menu: the engine's state as a disabled first line ("The engine is running. 2 agents are
-      working", from `working` in `/api/health`, or "The engine is not answering"), Open Shinsa, and Quit Shinsa
-      over the line "The engine and your agents keep running". It is read with the app's 5 s engine check.
+    - **The menu bar item** shows while the app runs (`main/tray.ts`, its text in `lib/tray.ts`): the Shinsa mark at
+      14 of the 18 points as a template image (`static/trayTemplate.png`, written by `scripts/icon.ts`), so macOS
+      draws it in the menu bar's own colour, with the number of decisions waiting for you beside it (none when
+      there are none). Its menu: the engine's state as a disabled first line ("The engine is running", or "The
+      engine is running. 2 agents are working" from `working` in `/api/health` when the queue cannot be read, or
+      "The engine is not answering"), "Moves to the new version once
+      agents hand over" under it while a restart waits; then, from `/api/queue`, a Needs you (3) header over each
+      decision and a Working (2) header over each working task, each task its title over what it waits for or is
+      doing ("Review · LOC-4", "Building · LOC-9"), opening the task in the window, the first 5 of each and "2 more"
+      opening Home; then Open Shinsa, and Quit Shinsa over the line "The engine and your agents keep running". It is
+      read with the app's 5 s engine check.
     - **It is called Shinsa** in the menu bar, its first menu (About Shinsa, Hide Shinsa, Quit Shinsa), the About
       panel, the Dock and notifications, packaged and in development alike. The menu bar and the Dock read the
       bundle's `CFBundleName`, so `bun run dev` runs a copy of Electron.app renamed to `.electron/Shinsa.app`
