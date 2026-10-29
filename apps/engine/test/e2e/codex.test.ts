@@ -335,7 +335,7 @@ describe('forking on Codex', () => {
     const [first, ...later] = listRuns(w, forked).filter((run) => run.role === 'agent');
     expect(first?.fork).toMatchObject({ taskId: source, sessionId: sourceThread });
     expect(first?.sessionId).not.toBe(sourceThread);
-    for (const run of later) expect(run.sessionId).toBe(first?.sessionId);
+    for (const run of later) expect(run.sessionId).toBe(first?.sessionId ?? null);
     expect(listRuns(w, source).filter((run) => run.role === 'agent').length).toBe(3);
   });
 });
