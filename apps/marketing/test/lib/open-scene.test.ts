@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { OPEN_TASK_ID } from '../../src/lib/demo-repo';
-import { createOpenState, OPEN_REPO_ID } from '../../src/lib/open-scene';
+import { createOpenState, OPEN_REPO_ID, OPEN_TASK_ID } from '../../src/lib/open-scene';
 
 describe('createOpenState', () => {
   test('builds the task the Review tab shows from the review the link carries', () => {

@@ -22,6 +22,7 @@ import {
   STEPS_AFTER,
   UNCHANGED_FILES,
 } from './onboarding-code.ts';
+import { OPEN_TASK_ID } from './open-scene.ts';
 import { TINT_CHANGES, TINT_UNCHANGED, TONE_PATH } from './tint-code.ts';
 
 interface ChangedFile {
@@ -116,8 +117,6 @@ const SHINSA: Repository = {
 };
 
 export const SHINSA_TASK_ID = 'review-shinsa-tint';
-
-export const OPEN_TASK_ID = 'open-pull-request';
 
 function selectRepository(taskId: string) {
   return taskId === SHINSA_TASK_ID ? SHINSA : NORTHWIND;

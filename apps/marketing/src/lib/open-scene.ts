@@ -1,6 +1,5 @@
 import type { Evidence, Repo, ReviewPayload, ShinsaState, Task } from '@shinsa/core';
 import { createSampleState, createSampleTask } from '@/routes/ui/samples.ts';
-import { OPEN_TASK_ID } from './demo-repo.ts';
 
 function toEvidence(payload: ReviewPayload, now: number): Evidence[] {
   return payload.evidence.map((piece, index) => ({
@@ -19,6 +18,8 @@ function toEvidence(payload: ReviewPayload, now: number): Evidence[] {
     ...(piece.label ? { label: piece.label } : {}),
   }));
 }
+
+export const OPEN_TASK_ID = 'open-pull-request';
 
 export const OPEN_REPO_ID = 'open-repository';
 
