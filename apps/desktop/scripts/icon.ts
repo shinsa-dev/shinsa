@@ -18,9 +18,13 @@ const ICONSET_SIZES = [16, 32, 128, 256, 512];
 
 const BODY_INK = { top: '#fbfbfa', bottom: '#e7e7e5' };
 
+const TRAY = { canvas: 18, mark: 16 };
+
 const desktopDir = resolve(import.meta.dirname, '..');
 
 const resourcesDir = join(desktopDir, 'resources');
+
+const staticDir = join(desktopDir, 'static');
 
 const logoPath = resolve(desktopDir, '../../packages/ui/src/components/logo.tsx');
 
@@ -124,4 +128,31 @@ function writeIcon(name: string) {
   }
 }
 
+function serializeTrayIcon() {
+  const scale = TRAY.mark / MARK.viewBox;
+  const offset = (TRAY.canvas - TRAY.mark) / 2;
+  const marks = listMarkPaths()
+    .map((d) => `    <path d="${d}"/>`)
+    .join('\n');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${TRAY.canvas}" height="${TRAY.canvas}" viewBox="0 0 ${TRAY.canvas} ${TRAY.canvas}">
+  <g transform="translate(${offset} ${offset}) scale(${scale.toFixed(6)})" fill="#000">
+${marks}
+  </g>
+</svg>
+`;
+}
+
+function writeTrayIcon() {
+  const scratch = mkdtempSync(join(tmpdir(), 'shinsa-tray-'));
+  const svgPath = join(scratch, 'tray.svg');
+  try {
+    writeFileSync(svgPath, serializeTrayIcon());
+    renderPng(svgPath, TRAY.canvas, join(staticDir, 'trayTemplate.png'));
+    renderPng(svgPath, TRAY.canvas * 2, join(staticDir, 'trayTemplate@2x.png'));
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 writeIcon('icon');
+writeTrayIcon();

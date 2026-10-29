@@ -213,7 +213,7 @@ and every page shows what it finds in the health banner at the top (`lib/connect
 | The engine keeps crashing | repeated exits, the engine's crash file in `data/` | The engine keeps stopping, with the last error; **Restart engine**, **Copy details** |
 | The engine was killed and is not coming back | no socket, the job not loaded | The engine is not running; **Start engine** (registers and kicks the job) |
 | A folder it needs is blocked | the engine reports `EPERM` on a chosen folder | Shinsa cannot read ‹folder›; **Open Privacy & Security** |
-| The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | Shinsa ‹version› finishes updating when agents are idle; **Restart now** (Versions and updates, above) |
+| The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | Shinsa ‹version› finishes updating once the working agents hand over; **Restart now** (Versions and updates, above) |
 
 Built as the app's status page (`apps/desktop/src/lib/engine.ts`), each state with its fix button and the engine
 log's warnings and errors; the version row is the web's engine banner. Not yet: a short guide per row

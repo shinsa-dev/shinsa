@@ -21,6 +21,7 @@ import { EngineSupervisor } from './engine.ts';
 import { applyMenu } from './menu.ts';
 import { showNotice } from './notifications.ts';
 import { requestHealth, resolveAppServerUrl } from './server.ts';
+import { StatusTray } from './tray.ts';
 import { Updater } from './updater.ts';
 import { MainWindow } from './window.ts';
 
@@ -38,6 +39,7 @@ let misses = 0;
 let shownScreen = '';
 let menuActions: Omit<Parameters<typeof applyMenu>[0], 'update'> | null = null;
 let updater: Updater | null = null;
+let tray: StatusTray | null = null;
 let firstHealth: Promise<ServerHealth | null> | null = null;
 let aboutCredits: string | undefined;
 
@@ -86,6 +88,10 @@ async function start() {
     (action) => void runEngineAction(action)
   );
   if (pendingPath) main.open(pendingPath);
+  tray = new StatusTray((action) => {
+    if (action === 'open') main?.show();
+    else app.quit();
+  });
   applySessionPolicy(origin);
   menuActions = {
     show: () => main?.show(),
@@ -173,6 +179,7 @@ function applyAboutPanel(credits = aboutCredits) {
 }
 
 function showApp(current: MainWindow, health: ServerHealth) {
+  tray?.update(health);
   applyAboutPanel(describeServer(current.origin, health));
   misses = 0;
   shownScreen = '';
@@ -220,11 +227,14 @@ async function watchEngine() {
   const current = main;
   if (!current || connecting) return;
   if (current.showsWaiting) {
-    if (await requestHealth(current.origin)) await connect();
+    const health = await requestHealth(current.origin);
+    tray?.update(health);
+    if (health) await connect();
     return;
   }
   if (!current.showsApp) return;
   const health = await requestHealth(current.origin);
+  tray?.update(health);
   misses = health ? 0 : misses + 1;
   if (misses >= MISSES_BEFORE_WAITING) {
     misses = 0;
