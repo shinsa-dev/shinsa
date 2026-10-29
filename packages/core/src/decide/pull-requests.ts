@@ -368,6 +368,16 @@ export function recordPush(decider: Decider, command: CommandOf<'pull_request.re
   decider.emit({ type: 'pull_request.pushed', taskId: command.taskId, sha: command.sha });
 }
 
+export function recordUploads(decider: Decider, command: CommandOf<'evidence.record_uploads'>) {
+  decider.task(command.taskId);
+  const uploads = command.uploads.filter((upload) => {
+    const evidence = decider.state.evidence[upload.evidenceId];
+    return evidence?.taskId === command.taskId && evidence.uploadUrl !== upload.url;
+  });
+  if (uploads.length === 0) return;
+  decider.emit({ type: 'evidence.uploaded', taskId: command.taskId, uploads });
+}
+
 function isShippingNow(decider: Decider, task: Task) {
   if (task.stage !== 'shipping' || decider.hasOpenGate(task.id, (gate) => gate.type === 'failure'))
     return false;

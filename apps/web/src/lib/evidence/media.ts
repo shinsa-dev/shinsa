@@ -10,7 +10,16 @@ const TEXT = /\.(txt|log|md)(\?.*)?$/i;
 
 const SERVED = /^\/(?!\/)/;
 
-export function resolveEvidenceMedia(uri: string): EvidenceMedia {
+const WEB = /^https?:\/\//i;
+
+const LINKED_MEDIA: Partial<Record<Evidence['kind'], EvidenceMedia>> = {
+  screenshot: 'image',
+  recording: 'video',
+};
+
+export function resolveEvidenceMedia(uri: string, kind?: Evidence['kind']): EvidenceMedia {
+  const linked = kind && WEB.test(uri) ? LINKED_MEDIA[kind] : undefined;
+  if (linked) return linked;
   if (!SERVED.test(uri)) return 'link';
   if (IMAGE.test(uri)) return 'image';
   if (VIDEO.test(uri)) return 'video';

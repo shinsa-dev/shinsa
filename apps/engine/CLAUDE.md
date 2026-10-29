@@ -195,9 +195,13 @@ src/
 │                        before a push), worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, the setup
 │                        check's describeWorkspaceProblem)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
-│                        checks, comments, threads, the reader and the merge queue), create, retarget, merge (only
-│                        the approved head, `--match-head-commit`); ci.ts: whether a repository has CI for a base
-│                        (readRepoCi: workflows, the base commit's checks, required checks; RepoCiCache)
+│                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
+│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id, a user
+│                        attachment upload and rewriting the description's block (writePullRequestBlock);
+│                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
+│                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a
+│                        repository has CI for a base (readRepoCi: workflows, the base commit's checks, required
+│                        checks; RepoCiCache)
 ├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
 │                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
 │                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after

@@ -432,6 +432,7 @@ export interface FakePullRequest {
   unresolved: number;
   mergedWith: string | null;
   mergeCommit?: string | null;
+  body?: string;
   checkRuns?: { name: string; status: string; conclusion: string | null; required: boolean }[];
 }
 
@@ -441,6 +442,7 @@ interface GitHubState {
   pulls: FakePullRequest[];
   calls: string[][];
   workflows?: Record<string, string>;
+  repositoryId?: number;
 }
 
 export class FakeGitHub {
@@ -488,7 +490,7 @@ export class FakeGitHub {
     }
   }
 
-  configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows'>>) {
+  configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows' | 'repositoryId'>>) {
     this.#change((state) => ({ ...state, ...patch }));
   }
 

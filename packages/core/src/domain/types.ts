@@ -566,6 +566,12 @@ export interface Evidence {
   replacedBy?: string;
   removedAt?: number;
   removedReason?: string;
+  uploadUrl?: string;
+}
+
+export interface EvidenceUpload {
+  evidenceId: string;
+  url: string;
 }
 
 export interface EvidencePart {

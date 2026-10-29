@@ -139,3 +139,15 @@ export const closing = {
   title: 'Hand over your first task.',
   text: 'Shinsa takes it from there.',
 };
+
+export const openTask = {
+  title: 'A pull request built with Shinsa',
+  text: 'An agent planned, built and checked this change in Shinsa, then wrote its review: the evidence first, then how it works, the calls it made and how to test it.',
+  missingTitle: 'This link does not lead to a review',
+  missing:
+    'It names no task or pull request. Open the review again from the link in the pull request on GitHub.',
+  primary: 'Open in Shinsa',
+  secondary: 'Download Shinsa',
+  source:
+    'Nothing here is stored or sent anywhere: your browser reads this review from the link in the pull request. The pull request on GitHub is the record.',
+};

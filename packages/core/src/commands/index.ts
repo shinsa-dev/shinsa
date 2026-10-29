@@ -6,6 +6,7 @@ import type {
   EvidencePart,
   EvidenceStage,
   EvidenceTheme,
+  EvidenceUpload,
   FindingVerdict,
   GateDecision,
   MessageKind,
@@ -326,6 +327,7 @@ type SystemCommand =
     }
   | { type: 'pull_request.record_update_conflict'; taskId: string; base: string; files: string[] }
   | { type: 'pull_request.record_hook_failure'; taskId: string; output: string; failures: string[] | null }
+  | { type: 'evidence.record_uploads'; taskId: string; uploads: EvidenceUpload[] }
   | { type: 'usage_wait.resume'; taskId: string; waitId: string }
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }

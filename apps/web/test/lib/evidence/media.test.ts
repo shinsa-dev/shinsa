@@ -4,6 +4,13 @@ import { createRound } from '../../support/rounds.ts';
 import { createEvidence, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 describe('resolveEvidenceMedia', () => {
+  it('shows a screenshot or recording at a web address, such as a GitHub attachment, as itself', () => {
+    expect(resolveEvidenceMedia('https://github.com/user-attachments/assets/1', 'screenshot')).toBe('image');
+    expect(resolveEvidenceMedia('https://github.com/user-attachments/assets/2', 'recording')).toBe('video');
+    expect(resolveEvidenceMedia('https://pr-1.example.com', 'preview')).toBe('link');
+    expect(resolveEvidenceMedia('javascript:alert(1)', 'screenshot')).toBe('link');
+  });
+
   it('reads stored evidence by its extension, in any case', () => {
     expect(resolveEvidenceMedia('/api/evidence/shot.png')).toBe('image');
     expect(resolveEvidenceMedia('/api/evidence/shot.JPEG')).toBe('image');

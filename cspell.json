@@ -8,6 +8,8 @@
     "gitdir",
     "commondir",
     "nohup",
+    "noarchive",
+    "quicktime",
     "sublabel",
     "acks",
     "Adyen",
