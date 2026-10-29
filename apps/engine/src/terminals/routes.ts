@@ -138,7 +138,7 @@ function readPortVariable(body: JsonObject) {
   return name;
 }
 
-function readServiceInput(
+export function readServiceInput(
   body: JsonObject,
   others: ServiceDefinition[],
   places: TerminalPlace[],

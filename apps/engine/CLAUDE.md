@@ -102,7 +102,7 @@ src/
 │   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
-│   │                    the task's own service runs (services.ts: `list_services` and `run_service`),
+│   │                    the task's own service runs and the services it adds (services.ts: `list_services`, `run_service`, `add_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
 │   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
