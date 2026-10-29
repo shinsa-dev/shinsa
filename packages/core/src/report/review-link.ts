@@ -18,7 +18,7 @@ type ReviewEvidenceKind = Extract<Evidence['kind'], 'screenshot' | 'recording' |
 
 const REVIEW_EVIDENCE_KINDS: readonly ReviewEvidenceKind[] = ['screenshot', 'recording', 'preview'];
 
-const FINDING_SEVERITIES: readonly ReviewFinding['severity'][] = ['blocking', 'suggestion'];
+const FINDING_SEVERITIES: readonly ReviewFinding['severity'][] = ['blocking', 'should_fix', 'optional'];
 
 const CHECK_OUTCOMES: readonly ReportCheck['outcome'][] = ['pass', 'fail', 'skipped'];
 

@@ -665,7 +665,7 @@ describe('validateReview', () => {
               message: 'The loop skips the last item.',
               fix: 'Use `<=` in the loop.',
             },
-            { severity: 'suggestion', message: 'Rename it.', title: '', fix: null },
+            { severity: 'optional', message: 'Rename it.', title: '', fix: null },
           ],
         })
       )
@@ -681,7 +681,7 @@ describe('validateReview', () => {
           message: 'The loop skips the last item.',
           fix: 'Use `<=` in the loop.',
         },
-        { severity: 'suggestion', file: null, line: null, end: null, message: 'Rename it.' },
+        { severity: 'optional', file: null, line: null, end: null, message: 'Rename it.' },
       ],
       disagreements: [],
     });
@@ -732,7 +732,7 @@ describe('validateReview', () => {
       'findings[0].end comes before findings[0].line.',
       `findings[0].title is ${PROTOCOL_LIMITS.findingTitle + 1} characters; the limit is ${PROTOCOL_LIMITS.findingTitle}.`,
       `findings[0].fix is ${PROTOCOL_LIMITS.findingFix + 1} characters; the limit is ${PROTOCOL_LIMITS.findingFix}.`,
-      'findings[0].severity must be one of blocking, suggestion.',
+      'findings[0].severity must be one of blocking, should_fix, optional.',
       `findings[0].message is 300 characters; the limit is ${PROTOCOL_LIMITS.finding}.`,
     ]);
   });

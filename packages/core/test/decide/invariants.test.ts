@@ -135,6 +135,14 @@ const STEPS = 400;
 
 const DECISIONS: GateDecision[] = ['approve', 'approve', 'approve', 'approve', 'revise', 'reply', 'reject'];
 
+const FINDING_SEVERITY_ODDS: ReviewFinding['severity'][] = [
+  'blocking',
+  'blocking',
+  'blocking',
+  'should_fix',
+  'optional',
+];
+
 const CHECK_NOTES = [undefined, undefined, undefined, 'passed_alone', 'fails_on_base'] as const;
 
 function randomChecks(state: ShinsaState, task: Task, random: Random): ReportCheck[] {
@@ -186,7 +194,7 @@ function randomFindings(random: Random): ReviewFinding[] {
   if (chance(random, 0.6)) return [];
   return [
     {
-      severity: chance(random, 0.6) ? 'blocking' : 'suggestion',
+      severity: pick(random, FINDING_SEVERITY_ODDS) ?? 'blocking',
       file: pick(random, ['a.ts', 'b.ts', null]) ?? null,
       line: 1,
       message: 'Look here.',

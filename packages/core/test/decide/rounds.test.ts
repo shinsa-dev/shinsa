@@ -759,7 +759,7 @@ describe('what each round keeps', () => {
       runId: harness.activeRun(taskId).id,
       summary: 'Read the whole change; one naming nit.',
       findings: [
-        { severity: 'suggestion', file: 'src/a.ts', line: 2, title: 'Vague name', message: 'Rename it.' },
+        { severity: 'optional', file: 'src/a.ts', line: 2, title: 'Vague name', message: 'Rename it.' },
       ],
     });
     expect(harness.task(taskId).reviewSummary).toBe('Read the whole change; one naming nit.');

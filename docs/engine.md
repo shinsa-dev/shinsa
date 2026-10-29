@@ -405,7 +405,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    and a suggested fix when it has one, and the Agent's judgement calls it would have made differently
    (`disagreements`, by their number in its brief; `resolveReviewerPrompt`). The task keeps them as `reviewSummary`,
    `findings` and `reviewDisagreements` until the next review or round (The review report, below). Blocking findings go back to the Agent, and then
-   the checks and a new reviewer run again. Suggestions alone do not block.
+   the checks and a new reviewer run again. Each finding has one of three levels, named for what happens to it:
+   `blocking` (a bug, a missed requirement, a broken rule, a failing check: back to the Agent), `should_fix` (not
+   proven broken, but worth holding the merge for) and `optional` (taste, polish). Should fix and optional findings
+   alone do not block; they reach your review.
 6. **Your review.** The review gate shows one report built from every phase. Approve it, or write
    in the chat: a message while the gate is open withdraws it and goes to the Agent. Approving with edits you made in
    the Code tab that no commit has yet commits them and runs the checks again before the push (Your edits, below).
@@ -1406,7 +1409,8 @@ checks it ran.
   could not settle it. Only review fixes escalate: a checks or pull request fix that stalls or
   runs out opens a failure gate (Recovery, below).
 - At any review gate you can decide each finding: Fix or Dismiss (`gate.answer` with
-  `verdicts`, one per finding index). Kept findings go to the Agent with the dismissed ones named
+  `verdicts`, one per finding index). Fix is chosen at first for a blocking or should fix finding and Dismiss for an
+  optional one (`createVerdictDraft` in the web). Kept findings go to the Agent with the dismissed ones named
   as off-limits; dismissing all of them approves. Approving with a Fix verdict is refused.
 - Request changes at a review or merge gate carries your line comments as data (`gate.answer` with `comments`,
   `docs/protocol.md` → Line comments), not as text the web wrote: core writes them into the Agent's fix prompt after your

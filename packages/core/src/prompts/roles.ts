@@ -329,7 +329,7 @@ function describeCoverageForReview(task: Task) {
       ? ['Changed lines no test runs (new-file line numbers):', ...gaps.map((gap) => `- ${gap}`)]
       : []),
     gaps.length > 0
-      ? 'Read those lines. Important new logic that no test runs (a branch that decides something, error handling, a calculation) is a finding: blocking when a bug there would go unnoticed, a suggestion otherwise. Leave out trivial lines.'
+      ? 'Read those lines. Important new logic that no test runs (a branch that decides something, error handling, a calculation) is a finding: blocking when a bug there would go unnoticed, should fix otherwise. Leave out trivial lines.'
       : '',
   ].join('\n');
 }
@@ -403,8 +403,9 @@ export function resolveReviewerPrompt(
     describeReviewScope(task, repo, stacked?.branch ?? null),
     describeTaskChecks(task, repo),
     "None of them blocks: a check that fails on the base branch too is not the change's, and CI runs the whole suite on the pull request. Look for what the checks miss, and run what the change touches that no check covers.",
-    'A blocking finding is a bug, a missed requirement, a broken repository rule or a security problem. Everything optional is a suggestion.',
-    'Check the new code follows the patterns of the code around it: a helper, component or query the repository already has re-implemented, or a new way of doing what it does one way everywhere, is a finding that names the existing code. It is blocking when the repository’s rules name the pattern.',
+    'Rank every finding by what should happen to it. `blocking`: a bug, a missed requirement, a broken repository rule or a security problem; the agent fixes it before the human sees the review. `should_fix`: not proven broken, but the change is worse without the fix and you would ask for it before the merge (an unhandled edge case, untested logic that decides something, a duplicated helper, a misleading name or message); the human sees it with Fix chosen. `optional`: taste, polish or a small cleanup the change is fine without; the human sees it with Dismiss chosen.',
+    'When you are unsure between `should_fix` and `optional`, ask whether you would hold the merge for it in a colleague’s pull request: yes is `should_fix`.',
+    'Check the new code follows the patterns of the code around it: a helper, component or query the repository already has re-implemented, or a new way of doing what it does one way everywhere, is a finding that names the existing code. It is blocking when the repository’s rules name the pattern, and should fix otherwise.',
     'Anchor every finding to a file and line range. Reproduce a finding before you report it; one you cannot reproduce is a guess.',
     'Give every finding a title of at most 80 characters that says what is wrong in a few words.',
     'Use its message, at most 280 characters, for what is wrong and why it matters.',

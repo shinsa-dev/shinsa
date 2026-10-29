@@ -243,8 +243,8 @@ describe('verdicts on review findings', () => {
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [
-        { severity: 'suggestion', file: 'a.ts', line: 3, message: 'Rename it.' },
-        { severity: 'suggestion', file: 'b.ts', line: 9, message: 'Cache it.' },
+        { severity: 'should_fix', file: 'a.ts', line: 3, message: 'Rename it.' },
+        { severity: 'optional', file: 'b.ts', line: 9, message: 'Cache it.' },
       ],
     });
     return { harness, taskId, gate: harness.openGate(taskId) };
@@ -264,9 +264,9 @@ describe('verdicts on review findings', () => {
     });
     const prompt = readInstruction(harness.activeRun(taskId));
     expect(prompt.startsWith('The human looked at the work and decided on each review finding.')).toBe(true);
-    expect(prompt).toContain('Fix these:\n- [suggestion] a.ts:3: Rename it.');
+    expect(prompt).toContain('Fix these:\n- [should fix] a.ts:3: Rename it.');
     expect(prompt).toContain(
-      'Leave these alone; the human dismissed them:\n- [suggestion] b.ts:9: Cache it. (the human: Premature.)'
+      'Leave these alone; the human dismissed them:\n- [optional] b.ts:9: Cache it. (the human: Premature.)'
     );
     expect(prompt).toContain('The human also wrote:\nKeep the API stable.');
     expect(harness.task(taskId).findings.map((finding) => finding.verdict)).toEqual(['fix', 'dismiss']);
