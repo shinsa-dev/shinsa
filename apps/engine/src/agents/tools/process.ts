@@ -1,7 +1,10 @@
 import {
+  MEMORY_LIMITS,
+  MEMORY_SCOPES,
   PROTOCOL_LIMITS,
   type ShinsaCommand,
   type ShinsaEvent,
+  validateMemoryProposal,
   validateSuggestions,
   validateWait,
 } from '@shinsa/core';
@@ -95,6 +98,27 @@ export const PROCESS_TOOL_SPECS = {
       required: ['tasks'],
     },
   },
+  remember: {
+    name: 'remember',
+    description:
+      'Propose a rule every later agent should follow, when the human corrected you or said "always" or "never" in this task. The human keeps or dismisses it; nothing changes until they keep it. Only what the code cannot show you: their taste, their limits, how they want things written. Never a fact about the code or the repository.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scope: {
+          type: 'string',
+          enum: [...MEMORY_SCOPES],
+          description: 'global: for every project. project: only for the project this task belongs to.',
+        },
+        text: limitedText(
+          'The rule as one short instruction to an agent, such as "Keep plans to three phases or fewer."',
+          MEMORY_LIMITS.text
+        ),
+        why: limitedText('What the human said that it comes from, in one sentence.', MEMORY_LIMITS.why),
+      },
+      required: ['scope', 'text', 'why'],
+    },
+  },
 } satisfies Record<string, ToolSpec>;
 
 export interface ProcessToolCall {
@@ -125,6 +149,11 @@ export async function handleProcessTool(name: string, input: Record<string, unkn
       const suggestions = assertProtocol(validateSuggestions(input));
       await call.dispatch({ type: 'agent.suggest_tasks', runId, attemptId, suggestions });
       return 'Suggested. The human decides whether to add them. Carry on with your step.';
+    }
+    case 'remember': {
+      const rule = assertProtocol(validateMemoryProposal(input));
+      await call.dispatch({ type: 'agent.remember', runId, attemptId, ...rule });
+      return 'Proposed. The human decides whether agents remember it. Carry on with your step.';
     }
     default:
       return handleShapeTool(name, input, call);

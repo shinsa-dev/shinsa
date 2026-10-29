@@ -5,6 +5,7 @@ import {
   type RunPurpose,
   type RunRole,
   type StoredBriefing,
+  type WorkspaceMode,
 } from '@shinsa/core';
 
 export interface StoredEventRow {
@@ -60,11 +61,25 @@ const TESTING_LOG_VERSION = 3;
 
 const WEEKLY_READINGS_LOG_VERSION = 4;
 
+const WATCH_CI_LOG_VERSION = 5;
+
+const NO_GITBUTLER_LOG_VERSION = 6;
+
+const GITBUTLER_EVENT_TYPES = [
+  'repo.registered',
+  'repo.updated',
+  'worktree.requested',
+  'worktree.created',
+  'gate.opened',
+];
+
 export function listLegacyEventTypes(version: number) {
   return [
     ...(version < 1 ? LEGACY_EVENT_TYPES : []),
     ...(version < TESTING_LOG_VERSION ? WALKTHROUGH_EVENT_TYPES : []),
     ...(version < WEEKLY_READINGS_LOG_VERSION ? ['run.metered'] : []),
+    ...(version < WATCH_CI_LOG_VERSION ? ['pull_request.watched'] : []),
+    ...(version < NO_GITBUTLER_LOG_VERSION ? GITBUTLER_EVENT_TYPES : []),
   ];
 }
 
@@ -111,6 +126,16 @@ function resolveReport(event: Payload) {
   return { ...event, report: { ...event.report, walkthrough: resolveWalkthrough(event.report.walkthrough) } };
 }
 
+function resolveRepo(event: Payload) {
+  if (!isRecord(event.repo) || event.repo.workspace !== 'gitbutler') return event;
+  return { ...event, repo: { ...event.repo, workspace: DEFAULT_WORKSPACE_MODE } };
+}
+
+function resolveGate(event: Payload) {
+  if (!isRecord(event.gate) || event.gate.cause !== 'workspace_update') return event;
+  return { ...event, gate: withoutKeys(event.gate, ['cause']) };
+}
+
 function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
   switch (event.type) {
     case 'task.answered': {
@@ -130,9 +155,19 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
     case 'settings.changed':
       if (!isRecord(event.settings)) return event;
       return { ...event, settings: withoutKeys(event.settings, ['worktreesDirectory']) };
+    case 'repo.registered':
+    case 'repo.updated':
+      return resolveRepo(event);
+    case 'worktree.requested':
+      if (event.workspace !== 'gitbutler') return event;
+      return { ...event, workspace: DEFAULT_WORKSPACE_MODE };
     case 'worktree.created':
+      if (event.workspace === 'gitbutler')
+        return { ...event, workspace: 'main_checkout' satisfies WorkspaceMode };
       if ('workspace' in event) return event;
       return { ...event, workspace: DEFAULT_WORKSPACE_MODE };
+    case 'gate.opened':
+      return resolveGate(event);
     case 'run.started': {
       if (!isRecord(event.run)) return event;
       const taskId = typeof event.run.taskId === 'string' ? event.run.taskId : '';
@@ -145,6 +180,9 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return { ...event, walkthrough: resolveWalkthrough(event.walkthrough) };
     case 'run.metered':
       return withoutKeys(event, ['weeklyPercent']);
+    case 'pull_request.watched':
+      if (!isRecord(event.watch) || 'ciAbsent' in event.watch) return event;
+      return { ...event, watch: { ...event.watch, ciAbsent: false } };
     default:
       return event;
   }

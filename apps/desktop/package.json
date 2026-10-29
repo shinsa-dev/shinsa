@@ -14,7 +14,6 @@
     "dmg-background": "bun scripts/dmg-background.ts",
     "icon": "bun scripts/icon.ts",
     "package": "bun run --cwd ../web build && bun ../engine/scripts/build-engine.ts && bun run build && electron-builder --mac --arm64 --publish never -c.mac.identity=null && codesign --force --deep --sign - release/mac-arm64/Shinsa.app",
-    "package:canary": "bun run --cwd ../web build && SHINSA_FLAVOR=canary bun ../engine/scripts/build-engine.ts && SHINSA_FLAVOR=canary bun run build && electron-builder --config electron-builder.canary.yml --mac --arm64 --publish never -c.mac.identity=null && codesign --force --deep --sign - 'release/mac-arm64/Shinsa Canary.app'",
     "test": "bun test --randomize"
   },
   "devDependencies": {

@@ -46,7 +46,6 @@ describe('which Shinsa is running', () => {
       problems: [],
       ...instance,
       protocol: ENGINE_PROTOCOL,
-      flavor: 'stable',
       busy: false,
       restart: null,
       dataDir: '/data',
@@ -58,8 +57,5 @@ describe('which Shinsa is running', () => {
       problems: [problem],
       uptimeMs: 0,
     });
-    expect(resolveHealth({ seq: 9, problems: [] }, '/data', instance, idle, 0, 'canary').flavor).toBe(
-      'canary'
-    );
   });
 });

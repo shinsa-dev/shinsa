@@ -244,6 +244,18 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
   );
 }
 
+function RememberCard({ args }: { args: ChatToolArgs }) {
+  const why = readString(args, 'why');
+  return (
+    <Card icon='IconLightbulbGlow' title='Proposed a rule to remember' meta='In Settings → Memory'>
+      <div className='flex flex-col gap-px text-xs'>
+        <InlineMarkdown text={readString(args, 'text') ?? ''} className='selectable font-medium text-fg-4' />
+        {why && <InlineMarkdown text={why} className='text-fg-3' />}
+      </div>
+    </Card>
+  );
+}
+
 function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArgs; field: string }) {
   const proposal = readProposedChange(args);
   return (
@@ -330,6 +342,8 @@ export function HandoverCard({
       return <AskCard call={call} args={tool.args} delegated={Boolean(run.delegation)} />;
     case 'suggest_tasks':
       return <SuggestionsCard args={tool.args} />;
+    case 'remember':
+      return <RememberCard args={tool.args} />;
     case 'answer':
       return <DeliveryCard title='Handed over the answer' args={tool.args} field='answer' />;
     case 'report_diagnosis':

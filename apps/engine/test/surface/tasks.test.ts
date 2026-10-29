@@ -307,6 +307,11 @@ describe('the task commands', () => {
       { type: 'round.remove', taskId: 'task-123', number: 3 },
       'Removed the queued round.',
     ],
+    [
+      ['rounds', 'send', 'fix', '2'],
+      { type: 'round.send', taskId: 'task-123', number: 2 },
+      'Sent the queued round to the current round.',
+    ],
     [['tasks', 'retry', 'fix'], { type: 'task.retry', taskId: 'task-123' }, 'Retrying.'],
     [
       ['tasks', 'retry', 'fix', '--account', 'acc-1'],

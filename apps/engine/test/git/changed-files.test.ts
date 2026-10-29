@@ -20,15 +20,15 @@ describe('the files a task changed', () => {
     expect(await listChangedFiles(repo, task, null)).toEqual(['README.md', 'new/c.ts', 'src/a.ts']);
   });
 
-  test('a GitButler branch lists its commits from the repository, and a branch not made yet lists none', async () => {
+  test('a branch with no checkout lists its commits from the repository, and a branch not made yet lists none', async () => {
     const { repo } = await createGitRepo({ remote: false });
     await git(repo.path, 'checkout', '-q', '-b', 'feat/butler');
     writeFiles(repo.path, { 'b.ts': '1\n' });
     await commitAll(repo.path, 'feat: b');
     await git(repo.path, 'checkout', '-q', 'main');
     writeFiles(repo.path, { 'mine.ts': 'not the task’s\n' });
-    const butler = createTask({ branch: 'feat/butler', worktreePath: repo.path, workspace: 'gitbutler' });
-    expect(await listChangedFiles(repo, butler, null)).toEqual(['b.ts']);
+    const branch = createTask({ branch: 'feat/butler', worktreePath: null });
+    expect(await listChangedFiles(repo, branch, null)).toEqual(['b.ts']);
     const unborn = createTask({ branch: 'feat/later', worktreePath: null });
     expect(await listChangedFiles(repo, unborn, null)).toEqual([]);
   });

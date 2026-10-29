@@ -300,6 +300,25 @@ describe('the other read endpoints', () => {
     expect((await read('/api/schedules')).body).toEqual({ schedules: [] });
   });
 
+  test('memory lists every rule with the name of its project', async () => {
+    const { read, engine } = await start();
+    await engine.dispatch({ type: 'project.write', project: { name: 'Work', color: 'blue', key: 'WK' } });
+    const projectId = Object.keys(engine.state.projects)[0] ?? '';
+    await engine.dispatch({
+      type: 'memory.write',
+      memoryId: null,
+      projectId: null,
+      text: 'Never use em dashes.',
+    });
+    await engine.dispatch({ type: 'memory.write', memoryId: null, projectId, text: 'Use bun.' });
+    expect((await read('/api/memory')).body).toMatchObject({
+      memory: [
+        { text: 'Never use em dashes.', project: null, status: 'kept' },
+        { text: 'Use bun.', project: 'Work', projectId },
+      ],
+    });
+  });
+
   test('delegations list every delegated run, or one task’s, and a missing task is refused', async () => {
     const { read, engine, runId, fixId } = await start();
     expect((await read('/api/delegations')).body).toEqual({ delegations: [] });

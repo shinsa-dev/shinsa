@@ -3,7 +3,6 @@ import {
   describeAppVersion,
   describeUpdateChannel,
   isAboveChannel,
-  listUpdateChannels,
   parseUpdateChannel,
   resolveDowngradeOffer,
   resolveUpdateChannel,
@@ -11,14 +10,10 @@ import {
 } from '../../src/lib/update-channel.ts';
 
 describe('parseUpdateChannel', () => {
-  it('reads Stable and Beta in Shinsa, and only Canary in Shinsa Canary', () => {
-    expect(listUpdateChannels()).toEqual(['stable', 'beta']);
-    expect(listUpdateChannels('canary')).toEqual(['canary']);
+  it('reads Stable, Beta and Canary', () => {
     expect(parseUpdateChannel('stable')).toBe('stable');
     expect(parseUpdateChannel('beta')).toBe('beta');
-    expect(parseUpdateChannel('canary')).toBeNull();
-    expect(parseUpdateChannel('canary', 'canary')).toBe('canary');
-    expect(parseUpdateChannel('beta', 'canary')).toBeNull();
+    expect(parseUpdateChannel('canary')).toBe('canary');
     expect(parseUpdateChannel('latest')).toBeNull();
     expect(parseUpdateChannel(undefined)).toBeNull();
     expect(parseUpdateChannel(1)).toBeNull();
@@ -31,17 +26,16 @@ describe('resolveUpdateChannel', () => {
     expect(resolveUpdateChannel('stable', '1.3.0-beta.2')).toBe('stable');
   });
 
-  it('starts a beta on Beta and a release on Stable until you choose', () => {
+  it('starts a beta on Beta, a canary on Canary and a release on Stable until you choose', () => {
     expect(resolveUpdateChannel(undefined, '1.3.0-beta.2')).toBe('beta');
     expect(resolveUpdateChannel('nightly', '1.2.0')).toBe('stable');
     expect(resolveUpdateChannel(null, '0.0.0')).toBe('stable');
+    expect(resolveUpdateChannel(undefined, '1.3.1-canary.4')).toBe('canary');
   });
 
-  it('never puts Shinsa on Canary, and keeps Shinsa Canary on it whatever is stored', () => {
-    expect(resolveUpdateChannel('canary', '1.3.0')).toBe('stable');
-    expect(resolveUpdateChannel(undefined, '1.3.1-canary.4')).toBe('beta');
-    expect(resolveUpdateChannel('stable', '1.3.1-canary.4', 'canary')).toBe('canary');
-    expect(resolveUpdateChannel(undefined, '1.3.0', 'canary')).toBe('canary');
+  it('keeps Canary when you chose it, and leaves it when you choose another channel', () => {
+    expect(resolveUpdateChannel('canary', '1.3.0')).toBe('canary');
+    expect(resolveUpdateChannel('beta', '1.3.1-canary.4')).toBe('beta');
   });
 });
 
@@ -72,7 +66,7 @@ describe('resolveUpdaterOptions', () => {
 });
 
 describe('resolveUpdaterOptions for going back', () => {
-  it('allows a downgrade only for the one Stable or Beta update you accepted', () => {
+  it('allows a downgrade only for the one Stable or Beta update you accepted, never onto Canary', () => {
     expect(resolveUpdaterOptions('stable', true)).toEqual({
       channel: 'latest',
       allowPrerelease: false,
@@ -108,7 +102,16 @@ describe('resolveDowngradeOffer', () => {
     expect(resolveDowngradeOffer({ ...offer, kept: '1.3.0-beta.1' })).toBe('1.2.0');
   });
 
-  it('never offers Shinsa Canary a way back', () => {
+  it('offers a canary that switched to Beta or Stable the newest version of that channel', () => {
+    const canary = { ...offer, current: '1.3.1-canary.4' };
+    expect(resolveDowngradeOffer({ ...canary, channel: 'beta', latest: '1.3.0-beta.2' })).toBe(
+      '1.3.0-beta.2'
+    );
+    expect(resolveDowngradeOffer({ ...canary, latest: '1.3.0' })).toBe('1.3.0');
+    expect(resolveDowngradeOffer({ ...canary, latest: '1.3.1' })).toBeNull();
+  });
+
+  it('never offers a way back on Canary', () => {
     expect(resolveDowngradeOffer({ ...offer, channel: 'canary', current: '1.3.1-canary.4' })).toBeNull();
   });
 });

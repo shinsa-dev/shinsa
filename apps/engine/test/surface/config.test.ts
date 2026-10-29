@@ -311,7 +311,7 @@ describe('repositories', () => {
           '--checks',
           'bun lint',
           '--workspace',
-          'gitbutler',
+          'main_checkout',
           '--coverage',
           'off',
         ])
@@ -352,7 +352,7 @@ describe('repositories', () => {
           defaultBranch: 'trunk',
           projectId: 'project-1',
           checkCommands: ['bun test', 'bun lint'],
-          workspace: 'gitbutler',
+          workspace: 'main_checkout',
           coverage: { mode: 'off' },
         },
       },

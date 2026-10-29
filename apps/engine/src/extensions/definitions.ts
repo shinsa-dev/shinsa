@@ -15,7 +15,29 @@ type Fields = Record<string, unknown>;
 
 export type Env = Record<string, string | undefined>;
 
-export const HEADLESS_BROWSER_ENV = { PLAYWRIGHT_MCP_HEADLESS: 'true' };
+const HEADLESS_BROWSER_ENV = { PLAYWRIGHT_MCP_HEADLESS: 'true' };
+
+const RETINA_BROWSER_ENV = { PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI' };
+
+const DEVICE_CHOICES = [
+  'PLAYWRIGHT_MCP_DEVICE',
+  'PLAYWRIGHT_MCP_MOBILE',
+  'PLAYWRIGHT_MCP_CDP_ENDPOINT',
+  'PLAYWRIGHT_MCP_EXTENSION',
+  'PLAYWRIGHT_MCP_ENDPOINT',
+];
+
+const DEVICE_FLAGS = ['--device', '--mobile', '--cdp-endpoint', '--extension', '--endpoint'];
+
+export function resolveBrowserEnv<T extends string | undefined>(
+  env: Record<string, T>,
+  args: string[] = []
+): Record<string, T | string> {
+  const chosen =
+    DEVICE_CHOICES.some((key) => env[key] !== undefined) ||
+    args.some((arg) => DEVICE_FLAGS.some((flag) => arg === flag || arg.startsWith(`${flag}=`)));
+  return { ...(chosen ? {} : RETINA_BROWSER_ENV), ...env, ...HEADLESS_BROWSER_ENV };
+}
 
 const TRANSPORTS = new Set<McpTransport>(['stdio', 'http', 'sse']);
 

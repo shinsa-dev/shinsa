@@ -16,6 +16,7 @@ import {
   resolvePanView,
   resolvePinch,
   resolvePinchView,
+  resolveShownSize,
   resolveStagePoint,
   resolveStepIndex,
   resolveSwap,
@@ -57,6 +58,20 @@ describe('resolveImageName', () => {
     expect(resolveImageName('blob:http://localhost/123')).toBe('Image');
     expect(resolveImageName('?size=2')).toBe('Image');
     expect(resolveImageName('')).toBe('Image');
+  });
+});
+
+describe('resolveShownSize', () => {
+  it('shows a shot taken at twice the scale at the width it was taken at, so each CSS pixel keeps two', () => {
+    expect(resolveShownSize({ width: 2560, height: 1600 }, 1280)).toEqual({ width: 1280, height: 800 });
+    expect(resolveShownSize({ width: 1170, height: 2532 }, 390)).toEqual({ width: 390, height: 844 });
+  });
+
+  it('keeps the natural size without a width, or when the file is no wider than it', () => {
+    expect(resolveShownSize({ width: 1280, height: 800 }, null)).toEqual({ width: 1280, height: 800 });
+    expect(resolveShownSize({ width: 1280, height: 800 }, undefined)).toEqual({ width: 1280, height: 800 });
+    expect(resolveShownSize({ width: 1280, height: 800 }, 1280)).toEqual({ width: 1280, height: 800 });
+    expect(resolveShownSize({ width: 900, height: 860 }, 1280)).toEqual({ width: 900, height: 860 });
   });
 });
 

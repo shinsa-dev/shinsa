@@ -41,7 +41,6 @@ import { type Classifier, routeUserCommand } from '../triage/message.ts';
 import type { Versions } from '../versions/index.ts';
 import { createVersionRoutes } from '../versions/routes.ts';
 import type { Workspaces } from '../workspaces/index.ts';
-import { LedgerStore } from '../workspaces/ledger.ts';
 import { type JsonObject, readJson, readJsonObject } from './body.ts';
 import { createCodeRoutes } from './code.ts';
 import { createEditRoutes } from './edits.ts';
@@ -169,7 +168,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
   }
 
   return [
-    ...createCodeRoutes(engine, new LedgerStore(context.config.dataDir)),
+    ...createCodeRoutes(engine),
     ...(context.workspaces ? createEditRoutes(engine, context.workspaces) : []),
     {
       method: 'POST',

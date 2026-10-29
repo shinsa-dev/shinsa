@@ -30,6 +30,7 @@ import { createSampleDelegations } from './sample-delegations.ts';
 import { createOverviewScene } from './sample-overview.ts';
 import {
   acknowledgeSample,
+  createSampleMergeQueueState,
   createSampleQueueTask,
   createSampleRoundsTask,
   createSampleRun,
@@ -149,6 +150,10 @@ function RoundSpecimens({ now }: { now: number }) {
 function QueueSpecimens({ now }: { now: number }) {
   const [one] = React.useState(() => createSampleQueueTask(now, 1));
   const [several] = React.useState(() => createSampleQueueTask(now, 3));
+  const [state] = React.useState(() => createSampleState({ tasks: [one, several] }));
+  const [atMerge] = React.useState(() => createSampleMergeQueueState(now));
+  const merging = Object.values(atMerge.tasks)[0];
+  const sample = { onUpdate: acknowledgeSample, onSend: acknowledgeSample, onRemove: acknowledgeSample };
   return (
     <>
       <Specimen label='MessageQueue · one queued message, docked above the composer'>
@@ -157,15 +162,22 @@ function QueueSpecimens({ now }: { now: number }) {
             placeholder='Tell the agent something.'
             submitLabel='Send message'
             onSubmit={acknowledgeSample}
-            dock={<MessageQueue task={one} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />}
+            dock={<MessageQueue state={state} task={one} {...sample} />}
           />
         </div>
       </Specimen>
-      <Specimen label='MessageQueue · several queued messages, each one editable and removable until it sends'>
+      <Specimen label='MessageQueue · several queued messages, each one editable, removable or sent now until it sends'>
         <div className='w-full max-w-xl'>
-          <MessageQueue task={several} onUpdate={acknowledgeSample} onRemove={acknowledgeSample} />
+          <MessageQueue state={state} task={several} {...sample} />
         </div>
       </Specimen>
+      {merging && (
+        <Specimen label='MessageQueue · a round queued while round 2 waits at the merge gate: it starts only after the merge, so Send now gives it to round 2 instead'>
+          <div className='w-full max-w-xl'>
+            <MessageQueue state={atMerge} task={merging} {...sample} />
+          </div>
+        </Specimen>
+      )}
     </>
   );
 }

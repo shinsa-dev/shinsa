@@ -215,6 +215,7 @@ function numberImages(entries: readonly EvidenceEntry[]) {
         src: part.evidence.uri,
         caption,
         media: part.media === 'video' ? 'video' : 'image',
+        width: part.evidence.width ?? null,
         item: entry.key,
         ...(named ? { part: describeEvidencePart(part.evidence) } : {}),
       });

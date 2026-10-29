@@ -1125,6 +1125,15 @@
  * These rules must live OUTSIDE any `@layer` so they beat sonner's
  * runtime-injected stylesheet, which is unlayered and would otherwise win
  * the cascade against our layered base rules.
+ *
+ * Unlayered is not enough on its own: sonner appends its <style> to <head>
+ * when its module runs, which in a production build is after our stylesheet's
+ * <link>, so a tie in specificity goes to sonner (the dev server injects ours
+ * later and hides this). Every rule here that replaces one of sonner's must be
+ * strictly more specific than it, which is why the parts are scoped under
+ * `[data-sonner-toast][data-styled="true"].bk-toast` (sonner's own rules use
+ * `[data-sonner-toast][data-styled=true]`). test/styles/globals.test.ts checks
+ * this against sonner's stylesheet.
  * ────────────────────────────────────────────────────────────────────── */
 
 @keyframes bk-toast-shake {
@@ -1192,7 +1201,7 @@
   padding-right: 10px;
 }
 
-[data-sonner-toast].bk-toast [data-content] {
+[data-sonner-toast][data-styled="true"].bk-toast [data-content] {
   gap: 0;
   flex: 1 1 auto;
   min-width: 0;
@@ -1210,7 +1219,7 @@
  * sonner absolutely-positions (see below). The -2px end margin takes the toast's
  * 8px gap down to the 6px icon ↔ label of a menu row or button, so the gap to an
  * action stays 8px. */
-[data-sonner-toast].bk-toast [data-icon] {
+[data-sonner-toast][data-styled="true"].bk-toast [data-icon] {
   width: 14px;
   height: 14px;
   margin: 0 -2px 0 0;
@@ -1218,17 +1227,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-[data-sonner-toast].bk-toast [data-icon] > svg {
-  margin: 0;
+  position: relative;
 }
 /* The loader is absolutely centered *on purpose* — that's what lets the result
  * icon cross-fade in the same spot. Never pull it into flow, or the two icons
- * sit side by side. The explicit box above is what stops it collapsing. */
-[data-sonner-toast].bk-toast [data-icon] {
-  position: relative;
-}
+ * sit side by side. The explicit box above is what stops it collapsing. The
+ * loader takes the icon box's full size: sonner's `left: 50%` would otherwise
+ * shrink it to 13px and its -50% shift would leave the spinner half a pixel off. */
 [data-sonner-toast].bk-toast .sonner-loader {
+  width: 100%;
+  height: 100%;
   transition:
     opacity 200ms ease,
     transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1244,12 +1252,14 @@
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] {
+[data-sonner-toast][data-styled="true"].bk-toast:has([data-description]) [data-icon] {
   align-self: flex-start;
   margin-top: -2.5px;
 }
 
-/* The result icon scales up as the loader shrinks away underneath it. */
+/* The result icon scales up as the loader shrinks away underneath it. It keeps
+ * the last frame: sonner hides a promise toast's icon (`opacity: 0`) and leaves
+ * its own fade-in to show it, which this animation replaces. */
 @keyframes bk-toast-icon-in {
   from {
     opacity: 0;
@@ -1260,10 +1270,14 @@
     transform: scale(1);
   }
 }
+/* Sonner nudges its 16px icons, the loader's included, with a -1px start margin. */
+[data-sonner-toast][data-styled="true"].bk-toast [data-icon] svg {
+  margin: 0;
+}
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
   transform: none;
   transform-origin: center;
-  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* ── Selection — follows the surface ──────────────────────────────────────
