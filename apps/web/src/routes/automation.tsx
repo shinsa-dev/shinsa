@@ -6,7 +6,7 @@ import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskLink } from '@/components/links/task.tsx';
-import { QuestionCard } from '@/components/overview/now-card.tsx';
+import { PausedCard, QuestionCard } from '@/components/overview/now-card.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { createScheduleActions, ScheduleMenu } from '@/components/settings/schedules.tsx';
@@ -50,6 +50,10 @@ function WatchGate({ state, home, gate }: { state: ShinsaState; home: Task; gate
       return <SignInCard state={state} task={home} gate={gate} />;
     case 'secret':
       return <SecretCard state={state} task={home} gate={gate} />;
+    case 'failure':
+      return (
+        <PausedCard state={state} task={home} gate={gate} onOpen={() => {}} cancelLabel='Stop this watch' />
+      );
     default:
       return <QuestionCard state={state} task={home} gate={gate} />;
   }

@@ -1,9 +1,10 @@
-import { isPausingGate } from '../domain/index.ts';
+import { isPausingGate, isWatchHome } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import { retryChecks } from './checks.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
+import { restartIntakeRead } from './intake.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
@@ -75,7 +76,8 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       startOperation(decider, taskId, guidance);
       return;
     case 'watching':
-      restartWatchCheck(decider, task, guidance);
+      if (isWatchHome(task)) restartIntakeRead(decider, task);
+      else restartWatchCheck(decider, task, guidance);
       return;
     case 'awaiting_proposal':
     case 'awaiting_operation':

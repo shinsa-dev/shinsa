@@ -141,7 +141,12 @@ export function selectWatchOfHome(state: ShinsaState, taskId: string) {
   );
 }
 
-const WATCH_GATE_TYPES: ReadonlySet<Gate['type']> = new Set<Gate['type']>(['question', 'sign_in', 'secret']);
+const WATCH_GATE_TYPES: ReadonlySet<Gate['type']> = new Set<Gate['type']>([
+  'question',
+  'sign_in',
+  'secret',
+  'failure',
+]);
 
 export function listAutomationGates(state: ShinsaState, schedule: Schedule) {
   const home = schedule.target.kind === 'task' ? state.tasks[schedule.target.taskId] : undefined;

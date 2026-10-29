@@ -250,7 +250,7 @@ describe('the decisions a watch waits on', () => {
     target: { kind: 'task', taskId: 'home' },
   });
 
-  it('lists its home’s open question, sign-in and secret gates, and nothing for a plain schedule', () => {
+  it('lists its home’s open question, sign-in, secret and pause gates, and nothing for a plain schedule', () => {
     const state = createShinsaState({
       tasks: [createTask({ id: 'home', watchHome: true }), createTask({ id: 'plain' })],
       gates: [
@@ -258,11 +258,12 @@ describe('the decisions a watch waits on', () => {
         createGate({ id: 's', taskId: 'home', type: 'sign_in' }),
         createGate({ id: 'k', taskId: 'home', type: 'secret' }),
         createGate({ id: 'old', taskId: 'home', type: 'question', status: 'answered' }),
+        createGate({ id: 'f', taskId: 'home', type: 'failure', cause: 'budget' }),
         createGate({ id: 'r', taskId: 'home', type: 'review' }),
       ],
       patch: { schedules: { w: watch } },
     });
-    expect(listAutomationGates(state, watch).map(({ gate }) => gate.id)).toEqual(['q', 's', 'k']);
+    expect(listAutomationGates(state, watch).map(({ gate }) => gate.id)).toEqual(['q', 's', 'k', 'f']);
     expect(listAutomationGates(state, watch)[0]?.home.id).toBe('home');
     const message = createSchedule({ id: 'm', target: { kind: 'task', taskId: 'plain' } });
     expect(listAutomationGates(state, message)).toEqual([]);

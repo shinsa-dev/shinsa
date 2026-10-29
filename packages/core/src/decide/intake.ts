@@ -222,6 +222,12 @@ export function startIntake(decider: Decider, schedule: Schedule, task: Task, no
   return run.id;
 }
 
+export function restartIntakeRead(decider: Decider, task: Task) {
+  const schedule = selectIntakeSchedule(decider, task);
+  if (schedule && startIntake(decider, schedule, task, schedule.text)) return;
+  settleTask(decider, task.id, resolveRestingStage(task), 'no automation reads here any more');
+}
+
 export function reportIntake(decider: Decider, command: CommandOf<'agent.report_intake'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'report_intake');
   const summary = command.summary.trim();

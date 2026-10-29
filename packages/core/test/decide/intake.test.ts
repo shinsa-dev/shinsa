@@ -605,3 +605,49 @@ describe('filing reports from an intake turn', () => {
     expect(listFiled(harness)).toHaveLength(1);
   });
 });
+
+describe('a watch over its cost limit', () => {
+  test('pauses its next read at a budget gate, and Continue lets the read go on', () => {
+    const { harness, taskId } = createIntake();
+    harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 1 } });
+    const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.6 };
+    for (let read = 0; read < 2; read += 1) {
+      fire(harness);
+      harness.send({ type: 'run.meter', runId: harness.activeRun(taskId).id, usage });
+      reportIntake(harness, taskId);
+    }
+    fire(harness);
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({ type: 'failure', cause: 'budget' });
+    expect(fire(harness).runs.at(-1)).toMatchObject({ outcome: 'skipped' });
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'intake' });
+    reportIntake(harness, taskId);
+    expect(fire(harness).runs.at(-1)).toMatchObject({ outcome: 'sent' });
+  });
+
+  function overBudget() {
+    const intake = createIntake();
+    const { harness, taskId } = intake;
+    harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 1 } });
+    fire(harness);
+    harness.send({
+      type: 'run.meter',
+      runId: harness.activeRun(taskId).id,
+      usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 2 },
+    });
+    reportIntake(harness, taskId);
+    fire(harness);
+    return { ...intake, gateId: harness.openGate(taskId).id };
+  }
+
+  test('Continue after its integration left the project rests the home instead of reading', () => {
+    const { harness, taskId, projectId, gateId } = overBudget();
+    harness.send({ type: 'watch_source.remove', projectId, server: 'slack' });
+    harness.send({ type: 'gate.answer', gateId, decision: 'approve', response: null });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'done',
+      stageReason: 'no automation reads here any more',
+    });
+  });
+});

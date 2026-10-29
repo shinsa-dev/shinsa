@@ -105,6 +105,31 @@ describe('an automation’s page', () => {
     expect(screen.getByRole('button', { name: 'Send answer' })).toBeDefined();
   });
 
+  it('shows a watch paused at its cost limit, with the way to go on or stop it', () => {
+    const paused = createShinsaState({
+      tasks: [createTask({ id: 'home', title: 'Watches slack', watchHome: true })],
+      gates: [
+        createGate({
+          id: 'b',
+          taskId: 'home',
+          type: 'failure',
+          cause: 'budget',
+          title: 'Reached its cost limit',
+          body: 'This task reached its $1.00 cost limit.',
+        }),
+      ],
+      patch: { schedules: { w: watch } },
+    });
+    render(
+      <TooltipProvider>
+        <AutomationPage state={paused} scheduleId='w' />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Reached its cost limit')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+    expect(screen.getByText('Stop this watch')).toBeDefined();
+  });
+
   it('sends a watch’s home task to the watch’s page', async () => {
     history.replaceState(null, '', '/tasks/home');
     const { container } = render(
