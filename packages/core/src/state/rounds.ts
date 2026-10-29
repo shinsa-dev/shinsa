@@ -45,7 +45,7 @@ export function createFirstRound(
   };
 }
 
-function resolveOutcome(task: Task): RoundOutcome {
+export function resolveRoundOutcome(task: Task): RoundOutcome {
   const document = task.plan?.document ?? null;
   const result = task.result?.body ?? null;
   return {
@@ -68,7 +68,7 @@ function endRound(task: Task, round: Round, status: Round['status'], at: number)
     pipeline: [...resolveTaskPipeline(task)],
     branch: round.branch ?? task.branch,
     pullRequest: task.pullRequest ? toRoundPullRequest(task.pullRequest) : round.pullRequest,
-    outcome: resolveOutcome(task),
+    outcome: resolveRoundOutcome(task),
   };
 }
 

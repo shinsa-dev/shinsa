@@ -101,6 +101,7 @@ interface SessionRecord {
   readOnly: boolean;
   prompt: string;
   resume: string | null;
+  fork: boolean;
   sessionId: string;
   model: string | null;
   cwd: string;
@@ -127,6 +128,9 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   },
   operate: async (agent) => {
     await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
+  },
+  watch: async (agent) => {
+    await agent.call('report_watch', { healthy: true, summary: 'The greeting still renders.' });
   },
   planner: async (agent) => {
     agent.say('Read the code; nothing to add.');
@@ -289,7 +293,8 @@ export class FakeAgents {
   start = (input: AgentSessionInput): AgentSession => {
     const state = input.role === 'agent' ? (this.state?.() ?? null) : null;
     const run = state ? selectAgentRun(state, input) : null;
-    const sessionId = input.resume ?? `session-${++this.#counter}-${Bun.randomUUIDv7()}`;
+    const sessionId =
+      input.resume && !input.fork ? input.resume : `session-${++this.#counter}-${Bun.randomUUIDv7()}`;
     const placement = resolvePlacement(input, run, this.#placements.get(sessionId) ?? null);
     this.#remember(sessionId, placement);
     const { key } = placement;
@@ -303,6 +308,7 @@ export class FakeAgents {
       readOnly: input.readOnly,
       prompt: input.prompt,
       resume: input.resume,
+      fork: input.fork === true,
       sessionId,
       model: input.model,
       cwd: input.cwd,
@@ -464,14 +470,35 @@ export class FakeGitHub {
     return this.#read().calls;
   }
 
+  #change(apply: (state: GitHubState) => GitHubState) {
+    const lock = `${this.path}.lock`;
+    const deadline = performance.now() + 20_000;
+    for (;;) {
+      try {
+        mkdirSync(lock);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      if (performance.now() > deadline) throw new Error(`${lock} stayed locked.`);
+      Bun.sleepSync(2);
+    }
+    try {
+      this.#write(apply(this.#read()));
+    } finally {
+      rmSync(lock, { recursive: true, force: true });
+    }
+  }
+
   configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows' | 'repositoryId'>>) {
-    this.#write({ ...this.#read(), ...patch });
+    this.#change((state) => ({ ...state, ...patch }));
   }
 
   update(number: number, patch: Partial<FakePullRequest>) {
-    const state = this.#read();
-    state.pulls = state.pulls.map((pull) => (pull.number === number ? { ...pull, ...patch } : pull));
-    this.#write(state);
+    this.#change((state) => ({
+      ...state,
+      pulls: state.pulls.map((pull) => (pull.number === number ? { ...pull, ...patch } : pull)),
+    }));
   }
 }
 
@@ -686,7 +713,7 @@ export class World {
 
   async createTask(
     request = 'Add the greeting files',
-    options: { priority?: Task['priority']; waitsOn?: string[]; shape?: TaskShape } = {}
+    options: { priority?: Task['priority']; waitsOn?: string[]; shape?: TaskShape; forkOf?: string } = {}
   ) {
     const before = new Set(Object.keys(this.state.tasks));
     if (options.shape) this.#shapes.set(request, options.shape);
@@ -696,6 +723,7 @@ export class World {
       repoId: this.repoId,
       priority: options.priority,
       waitsOn: options.waitsOn,
+      ...(options.forkOf ? { forkOf: options.forkOf } : {}),
     });
     const taskId = Object.keys(this.state.tasks).find((id) => !before.has(id));
     if (!taskId) throw new Error('task was not created');
@@ -703,9 +731,9 @@ export class World {
   }
 
   async until(describe: string, predicate: () => boolean, timeoutMs = 15_000) {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = performance.now() + timeoutMs;
     while (!predicate()) {
-      if (Date.now() > deadline) {
+      if (performance.now() > deadline) {
         const tasks = Object.values(this.state.tasks).map(
           (task) =>
             `${task.title}: ${task.stage} (${task.stageReason}) gates=${this.gates(task.id)

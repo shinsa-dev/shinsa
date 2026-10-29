@@ -44,7 +44,8 @@ src/
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
 │                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
-│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
+│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or after draining:
+│                        new runs held until the working ones hand over, 15 minutes at most)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
@@ -86,7 +87,8 @@ src/
 │                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
 │                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
 │                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
-│                        base of every timer that fires from state) and MonitorClock (monitors.ts)
+│                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
+│                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
 │   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or
@@ -144,11 +146,11 @@ src/
 ├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
 │                        account, shared entries linked), paths.ts (folders, the Claude config dir and
 │                        resolveAccountEnv, the environment every command for an account runs with), login.ts
-│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read and written),
+│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read only),
 │                        usage.ts and limits.ts (reading and caching usage), rotation.ts (leases, the spent marks in
 │                        account-marks.json and the one retry budget; the picker itself is core's `pickAccount`),
-│                        renewal.ts (a login Claude could not refresh: read again, claude-swap's copy taken, the
-│                        Sign in gate's text, noticing it works again),
+│                        renewal.ts (a login Claude could not refresh: read again, the Sign in gate's text,
+│                        noticing it works again),
 │                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
 │                        resume.ts (the usage-wait clock), routes.ts (/api/accounts), index.ts (the Accounts
 │                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
@@ -222,14 +224,16 @@ src/
 │                        (docs/engine.md → Test coverage of the change)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
+│                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,
+│                        without running git); discover.ts (scans the home folder for the folders that hold repositories),
 │                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
 │                        (setup verification before a task's first agent)
-├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional), the setup
-│                        steps: the fixed list, what each shows and saves (steps.ts), the run of setup, going back,
-│                        its saved state and the Claude logins it imports (flow.ts), the accounts it reads and the
-│                        imports it runs (accounts.ts)
+├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
+│                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
+│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
+│                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
+│                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
+│                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts
@@ -361,13 +365,17 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
-  runs of its task that registered before it (60 s, then they are cancelled). Checks and pushes wait for all of them.
+  runs of its task that registered before it (60 s, then they are cancelled, and a run still not settled `stopMs`, 15 s,
+  later is dropped with a warning). Checks and pushes wait for all of them. No wait on a session is unbounded: a
+  Claude session kills its `claude` and every process it started 10 s after its turn closes the prompt queue, and its
+  `cancel()` gives `interrupt()` 5 s (`agents/providers/claude/process.ts`, `killProcessTree` in `shell/`).
 - **Workspaces go through their strategy.** Making, committing in, pushing and removing a task's checkout goes through
   `Workspaces.resolve(task)` (`workspaces/`), never through `git/` directly, and every place shares the one
   `Workspaces` the supervisor owns (`runs.workspaces`).
 - **The two-hour clock stops while a question is open**, counted per question, so parallel `ask` calls cannot
   double-count the pause or leave a stray timer.
-- **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`), then stops
+- **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`, which waits at
+  most `stopMs` for the sessions and marks a run dispatched while stopping instead of starting it), then stops
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
@@ -443,12 +451,21 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   scenario after another through the fake `codex` passes a runtime or runner that answers in process where the
   scenario is about Shinsa's reading (`readCodexLogin`'s runner, a `resolveExecutable` that says what it found), and
   gives each scenario that needs the fake its own test (`test.each`).
+- **The fake `gh` and the test share one lock.** Each fake `gh` holds `<state>.lock` from the moment it reads its state
+  file until it writes it back, and `FakeGitHub` (`test/e2e/harness.ts`) takes the same lock for `update` and
+  `configure`, so a test's change made while a `gh` runs is never written over. `FAKE_GH_HOLD_MS` keeps a `gh`
+  holding it for that long, for a test that needs the overlap (`test/helpers/gh.test.ts`).
 - The fake `gh` answers `pr view` with a `mergeCommit`: the one a test puts on the pull request, or the head's sha
   once it merges one, so a test can follow a task past the merge (the operation gate shows that commit).
 - **Tests wait on conditions, never on time.** Use `awaitEffect(log, key)` from `test/helpers` (keys come from
   `log.listEffectStatuses()`, or are fixed: `run.execute:<runId>`, `run.cancel:<runId>`), a deferred the fake
   resolves, `until(condition)` for another process or the file system, or `spyOn(log, …)` for a failure that is only
   logged. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
+- **Wait for what the test reads next, never for a stage a task passes through.** A task can go through `building`
+  and `checking` in a few milliseconds, and a polled `untilStage` on a loaded machine sees only the stage after them:
+  wait for an agent session count (`world.agents.of('plan').length === 2`), a gate, or a stage the task rests in.
+  `until` and `World.until` time their deadline with `performance.now()`, because `setSystemTime` freezes
+  `Date.now()`; a wait of your own does the same.
 - **A test file that starts the whole server** (`test/e2e/`), or drives a pull request through many fake `gh` calls
   (`test/runtime/effects.test.ts`, which gives those waits 25 s), sets `setDefaultTimeout(30_000)`: alone it takes a
   second, but `bun run test` runs every workspace at once and Bun's own 5 s limit then fails it at random.

@@ -18,6 +18,7 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   editor: ['worktree', 'vscode', 'cursor', 'zed'],
   terminal: ['worktree', 'shell', 'command line'],
   finder: ['worktree', 'files', 'folder', 'reveal'],
+  fork: ['handoff', 'copy', 'follow-up', 'new task'],
   restart: ['retry', 'rerun', 'again'],
   complete: ['complete', 'finish', 'close', 'resolve'],
   cancel: ['stop', 'abandon', 'drop', 'close'],

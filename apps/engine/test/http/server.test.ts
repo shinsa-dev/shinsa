@@ -163,7 +163,9 @@ describe('the health endpoint', () => {
       version: '0.0.0',
       protocol: ENGINE_PROTOCOL,
       busy: false,
+      working: 0,
       restart: null,
+      restartBy: null,
       commit: null,
       installPath: join(import.meta.dirname, '../../../..'),
       dataDir: config.dataDir,
@@ -227,6 +229,7 @@ describe('the onboarding endpoints', () => {
     }
     const tools = (await (await call('/api/onboarding/prerequisites')).json()) as { ready: boolean };
     expect(tools.ready).toBe(true);
+    expect(await (await post('/api/onboarding/privacy', {})).json()).toEqual({ ok: true });
     expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
   });
 
@@ -234,10 +237,10 @@ describe('the onboarding endpoints', () => {
     const { call, post, config } = await start({ config: { roots: [] } });
     const opened = (await (await call('/api/onboarding/flow')).json()) as OnboardingFlow;
     expect(opened).toMatchObject({ index: 0, step: { id: 'roots', multiple: true, options: [] } });
-    const model = (await (
+    const projects = (await (
       await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: [config.home] })
     ).json()) as OnboardingFlow;
-    expect(model.step?.id).toBe('model');
+    expect(projects.step?.id).toBe('projects');
     const back = (await (
       await post('/api/onboarding/flow', { type: 'open', stepId: 'roots' })
     ).json()) as OnboardingFlow;
@@ -248,7 +251,11 @@ describe('the onboarding endpoints', () => {
       await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: ['/no/such'] })
     ).json()) as OnboardingFlow;
     expect(refused.step).toMatchObject({ id: 'roots', problem: '/no/such is not a folder on this machine.' });
-    const stale = await post('/api/onboarding/flow', { type: 'answer', stepId: 'merge', values: ['squash'] });
+    const stale = await post('/api/onboarding/flow', {
+      type: 'answer',
+      stepId: 'defaults',
+      values: ['merge=squash'],
+    });
     expect(stale.status).toBe(400);
     expect(await stale.json()).toEqual({
       error: { code: 'step_stale', message: 'That step is no longer open. Answer the step on screen.' },

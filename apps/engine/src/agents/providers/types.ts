@@ -35,6 +35,7 @@ export interface AgentSessionInput {
   prompt: string;
   model: string | null;
   resume: string | null;
+  fork?: boolean;
   defaultBranch: string;
   tools: ShinsaTools;
   pluginDir: string;
@@ -112,7 +113,7 @@ export interface SessionQuery {
 }
 
 export interface ProviderCapabilities {
-  sessions: { resume: boolean; inspect: boolean };
+  sessions: { resume: boolean; inspect: boolean; fork: boolean };
   turns: { steering: boolean };
   approvals: boolean;
   planning: { readOnly: boolean };
@@ -124,7 +125,7 @@ export interface ProviderCapabilities {
 }
 
 const MINIMAL_CAPABILITIES: ProviderCapabilities = {
-  sessions: { resume: false, inspect: false },
+  sessions: { resume: false, inspect: false, fork: false },
   turns: { steering: false },
   approvals: false,
   planning: { readOnly: false },

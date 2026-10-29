@@ -57,7 +57,7 @@ export interface AccountLogin {
 }
 
 export interface AccountImport {
-  origin: Exclude<AccountOrigin, 'login'>;
+  origin: 'cswap';
   email: string;
   plan: string | null;
 }

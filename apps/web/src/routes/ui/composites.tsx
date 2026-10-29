@@ -416,7 +416,17 @@ export function CompositeSpecimens() {
 const ENGINE_APP = { version: '0.6.0', protocol: 2 };
 
 const ENGINE_SAMPLES = [
-  { key: 'waiting', health: { version: '0.5.2', protocol: 2, busy: true, restart: 'idle' as const } },
+  {
+    key: 'waiting',
+    health: {
+      version: '0.5.2',
+      protocol: 2,
+      busy: true,
+      working: 2,
+      restart: 'idle' as const,
+      restartBy: new Date(2026, 9, 29, 14, 32).getTime(),
+    },
+  },
   { key: 'choose', health: { version: '0.5.2', protocol: 1, busy: true, restart: null } },
   { key: 'update', health: { version: '0.7.0', protocol: 3, busy: false, restart: null } },
 ].map(({ key, health }) => ({

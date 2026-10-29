@@ -135,11 +135,19 @@ function createAccountScenes(now: number): { label: string; snapshot: AccountsSn
   return [
     {
       label:
-        'AccountsGroup · accounts with their windows, out of usage, paused, signed out, no readings yet · Codex signed in',
+        'AccountsGroup · accounts with their windows, out of usage, paused, signed out, a copied claude-swap login, no readings yet · Codex signed in',
       snapshot: {
         ...full,
-        accounts: fresh ? [...full.accounts, fresh] : full.accounts,
-        imports: [{ origin: 'claude', email: 'christo@superwall.com', plan: 'max' }],
+        accounts: [
+          ...full.accounts.map((account) =>
+            account.id === 'lapsed' ? { ...account, origin: 'cswap' as const } : account
+          ),
+          ...(fresh ? [fresh] : []),
+        ],
+        imports: [
+          { origin: 'cswap', email: 'swap@superwall.com', plan: null },
+          { origin: 'cswap', email: 'side@superwall.com', plan: null },
+        ],
         providers: selectSampleLogin(logins, 'signed_in'),
       },
     },

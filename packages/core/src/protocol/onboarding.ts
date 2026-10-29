@@ -1,5 +1,5 @@
+import type { ProjectSuggestion } from '../domain/project-suggestions.ts';
 import type { Settings } from '../domain/settings.ts';
-import type { AccountImport } from './accounts.ts';
 
 export interface OnboardingStatus {
   completed: boolean;
@@ -26,7 +26,7 @@ export interface RootSuggestions {
   truncated: boolean;
 }
 
-export type OnboardingStepId = 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+export type OnboardingStepId = 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';
 
 export interface OnboardingCheck {
   id: string;
@@ -34,6 +34,7 @@ export interface OnboardingCheck {
   ok: boolean;
   detail: string;
   fix: string | null;
+  command: string | null;
   optional?: boolean;
 }
 
@@ -43,6 +44,14 @@ export interface OnboardingOption {
   detail: string | null;
   chosen: boolean;
   recommended: boolean;
+}
+
+export type OnboardingChoiceGroupId = 'model' | 'merge' | 'plans';
+
+export interface OnboardingChoiceGroup {
+  id: OnboardingChoiceGroupId;
+  label: string;
+  options: OnboardingOption[];
 }
 
 export interface OnboardingStepEntry {
@@ -58,11 +67,14 @@ export interface OnboardingStep {
   description: string;
   multiple: boolean;
   options: OnboardingOption[];
+  groups: OnboardingChoiceGroup[];
   checks: OnboardingCheck[];
   ready: boolean;
-  imported: AccountImport[];
-  notes: string[];
+  projects: ProjectSuggestion[];
+  filed: ProjectSuggestion[];
+  conversation: OnboardingProjectTurn[];
   problem: string | null;
+  access: string[];
   submitLabel: string;
 }
 
@@ -73,10 +85,39 @@ export interface OnboardingFlow {
   revisit: boolean;
 }
 
+export interface OnboardingProjectTurn {
+  request: string;
+  reply: string;
+}
+
+export const ONBOARDING_REQUEST_LIMIT = 500;
+
+export interface OnboardingProjectChoice {
+  id: string;
+  name: string;
+  repos: string[];
+}
+
 export type OnboardingReply =
-  | { type: 'answer'; stepId: OnboardingStepId; values: string[] }
+  | {
+      type: 'answer';
+      stepId: OnboardingStepId;
+      values: string[];
+      projects?: OnboardingProjectChoice[];
+    }
+  | { type: 'revise'; stepId: OnboardingStepId; text: string; projects?: OnboardingProjectChoice[] }
   | { type: 'open'; stepId: OnboardingStepId }
   | { type: 'restart' };
+
+export function serializeChoiceValue(group: OnboardingChoiceGroupId, value: string) {
+  return `${group}=${value}`;
+}
+
+export function parseChoiceValue(text: string) {
+  const at = text.indexOf('=');
+  if (at <= 0) return null;
+  return { group: text.slice(0, at), value: text.slice(at + 1) };
+}
 
 export function resolveDisplayPath(path: string, userHome: string) {
   const home = userHome.replace(/\/+$/, '');

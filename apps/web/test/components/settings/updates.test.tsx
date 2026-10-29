@@ -33,6 +33,11 @@ describe('the Updates settings', () => {
     expect(screen.getByText('1.3.0-beta.2')).toBeTruthy();
     expect(screen.getByText('1.3.0-beta.3 is ready')).toBeTruthy();
     expect(screen.getByText('Beta channel · Updates install when you quit Shinsa')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Updating or quitting the app never stops your agents. The engine keeps running and moves to the new version once the working agents hand over.'
+      )
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
     expect(actions.check).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Restart to update' }));

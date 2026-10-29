@@ -662,6 +662,18 @@ function handle(message: Json) {
       respond(id, { thread: { id: threadId }, model: params.model ?? 'gpt-6-astra', serviceTier: readTier(params) });
       return;
     }
+    case 'thread/fork': {
+      const sourceId = String(params.threadId);
+      const state = readState();
+      if (state.missing || !state.threads.includes(sourceId)) {
+        refuse(id, `no rollout found for thread id ${sourceId}`);
+        return;
+      }
+      const thread = openThread(newId('thread'), params);
+      rememberThread(thread.id);
+      respond(id, { thread: { id: thread.id }, model: params.model ?? 'gpt-6-astra', serviceTier: readTier(params) });
+      return;
+    }
     case 'turn/start': {
       const thread = threads.get(String(params.threadId));
       if (!thread) {

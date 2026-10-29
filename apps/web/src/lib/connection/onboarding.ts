@@ -47,6 +47,17 @@ export function requestRootSuggestions() {
   return requestJson<RootSuggestions>('/api/onboarding/roots?refresh=1');
 }
 
+export function requestPrivacySettings() {
+  return requestWithToast(async () => {
+    const opened = await requestJson<{ ok: boolean }>('/api/onboarding/privacy', {});
+    if (!opened.ok) {
+      throw new Error(
+        'System Settings did not open. Open it yourself and go to Privacy & Security → Full Disk Access.'
+      );
+    }
+  });
+}
+
 export function requestOnboardingFlow() {
   return requestJson<OnboardingFlow>('/api/onboarding/flow');
 }

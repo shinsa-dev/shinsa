@@ -66,7 +66,7 @@ src/
 │                    runs.ts (attempts, links, lost sessions, metering per attempt with its weekly readings,
 │                    silence, compaction), gates.ts (opened,
 │                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
-│                    delegations.ts, schedules.ts, suggestions.ts, memory.ts (rules written, proposed, removed), reviews.ts (verdicts), accounts.ts (binding),
+│                    delegations.ts, schedules.ts, watchdogs.ts (watchdogs and a project's data sources), suggestions.ts, memory.ts (rules written, proposed, removed), reviews.ts (verdicts), accounts.ts (binding),
 │                    shapes.ts (reshapes, results, proposed changes), project.ts also folds the checks
 │                    (plan.proposed sets Task.checks from the plan's verification; checks.changed applies the
 │                    agent's changes and drops a changed check's result; checks.started sets runningChecks, which
@@ -160,6 +160,10 @@ src/
 │   │                merge, or merge; isHeldByYourDecision)
 │   ├── config.ts    Setup verification and its configuration gate
 │   ├── monitors.ts  wait_for: arming, waking and checking a monitor
+│   ├── watchdogs.ts Watchdogs after a merge: arming them from the walkthrough (syncWatchdogs, after every command),
+│   │                firing a check as a read-only `watch` turn of the task's session, deferring it while the task
+│   │                works, recording report_watch, tripping into a forked task, stopping them, connecting a source;
+│   │                a project's data sources (watch_source.write, watch_source.remove)
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
 │   ├── silence.ts   Snoozing and dismissing a quiet run
 │   ├── settings.ts  Repositories, projects (keys, folders, moving repositories in), focus, settings, the guide;
@@ -338,11 +342,14 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   - the task's agent (`agent-invariants.ts`, `assertOneSessionPerTask`): a top-level run is the task's Agent, a
     reviewer or an inquiry agent (planner and builder exist only as delegated runs; there is no fixer or operator),
     every agent run has a purpose and no other run has one, an active agent run's purpose matches the stage (`plan`
-    planning, `build` building, `fix` fixing, `operate` operating), and every new run of a task-session role resumes
-    the session of the task's latest such run with a session (one session per task, across phases, fixes, rounds,
-    kinds of work and models) unless that session ended in a context overflow or an image error, the previous run of
-    the role failed with a fresh-class failure, or it belongs to another kind of work on another provider; every
-    reviewer resumes the reviewer's own session the same way; checked as each `run.started` is applied;
+    planning, `build` building, `fix` fixing, `operate` operating, `watch` watching), and every new run of a
+    task-session role resumes the session of the task's latest such run with a session (one session per task, across
+    phases, fixes, rounds, kinds of work and models) unless that session ended in a context overflow or an image
+    error, the previous run of the role failed with a fresh-class failure, or it belongs to another kind of work on
+    another provider; every reviewer resumes the reviewer's own session the same way; a run that forks
+    (`assertForkStartsSession`) is a task-session role's, of a task forked from the task it names, starts that
+    task's first session (it neither resumes nor follows a session the task already had) and copies a session its
+    source run really had; checked as each `run.started` is applied;
   - on your behalf (a walk of commands sent on your behalf): nothing sent on your behalf closes a gate, and none
     moves a task waiting at one to merged or done;
   - replaying the log reproduces the state, and the same input gives the same decision;

@@ -110,6 +110,7 @@ const state: FakeState = path !== '/dev/null' && existsSync(path)
   : { next: 1, defaultChecks: 'pending', pulls: [], calls: [] };
 const args = Bun.argv.slice(2);
 state.calls.push(args);
+if (Bun.env.FAKE_GH_HOLD_MS) Bun.sleepSync(Number(Bun.env.FAKE_GH_HOLD_MS));
 
 function save() {
   if (path === '/dev/null') return;

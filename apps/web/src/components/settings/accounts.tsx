@@ -27,6 +27,9 @@ import {
   describeDuplicate,
   describeImport,
   describeRemoval,
+  describeSharedLogin,
+  IMPORT_ICON,
+  isSharedLogin,
   MOVE_ACTION,
   resolvePauseAction,
 } from '@/lib/accounts/account.ts';
@@ -85,7 +88,7 @@ function AddAccountButton({ imports, actions }: { imports: AccountImport[]; acti
           return (
             <DropdownMenuItem
               key={`${entry.origin}-${entry.email}`}
-              icon={entry.origin === 'claude' ? 'IconClaudeai' : 'IconArrowsRepeatRightLeft'}
+              icon={IMPORT_ICON}
               onClick={() => actions.importLogin(entry)}
             >
               <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
@@ -302,8 +305,11 @@ export function AccountsGroup({
           actions={actions}
         />
       ))}
+      {accounts.filter(isSharedLogin).map((account) => (
+        <SettingsEmpty key={`shared-${account.id}`}>{describeSharedLogin(account)}</SettingsEmpty>
+      ))}
       {duplicates.map((duplicate) => (
-        <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate, accounts)}</SettingsEmpty>
+        <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate)}</SettingsEmpty>
       ))}
       {providers.map((login) => (
         <ProviderLoginBlock key={login.provider} login={login} onRefresh={actions.refresh} />

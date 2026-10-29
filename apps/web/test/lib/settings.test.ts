@@ -28,6 +28,7 @@ import {
   listGroupSpeedItems,
   listSpeedItems,
   listUsageLimitItems,
+  listWatchdogSettingItems,
   MERGE_ITEMS,
   MIXED_VALUE,
   needsCostLimit,
@@ -59,7 +60,9 @@ import {
   resolveSpeedAvailability,
   resolveSpeedValue,
   resolveUsageLimitValue,
+  resolveWatchdogSettingValue,
   updateSettings,
+  WATCHDOG_SETTING_FIELDS,
 } from '@/lib/settings.ts';
 import { createAccount, createProviderLogin, createSnapshot } from '../support/accounts.ts';
 import { spyOnCommands } from '../support/commands.ts';
@@ -531,5 +534,23 @@ describe('agent selects', () => {
       model: 'Agent model',
       speed: 'Agent speed',
     });
+  });
+});
+
+describe('the watchdog settings', () => {
+  it('offer how long, the first check and the longest gap, with the current value always among the choices', () => {
+    const [hours, first, gap] = WATCHDOG_SETTING_FIELDS;
+    if (!hours || !first || !gap) throw new Error('missing watchdog settings');
+    expect(resolveWatchdogSettingValue(hours, settings({}))).toBe('72');
+    expect(listWatchdogSettingItems(first, settings({})).map((item) => item.label)).toEqual([
+      '10 minutes',
+      '15 minutes',
+      '30 minutes',
+      '60 minutes',
+    ]);
+    expect(
+      listWatchdogSettingItems(gap, settings({ watchdogMaxGapHours: 3 })).map((item) => item.label)
+    ).toEqual(['1 hour', '2 hours', '3 hours', '4 hours', '6 hours', '12 hours']);
+    expect(resolveWatchdogSettingValue(gap, settings({ watchdogMaxGapHours: 3 }))).toBe('3');
   });
 });

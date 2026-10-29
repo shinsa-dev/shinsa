@@ -19,6 +19,7 @@ import type { Round } from './rounds.ts';
 import type { GateSecret } from './schedules.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { PipelineStep } from './steps.ts';
+import type { Watchdog, WatchSource } from './watchdogs.ts';
 import type { WorkspaceMode } from './workspaces.ts';
 
 export type TaskStage =
@@ -37,6 +38,7 @@ export type TaskStage =
   | 'investigating'
   | 'researching'
   | 'operating'
+  | 'watching'
   | 'awaiting_proposal'
   | 'awaiting_operation'
   | 'merged'
@@ -58,7 +60,7 @@ export type RunRole =
   | 'investigator'
   | 'researcher';
 
-export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate';
+export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 
@@ -98,7 +100,7 @@ export interface ProviderSignIn {
   email: string | null;
 }
 
-export type RunHandoffReason = 'provider_switch' | 'session_restore';
+export type RunHandoffReason = 'provider_switch' | 'session_restore' | 'fork';
 
 export interface RunHandoff {
   reason: RunHandoffReason;
@@ -221,6 +223,7 @@ export interface Project {
   key: string;
   description: string;
   folders: string[];
+  watchSources?: WatchSource[];
 }
 
 export interface Focus {
@@ -346,7 +349,9 @@ export type ActivityKind =
   | 'account'
   | 'delegation'
   | 'shape'
-  | 'round';
+  | 'round'
+  | 'fork'
+  | 'watchdog';
 
 export interface Activity {
   at: number;
@@ -439,6 +444,7 @@ export interface Task {
   usageWait?: UsageWait | null;
   parentTaskId?: string | null;
   createdBy?: TaskCreator | null;
+  forkOf?: string | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
   pipeline?: PipelineStep[];
@@ -458,6 +464,7 @@ export interface Task {
   pushHookFailure?: PushHookFailure | null;
   mergeStepsDone?: string[];
   carriedMergeSteps?: CarriedMergeStep[];
+  watchdogs?: Watchdog[];
 }
 
 export interface InboxMessage {
@@ -501,7 +508,14 @@ export interface Run {
   cohort?: DeliveryCohort | null;
   waitingOn?: RunWait | null;
   compactions?: string[];
+  fork?: RunFork | null;
   round?: number;
+}
+
+export interface RunFork {
+  taskId: string;
+  runId: string;
+  sessionId: string;
 }
 
 export interface Gate {

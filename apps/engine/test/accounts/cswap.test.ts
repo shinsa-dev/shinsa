@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { homedir } from 'node:os';
-import { Cswap, type CswapRunner, parseCswapExport, parseCswapList } from '../../src/accounts/cswap.ts';
+import { Cswap, type CswapRunner, parseCswapList } from '../../src/accounts/cswap.ts';
 import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
 
@@ -12,17 +12,6 @@ const LIST = JSON.stringify({
     { organizationName: 'No email' },
     'junk',
     null,
-  ],
-});
-
-const EXPORT = JSON.stringify({
-  accounts: [
-    { email: 'other@x.dev', credentials: { claudeAiOauth: { refreshToken: 'nope' } } },
-    {
-      email: 'Me@X.dev',
-      credentials: { claudeAiOauth: { accessToken: 'at', refreshToken: 'rt' } },
-      config: { oauthAccount: { emailAddress: 'me@x.dev', organizationName: 'Acme' } },
-    },
   ],
 });
 
@@ -41,33 +30,6 @@ describe('claude-swap output', () => {
     expect(parseCswapList(LIST)).toEqual([{ email: 'a@x.dev' }, { email: 'b@x.dev' }]);
     expect(parseCswapList('{"accounts":"none"}')).toEqual([]);
     expect(parseCswapList('not json')).toEqual([]);
-  });
-
-  test('an export finds the account by email in any case and keeps its login and OAuth account', () => {
-    expect(parseCswapExport(EXPORT, 'me@x.dev')).toEqual({
-      credentials: { claudeAiOauth: { accessToken: 'at', refreshToken: 'rt' } },
-      oauthAccount: { emailAddress: 'me@x.dev', organizationName: 'Acme' },
-    });
-  });
-
-  test('an export without a refresh token, an account or valid JSON is no login', () => {
-    const withoutRefresh = JSON.stringify({
-      accounts: [{ email: 'me@x.dev', credentials: { claudeAiOauth: { accessToken: 'at' } } }],
-    });
-    expect(parseCswapExport(withoutRefresh, 'me@x.dev')).toBeNull();
-    expect(parseCswapExport(EXPORT, 'missing@x.dev')).toBeNull();
-    expect(parseCswapExport('{"accounts":{}}', 'me@x.dev')).toBeNull();
-    expect(parseCswapExport('{', 'me@x.dev')).toBeNull();
-  });
-
-  test('an export without a config keeps the login and no OAuth account', () => {
-    const bare = JSON.stringify({
-      accounts: [{ email: 'me@x.dev', credentials: { claudeAiOauth: { refreshToken: 'rt' } } }],
-    });
-    expect(parseCswapExport(bare, 'me@x.dev')).toEqual({
-      credentials: { claudeAiOauth: { refreshToken: 'rt' } },
-      oauthAccount: null,
-    });
   });
 });
 
@@ -89,35 +51,23 @@ describe('Cswap', () => {
     expect(calls).toHaveLength(2);
   });
 
-  test('without claude-swap installed there are no accounts and no login to export', async () => {
+  test('without claude-swap installed there are no accounts', async () => {
     const { run, calls } = createRunner([]);
     const cswap = new Cswap({ run, which: () => null });
     expect(await cswap.list()).toEqual([]);
-    expect(await cswap.export('me@x.dev')).toBeNull();
     expect(calls).toHaveLength(0);
   });
 
-  test('a failed list or export is logged and gives nothing', async () => {
+  test('a failed list is logged and gives nothing', async () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     try {
       const { run } = createRunner([{ ok: false, code: 2, stdout: LIST }]);
       const cswap = new Cswap({ run, which: () => '/bin/cswap' });
       expect(await cswap.list()).toEqual([]);
-      expect(await cswap.export('me@x.dev')).toBeNull();
-      expect(warn.mock.calls).toEqual([
-        ['[Accounts] claude-swap did not list its accounts', { code: 2 }],
-        ['[Accounts] claude-swap could not export a login', { code: 2 }],
-      ]);
+      expect(warn.mock.calls).toEqual([['[Accounts] claude-swap did not list its accounts', { code: 2 }]]);
     } finally {
       warn.mockRestore();
     }
-  });
-
-  test('exports one account’s login to stdout', async () => {
-    const { run, calls } = createRunner([{ stdout: EXPORT }]);
-    const cswap = new Cswap({ run, which: () => '/bin/cswap' });
-    expect((await cswap.export('me@x.dev'))?.credentials.claudeAiOauth.refreshToken).toBe('rt');
-    expect(calls[0]?.command).toEqual(['/bin/cswap', 'export', '-', '--account', 'me@x.dev']);
   });
 
   test('looks for cswap, then claude-swap, on PATH', async () => {

@@ -25,5 +25,9 @@ export {
   EngineRestarter,
   EXIT_RESTART,
   isEngineBusy,
+  type RestartDrain,
+  resolveEngineActivity,
+  STOP_DEADLINE_MS,
+  stopWithin,
 } from './restart.ts';
 export { isStartedByService, SERVICE_MARKER } from './service.ts';

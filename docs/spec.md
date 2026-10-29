@@ -190,6 +190,17 @@ not chat text.
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
   are doing, and gives a heads-up when something is stuck (`docs/engine.md` → The briefing).
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
+- **Watchdogs after the merge.** You cannot verify everything before a merge. The Agent writes watchdogs for a change
+  whose effects only real traffic shows: each reads a data source (an MCP server the project lists: traces, logs,
+  analytics, support messages) for a window once the change is live (72 hours by default), checking soon after and less
+  often as it holds up, as a read-only turn of the task's own conversation, and an issue it finds becomes a new task
+  forked from this one. Where the merge is not the release, a watchdog starts only once the change is live in
+  production. The agent sets each one's schedule from what the change needs; Settings → Agents → Watchdogs holds the
+  defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
+  connecting (`docs/engine.md` → Watchdogs).
+- **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
+  agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
+  `docs/engine.md` → Forking a task).
 - Nothing in it approves a gate, merges or commits to the default branch on its own.
 
 ### Focus
@@ -281,13 +292,13 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   health check, each with `--help` and `--json`. Shaped like Tailscale's and Docker's
   (`docs/cli.md`). Agents in your own terminal can use it too.
 - **Claude accounts.** Shinsa runs agents on several Claude logins of its own (Settings → Agent usage:
-  sign in, import your Claude Code login or claude-swap's accounts, default, order, per-account
+  sign in to each, claude-swap's accounts included, default, order, per-account
   switch threshold). Each run uses the account with room (a task can be pinned to one, and a step
   rerun on the account you choose); a turn the limit rejects moves to another account, and when
   none has room the task waits for the reset and carries on by itself. A signed-out account asks
-  you to sign in instead of failing the task. One login is one account: when your Claude Code login
-  switches to a login Shinsa already has, Shinsa shows it once, runs it from your Claude Code login
-  and says so (`docs/engine.md` → Accounts and usage limits).
+  you to sign in instead of failing the task. Every account is a login of its own, signed in in
+  Shinsa: it never runs on your Claude Code login or copies claude-swap's, so their refreshes never
+  sign it out (`docs/engine.md` → Accounts and usage limits).
 - **Codex too.** Everything above works for agents on Codex, on its one login for now: its usage
   windows (read the way CodexBar reads them), a cost for every run that counts toward the usage
   and cost limits per task, waiting for its limit to reset and carrying on, a sign-in gate,
@@ -570,9 +581,12 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup steps): six steps on first run, one at a time, each
-answered with a pick (folders also by path), any earlier one open to change, your Claude logins imported
-for you, and the prerequisites checked. Nothing else opens until setup is complete.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): five steps on first run, one at a time (Folders,
+Projects, Defaults, Accounts, Tools), each with the recommended answer already picked (folders also by path),
+any earlier one open to change. Your projects are suggested from the repositories in your folders and made
+with one press, your Claude logins are imported for you, a folder macOS keeps private asks for access
+instead of failing, and the prerequisites are checked with the command that fixes each. Nothing else opens
+until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own
@@ -937,6 +951,19 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   characters per role), the writing rules are one block (`WRITING_RULES`), and the `handover` skill keeps only what the
   schemas cannot say (13.7k to 3.9k characters). No skill editor and no style setting: your skills come from
   `~/.claude/skills` and each repository, and taste is a memory rule.
+
+### Watchdogs, forks and the pattern check (2026-10-28)
+
+- **Forks.** A task can start from a copy of another task's agent session: Claude's `forkSession`, Codex `thread/fork`,
+  behind the `sessions.fork` capability, with the transcript handoff when there is nothing to copy. The source task
+  is never touched, and the reviewer never forks.
+- **Watchdogs.** The last phase's walkthrough lists them; they arm when the pull request merges, check on their own
+  clock as a read-only `watch` turn of the task's session, defer while the task works, pass at the end of their window
+  and file a forked task for an issue. Data sources live on the project and are added by the agent when it names a
+  server the project does not list yet, or asked of you with suggestions when none holds the data.
+- **The pattern check.** The reviewer reads new code against the code around it: a helper re-implemented, or a new way
+  of doing what the repository does one way, is a finding, blocking when the repository's rules name the pattern.
+  This is the validation harness for now; a rule engine for patterns waits until a project needs one.
 
 ## 11. Open questions
 

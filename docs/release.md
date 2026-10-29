@@ -27,7 +27,7 @@ release.yml -f channel=canary` makes one of the current `main` by hand, tested o
 
 The workflow first decides, on Ubuntu (`trigger`), whether to build and which commit: a run by hand always builds
 the commit it runs on; a canary is decided by `scripts/release-canary.ts` (Canary builds, below). Then, on a
-Blacksmith macOS 15 runner (`blacksmith-6vcpu-macos-15`), the `mac` job checks out that commit and:
+GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `mac` job checks out that commit and:
 
 1. Works out the version (`scripts/release.ts`, the rules below; `scripts/release-version.ts` holds them, tested at
    100%) and writes it to the run's summary.

@@ -55,3 +55,4 @@ export {
   selectSessionCwd,
 } from './session.ts';
 export { resolveMonitorPrompt } from './waits.ts';
+export { resolveWatchPrompt } from './watchdogs.ts';

@@ -4,6 +4,7 @@ import {
   refreshOnboardingStatus,
   replyToOnboarding,
   requestOnboardingFlow,
+  requestPrivacySettings,
   requestRootSuggestions,
   resetOnboardingStatus,
   restartOnboarding,
@@ -99,13 +100,13 @@ describe('the setup requests', () => {
     });
     expect(await requestOnboardingFlow()).toEqual(flow);
     const answered = await act(() =>
-      replyToOnboarding({ type: 'answer', stepId: 'merge', values: ['squash'] })
+      replyToOnboarding({ type: 'answer', stepId: 'defaults', values: ['merge=squash'] })
     );
     expect(answered.step).toBeNull();
     expect(fake.requests[1]).toEqual({
       path: '/api/onboarding/flow',
       method: 'POST',
-      body: { type: 'answer', stepId: 'merge', values: ['squash'] },
+      body: { type: 'answer', stepId: 'defaults', values: ['merge=squash'] },
     });
     await waitFor(() => expect(fake?.requests.at(-1)?.path).toBe('/api/onboarding'));
     expect((await requestRootSuggestions()).suggestions[0]?.repoCount).toBe(2);
@@ -132,5 +133,19 @@ describe('the setup requests', () => {
     });
     await restartOnboarding();
     expect(toasts.error).toHaveBeenCalledWith('Busy.');
+  });
+});
+
+describe('System Settings for a private folder', () => {
+  it('asks the engine to open Full Disk Access, and says how to get there when it cannot', async () => {
+    let opened = true;
+    fake = startFakeOnboarding({ 'POST /api/onboarding/privacy': { answer: () => ({ ok: opened }) } });
+    expect(await requestPrivacySettings()).toBe(true);
+    expect(toasts.error).not.toHaveBeenCalled();
+    opened = false;
+    expect(await requestPrivacySettings()).toBe(false);
+    expect(toasts.error).toHaveBeenCalledWith(
+      'System Settings did not open. Open it yourself and go to Privacy & Security → Full Disk Access.'
+    );
   });
 });

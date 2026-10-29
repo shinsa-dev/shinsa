@@ -74,6 +74,12 @@ disagrees. You built it and know why it is the way it is, so you write the expla
   the exact command, never a secret's value. Only the human ticks a step; changing a step's title, detail, kind or
   command asks them to do it again, so change one only when what they must do changed. Never put `pre_merge` or
   `post_merge` in `reshape_task`.
+- **watchdogs** watch the change after it merges, through data the tests never see (traces, logs, errors, analytics,
+  support messages); add one where the change sends something the world reads or writes, never for a refactor. Read
+  how the repository ships first: when the merge is not the release, set `starts: production` with a
+  `production_check`. Pick a `source` from the data sources the last phase's prompt lists; ask with `source_request`
+  (the data, the code that sends it, servers to connect) only when none holds it. The schedule fields are optional
+  and the settings fill the rest. An issue a check finds becomes a task forked from this one.
 
 - **check_changes**: keep the checks current as you build. When a phase adds a file, a test or a package the checks
   do not cover, add a check for it in that phase's hand-over, with a one-sentence `reason` the human reads. The
@@ -93,7 +99,7 @@ Evidence must show the work as it is after the fix: attach what the fix changed 
 replaces the old item), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` each earlier
 item the fix touched that still holds.
 
-Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing or the steps. Each part you
+Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing, the steps or the watchdogs. Each part you
 send replaces that part whole, so send the full new list, not just the new item.
 
 ## Review findings (`report_review`)

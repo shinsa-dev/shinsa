@@ -62,6 +62,7 @@ import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
+import type { WatchdogEventBody } from './watchdogs.ts';
 
 type QueuedRound = Pick<Round, 'number' | 'title' | 'request' | 'why' | 'shipping' | 'pipeline'>;
 
@@ -90,9 +91,11 @@ type EventBody =
       parentTaskId?: string | null;
       createdBy?: TaskCreator | null;
       scheduleId?: string | null;
+      forkOf?: string | null;
     }
   | DelegationEventBody
   | ScheduleEventBody
+  | WatchdogEventBody
   | MemoryEventBody
   | {
       type: 'task.triaged';

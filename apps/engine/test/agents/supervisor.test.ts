@@ -59,7 +59,7 @@ interface FakeSession {
 }
 
 function createSessions(
-  options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean } = {}
+  options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean; wedged?: boolean } = {}
 ) {
   const started: FakeSession[] = [];
   const startSession = (input: AgentSessionInput): AgentSession => {
@@ -79,6 +79,7 @@ function createSessions(
         },
         cancel: () => {
           fake.cancelled = true;
+          if (options.wedged) return new Promise<void>(() => undefined);
           done.resolve({ outcome: 'cancelled', summary: null });
           return options.cancelFails ? Promise.reject(new Error('already gone')) : Promise.resolve();
         },
@@ -644,6 +645,81 @@ describe('one agent at a time in a worktree', () => {
   test('quiesce without runs returns at once', async () => {
     const { supervisor } = setup(withTask(createTempDir()));
     await supervisor.quiesce('task-1');
+  });
+});
+
+describe('a session that never settles', () => {
+  test('a run whose session ignores its cancel stops holding the worktree, so the next run starts', async () => {
+    const wedged = createSessions({ wedged: true });
+    const healthy = createSessions();
+    let started = 0;
+    const warn = spyOn(log, 'warn');
+    const { supervisor } = setup(withTask(createTempDir(), [createRun(), createRun({ id: 'run-2' })]), {
+      startSession: (input) => {
+        started += 1;
+        return started === 1 ? wedged.startSession(input) : healthy.startSession(input);
+      },
+      quiesceMs: 20,
+      stopMs: 20,
+    });
+    try {
+      void supervisor.execute('run-1');
+      await until('the first session', () => wedged.started.length === 1);
+      const second = supervisor.execute('run-2');
+      await until('the second session', () => healthy.started.length === 1);
+      expect(wedged.started[0]?.cancelled).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        '[Runs] A run did not stop in time, so Shinsa stopped waiting for it',
+        {
+          runId: 'run-1',
+          taskId: 'task-1',
+        }
+      );
+      healthy.started[0]?.finish();
+      await second;
+      await supervisor.quiesce('task-1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('cancelling a run returns even when its session never answers', async () => {
+    const sessions = createSessions({ wedged: true });
+    const { supervisor } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      stopMs: 20,
+    });
+    void supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.cancel('run-1');
+    expect(sessions.started[0]?.cancelled).toBe(true);
+  });
+
+  test('a shutdown with a session that never settles still finishes', async () => {
+    const sessions = createSessions({ wedged: true });
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      stopMs: 20,
+    });
+    void supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.interruptForShutdown();
+    expect(sessions.started[0]?.cancelled).toBe(true);
+    expect(dispatched.filter((command) => command.type === 'run.interrupt')).toHaveLength(1);
+  });
+
+  test('a run dispatched while Shinsa stops is marked to resume on the next engine instead of starting', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched, commandIds } = setup(
+      withTask(createTempDir(), [createRun({ continuations: [1, 2] })]),
+      { startSession: sessions.startSession }
+    );
+    await supervisor.interruptForShutdown();
+    await supervisor.execute('run-1');
+    expect(sessions.started).toHaveLength(0);
+    const index = dispatched.findIndex((command) => command.type === 'run.interrupt');
+    expect(dispatched[index]).toEqual({ type: 'run.interrupt', runId: 'run-1', attemptId: null });
+    expect(commandIds[index]).toBe('run.interrupt:run-1:0:2');
   });
 });
 
@@ -1306,7 +1382,7 @@ describe('resume fallback', () => {
     expect(lost.sessions.started[0]?.input.resume).toBeNull();
     expect(checked).toBe(0);
     const sessionless = restoreSetup(() => undefined, {
-      capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false } },
+      capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false, fork: false } },
     });
     await runOnce(sessionless);
     expect(sessionless.sessions.started[0]?.input.prompt).toContain('<handoff_transcript>');
@@ -1348,7 +1424,7 @@ describe('resume fallback', () => {
     const plain = restoreSetup(() => undefined, {
       capabilities: {
         ...CLAUDE_CAPABILITIES,
-        sessions: { resume: false, inspect: false },
+        sessions: { resume: false, inspect: false, fork: false },
         contextHandoff: false,
       },
     });
@@ -1972,6 +2048,86 @@ describe('shutdown and restart continuation', () => {
     reject((command) => command.type === 'run.continue' && command.runId === 'run-2', new Error('log full'));
     await supervisor.recover();
     expect(sessions.started).toHaveLength(0);
+  });
+});
+
+describe('holding new runs for a restart', () => {
+  test('a new run waits while a restart drains, and starts when the hold is released', async () => {
+    const sessions = createSessions();
+    const { supervisor } = setup(withTask(createTempDir()), { startSession: sessions.startSession });
+    let held = 0;
+    supervisor.holdNewRuns(() => {
+      held += 1;
+    });
+    await supervisor.execute('run-1');
+    await supervisor.execute('run-1');
+    expect(sessions.started).toHaveLength(0);
+    expect(held).toBe(1);
+    expect(supervisor.isHeld('run-1')).toBe(true);
+    supervisor.releaseHeldRuns();
+    await until('the session', () => sessions.started.length === 1);
+    expect(supervisor.isHeld('run-1')).toBe(false);
+    sessions.started[0]?.finish();
+  });
+
+  test('a turn that carries a prompt or a delivery is never held, so an answer is not lost', async () => {
+    const sessions = createSessions();
+    const { supervisor } = setup(withTask(createTempDir()), { startSession: sessions.startSession });
+    supervisor.holdNewRuns(() => undefined);
+    const running = supervisor.execute('run-1', 'The answer is yes.');
+    await until('the session', () => sessions.started.length === 1);
+    expect(supervisor.isHeld('run-1')).toBe(false);
+    sessions.started[0]?.finish();
+    await running;
+  });
+
+  test('a held run that cannot start is logged', async () => {
+    const errors = spyOn(log, 'error').mockImplementation(() => undefined);
+    const { supervisor, reject } = setup(
+      (state) => {
+        state.runs['run-1'] = createRun();
+      },
+      { startSession: createSessions().startSession }
+    );
+    reject((command) => command.type === 'run.end', new Error('log full'));
+    supervisor.holdNewRuns(() => undefined);
+    await supervisor.execute('run-1');
+    supervisor.releaseHeldRuns();
+    await until('the log line', () => errors.mock.calls.length > 0);
+    expect(errors).toHaveBeenCalledWith('[Runs] Could not start a run held for the restart', {
+      runId: 'run-1',
+      error: 'log full',
+    });
+    errors.mockRestore();
+  });
+
+  test('shutdown marks a held run to start on the next engine, per continuation', async () => {
+    const warnings = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { supervisor, dispatched, reject, update } = setup(
+      withTask(createTempDir(), [createRun(), createRun({ id: 'run-2', continuations: [5] })]),
+      { startSession: createSessions().startSession }
+    );
+    reject(
+      (command) => command.type === 'run.interrupt' && command.runId === 'run-2',
+      new Error('engine stopped')
+    );
+    supervisor.holdNewRuns(() => undefined);
+    await supervisor.execute('run-1');
+    await supervisor.execute('run-2');
+    update((state) => {
+      delete state.runs['run-2'];
+    });
+    await supervisor.interruptForShutdown();
+    expect(dispatched.filter((command) => command.type === 'run.interrupt')).toEqual([
+      { type: 'run.interrupt', runId: 'run-1', attemptId: null },
+      { type: 'run.interrupt', runId: 'run-2', attemptId: null },
+    ]);
+    expect(warnings).toHaveBeenCalledWith('[Runs] Could not mark a run to resume after the restart', {
+      runId: 'run-2',
+      error: 'engine stopped',
+    });
+    expect(supervisor.isHeld('run-1')).toBe(false);
+    warnings.mockRestore();
   });
 });
 

@@ -3,7 +3,6 @@ import { Badge } from '@shinsa/ui/components/badge';
 import { Card } from '@shinsa/ui/components/card';
 import { Checkbox } from '@shinsa/ui/components/checkbox';
 import { HighlightList } from '@shinsa/ui/components/highlight-list';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import {
@@ -29,17 +28,10 @@ function OptionText({ option }: { option: OnboardingOption }) {
   );
 }
 
-function OptionEnd({ busy, selected }: { busy: boolean; selected: boolean }) {
-  if (busy) {
-    return (
-      <span className={cn(ICON_SLOT, 'self-center text-fg-2')}>
-        <Spinner size='sm' />
-      </span>
-    );
-  }
+function OptionEnd({ selected, lines }: { selected: boolean; lines: boolean }) {
   if (!selected) return null;
   return (
-    <span className={cn(ICON_SLOT, 'self-center')}>
+    <span className={cn(ICON_SLOT, 'h-auto self-stretch', lines && '-mt-1.5 -mb-1')}>
       <SelectedMark />
     </span>
   );
@@ -50,7 +42,6 @@ export function OptionList({
   values,
   multiple,
   label,
-  busyValue,
   disabled,
   autoFocus,
   onPick,
@@ -60,7 +51,6 @@ export function OptionList({
   values: string[];
   multiple: boolean;
   label: string;
-  busyValue: string | null;
   disabled: boolean;
   autoFocus: boolean;
   onPick: (value: string) => void;
@@ -68,6 +58,8 @@ export function OptionList({
 }) {
   const chosen = options.findIndex((option) => values.includes(option.value));
   const [highlighted, setHighlighted] = React.useState<number | null>(null);
+  const resting = multiple || chosen < 0 ? null : chosen;
+  const shown = highlighted ?? resting;
   const list = React.useRef<HTMLDivElement>(null);
   const id = React.useId();
 
@@ -114,7 +106,7 @@ export function OptionList({
                   role='option'
                   aria-selected={selected}
                   tabIndex={-1}
-                  data-highlighted={index === highlighted || undefined}
+                  data-highlighted={index === shown || undefined}
                   onPointerMove={() => setHighlighted(index)}
                   onClick={() => {
                     if (!disabled) onPick(option.value);
@@ -138,7 +130,7 @@ export function OptionList({
                     </span>
                   )}
                   <OptionText option={option} />
-                  <OptionEnd busy={busyValue === option.value} selected={selected && !multiple} />
+                  <OptionEnd selected={selected && !multiple} lines={Boolean(option.detail)} />
                 </div>
               );
             })}

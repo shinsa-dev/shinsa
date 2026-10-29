@@ -12,6 +12,7 @@ export const RUN_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'investigating',
   'researching',
   'operating',
+  'watching',
 ]);
 
 export const TASK_PRIORITIES: readonly [TaskPriority, ...TaskPriority[]] = [

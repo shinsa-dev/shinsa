@@ -13,7 +13,6 @@ import {
   type Run,
   type RunAccount,
   type RunFailure,
-  type RunRole,
   type RunUsage,
   resolveAgentModel,
   resolveAgentProvider,
@@ -74,7 +73,7 @@ import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
-  resolveHandoffPlan,
+  resolveRestorePlan,
   resolveTurnBrief,
   resolveTurnPlan,
   resolveTurnPrompt,
@@ -90,6 +89,7 @@ export interface SupervisorOptions {
   maxRunMs?: number;
   clockTimers?: ClockTimers;
   quiesceMs?: number;
+  stopMs?: number;
   onRejection?: RejectionHandler;
   onNotice?: NoticeListener;
   accounts?: AccountBroker;
@@ -125,12 +125,24 @@ const SCRATCH_BRANCH = 'main';
 
 const QUIESCE_MS = 60_000;
 
+const STOP_MS = 15_000;
+
 const OVERLOAD_RETRIES = 3;
 
 const UNGUARDED = 'This agent provider cannot stop the commands Shinsa forbids, so Shinsa will not run it.';
 
 const UNREADONLY =
   'This agent provider cannot keep a read-only agent from changing files, so Shinsa will not run a read-only task on it.';
+
+async function settleWithin(work: Promise<unknown>, ms: number) {
+  const timeout = Promise.withResolvers<'timeout'>();
+  const timer = setTimeout(() => timeout.resolve('timeout'), ms);
+  try {
+    return await Promise.race([work.then(() => 'settled' as const), timeout.promise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function createFailure(failureClass: RunFailure['class'], message: string, code: string): RunFailure {
   return { class: failureClass, message, code, retryable: null, resetAt: null };
@@ -144,8 +156,9 @@ function resolveDriveFailure(error: unknown): AgentSessionResult {
   return { outcome: 'failed', summary };
 }
 
-function resolveRoleCwd(role: RunRole, task: Task, repo: Repo) {
-  if (role === 'answerer') return repo.path;
+function resolveRoleCwd(run: Run, task: Task, repo: Repo) {
+  const role = run.role;
+  if (role === 'answerer' || run.purpose === 'watch') return repo.path;
   if (role === 'researcher') return task.worktreePath ?? repo.path;
   return task.worktreePath;
 }
@@ -166,6 +179,7 @@ export class RunSupervisor {
   readonly #maxRunMs: number;
   readonly #clockTimers: ClockTimers | undefined;
   readonly #quiesceMs: number;
+  readonly #stopMs: number;
   readonly #onRejection: RejectionHandler | null;
   readonly #onNotice: NoticeListener | null;
   readonly #leasing: AccountLeasing;
@@ -176,8 +190,10 @@ export class RunSupervisor {
   readonly #extensions: SessionExtensionSource | null;
   readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
+  readonly #held = new Set<string>();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
+  #holding: (() => void) | null = null;
 
   constructor(
     engine: Engine,
@@ -196,6 +212,7 @@ export class RunSupervisor {
     this.#maxRunMs = options.maxRunMs ?? MAX_RUN_MS;
     this.#clockTimers = options.clockTimers;
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS;
+    this.#stopMs = options.stopMs ?? STOP_MS;
     this.#onRejection = options.onRejection ?? null;
     this.#onNotice = options.onNotice ?? null;
     this.#extensions = options.extensions ?? null;
@@ -237,7 +254,17 @@ export class RunSupervisor {
   async execute(runId: string, override: string | null = null, delivery: Delivery | null = null) {
     const state = this.#engine.state;
     const run = state.runs[runId];
-    if (this.#shuttingDown || !run || run.endedAt !== null || this.#active.has(runId)) return;
+    if (!run || run.endedAt !== null || this.#active.has(runId)) return;
+    if (this.#shuttingDown) {
+      await this.#markInterrupted(runId, null);
+      return;
+    }
+    if (this.#holding && override === null && delivery === null) {
+      if (this.#held.has(runId)) return;
+      this.#held.add(runId);
+      this.#holding();
+      return;
+    }
     const task = state.tasks[run.taskId];
     const workspace = task ? this.#resolveWorkspace(run, task) : null;
     if (!task || !workspace) {
@@ -315,7 +342,7 @@ export class RunSupervisor {
   }
 
   #resolveCwd(run: Run, task: Task, repo: Repo) {
-    if (!isDelegatedRun(run)) return resolveRoleCwd(run.role, task, repo);
+    if (!isDelegatedRun(run)) return resolveRoleCwd(run, task, repo);
     if (run.delegation.isolation === 'worktree') {
       return resolveIsolatedPath(this.#config.worktreesDir, task.id, run.id);
     }
@@ -400,8 +427,7 @@ export class RunSupervisor {
         if (result.failure?.class === 'session_lost' && plan.resume !== null && !restored) {
           restored = true;
           carryUndelivered(active, result.undelivered);
-          await this.#recordSessionLost(run.id, plan.resume);
-          plan = resolveHandoffPlan(this.#context(turn), 'session_restore', plan.resume, provider.id);
+          plan = await this.#restoreLost(turn, plan, plan.resume);
           continue;
         }
         if (this.#isOverloadRetry(active, result)) {
@@ -450,6 +476,11 @@ export class RunSupervisor {
       },
     });
     await waitToRetry(active, delay);
+  }
+
+  async #restoreLost(turn: Turn, plan: TurnPlan, sessionId: string) {
+    if (!plan.fork) await this.#recordSessionLost(turn.run.id, sessionId);
+    return resolveRestorePlan(this.#context(turn), plan, sessionId);
   }
 
   #recordSessionLost(runId: string, sessionId: string) {
@@ -586,7 +617,7 @@ export class RunSupervisor {
       return this.#tools.handle(name, { runId: run.id, attemptId, input, signal, requestId });
     };
     const startSession = this.#startSession ?? provider.startSession;
-    let sessionId = plan.resume;
+    let sessionId = plan.fork ? null : plan.resume;
     const options = await this.#resolveSpeed(run, provider, active.lease, true);
     const session = startSession({
       role: run.role,
@@ -595,6 +626,7 @@ export class RunSupervisor {
       prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt, turn.brief),
       model: this.#resolveModel(turn),
       resume: plan.resume,
+      fork: plan.fork,
       defaultBranch: turn.defaultBranch,
       pluginDir: this.#config.pluginDir,
       tools: createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [
@@ -764,10 +796,10 @@ export class RunSupervisor {
   }
 
   #listEarlier(taskId: string, except: string | undefined) {
-    const earlier: ActiveRun[] = [];
+    const earlier: [string, ActiveRun][] = [];
     for (const [id, active] of this.#active) {
       if (id === except) break;
-      if (active.taskId === taskId && !(except && active.delegated)) earlier.push(active);
+      if (active.taskId === taskId && !(except && active.delegated)) earlier.push([id, active]);
     }
     return earlier;
   }
@@ -775,15 +807,38 @@ export class RunSupervisor {
   async quiesce(taskId: string, except?: string) {
     const earlier = this.#listEarlier(taskId, except);
     if (earlier.length === 0) return;
-    const timeout = Promise.withResolvers<'timeout'>();
-    const timer = setTimeout(() => timeout.resolve('timeout'), this.#quiesceMs);
-    const settled = Promise.all(earlier.map((active) => active.done)).then(() => 'settled' as const);
-    try {
-      if ((await Promise.race([settled, timeout.promise])) === 'settled') return;
-    } finally {
-      clearTimeout(timer);
+    const settled = Promise.allSettled(earlier.map(([, active]) => active.done));
+    if ((await settleWithin(settled, this.#quiesceMs)) === 'settled') return;
+    await this.#stopWithin(earlier, settled);
+  }
+
+  async #stopWithin(runs: [string, ActiveRun][], settled: Promise<unknown>) {
+    const cancelled = Promise.allSettled(runs.map(([, active]) => active.session?.cancel()));
+    if ((await settleWithin(Promise.all([cancelled, settled]), this.#stopMs)) === 'settled') return;
+    for (const [runId, active] of runs) {
+      if (this.#active.get(runId) !== active) continue;
+      log.warn('[Runs] A run did not stop in time, so Shinsa stopped waiting for it', {
+        runId,
+        taskId: active.taskId,
+      });
+      this.#active.delete(runId);
     }
-    await Promise.allSettled(earlier.map((active) => active.session?.cancel()));
+  }
+
+  async #markInterrupted(runId: string, attemptId: string | null) {
+    const continuations = this.#engine.state.runs[runId]?.continuations?.length ?? 0;
+    const attempt = attemptId ?? `${runId}:0:${continuations}`;
+    try {
+      await this.#engine.dispatch(
+        { type: 'run.interrupt', runId, attemptId },
+        { id: `run.interrupt:${attempt}` }
+      );
+    } catch (error) {
+      log.warn('[Runs] Could not mark a run to resume after the restart', {
+        runId,
+        error: describeError(error),
+      });
+    }
   }
 
   async steer(runId: string, text: string, cause?: string, from?: 'shinsa') {
@@ -807,35 +862,44 @@ export class RunSupervisor {
     const active = this.#active.get(runId);
     if (!active) return;
     stopActiveRun(active);
-    await active.session?.cancel();
+    await settleWithin(Promise.allSettled([active.session?.cancel()]), this.#stopMs);
+  }
+
+  holdNewRuns(onHeld: () => void) {
+    this.#holding = onHeld;
+  }
+
+  releaseHeldRuns() {
+    this.#holding = null;
+    const held = [...this.#held];
+    this.#held.clear();
+    for (const runId of held) {
+      this.execute(runId).catch((error: unknown) => {
+        log.error('[Runs] Could not start a run held for the restart', {
+          runId,
+          error: describeError(error),
+        });
+      });
+    }
+  }
+
+  isHeld(runId: string) {
+    return this.#held.has(runId);
   }
 
   async interruptForShutdown() {
     this.#shuttingDown = true;
     const compacting = this.#compaction.stop();
+    await this.#interruptHeld();
     const live = [...this.#active.entries()];
-    for (const [runId, active] of live) {
-      const continuations = this.#engine.state.runs[runId]?.continuations?.length ?? 0;
-      const attempt = active.attemptId ?? `${runId}:0:${continuations}`;
-      try {
-        await this.#engine.dispatch(
-          { type: 'run.interrupt', runId, attemptId: active.attemptId },
-          { id: `run.interrupt:${attempt}` }
-        );
-      } catch (error) {
-        log.warn('[Runs] Could not mark a run to resume after the restart', {
-          runId,
-          error: describeError(error),
-        });
-      }
-    }
-    await Promise.allSettled(
-      live.map(([, active]) => {
-        stopActiveRun(active);
-        return active.session?.cancel();
-      })
-    );
-    await Promise.allSettled([compacting, ...live.map(([, active]) => active.done)]);
+    for (const [runId, active] of live) await this.#markInterrupted(runId, active.attemptId);
+    for (const [, active] of live) stopActiveRun(active);
+    await this.#stopWithin(live, Promise.allSettled([compacting, ...live.map(([, active]) => active.done)]));
+  }
+
+  async #interruptHeld() {
+    for (const runId of this.#held) await this.#markInterrupted(runId, null);
+    this.#held.clear();
   }
 
   resolveQuestion(gateId: string) {

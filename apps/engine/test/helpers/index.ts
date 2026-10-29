@@ -92,9 +92,9 @@ export async function until(
   predicate: () => boolean | Promise<boolean>,
   timeoutMs = 5_000
 ) {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = performance.now() + timeoutMs;
   while (!(await predicate())) {
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
+    if (performance.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
     await Bun.sleep(10);
   }
 }
@@ -141,13 +141,11 @@ export function createTestOnboarding(engine: Engine, config: ServerConfig, run: 
       config,
       store,
       roots,
+      resolveLogin: () => Promise.resolve(null),
+      ask: () => Promise.resolve(null),
       run,
       models: { listModels: () => Promise.resolve([]) },
       accounts: () => Promise.resolve([]),
-      accountActions: {
-        listImports: () => Promise.resolve([]),
-        importAccount: () => Promise.resolve(),
-      },
     }),
   };
 }

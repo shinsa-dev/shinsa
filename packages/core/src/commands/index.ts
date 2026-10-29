@@ -50,6 +50,7 @@ import type {
 import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+import type { WatchdogAgentCommand, WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
   request: string;
@@ -92,6 +93,7 @@ export type UserCommand =
       waitsOn?: string[];
       mode?: TaskMode;
       account?: RunAccount | null;
+      forkOf?: string;
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
@@ -124,6 +126,7 @@ export type UserCommand =
   | { type: 'usage_wait.resume_now'; taskId: string }
   | DelegationUserCommand
   | ScheduleUserCommand
+  | WatchdogUserCommand
   | MemoryUserCommand;
 
 type AgentCommand =
@@ -223,6 +226,7 @@ type AgentCommand =
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
   | ScheduleAgentCommand
+  | WatchdogAgentCommand
   | MemoryAgentCommand;
 
 type SystemCommand =
@@ -329,7 +333,8 @@ type SystemCommand =
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
   | DelegationSystemCommand
-  | ScheduleSystemCommand;
+  | ScheduleSystemCommand
+  | WatchdogSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };
 
