@@ -162,6 +162,8 @@ describe('services', () => {
       command: 'bun run dev',
       source: 'package' as const,
       recommended: true,
+      previewUrl: null,
+      portVariable: 'PORT',
     };
     fetch = serve({ suggestions: [suggestion] });
     expect(await requestServiceSuggestions('shop')).toEqual([suggestion]);

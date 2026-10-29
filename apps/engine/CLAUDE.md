@@ -267,7 +267,8 @@ src/
 │                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
 │                        store.ts (data/terminals/: the terminals, their screens and services.json), detect.ts (the
 │                        services found in a project's folders: workspace scripts, Deno, bin/dev and Procfile lines, each
-│                        Compose service, Cargo, Go, Django, make),
+│                        Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the quick call
+│                        that names them, adds a port flag and a preview URL, cached per project),
 │                        routes.ts (/api/terminals, the foreground check, /api/services with its batch add, and /ws/terminals/<id>),
 │                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
 │                        services: add, update, remove, start, stop, restart, a run per task, closing a task's

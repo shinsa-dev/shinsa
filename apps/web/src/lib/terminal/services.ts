@@ -339,8 +339,8 @@ export function listPickedInputs(suggestions: ServiceSuggestion[], picked: strin
       cwd: each.cwd,
       command: each.command,
       env: {},
-      previewUrl: null,
-      portVariable: SERVICE_PORT_VARIABLE,
+      previewUrl: each.previewUrl,
+      portVariable: each.portVariable,
     }));
 }
 

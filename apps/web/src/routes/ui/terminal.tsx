@@ -146,6 +146,8 @@ const SUGGESTIONS: ServiceSuggestion[] = [
     command: 'bun run dev',
     source: 'package',
     recommended: true,
+    previewUrl: null,
+    portVariable: 'PORT',
   },
   {
     name: 'web',
@@ -153,6 +155,8 @@ const SUGGESTIONS: ServiceSuggestion[] = [
     command: 'bun run dev',
     source: 'package',
     recommended: true,
+    previewUrl: null,
+    portVariable: 'PORT',
   },
   {
     name: 'db',
@@ -160,8 +164,18 @@ const SUGGESTIONS: ServiceSuggestion[] = [
     command: 'docker compose up db',
     source: 'compose',
     recommended: true,
+    previewUrl: null,
+    portVariable: 'PORT',
   },
-  { name: 'all', cwd: '~/Developer/shop', command: 'bun run dev', source: 'package', recommended: false },
+  {
+    name: 'all',
+    cwd: '~/Developer/shop',
+    command: 'bun run dev',
+    source: 'package',
+    recommended: false,
+    previewUrl: null,
+    portVariable: 'PORT',
+  },
 ];
 
 const SHOP_PLACES: TerminalPlace[] = [

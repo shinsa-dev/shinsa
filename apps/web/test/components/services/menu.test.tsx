@@ -66,10 +66,26 @@ const ROOT = '/code/shop';
 
 const PLACES: TerminalPlace[] = [{ path: ROOT, label: 'shop', kind: 'repository', taskId: null }];
 
+const DETECTED = { previewUrl: null, portVariable: 'PORT' };
+
 const SUGGESTIONS: ServiceSuggestion[] = [
-  { name: 'api', cwd: `${ROOT}/apps/api`, command: 'bun run dev', source: 'package', recommended: true },
-  { name: 'web', cwd: `${ROOT}/apps/web`, command: 'bun run dev', source: 'package', recommended: true },
-  { name: 'all', cwd: ROOT, command: 'bun run dev', source: 'package', recommended: false },
+  {
+    name: 'api',
+    cwd: `${ROOT}/apps/api`,
+    command: 'bun run dev',
+    source: 'package',
+    recommended: true,
+    ...DETECTED,
+  },
+  {
+    name: 'web',
+    cwd: `${ROOT}/apps/web`,
+    command: 'bun run dev',
+    source: 'package',
+    recommended: true,
+    ...DETECTED,
+  },
+  { name: 'all', cwd: ROOT, command: 'bun run dev', source: 'package', recommended: false, ...DETECTED },
 ];
 
 function createActions(suggestions: ServiceSuggestion[] = SUGGESTIONS) {

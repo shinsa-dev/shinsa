@@ -67,6 +67,8 @@ const WEB = {
   command: 'bun run dev',
   source: 'package' as const,
   recommended: true,
+  previewUrl: null,
+  portVariable: 'PORT',
 };
 
 const LATER = NOW + SERVICE_LIMITS.startingMs + 1;
@@ -493,6 +495,11 @@ describe('the service form', () => {
         portVariable: 'PORT',
       },
     ]);
+    const refined = { ...WEB, previewUrl: 'http://localhost:{port}', portVariable: 'WEB_PORT' };
+    expect(listPickedInputs([refined], picked)[0]).toMatchObject({
+      previewUrl: 'http://localhost:{port}',
+      portVariable: 'WEB_PORT',
+    });
   });
 
   it('words the add button, the toast and the empty list', () => {
