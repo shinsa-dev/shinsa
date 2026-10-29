@@ -79,7 +79,13 @@ describe('shipping', () => {
     expect(listShippingTiles(stats, year)).toEqual([
       { key: 'pull-requests', label: 'Pull requests merged', value: '1,200', detail: null },
       { key: 'tasks', label: 'Tasks finished', value: '4', detail: null },
-      { key: 'lines', label: 'Lines changed in 1 file', value: '1,520', detail: '+1,500 −20' },
+      {
+        key: 'lines',
+        label: 'Lines changed in 1 file',
+        value: '1,520',
+        detail: null,
+        changes: { added: 1500, removed: 20 },
+      },
       { key: 'streak', label: 'Shipping streak', value: '1 day', detail: 'Longest 9 days' },
     ]);
   });

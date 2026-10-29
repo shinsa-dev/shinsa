@@ -22,7 +22,13 @@ const LEVEL_FILL: Record<ShippingLevel, string> = {
 
 const LEVELS: ShippingLevel[] = [0, 1, 2, 3, 4];
 
-const WEEKDAYS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+const WEEKDAYS = Array.from({ length: 7 }, (_, weekday) =>
+  new Date(2026, 10, 1 + weekday).toLocaleDateString(undefined, { weekday: 'short' })
+);
+
+const CELL_GAP = 3;
+
+const CELL_MAX = 14;
 
 interface HoveredCell {
   cell: ShippingCell;
@@ -47,7 +53,12 @@ export function ShippingGraph({ year }: { year: Stats }) {
   const grid = React.useMemo(() => resolveShippingGrid(year.days), [year.days]);
   const [hovered, setHovered] = React.useState<HoveredCell | null>(null);
   const board = React.useRef<HTMLDivElement>(null);
-  const columns = { gridTemplateColumns: `1.5rem repeat(${grid.weeks.length}, minmax(0, 1fr))` };
+  const today = year.days.at(-1)?.day;
+  const columns = {
+    gap: CELL_GAP,
+    gridTemplateColumns: `2rem repeat(${grid.weeks.length}, minmax(0, 1fr))`,
+  };
+  const reach = { maxWidth: `calc(2rem + ${grid.weeks.length * (CELL_MAX + CELL_GAP)}px)` };
   const show = (cell: ShippingCell, element: Element) => {
     const frame = board.current?.getBoundingClientRect();
     const box = element.getBoundingClientRect();
@@ -61,8 +72,8 @@ export function ShippingGraph({ year }: { year: Stats }) {
   };
   return (
     <ChartPanel title={describeShippingYear(year)} aside={<ShippingLegend />}>
-      <div ref={board} className='relative flex flex-col gap-1'>
-        <div aria-hidden className='grid h-4 gap-1' style={columns}>
+      <div ref={board} className='relative mx-auto flex w-full flex-col gap-1' style={reach}>
+        <div aria-hidden className='grid h-4' style={columns}>
           <span />
           {grid.weeks.map((cells, week) => (
             <span
@@ -76,13 +87,13 @@ export function ShippingGraph({ year }: { year: Stats }) {
         <div
           role='img'
           aria-label={describeShippingYear(year)}
-          className='grid grid-flow-col grid-rows-7 gap-1'
+          className='grid grid-flow-col grid-rows-7'
           style={columns}
           onPointerLeave={() => setHovered(null)}
         >
-          {WEEKDAYS.map((weekday, index) => (
+          {WEEKDAYS.map((weekday) => (
             <span
-              key={`${weekday}-${String(index)}`}
+              key={weekday}
               aria-hidden
               className='flex items-center overflow-visible text-2xs text-fg-2 leading-none'
             >
@@ -97,7 +108,8 @@ export function ShippingGraph({ year }: { year: Stats }) {
                 className={cn(
                   'aspect-square rounded-xs',
                   cell ? LEVEL_FILL[cell.level] : 'invisible',
-                  hovered?.cell.day === cell?.day && 'ring-1 ring-fg-3'
+                  cell?.day === today && 'ring-1 ring-fg-2',
+                  cell && hovered?.cell.day === cell.day && 'ring-1 ring-fg-4'
                 )}
                 onPointerEnter={cell ? (event) => show(cell, event.currentTarget) : undefined}
               />

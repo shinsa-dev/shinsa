@@ -13,20 +13,14 @@ import {
   type StatsRange,
 } from '@/lib/stats/days.ts';
 import { listShippingTiles, SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
-import {
-  listBreakdowns,
-  listSavingRows,
-  listTaskRows,
-  listUsageTiles,
-  USAGE_SECTION,
-} from '@/lib/stats/usage.ts';
+import { listBreakdowns, listTaskRows, listUsageTiles, USAGE_SECTION } from '@/lib/stats/usage.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 import { SettingsGroup } from '../group.tsx';
 import { ShippingChart } from './shipping-chart.tsx';
 import { ShippingGraph } from './shipping-graph.tsx';
 import { StatTiles } from './stat-tile.tsx';
 import { UsageChart } from './usage-chart.tsx';
-import { Breakdown, Savings, TopTasks } from './usage-tables.tsx';
+import { Breakdown, TopTasks } from './usage-tables.tsx';
 
 function useStatsRange() {
   const range = parseStatsRange(useSearchParam('range') ?? '');
@@ -77,7 +71,6 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
           ))}
         </div>
         <TopTasks state={state} rows={listTaskRows(stats.tasks)} />
-        <Savings state={state} rows={listSavingRows(stats.savings)} />
       </SettingsGroup>
     </>
   );

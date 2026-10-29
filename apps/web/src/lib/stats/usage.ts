@@ -1,11 +1,9 @@
 import {
   describeUsd,
-  resolveCacheHitRate,
   resolveModelLabel,
   type Stats,
   type StatsBreakdown,
   type StatsDay,
-  type StatsSaving,
   type StatsWork,
   sumTokenLines,
   type TaskTokens,
@@ -50,19 +48,9 @@ export interface TaskRow {
   cost: string;
 }
 
-export interface SavingRow {
-  key: string;
-  taskId: string;
-  title: string;
-  headline: string;
-  detail: string;
-}
-
 export const USAGE_SECTION = 'Token usage';
 
 export const TOP_TASKS = 8;
-
-const TOP_SAVINGS = 8;
 
 export const TOKEN_KINDS: readonly { kind: TokenKind; label: string }[] = [
   { kind: 'cacheReadTokens', label: 'Cache read' },
@@ -195,41 +183,5 @@ export function listTaskRows(tasks: TaskTokens[]): TaskRow[] {
     tokens: formatTokenCount(task.usage.tokens),
     cacheHit: formatPercent(task.cacheHitRate),
     cost: describeUsd(task.usage.knownUsd),
-  }));
-}
-
-function describeSaving(saving: StatsSaving): { headline: string; detail: string } {
-  const { task } = saving;
-  const prompt = task.usage.inputTokens + task.usage.cacheReadTokens + task.usage.cacheWriteTokens;
-  switch (saving.kind) {
-    case 'cache_misses':
-      return {
-        headline: `Only ${formatPercent(resolveCacheHitRate(task.usage))} of the prompt came from the cache`,
-        detail: `${formatTokenCount(task.usage.inputTokens + task.usage.cacheWriteTokens)} prompt tokens were sent fresh.`,
-      };
-    case 'cache_writes':
-      return {
-        headline: `${formatPercent(task.usage.cacheWriteTokens / prompt)} of the prompt was written to the cache`,
-        detail: 'The start of the prompt kept changing, so the cache was rebuilt instead of read.',
-      };
-    case 'fresh_sessions':
-      return {
-        headline: formatCount(task.freshSessions, 'fresh session', 'fresh sessions'),
-        detail: 'The agent started over and read its context again instead of resuming.',
-      };
-    case 'compactions':
-      return {
-        headline: `Compacted ${formatCount(task.compactions, 'time', 'times')}`,
-        detail: 'The context filled up; a smaller brief or fewer large tool outputs would keep it lighter.',
-      };
-  }
-}
-
-export function listSavingRows(savings: StatsSaving[]): SavingRow[] {
-  return savings.slice(0, TOP_SAVINGS).map((saving) => ({
-    key: `${saving.task.taskId}-${saving.kind}`,
-    taskId: saving.task.taskId,
-    title: saving.task.title,
-    ...describeSaving(saving),
   }));
 }

@@ -20,6 +20,7 @@ export interface ShippingTile {
   label: string;
   value: string;
   detail: string | null;
+  changes?: { added: number; removed: number };
 }
 
 export interface ShippingPoint {
@@ -113,7 +114,8 @@ export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {
       key: 'lines',
       label: `Lines changed in ${formatCount(total.changedFiles, 'file', 'files')}`,
       value: formatNumber(total.additions + total.deletions),
-      detail: `+${formatNumber(total.additions)} −${formatNumber(total.deletions)}`,
+      detail: null,
+      changes: { added: total.additions, removed: total.deletions },
     },
     {
       key: 'streak',

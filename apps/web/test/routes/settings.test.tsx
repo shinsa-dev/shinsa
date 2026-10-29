@@ -132,7 +132,8 @@ describe('Settings stats', () => {
     await renderSettings('/settings?tab=statistics', createShinsaState({ tasks: [task] }));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Statistics');
     expect(screen.getByText('Pull requests merged')).toBeTruthy();
-    expect(screen.getByText('+40 −2')).toBeTruthy();
+    expect(screen.getByText('+40').className).toContain('text-green-text');
+    expect(screen.getByText('−2').className).toContain('text-red-text');
     expect(screen.getByText('Lines changed in 3 files')).toBeTruthy();
     expect(screen.getByText('1 day')).toBeTruthy();
     const graph = screen.getByRole('img', { name: '1 pull request merged in the last year' });
@@ -158,7 +159,7 @@ describe('Settings stats', () => {
     expect(screen.getAllByText('Last 90 days').length).toBeGreaterThan(0);
   });
 
-  it('shows where the tokens went, the tasks that used the most and where to save', async () => {
+  it('shows where the tokens went and the tasks that used the most', async () => {
     const now = Date.now();
     const heavy = {
       inputTokens: 300_000,
@@ -193,9 +194,8 @@ describe('Settings stats', () => {
     expect(screen.getByText('Review')).toBeTruthy();
     expect(screen.getByText('Opus 5.5')).toBeTruthy();
     expect(screen.getByText('Unknown model')).toBeTruthy();
-    expect(document.querySelectorAll('[data-task="t1"]').length).toBe(2);
+    expect(document.querySelectorAll('[data-task="t1"]').length).toBe(1);
     expect(screen.getByText('gone')).toBeTruthy();
-    expect(screen.getByText('Only 13% of the prompt came from the cache')).toBeTruthy();
     const chart = screen.getByRole('img', { name: 'Tokens over time' });
     chart.getBoundingClientRect = () => ({ left: 0, width: 100, height: 160 }) as DOMRect;
     fireEvent.pointerMove(chart, { clientX: 99 });
@@ -207,9 +207,9 @@ describe('Settings stats', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('says so when no agent ran and nothing stands out', async () => {
+  it('says so when no agent ran', async () => {
     await renderSettings('/settings?tab=statistics', createShinsaState({}));
     expect(screen.getAllByText('No agent runs')).toHaveLength(4);
-    expect(screen.getByText('Nothing stands out in this range.')).toBeTruthy();
+    expect(screen.queryByText('Where tokens could be saved')).toBeNull();
   });
 });

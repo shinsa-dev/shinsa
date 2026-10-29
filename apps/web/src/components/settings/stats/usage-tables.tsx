@@ -2,7 +2,7 @@ import type { ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { TaskLink } from '@/components/links/task.tsx';
-import type { BreakdownRow, SavingRow, TaskRow } from '@/lib/stats/usage.ts';
+import type { BreakdownRow, TaskRow } from '@/lib/stats/usage.ts';
 import { TOKEN_TEXT } from '../group.tsx';
 import { STAT_PANEL } from './stat-tile.tsx';
 
@@ -77,23 +77,6 @@ export function TopTasks({ state, rows }: { state: ShinsaState; rows: TaskRow[] 
           <span className={cn(TOKEN_TEXT, 'w-12 text-right')}>{row.tokens}</span>
           <span className={cn(TOKEN_TEXT, 'w-12 text-right')}>{row.cacheHit}</span>
           <span className={cn(TOKEN_TEXT, 'w-14 text-right')}>{row.cost}</span>
-        </div>
-      ))}
-    </ListPanel>
-  );
-}
-
-export function Savings({ state, rows }: { state: ShinsaState; rows: SavingRow[] }) {
-  return (
-    <ListPanel title='Where tokens could be saved'>
-      {rows.length === 0 && <span className={EMPTY_ROW}>Nothing stands out in this range.</span>}
-      {rows.map((row) => (
-        <div key={row.key} className='flex flex-col gap-1 px-3 py-2'>
-          <div className='flex items-baseline gap-2'>
-            <span className='shrink-0 text-fg-4 text-xs'>{row.headline}</span>
-            <TaskTitle state={state} taskId={row.taskId} title={row.title} />
-          </div>
-          <span className='text-2xs text-fg-2'>{row.detail}</span>
         </div>
       ))}
     </ListPanel>

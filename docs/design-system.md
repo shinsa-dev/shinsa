@@ -1701,7 +1701,7 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 - The area: a vertical gradient of `--primary` from 24% to nothing at the baseline.
 - The line: 2px `stroke-primary`, round joins and caps, `vector-effect: non-scaling-stroke`, so it keeps its width however the chart stretches.
 
-**In Shinsa** the plot has three hairline grid lines (the top of a readable scale, its middle and 0, the baseline a step darker) with their values in a gutter to the left, up to five dates under it, and on hover a 1px `bg-fg-1` crosshair, an 8px accent dot ringed in the card colour and a `ChartTooltip` above the point.
+**In Shinsa** the plot runs the full width of its panel: three dashed `border-border` grid lines (the top of a readable scale, its middle and 0, none stronger than the others) that fade out at both ends, the top value alone in a small label above the top right, up to five dates under it, and on hover a dashed `border-fg-1` crosshair and an 8px accent dot ringed in the card colour that glide to the next point (200ms ease-out), with a `ChartTooltip` above the point.
 
 #### ChartTooltip
 
@@ -1711,7 +1711,7 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 
 **Parts:** `ChartTooltip` (`x`, `y`, `width`, children), `ChartTooltipTitle` (what the point is, `text-fg-2`), `ChartTooltipRow` (`swatch`: a short line key in the series' fill, `label`, and `value`, which leads in `font-medium text-fg-4 tabular-nums`).
 
-**Markup and classes:** the page tooltip's chip (`rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4`, `shadow-2`), `pointer-events-none`, 10px above its point.
+**Markup and classes:** the page tooltip's chip (`rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4`, `shadow-2`), `pointer-events-none`, 10px above its point. It fades in (`starting:opacity-0`) and glides from point to point (`left`, `top` and its edge shift ease over 200ms), so moving along a chart never jumps.
 
 #### Badge
 

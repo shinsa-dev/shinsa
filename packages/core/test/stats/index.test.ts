@@ -4,7 +4,6 @@ import {
   type Run,
   type RunUsage,
   resolveCacheHitRate,
-  resolveCacheWriteShare,
   resolveStats,
   type ShinsaState,
   type StatsWindow,
@@ -98,7 +97,6 @@ describe('resolveStats', () => {
     expect(stats.streak).toEqual({ current: 0, longest: 0 });
     expect(stats.cacheHitRate).toBeNull();
     expect(stats.tasks).toEqual([]);
-    expect(stats.savings).toEqual([]);
   });
 
   test('a merged pull request counts once on its last day with the lines it changed', () => {
@@ -234,68 +232,6 @@ describe('resolveStats', () => {
     expect(stats.cacheHitRate).toBe(0.8);
   });
 
-  test('the savings list flags cache misses, heavy cache writes, fresh sessions and compactions', () => {
-    const big = {
-      inputTokens: 150_000,
-      outputTokens: 1000,
-      cacheReadTokens: 50_000,
-      cacheWriteTokens: 100_000,
-    };
-    const attempt = (attemptId: string, resumed: boolean) => ({
-      attemptId,
-      provider: 'claude',
-      model: null,
-      resumed,
-      handoff: null,
-      startedAt: DAY,
-    });
-    const runs = [
-      run('w1', 'wasteful', { usage: usage(big) }),
-      run('f1', 'fresh', { attempts: [attempt('x', false), attempt('y', true), attempt('z', false)] }),
-      run('f2', 'fresh', {
-        role: 'builder',
-        delegation: { parentRunId: 'f1', depth: 1 } as Run['delegation'],
-        attempts: [attempt('d', false)],
-      }),
-      run('c1', 'compacted', { compactions: ['one', 'two'] }),
-      run('ok', 'fine', { compactions: ['one'], attempts: [attempt('o', false)] }),
-    ];
-    const tasks = ['wasteful', 'fresh', 'compacted', 'fine'].map((id) => task(id));
-    const stats = resolveStats(stateOf(tasks, runs), windowOf(2));
-    expect(stats.savings.map((saving) => [saving.kind, saving.task.taskId])).toEqual([
-      ['cache_misses', 'wasteful'],
-      ['cache_writes', 'wasteful'],
-      ['fresh_sessions', 'fresh'],
-      ['compactions', 'compacted'],
-    ]);
-    expect(stats.tasks.find((entry) => entry.taskId === 'fresh')?.freshSessions).toBe(1);
-  });
-
-  test('a fresh session counts against the task’s first one, even when that one fell before the range', () => {
-    const attempt = (attemptId: string, startedAt: number) => ({
-      attemptId,
-      provider: 'claude',
-      model: null,
-      resumed: false,
-      handoff: null,
-      startedAt,
-    });
-    const before = run('old', 'a', {
-      startedAt: 5 * DAY,
-      endedAt: 5 * DAY,
-      attempts: [attempt('first', 5 * DAY), attempt('early-restart', 5 * DAY + 1)],
-    });
-    const inside = run('new', 'a', {
-      startedAt: 10 * DAY,
-      endedAt: 10 * DAY,
-      attempts: [attempt('restart', 10 * DAY)],
-    });
-    const window = { days: ['d10', 'd11'], dayOf: (at: number) => `d${Math.floor(at / DAY)}` };
-    const stats = resolveStats(stateOf([task('a')], [before, inside]), window);
-    expect(stats.tasks[0]?.freshSessions).toBe(1);
-    expect(stats.savings.map((saving) => saving.kind)).toEqual(['fresh_sessions']);
-  });
-
   test('a real merge through the harness shows up as shipped', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -311,7 +247,7 @@ describe('resolveStats', () => {
 });
 
 describe('cache rates', () => {
-  test('share of prompt tokens read from or written to the cache, none without a prompt', () => {
+  test('share of prompt tokens read from the cache, none without a prompt', () => {
     const line = {
       runs: 1,
       inputTokens: 100,
@@ -322,9 +258,7 @@ describe('cache rates', () => {
       knownUsd: 0,
     };
     expect(resolveCacheHitRate(line)).toBe(0.6);
-    expect(resolveCacheWriteShare(line)).toBe(0.2);
     const empty = { ...line, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     expect(resolveCacheHitRate(empty)).toBeNull();
-    expect(resolveCacheWriteShare(empty)).toBeNull();
   });
 });

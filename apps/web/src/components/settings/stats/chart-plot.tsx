@@ -74,6 +74,10 @@ function AxisLabels({
   );
 }
 
+const GRID_FADE = '[mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]';
+
+const GLIDE = 'transition-[left,top] duration-200 ease-out';
+
 export function ChartPlot({
   label,
   layout,
@@ -96,28 +100,19 @@ export function ChartPlot({
   children: (hovered: number | null) => React.ReactNode;
 }) {
   const [hover, setHover] = React.useState<PlotHover | null>(null);
-  const ticks = listChartTicks(max);
   const hovered = hover && hover.index < count ? hover : null;
   const share = hovered ? resolveShare(layout, hovered.index, count) : 0;
   const level = hovered ? 1 - (values[hovered.index] ?? 0) / max : 1;
   return (
-    <div className='flex gap-2'>
-      <div aria-hidden className='relative h-40 w-8 shrink-0 text-right text-2xs text-fg-2 tabular-nums'>
-        {ticks.map((tick) => (
-          <span
-            key={tick}
-            className='absolute right-0 -translate-y-1/2'
-            style={{ top: `${(1 - tick / max) * 100}%` }}
-          >
-            {formatTick(tick)}
-          </span>
-        ))}
-      </div>
-      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+    <div className='flex min-w-0 flex-col gap-2'>
+      <div className='relative pt-4'>
+        <span aria-hidden className='absolute top-0 right-0 text-2xs text-fg-2 tabular-nums leading-4'>
+          {formatTick(max)}
+        </span>
         <div
           role='img'
           aria-label={label}
-          className='relative h-40'
+          className='relative h-36'
           onPointerMove={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
             const index = resolveIndex(layout, event.clientX - box.left, count, box.width);
@@ -125,25 +120,32 @@ export function ChartPlot({
           }}
           onPointerLeave={() => setHover(null)}
         >
-          {ticks.map((tick) => (
-            <span
-              key={tick}
-              aria-hidden
-              className={cn('absolute inset-x-0 border-t', tick === 0 ? 'border-fg-1' : 'border-border')}
-              style={{ top: `${(1 - tick / max) * 100}%` }}
-            />
-          ))}
+          <div aria-hidden className={cn('absolute inset-0', GRID_FADE)}>
+            {listChartTicks(max).map((tick) => (
+              <span
+                key={tick}
+                className='absolute inset-x-0 border-bg-4 border-t border-dashed'
+                style={{ top: `${(1 - tick / max) * 100}%` }}
+              />
+            ))}
+          </div>
           {children(hovered?.index ?? null)}
           {hovered && layout === 'points' && (
             <>
               <span
                 aria-hidden
-                className='pointer-events-none absolute inset-y-0 w-px bg-fg-1'
+                className={cn(
+                  'pointer-events-none absolute inset-y-0 border-fg-1 border-l border-dashed',
+                  GLIDE
+                )}
                 style={{ left: `${share * 100}%` }}
               />
               <span
                 aria-hidden
-                className='pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card'
+                className={cn(
+                  'pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card',
+                  GLIDE
+                )}
                 style={{ left: `${share * 100}%`, top: `${level * 100}%` }}
               />
             </>
@@ -158,8 +160,8 @@ export function ChartPlot({
             </ChartTooltip>
           )}
         </div>
-        <AxisLabels labels={labels} count={count} layout={layout} />
       </div>
+      <AxisLabels labels={labels} count={count} layout={layout} />
     </div>
   );
 }

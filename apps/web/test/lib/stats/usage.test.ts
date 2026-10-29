@@ -1,17 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  resolveStats,
-  type Stats,
-  type StatsSaving,
-  type TaskTokens,
-  type TokenLine,
-  UNKNOWN_MODEL,
-} from '@shinsa/core';
+import { resolveStats, type Stats, type TaskTokens, type TokenLine, UNKNOWN_MODEL } from '@shinsa/core';
 import { listCalendarDays, resolveDayKey } from '@/lib/stats/days.ts';
 import {
   formatPercent,
   listBreakdowns,
-  listSavingRows,
   listTaskRows,
   listTokenBars,
   listTokenPoints,
@@ -49,8 +41,6 @@ function taskTokens(taskId: string, overrides: Partial<TaskTokens> = {}): TaskTo
     handle: null,
     usage: line(),
     cacheHitRate: 0.75,
-    freshSessions: 0,
-    compactions: 0,
     ...overrides,
   };
 }
@@ -134,35 +124,5 @@ describe('usage', () => {
       cacheHit: '75%',
       cost: '$0.50',
     });
-  });
-
-  it('says what each saving is about', () => {
-    const wasteful = taskTokens('w', {
-      usage: line({ inputTokens: 100_000, cacheReadTokens: 50_000, cacheWriteTokens: 100_000 }),
-    });
-    const savings: StatsSaving[] = [
-      { kind: 'cache_misses', task: wasteful },
-      { kind: 'cache_writes', task: wasteful },
-      { kind: 'fresh_sessions', task: taskTokens('f', { freshSessions: 2 }) },
-      { kind: 'compactions', task: taskTokens('c', { compactions: 3 }) },
-    ];
-    expect(listSavingRows(savings).map((row) => [row.key, row.headline, row.detail])).toEqual([
-      ['w-cache_misses', 'Only 20% of the prompt came from the cache', '200k prompt tokens were sent fresh.'],
-      [
-        'w-cache_writes',
-        '40% of the prompt was written to the cache',
-        'The start of the prompt kept changing, so the cache was rebuilt instead of read.',
-      ],
-      [
-        'f-fresh_sessions',
-        '2 fresh sessions',
-        'The agent started over and read its context again instead of resuming.',
-      ],
-      [
-        'c-compactions',
-        'Compacted 3 times',
-        'The context filled up; a smaller brief or fewer large tool outputs would keep it lighter.',
-      ],
-    ]);
   });
 });

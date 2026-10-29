@@ -1,5 +1,4 @@
 import { addUsage, resolveUsageDelta } from '../costs/index.ts';
-import { isDelegatedRun } from '../domain/delegations.ts';
 import { resolveTaskRounds } from '../domain/rounds.ts';
 import type { PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -37,15 +36,6 @@ export interface TaskTokens {
   handle: string | null;
   usage: TokenLine;
   cacheHitRate: number | null;
-  freshSessions: number;
-  compactions: number;
-}
-
-export type SavingKind = 'cache_misses' | 'cache_writes' | 'fresh_sessions' | 'compactions';
-
-export interface StatsSaving {
-  kind: SavingKind;
-  task: TaskTokens;
 }
 
 export interface StatsStreak {
@@ -62,7 +52,6 @@ export interface Stats {
   byWork: StatsBreakdown<StatsWork>[];
   byModel: StatsBreakdown<string>[];
   tasks: TaskTokens[];
-  savings: StatsSaving[];
 }
 
 export interface StatsWindow {
@@ -70,10 +59,6 @@ export interface StatsWindow {
   dayOf: (at: number) => string;
 }
 
-export const SAVING_MIN_TOKENS = 200_000;
-export const LOW_CACHE_HIT_RATE = 0.5;
-export const HIGH_CACHE_WRITE_SHARE = 0.25;
-export const MANY_COMPACTIONS = 2;
 export const UNKNOWN_MODEL = 'unknown';
 
 const SHIPPED_STAGES: readonly Task['stage'][] = ['merged', 'done'];
@@ -146,11 +131,6 @@ export function resolveCacheHitRate(line: TokenLine) {
   return prompt === 0 ? null : line.cacheReadTokens / prompt;
 }
 
-export function resolveCacheWriteShare(line: TokenLine) {
-  const prompt = resolvePromptTokens(line);
-  return prompt === 0 ? null : line.cacheWriteTokens / prompt;
-}
-
 export function listUsageSlices(run: Run): UsageSlice[] {
   if (!run.usage) return [];
   const meters = run.meters ?? [];
@@ -164,19 +144,6 @@ export function listUsageSlices(run: Run): UsageSlice[] {
 
 function resolveWorkKey(run: Run): StatsWork {
   return run.purpose ?? run.role;
-}
-
-function countFreshSessions(runs: Run[], dayAt: DayLookup) {
-  const fresh = runs
-    .filter((run) => run.role === 'agent' && !isDelegatedRun(run))
-    .flatMap((run) => run.attempts ?? [])
-    .filter((attempt) => !attempt.resumed)
-    .sort((a, b) => a.startedAt - b.startedAt);
-  return fresh.slice(1).filter((attempt) => dayAt(attempt.startedAt) !== null).length;
-}
-
-function countCompactions(runs: Run[]) {
-  return runs.reduce((total, run) => total + (run.compactions?.length ?? 0), 0);
 }
 
 function resolveMergedAt(task: Task, endedAt: number | null) {
@@ -218,24 +185,11 @@ function addToMap<Key>(lines: Map<Key, TokenLine>, key: Key, usage: RunUsage, ru
   lines.set(key, addTokens(lines.get(key) ?? createTokenLine(), usage, runs));
 }
 
-function listSavingKinds(task: TaskTokens): SavingKind[] {
-  const kinds: SavingKind[] = [];
-  if (task.usage.tokens >= SAVING_MIN_TOKENS) {
-    if ((task.cacheHitRate ?? 1) < LOW_CACHE_HIT_RATE) kinds.push('cache_misses');
-    if ((resolveCacheWriteShare(task.usage) ?? 0) > HIGH_CACHE_WRITE_SHARE) kinds.push('cache_writes');
-  }
-  if (task.freshSessions > 0) kinds.push('fresh_sessions');
-  if (task.compactions >= MANY_COMPACTIONS) kinds.push('compactions');
-  return kinds;
-}
-
 interface UsageFold {
   byRole: Map<RunRole, TokenLine>;
   byWork: Map<StatsWork, TokenLine>;
   byModel: Map<string, TokenLine>;
   byTask: Map<string, TokenLine>;
-  runsByTask: Map<string, Run[]>;
-  allRunsByTask: Map<string, Run[]>;
 }
 
 function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
@@ -251,8 +205,6 @@ function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
     addToMap(fold.byModel, run.model ?? UNKNOWN_MODEL, slice.usage, runs);
     addToMap(fold.byTask, run.taskId, slice.usage, runs);
   }
-  fold.allRunsByTask.set(run.taskId, [...(fold.allRunsByTask.get(run.taskId) ?? []), run]);
-  if (counted) fold.runsByTask.set(run.taskId, [...(fold.runsByTask.get(run.taskId) ?? []), run]);
 }
 
 function foldShipping(task: Task, dayAt: DayLookup) {
@@ -270,19 +222,16 @@ function foldShipping(task: Task, dayAt: DayLookup) {
   }
 }
 
-function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold, dayAt: DayLookup): TaskTokens[] {
+function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold): TaskTokens[] {
   return [...fold.byTask.entries()]
     .map(([taskId, usage]): TaskTokens => {
       const task = state.tasks[taskId];
-      const runs = fold.runsByTask.get(taskId) ?? [];
       return {
         taskId,
         title: task?.title ?? taskId,
         handle: task?.handle ?? null,
         usage,
         cacheHitRate: resolveCacheHitRate(usage),
-        freshSessions: countFreshSessions(fold.allRunsByTask.get(taskId) ?? [], dayAt),
-        compactions: countCompactions(runs),
       };
     })
     .sort((a, b) => b.usage.tokens - a.usage.tokens || a.taskId.localeCompare(b.taskId));
@@ -309,14 +258,11 @@ export function resolveStats(state: Pick<ShinsaState, 'tasks' | 'runs'>, window:
     byWork: new Map(),
     byModel: new Map(),
     byTask: new Map(),
-    runsByTask: new Map(),
-    allRunsByTask: new Map(),
   };
   for (const run of Object.values(state.runs)) foldRunUsage(fold, run, dayAt);
   for (const task of Object.values(state.tasks)) foldShipping(task, dayAt);
   const series = [...days.values()];
   const total = resolveTotal(series);
-  const tasks = listTaskTokens(state, fold, dayAt);
   return {
     days: series,
     total,
@@ -325,7 +271,6 @@ export function resolveStats(state: Pick<ShinsaState, 'tasks' | 'runs'>, window:
     byRole: listBreakdown(fold.byRole),
     byWork: listBreakdown(fold.byWork),
     byModel: listBreakdown(fold.byModel),
-    tasks,
-    savings: tasks.flatMap((task) => listSavingKinds(task).map((kind) => ({ kind, task }))),
+    tasks: listTaskTokens(state, fold),
   };
 }

@@ -310,8 +310,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
   past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
-  used the most, and a savings list that flags a task with a low cache hit rate, heavy cache writes, fresh sessions
-  of its Agent or repeated compactions. All of it is folded from the event log in core (`resolveStats`); lines
+  used the most. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
   changed come from GitHub's pull request read (`changes`), so pull requests merged before it show none. Quick calls
   (triage, briefings, titles) are not metered, and tokens are counted per run, not per turn or tool call.
 - **Fast mode only on credits you have.** Agents run at standard speed unless you pick Fast. Fast

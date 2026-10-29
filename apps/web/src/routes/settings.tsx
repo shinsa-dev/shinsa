@@ -136,9 +136,13 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
     <PageScroll viewportRef={scroller}>
       <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
         <div className='flex flex-col gap-3'>
-          <div className='flex items-end justify-between gap-3'>
+          <div className='relative'>
             <PageHeading title={current.label} />
-            {tab === 'statistics' && <StatisticsRange />}
+            {tab === 'statistics' && (
+              <div className='absolute top-1/2 right-0 -translate-y-1/2'>
+                <StatisticsRange />
+              </div>
+            )}
           </div>
           <Choice<SettingsTabId>
             label='Settings sections'

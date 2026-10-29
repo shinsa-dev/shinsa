@@ -22,8 +22,9 @@ function resolveShift(x: number, width: number) {
 
 /**
  * The readout a chart shows under the pointer: the page tooltip's chip, placed
- * by the chart above the point it reads instead of opened by a trigger, so it
- * follows the pointer at once. The chart's box must be `relative`.
+ * by the chart above the point it reads instead of opened by a trigger. It fades
+ * in and glides from point to point, so moving along the chart never jumps.
+ * The chart's box must be `relative`.
  */
 function ChartTooltip({ x, y, width, className, children }: ChartTooltipProps) {
   return (
@@ -31,7 +32,7 @@ function ChartTooltip({ x, y, width, className, children }: ChartTooltipProps) {
       data-slot='chart-tooltip'
       role='status'
       className={cn(
-        'corner-superellipse/1.125 pointer-events-none absolute z-20 flex w-max max-w-64 flex-col gap-1 rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4 leading-[1.35] shadow-2',
+        'corner-superellipse/1.125 pointer-events-none absolute z-20 flex w-max max-w-64 flex-col gap-1 rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4 leading-[1.35] starting:opacity-0 shadow-2 transition-[left,top,transform,opacity] duration-200 ease-out',
         className
       )}
       style={{ left: x, top: y, transform: `translate(${resolveShift(x, width)}, calc(-100% - 10px))` }}
