@@ -182,12 +182,14 @@ describe('the /ui gallery', () => {
     );
     const review = findSection('shinsa-review');
     const verdicts = review.getAllByRole('tablist', { name: 'Verdict' });
-    expect(verdicts).toHaveLength(3);
+    expect(verdicts).toHaveLength(6);
     fireEvent.click(review.getByRole('button', { name: 'Collapse disputed' }));
     expect(review.queryByText('Kept the old keys')).toBeNull();
-    const [blocking] = verdicts;
-    if (!blocking) throw new Error('No verdict.');
+    const [blocking, shouldFix, optional] = verdicts;
+    if (!blocking || !shouldFix || !optional) throw new Error('No verdict.');
     expect(within(blocking).getByRole('tab', { name: 'Fix' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(shouldFix).getByRole('tab', { name: 'Fix' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(optional).getByRole('tab', { name: 'Dismiss' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(within(blocking).getByRole('tab', { name: 'Dismiss' }));
     expect(within(blocking).getByRole('tab', { name: 'Dismiss' }).getAttribute('aria-selected')).toBe('true');
     await expectNothingSent();

@@ -91,7 +91,7 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='A finding · the same card on NoteHead, no bar: a blocking finding and an optional one, label and title on the left, Fix / Dismiss on the right, the suggested fix below'>
+      <Specimen label='A finding · the same card on NoteHead, no bar: a blocking, a should fix and an optional finding, label and title on the left, Fix / Dismiss on the right, the suggested fix below'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
           {FINDINGS.map((item) => (
             <ReviewNote
@@ -115,9 +115,9 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place; a finding and your comment'>
+      <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place; a finding of each level and your comment'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
-          {FINDINGS.slice(0, 1).map((item) => (
+          {FINDINGS.map((item) => (
             <ReviewNote
               key={item.key}
               persistId={notPersisted('a finding card never folds')}
