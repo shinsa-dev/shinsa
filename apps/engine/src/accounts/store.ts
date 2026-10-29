@@ -122,6 +122,10 @@ function exists(path: string) {
   }
 }
 
+export function isSharedLogin(account: StoredAccount) {
+  return account.origin !== 'login';
+}
+
 export class AccountStore {
   readonly #options: AccountStoreOptions;
   readonly #path: string;
@@ -194,8 +198,8 @@ export class AccountStore {
   resolveDuplicates() {
     const { accounts, defaultAccountId } = this.#registry;
     const rank = (account: StoredAccount) => {
-      if (account.origin === 'claude') return 0;
-      return account.id === defaultAccountId ? 1 : 2;
+      if (isSharedLogin(account)) return 2;
+      return account.id === defaultAccountId ? 0 : 1;
     };
     const preferred = accounts
       .map((account, index) => ({ account, index }))
@@ -222,20 +226,17 @@ export class AccountStore {
     return preferred === id || duplicates.get(preferred) === id;
   }
 
-  create(origin: AccountOrigin, details: AccountDetails = {}) {
-    if (origin === 'claude' && this.#registry.accounts.some((existing) => existing.origin === 'claude')) {
-      throw new DomainError('account_exists', 'Your Claude Code login is already in your accounts.');
-    }
+  create(details: AccountDetails = {}) {
     const id = (this.#options.newId ?? (() => crypto.randomUUID().slice(0, 8)))();
-    const configDir = origin === 'claude' ? null : resolveAccountDir(this.#options.home, id);
-    if (configDir) this.linkSharedEntries(configDir);
+    const configDir = resolveAccountDir(this.#options.home, id);
+    this.linkSharedEntries(configDir);
     const account: StoredAccount = {
       id,
       configDir,
       email: details.email ?? null,
       organization: details.organization ?? null,
       plan: details.plan ?? null,
-      origin,
+      origin: 'login',
       addedAt: (this.#options.now ?? Date.now)(),
       paused: false,
       switchAt: null,
@@ -299,7 +300,16 @@ export class AccountStore {
     }
   }
 
-  update(id: string, patch: Partial<Omit<StoredAccount, 'id' | 'configDir' | 'origin' | 'addedAt'>>) {
+  createFolder(id: string) {
+    const account = this.#registry.accounts.find((candidate) => candidate.id === id);
+    if (!account) return null;
+    account.configDir ??= resolveAccountDir(this.#options.home, id);
+    this.linkSharedEntries(account.configDir);
+    this.#write();
+    return { ...account };
+  }
+
+  update(id: string, patch: Partial<Omit<StoredAccount, 'id' | 'configDir' | 'addedAt'>>) {
     const account = this.#registry.accounts.find((candidate) => candidate.id === id);
     if (!account) return;
     const next = { ...account, ...patch };

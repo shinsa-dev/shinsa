@@ -1,5 +1,4 @@
 import {
-  type AccountImport,
   type AccountSummary,
   describeList,
   type OnboardingCheck,
@@ -131,10 +130,6 @@ export function resolveFolderOptions(options: OnboardingOption[], typed: string[
       recommended: false,
     }));
   return [...options, ...added];
-}
-
-export function isImportedNow(account: AccountSummary, imported: AccountImport[]) {
-  return imported.some((entry) => entry.email.toLowerCase() === account.email?.toLowerCase());
 }
 
 export function describeAccountSource(account: AccountSummary) {

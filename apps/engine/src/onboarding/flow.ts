@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
 import {
-  type AccountImport,
   DomainError,
   type OnboardingFlow,
   type OnboardingProjectChoice,
@@ -11,7 +10,6 @@ import {
 import { writeJsonFile } from '../config/file.ts';
 import type { JsonObject } from '../http/body.ts';
 import { describeError, log } from '../log/index.ts';
-import type { AccountActions } from './accounts.ts';
 import type { ProjectRevision } from './revise.ts';
 import { PrivateFoldersError } from './roots.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
@@ -23,9 +21,6 @@ interface Draft {
   furthest: number;
   saves: number;
   revisit: boolean;
-  tried: string[];
-  imported: AccountImport[];
-  notes: string[];
   problem: string | null;
   access: string[];
   picked: string[];
@@ -46,7 +41,6 @@ interface FlowOptions {
     text: string,
     choices: OnboardingProjectChoice[] | undefined
   ) => Promise<ProjectRevision>;
-  accountActions: AccountActions;
   isCompleted: () => boolean;
   complete: () => Promise<void>;
   readOnly?: boolean;
@@ -65,9 +59,6 @@ function isDraft(value: unknown): value is Draft {
     typeof draft.index === 'number' &&
     typeof draft.furthest === 'number' &&
     typeof draft.saves === 'number' &&
-    Array.isArray(draft.tried) &&
-    Array.isArray(draft.imported) &&
-    Array.isArray(draft.notes) &&
     Array.isArray(draft.access) &&
     Array.isArray(draft.picked) &&
     (draft.revision === null ||
@@ -145,10 +136,6 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
   throw new DomainError('reply_invalid', 'Answer a step, open one or start again.');
 }
 
-function resolveImportKey(entry: AccountImport) {
-  return `${entry.origin}:${entry.email.toLowerCase()}`;
-}
-
 export class OnboardingSetup {
   readonly #options: FlowOptions;
   #draft: Draft | null = null;
@@ -211,9 +198,6 @@ export class OnboardingSetup {
       furthest: 0,
       saves: 0,
       revisit: this.#options.isCompleted(),
-      tried: [],
-      imported: [],
-      notes: [],
       problem: null,
       access: [],
       picked: [],
@@ -294,32 +278,6 @@ export class OnboardingSetup {
     this.#move(draft, draft.index + 1);
   }
 
-  async #importAccounts(draft: Draft, context: StepReadContext) {
-    if (this.#options.readOnly) return;
-    const actions = this.#options.accountActions;
-    const known = new Set(
-      (await context.listAccounts()).flatMap((account) =>
-        account.email ? [account.email.toLowerCase()] : []
-      )
-    );
-    const tried = new Set(draft.tried);
-    const fresh = (await actions.listImports()).filter((entry) => !tried.has(resolveImportKey(entry)));
-    if (fresh.length === 0) return;
-    for (const entry of fresh) {
-      draft.tried.push(resolveImportKey(entry));
-      if (known.has(entry.email.toLowerCase())) continue;
-      try {
-        await actions.importAccount(entry.origin, entry.email);
-        known.add(entry.email.toLowerCase());
-        draft.imported.push(entry);
-      } catch (error) {
-        if (!(error instanceof DomainError)) throw error;
-        draft.notes.push(error.message);
-      }
-    }
-    this.#write(draft);
-  }
-
   #write(draft: Draft) {
     if (this.#options.readOnly) return;
     writeJsonFile(this.#options.path, draft);
@@ -329,7 +287,6 @@ export class OnboardingSetup {
     const { steps } = this.#options;
     const context = this.#options.resolveContext(draft.revision);
     const definition = steps[draft.index];
-    if (definition?.id === 'accounts') await this.#importAccounts(draft, context);
     const entries = await Promise.all(
       steps.map(async (step, index) => ({
         id: step.id,
@@ -360,12 +317,9 @@ export class OnboardingSetup {
     if (!definition) return null;
     const answered = draft.revisit || draft.index < draft.furthest;
     const view = await definition.view(context, answered, draft.picked);
-    const accounts = definition.id === 'accounts';
     return {
       id: definition.id,
       ...view,
-      imported: accounts ? draft.imported : [],
-      notes: accounts ? draft.notes : [],
       conversation: definition.id === 'projects' ? (draft.revision?.turns ?? []) : [],
       problem: draft.problem,
       access: draft.access,

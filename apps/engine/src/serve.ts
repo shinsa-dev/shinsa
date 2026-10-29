@@ -217,7 +217,6 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
 
 function startHttp(services: Services, options: ShinsaOptions, instance: ServerInstance) {
   const { engine, config, store, roots, models, accounts } = services;
-  const onboardingAccounts = createOnboardingAccounts(accounts);
   return startServer({
     engine,
     config,
@@ -236,8 +235,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       ask: services.quick.write,
       models,
       run: options.runPrerequisite,
-      accounts: options.accounts ?? onboardingAccounts.source,
-      accountActions: onboardingAccounts.actions,
+      accounts: options.accounts ?? createOnboardingAccounts(accounts),
     }),
     accounts,
     schedules: services.schedules,

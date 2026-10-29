@@ -6,7 +6,6 @@ import {
   describeStepHeading,
   describeStepPosition,
   isHighlightKey,
-  isImportedNow,
   listChosenValues,
   listFolderRows,
   listFolderSuggestions,
@@ -179,12 +178,6 @@ describe('the accounts step', () => {
     });
     const missing = createProviderLogin({ status: 'not_installed', fix: null });
     expect(resolveProviderChoice(missing)).toMatchObject({ detail: 'Not installed', command: null });
-  });
-
-  it('marks the accounts setup imported just now', () => {
-    const imported = [{ origin: 'cswap' as const, email: 'Work@acme.dev', plan: null }];
-    expect(isImportedNow(createAccount({ id: 'a', email: 'work@acme.dev' }), imported)).toBe(true);
-    expect(isImportedNow(createAccount({ id: 'b', email: null }), imported)).toBe(false);
   });
 });
 

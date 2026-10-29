@@ -224,6 +224,36 @@ describe('the setup page', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('offers each claude-swap account as a sign-in of its own from Add account', async () => {
+    startFakeServer();
+    pushAccounts(
+      createSnapshot({
+        accounts: [createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' })],
+        imports: [{ origin: 'cswap', email: 'swap@acme.dev', plan: null }],
+      })
+    );
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': {
+        answer: createFlow(
+          createStep({ id: 'accounts', title: 'Which accounts can agents use?', options: [] })
+        ),
+      },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+      'POST /api/accounts/import': { answer: createSnapshot() },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+    const item = await screen.findByRole('menuitem', { name: /Sign in to swap@acme\.dev/ });
+    expect(item.textContent).toBe('Sign in to swap@acme.devFrom claude-swap');
+    fireEvent.click(item);
+    await waitFor(() =>
+      expect(fake?.requests.find((request) => request.path === '/api/accounts/import')?.body).toEqual({
+        origin: 'cswap',
+        email: 'swap@acme.dev',
+      })
+    );
+  });
+
   it('lists the Claude accounts and Codex, adds either from Add account, and removes one you do not want', async () => {
     const codexSignedOut = createProviderLogin({
       status: 'signed_out',
@@ -248,8 +278,6 @@ describe('the setup page', () => {
             id: 'accounts',
             title: 'Which accounts can agents use?',
             options: [],
-            imported: [{ origin: 'cswap', email: 'work@acme.dev', plan: null }],
-            notes: ['claude-swap did not hand over side@acme.dev.'],
           })
         ),
       },
@@ -266,9 +294,8 @@ describe('the setup page', () => {
     });
     renderPage();
     const work = (await screen.findByText('work@acme.dev')).closest('li') as HTMLElement;
-    expect(within(work).getByText('Added')).toBeTruthy();
+    expect(within(work).queryByText('Added')).toBeNull();
     expect(within(work).getByText('From claude-swap')).toBeTruthy();
-    expect(screen.getByText('claude-swap did not hand over side@acme.dev.')).toBeTruthy();
     const codex = screen.getByText('Not signed in').closest('li') as HTMLElement;
     expect(within(codex).getByText('Codex')).toBeTruthy();
     fireEvent.click(within(work).getByRole('button', { name: 'Remove' }));

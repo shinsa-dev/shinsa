@@ -1,4 +1,4 @@
-import type { OnboardingStepId } from '@shinsa/core';
+import type { AccountImport, OnboardingStepId } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -10,13 +10,20 @@ import { OnboardingStepper } from '@/components/onboarding/stepper.tsx';
 import { OnboardingTrack } from '@/components/onboarding/track.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { useOnboardingFlow } from '@/hooks/use-onboarding-flow.ts';
-import { refreshUsage, removeAccount, startSignIn, useAccounts } from '@/lib/connection/accounts.ts';
+import {
+  importAccount,
+  refreshUsage,
+  removeAccount,
+  startSignIn,
+  useAccounts,
+} from '@/lib/connection/accounts.ts';
 import { copyText } from '@/lib/connection/commands.ts';
 import { requestPrivacySettings, useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { navigate } from '@/router.ts';
 
 const ACCOUNT_ACTIONS = {
   signIn: (accountId: string | null) => void startSignIn(accountId),
+  importLogin: (entry: AccountImport) => void importAccount(entry),
   remove: (accountId: string) => void removeAccount(accountId),
   copy: (text: string) => void copyText(text),
 };
@@ -66,6 +73,7 @@ function OnboardingContent() {
             userHome={status?.paths.userHome ?? ''}
             accounts={{
               list: accounts?.accounts ?? null,
+              imports: accounts?.imports ?? [],
               providers: accounts?.providers ?? [],
               actions: ACCOUNT_ACTIONS,
               refresh: () => void refreshUsage(),

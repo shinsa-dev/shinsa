@@ -74,7 +74,7 @@ async function createBench(emails: string[]): Promise<Bench> {
   });
   worlds.push(world);
   const ready = accounts as unknown as Accounts;
-  const added = emails.map((email) => ready.store.create('login', { email, plan: 'max' }));
+  const added = emails.map((email) => ready.store.create({ email, plan: 'max' }));
   const clock = new UsageResumeClock(world.engine, { graceMs: 0 });
   clocks.push(clock);
   clock.start();

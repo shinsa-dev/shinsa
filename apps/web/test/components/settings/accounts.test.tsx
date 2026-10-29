@@ -43,7 +43,7 @@ function DialogProbe() {
   const dialog = useSignInDialog();
   return (
     <output aria-label='Sign-in dialog'>
-      {dialog.open ? `open ${dialog.accountId ?? 'new'}` : 'closed'}
+      {dialog.open ? `open ${dialog.importing ?? dialog.accountId ?? 'new'}` : 'closed'}
     </output>
   );
 }
@@ -265,24 +265,36 @@ describe('the Accounts settings', () => {
   it('offers the logins it can import next to signing in another account', async () => {
     renderAccounts({
       ...ACCOUNTS,
-      imports: [
-        { origin: 'claude', email: 'me@example.com', plan: 'max' },
-        { origin: 'cswap', email: 'two@example.com', plan: 'pro' },
-      ],
+      imports: [{ origin: 'cswap', email: 'two@example.com', plan: 'pro' }],
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
     await settle();
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Sign in with another account',
-      'Use your Claude Code loginme@example.com',
-      'Import two@example.com from claude-swap',
+      'Sign in to two@example.comFrom claude-swap',
     ]);
-    await pickItem('Import two@example.com from claude-swap');
+    await pickItem(/Sign in to two@example.com/);
     expect(fake.requests.at(-1)?.body).toEqual({ origin: 'cswap', email: 'two@example.com' });
+    expect(screen.getByRole('status', { name: 'Sign-in dialog' }).textContent).toBe('open two@example.com');
+  });
+
+  it('says why a copied claude-swap login needs signing in again', () => {
+    renderAccounts(
+      createSnapshot({
+        accounts: [
+          createAccount({ id: 'copy', email: 'two@example.com', origin: 'cswap', signIn: 'signed_out' }),
+        ],
+      })
+    );
+    expect(
+      screen.getByText(
+        'two@example.com is a copy of claude-swap’s login, so each one signs the other out. Sign in to it again from its menu to give Shinsa a login of its own.'
+      )
+    ).toBeTruthy();
   });
 
   it('signs in another account from the Add account menu', async () => {
-    renderAccounts({ ...ACCOUNTS, imports: [{ origin: 'claude', email: 'me@example.com', plan: 'max' }] });
+    renderAccounts({ ...ACCOUNTS, imports: [{ origin: 'cswap', email: 'me@example.com', plan: 'max' }] });
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
     await settle();
     await pickItem('Sign in with another account');

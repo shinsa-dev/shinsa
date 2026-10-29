@@ -1,6 +1,5 @@
 import type { ProjectSuggestion } from '../domain/project-suggestions.ts';
 import type { Settings } from '../domain/settings.ts';
-import type { AccountImport } from './accounts.ts';
 
 export interface OnboardingStatus {
   completed: boolean;
@@ -74,8 +73,6 @@ export interface OnboardingStep {
   projects: ProjectSuggestion[];
   filed: ProjectSuggestion[];
   conversation: OnboardingProjectTurn[];
-  imported: AccountImport[];
-  notes: string[];
   problem: string | null;
   access: string[];
   submitLabel: string;

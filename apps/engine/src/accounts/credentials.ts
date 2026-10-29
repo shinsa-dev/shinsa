@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { log } from '../log/index.ts';
@@ -20,12 +20,10 @@ export interface StoredLogin {
 
 export type SecretReader = (service: string, account: string) => Promise<string | null>;
 
-export type SecretWriter = (service: string, account: string, value: string) => Promise<boolean>;
-
 export type SecretRunner = (
   command: string[],
   cwd: string,
-  options: { timeoutMs: number; input?: string }
+  options: { timeoutMs: number }
 ) => Promise<CommandResult>;
 
 const SECURITY = '/usr/bin/security';
@@ -33,8 +31,6 @@ const SECURITY = '/usr/bin/security';
 const KEYCHAIN_TIMEOUT_MS = 5_000;
 
 const NOT_FOUND = 44;
-
-const STDIN_LINE_LIMIT = 4096 - 64;
 
 export function createKeychainReader(
   run: SecretRunner = runCommand,
@@ -53,31 +49,6 @@ export function createKeychainReader(
     if (result.code !== NOT_FOUND)
       log.warn('[Accounts] The keychain did not answer', { service, code: result.code });
     return null;
-  };
-}
-
-function quoteForSecurity(value: string) {
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
-}
-
-export function createKeychainWriter(
-  run: SecretRunner = runCommand,
-  platform = process.platform
-): SecretWriter {
-  return async (service, account, value) => {
-    if (platform !== 'darwin') return false;
-    const hex = Buffer.from(value, 'utf8').toString('hex');
-    const line = `add-generic-password -U -a ${quoteForSecurity(account)} -s ${quoteForSecurity(service)} -X ${quoteForSecurity(hex)}\n`;
-    const command =
-      line.length <= STDIN_LINE_LIMIT
-        ? { argv: [SECURITY, '-i'], input: line }
-        : { argv: [SECURITY, 'add-generic-password', '-U', '-a', account, '-s', service, '-X', hex] };
-    const result = await run(command.argv, homedir(), {
-      timeoutMs: KEYCHAIN_TIMEOUT_MS,
-      ...(command.input ? { input: command.input } : {}),
-    });
-    if (!result.ok) log.warn('[Accounts] The keychain did not take a login', { service, code: result.code });
-    return result.ok;
   };
 }
 
@@ -127,27 +98,4 @@ export async function readStoredLogin(query: LoginQuery): Promise<StoredLogin | 
   if (fromKeychain) return fromKeychain;
   const file = readCredentialsFile(configDir ?? resolveSharedConfigDir(query.env, query.userHome));
   return file === null ? null : parseStoredLogin(file);
-}
-
-export interface LoginWrite {
-  configDir: string;
-  env: Env;
-  readSecret: SecretReader;
-  writeSecret: SecretWriter;
-}
-
-function mergeLogin(raw: string | null, oauth: Record<string, unknown>) {
-  return JSON.stringify({ ...parseSecretObject(raw), claudeAiOauth: oauth });
-}
-
-export async function writeStoredLogin(query: LoginWrite, oauth: Record<string, unknown>) {
-  const service = resolveKeychainService(query.configDir);
-  const account = resolveKeychainAccount(query.env);
-  const stored = await query.readSecret(service, account);
-  if (await query.writeSecret(service, account, mergeLogin(stored, oauth))) return;
-  writeFileSync(
-    join(query.configDir, '.credentials.json'),
-    mergeLogin(readCredentialsFile(query.configDir), oauth),
-    { mode: 0o600 }
-  );
 }
