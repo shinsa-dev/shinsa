@@ -5,6 +5,7 @@ import {
   isResolvingConflicts,
   resolveGateGlyph,
   resolveGateStatus,
+  resolveRowStatus,
   resolveStageLabel,
   resolveTaskGlyph,
   resolveTaskMenuIcon,
@@ -175,6 +176,29 @@ describe('resolveTaskStatus', () => {
       label: 'Waiting to check in again',
       tone: 'blue',
     });
+  });
+
+  it('names the stage in a queue row while the agent waits to check in, and the status otherwise', () => {
+    const monitor = {
+      id: 'm',
+      runId: 'r',
+      role: 'agent' as const,
+      phaseIndex: 0,
+      notes: 'n',
+      armedAt: 0,
+      nextCheckAt: 1,
+      timeoutAt: 2,
+      attempts: 0,
+      maxAttempts: 1,
+      status: 'armed' as const,
+    };
+    const waiting = createTask({ id: 't', stage: 'building', monitor });
+    expect(resolveRowStatus(createShinsaState({ tasks: [waiting] }), waiting)).toEqual({
+      label: 'Building',
+      tone: 'blue',
+    });
+    const { state, task } = withGate({ type: 'review' });
+    expect(resolveRowStatus(state, task)).toEqual(resolveGateStatus(gate({ type: 'review' })));
   });
 
   it('shows a sign-in gate as sign in needed in orange, in the paused group', () => {

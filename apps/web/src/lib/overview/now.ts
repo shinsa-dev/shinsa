@@ -123,3 +123,9 @@ export function listFeedLines(entries: ChatEntry[], limit: number) {
   if (latest?.label) lines[lines.length - 1] = { ...latest, label: resolvePresentVerb(latest.label) };
   return lines;
 }
+
+export function resolveLatestActivity(entries: ChatEntry[]) {
+  const [line] = listFeedLines(entries, 1);
+  if (!line) return null;
+  return [line.label, line.text].filter(Boolean).join(' ');
+}

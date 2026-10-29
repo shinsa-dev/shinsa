@@ -99,7 +99,7 @@ describe('resolveTaskNow', () => {
     );
   });
 
-  it('names the active phase while building', () => {
+  it('names the active phase and where it falls in the plan while building', () => {
     const task = {
       plan: plan('Set up', 'Wire the form'),
       phases: [
@@ -107,7 +107,10 @@ describe('resolveTaskNow', () => {
         { status: 'active' as const, at: NOW },
       ],
     };
-    expect(nowFor({ ...task, stage: 'building' })).toBe('Wire the form');
+    expect(nowFor({ ...task, stage: 'building' })).toBe('Phase 2 of 2: Wire the form');
+    expect(
+      nowFor({ stage: 'building', plan: plan('Only'), phases: [{ status: 'active' as const, at: NOW }] })
+    ).toBe('Only');
     expect(nowFor({ ...task, stage: 'checking', stageReason: 'running the checks' })).toBe(
       'Running the checks'
     );
