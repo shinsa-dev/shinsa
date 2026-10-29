@@ -20,12 +20,11 @@
     <a href="#development">Development</a>
 </p>
 
-> [!WARNING]
+> [!NOTE]
 > **Shinsa is in early pre-release.** No stable version has shipped yet: every build so far is a beta or a canary,
-> and the 1.0.0 in their version numbers does not mean the product is finished. It is very early, and a lot will
-> change. Features, screens, commands and the data Shinsa keeps can change or break from one build to the next,
-> without a migration path. Try it, share what you think, and expect rough edges; do not rely on it for work you
-> cannot afford to lose.
+> and the 1.0.0 in their version numbers does not mean the product is finished. It works, but it is pre-release
+> software: expect bugs, a task that sometimes gets stuck, and features and screens that change from one build to the
+> next. Feedback is very welcome.
 
 <p>
   <a href="https://shinsa.dev">
