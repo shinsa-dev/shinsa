@@ -56,7 +56,7 @@ function OpenDescription({ scene }: { scene: OpenScene }) {
   const { payload } = scene;
   return (
     <div className='flex flex-col gap-1'>
-      <p className={cn(PAGE_DESCRIPTION, 'line-clamp-2')}>
+      <p className={PAGE_DESCRIPTION}>
         {payload.task.summary ?? payload.report.headline}
       </p>
       <p className='text-2xs text-fg-2'>{openTask.source}</p>
