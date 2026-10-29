@@ -21,7 +21,7 @@ export {
   runPush,
 } from './push.ts';
 export { assertRefName, slugify } from './refs.ts';
-export { inspectRepo, resolveRepoRoot } from './repo.ts';
+export { inspectRepo, resolveRepoRemote, resolveRepoRoot } from './repo.ts';
 export { updateOntoBase } from './update.ts';
 export {
   createWorktree,

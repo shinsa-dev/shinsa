@@ -146,12 +146,18 @@ describe('reacting to the pull request', () => {
     }
   });
 
-  test('a pull request that keeps failing the same way stops after two fix rounds', () => {
+  test('a pull request that keeps failing while its fixes change nothing stops after two fix rounds', () => {
     const { harness, taskId } = shipping();
-    for (let round = 0; round < 3; round += 1) {
+    for (let round = 0; round < 4; round += 1) {
       harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'failing' }) });
       if (harness.task(taskId).stage !== 'fixing') break;
-      pushFix(harness, taskId);
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'Tried.',
+        treeHash: 'same-tree',
+      });
+      pushed(harness, taskId);
     }
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('failure');
@@ -467,6 +473,35 @@ describe('watching the pull request', () => {
       'check:test',
       'check:build',
     ]);
+  });
+
+  test('failing reads without check names are a stall only when the fix left the tree unchanged', () => {
+    const { harness, taskId } = shipping();
+    const fixOn = (treeHash: string) => {
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        treeHash,
+      });
+      pushed(harness, taskId);
+    };
+    for (const tree of ['t1', 't2', 't3']) {
+      record(harness, taskId, { checks: 'failing', headSha: `head-${tree}` });
+      expect(harness.task(taskId).stage).toBe('fixing');
+      fixOn(tree);
+    }
+    expect(harness.task(taskId).fixFingerprints?.map((fingerprint) => fingerprint.signature)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    for (const head of ['head-a', 'head-b', 'head-c']) {
+      record(harness, taskId, { checks: 'failing', headSha: head });
+      if (harness.task(taskId).stage !== 'fixing') break;
+      fixOn('t3');
+    }
+    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
   });
 
   test('ten updates in a row that only bring comments stop the watch; retrying watches again', () => {

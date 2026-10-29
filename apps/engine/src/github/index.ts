@@ -16,6 +16,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import { assertRefName } from '../git/index.ts';
+import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 
 interface CheckEntry {
@@ -308,7 +309,16 @@ async function readDetails(
   signal?: AbortSignal
 ): Promise<PullRequestDetails | null> {
   const slug = resolveRepoSlug(repo);
-  if (!slug) return null;
+  if (!slug) {
+    log.warn(
+      '[GitHub] The repository has no GitHub remote, so the pull request is read without its checks and threads',
+      {
+        repo: repo.name,
+        number,
+      }
+    );
+    return null;
+  }
   const output = await runGhOrThrow(
     [
       'api',

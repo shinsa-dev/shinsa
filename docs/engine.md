@@ -2201,6 +2201,9 @@ changes costs one call.
   fingerprint changed: an agent that writes a hopeful summary and changes nothing does not buy
   itself another round. A fix round records its reason, signature and tree (`fixFingerprints`);
   a fix that left the tree unchanged counts as a repeat even when the failures read differently.
+  A pull request read without check names or thread ids (only totals: failing, two threads) has no
+  signature (`resolvePullRequestSignature`), since its totals cannot tell two failures apart: such a
+  fix counts as a repeat only by its tree.
 - A message that reaches a session just as it ends is not lost: it is delivered to whatever
   runs next (`message.deliver`).
 - A run that goes two hours without handing over is stopped as failed. Time spent waiting on your
@@ -2477,6 +2480,12 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   auto-merge request and the last merge queue removal. Each read is compared with the last one and
   dispatched only when the pull request changed, a comment is new, or the watch would move; a read
   the watch effect asks for, or the one right after an open or a push, is always dispatched.
+- **The GraphQL read needs the repository's remote.** A repository registered before it had an
+  `origin` has `remote: null`, and without an owner and name only `gh pr view` runs, which knows no
+  check names and no threads (the engine log warns). So a sync of a repository without a remote reads
+  `origin` again first (`syncRepoRemote`, `apps/engine/src/repos/index.ts`), as does registering it
+  again (`upsertRepo`), and records the one it finds with `repo.update`. A remote already known is
+  never replaced.
 - **Per-check diff.** A check reported failed is not reported again until the head moves or it
   passes and fails again. A read with no checks keeps the last state (a host can answer with an
   empty list when its check read fails).
