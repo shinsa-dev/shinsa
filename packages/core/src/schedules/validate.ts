@@ -166,6 +166,39 @@ export function validateIntakeReport(input: Record<string, unknown>): Validation
   return reader.result({ summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.intakeSummary) });
 }
 
+export interface ReportFilingRequest {
+  title: string;
+  request: string;
+  reportId: string | null;
+  link: string | null;
+  author: string | null;
+  postedAt: string | null;
+  text: string;
+  forkFrom: string | null;
+  repository: string | null;
+}
+
+export function validateReportFiling(input: Record<string, unknown>): Validation<ReportFilingRequest> {
+  const reader = new Reader();
+  const L = SCHEDULE_LIMITS;
+  const reportId = reader.optionalText(input.report_id, 'report_id', L.reportId);
+  const link = reader.optionalText(input.link, 'link', L.reportLink);
+  if (reportId === null && link === null) {
+    reader.errors.push('Give the report’s report_id or link in the source, so Shinsa never files it twice.');
+  }
+  return reader.result({
+    title: reader.text(input.title, 'title', L.reportTitle),
+    request: reader.text(input.request, 'request', L.reportRequest),
+    reportId,
+    link,
+    author: reader.optionalText(input.author, 'author', L.reportAuthor),
+    postedAt: reader.optionalText(input.posted_at, 'posted_at', L.reportPostedAt),
+    text: reader.text(input.text, 'text', L.reportText),
+    forkFrom: reader.optionalText(input.fork_from, 'fork_from', L.reference),
+    repository: reader.optionalText(input.repository, 'repository', L.reference),
+  });
+}
+
 export function validateSecretRequest(
   input: Record<string, unknown>
 ): Validation<{ label: string; reason: string }> {

@@ -186,6 +186,8 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
       );
     case 'create_task':
       return plain('IconPlusSmall', 'Created a task:', firstLine(readString(args, 'request') ?? ''));
+    case 'file_report':
+      return plain('IconPlusSmall', 'Filed a report:', readString(args, 'title'));
     case 'split_task':
       return plain(
         'IconSplit',
@@ -206,7 +208,13 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
 function describeShinsaMessage(
   name: Exclude<
     ShinsaToolName,
-    PlainShinsaTool | 'reshape_task' | 'delegate_task' | 'create_task' | 'split_task' | 'set_schedule'
+    | PlainShinsaTool
+    | 'reshape_task'
+    | 'delegate_task'
+    | 'create_task'
+    | 'file_report'
+    | 'split_task'
+    | 'set_schedule'
   >,
   args: ChatToolArgs
 ): ToolDescription {
@@ -359,6 +367,7 @@ const PRESENT_VERB: Record<string, string> = {
   'Stopped a delegation': 'Stopping a delegation',
   'Answered a delegated agent:': 'Answering a delegated agent:',
   'Created a task:': 'Creating a task:',
+  'Filed a report:': 'Filing a report:',
   'Split the plan into': 'Splitting the plan into',
   'Set a schedule:': 'Setting a schedule:',
   'Listed the schedules': 'Listing the schedules',
@@ -421,6 +430,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   delegation_answer: (count) =>
     count === 1 ? 'answered a delegated agent' : `answered delegated agents ${count} times`,
   create_task: (count) => `created ${formatCount(count, 'task', 'tasks')}`,
+  file_report: (count) => `filed ${formatCount(count, 'report', 'reports')}`,
   split_task: () => 'split the plan',
   set_schedule: (count) => `set ${formatCount(count, 'schedule', 'schedules')}`,
   list_schedules: () => 'listed the schedules',

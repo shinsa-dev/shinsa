@@ -8,6 +8,7 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  validateReportFiling,
   validateScheduleRequest,
 } from '@shinsa/core';
 import { assertProtocol, readString } from '../agents/handover.ts';
@@ -190,6 +191,42 @@ async function removeSchedule(input: Record<string, unknown>, call: ScheduleTool
   return `Deleted “${name ?? scheduleId}”.`;
 }
 
+function resolveFiledFork(state: ShinsaState, reference: string | null) {
+  if (reference === null) return null;
+  const handle = reference.toUpperCase();
+  const task =
+    state.tasks[reference] ?? Object.values(state.tasks).find((candidate) => candidate.handle === handle);
+  if (!task) {
+    throw new Error(`There is no task "${reference}" to fork. Find it with find_tasks and pass its id.`);
+  }
+  return task.id;
+}
+
+function resolveFiledRepo(state: ShinsaState, name: string | null) {
+  if (name === null) return null;
+  const repo = Object.values(state.repos).find((candidate) => candidate.name === name);
+  if (repo) return repo.id;
+  const known = Object.values(state.repos).map((candidate) => candidate.name);
+  throw new Error(`There is no repository "${name}". Known: ${known.join(', ') || 'none'}.`);
+}
+
+async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall) {
+  const { forkFrom, repository, ...filing } = assertProtocol(validateReportFiling(input));
+  const state = call.state();
+  const events = await call.dispatch({
+    type: 'agent.file_report',
+    runId: call.runId,
+    attemptId: call.attemptId,
+    ...filing,
+    forkOf: resolveFiledFork(state, forkFrom),
+    repoId: resolveFiledRepo(state, repository),
+  });
+  const created = events.find((event) => event.type === 'task.created');
+  const task = created?.type === 'task.created' ? call.state().tasks[created.taskId] : undefined;
+  if (!task) throw new Error('Nothing was filed. Call file_report again.');
+  return `Filed ${task.handle ?? task.id} “${task.title}”. Go on with the next report.`;
+}
+
 export function handleScheduleTool(
   name: string,
   input: Record<string, unknown>,
@@ -203,6 +240,8 @@ export function handleScheduleTool(
       return Promise.resolve(serializeSchedules(call, context));
     case 'delete_schedule':
       return removeSchedule(input, call);
+    case 'file_report':
+      return fileReport(input, call);
     default:
       return null;
   }

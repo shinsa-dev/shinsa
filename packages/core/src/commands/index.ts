@@ -349,4 +349,4 @@ export function isUserCommand(command: ShinsaCommand): command is UserCommand {
 export type CommandOf<T extends ShinsaCommand['type']> = Extract<ShinsaCommand, { type: T }>;
 
 export { parseUserCommand, USER_COMMAND_TYPES } from './parse.ts';
-export type { ScheduleTargetInput } from './schedules.ts';
+export type { ReportFiling, ScheduleTargetInput } from './schedules.ts';

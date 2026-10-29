@@ -29,6 +29,7 @@ import { holdForBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { planDelivery, releaseWaits, settleDelegation, waitForDelegations } from './delegations.ts';
 import { resolveRecoveryFingerprint } from './fingerprints.ts';
+import { missIntakeRead } from './intake.ts';
 import { missWatchCheck, moveWatchCheck } from './watchdogs.ts';
 
 const MAX_RECOVERIES = 1;
@@ -135,7 +136,7 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   if (failure?.class === 'auth' && requestSignIn(decider, run, failure)) return;
   const recovery = failure ? FAILURE_RECOVERY[failure.class] : RESUME;
   const givesUp = recovery.mode === 'pause' || task.recoveries >= MAX_RECOVERIES;
-  if (givesUp && missWatchCheck(decider, run.id, why)) return;
+  if (givesUp && (missWatchCheck(decider, run.id, why) || missIntakeRead(decider, run.id))) return;
   if (recovery.mode === 'pause') {
     decider.fail(task.id, recovery.title, `${why} Retry starts the step again.`, run.id);
     return;

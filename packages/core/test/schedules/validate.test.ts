@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { validateScheduleRequest, validateSecretRequest } from '../../src/index.ts';
+import {
+  SCHEDULE_LIMITS,
+  validateIntakeReport,
+  validateReportFiling,
+  validateScheduleRequest,
+  validateSecretRequest,
+} from '../../src/index.ts';
 
 const NOW = Date.parse('2026-10-23T12:00:00Z');
 
@@ -120,5 +126,71 @@ describe('reading request_secret', () => {
       ok: false,
       errors: ['label is required.', 'reason is required.'],
     });
+  });
+});
+
+describe('a report to file', () => {
+  const report = {
+    title: 'Editor loses edits',
+    request: 'Keep unsaved edits.',
+    text: 'I lost my edits.',
+  };
+
+  test('reads every field, the optional ones as null when left out', () => {
+    expect(validateReportFiling({ ...report, link: 'https://slack.com/p1' })).toEqual({
+      ok: true,
+      value: {
+        ...report,
+        reportId: null,
+        link: 'https://slack.com/p1',
+        author: null,
+        postedAt: null,
+        forkFrom: null,
+        repository: null,
+      },
+    });
+    expect(
+      validateReportFiling({
+        ...report,
+        report_id: '17.1',
+        author: 'Dana',
+        posted_at: '2026-10-29T10:00:00Z',
+        fork_from: 'LOC-14',
+        repository: 'shinsa',
+      })
+    ).toMatchObject({
+      ok: true,
+      value: {
+        reportId: '17.1',
+        author: 'Dana',
+        postedAt: '2026-10-29T10:00:00Z',
+        forkFrom: 'LOC-14',
+        repository: 'shinsa',
+      },
+    });
+  });
+
+  test('needs the report’s id or link, and keeps every text within its limit', () => {
+    const unnamed = validateReportFiling(report);
+    expect(unnamed.ok).toBe(false);
+    expect(unnamed.ok ? [] : unnamed.errors).toContain(
+      'Give the report’s report_id or link in the source, so Shinsa never files it twice.'
+    );
+    const long = validateReportFiling({
+      ...report,
+      link: 'l',
+      text: 'x'.repeat(SCHEDULE_LIMITS.reportText + 1),
+    });
+    expect(long.ok).toBe(false);
+  });
+});
+
+describe('a read of a data source to report', () => {
+  test('needs a summary within its limit', () => {
+    expect(validateIntakeReport({ summary: 'Filed 2.' })).toEqual({
+      ok: true,
+      value: { summary: 'Filed 2.' },
+    });
+    expect(validateIntakeReport({ summary: 'x'.repeat(SCHEDULE_LIMITS.intakeSummary + 1) }).ok).toBe(false);
   });
 });

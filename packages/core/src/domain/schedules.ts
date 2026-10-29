@@ -26,6 +26,16 @@ export interface ScheduleSource {
   server: string;
 }
 
+export interface SourceReport {
+  scheduleId: string;
+  server: string;
+  reportId: string | null;
+  link: string | null;
+  author: string | null;
+  postedAt: string | null;
+  text: string;
+}
+
 export type ScheduleRunOutcome = 'sent' | 'skipped' | 'failed';
 
 export interface ScheduleRun {
@@ -87,6 +97,14 @@ export const SCHEDULE_LIMITS = {
   secretReason: 300,
   detail: 300,
   intakeSummary: 1_000,
+  reportTitle: 100,
+  reportRequest: 2_000,
+  reportId: 200,
+  reportLink: 2_000,
+  reportAuthor: 120,
+  reportPostedAt: 60,
+  reportText: 4_000,
+  filedListed: 10,
   reference: 200,
   timeZone: 60,
   runAt: 60,

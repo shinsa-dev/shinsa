@@ -65,7 +65,7 @@ export interface RunWait {
   reason: string;
 }
 
-export type TaskCreatorKind = 'courier' | 'split' | 'watchdog';
+export type TaskCreatorKind = 'courier' | 'split' | 'watchdog' | 'intake';
 
 export interface TaskCreator {
   kind: TaskCreatorKind;

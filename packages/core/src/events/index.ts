@@ -48,6 +48,7 @@ import type {
   PushHookFailure,
   ShippingStepKind,
 } from '../domain/pull-requests.ts';
+import type { SourceReport } from '../domain/schedules.ts';
 import type {
   CheckChange,
   PlanDocument,
@@ -90,6 +91,7 @@ type EventBody =
       parentTaskId?: string | null;
       createdBy?: TaskCreator | null;
       scheduleId?: string | null;
+      sourceReport?: SourceReport | null;
       forkOf?: string | null;
     }
   | DelegationEventBody

@@ -7,8 +7,10 @@ export {
   serializeTimeOfDay,
 } from './time.ts';
 export {
+  type ReportFilingRequest,
   type ScheduleRequest,
   validateIntakeReport,
+  validateReportFiling,
   validateScheduleRequest,
   validateSecretRequest,
 } from './validate.ts';

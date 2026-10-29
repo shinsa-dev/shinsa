@@ -5,15 +5,17 @@ import {
   SCHEDULE_LIMITS,
   type Schedule,
   type ScheduleSource,
+  type SourceReport,
   type Task,
 } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
-import { resolveIntakePrompt } from '../prompts/intake.ts';
+import { resolveFiledRequest, resolveIntakePrompt } from '../prompts/intake.ts';
 import { listLiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { resolveRestingStage } from './shapes.ts';
+import { createTask } from './tasks.ts';
 
 export function selectProjectSource(decider: Decider, source: ScheduleSource) {
   const project = decider.state.projects[source.projectId];
@@ -42,6 +44,132 @@ export function assertIntakeTarget(decider: Decider, source: ScheduleSource, tas
   );
 }
 
+function listFiledTasks(decider: Decider, scheduleId: string) {
+  return Object.values(decider.state.tasks)
+    .filter((task) => task.sourceReport?.scheduleId === scheduleId)
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function resolveLastSentAt(schedule: Schedule) {
+  return schedule.runs.filter((run) => run.outcome === 'sent').at(-1)?.at ?? -1;
+}
+
+function findIntakeSchedule(decider: Decider, task: Task) {
+  const reading = Object.values(decider.state.schedules)
+    .filter(
+      (candidate) =>
+        candidate.source !== null && candidate.target.kind === 'task' && candidate.target.taskId === task.id
+    )
+    .sort((a, b) => resolveLastSentAt(b) - resolveLastSentAt(a));
+  const schedule = reading[0];
+  if (schedule?.source) return { schedule, source: schedule.source };
+  throw new DomainError(
+    'schedule_not_found',
+    'No automation reads a data source in this task any more. Call `report_intake` and stop.'
+  );
+}
+
+function isSameReport(known: SourceReport, report: SourceReport) {
+  if (known.server !== report.server) return false;
+  if (report.reportId !== null && known.reportId === report.reportId) return true;
+  return report.link !== null && known.link === report.link;
+}
+
+function selectFiledTask(decider: Decider, projectId: string | null, report: SourceReport) {
+  return (
+    Object.values(decider.state.tasks).find(
+      (candidate) =>
+        candidate.projectId === projectId &&
+        candidate.sourceReport !== undefined &&
+        candidate.sourceReport !== null &&
+        isSameReport(candidate.sourceReport, report)
+    ) ?? null
+  );
+}
+
+function resolveSourceReport(command: CommandOf<'agent.file_report'>, scheduleId: string, server: string) {
+  const reportId = command.reportId?.trim() || null;
+  const link = command.link?.trim() || null;
+  if (reportId === null && link === null) {
+    throw new DomainError(
+      'report_unnamed',
+      'Give the report’s `report_id` or `link` in the source, so Shinsa never files it twice.'
+    );
+  }
+  const text = command.text.trim();
+  if (!text) throw new DomainError('report_empty', 'Give the report’s own words in `text`.');
+  return {
+    scheduleId,
+    server,
+    reportId,
+    link,
+    author: command.author?.trim() || null,
+    postedAt: command.postedAt?.trim() || null,
+    text,
+  };
+}
+
+function assertForkable(task: Task, forkOf: string | null) {
+  if (forkOf !== task.id) return;
+  throw new DomainError(
+    'fork_intake',
+    '`fork_from` names this task, which reads the source. Name the task that shipped the feature, or leave it out.'
+  );
+}
+
+export function fileReport(decider: Decider, command: CommandOf<'agent.file_report'>) {
+  const { run, task } = findCurrentRun(decider, command.runId, 'file_report');
+  if (run.purpose !== 'intake') {
+    throw new DomainError(
+      'wrong_step',
+      'You file reports only while you read a data source for an automation. Use `create_task` for other work.'
+    );
+  }
+  const { schedule, source } = findIntakeSchedule(decider, task);
+  const report = resolveSourceReport(command, schedule.id, source.server);
+  const filed = selectFiledTask(decider, task.projectId ?? null, report);
+  if (filed) {
+    throw new DomainError(
+      'report_filed',
+      `This report was already filed as ${filed.handle ?? filed.id} “${filed.title}”. Skip it and go on.`
+    );
+  }
+  assertForkable(task, command.forkOf);
+  createTask(
+    decider,
+    {
+      type: 'task.create',
+      request: resolveFiledRequest(command, source.server),
+      repoId: command.repoId,
+      projectId: task.projectId ?? null,
+      origin: null,
+      ...(command.forkOf ? { forkOf: command.forkOf } : {}),
+    },
+    {
+      createdBy: {
+        kind: 'intake',
+        taskId: task.id,
+        runId: run.id,
+        requestKey: report.link ?? report.reportId ?? '',
+      },
+      scheduleId: schedule.id,
+      sourceReport: report,
+    }
+  );
+}
+
+export function missIntakeRead(decider: Decider, runId: string) {
+  const run = decider.state.runs[runId];
+  if (run?.purpose !== 'intake') return false;
+  settleTask(
+    decider,
+    run.taskId,
+    resolveRestingStage(decider.task(run.taskId)),
+    'could not read a data source'
+  );
+  return true;
+}
+
 export function isIntakeBusy(decider: Decider, task: Task) {
   return !isTaskResting(task) || listLiveRuns(decider.state, task.id).length > 0;
 }
@@ -50,7 +178,8 @@ export function startIntake(decider: Decider, schedule: Schedule, task: Task, no
   const source = schedule.source ? selectProjectSource(decider, schedule.source) : null;
   if (!source) return null;
   decider.stage(task.id, 'watching', `reading ${source.server} for the automation “${schedule.name}”`);
-  const prompt = resolveAgentPrompt(resolveIntakePrompt(schedule, source, note));
+  const filed = listFiledTasks(decider, schedule.id).slice(0, SCHEDULE_LIMITS.filedListed);
+  const prompt = resolveAgentPrompt(resolveIntakePrompt(schedule, source, note, filed));
   const run = decider.startRun(decider.task(task.id), 'agent', prompt, {
     purpose: 'intake',
     resumeFrom: decider.taskSession(task.id, 'agent'),
