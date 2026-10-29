@@ -6,9 +6,9 @@ import {
   bulletList,
   CHECK_MARK,
   CHECK_NOTE,
+  describeManualStep,
   describeSection,
   serializeMergeStepsMarkdown,
-  serializeTestingMarkdown,
 } from './markdown.ts';
 import { listMergeSteps } from './merge-steps.ts';
 import type { ReportCheck, WorkReport } from './types.ts';
@@ -24,8 +24,6 @@ const SHINSA_SITE_URL = 'https://shinsa.dev';
 const OPEN_TITLE_LIMIT = 120;
 
 const LOCAL_HOST = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?:[:/]|$)/i;
-
-const SHOWN_ATTENTION = new Set(['critical', 'high']);
 
 const STAGE_WORDS: Record<NonNullable<Evidence['stage']>, string> = { before: 'Before', after: 'After' };
 
@@ -138,11 +136,13 @@ function describeEvidenceItem(item: EvidenceGroup, notes: PullRequestSource['not
   return [describeHeading(item), describeMedia(first, published[0] as string)].join('\n\n');
 }
 
-function serializeEvidence(source: PullRequestSource, taskUrl: string) {
+function serializeEvidence(source: PullRequestSource, report: WorkReport, taskUrl: string) {
   const blocks = listPullRequestEvidence(source.task, source.evidence).map((item) =>
     describeEvidenceItem(item, source.notes, taskUrl)
   );
-  return describeSection('### Evidence', blocks.join('\n\n'));
+  const tests = describeSection('**Tests**', bulletList(report.walkthrough?.testing.automated ?? []));
+  const parts = [...blocks, serializeChecks(source.task, report), tests].filter(Boolean);
+  return describeSection('### Evidence', parts.join('\n\n'));
 }
 
 function describeCheckRow(check: ReportCheck) {
@@ -159,7 +159,7 @@ function serializeChecks(task: Task, report: WorkReport) {
     task.coverage?.status === 'measured' && task.coverage.executable > 0
       ? `\n\nThe tests cover ${task.coverage.covered} of ${task.coverage.executable} changed lines.`
       : '';
-  return `### Checks\n${passed} of ${report.checks.length} passed.\n\n${rows.join('\n')}${coverage}`;
+  return `**Checks**: ${passed} of ${report.checks.length} passed.\n\n${rows.join('\n')}${coverage}`;
 }
 
 function describeEarlierRound(round: Round) {
@@ -179,24 +179,13 @@ function serializeEarlierRounds(rounds: readonly Round[]) {
   );
 }
 
-function serializeChanges(report: WorkReport, heading: string) {
-  const lines = report.sections.map((section) => {
-    const spots = section.spots
-      .filter((spot) => SHOWN_ATTENTION.has(spot.attention))
-      .map((spot) => `\n  - \`${spot.file}#L${spot.start}-L${spot.end}\`: ${spot.why}`)
-      .join('');
-    return `**${section.title}**: ${section.summary}${spots}`;
-  });
-  return describeSection(heading, bulletList(lines));
-}
-
 function serializeJudgementCalls(report: WorkReport) {
   return describeSection(
     '### Judgement calls',
     bulletList(
       report.judgementCalls.map((call) => {
         const rejected = (call.alternatives ?? []).map(
-          (alternative) => `\n  - Not ${alternative.option}: ${alternative.rejected}`
+          (alternative) => `\n  - Turned down, ${alternative.option}: ${alternative.rejected}`
         );
         return `**${call.title}**: ${call.call}. ${call.reason}${rejected.join('')}`;
       })
@@ -211,6 +200,11 @@ function serializeRisks(report: WorkReport) {
   );
 }
 
+function serializeManualTesting(report: WorkReport) {
+  const steps = report.walkthrough?.testing.manual ?? [];
+  return describeSection('### How to test', steps.map(describeManualStep).join('\n'));
+}
+
 function serializeHeader(task: Task, taskUrl: string) {
   const name = task.handle ? `${task.handle}, ${task.title}` : task.title;
   return `> [!NOTE]\n> Shinsa task **${name}**. [Open it in Shinsa](${taskUrl}) to see the full review, the evidence and the agent's work.`;
@@ -220,30 +214,17 @@ function serializeSections(source: PullRequestSource): Section[] {
   const { task } = source;
   const report = assembleReport(task);
   const taskUrl = resolveShinsaTaskUrl(task);
-  const flow = report.walkthrough?.flow?.trim();
-  const earlier = listEarlierRounds(task);
-  const changes =
-    earlier.length > 0 ? `### What changed in round ${resolveCurrentRound(task).number}` : '### What changed';
   return [
     { text: serializeHeader(task, taskUrl), drop: Number.POSITIVE_INFINITY },
     { text: task.summary?.trim() ?? '', drop: Number.POSITIVE_INFINITY },
-    { text: serializeEarlierRounds(earlier), drop: 3 },
-    { text: describeSection('### How it works', report.walkthrough?.approach ?? ''), drop: 8 },
-    {
-      text: flow ? `<details><summary>How it flows</summary>\n\n${flow}\n\n</details>` : '',
-      drop: 2,
-    },
-    { text: serializeEvidence(source, taskUrl), drop: 4 },
-    { text: serializeChecks(task, report), drop: 9 },
-    { text: serializeChanges(report, changes), drop: 5 },
-    { text: serializeJudgementCalls(report), drop: 6 },
-    { text: serializeRisks(report), drop: 7 },
-    { text: serializeTestingMarkdown(report.walkthrough?.testing), drop: 10 },
+    { text: serializeEarlierRounds(listEarlierRounds(task)), drop: 1 },
+    { text: describeSection('### Approach', report.walkthrough?.approach ?? ''), drop: 5 },
+    { text: serializeEvidence(source, report, taskUrl), drop: 9 },
+    { text: describeSection('### How it works', report.walkthrough?.flow?.trim() ?? ''), drop: 3 },
+    { text: serializeJudgementCalls(report), drop: 2 },
+    { text: serializeRisks(report), drop: 4 },
+    { text: serializeManualTesting(report), drop: 6 },
     { text: serializeMergeStepsMarkdown(listMergeSteps(task)), drop: Number.POSITIVE_INFINITY },
-    {
-      text: task.plan ? `<details><summary>Plan</summary>\n\n${task.plan.body}\n\n</details>` : '',
-      drop: 1,
-    },
     {
       text: `---\n<sub>Made with [Shinsa](${SHINSA_SITE_URL}). Hand over the work. Keep the decisions.</sub>`,
       drop: Number.POSITIVE_INFINITY,

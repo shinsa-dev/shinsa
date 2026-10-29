@@ -79,34 +79,32 @@ describe('serializePullRequestMarkdown', () => {
       PULL_REQUEST_BLOCK_START,
       `> Shinsa task **LOC-28, ${task.title}**. [Open it in Shinsa](${resolveShinsaTaskUrl(task)})`,
       'Tabs stay put.',
-      '### How it works\nClamp the tab width in one place.',
-      '<details><summary>How it flows</summary>\n\ntabs → clamp → render',
-      '### Checks\n3 of 3 passed.',
+      '### Approach\nClamp the tab width in one place.',
+      '### Evidence\n**Checks**: 3 of 3 passed.',
       '| ✓ | Panel tests |',
-      '### What changed\n- **Find the overflow**: Found the overflow.\n  - `src/tabs.tsx#L4-L9`: Clamps the width.',
-      '### Judgement calls\n- **Clamp width**: Clamp at 240px. Fits the longest label\n  - Not scroll the tabs: Hides the active tab.',
+      '**Tests**\n- `test/tabs.test.ts` proves the clamp.',
+      '### How it works\ntabs → clamp → render',
+      '### Judgement calls\n- **Clamp width**: Clamp at 240px. Fits the longest label\n  - Turned down, scroll the tabs: Hides the active tab.',
       '### Risks\n- **Long labels**: They truncate.',
-      '### How to test',
-      '`test/tabs.test.ts` proves the clamp.',
+      '### How to test\n1. Open a long tab group\n   Expected: No scroll.',
       '### Pre-merge steps\n- [ ] **Set TAB_LIMIT**: In production.',
-      '<details><summary>Plan</summary>',
       '<sub>Made with [Shinsa](https://shinsa.dev). Hand over the work. Keep the decisions.</sub>',
       PULL_REQUEST_BLOCK_END,
     ];
     const positions = headings.map((heading) => markdown.indexOf(heading));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
-    expect(markdown).not.toContain('src/tabs.css');
-    expect(markdown).not.toContain('### Evidence');
+    expect(markdown).not.toContain('What changed');
+    expect(markdown).not.toContain('Plan');
+    expect(markdown).not.toContain('Covered by tests');
   });
 
   test('without a handle, a plan or checks, it names the task by title and leaves those sections out', () => {
     const task = { ...builtTask(), handle: null, plan: null, checkResults: null, summary: null };
     const markdown = serializePullRequestMarkdown({ task, evidence: [], notes: {} });
     expect(markdown).toContain(`Shinsa task **${task.title}**.`);
-    expect(markdown).not.toContain('### Checks');
-    expect(markdown).not.toContain('<summary>Plan</summary>');
-    expect(markdown).not.toContain('How it flows');
+    expect(markdown).not.toContain('### Evidence');
+    expect(markdown).not.toContain('### How it works');
   });
 
   test('marks failing and skipped checks, escapes pipes and gives the changed-line coverage', () => {
@@ -224,20 +222,16 @@ describe('serializePullRequestMarkdown', () => {
     expect(markdown).not.toContain('Tests');
   });
 
-  test('stays within the limit by dropping the plan and the flow first, then cutting as a last resort', () => {
-    const base = withReports(builtTask());
-    const task = { ...base, plan: base.plan && { ...base.plan, body: 'p'.repeat(5000) } };
-    const withoutPlan = serializePullRequestMarkdown({
-      task: { ...task, plan: null },
-      evidence: [],
-      notes: {},
-    });
-    const limit = withoutPlan.length - 10;
+  test('stays within the limit by dropping the judgement calls and the flow first, then cutting as a last resort', () => {
+    const task = withReports(builtTask());
+    const full = serializePullRequestMarkdown({ task, evidence: [], notes: {} });
+    const limit = full.length - 150;
     const fitted = serializePullRequestMarkdown({ task, evidence: [], notes: {} }, limit);
     expect(fitted.length).toBeLessThanOrEqual(limit);
-    expect(fitted).not.toContain('<summary>Plan</summary>');
-    expect(fitted).not.toContain('How it flows');
-    expect(fitted).toContain('### Checks');
+    expect(fitted).not.toContain('### Judgement calls');
+    expect(fitted).not.toContain('### How it works');
+    expect(fitted).toContain('### Evidence');
+    expect(fitted).toContain('### Risks');
     const cut = serializePullRequestMarkdown(
       { task: { ...task, summary: 's'.repeat(400) }, evidence: [], notes: {} },
       300
@@ -340,7 +334,6 @@ describe('a pull request that carries several rounds', () => {
       '### Earlier rounds in this pull request\n- **Round 1, Clamp the tabs**: Stop the scroll. Merged into the PR.\n  - Find it\n  - Fix it\n- **Round 3, Bare round**'
     );
     expect(markdown).not.toContain('Stacked elsewhere');
-    expect(markdown).toContain('### What changed in round 4');
     expect(listPullRequestEvidence(task, evidence).map((item) => item.title)).toEqual(['First', 'Now']);
   });
 
@@ -352,7 +345,6 @@ describe('a pull request that carries several rounds', () => {
     };
     const markdown = serializePullRequestMarkdown({ task, evidence: [], notes: {} });
     expect(markdown).not.toContain('Earlier rounds');
-    expect(markdown).toContain('### What changed\n');
   });
 });
 

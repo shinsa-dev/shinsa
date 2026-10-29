@@ -2487,14 +2487,14 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
 ## The pull request description
 
 The description is one block Shinsa writes between `<!-- shinsa:start -->` and `<!-- shinsa:end -->`
-(`serializePullRequestMarkdown`, `packages/core/src/report/pull-request.ts`, pure), in this order: a note naming the
-task (handle and title) with a link to open it in Shinsa, the summary, the earlier rounds in this pull request (when
-a later round ships onto it: each one's title, goal or headline, result and phases, from its `outcome`), How it works (the walkthrough's approach, its
-flow folded away), Evidence, Checks (a table of each check with ✓, ✗ or –, the count that passed and the
-changed-line coverage when it was measured), What changed (What changed in round N when earlier rounds share the
-pull request; each phase's summary with its critical and high spots),
-the judgement calls with the options turned down, the risks, How to test (the tests and the steps to try), the steps
-around the merge, the plan folded away, and a one-line footer linking shinsa.dev.
+(`serializePullRequestMarkdown`, `packages/core/src/report/pull-request.ts`, pure), in the Review tab's order: a note
+naming the task (handle and title) with a link to open it in Shinsa, the summary, the earlier rounds in this pull
+request (when a later round ships onto it: each one's title, goal or headline, result and phases, from its
+`outcome`), Approach (the walkthrough's approach), Evidence (the screenshots, recordings, notes and previews, then
+the checks as a table of each with ✓, ✗ or –, the count that passed and the changed-line coverage when it was
+measured, then the tests the walkthrough names), How it works (the walkthrough's flow), the judgement calls with the
+options turned down, the risks, How to test (the steps to try), the steps around the merge, and a one-line footer
+linking shinsa.dev. The plan, the goal and each phase's summary stay in Shinsa.
 
 - **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to
   `https://shinsa.dev/open?task=<id>&handle=<handle>&title=<title>` (`resolveShinsaTaskUrl`, the title cut to 120
@@ -2524,9 +2524,9 @@ around the merge, the plan folded away, and a one-line footer linking shinsa.dev
   open pull request writes it again (`writePullRequestBlock`): it reads the body, replaces only the marked block
   (`replacePullRequestBlock`), so what a person wrote around it stays, and edits the pull request only when the body
   changed. A body without the markers is replaced whole. A failed rewrite is logged; the push stands.
-- **The size limit.** GitHub takes 65,536 characters. Over that, whole sections go in this order: the plan, the
-  flow, the earlier rounds, the evidence, What changed, the judgement calls, the risks, How it works, Checks, How to
-  test; the note, the summary, the steps around the merge and the footer stay. Only when that is not enough is the
+- **The size limit.** GitHub takes 65,536 characters. Over that, whole sections go in this order: the earlier
+  rounds, the judgement calls, How it works, the risks, Approach, How to test, Evidence; the note, the summary, the
+  steps around the merge and the footer stay. Only when that is not enough is the
   block cut, with `…`, closing the code block and every `<details>` the cut lands in, so the footer is never folded
   away.
 

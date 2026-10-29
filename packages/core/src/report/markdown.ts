@@ -127,7 +127,7 @@ function describeTestTarget(target: ManualTestTarget) {
   return ` ${TEST_TARGET_MARKDOWN[target.kind](target.value)}`;
 }
 
-function describeManualStep(step: ManualTestStep, index: number) {
+export function describeManualStep(step: ManualTestStep, index: number) {
   const action = step.target ? `${step.action.replace(/[.:]$/, '')}:` : step.action;
   const target = step.target ? describeTestTarget(step.target) : '';
   return `${index + 1}. ${action}${target}\n${STEP_INDENT}Expected: ${step.expect}`;
