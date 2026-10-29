@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { resolveServiceView, SERVICE_LIMITS, type Task } from '@shinsa/core';
 import {
   canStartAll,
@@ -9,6 +9,7 @@ import {
   describeServiceClose,
   describeServiceFolder,
   describeServiceGroup,
+  describeServicePreview,
   describeServiceState,
   describeServicesAdded,
   describeServicesEmpty,
@@ -26,6 +27,9 @@ import {
   listServiceGroups,
   listServicePlaces,
   listStoppedServices,
+  listTaskPreviews,
+  listUnattachedPreviews,
+  openServicePreview,
   parseServiceEnv,
   resolveActiveService,
   resolveServiceForm,
@@ -35,12 +39,18 @@ import {
   resolveShownErrors,
   resolveSuggestionKey,
   SERVICE_GLYPHS,
+  selectServicePreview,
   serializeServiceEnv,
   togglePick,
   validateServiceDraft,
 } from '@/lib/terminal/services.ts';
 import { createProject, createShinsaState, NOW } from '../../support/state.ts';
-import { createService, createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
+import {
+  createService,
+  createTerminal,
+  createTerminalState,
+  createTerminalsSnapshot,
+} from '../../support/terminals.ts';
 
 const API = createService({ id: 'api', env: { PORT: '4000' } });
 
@@ -76,6 +86,40 @@ describe('describeServiceState', () => {
     ).toBe('Failed');
     expect(describeServiceState(view(null), LATER)).toBe('Stopped');
     expect(describeServiceState(view({ id: 't', startedAt: NOW }, NOW), NOW)).toBe('Starting');
+  });
+});
+
+describe('a service’s preview', () => {
+  const service = createService({ id: 'web', previewUrl: 'http://localhost:{port}/tasks/SH-4' });
+  const running = resolveServiceView(
+    service,
+    createTerminal({ id: 't-web', serviceId: 'web', port: 4123, startedAt: NOW - 60_000 }),
+    NOW
+  );
+  const stopped = resolveServiceView(
+    service,
+    createTerminal({ id: 't-web', serviceId: 'web', port: 4123, status: 'stopped', endedAt: NOW }),
+    NOW
+  );
+
+  it('has a URL only while the service runs', () => {
+    expect(selectServicePreview(running)).toBe('http://localhost:4123/tasks/SH-4');
+    expect(selectServicePreview(stopped)).toBeNull();
+    expect(selectServicePreview(resolveServiceView(API, null, NOW))).toBeNull();
+  });
+
+  it('names the service, and the task when the run is a task’s', () => {
+    expect(describeServicePreview(running)).toBe('Open web');
+    expect(describeServicePreview(running, 'SH-4 Fix the cart')).toBe('Open web for SH-4 Fix the cart');
+  });
+
+  it('opens a running preview in a new window, and nothing for a stopped one', () => {
+    const open = spyOn(window, 'open').mockImplementation(() => null);
+    openServicePreview(stopped);
+    expect(open).not.toHaveBeenCalled();
+    openServicePreview(running);
+    expect(open).toHaveBeenCalledWith('http://localhost:4123/tasks/SH-4', '_blank', 'noopener');
+    open.mockRestore();
   });
 });
 
@@ -243,6 +287,34 @@ describe('which services the menu shows', () => {
   });
 });
 
+describe('a task’s previews', () => {
+  it('lists the task’s running services that have a preview URL, and nothing else', () => {
+    const state = createTerminalState();
+    const task = state.tasks.fix as Task;
+    const web = createService({
+      id: 'web',
+      cwd: '/Users/you/Developer/web',
+      previewUrl: 'http://localhost:{port}/',
+    });
+    const docs = createService({ id: 'docs', cwd: '/Users/you/Developer/web/docs' });
+    const snapshot = createTerminalsSnapshot(
+      [
+        createTerminal({ id: 'mine', serviceId: 'web', port: 4000 }),
+        createTerminal({ id: 'task-web', serviceId: 'web', taskId: 'fix', port: 4123 }),
+        createTerminal({ id: 'task-docs', serviceId: 'docs', taskId: 'fix', port: 4124 }),
+      ],
+      [web, docs]
+    );
+    expect(listTaskPreviews(state, snapshot, task, LATER).map((each) => each.url)).toEqual([
+      'http://localhost:4123/',
+    ]);
+    expect(listTaskPreviews(state, null, task, LATER)).toEqual([]);
+    const previews = listTaskPreviews(state, snapshot, task, LATER);
+    expect(listUnattachedPreviews(previews, ['https://preview.dev', 'not a url'])).toEqual(previews);
+    expect(listUnattachedPreviews(previews, ['http://localhost:4123/editor'])).toEqual([]);
+  });
+});
+
 describe('a task’s services', () => {
   it('names the task in the popover’s header', () => {
     expect(describeTaskServices({ handle: 'SH-4' }).title).toBe('Services for SH-4');
@@ -260,8 +332,20 @@ describe('the service form', () => {
       path: API.cwd,
       command: 'bun run dev',
       env: 'PORT=4000',
+      previewUrl: '',
+      portVariable: '',
     });
-    expect(createServiceDraft(null)).toEqual({ name: '', path: '', command: '', env: '' });
+    expect(
+      createServiceDraft({ ...API, previewUrl: 'http://localhost:{port}', portVariable: 'APP_PORT' })
+    ).toMatchObject({ previewUrl: 'http://localhost:{port}', portVariable: 'APP_PORT' });
+    expect(createServiceDraft(null)).toEqual({
+      name: '',
+      path: '',
+      command: '',
+      env: '',
+      previewUrl: '',
+      portVariable: '',
+    });
   });
 
   it('reads variables one a line, with export, quotes and comments, and refuses a line it cannot read', () => {
@@ -280,23 +364,70 @@ describe('the service form', () => {
   });
 
   it('checks every field before it is sent', () => {
-    expect(
-      validateServiceDraft({ name: ' api ', path: ' /shop ', command: ' bun dev ', env: 'A=1' })
-    ).toEqual({
+    const draft = {
+      name: ' api ',
+      path: ' /shop ',
+      command: ' bun dev ',
+      env: 'A=1',
+      previewUrl: '',
+      portVariable: '',
+    };
+    expect(validateServiceDraft(draft)).toEqual({
       ok: true,
-      input: { name: 'api', cwd: '/shop', command: 'bun dev', env: { A: '1' } },
+      input: {
+        name: 'api',
+        cwd: '/shop',
+        command: 'bun dev',
+        env: { A: '1' },
+        previewUrl: null,
+        portVariable: 'PORT',
+      },
     });
-    expect(validateServiceDraft({ name: '', path: '', command: '', env: 'bad' })).toEqual({
+    expect(
+      validateServiceDraft({
+        ...draft,
+        previewUrl: ' http://localhost:{port}/a ',
+        portVariable: ' APP_PORT ',
+      })
+    ).toMatchObject({
+      ok: true,
+      input: { previewUrl: 'http://localhost:{port}/a', portVariable: 'APP_PORT' },
+    });
+    expect(
+      validateServiceDraft({
+        name: '',
+        path: '',
+        command: '',
+        env: 'bad',
+        previewUrl: 'localhost',
+        portVariable: '1P',
+      })
+    ).toEqual({
       ok: false,
       errors: {
         name: 'Give the service a name.',
         path: 'Choose the folder it runs in.',
         command: 'Give the command that starts it.',
         env: 'Write each variable as NAME=value on a line of its own. “bad” is not.',
+        previewUrl: 'Give an http or https address, with {port} where the run’s port goes.',
+        portVariable: 'Use letters, digits and _, not starting with a digit.',
       },
     });
     expect(
-      validateServiceDraft({ name: 'x'.repeat(SERVICE_LIMITS.name + 1), path: '/a', command: 'b', env: '' })
+      validateServiceDraft({ ...draft, previewUrl: `http://a.test/${'x'.repeat(SERVICE_LIMITS.previewUrl)}` })
+    ).toMatchObject({ ok: false, errors: { previewUrl: expect.any(String) } });
+    expect(validateServiceDraft({ ...draft, previewUrl: 'http://localhost:3000' })).toMatchObject({
+      ok: false,
+      errors: { previewUrl: 'Give an http or https address, with {port} where the run’s port goes.' },
+    });
+    expect(
+      validateServiceDraft({
+        ...draft,
+        name: 'x'.repeat(SERVICE_LIMITS.name + 1),
+        path: '/a',
+        command: 'b',
+        env: '',
+      })
     ).toMatchObject({ ok: false, errors: { name: `Keep the name to ${SERVICE_LIMITS.name} characters.` } });
   });
 
@@ -353,7 +484,14 @@ describe('the service form', () => {
     expect(both).toHaveLength(2);
     expect(togglePick(both, resolveSuggestionKey(WEB))).toEqual([resolveSuggestionKey(all)]);
     expect(listPickedInputs([WEB, all], picked)).toEqual([
-      { name: 'web', cwd: '/shop/apps/web', command: 'bun run dev', env: {} },
+      {
+        name: 'web',
+        cwd: '/shop/apps/web',
+        command: 'bun run dev',
+        env: {},
+        previewUrl: null,
+        portVariable: 'PORT',
+      },
     ]);
   });
 

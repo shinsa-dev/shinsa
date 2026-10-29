@@ -30,6 +30,12 @@ function createTerminals(options: Partial<TerminalsOptions> = {}) {
     readForeground: () => Promise.resolve('vim'),
     now: () => 100,
     newId: () => `term-${++id}`,
+    pickPort: (preferred, taken) => {
+      if (preferred !== null && !taken.has(preferred)) return preferred;
+      let port = 5001;
+      while (taken.has(port)) port++;
+      return port;
+    },
     notifyMs: 1,
     screenMs: 1,
     ...options,
@@ -202,7 +208,14 @@ const STATE = {
   tasks: {},
 } as unknown as ShinsaState;
 
-const SERVICE = { name: 'api', cwd: '/code/web/apps/api', command: 'bun run dev', env: { PORT: '4000' } };
+const SERVICE = {
+  name: 'api',
+  cwd: '/code/web/apps/api',
+  command: 'bun run dev',
+  env: { PORT: '4000' },
+  previewUrl: null,
+  portVariable: 'PORT',
+};
 
 function main(place: TerminalPlaceKind, cwd = SERVICE.cwd) {
   return { cwd, place, taskId: null };
@@ -369,6 +382,52 @@ describe('Terminals services', () => {
     expect(terminals.snapshot().terminals[0]).toMatchObject({ serviceId: null, status: 'stopped' });
   });
 
+  it('gives each task run a free port of its own in the service’s port variable', async () => {
+    const { terminals, fake } = createTerminals();
+    const preview = { ...SERVICE, previewUrl: 'http://localhost:{port}/tasks', portVariable: 'APP_PORT' };
+    const service = terminals.addService('p1', preview);
+    const run = (taskId: string) =>
+      terminals.startService(service.id, { cwd: `/wt/${taskId}`, place: 'worktree', taskId });
+    const [a, b] = [run('a'), run('b')];
+    expect([a.port, b.port]).toEqual([5001, 5002]);
+    expect(fake.spawned.map((each) => each.options.env.APP_PORT)).toEqual(['5001', '5002']);
+    expect(fake.spawned[0]?.options.env.PORT).toBe('4000');
+    await terminals.stopService(service.id, 'a');
+    run('c');
+    expect(terminals.find(a.id).info.port).toBe(5001);
+    expect(run('a').port).toBe(5003);
+  });
+
+  it('keeps a task run’s port across a restart while no other run holds it', async () => {
+    const { terminals } = createTerminals();
+    const service = terminals.addService('p1', SERVICE);
+    const forTask = { cwd: '/wt/a', place: 'worktree', taskId: 'a' } as const;
+    const first = terminals.startService(service.id, forTask);
+    expect((await terminals.restartService(service.id, forTask)).port).toBe(first.port);
+  });
+
+  it('leaves your run’s port to its command unless the service has a preview URL', () => {
+    const { terminals, fake } = createTerminals();
+    const plain = terminals.addService('p1', { ...SERVICE, env: {} });
+    expect(terminals.startService(plain.id, main('repository')).port).toBeNull();
+    expect(fake.spawned[0]?.options.env.PORT).toBeUndefined();
+    const fixed = terminals.addService('p1', {
+      ...SERVICE,
+      name: 'web',
+      previewUrl: 'http://localhost:{port}',
+    });
+    expect(terminals.startService(fixed.id, main('repository')).port).toBe(4000);
+    expect(fake.spawned[1]?.options.env.PORT).toBe('4000');
+    const picked = terminals.addService('p1', {
+      ...SERVICE,
+      name: 'docs',
+      env: {},
+      previewUrl: 'http://localhost:{port}',
+    });
+    expect(terminals.startService(picked.id, main('repository')).port).toBe(5001);
+    expect(fake.spawned[2]?.options.env.PORT).toBe('5001');
+  });
+
   it('refuses more services than the limit', () => {
     const { terminals } = createTerminals();
     for (let index = 0; index < SERVICE_LIMITS.services; index++) terminals.addService('p1', SERVICE);
@@ -392,6 +451,17 @@ describe('parseStoredService', () => {
     expect(parseStoredService({ ...service, env: { A: 1 } })).toBeNull();
     expect(parseStoredService({ ...service, env: [] })).toBeNull();
     expect(parseStoredService({ ...service, env: null })).toBeNull();
+    expect(parseStoredService({ ...service, previewUrl: 'file:///etc' })).toBeNull();
+    expect(parseStoredService({ ...service, previewUrl: 'http://localhost:3000' })).toBeNull();
+    expect(parseStoredService({ ...service, previewUrl: 3 })).toBeNull();
+    expect(parseStoredService({ ...service, portVariable: 'A-B' })).toBeNull();
+    const preview = { ...service, previewUrl: 'http://localhost:{port}', portVariable: 'APP_PORT' };
+    expect(parseStoredService(preview)).toEqual(preview);
+  });
+
+  it('reads a service saved before previews with none, on PORT', () => {
+    const { previewUrl, portVariable, ...saved } = service;
+    expect(parseStoredService(saved)).toEqual({ ...saved, previewUrl: null, portVariable: 'PORT' });
   });
 });
 
@@ -404,11 +474,14 @@ describe('parseStoredTerminal', () => {
     expect(parseStoredTerminal({ ...createInfo(), name: 3 })).toBeNull();
     expect(parseStoredTerminal({ ...createInfo(), serviceId: 3 })).toBeNull();
     expect(parseStoredTerminal({ ...createInfo(), startedAt: '1' })).toBeNull();
+    expect(parseStoredTerminal({ ...createInfo(), port: 0 })).toBeNull();
+    expect(parseStoredTerminal({ ...createInfo(), port: 70000 })).toBeNull();
+    expect(parseStoredTerminal({ ...createInfo(), port: 4000 })).toEqual(createInfo({ port: 4000 }));
   });
 
   it('reads a terminal saved before services as a shell of its own', () => {
-    const { serviceId, ...saved } = createInfo();
-    expect(serviceId).toBeNull();
+    const { serviceId, port, ...saved } = createInfo();
+    expect([serviceId, port]).toEqual([null, null]);
     expect(parseStoredTerminal(saved)).toEqual(createInfo());
   });
 });

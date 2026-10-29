@@ -10,7 +10,13 @@ import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeServiceState, SERVICE_GLYPHS, type TaskServiceRun } from '@/lib/terminal/services.ts';
+import {
+  describeServicePreview,
+  describeServiceState,
+  SERVICE_GLYPHS,
+  selectServicePreview,
+  type TaskServiceRun,
+} from '@/lib/terminal/services.ts';
 
 export interface ServiceHandlers {
   start: (view: ServiceView) => void;
@@ -18,6 +24,7 @@ export interface ServiceHandlers {
   restart: (view: ServiceView) => void;
   startAll: (project: Project) => void;
   open: (view: ServiceView, project: Project) => void;
+  preview: (view: ServiceView) => void;
 }
 
 const REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
@@ -26,21 +33,50 @@ const TREE_LINE = 'pointer-events-none absolute start-3.75 w-px bg-bg-a4';
 
 export function ServiceActionButton({
   label,
+  detail,
   icon,
   size = 'icon-sm',
   variant = 'secondary',
   onClick,
 }: {
   label: string;
+  detail?: string;
   icon: IconName;
   size?: 'icon-xs' | 'icon-sm';
   variant?: 'secondary' | 'bare';
   onClick: React.MouseEventHandler<HTMLButtonElement>;
 }) {
   return (
-    <Hint label={label}>
+    <Hint label={label} detail={detail}>
       <Button variant={variant} size={size} icon={icon} aria-label={label} onClick={onClick} />
     </Hint>
+  );
+}
+
+function ServicePreviewButton({
+  view,
+  label = null,
+  size = 'icon-sm',
+  onPreview,
+}: {
+  view: ServiceView;
+  label?: string | null;
+  size?: 'icon-xs' | 'icon-sm';
+  onPreview: () => void;
+}) {
+  const url = selectServicePreview(view);
+  if (!url) return null;
+  return (
+    <ServiceActionButton
+      label={describeServicePreview(view, label)}
+      detail={url}
+      icon='IconArrowUpRight'
+      size={size}
+      onClick={(event) => {
+        event.stopPropagation();
+        onPreview();
+      }}
+    />
   );
 }
 
@@ -50,18 +86,21 @@ export function ServiceRunButtons({
   onStart,
   onStop,
   onRestart,
+  onPreview,
 }: {
   view: ServiceView;
   size?: 'icon-xs' | 'icon-sm';
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
+  onPreview: () => void;
 }) {
   const name = view.service.name;
   if (!isServiceActive(view))
     return <ServiceActionButton label={`Start ${name}`} icon='IconPlay' size={size} onClick={onStart} />;
   return (
     <>
+      <ServicePreviewButton view={view} size={size} onPreview={onPreview} />
       <ServiceActionButton
         label={`Restart ${name}`}
         icon='IconArrowRotateClockwise'
@@ -110,20 +149,31 @@ export function ServiceRow({
   );
 }
 
-function RowRunButtons({ view, handlers }: { view: ServiceView; handlers: ServiceHandlers }) {
+function RowRunButtons({
+  view,
+  label = null,
+  handlers,
+}: {
+  view: ServiceView;
+  label?: string | null;
+  handlers: ServiceHandlers;
+}) {
   const name = view.service.name;
   if (!isServiceActive(view))
     return (
       <ServiceActionButton label={`Start ${name}`} icon='IconPlay' onClick={() => handlers.start(view)} />
     );
   return (
-    <span className={cn('flex shrink-0 items-center gap-px', REVEAL)}>
-      <ServiceActionButton
-        label={`Restart ${name}`}
-        icon='IconArrowRotateClockwise'
-        onClick={() => handlers.restart(view)}
-      />
-      <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
+    <span className='flex shrink-0 items-center gap-px'>
+      <span className={cn('flex items-center gap-px', REVEAL)}>
+        <ServiceActionButton
+          label={`Restart ${name}`}
+          icon='IconArrowRotateClockwise'
+          onClick={() => handlers.restart(view)}
+        />
+        <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
+      </span>
+      <ServicePreviewButton view={view} label={label} onPreview={() => handlers.preview(view)} />
     </span>
   );
 }
@@ -165,7 +215,7 @@ export function TaskRunRow({
           {state}
         </span>
       </button>
-      <RowRunButtons view={view} handlers={handlers} />
+      <RowRunButtons view={view} label={label} handlers={handlers} />
     </div>
   );
 }

@@ -556,6 +556,9 @@ Only these, and they win over anything below:
       (`IconCircleDotted`), Running (the kit's `Spinner` in the accent, while the stage is `checking` and the check is
       in the current run, as core records it in `Task.runningChecks`), Passed with "Passed when re-run alone"
       under it, or "Already failing on main, so it does not block" (a grey `IconCircleXFilled`, "Not blocking").
+      A row with no line under its label (a repository command whose label is its command, a CI run) centres its
+      glyph, label and result on one another; a row with one tops them on its first line (`has-[[data-facts]]`, each
+      second line marked `data-facts`), wherever a check row is drawn: the Checks list, How to test and Evidence.
       **CI** (after the pull request) holds the pull request's checks, each named and linked to its run, "Required"
       or "Optional" beside it. Each stage's header is its title and summary ("All 4 passed", "1 of 4 failed", "Running
       2 checks", "2 passed, 2 not run yet", in the accent, red or blue); the rows sit in one `INSET` with hairlines
@@ -2502,7 +2505,17 @@ Only these, and they win over anything below:
       (`IconArrowRotateClockwise`) and Stop (`IconStop`) show on a running one while the row is under the pointer (the
       shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
       as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
-      set (measured: 1px between Restart and Stop, each 24px). A row has no `•••`: editing and removing are Manage's. Measured in the
+      set (measured: 1px between Restart and Stop, each 24px). A running row whose service has a preview URL ends
+      with Open (`ServicePreviewButton`, `icon-sm`, `IconArrowUpRight`, after Stop, 1px apart): always shown, not only
+      under the pointer, since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
+      task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
+      port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
+      `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
+      Terminal page's toolbar have the same button. Evidence's Preview group links the task's running previews too,
+      after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
+      name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
+      link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
+      path). How to test stays the agent's: it names the preview it attached. A row has no `•••`: editing and removing are Manage's. Measured in the
       browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
       24px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
@@ -2538,8 +2551,10 @@ Only these, and they win over anything below:
       case is one press of the primary "Add 2 services" (disabled at none) beside Back; what you already added is not
       listed. While it reads, "Looking for services" after 300ms. Once added, the popover is the list again.
     - **The form** (Custom service…, "Add a service"; or a service's, "Edit ‹name›") is short: Name, Folder (a
-      select of the project's repositories and folders, never a typed path) and Command, with Environment
-      (`NAME=value` lines) folded under Advanced (open by itself when the service has variables or the field has a
+      select of the project's repositories and folders, never a typed path), Command and Preview URL (optional,
+      `http://localhost:{port}` as its placeholder, the note "Where Open takes you. Shinsa puts the run's port where
+      {port} is."), with Port variable (`PORT` as its placeholder, the note that each task's run gets a free port in
+      it) and Environment (`NAME=value` lines) folded under Advanced (open by itself when either has a value or a
       problem). Its fields are the kit's `Field` and `FieldLabel`, as in every Shinsa form (the project and MCP
       server dialogs), its Name, Folder, Command and Environment the kit's `Input`, `SelectTrigger` and `Textarea` as
       they are in Settings and every dialog: filled, never bordered (21). In a dark popover those had drawn as bare
@@ -2591,7 +2606,9 @@ Only these, and they win over anything below:
       the task's worktree (its repository when it has none), in its project, and go there.
     - **Shape.** The page fills the space under the top bar edge to edge, with no column: a 36px `Toolbar` with the
       project picker, the tabs, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
-      Restart and Stop (or Start) when a service's tab is in front, else, while any of the project's services is not
+      Restart and Stop (or Start) when a service's tab is in front, and Open after them while it runs with a preview
+      URL (the rows' `ServicePreviewButton`: the toolbar acts on the tab in front, and a tab has no room for a second
+      button beside its close), else, while any of the project's services is not
       running, one play button that starts them all ("Start all services in ‹project›"; a shell's tab or no tab is
       in front, `resolveActiveService`), and Find in the scrollback (`IconMagnifyingGlass`), then the terminal on its own
       background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and

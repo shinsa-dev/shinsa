@@ -11,6 +11,8 @@ export interface ServiceDefinition {
   cwd: string;
   command: string;
   env: Record<string, string>;
+  previewUrl: string | null;
+  portVariable: string;
 }
 
 export type ServiceSource =
@@ -41,6 +43,7 @@ export interface ServiceView {
   state: ServiceState;
   exitCode: number | null;
   since: number | null;
+  url: string | null;
 }
 
 export interface TaskServiceView extends ServiceView {
@@ -62,7 +65,12 @@ export const SERVICE_LIMITS = {
   envKeys: 50,
   envValue: 4000,
   startingMs: 3000,
+  previewUrl: 2000,
 } as const;
+
+export const SERVICE_PORT_VARIABLE = 'PORT';
+
+const PORT_PLACEHOLDER = '{port}';
 
 const STOPPED_BY_YOU = new Set([130, 143]);
 
@@ -70,6 +78,24 @@ const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export function isServiceEnvKey(key: string) {
   return ENV_KEY.test(key);
+}
+
+export function isServicePreviewUrl(url: string) {
+  if (!url.includes(PORT_PLACEHOLDER)) return false;
+  try {
+    const { protocol } = new URL(url.replaceAll(PORT_PLACEHOLDER, '1'));
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function resolveServiceUrl(
+  service: Pick<ServiceDefinition, 'previewUrl'>,
+  terminal: Pick<TerminalInfo, 'port'> | null
+) {
+  if (!(service.previewUrl && terminal?.port)) return null;
+  return service.previewUrl.replaceAll(PORT_PLACEHOLDER, String(terminal.port));
 }
 
 export function resolveServiceState(terminal: TerminalInfo | null, now: number): ServiceView['state'] {
@@ -90,7 +116,15 @@ export function resolveServiceView(
 ): ServiceView {
   const state = resolveServiceState(terminal, now);
   const since = terminal ? (terminal.status === 'running' ? terminal.startedAt : terminal.endedAt) : null;
-  return { service, taskId, terminal, state, exitCode: terminal?.exitCode ?? null, since };
+  return {
+    service,
+    taskId,
+    terminal,
+    state,
+    exitCode: terminal?.exitCode ?? null,
+    since,
+    url: resolveServiceUrl(service, terminal),
+  };
 }
 
 export function selectServiceTerminal(snapshot: TerminalsSnapshot, serviceId: string, taskId: string | null) {

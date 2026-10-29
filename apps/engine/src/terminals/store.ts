@@ -1,6 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isServiceEnvKey, SERVICE_LIMITS, type ServiceDefinition, type TerminalInfo } from '@shinsa/core';
+import {
+  isServiceEnvKey,
+  isServicePreviewUrl,
+  SERVICE_LIMITS,
+  SERVICE_PORT_VARIABLE,
+  type ServiceDefinition,
+  type TerminalInfo,
+} from '@shinsa/core';
 import { writeJsonFile } from '../config/file.ts';
 import { describeError, log } from '../log/index.ts';
 
@@ -30,6 +37,12 @@ function isNumberOrNull(value: unknown): value is number | null {
   return value === null || typeof value === 'number';
 }
 
+function isPortOrNull(value: unknown): value is number | null {
+  return (
+    value === null || (typeof value === 'number' && Number.isInteger(value) && value > 0 && value < 65536)
+  );
+}
+
 export function parseStoredTerminal(value: unknown): TerminalInfo | null {
   if (!value || typeof value !== 'object') return null;
   const fields = value as Record<string, unknown>;
@@ -38,7 +51,8 @@ export function parseStoredTerminal(value: unknown): TerminalInfo | null {
   if (!(STATUSES.has(fields.status as string) && PLACES.has(fields.place as string))) return null;
   if (!(isTextOrNull(fields.name) && isTextOrNull(fields.title) && isTextOrNull(fields.taskId))) return null;
   const serviceId = fields.serviceId ?? null;
-  if (!isTextOrNull(serviceId)) return null;
+  const port = fields.port ?? null;
+  if (!(isTextOrNull(serviceId) && isPortOrNull(port))) return null;
   if (
     !(
       typeof fields.startedAt === 'number' &&
@@ -47,7 +61,7 @@ export function parseStoredTerminal(value: unknown): TerminalInfo | null {
     )
   )
     return null;
-  return { ...fields, serviceId } as unknown as TerminalInfo;
+  return { ...fields, serviceId, port } as unknown as TerminalInfo;
 }
 
 function isEnv(value: unknown): value is Record<string, string> {
@@ -68,8 +82,12 @@ export function parseStoredService(value: unknown): ServiceDefinition | null {
   if (!(isText(fields.name) && fields.name.length > 0 && isText(fields.cwd) && isText(fields.command)))
     return null;
   if (!isEnv(fields.env)) return null;
+  const previewUrl = fields.previewUrl ?? null;
+  const portVariable = fields.portVariable ?? SERVICE_PORT_VARIABLE;
+  if (!(previewUrl === null || (isText(previewUrl) && isServicePreviewUrl(previewUrl)))) return null;
+  if (!(isText(portVariable) && isServiceEnvKey(portVariable))) return null;
   const { id, projectId, name, cwd, command, env } = fields;
-  return { id, projectId, name, cwd, command, env };
+  return { id, projectId, name, cwd, command, env, previewUrl, portVariable };
 }
 
 function readList<T>(path: string, field: string, parse: (value: unknown) => T | null, what: string): T[] {

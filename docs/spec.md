@@ -240,7 +240,10 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   when the engine restarts. Also `shinsa services list|start|stop|restart` and ⌘K. A service is defined once per
   project and also runs for any open task, in that task's worktree beside your own run: from the Services item
   among the task's facts, `--task`, or by the task's agent, which can start, stop and read only its own task's runs. The popover
-  lists the tasks running each service under it, and a task's run closes when its worktree goes.
+  lists the tasks running each service under it, and a task's run closes when its worktree goes. A service may name a
+  preview URL with `{port}` in it: each task's run gets a free port of its own, and an Open button wherever it runs
+  takes you to that run, so before the review the task's agent leaves the services that show its change running and
+  attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
 - **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
   that handle several parents), then done and cancelled, collapsed. Priority then age
@@ -849,6 +852,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Services per task (2026-10-27).** A project's services run for a task in its worktree, started by you or by the
   task's agent (`list_services`, `run_service`), shown under each service and among the task's facts
   (`docs/engine.md` → Services → Runs for a task).
+- **Local previews (2026-10-29).** A service's preview URL and port variable, a free port per task run, Open in
+  the Services popovers, a task's Services fact and the Terminal toolbar, and the agent's `preview` evidence before
+  the review (`docs/engine.md` → Services → A live preview).
 - **Why xterm.js and not ghostty-web.** ghostty-web runs Ghostty's own parser in WebAssembly and handles complex
   scripts better, but it is at 0.4, has no WebGL renderer, no search, serialize or headless counterpart, and its
   xterm.js compatibility is partial. xterm.js 6 is what VS Code ships: the WebGL renderer, the add-ons this needs, and

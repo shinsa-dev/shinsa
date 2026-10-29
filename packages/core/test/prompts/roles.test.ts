@@ -119,6 +119,16 @@ describe('what a prompt says about the work it builds on', () => {
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Later phases build on this one');
   });
 
+  test('only the last phase asks for a live preview of the project’s services as evidence', () => {
+    const { task } = tasks();
+    const preview = 'Before the review, give the human a live preview: call `list_services`';
+    expect(resolvePhaseInstruction(task, null, 0)).not.toContain(preview);
+    const last = resolvePhaseInstruction(task, null, 1);
+    expect(last).toContain(preview);
+    expect(last).toContain('as `preview` evidence');
+    expect(last).toContain('the local preview you attached');
+  });
+
   test('a plan that asks for screenshots gets before shots first and everything before the last phase', () => {
     const { task } = tasks();
     const plan = task.plan;

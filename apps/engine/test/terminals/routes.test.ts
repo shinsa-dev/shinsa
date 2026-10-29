@@ -28,6 +28,8 @@ setDefaultTimeout(30_000);
 
 const ORIGIN = 'http://localhost:5181';
 
+const NO_PREVIEW = { previewUrl: null, portVariable: 'PORT' };
+
 const running: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
@@ -290,9 +292,15 @@ describe('services over HTTP', () => {
       path: join(repoPath, 'apps/api'),
       command: 'echo "up-$PORT"; sleep 30',
       env: { PORT: '4100' },
+      previewUrl: ' http://localhost:{port}/tasks ',
     });
     const { service } = (await added.json()) as { service: ServiceDefinition };
-    expect(service).toMatchObject({ name: 'api', env: { PORT: '4100' } });
+    expect(service).toMatchObject({
+      name: 'api',
+      env: { PORT: '4100' },
+      previewUrl: 'http://localhost:{port}/tasks',
+      portVariable: 'PORT',
+    });
     const left = await read<{ suggestions: ServiceSuggestion[] }>(
       `/api/services/suggestions?projectId=${projectId}`
     );
@@ -302,12 +310,15 @@ describe('services over HTTP', () => {
       cwd: join(repoPath, 'apps/api'),
       command: 'npm run dev',
       env: {},
+      ...NO_PREVIEW,
     });
     terminals.updateService(service.id, {
       name: 'renamed',
       cwd: service.cwd,
       command: service.command,
       env: service.env,
+      previewUrl: service.previewUrl,
+      portVariable: service.portVariable,
     });
     const same = await read<{ suggestions: ServiceSuggestion[] }>(
       `/api/services/suggestions?projectId=${projectId}`
@@ -319,7 +330,7 @@ describe('services over HTTP', () => {
     const started = (await (await post(`/api/services/${service.id}/start`, {}, null)).json()) as {
       terminal: TerminalInfo;
     };
-    expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running' });
+    expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running', port: 4100 });
     await until('it printed', async () =>
       (await terminals.find(started.terminal.id).serializeScreen()).includes('up-4100')
     );
@@ -361,7 +372,13 @@ describe('services over HTTP', () => {
     );
     expect(terminals.snapshot().services).toEqual([]);
     for (let index = 0; index < 31; index += 1)
-      terminals.addService(projectId, { name: `s${index}`, cwd: repoPath, command: 'x', env: {} });
+      terminals.addService(projectId, {
+        name: `s${index}`,
+        cwd: repoPath,
+        command: 'x',
+        env: {},
+        ...NO_PREVIEW,
+      });
     expect(await refusal({ projectId, services: [one, { ...one, name: 'web' }] })).toBe('service_limit');
     for (const service of terminals.snapshot().services) terminals.removeServices([service.id]);
     const added = (await (
@@ -374,7 +391,7 @@ describe('services over HTTP', () => {
   test('removes several services at once, finding every one before it removes any', async () => {
     const { post, projectId, repoPath, terminals } = await start();
     const add = (name: string) =>
-      terminals.addService(projectId, { name, cwd: repoPath, command: 'sleep 30', env: {} });
+      terminals.addService(projectId, { name, cwd: repoPath, command: 'sleep 30', env: {}, ...NO_PREVIEW });
     const [api, web, docs] = [add('api'), add('web'), add('docs')];
     const started = terminals.startService(api.id, { cwd: repoPath, place: 'repository', taskId: null });
     const refusal = async (body: unknown, origin: string | null = ORIGIN) =>
@@ -407,6 +424,12 @@ describe('services over HTTP', () => {
     expect(await refusal({ ...service, env: { A: 3 } })).toBe('service_env_invalid');
     const many = Object.fromEntries(Array.from({ length: 51 }, (_, index) => [`K${index}`, 'v']));
     expect(await refusal({ ...service, env: many })).toBe('body_invalid');
+    expect(await refusal({ ...service, previewUrl: 'localhost:{port}' })).toBe('service_preview_invalid');
+    expect(await refusal({ ...service, previewUrl: 'http://localhost:3000' })).toBe(
+      'service_preview_invalid'
+    );
+    expect(await refusal({ ...service, previewUrl: 'x'.repeat(2001) })).toBe('body_invalid');
+    expect(await refusal({ ...service, portVariable: '1PORT' })).toBe('service_env_invalid');
     expect(await refusal({ ...service, projectId: 'nope' })).toBe('project_not_found');
     expect(await refusal(service, null)).toBe('browser_only');
     const { service: added } = (await (await post('/api/services', service)).json()) as {
@@ -418,7 +441,13 @@ describe('services over HTTP', () => {
       error: { code: string };
     };
     expect(moved.error.code).toBe('terminal_place_missing');
-    const stray = terminals.addService(projectId, { name: 'x', cwd: '/etc', command: 'ls', env: {} });
+    const stray = terminals.addService(projectId, {
+      name: 'x',
+      cwd: '/etc',
+      command: 'ls',
+      env: {},
+      ...NO_PREVIEW,
+    });
     const outside = (await (await post(`/api/services/${stray.id}/start`, {}, null)).json()) as {
       error: { code: string };
     };
@@ -437,6 +466,7 @@ describe('services for a task over HTTP', () => {
       cwd: appPath,
       command: 'sleep 30',
       env: {},
+      ...NO_PREVIEW,
     });
     const repoId = Object.keys(engine.state.repos)[0] ?? '';
     await engine.dispatch({ type: 'task.create', request: 'Change the api', repoId });
@@ -471,7 +501,13 @@ describe('services for a task over HTTP', () => {
       [null, 'running'],
     ]);
     expect((await call(service.id, 'start', { taskId: 'nope' })).error?.code).toBe('task_not_found');
-    const outside = terminals.addService(projectId, { name: 'notes', cwd: root, command: 'ls', env: {} });
+    const outside = terminals.addService(projectId, {
+      name: 'notes',
+      cwd: root,
+      command: 'ls',
+      env: {},
+      ...NO_PREVIEW,
+    });
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.code).toBe('service_place_invalid');
     expect(refused.error?.message).toContain('cannot run for this task');

@@ -8,6 +8,8 @@ import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 import { createFakeSpawner } from '../terminals/fakes.ts';
 
+const NO_PREVIEW = { previewUrl: null, portVariable: 'PORT' };
+
 function setup(options: { services?: boolean; worktree?: boolean } = {}) {
   const root = createTempDir();
   const repoPath = join(root, 'app');
@@ -31,11 +33,18 @@ function setup(options: { services?: boolean; worktree?: boolean } = {}) {
     spawn: fake.spawn,
     now: () => 100_000,
     newId: () => `id-${++id}`,
+    pickPort: () => 6100,
     notifyMs: 1,
   });
   if (options.services ?? true) {
-    runner.addService('p1', { name: 'api', cwd: join(repoPath, 'apps/api'), command: 'bun dev', env: {} });
-    runner.addService('p1', { name: 'notes', cwd: root, command: 'ls', env: {} });
+    runner.addService('p1', {
+      name: 'api',
+      cwd: join(repoPath, 'apps/api'),
+      command: 'bun dev',
+      env: {},
+      ...NO_PREVIEW,
+    });
+    runner.addService('p1', { name: 'notes', cwd: root, command: 'ls', env: {}, ...NO_PREVIEW });
   }
   const call = (
     name: 'list_services' | 'run_service',
@@ -91,6 +100,24 @@ describe('the service tools', () => {
     expect(fake.spawned.map((each) => each.hungUp)).toEqual([false, true, true]);
     expect(await call('list_services')).toContain('api (stopped)');
     expect(SERVICE_OUTPUT_LINES).toBe(60);
+  });
+
+  test('gives the preview URL of a run that has one, while it runs', async () => {
+    const { call, runner, worktree } = setup();
+    runner.updateService('id-1', {
+      ...runner.findService('id-1'),
+      previewUrl: 'http://localhost:{port}/tasks/SW-17',
+    });
+    const preview = 'http://localhost:6100/tasks/SW-17';
+    expect(await call('run_service', { service: 'api', action: 'start' })).toBe(
+      `Started api for this task in ${join(worktree, 'apps/api')}. Its preview is at ${preview} once it is up. Read its output with list_services and the service’s name.`
+    );
+    expect(await call('run_service', { service: 'api', action: 'start' })).toBe(
+      `api already runs for this task in ${join(worktree, 'apps/api')}, preview at ${preview}.`
+    );
+    expect(await call('list_services')).toContain(`, preview at ${preview}`);
+    await call('run_service', { service: 'api', action: 'stop' });
+    expect(await call('list_services')).not.toContain('preview at');
   });
 
   test('shows a failed run with its exit code', async () => {

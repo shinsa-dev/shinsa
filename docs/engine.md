@@ -1845,7 +1845,10 @@ beside your run (Runs for a task, below).
 - **What one is.** `ServiceDefinition` (core's `protocol/services.ts`): an id, its project, a name (40 characters, one
   per name in a project), the folder it runs in (one of the project's repositories or folders, or a folder inside one;
   never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
-  variables added to your environment (50 at most, names a shell can export). It runs as `<login shell> -l -c
+  variables added to your environment (50 at most, names a shell can export), an optional preview URL (`previewUrl`,
+  http or https, 2,000 characters, with `{port}` where the run's port goes: `http://localhost:{port}/tasks/SW-17`;
+  `isServicePreviewUrl` refuses one without it, which would send every run's Open to one server) and the variable that carries the port (`portVariable`, `PORT` unless it names another,
+  `SERVICE_PORT_VARIABLE`). It runs as `<login shell> -l -c
   <command>` in its own terminal tab (`TerminalInfo.serviceId`), with the terminal's environment and its variables
   over it, so the shell that started it is the program: it ends when the command ends.
 - **Kept beside the terminals, not in the event log.** The definitions are in `data/terminals/services.json` (mode
@@ -1875,8 +1878,22 @@ beside your run (Runs for a task, below).
   one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
   `routes.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
-  run's tab and removing one closes them all. Two runs of one dev server may want one port: Shinsa leaves that to
-  the service (its variables, or a port its framework picks), and a run that cannot bind fails like any other.
+  run's tab and removing one closes them all.
+- **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
+  `pickFreePort` in `pty.ts`: the run's last port while it is still free, else a port the system hands out for
+  `Bun.listen` on port 0, never one another running service holds; `service_port_unavailable` when none is), kept on
+  `TerminalInfo.port` and put in the service's port variable over its own variables, so a task's run never meets
+  yours or another task's. Your run is unchanged unless the service has a preview URL; with one it uses the port its
+  own variables set, else a free port it keeps across restarts. The command must listen on that variable: Next and
+  most servers read `PORT`, Vite needs `--port $PORT` in the command. A run that cannot bind fails like any other.
+- **A live preview.** `resolveServiceUrl` (core) puts the run's port in the preview URL, `ServiceView.url`; a run
+  without a port has none. Wherever an active run has one, an Open button opens it (`docs/design.md`, 37),
+  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Before the
+  review, the last phase asks the Agent to start the services that show the change and attach each URL, with the path
+  to the screen to check, as `preview` evidence, which How to test links (`resolvePhaseInstruction`, the evidence
+  skill); Evidence's Preview group also links each active run of the task the agent did not attach
+  (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
+  `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
 - **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
   (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), so no dev server keeps running in a
   deleted folder; your own shells opened in that worktree are left as they are.
@@ -1918,7 +1935,8 @@ beside your run (Runs for a task, below).
   task: the tool takes the task from the calling run, so it can start, stop or restart only that task's run, never
   yours or another task's. `list_services` lists the services the task can run with their state and folder in the
   worktree, and with `service` the run's last 60 lines of output as plain text (`TerminalMirror.readLines`); a start
-  of a running one says so. The house rules ask an agent to stop what it started. Definitions stay yours: no tool
+  of a running one says so, and both report the run's preview URL. The house rules ask an agent to stop what it
+  started, except a preview it attaches for the review. Definitions stay yours: no tool
   adds, changes or removes one, `shinsa services` stays human-only, and `agents/policy.ts` still refuses a shell
   command naming `/api/services` as it does `/api/terminals`.
 

@@ -1,4 +1,4 @@
-import type { Evidence, ShinsaState, Task } from '@shinsa/core';
+import type { Evidence, ServiceView, ShinsaState, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -12,9 +12,11 @@ import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
+import { TaskPreviewLinks, useTaskPreviews } from '@/components/services/task-previews.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
+  describeEvidenceKind,
   type EarlierEvidenceEntry,
   type EvidenceEntry,
   type EvidenceGroup,
@@ -33,6 +35,7 @@ import {
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
 import { type ChecksView, resolveChecksView, resolveEvidenceCheckRow } from '@/lib/tasks/checks.ts';
+import { listUnattachedPreviews } from '@/lib/terminal/services.ts';
 
 type Viewer = ReturnType<typeof useImageViewer>;
 
@@ -40,6 +43,24 @@ export const EVIDENCE_EMPTY =
   'No screenshots, recordings or test runs were attached this round. Request changes to ask the agent for them.';
 
 const EVIDENCE_ALL_REMOVED = 'The agents removed the evidence they attached this round.';
+
+function LocalPreviews({ views }: { views: ServiceView[] }) {
+  if (views.length === 0) return null;
+  return (
+    <section className='flex min-w-0 flex-col gap-1'>
+      <SectionLabel count={views.length > 1 ? views.length : undefined}>
+        {describeEvidenceKind('preview', views.length)}
+      </SectionLabel>
+      <TaskPreviewLinks views={views} />
+    </section>
+  );
+}
+
+function listAttachedUris(layout: EvidenceLayout) {
+  return layout.groups
+    .filter((group) => group.kind === 'preview')
+    .flatMap((group) => group.entries.flatMap((entry) => entry.parts.map((part) => part.evidence.uri)));
+}
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
@@ -132,7 +153,7 @@ function CheckLinks({ links }: { links: readonly Evidence[] }) {
   return (
     <span className='flex flex-col gap-px'>
       {notes.map((link) => (
-        <span key={link.id} className='selectable text-2xs text-fg-3'>
+        <span key={link.id} data-facts='' className='selectable text-2xs text-fg-3'>
           {link.detail}
         </span>
       ))}
@@ -162,16 +183,20 @@ function Group({
   group,
   viewer,
   checks,
+  local = [],
 }: {
   group: EvidenceGroup;
   viewer: Viewer;
   checks: ChecksView | null;
+  local?: ServiceView[];
 }) {
-  const count = group.entries.length;
+  const count = group.entries.length + local.length;
   const linked = group.entries.filter((entry) => entry.check);
   return (
     <section className='flex min-w-0 flex-col gap-1'>
-      <SectionLabel count={count > 1 ? count : undefined}>{group.label}</SectionLabel>
+      <SectionLabel count={count > 1 ? count : undefined}>
+        {local.length > 0 ? describeEvidenceKind(group.kind, count) : group.label}
+      </SectionLabel>
       {group.kind === 'comparison' && (
         <div className='flex flex-col gap-4'>
           {group.entries.map((entry) => (
@@ -186,6 +211,7 @@ function Group({
           viewer={viewer}
         />
       )}
+      {local.length > 0 && <TaskPreviewLinks views={local} />}
     </section>
   );
 }
@@ -239,19 +265,30 @@ function EvidenceBody({
   layout,
   checks,
   persistId,
+  previews,
 }: {
   layout: EvidenceLayout;
   checks: ChecksView | null;
   persistId: DisclosureId;
+  previews: ServiceView[];
 }) {
   const viewer = useImageViewer();
   const earlier = useDisclosure(extendDisclosureId(persistId, 'earlier'), false);
+  const local = listUnattachedPreviews(previews, listAttachedUris(layout));
+  const attached = layout.groups.some((group) => group.kind === 'preview');
   return (
     <div className='flex flex-col gap-5'>
       {layout.count === 0 && <p className='text-fg-2 text-xs'>{EVIDENCE_ALL_REMOVED}</p>}
       {layout.groups.map((group) => (
-        <Group key={group.kind} group={group} viewer={viewer} checks={checks} />
+        <Group
+          key={group.kind}
+          group={group}
+          viewer={viewer}
+          checks={checks}
+          local={group.kind === 'preview' ? local : []}
+        />
       ))}
+      {!attached && <LocalPreviews views={local} />}
       {layout.earlier.length > 0 && (
         <EarlierVersions entries={layout.earlier} disclosure={earlier} viewer={viewer} />
       )}
@@ -265,14 +302,16 @@ export function EvidencePanel({
   layout,
   persistId,
   checks = null,
+  previews = [],
 }: {
   layout: EvidenceLayout;
   persistId: DisclosureId;
   checks?: ChecksView | null;
+  previews?: ServiceView[];
 }) {
   return (
     <Panel persistId={persistId} title='Evidence' icon='IconImages1' count={layout.count}>
-      <EvidenceBody layout={layout} checks={checks} persistId={persistId} />
+      <EvidenceBody layout={layout} checks={checks} persistId={persistId} previews={previews} />
     </Panel>
   );
 }
@@ -293,14 +332,18 @@ export function EvidenceSection({
     [evidence, runs, task, dataDir]
   );
   const checks = React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task]);
+  const previews = useTaskPreviews(state, task);
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');
   if (layout.count === 0 && layout.earlier.length === 0) {
-    if (!showEmpty) return null;
+    if (!(showEmpty || previews.length > 0)) return null;
     return (
       <Panel persistId={persistId} title='Evidence' icon='IconImages1'>
-        <p className='text-fg-2 text-xs'>{EVIDENCE_EMPTY}</p>
+        <div className='flex flex-col gap-5'>
+          <p className='text-fg-2 text-xs'>{EVIDENCE_EMPTY}</p>
+          <LocalPreviews views={previews} />
+        </div>
       </Panel>
     );
   }
-  return <EvidencePanel layout={layout} persistId={persistId} checks={checks} />;
+  return <EvidencePanel layout={layout} persistId={persistId} checks={checks} previews={previews} />;
 }
