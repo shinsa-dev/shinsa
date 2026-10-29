@@ -17,23 +17,33 @@ interface OpenScene {
   link: string | null;
 }
 
+function OpenEyebrow({ payload }: { payload: ReviewPayload }) {
+  const { pullRequest, handle } = payload.task;
+  return (
+    <>
+      <span className='text-primary'>{describePullRequestEyebrow(pullRequest)}</span>
+      {handle && <span> · {handle}</span>}
+    </>
+  );
+}
+
 function OpenSummary({ scene }: { scene: OpenScene }) {
   const { payload, link } = scene;
   return (
     <NowFrame
-      eyebrow={describePullRequestEyebrow(payload.task.pullRequest, payload.task.handle)}
+      eyebrow={<OpenEyebrow payload={payload} />}
       title={payload.task.title}
       action={
         <>
+          <a href={site.downloadUrl} className={buttonVariants({ variant: link ? 'outline' : 'primary' })}>
+            {openTask.secondary}
+          </a>
           {link && (
             <a href={link} data-icon='inline-start' className={buttonVariants({ variant: 'primary' })}>
               <Icon name='IconArrowUpRight' />
               {openTask.primary}
             </a>
           )}
-          <a href={site.downloadUrl} className={buttonVariants({ variant: link ? 'secondary' : 'primary' })}>
-            {openTask.secondary}
-          </a>
         </>
       }
     >

@@ -62,10 +62,8 @@ describe('readReviewFragment', () => {
 });
 
 describe('describePullRequestEyebrow', () => {
-  test('names the pull request by number and the task by handle, each when known', () => {
-    expect(describePullRequestEyebrow(23, 'LOC-28')).toBe('Pull request #23 · LOC-28');
-    expect(describePullRequestEyebrow(null, 'LOC-28')).toBe('Pull request · LOC-28');
-    expect(describePullRequestEyebrow(23, null)).toBe('Pull request #23');
-    expect(describePullRequestEyebrow(null, null)).toBe('Pull request');
+  test('names the pull request by its number when it has one', () => {
+    expect(describePullRequestEyebrow(23)).toBe('Pull request #23');
+    expect(describePullRequestEyebrow(null)).toBe('Pull request');
   });
 });

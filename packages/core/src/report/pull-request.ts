@@ -219,8 +219,8 @@ function serializeManualTesting(report: WorkReport) {
 }
 
 function serializeHeader(task: Task, taskUrl: string) {
-  const name = task.handle ? `${task.handle}, ${task.title}` : task.title;
-  return `> [!NOTE]\n> Shinsa task **${name}**. [Open it in Shinsa](${taskUrl}) to see the full review, the evidence and the agent's work.`;
+  const name = task.handle ? `\`${task.handle}\` **${task.title}**` : `**${task.title}**`;
+  return `> [!NOTE]\n> Shinsa task ${name}. [Open it in Shinsa](${taskUrl}) to see the full review, the evidence and the agent's work.`;
 }
 
 function serializeSections(source: PullRequestSource): Section[] {

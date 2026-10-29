@@ -77,7 +77,7 @@ describe('serializePullRequestMarkdown', () => {
     const markdown = serializePullRequestMarkdown({ task, evidence: [], notes: {} });
     const headings = [
       PULL_REQUEST_BLOCK_START,
-      `> Shinsa task **LOC-28, ${task.title}**. [Open it in Shinsa](${resolveShinsaTaskUrl(task)})`,
+      `> Shinsa task \`LOC-28\` **${task.title}**. [Open it in Shinsa](${resolveShinsaTaskUrl(task)})`,
       'Tabs stay put.',
       '<details open>\n<summary><h3>Approach</h3></summary>\n\nClamp the tab width in one place.',
       '<details open>\n<summary><h3>Evidence</h3></summary>\n\n✅ **Checks**: all 3 passed.',
