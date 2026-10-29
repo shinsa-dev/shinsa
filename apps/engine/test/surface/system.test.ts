@@ -105,6 +105,23 @@ describe('accounts', () => {
     );
   });
 
+  test('an import from claude-swap starts a sign-in and says how to finish; your Claude Code login lists the accounts', async () => {
+    const fake = createFakeClient({
+      '/api/accounts/import': (_path: string, body: unknown) =>
+        (body as { origin: string }).origin === 'cswap'
+          ? createAccountsSnapshot({
+              login: { id: 'login-3', phase: 'waiting', url: 'https://claude.ai/oauth' },
+            })
+          : SNAPSHOT,
+    });
+    expect((await runSpec(fake, ['accounts', 'import', 'cswap', 'swap@example.com'])).text).toBe(
+      'Sign-in login-3: https://claude.ai/oauth. Then run `shinsa accounts sign-in-code login-3 <code>`.'
+    );
+    expect((await runSpec(fake, ['accounts', 'import', 'claude', 'me@example.com'])).text).toBe(
+      'acc-1  me@example.com  max  42% used  (default)'
+    );
+  });
+
   test('import, update and remove post to the account routes', async () => {
     const fake = createFakeClient({
       '/api/accounts': SNAPSHOT,

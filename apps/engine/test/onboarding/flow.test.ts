@@ -326,44 +326,50 @@ describe('the setup steps', () => {
 });
 
 describe('the accounts step', () => {
-  test('imports every login it finds once, skips one already in your accounts, and says what failed', async () => {
+  test('adds your Claude Code login once, skips one already in your accounts, says what failed, and never signs in to claude-swap’s', async () => {
     const world = setup({
       imports: [
         { origin: 'claude', email: 'me@example.com', plan: 'max' },
-        { origin: 'cswap', email: 'work@example.com', plan: null },
-        { origin: 'cswap', email: 'broken@example.com', plan: null },
+        { origin: 'claude', email: 'work@example.com', plan: null },
+        { origin: 'cswap', email: 'swap@example.com', plan: null },
       ],
-      importAccount: (_origin, email) => {
-        if (email === 'broken@example.com') {
-          return Promise.reject(new DomainError('import_failed', 'claude-swap did not hand it over.'));
-        }
-        return Promise.resolve();
-      },
     });
     const flow = await reachAccounts(world);
-    expect(world.importCalls).toEqual(['cswap:work@example.com', 'cswap:broken@example.com']);
+    expect(world.importCalls).toEqual(['claude:work@example.com']);
     expect(flow.step).toMatchObject({
-      imported: [{ origin: 'cswap', email: 'work@example.com', plan: null }],
-      notes: ['claude-swap did not hand it over.'],
+      imported: [{ origin: 'claude', email: 'work@example.com', plan: null }],
+      notes: [],
     });
     await world.onboarding.setup.resolve();
-    expect(world.importCalls).toHaveLength(2);
+    expect(world.importCalls).toHaveLength(1);
     expect(flow.steps[3]?.summary).toBeNull();
   });
 
-  test('an account you removed after it was imported is not imported again', async () => {
-    const world = setup({ imports: [{ origin: 'cswap', email: 'work@example.com', plan: null }] });
+  test('an import that fails is noted, and one you removed after it was imported is not imported again', async () => {
+    const failing = setup({
+      imports: [{ origin: 'claude', email: 'broken@example.com', plan: null }],
+      importAccount: () =>
+        Promise.reject(
+          new DomainError('import_failed', 'Your Claude Code login is no longer broken@example.com.')
+        ),
+    });
+    expect((await reachAccounts(failing)).step).toMatchObject({
+      imported: [],
+      notes: ['Your Claude Code login is no longer broken@example.com.'],
+    });
+
+    const world = setup({ imports: [{ origin: 'claude', email: 'work@example.com', plan: null }] });
     await reachAccounts(world);
     world.accounts.pop();
-    world.imports.push({ origin: 'cswap', email: 'work@example.com', plan: null });
+    world.imports.push({ origin: 'claude', email: 'work@example.com', plan: null });
     await openStep(world.onboarding, 'defaults');
     await answer(world.onboarding, 'defaults', 'model=opus', 'merge=squash', 'plans=no');
-    expect(world.importCalls).toEqual(['cswap:work@example.com']);
+    expect(world.importCalls).toEqual(['claude:work@example.com']);
   });
 
   test('an import that fails in a way Shinsa did not expect is not swallowed', async () => {
     const world = setup({
-      imports: [{ origin: 'cswap', email: 'work@example.com', plan: null }],
+      imports: [{ origin: 'claude', email: 'work@example.com', plan: null }],
       importAccount: () => Promise.reject(new Error('disk full')),
     });
     await expect(reachAccounts(world)).rejects.toThrow('disk full');

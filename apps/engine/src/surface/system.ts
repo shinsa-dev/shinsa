@@ -77,6 +77,12 @@ function formatAccounts(snapshot: AccountsSnapshot) {
   return lines.length === 0 ? 'No Claude accounts.' : lines.join('\n');
 }
 
+function describeSignInStart(snapshot: AccountsSnapshot) {
+  const login = snapshot.login;
+  if (!login) return formatAccounts(snapshot);
+  return `Sign-in ${login.id}: ${login.url ?? 'starting'}. Then run \`shinsa accounts sign-in-code ${login.id} <code>\`.`;
+}
+
 function formatUsage(snapshot: AccountsSnapshot) {
   if (snapshot.accounts.length === 0) return 'No Claude accounts.';
   return snapshot.accounts
@@ -200,13 +206,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       const data = await client.post<AccountsSnapshot>('/api/accounts/login', {
         accountId: account?.id ?? null,
       });
-      const login = data.login;
-      return {
-        data,
-        text: login
-          ? `Sign-in ${login.id}: ${login.url ?? 'starting'}. Then run \`shinsa accounts sign-in-code ${login.id} <code>\`.`
-          : formatAccounts(data),
-      };
+      return { data, text: describeSignInStart(data) };
     },
   }),
   defineAction({
@@ -227,7 +227,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['accounts', 'import'],
-    summary: 'Import a Claude login from Claude Code or claude-swap.',
+    summary: 'Add your Claude Code login, or sign in to an account claude-swap has.',
     humanOnly: true,
     fields: [
       {
@@ -245,7 +245,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         origin: values.origin,
         email: readValue(values, 'email'),
       });
-      return { data, text: formatAccounts(data) };
+      return { data, text: values.origin === 'cswap' ? describeSignInStart(data) : formatAccounts(data) };
     },
   }),
   defineAction({

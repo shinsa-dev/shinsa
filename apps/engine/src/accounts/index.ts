@@ -24,13 +24,7 @@ import { describeError, log } from '../log/index.ts';
 import { type AccountActions, type AccountSource, createSummaryAccountSource } from '../onboarding/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
-import {
-  createKeychainReader,
-  createKeychainWriter,
-  readStoredLogin,
-  type SecretReader,
-  type SecretWriter,
-} from './credentials.ts';
+import { createKeychainReader, readStoredLogin, type SecretReader } from './credentials.ts';
 import { Cswap } from './cswap.ts';
 import { AccountImports } from './imports.ts';
 import { UsageLimits } from './limits.ts';
@@ -57,7 +51,6 @@ export interface AccountsOptions {
   env?: Env;
   run?: ClaudeRunner;
   readSecret?: SecretReader;
-  writeSecret?: SecretWriter;
   requestHttp?: UsageRequester;
   spawnLogin?: LoginSpawner;
   cswap?: Cswap;
@@ -154,13 +147,10 @@ export class Accounts {
       now: this.#now,
       timers: options.loginTimers,
     });
-    const cswap = options.cswap ?? new Cswap({ run: this.#run });
     this.#renewal = new LoginRenewal({
-      cswap,
       env: this.#env,
       userHome,
       readSecret: this.#readSecret,
-      writeSecret: options.writeSecret ?? createKeychainWriter(),
       now: this.#now,
     });
     this.#rotation = new AccountRotation({
@@ -177,9 +167,9 @@ export class Accounts {
       store: this.store,
       limits: this.limits,
       signIns: this.#signIns,
-      cswap,
+      cswap: options.cswap ?? new Cswap({ run: this.#run }),
       readStatus: (env) => this.#status(env),
-      forget: (accountId) => this.#forget(accountId),
+      signIn: (email) => this.#beginLogin(null, email),
       onChange: () => this.#changed(),
     });
   }
@@ -562,9 +552,14 @@ export class Accounts {
 
   async startLogin(accountId: string | null) {
     this.#assertChangeable();
+    await this.#beginLogin(accountId ? this.store.find(accountId) : null, null);
+    return this.snapshot();
+  }
+
+  async #beginLogin(existing: StoredAccount | null, email: string | null) {
     const claude = await this.#resolveClaude();
-    const account = accountId ? this.store.find(accountId) : this.store.create('login');
-    if (!accountId) this.#newLogins.add(account.id);
+    const account = existing ?? this.store.create('login', { email });
+    if (!existing) this.#newLogins.add(account.id);
     if (account.configDir) this.store.linkSharedEntries(account.configDir);
     this.logins.start({
       accountId: account.id,
@@ -573,7 +568,6 @@ export class Accounts {
       env: resolveAccountEnv(account.configDir),
       email: account.email,
     });
-    return this.snapshot();
   }
 
   #finishLogin: LoginFinisher = async (accountId, loginId) => {
@@ -583,8 +577,15 @@ export class Accounts {
     if (status.signIn !== 'signed_in') {
       return { ok: false, message: 'Sign-in finished, but Claude still reports this account as signed out.' };
     }
+    const isNew = this.#newLogins.has(accountId);
+    if (isNew && account.email && status.email?.toLowerCase() !== account.email.toLowerCase()) {
+      return {
+        ok: false,
+        message: `You signed in as ${status.email ?? 'another account'}, not ${account.email}. Sign in as ${account.email} to add it.`,
+      };
+    }
     const twin = this.store.selectByIdentity(status, accountId);
-    if (twin && this.#newLogins.has(accountId)) {
+    if (twin && isNew) {
       return { ok: false, message: `${status.email} is already in your accounts.` };
     }
     this.store.update(accountId, {
@@ -607,7 +608,7 @@ export class Accounts {
 
   #loginEnded(accountId: string, done: boolean) {
     if (done || !this.#newLogins.delete(accountId)) return;
-    this.#forget(accountId).catch((error: unknown) => {
+    this.#forgetUnused(accountId).catch((error: unknown) => {
       log.warn('[Accounts] Could not clear an account that never signed in', {
         accountId,
         error: describeError(error),
@@ -650,6 +651,11 @@ export class Accounts {
     if (patch.switchAt !== undefined) this.store.update(account.id, { switchAt: patch.switchAt });
     if (patch.position !== undefined) this.store.move(account.id, patch.position);
     return this.snapshot();
+  }
+
+  async #forgetUnused(accountId: string) {
+    await this.#forget(accountId);
+    await this.#imports.sync();
   }
 
   async remove(accountId: unknown) {

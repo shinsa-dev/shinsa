@@ -1,10 +1,8 @@
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { type AccountImport, DomainError } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { Cswap } from './cswap.ts';
 import type { UsageLimits } from './limits.ts';
-import { type Env, resolveAccountEnv } from './paths.ts';
+import type { Env } from './paths.ts';
 import type { SignInState } from './rotation.ts';
 import type { AuthStatus } from './status.ts';
 import type { AccountStore } from './store.ts';
@@ -15,7 +13,7 @@ export interface AccountImportsOptions {
   signIns: Map<string, SignInState>;
   cswap: Cswap;
   readStatus: (env: Env) => Promise<AuthStatus>;
-  forget: (accountId: string) => Promise<void>;
+  signIn: (email: string) => Promise<void>;
   onChange: () => void;
 }
 
@@ -92,32 +90,9 @@ export class AccountImports {
   }
 
   async #importCswap(email: string) {
-    const { store } = this.#options;
-    const login = await this.#options.cswap.export(email);
-    if (!login) {
-      throw new DomainError(
-        'import_failed',
-        `claude-swap did not hand over ${email}. Sign in to it instead.`
-      );
-    }
-    const organization =
-      typeof login.oauthAccount?.organizationName === 'string' ? login.oauthAccount.organizationName : null;
-    if (store.selectByIdentity({ email, organization }))
+    if (this.#options.store.selectByIdentity({ email, organization: null }))
       throw new DomainError('account_exists', `${email} is already in your accounts.`);
-    const account = store.create('cswap', { email, organization });
-    const configDir = account.configDir as string;
-    writeFileSync(join(configDir, '.credentials.json'), JSON.stringify(login.credentials), { mode: 0o600 });
-    if (login.oauthAccount) store.writeAccountConfig(configDir, { oauthAccount: login.oauthAccount });
-    const status = await this.#options.readStatus(resolveAccountEnv(configDir));
-    if (status.signIn !== 'signed_in' || status.email?.toLowerCase() !== email.toLowerCase()) {
-      await this.#options.forget(account.id);
-      throw new DomainError(
-        'import_failed',
-        `The copy of ${email} from claude-swap did not work. Sign in to it instead.`
-      );
-    }
-    store.update(account.id, { plan: status.plan });
-    await this.#recordImported(account.id);
+    await this.#options.signIn(email);
   }
 
   async #recordImported(accountId: string) {

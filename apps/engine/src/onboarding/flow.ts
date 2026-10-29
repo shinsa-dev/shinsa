@@ -303,7 +303,9 @@ export class OnboardingSetup {
       )
     );
     const tried = new Set(draft.tried);
-    const fresh = (await actions.listImports()).filter((entry) => !tried.has(resolveImportKey(entry)));
+    const fresh = (await actions.listImports()).filter(
+      (entry) => entry.origin === 'claude' && !tried.has(resolveImportKey(entry))
+    );
     if (fresh.length === 0) return;
     for (const entry of fresh) {
       draft.tried.push(resolveImportKey(entry));

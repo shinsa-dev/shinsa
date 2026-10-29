@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountsSnapshot, ProviderLogin, RunAccount, RunFailure, ShinsaCommand } from '@shinsa/core';
 import { Cswap } from '../../src/accounts/cswap.ts';
@@ -63,7 +63,6 @@ function createWorld(options: WorldOptions = {}) {
   const usage = new Map<string, unknown>();
   const processes: FakeProcess[] = [];
   let cswapList: unknown = { accounts: [] };
-  let cswapExport: unknown = null;
   let now = options.now ?? 1_000_000;
   let keychainBroken = false;
   const stub: StubEngine = createStubEngine();
@@ -72,9 +71,6 @@ function createWorld(options: WorldOptions = {}) {
     calls.push({ command, env });
     if (command[0] === '/bin/cswap' && command[1] === 'list')
       return Promise.resolve(result(JSON.stringify(cswapList)));
-    if (command[0] === '/bin/cswap' && command[1] === 'export') {
-      return Promise.resolve(cswapExport ? result(JSON.stringify(cswapExport)) : result('', false));
-    }
     if (command[1] === 'auth' && command[2] === 'status') {
       const status = statuses.get(env.CLAUDE_CONFIG_DIR ?? 'default') ?? { loggedIn: false };
       return Promise.resolve(result(JSON.stringify(status), status.loggedIn));
@@ -104,10 +100,6 @@ function createWorld(options: WorldOptions = {}) {
       secretReads.push(service);
       if (keychainBroken) return Promise.reject(new Error('keychain locked'));
       return Promise.resolve(secrets.get(service) ?? null);
-    },
-    writeSecret: (service, _account, value) => {
-      secrets.set(service, value);
-      return Promise.resolve(true);
     },
     requestHttp: (_url, init) => {
       const token = (init.headers as Record<string, string>).Authorization?.replace('Bearer ', '') ?? '';
@@ -144,9 +136,8 @@ function createWorld(options: WorldOptions = {}) {
     get now() {
       return now;
     },
-    setCswap: (list: unknown, exported: unknown) => {
+    setCswap: (list: unknown) => {
       cswapList = list;
-      cswapExport = exported;
     },
     login: (dir: string | null, token: string, plan = 'max') => {
       secrets.set(
@@ -518,67 +509,61 @@ describe('importing logins', () => {
     );
   });
 
-  test('an account from claude-swap is copied into its own folder and checked before it is kept', async () => {
+  test('an account from claude-swap gets a sign-in of its own, and claude-swap’s login is never read', async () => {
     const world = createWorld({ registry: true });
-    const oauth = { accessToken: 'a', refreshToken: 'r', expiresAt: 1 };
-    world.setCswap(
-      { accounts: [{ email: 'swap@example.com', organizationName: 'Swap' }] },
-      {
-        accounts: [
-          {
-            email: 'swap@example.com',
-            credentials: { claudeAiOauth: oauth, mcpOAuth: { secret: 'machine' } },
-            config: { oauthAccount: { emailAddress: 'swap@example.com', organizationName: 'Swap' } },
-          },
-        ],
-      }
-    );
+    world.setCswap({ accounts: [{ email: 'swap@example.com', organizationName: 'Swap' }] });
     await world.accounts.refresh();
     expect(world.accounts.snapshot().imports).toEqual([
       { origin: 'cswap', email: 'swap@example.com', plan: null },
     ]);
-    world.statuses.set('pending', { loggedIn: false });
-    const original = world.accounts.store.create.bind(world.accounts.store);
-    let dir = '';
-    world.accounts.store.create = (origin, details) => {
-      const created = original(origin, details);
-      dir = created.configDir as string;
-      world.statuses.set(dir, { loggedIn: true, email: 'swap@example.com', subscriptionType: 'team' });
-      return created;
-    };
     const snapshot = await world.accounts.importAccount('cswap', 'swap@example.com');
-    expect(snapshot.accounts[0]).toMatchObject({
-      origin: 'cswap',
-      email: 'swap@example.com',
-      organization: 'Swap',
+    expect(snapshot.login).toMatchObject({ email: 'swap@example.com', phase: 'starting' });
+    const [account] = world.accounts.store.list();
+    expect(account).toMatchObject({ origin: 'login', email: 'swap@example.com' });
+    const dir = account?.configDir as string;
+    expect(existsSync(join(dir, '.credentials.json'))).toBe(false);
+    expect(world.calls.at(-1)?.command).toEqual(['claude', 'auth', 'login', '--claudeai']);
+    expect(world.calls.at(-1)?.env.CLAUDE_CONFIG_DIR).toBe(dir);
+
+    world.statuses.set(dir, { loggedIn: true, email: 'Swap@example.com', subscriptionType: 'team' });
+    world.processes.at(-1)?.exit(0);
+    await until('the sign-in to finish', () => world.accounts.logins.current()?.phase === 'done');
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({
+      origin: 'login',
+      email: 'Swap@example.com',
       plan: 'team',
+      signIn: 'signed_in',
     });
-    expect(JSON.parse(readFileSync(join(dir, '.credentials.json'), 'utf8'))).toEqual({
-      claudeAiOauth: oauth,
-    });
-    expect(statSync(join(dir, '.credentials.json')).mode & 0o777).toBe(0o600);
-    expect(JSON.parse(readFileSync(join(dir, '.claude.json'), 'utf8')).oauthAccount.emailAddress).toBe(
-      'swap@example.com'
-    );
+    expect(world.accounts.snapshot().imports).toEqual([]);
+    expect(world.calls.some((call) => call.command[1] === 'export')).toBe(false);
     await expect(world.accounts.importAccount('cswap', 'swap@example.com')).rejects.toThrow(
       'swap@example.com is already in your accounts.'
     );
   });
 
-  test('a claude-swap login that does not hand over, or does not work, is not kept', async () => {
+  test('signing in as another account than the claude-swap one you picked adds nothing', async () => {
     const world = createWorld({ registry: true });
-    world.setCswap({ accounts: [] }, null);
-    await expect(world.accounts.importAccount('cswap', 'gone@example.com')).rejects.toThrow(
-      'claude-swap did not hand over gone@example.com. Sign in to it instead.'
+    world.setCswap({ accounts: [{ email: 'swap@example.com' }] });
+    await world.accounts.refresh();
+    await world.accounts.importAccount('cswap', 'swap@example.com');
+    const dir = world.accounts.store.list()[0]?.configDir as string;
+    world.statuses.set(dir, { loggedIn: true, email: 'other@example.com' });
+    world.processes.at(-1)?.exit(0);
+    await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
+    expect(world.accounts.snapshot().login?.message).toBe(
+      'You signed in as other@example.com, not swap@example.com. Sign in as swap@example.com to add it.'
     );
-    world.setCswap(
-      { accounts: [] },
-      { accounts: [{ email: 'dead@example.com', credentials: { claudeAiOauth: { refreshToken: 'r' } } }] }
+    await until('the account to be removed', () => world.accounts.store.list().length === 0);
+    await until('the account to be offered again', () => world.accounts.snapshot().imports.length === 1);
+
+    await world.accounts.importAccount('cswap', 'swap@example.com');
+    const again = world.accounts.store.list()[0]?.configDir as string;
+    world.statuses.set(again, { loggedIn: true });
+    world.processes.at(-1)?.exit(0);
+    await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
+    expect(world.accounts.snapshot().login?.message).toBe(
+      'You signed in as another account, not swap@example.com. Sign in as swap@example.com to add it.'
     );
-    await expect(world.accounts.importAccount('cswap', 'dead@example.com')).rejects.toThrow(
-      'The copy of dead@example.com from claude-swap did not work. Sign in to it instead.'
-    );
-    expect(world.accounts.store.list()).toEqual([]);
   });
 
   test('an import names its account and comes from a known place', async () => {
@@ -652,12 +637,7 @@ describe('one login, one account', () => {
   test('an account already held by your Claude Code login is neither offered nor imported from claude-swap', async () => {
     const world = createWorld({ registry: true });
     await addClaudeLogin(world, 'me@example.com', 'Acme');
-    const login = {
-      email: 'me@example.com',
-      credentials: { claudeAiOauth: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 } },
-      config: { oauthAccount: { emailAddress: 'me@example.com', organizationName: 'Acme' } },
-    };
-    world.setCswap({ accounts: [{ email: 'me@example.com' }] }, { accounts: [login] });
+    world.setCswap({ accounts: [{ email: 'me@example.com' }] });
     await world.accounts.refresh();
     expect(world.accounts.snapshot().imports).toEqual([]);
     await expect(world.accounts.importAccount('cswap', 'ME@example.com')).rejects.toThrow(
@@ -969,27 +949,12 @@ describe('moving a rejected attempt to another account', () => {
     });
   }
 
-  test('a login Claude could not refresh is read again from claude-swap and its account tried once more', async () => {
+  test('a copied claude-swap login Claude could not refresh is never copied again; the gate asks for a login of its own', async () => {
     const world = createWorld({ registry: true });
     const swapped = world.accounts.store.create('cswap', { email: 'a@example.com' });
     const dir = swapped.configDir as string;
     storeLogin(world, dir, 'dead', world.now - HOUR);
-    world.setCswap(
-      { accounts: [] },
-      {
-        accounts: [
-          {
-            email: 'a@example.com',
-            credentials: {
-              claudeAiOauth: { accessToken: 'at-fresh', refreshToken: 'fresh', expiresAt: world.now + HOUR },
-            },
-          },
-        ],
-      }
-    );
-    expect(await rejectToken(world, swapped.id, [swapped.id])).toEqual({ retry: true, renewed: swapped.id });
-    expect(readRefreshToken(world, dir)).toBe('fresh');
-    const last = await rejectToken(world, swapped.id, [swapped.id], [swapped.id]);
+    const last = await rejectToken(world, swapped.id, [swapped.id]);
     expect(last).toEqual({
       retry: false,
       failure: failure({
@@ -997,10 +962,12 @@ describe('moving a rejected attempt to another account', () => {
         code: 'login_expired',
         retryable: null,
         message:
-          'Claude could not refresh the login of a@example.com. Sign in to it here, or sign in to Claude Code as a@example.com and run `cswap add`: Shinsa takes the new login from claude-swap.',
+          'Claude could not refresh the login of a@example.com. Sign in to it here, so Shinsa has a login of its own instead of a copy of claude-swap’s.',
         account: { id: swapped.id, email: 'a@example.com' },
       }),
     });
+    expect(readRefreshToken(world, dir)).toBe('dead');
+    expect(world.calls.some((call) => call.command[0] === '/bin/cswap')).toBe(false);
     expect(world.accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
   });
 
