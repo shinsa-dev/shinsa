@@ -2506,10 +2506,11 @@ Only these, and they win over anything below:
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. The review links the task's running previews too, without the
-      agent attaching them: Evidence opens with "Running for this task" and How to test with "Open it on this
-      machine", a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's name, its URL;
-      `listTaskPreviews`), there only while the run is active. A row has no `•••`: editing and removing are Manage's. Measured in the
+      Terminal page's toolbar have the same button. Evidence's Preview group links the task's running previews too,
+      after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
+      name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
+      link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
+      path). How to test stays the agent's: it names the preview it attached. A row has no `•••`: editing and removing are Manage's. Measured in the
       browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
       24px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the

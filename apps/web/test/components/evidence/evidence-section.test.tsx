@@ -302,26 +302,63 @@ describe('evidence brought up to date', () => {
 });
 
 describe('the task’s running services in the Evidence section', () => {
-  it('links each running preview of the task, even before any evidence is attached', () => {
-    const state = createTerminalState();
+  function runWeb(port: number) {
     const web = createService({
       id: 'web',
       cwd: '/Users/you/Developer/web',
       previewUrl: 'http://localhost:{port}/',
     });
     connection.replaceTerminals(
-      createTerminalsSnapshot(
-        [createTerminal({ id: 'run', serviceId: 'web', taskId: 'fix', port: 4123 })],
-        [web]
-      )
+      createTerminalsSnapshot([createTerminal({ id: 'run', serviceId: 'web', taskId: 'fix', port })], [web])
     );
+  }
+
+  function renderTaskSection(evidence: Evidence[]) {
+    const attached = createShinsaState({
+      evidence: evidence.map((each) => ({ ...each, taskId: 'fix' })),
+      runs: [createRun({ id: 'build', taskId: 'fix' })],
+    });
+    const state = { ...createTerminalState(), evidence: attached.evidence, runs: attached.runs };
+    return render(
+      <TooltipProvider>
+        <EvidenceSection state={state} task={state.tasks.fix as Task} />
+      </TooltipProvider>
+    );
+  }
+
+  it('links each running preview of the task under Preview, even before any evidence is attached', () => {
+    const state = createTerminalState();
+    runWeb(4123);
     render(
       <TooltipProvider>
         <EvidenceSection state={state} task={state.tasks.fix as Task} />
       </TooltipProvider>
     );
-    expect(screen.getByText('Running for this task')).toBeTruthy();
+    expect(screen.getByText('Preview')).toBeTruthy();
     expect(screen.getByText('web').closest('a')?.getAttribute('href')).toBe('http://localhost:4123/');
     expect(screen.getByText(EVIDENCE_EMPTY)).toBeTruthy();
+  });
+
+  it('puts a running preview in the agent’s Previews, after the ones it attached', () => {
+    runWeb(4123);
+    renderTaskSection([piece('remote', { kind: 'preview', title: 'Remote', uri: 'https://preview.dev' })]);
+    const label = screen.getByText('Previews');
+    const section = label.closest('section') as HTMLElement;
+    const links = within(section).getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      'https://preview.dev',
+      'http://localhost:4123/',
+    ]);
+  });
+
+  it('leaves out a running preview the agent attached already, path and all', () => {
+    runWeb(4123);
+    renderTaskSection([
+      piece('local', { kind: 'preview', title: 'Editor', uri: 'http://localhost:4123/editor' }),
+    ]);
+    expect(screen.getByText('Preview')).toBeTruthy();
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).not.toContain(
+      'http://localhost:4123/'
+    );
   });
 });

@@ -16,6 +16,7 @@ import { TaskPreviewLinks, useTaskPreviews } from '@/components/services/task-pr
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
+  describeEvidenceKind,
   type EarlierEvidenceEntry,
   type EvidenceEntry,
   type EvidenceGroup,
@@ -34,6 +35,7 @@ import {
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
 import { type ChecksView, resolveChecksView, resolveEvidenceCheckRow } from '@/lib/tasks/checks.ts';
+import { listUnattachedPreviews } from '@/lib/terminal/services.ts';
 
 type Viewer = ReturnType<typeof useImageViewer>;
 
@@ -42,16 +44,22 @@ export const EVIDENCE_EMPTY =
 
 const EVIDENCE_ALL_REMOVED = 'The agents removed the evidence they attached this round.';
 
-export const RUNNING_PREVIEWS = 'Running for this task';
-
-function RunningPreviews({ views }: { views: ServiceView[] }) {
+function LocalPreviews({ views }: { views: ServiceView[] }) {
   if (views.length === 0) return null;
   return (
     <section className='flex min-w-0 flex-col gap-1'>
-      <SectionLabel count={views.length > 1 ? views.length : undefined}>{RUNNING_PREVIEWS}</SectionLabel>
+      <SectionLabel count={views.length > 1 ? views.length : undefined}>
+        {describeEvidenceKind('preview', views.length)}
+      </SectionLabel>
       <TaskPreviewLinks views={views} />
     </section>
   );
+}
+
+function listAttachedUris(layout: EvidenceLayout) {
+  return layout.groups
+    .filter((group) => group.kind === 'preview')
+    .flatMap((group) => group.entries.flatMap((entry) => entry.parts.map((part) => part.evidence.uri)));
 }
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
@@ -175,16 +183,20 @@ function Group({
   group,
   viewer,
   checks,
+  local = [],
 }: {
   group: EvidenceGroup;
   viewer: Viewer;
   checks: ChecksView | null;
+  local?: ServiceView[];
 }) {
-  const count = group.entries.length;
+  const count = group.entries.length + local.length;
   const linked = group.entries.filter((entry) => entry.check);
   return (
     <section className='flex min-w-0 flex-col gap-1'>
-      <SectionLabel count={count > 1 ? count : undefined}>{group.label}</SectionLabel>
+      <SectionLabel count={count > 1 ? count : undefined}>
+        {local.length > 0 ? describeEvidenceKind(group.kind, count) : group.label}
+      </SectionLabel>
       {group.kind === 'comparison' && (
         <div className='flex flex-col gap-4'>
           {group.entries.map((entry) => (
@@ -199,6 +211,7 @@ function Group({
           viewer={viewer}
         />
       )}
+      {local.length > 0 && <TaskPreviewLinks views={local} />}
     </section>
   );
 }
@@ -261,13 +274,21 @@ function EvidenceBody({
 }) {
   const viewer = useImageViewer();
   const earlier = useDisclosure(extendDisclosureId(persistId, 'earlier'), false);
+  const local = listUnattachedPreviews(previews, listAttachedUris(layout));
+  const attached = layout.groups.some((group) => group.kind === 'preview');
   return (
     <div className='flex flex-col gap-5'>
-      <RunningPreviews views={previews} />
       {layout.count === 0 && <p className='text-fg-2 text-xs'>{EVIDENCE_ALL_REMOVED}</p>}
       {layout.groups.map((group) => (
-        <Group key={group.kind} group={group} viewer={viewer} checks={checks} />
+        <Group
+          key={group.kind}
+          group={group}
+          viewer={viewer}
+          checks={checks}
+          local={group.kind === 'preview' ? local : []}
+        />
       ))}
+      {!attached && <LocalPreviews views={local} />}
       {layout.earlier.length > 0 && (
         <EarlierVersions entries={layout.earlier} disclosure={earlier} viewer={viewer} />
       )}
@@ -318,8 +339,8 @@ export function EvidenceSection({
     return (
       <Panel persistId={persistId} title='Evidence' icon='IconImages1'>
         <div className='flex flex-col gap-5'>
-          <RunningPreviews views={previews} />
           <p className='text-fg-2 text-xs'>{EVIDENCE_EMPTY}</p>
+          <LocalPreviews views={previews} />
         </div>
       </Panel>
     );

@@ -1891,8 +1891,8 @@ beside your run (Runs for a task, below).
   `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Before the
   review, the last phase asks the Agent to start the services that show the change and attach each URL, with the path
   to the screen to check, as `preview` evidence, which How to test links (`resolvePhaseInstruction`, the evidence
-  skill); the review also links every active run of the task with a preview URL, attached or not (`docs/design.md`,
-  37). The preview runs while the task waits for review and the merge, and stops when the task settles:
+  skill); Evidence's Preview group also links each active run of the task the agent did not attach
+  (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
 - **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
   (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), so no dev server keeps running in a

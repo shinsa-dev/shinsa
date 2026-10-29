@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { type Coverage, resolveServiceView } from '@shinsa/core';
+import type { Coverage } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { createFullCoverage, createPartialCoverage } from '../../support/coverage.ts';
-import { createTask, NOW } from '../../support/state.ts';
-import { createService, createTerminal } from '../../support/terminals.ts';
+import { createTask } from '../../support/state.ts';
 
 const TASK = createTask({ id: 't', handle: 'SW-7', repoId: 'web' });
 
@@ -60,36 +59,5 @@ describe('How to test: coverage', () => {
     unmount();
     renderPanel({ status: 'unavailable', command: 'bun test', reason: 'No report.' });
     expect(screen.queryByText('Covered by tests')).toBeNull();
-  });
-});
-
-describe('How to test: the task’s running services', () => {
-  it('links each running preview of the task first, so you can open it on this machine', () => {
-    const view = resolveServiceView(
-      createService({ id: 'web', previewUrl: 'http://localhost:{port}/editor' }),
-      createTerminal({ id: 'run', serviceId: 'web', taskId: 't', port: 4123, startedAt: 0 }),
-      NOW,
-      't'
-    );
-    render(
-      <TooltipProvider>
-        <TestingPanel
-          persistId={createDisclosureId('task', 't', 'review', 'panel', 'testing')}
-          task={TASK}
-          testing={null}
-          checks={null}
-          previews={[view]}
-        />
-      </TooltipProvider>
-    );
-    expect(screen.getByText('Open it on this machine')).toBeDefined();
-    const link = screen.getByText('web').closest('a');
-    expect(link?.getAttribute('href')).toBe('http://localhost:4123/editor');
-    expect(link?.getAttribute('target')).toBe('_blank');
-  });
-
-  it('says nothing about previews when none runs', () => {
-    renderPanel(null);
-    expect(screen.queryByText('Open it on this machine')).toBeNull();
   });
 });

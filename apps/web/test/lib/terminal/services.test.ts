@@ -28,6 +28,7 @@ import {
   listServicePlaces,
   listStoppedServices,
   listTaskPreviews,
+  listUnattachedPreviews,
   openServicePreview,
   parseServiceEnv,
   resolveActiveService,
@@ -308,6 +309,9 @@ describe('a task’s previews', () => {
       'http://localhost:4123/',
     ]);
     expect(listTaskPreviews(state, null, task, LATER)).toEqual([]);
+    const previews = listTaskPreviews(state, snapshot, task, LATER);
+    expect(listUnattachedPreviews(previews, ['https://preview.dev', 'not a url'])).toEqual(previews);
+    expect(listUnattachedPreviews(previews, ['http://localhost:4123/editor'])).toEqual([]);
   });
 });
 

@@ -107,6 +107,19 @@ export function listTaskPreviews(
   return listTaskServices(state, snapshot, task, now).filter((view) => selectServicePreview(view) !== null);
 }
 
+function resolveOrigin(url: string) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function listUnattachedPreviews(views: ServiceView[], attached: readonly string[]) {
+  const origins = new Set(attached.map(resolveOrigin));
+  return views.filter((view) => !origins.has(resolveOrigin(selectServicePreview(view) ?? '')));
+}
+
 export function describeServicePreview(view: ServiceView, label: string | null = null) {
   return label ? `Open ${view.service.name} for ${label}` : `Open ${view.service.name}`;
 }
