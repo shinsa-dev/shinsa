@@ -3,7 +3,6 @@ import { Badge } from '@shinsa/ui/components/badge';
 import { Card } from '@shinsa/ui/components/card';
 import { Checkbox } from '@shinsa/ui/components/checkbox';
 import { HighlightList } from '@shinsa/ui/components/highlight-list';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import {
@@ -29,14 +28,7 @@ function OptionText({ option }: { option: OnboardingOption }) {
   );
 }
 
-function OptionEnd({ busy, selected }: { busy: boolean; selected: boolean }) {
-  if (busy) {
-    return (
-      <span className={cn(ICON_SLOT, 'self-center text-fg-2')}>
-        <Spinner size='sm' />
-      </span>
-    );
-  }
+function OptionEnd({ selected }: { selected: boolean }) {
   if (!selected) return null;
   return (
     <span className={cn(ICON_SLOT, 'self-center')}>
@@ -50,7 +42,6 @@ export function OptionList({
   values,
   multiple,
   label,
-  busyValue,
   disabled,
   autoFocus,
   onPick,
@@ -60,7 +51,6 @@ export function OptionList({
   values: string[];
   multiple: boolean;
   label: string;
-  busyValue: string | null;
   disabled: boolean;
   autoFocus: boolean;
   onPick: (value: string) => void;
@@ -138,7 +128,7 @@ export function OptionList({
                     </span>
                   )}
                   <OptionText option={option} />
-                  <OptionEnd busy={busyValue === option.value} selected={selected && !multiple} />
+                  <OptionEnd selected={selected && !multiple} />
                 </div>
               );
             })}

@@ -3831,10 +3831,13 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** The engine is a background process, so it cannot answer macOS's consent prompts
-  well: discovery in the bundle skips `~/Desktop`, `~/Documents` and `~/Downloads` (`createDiscoverer`), and a folder
-  chosen at setup that the engine may not read is refused with `roots_unreadable`, which says to give Shinsa Full Disk
-  Access (`resolveChosenRoots`).
+- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
+  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
+  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+  the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
+  (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
+  offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
+  the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.
 
 Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies. Its
 `dev` and `start` scripts (`apps/engine/package.json`) pass `SHINSA_PORT=5180` unless one is exported, so a checkout
@@ -3881,6 +3884,9 @@ into hidden folders, `node_modules`, `Library`, caches, build output or media fo
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
 
+**`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
+machine; answers `{ ok }`, whether `open` ran.
+
 **`GET /api/onboarding/prerequisites`**: the tools Shinsa needs, checked on this machine (each with a 15 second
 limit).
 
@@ -3892,7 +3898,8 @@ limit).
     label: string;      // "GitHub CLI", "Signed in to Claude"
     ok: boolean;
     detail: string;     // the version, "Signed in as octo.", or what went wrong
-    fix: string | null; // one sentence with the command that fixes it
+    fix: string | null; // one sentence on what fixes it
+    command: string | null; // the command to copy, when one fixes it (`gh auth login`)
     optional?: true;    // codex and codex_auth
   }[];
 }
@@ -3905,18 +3912,20 @@ limit).
 
 The web's setup is a short run of steps the server keeps (`apps/engine/src/onboarding/flow.ts`), over a fixed,
 ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
-discovered folders with their repository counts, several at once, and any other folder by its path), `model` (the
-default model, from the provider's catalog, or each role's own), `merge` (the merge method), `plans` (plan approval
-for large tasks), `accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login,
-claude and its login, bun, and optionally codex and its login, each with its fix). Each step has a short label for
-the steps along the top (Folders, Model, Merging, Plans, Accounts, Tools), a title and a one-line description.
+discovered folders with their repository counts, several at once, and any other folder by its path), `projects`
+(the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
+default model, from the provider's catalog, or each role's own; the merge method; plan approval for large tasks),
+`accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
+bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
+the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.
 Nothing you send can add, drop or reorder a step: a reply only ever answers the step on screen or opens one you
 have reached.
 
-- **Answering** (`{ type: 'answer', stepId, values }`) is checked against the step on screen and saved at once:
-  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `model`, `merge` and `plans` exactly one of
-  their options (`model`'s `:roles` saves no default model, so each role keeps its own), and `accounts` and
-  `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
+- **Answering** (`{ type: 'answer', stepId, values, projects? }`) is checked against the step on screen and saved at once:
+  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `defaults` exactly one option of each of its
+  three groups, each value written `<group>=<option>` (`serializeChoiceValue`, so `model=opus`, `merge=squash`,
+  `plans=yes`; `model=:roles` saves no default model, so each role keeps its own), all three saved as one
+  `settings.change`, and `projects`, `accounts` and `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
   the step refuses (a folder that is not there, one macOS keeps private, an option that is not listed) stays on the
   step with the reason as its `problem`, which the next reply clears. There are no free answers to read and no
   model call: an answer is a pick, or for folders a path.
@@ -3924,13 +3933,27 @@ have reached.
   you can change an answer you gave: a step you have answered lists that answer `chosen`, a new answer replaces it
   (with a command id of its own, so going back to the first answer saves it again), and you carry on from the step
   after it. The later steps keep their answers, shown again `chosen` when you get to them, and the steps along the
-  top carry each answered step's summary ("~/Developer and 1 more", "Opus 5.5", "Squash", "Plan first", "2
-  accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
+  top carry each answered step's summary ("~/Developer and 1 more", "6 projects", "Opus 5.5 · Squash · Plan first",
+  "2 accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
   one on screen with `step_stale`.
-- **Nothing is chosen for you on a step you have not answered**, a saved or default setting included: the options
-  carry no `chosen` until you answer the step, and `merge`'s Squash and `plans`' Show me the plan first are marked
-  `recommended` instead. `roots` is the exception, as it picks several at once: the folders already in
-  `config.json` start chosen, and with none, the found folder with the most repositories does.
+- **The recommended choice is picked for you**, so one Continue gets through a step: `defaults` starts with the
+  current model (or each role's own when none is set), Squash and Show me the plan first `chosen` and `recommended`;
+  once you have answered it, it shows what you saved. `roots` starts with the folders already in `config.json`, and
+  with none, the found folder with the most repositories; `projects` starts with every suggestion kept.
+- **Projects are suggested, not asked for** (`onboarding/projects.ts`, core's `resolveProjectSuggestions` in
+  `domain/project-suggestions.ts`). The step lists the repositories one level inside each chosen folder (and any
+  registered deeper inside one), each with its origin read from `.git/config` without running git
+  (`readOriginRemote`, following a worktree's `gitdir` and `commondir`), and groups them: by GitHub owner, your own
+  login (`gh api user`) and owners with a single repository into Personal, a product with three or more remotes
+  sharing a first word split off its owner, a repository with no remote by its name's first word or else into the
+  group holding most of its folder, and a chosen folder that is mostly one group becomes that project's folder.
+  Repositories already in a project are left out, and a suggestion named like a project you have adds to it. The
+  answer may carry `projects` (`{ id, name, repos }[]`, the suggestions you keep, renamed or with repositories left
+  out): without it every suggestion is created as shown, and an empty list creates none. Each kept suggestion is a
+  `project.write` with its suggested key and colour (its folder only when no repository was left out, so a folder
+  never files one back in), and each repository is registered in it through `createProjectChanges().upsertRepo`,
+  with ids from the answer's command id. A stale suggestion id, an empty or long name, or no repositories left is
+  the step's `problem`.
 - **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports every login
   `AccountActions.listImports` offers (your Claude Code login and each claude-swap account, Accounts and usage
   limits above) whose email is not already one of your accounts, through the same import Settings uses. An email
@@ -3945,8 +3968,9 @@ have reached.
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
   on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
   its receipt while a later answer to the same step is not.
-- **Persistence.** The run of setup lives in `data/onboarding.json` (version 2, written atomically: the step on
-  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem), so a
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 4, written atomically: the step on
+  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem, and the
+  private folders with the picks they came from), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
 - **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
@@ -3964,11 +3988,14 @@ how the tools are checked again.
   steps: { id: StepId; label: string; summary: string | null; reached: boolean }[];
   index: number;                   // the step on screen; steps.length once setup is done
   step: {                          // null once setup is done
-    id: 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+    id: 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';
     title: string;
     description: string;
     multiple: boolean;             // roots: pick several
     options: { value: string; label: string; detail: string | null; chosen: boolean; recommended: boolean }[];
+    groups: { id: 'model' | 'merge' | 'plans'; label: string; options: Option[] }[]; // defaults
+    projects: ProjectSuggestion[]; // projects: { id, name, key, color, projectId, folders, repos }
+    access: string[];              // roots: the folders macOS keeps private, to ask access for
     checks: Check[];               // prerequisites
     ready: boolean;                // prerequisites: every required tool is there
     imported: AccountImport[];     // accounts: what this run imported
@@ -3981,8 +4008,8 @@ how the tools are checked again.
 ```
 
 **`POST /api/onboarding/flow`** with a reply (`answer`, `open` or `restart`): answers with the run. Codes:
-`body_invalid`, `step_invalid`, `values_invalid`, `reply_invalid`, `step_stale`, `step_unreached`,
-`setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
+`body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
+`step_unreached`, `setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
 
 ## The socket
 

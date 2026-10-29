@@ -100,13 +100,13 @@ describe('the setup requests', () => {
     });
     expect(await requestOnboardingFlow()).toEqual(flow);
     const answered = await act(() =>
-      replyToOnboarding({ type: 'answer', stepId: 'merge', values: ['squash'] })
+      replyToOnboarding({ type: 'answer', stepId: 'defaults', values: ['merge=squash'] })
     );
     expect(answered.step).toBeNull();
     expect(fake.requests[1]).toEqual({
       path: '/api/onboarding/flow',
       method: 'POST',
-      body: { type: 'answer', stepId: 'merge', values: ['squash'] },
+      body: { type: 'answer', stepId: 'defaults', values: ['merge=squash'] },
     });
     await waitFor(() => expect(fake?.requests.at(-1)?.path).toBe('/api/onboarding'));
     expect((await requestRootSuggestions()).suggestions[0]?.repoCount).toBe(2);

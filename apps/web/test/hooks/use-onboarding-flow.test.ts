@@ -27,7 +27,7 @@ afterEach(() => {
 describe('useOnboardingFlow', () => {
   it('loads the step, marks what is being sent and slides forward to the next one', async () => {
     let reply = (_flow: unknown) => {};
-    const next = createFlow(createStep({ id: 'plans' }));
+    const next = createFlow(createStep({ id: 'accounts' }));
     fake = startFakeOnboarding({
       'GET /api/onboarding/flow': { answer: createFlow(createStep()) },
       'POST /api/onboarding/flow': {
@@ -39,10 +39,10 @@ describe('useOnboardingFlow', () => {
       'GET /api/onboarding': { answer: createOnboardingStatus() },
     });
     const { result } = renderHook(() => useOnboardingFlow());
-    await waitFor(() => expect(result.current.flow?.step?.id).toBe('merge'));
+    await waitFor(() => expect(result.current.flow?.step?.id).toBe('defaults'));
     let sent: Promise<boolean> = Promise.resolve(false);
     act(() => {
-      sent = result.current.answer('merge', ['rebase'], 'rebase');
+      sent = result.current.answer('defaults', ['merge=rebase'], 'rebase');
     });
     await waitFor(() => expect(result.current.pending).toBe('rebase'));
     await act(async () => {
@@ -54,13 +54,13 @@ describe('useOnboardingFlow', () => {
     expect(result.current.direction).toBe('forward');
     expect(fake.requests.find((request) => request.method === 'POST')?.body).toEqual({
       type: 'answer',
-      stepId: 'merge',
-      values: ['rebase'],
+      stepId: 'defaults',
+      values: ['merge=rebase'],
     });
   });
 
   it('opens an earlier step and slides back to it, and checks again without sending anything', async () => {
-    const back = createFlow(createStep({ id: 'model' }));
+    const back = createFlow(createStep({ id: 'projects' }));
     fake = startFakeOnboarding({
       'GET /api/onboarding/flow': { answer: createFlow(createStep()) },
       'POST /api/onboarding/flow': { answer: back },
@@ -69,19 +69,19 @@ describe('useOnboardingFlow', () => {
     const { result } = renderHook(() => useOnboardingFlow());
     await waitFor(() => expect(result.current.flow).not.toBeNull());
     await act(async () => {
-      expect(await result.current.open('model')).toBe(true);
+      expect(await result.current.open('projects')).toBe(true);
     });
     expect(result.current.direction).toBe('back');
     expect(fake.requests.find((request) => request.method === 'POST')?.body).toEqual({
       type: 'open',
-      stepId: 'model',
+      stepId: 'projects',
     });
     await act(async () => {
       expect(await result.current.refresh()).toBe(true);
     });
-    expect(result.current.flow?.step?.id).toBe('merge');
+    expect(result.current.flow?.step?.id).toBe('defaults');
     await act(async () => {
-      await result.current.answer('merge', ['squash']);
+      await result.current.answer('defaults', ['merge=squash']);
     });
     expect(fake.requests.filter((request) => request.method === 'POST')).toHaveLength(2);
   });
@@ -97,10 +97,10 @@ describe('useOnboardingFlow', () => {
     const { result } = renderHook(() => useOnboardingFlow());
     await waitFor(() => expect(result.current.flow).not.toBeNull());
     await act(async () => {
-      expect(await result.current.answer('merge', ['x'])).toBe(false);
+      expect(await result.current.answer('defaults', ['x'])).toBe(false);
     });
     expect(toasts.error).toHaveBeenCalledWith('That step is no longer open.');
-    expect(result.current.flow?.step?.id).toBe('merge');
+    expect(result.current.flow?.step?.id).toBe('defaults');
   });
 
   it('goes Home when setup is already finished', async () => {

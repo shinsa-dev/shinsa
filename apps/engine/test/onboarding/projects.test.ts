@@ -95,7 +95,7 @@ describe('the projects step', () => {
     const world = await setup();
     await answerFolders(world);
     const next = await answerProjects(world.onboarding);
-    expect(next.step?.id).toBe('model');
+    expect(next.step?.id).toBe('defaults');
     expect(next.steps[1]?.summary).toBe('2 projects');
     expect(listProjects(world.engine)).toEqual([
       { name: 'Acme', key: 'ACM', folders: [world.acme], repos: ['api', 'web'] },
@@ -122,7 +122,7 @@ describe('the projects step', () => {
     const world = await setup();
     await answerFolders(world);
     const next = await answerProjects(world.onboarding, []);
-    expect(next.step?.id).toBe('model');
+    expect(next.step?.id).toBe('defaults');
     expect(next.steps[1]?.summary).toBeNull();
     expect(world.engine.state.projects).toEqual({});
   });

@@ -66,7 +66,7 @@ src/
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, accounts, checks, finished),
+│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts, checks, finished),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
 │                        services (menu.tsx: Services beside Tasks and in the rail, its popover (SERVICES_PANEL, the
 │                        queue popover's COMPACT_POPOVER: the list as tall as its content, the forms at one height)
@@ -253,7 +253,7 @@ src/
         changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, secrets.ts,
-        onboarding.ts, baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
+        onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start and priority),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the

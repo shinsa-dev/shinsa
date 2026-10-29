@@ -93,64 +93,65 @@ function sentReplies() {
 }
 
 describe('the setup page', () => {
-  it('shows one step at a time with its options, none picked, and where you are in setup', async () => {
+  it('shows the defaults with the recommended choice picked in each group, and where you are in setup', async () => {
     serve(createFlow(createStep()));
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'How should pull requests be merged?' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: 'Setup, step 4 of 7' })).toBeTruthy();
-    const options = screen.getAllByRole('option');
-    expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['false', 'false']);
+    expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Setup, step 3 of 5' })).toBeTruthy();
+    const merge = screen.getByRole('listbox', { name: 'Merging' });
+    const options = within(merge).getAllByRole('option');
+    expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['true', 'false']);
     expect(within(options[0] as HTMLElement).getByText('Recommended')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Continue/ })).toBeNull();
+    expect(screen.getByRole('listbox', { name: 'Large tasks' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Continue/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Back/ })).toBeTruthy();
   });
 
-  it('answers with the option you click and moves on to the next step', async () => {
-    serve(createFlow(createStep()), [
-      () => createFlow(createStep({ id: 'plans', title: 'Should agents ask?' })),
-    ]);
+  it('Continue keeps the recommended choices, sending one pick per group', async () => {
+    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts', title: 'Accounts' }))]);
     renderPage();
-    fireEvent.click(await screen.findByRole('option', { name: /Rebase/ }));
-    expect(await screen.findByRole('heading', { name: 'Should agents ask?' })).toBeTruthy();
-    expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'merge', values: ['rebase'] }]);
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }));
+    expect(await screen.findByRole('heading', { name: 'Accounts' })).toBeTruthy();
+    expect(sentReplies()).toEqual([
+      { type: 'answer', stepId: 'defaults', values: ['merge=squash', 'plans=yes'] },
+    ]);
   });
 
-  it('answers from the keyboard: the arrows move through the options and Enter picks one', async () => {
-    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'plans' }))]);
+  it('a click changes only its own group’s pick, and nothing is sent until Continue', async () => {
+    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts' }))]);
     renderPage();
-    const list = await screen.findByRole('listbox', { name: 'How should pull requests be merged?' });
+    fireEvent.click(await screen.findByRole('option', { name: /Rebase/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Start building/ }));
+    expect(screen.getByRole('option', { name: /Rebase/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('option', { name: /Squash/ }).getAttribute('aria-selected')).toBe('false');
+    expect(sentReplies()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        { type: 'answer', stepId: 'defaults', values: ['merge=rebase', 'plans=no'] },
+      ])
+    );
+  });
+
+  it('picks from the keyboard: the arrows move through a group and Enter picks one', async () => {
+    serve(createFlow(createStep()));
+    renderPage();
+    const list = await screen.findByRole('listbox', { name: 'Merging' });
     await waitFor(() => expect(document.activeElement).toBe(list));
-    fireEvent.keyDown(list, { key: 'Enter' });
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     fireEvent.keyDown(list, { key: 'Tab' });
     expect(list.getAttribute('aria-activedescendant')).toMatch(/-1$/);
     fireEvent.keyDown(list, { key: 'Enter' });
-    await waitFor(() =>
-      expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'merge', values: ['rebase'] }])
-    );
+    expect(screen.getByRole('option', { name: /Rebase/ }).getAttribute('aria-selected')).toBe('true');
+    expect(sentReplies()).toEqual([]);
   });
 
-  it('goes back a step, shows your earlier answer picked and keeps it with Continue', async () => {
-    const back = createFlow(
-      createStep({
-        id: 'model',
-        title: 'Which model should agents use?',
-        options: [createOption({ value: 'opus', label: 'Opus 5.5', chosen: true })],
-      })
-    );
-    serve(createFlow(createStep()), [() => back, () => createFlow(createStep())]);
+  it('goes back a step from the defaults', async () => {
+    serve(createFlow(createStep()), [() => createFlow(PROJECTS)]);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Back/ }));
-    expect(await screen.findByRole('heading', { name: 'Which model should agents use?' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: /Opus/ }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
-    await waitFor(() =>
-      expect(sentReplies()).toEqual([
-        { type: 'open', stepId: 'model' },
-        { type: 'answer', stepId: 'model', values: ['opus'] },
-      ])
-    );
+    await waitFor(() => expect(sentReplies()).toEqual([{ type: 'open', stepId: 'projects' }]));
   });
 
   it('opens any step you already answered from the steps at the top', async () => {
@@ -385,7 +386,7 @@ describe('the setup page', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     });
-    expect(await screen.findByRole('heading', { name: 'How should pull requests be merged?' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
   });
 
   it('creates every suggested project with one press when you change nothing', async () => {

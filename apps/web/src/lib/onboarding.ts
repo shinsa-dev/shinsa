@@ -3,6 +3,7 @@ import {
   type AccountSummary,
   describeList,
   type OnboardingCheck,
+  type OnboardingChoiceGroup,
   type OnboardingFlow,
   type OnboardingOption,
   type OnboardingStatus,
@@ -94,7 +95,14 @@ export function resolveStepDirection(before: number | null, after: number): Step
 }
 
 export function listChosenValues(step: OnboardingStep) {
-  return step.options.filter((option) => option.chosen).map((option) => option.value);
+  return [...step.options, ...step.groups.flatMap((group) => group.options)]
+    .filter((option) => option.chosen)
+    .map((option) => option.value);
+}
+
+export function resolvePickedChoices(group: OnboardingChoiceGroup, values: string[], value: string) {
+  const own = new Set(group.options.map((option) => option.value));
+  return [...values.filter((entry) => !own.has(entry)), value];
 }
 
 export function isHighlightKey(key: string): key is HighlightKey {
@@ -172,7 +180,7 @@ export function listReadableRoots(values: string[], access: string[], userHome: 
 }
 
 export function resolveSubmitValues(step: OnboardingStep, values: string[]) {
-  if (step.id === 'roots' || step.options.length > 0) return values;
+  if (step.id === 'roots' || step.options.length > 0 || step.groups.length > 0) return values;
   return ['continue'];
 }
 

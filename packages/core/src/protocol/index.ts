@@ -100,6 +100,8 @@ export {
 } from './messages.ts';
 export type {
   OnboardingCheck,
+  OnboardingChoiceGroup,
+  OnboardingChoiceGroupId,
   OnboardingFlow,
   OnboardingOption,
   OnboardingProjectChoice,
@@ -111,7 +113,7 @@ export type {
   RootSuggestion,
   RootSuggestions,
 } from './onboarding.ts';
-export { resolveDisplayPath } from './onboarding.ts';
+export { parseChoiceValue, resolveDisplayPath, serializeChoiceValue } from './onboarding.ts';
 export {
   applyStatePatch,
   type EntryChange,

@@ -16,7 +16,7 @@ import { PrivateFoldersError } from './roots.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
 
 interface Draft {
-  version: 3;
+  version: 4;
   id: string;
   index: number;
   furthest: number;
@@ -53,7 +53,7 @@ function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<Draft>;
   return (
-    draft.version === 3 &&
+    draft.version === 4 &&
     typeof draft.id === 'string' &&
     typeof draft.index === 'number' &&
     typeof draft.furthest === 'number' &&
@@ -184,7 +184,7 @@ export class OnboardingSetup {
 
   #start(): Draft {
     const draft: Draft = {
-      version: 3,
+      version: 4,
       id: Bun.randomUUIDv7(),
       index: 0,
       furthest: 0,

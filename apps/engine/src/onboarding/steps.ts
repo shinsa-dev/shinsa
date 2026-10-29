@@ -3,14 +3,18 @@ import {
   DomainError,
   describeList,
   type OnboardingCheck,
+  type OnboardingChoiceGroup,
+  type OnboardingChoiceGroupId,
   type OnboardingOption,
   type OnboardingProjectChoice,
   type OnboardingStepId,
   type ProjectSuggestion,
+  parseChoiceValue,
   type RootSuggestions,
   resolveDisplayPath,
   resolveModelLabel,
   type Settings,
+  serializeChoiceValue,
 } from '@shinsa/core';
 import type { AccountSource, ClaudeAccount } from './accounts.ts';
 import type { PrerequisiteReport } from './prerequisites.ts';
@@ -44,6 +48,7 @@ interface StepView {
   description: string;
   multiple: boolean;
   options: OnboardingOption[];
+  groups: OnboardingChoiceGroup[];
   projects: ProjectSuggestion[];
   checks: OnboardingCheck[];
   ready: boolean;
@@ -78,6 +83,7 @@ function createView(view: Partial<StepView> & Pick<StepView, 'title' | 'descript
   return {
     multiple: false,
     options: [],
+    groups: [],
     projects: [],
     checks: [],
     ready: true,
@@ -88,16 +94,6 @@ function createView(view: Partial<StepView> & Pick<StepView, 'title' | 'descript
 
 function describeRepoCount(count: number) {
   return count === 1 ? '1 repository' : `${count} repositories`;
-}
-
-function findOneOption(values: string[], options: OnboardingOption[]) {
-  const [value] = values;
-  const option = options.find((entry) => entry.value === value);
-  if (values.length !== 1 || !option) {
-    const labels = options.map((entry) => entry.label);
-    throw new DomainError('answer_invalid', `Pick one of these: ${describeList(labels, 'or')}.`);
-  }
-  return option;
 }
 
 function assertContinue(values: string[]) {
@@ -185,44 +181,40 @@ function resolveModelMeaning(model: AgentModel) {
   return meaning ?? (model.description || null);
 }
 
-async function listModelOptions(context: StepReadContext, answered: boolean) {
+function createChoice(
+  group: OnboardingChoiceGroupId,
+  value: string,
+  label: string,
+  detail: string | null,
+  picked: string,
+  recommended = false
+) {
+  return createOption(serializeChoiceValue(group, value), label, detail, picked === value, recommended);
+}
+
+async function listModelChoices(context: StepReadContext) {
   const models = await context.listModels();
   const current = context.settings.defaultModel;
+  const picked = current ?? ROLE_MODELS;
   const options = models.map((model) =>
-    createOption(model.id, model.label, resolveModelMeaning(model), answered && current === model.id)
+    createChoice('model', model.id, model.label, resolveModelMeaning(model), picked, model.id === current)
   );
-  if (current && !options.some((option) => option.value === current)) {
-    options.unshift(createOption(current, resolveModelLabel(current), null, answered));
+  if (current && !models.some((model) => model.id === current)) {
+    options.unshift(createChoice('model', current, resolveModelLabel(current), null, picked, true));
   }
   options.push(
-    createOption(
+    createChoice(
+      'model',
       ROLE_MODELS,
       'Each role’s own model',
       'Planning, building and review each start on the model Shinsa picks for that role.',
-      answered && current === null
+      picked
     )
   );
   return options;
 }
 
-const MODEL: StepDefinition = {
-  id: 'model',
-  label: 'Model',
-  view: async (context, answered) =>
-    createView({
-      title: 'Which model should agents use?',
-      description: 'This is the default for every role. You can still pick a model per role in Settings.',
-      options: await listModelOptions(context, answered),
-    }),
-  summarize: (context) => {
-    const current = context.settings.defaultModel;
-    return Promise.resolve(current ? resolveModelLabel(current) : 'Each role’s own');
-  },
-  answer: async (values, context) => {
-    const option = findOneOption(values, await listModelOptions(context, false));
-    await context.save({ defaultModel: option.value === ROLE_MODELS ? null : option.value });
-  },
-};
+const RECOMMENDED_MERGE: Settings['mergeMethod'] = 'squash';
 
 const MERGE_OPTIONS: { value: Settings['mergeMethod']; label: string; detail: string }[] = [
   { value: 'squash', label: 'Squash', detail: 'Every pull request lands as one commit.' },
@@ -234,74 +226,97 @@ const MERGE_OPTIONS: { value: Settings['mergeMethod']; label: string; detail: st
   },
 ];
 
-function listMergeOptions(context: StepReadContext, answered: boolean) {
+function listMergeChoices(context: StepReadContext, answered: boolean) {
+  const picked = answered ? context.settings.mergeMethod : RECOMMENDED_MERGE;
   return MERGE_OPTIONS.map((option) =>
-    createOption(
+    createChoice(
+      'merge',
       option.value,
       option.label,
       option.detail,
-      answered && context.settings.mergeMethod === option.value,
-      option.value === 'squash'
+      picked,
+      option.value === RECOMMENDED_MERGE
     )
   );
 }
 
-const MERGE: StepDefinition = {
-  id: 'merge',
-  label: 'Merging',
-  view: (context, answered) =>
-    Promise.resolve(
-      createView({
-        title: 'How should pull requests be merged?',
-        description: 'Shinsa merges a pull request only after you approve the merge.',
-        options: listMergeOptions(context, answered),
-      })
-    ),
-  summarize: (context) =>
-    Promise.resolve(
-      MERGE_OPTIONS.find((option) => option.value === context.settings.mergeMethod)?.label ?? null
-    ),
-  answer: async (values, context) => {
-    const option = findOneOption(values, listMergeOptions(context, false));
-    await context.save({ mergeMethod: option.value as Settings['mergeMethod'] });
-  },
-};
-
-function listPlanOptions(context: StepReadContext, answered: boolean) {
-  const approves = context.settings.approvePlans === true;
+function listPlanChoices(context: StepReadContext, answered: boolean) {
+  const picked = !answered || context.settings.approvePlans === true ? 'yes' : 'no';
   return [
-    createOption(
+    createChoice(
+      'plans',
       'yes',
       'Show me the plan first',
       'Before building a large task, the agent waits for you to approve its plan.',
-      answered && approves,
+      picked,
       true
     ),
-    createOption(
+    createChoice(
+      'plans',
       'no',
       'Start building',
       'Agents plan on their own and show you a plan only when you ask for one.',
-      answered && !approves
+      picked
     ),
   ];
 }
 
-const PLANS: StepDefinition = {
-  id: 'plans',
-  label: 'Plans',
-  view: (context, answered) =>
-    Promise.resolve(
-      createView({
-        title: 'Should agents ask before they build a large task?',
-        description: 'Small tasks always start straight away. You can change this in Settings.',
-        options: listPlanOptions(context, answered),
-      })
-    ),
-  summarize: (context) =>
-    Promise.resolve(context.settings.approvePlans === true ? 'Plan first' : 'Start building'),
+async function listDefaultGroups(
+  context: StepReadContext,
+  answered: boolean
+): Promise<OnboardingChoiceGroup[]> {
+  return [
+    { id: 'model', label: 'Model', options: await listModelChoices(context) },
+    { id: 'merge', label: 'Merging', options: listMergeChoices(context, answered) },
+    { id: 'plans', label: 'Large tasks', options: listPlanChoices(context, answered) },
+  ];
+}
+
+function findGroupValue(group: OnboardingChoiceGroup, values: string[]) {
+  const picks = values.filter((value) => parseChoiceValue(value)?.group === group.id);
+  const option = group.options.find((entry) => entry.value === picks[0]);
+  if (picks.length !== 1 || !option) {
+    const labels = group.options.map((entry) => entry.label);
+    throw new DomainError(
+      'answer_invalid',
+      `Pick one ${group.label.toLowerCase()} option: ${describeList(labels, 'or')}.`
+    );
+  }
+  return parseChoiceValue(option.value)?.value as string;
+}
+
+function resolveMergeLabel(method: Settings['mergeMethod']) {
+  return MERGE_OPTIONS.find((option) => option.value === method)?.label as string;
+}
+
+const DEFAULTS: StepDefinition = {
+  id: 'defaults',
+  label: 'Defaults',
+  view: async (context, answered) =>
+    createView({
+      title: 'How should agents work?',
+      description:
+        'The recommended choices are picked. Continue to keep them; you can change any of them in Settings.',
+      groups: await listDefaultGroups(context, answered),
+    }),
+  summarize: (context) => {
+    const { defaultModel, mergeMethod, approvePlans } = context.settings;
+    const parts = [
+      defaultModel ? resolveModelLabel(defaultModel) : 'Each role’s own model',
+      resolveMergeLabel(mergeMethod),
+      approvePlans === true ? 'Plan first' : 'Start building',
+    ];
+    return Promise.resolve(parts.join(' · '));
+  },
   answer: async (values, context) => {
-    const option = findOneOption(values, listPlanOptions(context, false));
-    await context.save({ approvePlans: option.value === 'yes' });
+    const [model, merge, plans] = (await listDefaultGroups(context, false)).map((group) =>
+      findGroupValue(group, values)
+    );
+    await context.save({
+      defaultModel: model === ROLE_MODELS ? null : (model as string),
+      mergeMethod: merge as Settings['mergeMethod'],
+      approvePlans: plans === 'yes',
+    });
   },
 };
 
@@ -356,9 +371,7 @@ const PREREQUISITES: StepDefinition = {
 export const ONBOARDING_STEPS: readonly StepDefinition[] = [
   ROOTS,
   PROJECTS,
-  MODEL,
-  MERGE,
-  PLANS,
+  DEFAULTS,
   ACCOUNTS,
   PREREQUISITES,
 ];

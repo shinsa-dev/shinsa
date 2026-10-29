@@ -16,6 +16,7 @@ import {
   resolveFolderOptions,
   resolveNextHighlight,
   resolveOnboardingRedirect,
+  resolvePickedChoices,
   resolveStepDirection,
   resolveStepState,
   resolveSubmitValues,
@@ -45,22 +46,22 @@ describe('the setup lock', () => {
 
 describe('the steps', () => {
   it('counts the step you are on, and the last one once setup is done', () => {
-    expect(describeStepPosition(createFlow(createStep()))).toBe('Step 4 of 7');
-    expect(describeStepPosition(createFlow(null))).toBe('Step 7 of 7');
+    expect(describeStepPosition(createFlow(createStep()))).toBe('Step 3 of 5');
+    expect(describeStepPosition(createFlow(null))).toBe('Step 5 of 5');
   });
 
   it('names the step you are on for a narrow window, and only the count once setup is done', () => {
-    expect(describeStepHeading(createFlow(createStep()))).toBe('Step 4 of 7: Merging');
-    expect(describeStepHeading(createFlow(null))).toBe('Step 7 of 7');
+    expect(describeStepHeading(createFlow(createStep()))).toBe('Step 3 of 5: Defaults');
+    expect(describeStepHeading(createFlow(null))).toBe('Step 5 of 5');
   });
 
   it('checks the answered steps along the top, with the answer as the hint, and holds back the ones not reached', () => {
-    const items = listStepperItems(createFlow(createStep({ id: 'model' })));
+    const items = listStepperItems(createFlow(createStep()));
     expect(items.slice(0, 4)).toEqual([
       { value: 'roots', label: 'Folders', hint: 'Folders answer', checked: true, disabled: false },
       { value: 'projects', label: 'Projects', hint: 'Projects answer', checked: true, disabled: false },
-      { value: 'model', label: 'Model', hint: undefined, checked: false, disabled: false },
-      { value: 'merge', label: 'Merging', hint: undefined, checked: false, disabled: true },
+      { value: 'defaults', label: 'Defaults', hint: undefined, checked: false, disabled: false },
+      { value: 'accounts', label: 'Accounts', hint: undefined, checked: false, disabled: true },
     ]);
   });
 
@@ -71,34 +72,48 @@ describe('the steps', () => {
   });
 
   it('marks each step done, current, reached ahead of you or not reached yet', () => {
-    const flow = createFlow(createStep({ id: 'model' }));
-    const [folders, , model, merge] = flow.steps;
+    const flow = createFlow(createStep());
+    const [folders, , defaults, accounts] = flow.steps;
     expect(resolveStepState(folders as never, 0, 2)).toBe('done');
-    expect(resolveStepState(model as never, 2, 2)).toBe('current');
-    expect(resolveStepState(merge as never, 3, 2)).toBe('upcoming');
-    expect(resolveStepState({ id: 'merge', label: 'Merging', summary: null, reached: true }, 2, 1)).toBe(
+    expect(resolveStepState(defaults as never, 2, 2)).toBe('current');
+    expect(resolveStepState(accounts as never, 3, 2)).toBe('upcoming');
+    expect(resolveStepState({ id: 'defaults', label: 'Defaults', summary: null, reached: true }, 2, 1)).toBe(
       'ahead'
     );
-    expect(resolveStepState({ id: 'merge', label: 'Merging', summary: 'Squash', reached: true }, 2, 1)).toBe(
-      'done'
-    );
+    expect(
+      resolveStepState({ id: 'defaults', label: 'Defaults', summary: 'Squash', reached: true }, 2, 1)
+    ).toBe('done');
   });
 
   it('starts with your earlier answer picked, and sends continue for a step without options', () => {
-    const step = createStep({ options: [createOption({ chosen: true }), createOption({ value: 'rebase' })] });
+    const step = createStep({
+      id: 'roots',
+      groups: [],
+      options: [createOption({ chosen: true }), createOption({ value: 'rebase' })],
+    });
     expect(listChosenValues(step)).toEqual(['squash']);
     expect(resolveSubmitValues(step, ['rebase'])).toEqual(['rebase']);
+    expect(listChosenValues(createStep())).toEqual(['merge=squash', 'plans=yes']);
+    expect(resolveSubmitValues(createStep(), ['merge=rebase'])).toEqual(['merge=rebase']);
     expect(resolveSubmitValues(createStep({ id: 'roots', options: [] }), ['/a'])).toEqual(['/a']);
-    expect(resolveSubmitValues(createStep({ id: 'accounts', options: [] }), [])).toEqual(['continue']);
+    expect(resolveSubmitValues(createStep({ id: 'accounts', groups: [] }), [])).toEqual(['continue']);
   });
 
   it('lists what you set up, leaving out the steps without an answer to show', () => {
-    expect(listSetupSummary(createFlow(createStep({ id: 'plans' })))).toEqual([
+    expect(listSetupSummary(createFlow(createStep({ id: 'accounts' })))).toEqual([
       { id: 'roots', label: 'Folders', summary: 'Folders answer' },
       { id: 'projects', label: 'Projects', summary: 'Projects answer' },
-      { id: 'model', label: 'Model', summary: 'Model answer' },
-      { id: 'merge', label: 'Merging', summary: 'Merging answer' },
+      { id: 'defaults', label: 'Defaults', summary: 'Defaults answer' },
     ]);
+  });
+
+  it('picking a choice replaces only its own group’s pick', () => {
+    const [merge] = createStep().groups;
+    expect(resolvePickedChoices(merge as never, ['merge=squash', 'plans=yes'], 'merge=rebase')).toEqual([
+      'plans=yes',
+      'merge=rebase',
+    ]);
+    expect(resolvePickedChoices(merge as never, [], 'merge=squash')).toEqual(['merge=squash']);
   });
 });
 

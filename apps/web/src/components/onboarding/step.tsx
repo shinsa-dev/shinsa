@@ -13,6 +13,7 @@ import { ErrorLine } from '@/components/chat/turn-detail.tsx';
 import { OnboardingAccess } from '@/components/onboarding/access.tsx';
 import { type OnboardingAccountActions, OnboardingAccounts } from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
+import { OnboardingDefaults } from '@/components/onboarding/defaults.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
 import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
@@ -131,7 +132,6 @@ function FoldersBody({
         values={values}
         multiple
         label='Folders'
-        busyValue={null}
         disabled={busy}
         autoFocus={autoFocus}
         onPick={(value) => onChange(resolveToggledRoots(values, value))}
@@ -197,6 +197,17 @@ function StepBody({
       />
     );
   }
+  if (step.id === 'defaults') {
+    return (
+      <OnboardingDefaults
+        groups={step.groups}
+        values={values}
+        disabled={pending !== null}
+        autoFocus={autoFocus}
+        onChange={onChange}
+      />
+    );
+  }
   if (step.id === 'accounts') {
     return (
       <OnboardingAccounts
@@ -207,24 +218,7 @@ function StepBody({
       />
     );
   }
-  if (step.id === 'prerequisites') {
-    return <OnboardingChecks checks={step.checks} />;
-  }
-  return (
-    <OptionList
-      options={step.options}
-      values={values}
-      multiple={false}
-      label={step.title}
-      busyValue={pending}
-      disabled={pending !== null}
-      autoFocus={autoFocus}
-      onPick={(value) => {
-        onChange([value]);
-        actions.answer(step.id, [value], value);
-      }}
-    />
-  );
+  return <OnboardingChecks checks={step.checks} />;
 }
 
 function StepAction({
@@ -297,7 +291,6 @@ function StepFooter({
 }) {
   const previous = flow.steps[flow.index - 1];
   const submit = resolveSubmit(step, values, drafts);
-  const choosing = step.options.length > 0 && !step.multiple;
   return (
     <>
       {previous ? (
@@ -319,16 +312,14 @@ function StepFooter({
           </Button>
         )}
         <StepAction step={step} pending={pending} accounts={accounts} actions={actions} />
-        {(!choosing || values.length > 0) && (
-          <Button
-            icon={{ name: 'IconArrowRight', position: 'inline-end' }}
-            disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
-            loading={pending === SUBMIT_KEY}
-            onClick={() => actions.answer(step.id, submit.values, SUBMIT_KEY, submit.projects)}
-          >
-            {submit.label}
-          </Button>
-        )}
+        <Button
+          icon={{ name: 'IconArrowRight', position: 'inline-end' }}
+          disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
+          loading={pending === SUBMIT_KEY}
+          onClick={() => actions.answer(step.id, submit.values, SUBMIT_KEY, submit.projects)}
+        >
+          {submit.label}
+        </Button>
       </div>
     </>
   );

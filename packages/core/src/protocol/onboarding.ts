@@ -27,14 +27,7 @@ export interface RootSuggestions {
   truncated: boolean;
 }
 
-export type OnboardingStepId =
-  | 'roots'
-  | 'projects'
-  | 'model'
-  | 'merge'
-  | 'plans'
-  | 'accounts'
-  | 'prerequisites';
+export type OnboardingStepId = 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';
 
 export interface OnboardingCheck {
   id: string;
@@ -54,6 +47,14 @@ export interface OnboardingOption {
   recommended: boolean;
 }
 
+export type OnboardingChoiceGroupId = 'model' | 'merge' | 'plans';
+
+export interface OnboardingChoiceGroup {
+  id: OnboardingChoiceGroupId;
+  label: string;
+  options: OnboardingOption[];
+}
+
 export interface OnboardingStepEntry {
   id: OnboardingStepId;
   label: string;
@@ -67,6 +68,7 @@ export interface OnboardingStep {
   description: string;
   multiple: boolean;
   options: OnboardingOption[];
+  groups: OnboardingChoiceGroup[];
   checks: OnboardingCheck[];
   ready: boolean;
   projects: ProjectSuggestion[];
@@ -99,6 +101,16 @@ export type OnboardingReply =
     }
   | { type: 'open'; stepId: OnboardingStepId }
   | { type: 'restart' };
+
+export function serializeChoiceValue(group: OnboardingChoiceGroupId, value: string) {
+  return `${group}=${value}`;
+}
+
+export function parseChoiceValue(text: string) {
+  const at = text.indexOf('=');
+  if (at <= 0) return null;
+  return { group: text.slice(0, at), value: text.slice(at + 1) };
+}
 
 export function resolveDisplayPath(path: string, userHome: string) {
   const home = userHome.replace(/\/+$/, '');

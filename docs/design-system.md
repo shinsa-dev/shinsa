@@ -7493,7 +7493,12 @@ style of its own.
   `max-w-64 text-fg-3 text-xs` `Truncate`) and "Go to Home" (primary, arrow at its end).
 - No folder path or other machine-specific value is ever written into the UI code; the ones on screen come from the
   server.
-- Example: Shinsa's six-step setup (Folders, Model, Merging, Plans, Accounts, Tools).
+- **Ask before you need it, and never as an error**: a permission the app needs only for some choices (a folder the
+  system keeps private) is a card above the list naming it, with the way to allow it, Check again and Leave it out;
+  the choices stay as picked, and coming back to the window checks again by itself.
+- **Suggest, then let them edit**: what the app can work out (projects from repositories) is shown worked out and
+  kept, each row with a name to change and a box to untick, and the primary button counts what will be made ("Create 6 projects").
+- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Accounts, Tools).
 
 #### Pick-one and pick-many option lists
 
@@ -7506,9 +7511,8 @@ list rows.
 - The recommended option has a quiet `Badge size='sm'` "Recommended" after its label (`gap-1.5`).
 - Pick-one: the chosen option is marked with the accent `SelectedMark` (`IconCheckmark1`, `size='sm'`,
   `text-primary-text`, labelled "Selected") in a 20px slot at the row's end (`self-center`), as a select or menu
-  marks its value. Clicking answers at once and moves on, a spinner (`sm`, `text-fg-2`) in the mark's slot while it
-  saves. Nothing starts chosen on an unanswered step, so there is no Continue until the user goes back to an answered
-  one, where the answer is marked and Continue keeps it.
+  marks its value. The recommended option starts chosen, so one Continue keeps it; several pick-one lists can share a
+  step, each under its section label, and a click moves only its own list's mark.
 - Pick-many: a `filled` `sm` `Checkbox` in the 20px leading slot, the defaults already checked; the last row can be
   an add field (`sm` `Input` + `secondary` `sm` "Add folder" with `IconPlusMedium`, disabled while empty) that adds
   the typed value checked. Continue is disabled with nothing checked.

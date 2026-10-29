@@ -1107,33 +1107,44 @@ Only these, and they win over anything below:
       with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
       slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
       answered has the accent checkmark before its label (`Choice` items take `checked`) and its answer as the
-      tooltip ("Opus 5.5"); a step you reached but have not answered again (after going back) is a plain segment;
+      tooltip ("Opus 5.5 · Squash · Plan first"); a step you reached but have not answered again (after going back) is a plain segment;
       both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
-      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 2 of 6: Model",
+      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 3 of 5: Defaults",
       `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
       height on every step and on the finished page.
     - **Each step** (`OnboardingSection`, shared with the finished page) is the `PageHeading` (the question itself as
-      the `text-base` title, "How should pull requests be merged?", its one line of description in `text-xs` `fg-2`
+      the `text-base` title, "How should agents work?", its one line of description in `text-xs` `fg-2`
       under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
-      action (Add account, Check again) and the primary button with the step's label ("Continue", "Skip for now",
-      "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
+      action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
+      "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
       It enters with a 0.5rem slide and a fade (220ms, the strong ease-out; from the left when you went back), only a
       fade under reduced motion; nothing leaves, so two steps never overlap.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
       like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
       marked with the accent `SelectedMark` at the row's end, as a select or menu marks the current value. The hover
-      and the keyboard highlight are the menus' one surface, which slides to the row on the movement clock. Clicking a
-      one-answer option answers it at once and moves on, a spinner in the mark's slot while it saves; nothing starts
-      chosen on a step you have not answered, so there is no Continue until you go back to one you have, where your
-      answer is marked and Continue keeps it. The list takes focus when the step opens: the arrows, Home and End move
-      the highlight (`aria-activedescendant`) and Enter or Space picks, so setup runs from the keyboard alone; these
-      keys belong to the list, not the page (10).
+      and the keyboard highlight are the menus' one surface, which slides to the row on the movement clock. The first
+      list takes focus when the step opens: the arrows, Home and End move the highlight (`aria-activedescendant`) and
+      Enter or Space picks, so setup runs from the keyboard alone; these keys belong to the list, not the page (10).
+    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Large tasks, each a
+      `SectionLabel` over its list card, 16px apart. The recommended choice of each starts picked, so one Continue
+      keeps them all; a click only moves that list's mark, and nothing is sent until Continue.
+    - **Projects** (`OnboardingProjects`) are one card of the projects Shinsa suggests, all kept: a row each with a
+      `sm` `Checkbox`, the project's colour dot and its name in a `sm` `Input` you can rename, and under it the count,
+      the folder and the first repositories in `text-2xs` `fg-2` ("29 repositories · ~/Developer/Superwall · docs,
+      ios, pwn and 26 more"). A quiet Repositories button opens the project's repositories as checkbox rows, to leave
+      one out ("2 of 3 repositories"). The primary button counts what you keep ("Create 6 projects", "Create the
+      project", "Continue without projects"), is off while a kept project has no name, and shows its spinner while the
+      projects are made; the rows are locked meanwhile.
     - **Folders** pick several: the found folders with their repository counts, each with a `sm` `Checkbox` in the
       row's icon slot, the folders you chose already checked (the one with the most repositories on a first run), and
       as the card's last row a `sm` path field with a secondary Add folder (Settings → Repository folders' row), which
-      adds the folder to the list checked. Continue is off with nothing checked.
+      adds the folder to the list checked. Continue is off with nothing checked. A folder macOS keeps private is never
+      an error: a Settings card above the list (`OnboardingAccess`, the lock icon in `fg-3`, "macOS keeps ~/Documents
+      private" in `text-xs` `fg-4` over why in `text-2xs` `fg-3`) offers Open System Settings (Full Disk Access),
+      Check again and Leave it out, `sm` secondary buttons; your picks stay checked, and coming back to the window
+      checks again by itself (`useWindowReturn`).
     - **Accounts** are already imported when the step opens (the server does it, never a question): one Settings
       card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where it came from
       and its plan in `text-2xs` `fg-2`: "Your Claude Code login · Max plan", "From claude-swap"), "Added" on the ones
@@ -1142,11 +1153,12 @@ Only these, and they win over anything below:
       found". Add account (Sign in to Claude with none) is in the footer and opens the sign-in dialog. An import that
       failed is an amber line under the card.
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
-      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3`, and its
-      version or state at the right in `TOKEN_TEXT`. Check again is in the footer. An optional check that fails (codex
+      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
+      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in
+      `TOKEN_TEXT`. Check again is in the footer, and coming back to the window checks again by itself. An optional check that fails (codex
       and its sign-in) is a skipped row, never a fail, and never holds setup back.
     - **Finished** (`OnboardingFinished`) is "Shinsa is ready" with its line, what you set up as `SettingRow`s in a
-      Settings card (Folders, Model, Merging, Plans, Accounts, the answer at the right in `fg-3`) and Go to Home.
+      Settings card (Folders, Projects, Defaults, Accounts, the answer at the right in `fg-3`) and Go to Home.
       Opening `/onboarding` once the server's run is finished (setup done and not started again) goes Home instead.
     Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
     as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,

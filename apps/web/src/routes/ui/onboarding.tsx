@@ -13,9 +13,7 @@ const USER_HOME = '/Users/sam';
 const LABELS: [OnboardingStepId, string, string][] = [
   ['roots', 'Folders', '~/Developer'],
   ['projects', 'Projects', '6 projects'],
-  ['model', 'Model', 'Opus 5.5'],
-  ['merge', 'Merging', 'Squash'],
-  ['plans', 'Plans', 'Plan first'],
+  ['defaults', 'Defaults', 'Opus 5.5 · Squash · Plan first'],
   ['accounts', 'Accounts', '2 accounts'],
   ['prerequisites', 'Tools', ''],
 ];
@@ -27,6 +25,7 @@ function createSampleStep(
     description: '',
     multiple: false,
     options: [],
+    groups: [],
     projects: [],
     access: [],
     checks: [],
@@ -141,31 +140,58 @@ const PROJECTS = createSampleStep({
   ],
 });
 
-const MERGE = createSampleStep({
-  id: 'merge',
-  title: 'How should pull requests be merged?',
-  description: 'Shinsa merges a pull request only after you approve the merge.',
-  options: [
+function createSampleChoice(value: string, label: string, detail: string, chosen = false) {
+  return { value, label, detail, chosen, recommended: chosen };
+}
+
+const DEFAULTS = createSampleStep({
+  id: 'defaults',
+  title: 'How should agents work?',
+  description:
+    'The recommended choices are picked. Continue to keep them; you can change any of them in Settings.',
+  groups: [
     {
-      value: 'squash',
-      label: 'Squash',
-      detail: 'Every pull request lands as one commit.',
-      chosen: true,
-      recommended: true,
+      id: 'model',
+      label: 'Model',
+      options: [
+        createSampleChoice('model=opus', 'Opus 5.5', 'Most capable for complex work', true),
+        createSampleChoice('model=sonnet', 'Sonnet 5.5', 'Efficient for routine tasks'),
+        createSampleChoice(
+          'model=:roles',
+          'Each role’s own model',
+          'Planning, building and review each start on the model Shinsa picks for that role.'
+        ),
+      ],
     },
     {
-      value: 'merge',
-      label: 'Merge commit',
-      detail: 'Every commit is kept, joined by a merge commit.',
-      chosen: false,
-      recommended: false,
+      id: 'merge',
+      label: 'Merging',
+      options: [
+        createSampleChoice('merge=squash', 'Squash', 'Every pull request lands as one commit.', true),
+        createSampleChoice('merge=merge', 'Merge commit', 'Every commit is kept, joined by a merge commit.'),
+        createSampleChoice(
+          'merge=rebase',
+          'Rebase',
+          'The commits are replayed onto the default branch, with no merge commit.'
+        ),
+      ],
     },
     {
-      value: 'rebase',
-      label: 'Rebase',
-      detail: 'The commits are replayed onto the default branch, with no merge commit.',
-      chosen: false,
-      recommended: false,
+      id: 'plans',
+      label: 'Large tasks',
+      options: [
+        createSampleChoice(
+          'plans=yes',
+          'Show me the plan first',
+          'Before building a large task, the agent waits for you to approve its plan.',
+          true
+        ),
+        createSampleChoice(
+          'plans=no',
+          'Start building',
+          'Agents plan on their own and show you a plan only when you ask for one.'
+        ),
+      ],
     },
   ],
 });
@@ -264,8 +290,8 @@ export function OnboardingSpecimens() {
       <Specimen label='Projects · suggested from the folders, all kept; rename one, untick it or open its repositories'>
         <StepSpecimen step={PROJECTS} />
       </Specimen>
-      <Specimen label='One answer · gone back to, your answer picked and Continue keeps it; run again from Settings'>
-        <StepSpecimen step={MERGE} revisit />
+      <Specimen label='Defaults · the recommended choice picked in each group, Continue keeps them all; run again from Settings'>
+        <StepSpecimen step={DEFAULTS} revisit />
       </Specimen>
       <Specimen label='Accounts · imported for you, one added now, one that could not be, each removable'>
         <StepSpecimen step={ACCOUNTS} />
