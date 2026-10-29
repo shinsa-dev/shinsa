@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
-import { readReviewFragment, resolveDocumentTitle, resolveTaskInvite } from '../../src/lib/open';
+import { openTask } from '../../src/lib/content';
+import {
+  readReviewFragment,
+  resolveDocumentTitle,
+  resolvePendingHeader,
+  resolveTaskInvite,
+} from '../../src/lib/open';
 
 function encode(value: unknown) {
   return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
@@ -85,5 +91,34 @@ describe('readReviewFragment', () => {
     for (const cut of [1, 10, Math.floor(whole.length / 2), whole.length - 1]) {
       expect(await readReviewFragment(`#review=${whole.slice(0, cut)}`)).toBeNull();
     }
+  });
+});
+
+describe('resolvePendingHeader', () => {
+  test('fills the header from the link before the review is read', () => {
+    expect(resolvePendingHeader('?task=id-1&handle=LOC-28&title=Fix+the+tabs')).toEqual({
+      title: 'Fix the tabs',
+      description: '',
+      handle: 'LOC-28',
+      link: 'shinsa://task/id-1',
+      documentTitle: 'LOC-28: Fix the tabs · Shinsa',
+    });
+    expect(resolvePendingHeader('?task=id-1')).toEqual({
+      title: openTask.untitled,
+      description: '',
+      handle: '',
+      link: 'shinsa://task/id-1',
+      documentTitle: null,
+    });
+  });
+
+  test('says the link leads nowhere when it names no task', () => {
+    expect(resolvePendingHeader('')).toEqual({
+      title: openTask.missingTitle,
+      description: openTask.missing,
+      handle: '',
+      link: null,
+      documentTitle: null,
+    });
   });
 });

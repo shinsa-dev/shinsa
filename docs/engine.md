@@ -2661,8 +2661,11 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   that opens `shinsa://task/<id>` in the Mac app) as the main button and the download beside it, in place of the
   app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data the same
   header shows the task's handle and title and the same two buttons, with no Review tab; a link that names no task
-  gets the header "This link does not lead to a review" with Download alone. The page has no static content: it
-  renders nothing until it has read the link, so no other layout paints first. The data is a compact copy of the review (`serializeReviewPayload`,
+  gets the header "This link does not lead to a review" with Download alone. The data rides in the fragment,
+  which the browser never sends, so the review can only be drawn in the browser; the header arrives drawn: the
+  site's Worker serves `/open` (`apps/marketing/src/worker/open.ts`) and writes the title, handle, Open in Shinsa link
+  and tab title from the query into the page before it is sent, so the first paint is the page's own header and the
+  Review tab fills in under it once the fragment is read. The data is a compact copy of the review (`serializeReviewPayload`,
   `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
   task page's header shows that are not private (the status, as its stage once the pull request is open: shipping,
   ready to merge, merged or done; the repository's name and GitHub slug, the branch, the changed-line coverage and when

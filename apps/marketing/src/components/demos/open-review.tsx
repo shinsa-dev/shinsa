@@ -8,12 +8,7 @@ import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import {
-  readReviewFragment,
-  resolveDocumentTitle,
-  resolveTaskInvite,
-  type TaskInvite,
-} from '../../lib/open.ts';
+import { readReviewFragment, resolveTaskInvite, type TaskInvite } from '../../lib/open.ts';
 import { createOpenState } from '../../lib/open-scene.ts';
 import { site } from '../../lib/site.ts';
 import { DemoRoot } from './frame.tsx';
@@ -34,7 +29,13 @@ function OpenActions({ link }: { link: string | null }) {
         {openTask.secondary}
       </a>
       {link && (
-        <a href={link} data-icon='inline-start' className={buttonVariants({ variant: 'primary' })}>
+        <a
+          href={link}
+          data-open-link
+          data-icon='inline-start'
+          className={buttonVariants({ variant: 'primary' })}
+          suppressHydrationWarning
+        >
           <Icon name='IconArrowUpRight' />
           {openTask.primary}
         </a>
@@ -49,7 +50,7 @@ function OpenHeader({
   link,
   facts,
 }: {
-  title: string;
+  title: React.ReactNode;
   description: React.ReactNode;
   link: string | null;
   facts: React.ReactNode;
@@ -90,6 +91,17 @@ function InviteHeader({ invite }: { invite: TaskInvite | null }) {
   );
 }
 
+function PendingHeader() {
+  return (
+    <OpenHeader
+      title={<span data-open-title suppressHydrationWarning />}
+      description={<p data-open-description className={PAGE_DESCRIPTION} suppressHydrationWarning />}
+      link='shinsa://'
+      facts={<p data-open-handle className='text-fg-2 text-xs' suppressHydrationWarning />}
+    />
+  );
+}
+
 function ReviewPage({ scene }: { scene: OpenScene }) {
   return (
     <DemoRoot>
@@ -110,8 +122,6 @@ export function OpenReview() {
   const [view, setView] = React.useState<OpenView | null>(null);
   React.useEffect(() => {
     const invite = resolveTaskInvite(window.location.search);
-    const title = resolveDocumentTitle(invite);
-    if (title) document.title = title;
     void readReviewFragment(window.location.hash).then((payload) => {
       if (!payload) {
         setView({ kind: 'invite', invite });
@@ -123,7 +133,7 @@ export function OpenReview() {
       });
     });
   }, []);
-  if (!view) return null;
+  if (!view) return <PendingHeader />;
   if (view.kind === 'invite') return <InviteHeader invite={view.invite} />;
   return <ReviewPage scene={view.scene} />;
 }
