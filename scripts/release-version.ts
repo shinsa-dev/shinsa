@@ -42,7 +42,7 @@ const IGNORED_GLOBS = CANARY_IGNORED_PATHS.map((pattern) => new Bun.Glob(pattern
 
 export type CanaryDecision =
   | { build: true; reason: 'first' | 'changed'; base: string | null; files: string[] }
-  | { build: false; reason: 'unchanged'; base: string; files: string[] };
+  | { build: false; reason: 'unchanged' | 'released'; base: string; files: string[] };
 
 export function parseReleaseOptions(channel: string | undefined, bump: string | undefined) {
   const parsedChannel = CHANNELS.find((entry) => entry === channel);
@@ -120,9 +120,14 @@ export function selectLastCanaryTag(tags: readonly string[]) {
   return version ? `v${version}` : null;
 }
 
-export function resolveCanaryDecision(base: string | null, changed: readonly string[]): CanaryDecision {
+export function resolveCanaryDecision(
+  base: string | null,
+  changed: readonly string[],
+  released = false
+): CanaryDecision {
   const files = changed.filter(isAppChange);
   if (base === null) return { build: true, reason: 'first', base, files };
+  if (released) return { build: false, reason: 'released', base, files: [] };
   return files.length > 0
     ? { build: true, reason: 'changed', base, files }
     : { build: false, reason: 'unchanged', base, files };
@@ -130,6 +135,8 @@ export function resolveCanaryDecision(base: string | null, changed: readonly str
 
 export function describeCanaryDecision(decision: CanaryDecision) {
   if (decision.reason === 'first') return 'Building a canary: there is no canary before it.';
+  if (decision.reason === 'released')
+    return `No canary: the newest tested commit is already in ${decision.base}.`;
   if (decision.reason === 'unchanged')
     return `No canary: nothing since ${decision.base} changes the app, only docs, the site or agent notes.`;
   const shown = decision.files.slice(0, 5).map((file) => `\`${file}\``);

@@ -1,14 +1,12 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: [Test]
-    types: [completed]
-    branches: [main]
+  schedule:
+    - cron: '17 */3 * * *'
   workflow_dispatch:
     inputs:
       channel:
-        description: Stable is a normal release marked latest; beta is a pre-release of the next version; canary is a pre-release of main for the Canary channel, as every tested merge makes
+        description: Stable is a normal release marked latest; beta is a pre-release of the next version; canary is a pre-release of main for the Canary channel, as the build every three hours makes
         type: choice
         options: [beta, stable, canary]
         default: beta
@@ -23,24 +21,28 @@ permissions:
 
 jobs:
   trigger:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
     outputs:
       build: ${{ steps.decide.outputs.build }}
       channel: ${{ steps.decide.outputs.channel }}
       sha: ${{ steps.decide.outputs.sha }}
     steps:
+      - name: Find the newest tested commit
+        id: tested
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test.yml --branch main --event push \
+            --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ steps.tested.outputs.sha || github.sha }}
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
@@ -50,12 +52,17 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           INPUT_CHANNEL: ${{ inputs.channel }}
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RELEASE_SHA: ${{ steps.tested.outputs.sha || github.sha }}
+          TESTED_SHA: ${{ steps.tested.outputs.sha }}
         run: |
           echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = workflow_dispatch ]; then
             echo "channel=$INPUT_CHANNEL" >> "$GITHUB_OUTPUT"
             echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$TESTED_SHA" ]; then
+            echo "channel=canary" >> "$GITHUB_OUTPUT"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "No canary: no push to main has passed Test yet." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "channel=canary" >> "$GITHUB_OUTPUT"
             bun scripts/release-canary.ts
