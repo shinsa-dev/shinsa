@@ -11,6 +11,8 @@ import {
 } from '@shinsa/core';
 import {
   type ForegroundReader,
+  type PortPicker,
+  pickFreePort,
   readForegroundProgram,
   resolveLoginShell,
   resolveServiceCommand,
@@ -33,6 +35,7 @@ export interface TerminalsOptions {
   env?: Env;
   spawn?: TerminalSpawner;
   readForeground?: ForegroundReader;
+  pickPort?: PortPicker;
   now?: () => number;
   newId?: () => string;
   notifyMs?: number;
@@ -57,6 +60,8 @@ export interface ServiceInput {
   cwd: string;
   command: string;
   env: Record<string, string>;
+  previewUrl: string | null;
+  portVariable: string;
 }
 
 type Listener = (snapshot: TerminalsSnapshot) => void;
@@ -183,13 +188,36 @@ export class Terminals {
     if (this.#sessions.get(session.info.id) === session) this.#store.writeScreen(session.info.id, screen);
   }
 
+  #takenPorts(session: TerminalSession) {
+    return new Set(
+      [...this.#sessions.values()]
+        .filter((each) => each !== session && each.running)
+        .flatMap((each) => (each.info.port === null ? [] : [each.info.port]))
+    );
+  }
+
+  #resolvePort(session: TerminalSession, service: ServiceDefinition) {
+    const yours = session.info.taskId === null;
+    if (yours && !service.previewUrl) return null;
+    const own = Number(service.env[service.portVariable]);
+    if (yours && Number.isInteger(own) && own > 0) return own;
+    return (this.#options.pickPort ?? pickFreePort)(session.info.port, this.#takenPorts(session));
+  }
+
+  #resolveServiceEnv(session: TerminalSession, service: ServiceDefinition, env: Record<string, string>) {
+    const port = this.#resolvePort(session, service);
+    session.info = { ...session.info, port };
+    if (port === null) return { ...env, ...service.env };
+    return { ...env, ...service.env, [service.portVariable]: String(port) };
+  }
+
   #start(session: TerminalSession) {
     const env = resolveTerminalEnv(this.#env, this.#options.version);
     const shell = resolveLoginShell(this.#env);
     const service = session.info.serviceId ? this.#services.get(session.info.serviceId) : undefined;
     session.start({
       command: service ? resolveServiceCommand(shell, service.command) : resolveShellCommand(shell),
-      env: service ? { ...env, ...service.env } : env,
+      env: service ? this.#resolveServiceEnv(session, service, env) : env,
       spawn: this.#options.spawn ?? spawnTerminalProcess,
       now: this.#now(),
     });
@@ -211,6 +239,7 @@ export class Terminals {
       name: service?.name ?? null,
       title: null,
       serviceId: service?.id ?? null,
+      port: null,
       status: 'running',
       exitCode: null,
       startedAt: this.#now(),

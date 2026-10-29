@@ -2,11 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import {
   isServiceActive,
   isServiceEnvKey,
+  isServicePreviewUrl,
   listProjectServices,
   listServiceTaskRuns,
   listTaskServices,
   resolveServiceState,
   resolveServicesSummary,
+  resolveServiceUrl,
   resolveServiceView,
   resolveTaskServiceCwd,
   SERVICE_LIMITS,
@@ -20,7 +22,17 @@ import {
 } from '../../src/index.ts';
 
 function service(id: string, extra: Partial<ServiceDefinition> = {}): ServiceDefinition {
-  return { id, projectId: 'p1', name: id, cwd: `/code/${id}`, command: 'bun dev', env: {}, ...extra };
+  return {
+    id,
+    projectId: 'p1',
+    name: id,
+    cwd: `/code/${id}`,
+    command: 'bun dev',
+    env: {},
+    previewUrl: null,
+    portVariable: 'PORT',
+    ...extra,
+  };
 }
 
 function terminal(extra: Partial<TerminalInfo>): TerminalInfo {
@@ -33,6 +45,7 @@ function terminal(extra: Partial<TerminalInfo>): TerminalInfo {
     place: 'repository',
     taskId: null,
     serviceId: null,
+    port: null,
     status: 'running',
     exitCode: null,
     startedAt: 0,
@@ -219,5 +232,41 @@ describe('task runs', () => {
   it('takes the task from the run, or the one it is asked for', () => {
     expect(resolveServiceView(WEB, null, 0).taskId).toBeNull();
     expect(resolveServiceView(WEB, null, 0, 'a').taskId).toBe('a');
+  });
+});
+
+describe('resolveServiceUrl', () => {
+  const preview = service('web', { previewUrl: 'http://localhost:{port}/tasks/SW-17' });
+
+  it('puts the run’s port into the preview URL', () => {
+    expect(resolveServiceUrl(preview, terminal({ port: 4123 }))).toBe('http://localhost:4123/tasks/SW-17');
+    expect(resolveServiceView(preview, terminal({ port: 4123 }), LATER).url).toBe(
+      'http://localhost:4123/tasks/SW-17'
+    );
+  });
+
+  it('has no URL without a preview URL, or without a port to put in it', () => {
+    expect(resolveServiceUrl(service('api'), terminal({ port: 4123 }))).toBeNull();
+    expect(resolveServiceUrl(preview, terminal({}))).toBeNull();
+    expect(resolveServiceUrl(preview, null)).toBeNull();
+  });
+
+  it('keeps a preview URL with no placeholder as it is', () => {
+    const fixed = service('docs', { previewUrl: 'https://docs.test/start' });
+    expect(resolveServiceUrl(fixed, null)).toBe('https://docs.test/start');
+  });
+});
+
+describe('isServicePreviewUrl', () => {
+  it('takes an http or https URL, with or without the port placeholder', () => {
+    expect(
+      ['http://localhost:{port}/a', 'https://shop.test', 'http://127.0.0.1:{port}'].map(isServicePreviewUrl)
+    ).toEqual([true, true, true]);
+  });
+
+  it('refuses anything else', () => {
+    expect(['localhost:{port}', 'file:///etc/hosts', 'javascript:alert(1)', ''].map(isServicePreviewUrl)).toEqual(
+      [false, false, false, false]
+    );
   });
 });

@@ -260,8 +260,20 @@ describe('the service form', () => {
       path: API.cwd,
       command: 'bun run dev',
       env: 'PORT=4000',
+      previewUrl: '',
+      portVariable: '',
     });
-    expect(createServiceDraft(null)).toEqual({ name: '', path: '', command: '', env: '' });
+    expect(
+      createServiceDraft({ ...API, previewUrl: 'http://localhost:{port}', portVariable: 'APP_PORT' })
+    ).toMatchObject({ previewUrl: 'http://localhost:{port}', portVariable: 'APP_PORT' });
+    expect(createServiceDraft(null)).toEqual({
+      name: '',
+      path: '',
+      command: '',
+      env: '',
+      previewUrl: '',
+      portVariable: '',
+    });
   });
 
   it('reads variables one a line, with export, quotes and comments, and refuses a line it cannot read', () => {
@@ -280,23 +292,66 @@ describe('the service form', () => {
   });
 
   it('checks every field before it is sent', () => {
-    expect(
-      validateServiceDraft({ name: ' api ', path: ' /shop ', command: ' bun dev ', env: 'A=1' })
-    ).toEqual({
+    const draft = {
+      name: ' api ',
+      path: ' /shop ',
+      command: ' bun dev ',
+      env: 'A=1',
+      previewUrl: '',
+      portVariable: '',
+    };
+    expect(validateServiceDraft(draft)).toEqual({
       ok: true,
-      input: { name: 'api', cwd: '/shop', command: 'bun dev', env: { A: '1' } },
+      input: {
+        name: 'api',
+        cwd: '/shop',
+        command: 'bun dev',
+        env: { A: '1' },
+        previewUrl: null,
+        portVariable: 'PORT',
+      },
     });
-    expect(validateServiceDraft({ name: '', path: '', command: '', env: 'bad' })).toEqual({
+    expect(
+      validateServiceDraft({
+        ...draft,
+        previewUrl: ' http://localhost:{port}/a ',
+        portVariable: ' APP_PORT ',
+      })
+    ).toMatchObject({
+      ok: true,
+      input: { previewUrl: 'http://localhost:{port}/a', portVariable: 'APP_PORT' },
+    });
+    expect(
+      validateServiceDraft({
+        name: '',
+        path: '',
+        command: '',
+        env: 'bad',
+        previewUrl: 'localhost',
+        portVariable: '1P',
+      })
+    ).toEqual({
       ok: false,
       errors: {
         name: 'Give the service a name.',
         path: 'Choose the folder it runs in.',
         command: 'Give the command that starts it.',
         env: 'Write each variable as NAME=value on a line of its own. “bad” is not.',
+        previewUrl: 'Give an http or https address, with {port} where the run’s port goes.',
+        portVariable: 'Use letters, digits and _, not starting with a digit.',
       },
     });
     expect(
-      validateServiceDraft({ name: 'x'.repeat(SERVICE_LIMITS.name + 1), path: '/a', command: 'b', env: '' })
+      validateServiceDraft({ ...draft, previewUrl: `http://a.test/${'x'.repeat(SERVICE_LIMITS.previewUrl)}` })
+    ).toMatchObject({ ok: false, errors: { previewUrl: expect.any(String) } });
+    expect(
+      validateServiceDraft({
+        ...draft,
+        name: 'x'.repeat(SERVICE_LIMITS.name + 1),
+        path: '/a',
+        command: 'b',
+        env: '',
+      })
     ).toMatchObject({ ok: false, errors: { name: `Keep the name to ${SERVICE_LIMITS.name} characters.` } });
   });
 
@@ -353,7 +408,14 @@ describe('the service form', () => {
     expect(both).toHaveLength(2);
     expect(togglePick(both, resolveSuggestionKey(WEB))).toEqual([resolveSuggestionKey(all)]);
     expect(listPickedInputs([WEB, all], picked)).toEqual([
-      { name: 'web', cwd: '/shop/apps/web', command: 'bun run dev', env: {} },
+      {
+        name: 'web',
+        cwd: '/shop/apps/web',
+        command: 'bun run dev',
+        env: {},
+        previewUrl: null,
+        portVariable: 'PORT',
+      },
     ]);
   });
 

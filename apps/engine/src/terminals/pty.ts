@@ -1,4 +1,5 @@
 import { userInfo } from 'node:os';
+import { DomainError } from '@shinsa/core';
 
 type Env = Record<string, string | undefined>;
 
@@ -40,6 +41,40 @@ export function resolveShellCommand(shell: string) {
 
 export function resolveServiceCommand(shell: string, command: string) {
   return [shell, '-l', '-c', command];
+}
+
+export type PortListener = (port: number) => number | null;
+
+export type PortPicker = (preferred: number | null, taken: ReadonlySet<number>) => number;
+
+const PORT_ATTEMPTS = 20;
+
+export const PORT_PROBE_SOCKET = {
+  data: (socket: { end: () => void }) => socket.end(),
+};
+
+export function listenOnce(port: number) {
+  try {
+    const listener = Bun.listen({ hostname: '127.0.0.1', port, socket: PORT_PROBE_SOCKET });
+    const bound = listener.port;
+    listener.stop(true);
+    return bound;
+  } catch {
+    return null;
+  }
+}
+
+export function pickFreePort(
+  preferred: number | null,
+  taken: ReadonlySet<number>,
+  listen: PortListener = listenOnce
+) {
+  if (preferred !== null && !taken.has(preferred) && listen(preferred) === preferred) return preferred;
+  for (let attempt = 0; attempt < PORT_ATTEMPTS; attempt++) {
+    const port = listen(0);
+    if (port !== null && !taken.has(port)) return port;
+  }
+  throw new DomainError('service_port_unavailable', 'Shinsa could not find a free port for the service.');
 }
 
 export type ForegroundReader = (pid: number) => Promise<string | null>;

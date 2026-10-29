@@ -57,6 +57,7 @@ const BASE: TerminalInfo = {
   place: 'repository',
   taskId: null,
   serviceId: null,
+  port: null,
   status: 'running',
   exitCode: null,
   startedAt: 0,
@@ -64,7 +65,16 @@ const BASE: TerminalInfo = {
 };
 
 function service(name: string, command = 'bun run dev'): ServiceDefinition {
-  return { id: name, projectId: 'shop', name, cwd: `~/Developer/shop/apps/${name}`, command, env: {} };
+  return {
+    id: name,
+    projectId: 'shop',
+    name,
+    cwd: `~/Developer/shop/apps/${name}`,
+    command,
+    env: {},
+    previewUrl: null,
+    portVariable: 'PORT',
+  };
 }
 
 function serviceTerminal(name: string, extra: Partial<TerminalInfo>): TerminalInfo {

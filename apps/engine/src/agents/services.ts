@@ -2,10 +2,13 @@ import { existsSync } from 'node:fs';
 import {
   isServiceActive,
   listTaskServices,
+  resolveServiceUrl,
   resolveTaskProject,
+  type ServiceView,
   type ShinsaState,
   type Task,
   type TaskServiceView,
+  type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { ServiceRun } from '../terminals/index.ts';
@@ -21,9 +24,9 @@ type ServiceAction = (typeof SERVICE_ACTIONS)[number];
 export interface TaskServiceRunner {
   readonly home: string;
   snapshot(): TerminalsSnapshot;
-  startService(id: string, run: ServiceRun): unknown;
+  startService(id: string, run: ServiceRun): TerminalInfo;
   stopService(id: string, taskId: string | null): Promise<void>;
-  restartService(id: string, run: ServiceRun): Promise<unknown>;
+  restartService(id: string, run: ServiceRun): Promise<TerminalInfo>;
   readServiceOutput(id: string, taskId: string | null, lines: number): Promise<string[]>;
 }
 
@@ -41,9 +44,13 @@ function describeNone(snapshot: TerminalsSnapshot, task: Task, state: ShinsaStat
   return 'None of the project’s services can run for this task: their folders are outside this task’s repository, or the task has no worktree of its own.';
 }
 
+function describePreview(view: Pick<ServiceView, 'url' | 'state'>) {
+  return view.url && isServiceActive(view) ? `, preview at ${view.url}` : '';
+}
+
 function describeView(view: TaskServiceView) {
   const exit = view.state === 'failed' && view.exitCode !== null ? ` with code ${view.exitCode}` : '';
-  return `- ${view.service.name} (${view.state}${exit}): \`${view.service.command}\` in ${view.cwd}`;
+  return `- ${view.service.name} (${view.state}${exit}): \`${view.service.command}\` in ${view.cwd}${describePreview(view)}`;
 }
 
 function findView(views: TaskServiceView[], reference: string) {
@@ -83,6 +90,11 @@ async function listServices(input: Record<string, unknown>, context: ServiceTool
   return `${describeView(view)}\nIts last ${output.length} lines:\n\`\`\`text\n${output.join('\n')}\n\`\`\``;
 }
 
+function applyRun(runner: TaskServiceRunner, action: 'start' | 'restart', id: string, run: ServiceRun) {
+  if (action === 'start') return runner.startService(id, run);
+  return runner.restartService(id, run);
+}
+
 async function runService(input: Record<string, unknown>, context: ServiceToolContext) {
   const { state, task, runner, now } = context;
   const action = readAction(input);
@@ -95,11 +107,12 @@ async function runService(input: Record<string, unknown>, context: ServiceToolCo
     return `Stopped ${name} for this task.`;
   }
   if (action === 'start' && isServiceActive(view))
-    return `${name} already runs for this task in ${view.cwd}.`;
+    return `${name} already runs for this task in ${view.cwd}${describePreview(view)}.`;
   const run = resolveRun(context, view);
-  if (action === 'start') runner.startService(view.service.id, run);
-  else await runner.restartService(view.service.id, run);
-  return `${action === 'start' ? 'Started' : 'Restarted'} ${name} for this task in ${run.cwd}. Read its output with list_services and the service’s name.`;
+  const terminal = await applyRun(runner, action, view.service.id, run);
+  const url = resolveServiceUrl(view.service, terminal);
+  const preview = url ? ` Its preview is at ${url} once it is up.` : '';
+  return `${action === 'start' ? 'Started' : 'Restarted'} ${name} for this task in ${run.cwd}.${preview} Read its output with list_services and the service’s name.`;
 }
 
 export function handleServiceTool(

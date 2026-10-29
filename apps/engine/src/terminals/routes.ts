@@ -2,10 +2,12 @@ import { statSync } from 'node:fs';
 import {
   DomainError,
   isServiceEnvKey,
+  isServicePreviewUrl,
   listTerminalPlaces,
   parseTerminalClientFrame,
   resolveTaskServiceCwd,
   SERVICE_LIMITS,
+  SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
   type ShinsaState,
@@ -116,6 +118,26 @@ function readEnv(body: JsonObject) {
   return env;
 }
 
+function readPreviewUrl(body: JsonObject) {
+  const url = readOptionalText(body, 'previewUrl', SERVICE_LIMITS.previewUrl)?.trim() || null;
+  if (url !== null && !isServicePreviewUrl(url))
+    throw new DomainError(
+      'service_preview_invalid',
+      'Give the preview as an http or https URL, with {port} where the run’s port goes.'
+    );
+  return url;
+}
+
+function readPortVariable(body: JsonObject) {
+  const name = readOptionalText(body, 'portVariable', 200)?.trim() || SERVICE_PORT_VARIABLE;
+  if (!isServiceEnvKey(name))
+    throw new DomainError(
+      'service_env_invalid',
+      `“${name}” is not a variable name: use letters, digits and _, not starting with a digit.`
+    );
+  return name;
+}
+
 function readServiceInput(
   body: JsonObject,
   others: ServiceDefinition[],
@@ -133,7 +155,14 @@ function readServiceInput(
     throw new DomainError('terminal_place_missing', `The folder ${cwd} is not there anymore.`);
   const command = readText(body, 'command', SERVICE_LIMITS.command).trim();
   if (!command) throw new DomainError('body_invalid', 'Give the service a command to run.');
-  return { name, cwd, command, env: readEnv(body) };
+  return {
+    name,
+    cwd,
+    command,
+    env: readEnv(body),
+    previewUrl: readPreviewUrl(body),
+    portVariable: readPortVariable(body),
+  };
 }
 
 function readServiceBatch(

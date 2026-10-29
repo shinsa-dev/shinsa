@@ -89,11 +89,13 @@ function formatServices({ projects, views, taskRuns }: ServicesRead, display: Di
     names.get(view.service.projectId) ?? '',
     { text: describeState(view), tone: STATE_TONES[view.state] },
     describeTaskRuns(taskRuns.get(view.service.id) ?? []),
+    isServiceActive(view) ? (view.url ?? '') : '',
     { text: view.service.command, tone: 'dim' as const },
   ]);
-  return describeTable(display, { headers: ['Service', 'Project', 'State', 'Tasks', 'Command'], rows }).join(
-    '\n'
-  );
+  return describeTable(display, {
+    headers: ['Service', 'Project', 'State', 'Tasks', 'Preview', 'Command'],
+    rows,
+  }).join('\n');
 }
 
 async function findServiceView(client: SurfaceClient, values: Values) {

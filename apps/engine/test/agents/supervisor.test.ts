@@ -37,6 +37,7 @@ import {
   createTask,
   type StubEngine,
 } from '../helpers/state.ts';
+import { createInfo } from '../terminals/fakes.ts';
 
 type Broker = NonNullable<SupervisorOptions['accounts']>;
 
@@ -1007,9 +1008,9 @@ describe('hand-overs', () => {
     const services = {
       home: '/home',
       snapshot: () => ({ terminals: [], services: [], home: '/home' }),
-      startService: () => undefined,
+      startService: () => createInfo(),
       stopService: () => Promise.resolve(),
-      restartService: () => Promise.resolve(),
+      restartService: () => Promise.resolve(createInfo()),
       readServiceOutput: () => Promise.resolve([]),
     };
     const agent = await handOverSetup(undefined, { services });

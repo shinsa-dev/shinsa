@@ -10,6 +10,7 @@ export function createTerminal(overrides: Partial<TerminalInfo> & { id: string }
     place: 'repository',
     taskId: null,
     serviceId: null,
+    port: null,
     status: 'running',
     exitCode: null,
     startedAt: NOW - 60_000,
@@ -32,6 +33,8 @@ export function createService(overrides: Partial<ServiceDefinition> & { id: stri
     cwd: `/Users/you/Developer/web/apps/${overrides.id}`,
     command: 'bun run dev',
     env: {},
+    previewUrl: null,
+    portVariable: 'PORT',
     ...overrides,
   };
 }

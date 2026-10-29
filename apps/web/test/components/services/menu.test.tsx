@@ -34,6 +34,8 @@ const QUEUE = createShinsaState({
   gates: [createGate({ id: 'g-review', taskId: 'review', type: 'review' })],
 });
 
+const NO_PREVIEW = { previewUrl: null, portVariable: 'PORT' };
+
 function running(id: string): ServiceView {
   return resolveServiceView(
     createService({ id }),
@@ -327,7 +329,11 @@ describe('the Services popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add 1 service' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent).toEqual([
-      ['add', 'shop', [{ name: 'web', cwd: `${ROOT}/apps/web`, command: 'bun run dev', env: {} }]],
+      [
+        'add',
+        'shop',
+        [{ name: 'web', cwd: `${ROOT}/apps/web`, command: 'bun run dev', env: {}, ...NO_PREVIEW }],
+      ],
     ]);
     expect(await screen.findByRole('button', { name: 'Manage' })).toBeTruthy();
   });
@@ -372,7 +378,11 @@ describe('the Services popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent).toEqual([
-      ['addOne', 'shop', { name: 'worker', cwd: ROOT, command: 'bun worker.ts', env: { PORT: '4000' } }],
+      [
+        'addOne',
+        'shop',
+        { name: 'worker', cwd: ROOT, command: 'bun worker.ts', env: { PORT: '4000' }, ...NO_PREVIEW },
+      ],
     ]);
     expect(await screen.findByRole('button', { name: 'Manage' })).toBeTruthy();
   });
