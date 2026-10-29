@@ -3,6 +3,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
@@ -26,7 +27,7 @@ function SourceRequest({ task, watchdog }: { task: Task; watchdog: Watchdog }) {
   if (!request) return null;
   const ready = server.trim().length > 0 && data.trim().length > 0;
   return (
-    <div className='flex flex-col gap-2 rounded-md bg-bg-a1 p-3 text-xs'>
+    <div className={cn(INSET, 'flex flex-col gap-2.5 p-3 text-xs')}>
       <p className='text-fg-4'>
         It needs <InlineMarkdown text={request.data} className='inline' />.{' '}
         <InlineMarkdown text={request.evidence} className='inline text-fg-3' />
@@ -49,6 +50,7 @@ function SourceRequest({ task, watchdog }: { task: Task; watchdog: Watchdog }) {
         }}
       >
         <Input
+          size='sm'
           aria-label='MCP server'
           placeholder='MCP server, as Integrations names it'
           value={server}
@@ -56,19 +58,18 @@ function SourceRequest({ task, watchdog }: { task: Task; watchdog: Watchdog }) {
           className='min-w-40 flex-1'
         />
         <Input
+          size='sm'
           aria-label='What it holds'
           placeholder='What it holds'
           value={data}
           onChange={(event) => setData(event.target.value)}
           className='min-w-40 flex-1'
         />
-        <Button type='submit' variant='outline' size='sm' disabled={!ready} loading={busy === 'connect'}>
+        <Button type='submit' size='sm' disabled={!ready} loading={busy === 'connect'}>
           Connect
         </Button>
       </form>
-      <p className='text-2xs text-fg-2'>
-        Connect the server in Settings → Integrations first, then name it here.
-      </p>
+      <p className='text-fg-2'>Connect the server in Settings → Integrations first, then name it here.</p>
     </div>
   );
 }

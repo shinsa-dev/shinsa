@@ -1256,8 +1256,10 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 - **You stop them.** `watchdog.stop` (Stop on the Overview, `shinsa watchdogs stop`) ends one, and its check if it is
   running. Marking the task done or cancelling it stops every active one; an agent cannot mark a task done while one
   is watching or waits for a source (`task_open`). While one is active the merged task's status reads Watching and its
-  Now card says its watchdogs keep watching the change; the Watchdogs panel lists each with its status, schedule,
-  source, progress and last check. `read_task` lists them too.
+  Now card says its watchdogs keep watching the change; the task's steps end with Watching after Merge
+  (`resolveTaskProgress`: current while one of the round's watchdogs is active, "1 of 4 done", done once they all
+  ended; a check running at stage `watching` keeps every earlier step done), and the Watchdogs panel lists each with
+  its status, schedule, source, progress and last check. `read_task` lists them too.
 - **Why a turn of the task's session, not an agent of its own.** The engine's first rule (Agents, above): a check is
   the same work as the change, read back, and the agent that built it knows what to look for. A check resumes a
   session that may be long and cold, so it costs a read of the whole context each time; compaction keeps that

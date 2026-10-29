@@ -6,6 +6,7 @@ import {
   listOpenGates,
   MINUTE_MS,
   replayEventLog,
+  resolveTaskProgress,
   serializeTaskDetail,
   type Watchdog,
   type WatchdogSpec,
@@ -645,6 +646,41 @@ describe('a watchdog that starts on production', () => {
     harness.advance(24 * HOUR_MS);
     reportLive(harness, taskId, false);
     expect(watchdog(harness, taskId).status).toBe('awaiting_production');
+  });
+});
+
+describe('watchdogs on the task’s steps', () => {
+  test('a Watching step follows the merge, current while one watches and done once they all end', () => {
+    const { harness, taskId } = mergeWith([
+      { ...LATENCY, firstCheckMinutes: 1440, maxGapHours: 24, forHours: 24 },
+    ]);
+    const watching = resolveTaskProgress(harness.task(taskId));
+    expect(watching.phases.at(-1)).toMatchObject({
+      key: 'watch',
+      title: 'Watching',
+      status: 'active',
+      count: { done: 0, total: 1 },
+    });
+    expect(watching.current?.key).toBe('watch');
+    fire(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('watching');
+    const checking = resolveTaskProgress(harness.task(taskId));
+    expect(checking.phases.filter((phase) => phase.status === 'active').map((phase) => phase.key)).toEqual([
+      'watch',
+    ]);
+    report(harness, taskId, true);
+    const passed = resolveTaskProgress(harness.task(taskId));
+    expect(passed.phases.at(-1)).toMatchObject({
+      key: 'watch',
+      status: 'done',
+      count: { done: 1, total: 1 },
+    });
+    expect(passed.current).toBeNull();
+  });
+
+  test('a task without watchdogs has no Watching step', () => {
+    const { harness, taskId } = mergeWith([]);
+    expect(resolveTaskProgress(harness.task(taskId)).phases.map((phase) => phase.key)).not.toContain('watch');
   });
 });
 

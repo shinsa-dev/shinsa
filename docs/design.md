@@ -2586,9 +2586,10 @@ Only these, and they win over anything below:
       then a quiet line with the schedule, the source and its progress ("18 h left · 5 checks", "Passed after 2
       checks, nothing wrong.", "Filed SW-9 to fix it."), and the last check's summary. Stop is a secondary button on
       the rows still active.
-    - **A source request asks, it never connects.** A watchdog waiting for a source shows, in a tinted block under its
-      row, the data it needs, where the code sends it and the servers it suggests, then a server and a "what it holds"
-      field with Connect. Connecting a server happens in Settings → Integrations; this only names it.
+    - **A source request asks, it never connects.** A watchdog waiting for a source shows, in an `INSET` block under its
+      row (a border, no tint, so the fields keep their contrast on the card), the data it needs, where the code sends
+      it and the servers it suggests, then a small server field and a "what it holds" field with Connect, as the secret
+      card asks for its value. Connecting a server happens in Settings → Integrations; this only names it.
     - **A project's data sources** are rows under its repositories in Settings → Projects (`IconRadar`): the server,
       what it holds, the repositories it covers ("every repository"), "added by an agent" when one did, and a remove
       button.
