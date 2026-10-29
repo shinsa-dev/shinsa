@@ -98,6 +98,7 @@
     "northwind",
     "nosniff",
     "notarytool",
+    "nothrow",
     "numstat",
     "octo",
     "oklab",
@@ -136,6 +137,7 @@
     "resteered",
     "resvg",
     "rrggbb",
+    "Rsrc",
     "rsvg",
     "runserver",
     "screencapture",
@@ -199,8 +201,6 @@
     "worktree",
     "worktrees",
     "xcrun",
-    "ZDOTDIR",
-    "nothrow",
-    "Rsrc"
+    "ZDOTDIR"
   ]
 }
