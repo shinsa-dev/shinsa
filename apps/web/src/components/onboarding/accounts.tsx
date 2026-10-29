@@ -1,18 +1,36 @@
-import type { AccountImport, AccountSummary } from '@shinsa/core';
+import type { AccountImport, AccountSummary, ProviderLogin } from '@shinsa/core';
 import { Badge } from '@shinsa/ui/components/badge';
 import { Button } from '@shinsa/ui/components/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { PathRow, SETTING_ROW, SettingsCard, SettingsEmpty } from '@/components/settings/group.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
-import { describeRemoval, resolveAccountLabel, resolveProviderIcon } from '@/lib/accounts/account.ts';
-import { describeAccountSource, isImportedNow } from '@/lib/onboarding.ts';
+import {
+  ACCOUNT_LABEL,
+  describeRemoval,
+  resolveAccountLabel,
+  resolveProviderIcon,
+} from '@/lib/accounts/account.ts';
+import {
+  describeAccountSource,
+  describeProviderSource,
+  isImportedNow,
+  resolveProviderChoice,
+} from '@/lib/onboarding.ts';
 
 export interface OnboardingAccountActions {
   signIn: (accountId: string | null) => void;
   remove: (accountId: string) => void;
+  copy: (text: string) => void;
 }
 
 function AccountActions({
@@ -56,6 +74,68 @@ function AccountActions({
   );
 }
 
+function ProviderRow({ login }: { login: ProviderLogin }) {
+  const { command } = resolveProviderChoice(login);
+  return (
+    <PathRow
+      icon={resolveProviderIcon(login.provider)}
+      iconLabel={login.label}
+      title={login.email ?? login.label}
+      path={describeProviderSource(login)}
+      action={command ? <CopyButton text={command} /> : undefined}
+    />
+  );
+}
+
+export function OnboardingAddAccount({
+  accounts,
+  providers,
+  actions,
+}: {
+  accounts: AccountSummary[] | null;
+  providers: ProviderLogin[];
+  actions: OnboardingAccountActions;
+}) {
+  const claude = accounts?.length === 0 ? 'Sign in to Claude' : 'Claude account';
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant='secondary' icon='IconUserAdd'>
+            {ACCOUNT_LABEL.add}
+          </Button>
+        }
+      />
+      <DropdownMenuContent align='end' className='min-w-64'>
+        <DropdownMenuItem icon='IconClaudeai' onClick={() => actions.signIn(null)}>
+          <span className='flex min-w-0 flex-1 flex-col'>
+            <span className='text-fg-4'>{claude}</span>
+            <span className='text-2xs text-fg-2'>Opens the Claude sign-in</span>
+          </span>
+        </DropdownMenuItem>
+        {providers.map((login) => {
+          const choice = resolveProviderChoice(login);
+          return (
+            <DropdownMenuItem
+              key={login.provider}
+              icon={resolveProviderIcon(login.provider)}
+              disabled={choice.command === null}
+              onClick={() => {
+                if (choice.command) actions.copy(choice.command);
+              }}
+            >
+              <span className='flex min-w-0 flex-1 flex-col'>
+                <span className='text-fg-4'>{choice.label}</span>
+                <span className='text-2xs text-fg-2'>{choice.detail}</span>
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function AccountRows({
   accounts,
   imported,
@@ -93,11 +173,13 @@ function AccountRows({
 
 export function OnboardingAccounts({
   accounts,
+  providers,
   imported,
   notes,
   actions,
 }: {
   accounts: AccountSummary[] | null;
+  providers: ProviderLogin[];
   imported: AccountImport[];
   notes: string[];
   actions: OnboardingAccountActions;
@@ -106,6 +188,15 @@ export function OnboardingAccounts({
     <div className='flex flex-col gap-3'>
       <SettingsCard>
         <AccountRows accounts={accounts} imported={imported} actions={actions} />
+        {providers.length > 0 && (
+          <ul className='flex flex-col'>
+            {providers.map((login) => (
+              <li key={login.provider}>
+                <ProviderRow login={login} />
+              </li>
+            ))}
+          </ul>
+        )}
       </SettingsCard>
       {notes.map((note) => (
         <p key={note} className='flex items-start gap-1.25 px-1 text-amber-text text-xs'>

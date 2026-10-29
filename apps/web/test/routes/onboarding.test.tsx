@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { OnboardingFlow } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { closeSignIn } from '@/lib/connection/accounts.ts';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
-import { createAccount, createSnapshot } from '../support/accounts.ts';
+import { createAccount, createProviderLogin, createSnapshot } from '../support/accounts.ts';
 import {
   createFlow,
   createOnboardingStatus,
@@ -38,11 +38,42 @@ const ROOTS = createStep({
   ],
 });
 
+const PROJECTS = createStep({
+  id: 'projects',
+  title: 'Shinsa sorted your repositories into projects',
+  options: [],
+  submitLabel: 'Create 2 projects',
+  projects: [
+    {
+      id: 'owner:acme',
+      name: 'Acme',
+      key: 'ACM',
+      color: 'green',
+      projectId: null,
+      folders: ['/Users/me/Acme'],
+      repos: [
+        { path: '/Users/me/Acme/api', name: 'api' },
+        { path: '/Users/me/Acme/web', name: 'web' },
+      ],
+    },
+    {
+      id: 'personal',
+      name: 'Personal',
+      key: 'PER',
+      color: 'blue',
+      projectId: null,
+      folders: [],
+      repos: [{ path: '/Users/me/code/notes', name: 'notes' }],
+    },
+  ],
+});
+
 function serve(first: OnboardingFlow, replies: ((body: unknown) => OnboardingFlow)[] = []) {
   fake = startFakeOnboarding({
     'GET /api/onboarding/flow': { answer: first },
     'POST /api/onboarding/flow': { answer: (body: unknown) => replies.shift()?.(body) ?? first },
     'GET /api/onboarding': { answer: createOnboardingStatus() },
+    'POST /api/onboarding/privacy': { answer: { ok: true } },
   });
   return fake;
 }
@@ -62,64 +93,95 @@ function sentReplies() {
 }
 
 describe('the setup page', () => {
-  it('shows one step at a time with its options, none picked, and where you are in setup', async () => {
+  it('shows the defaults with the recommended choice picked in each group, and where you are in setup', async () => {
     serve(createFlow(createStep()));
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'How should pull requests be merged?' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: 'Setup, step 3 of 6' })).toBeTruthy();
-    const options = screen.getAllByRole('option');
-    expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['false', 'false']);
+    expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Setup, step 3 of 5' })).toBeTruthy();
+    const merge = screen.getByRole('listbox', { name: 'Merging' });
+    const options = within(merge).getAllByRole('option');
+    expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['true', 'false']);
     expect(within(options[0] as HTMLElement).getByText('Recommended')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Continue/ })).toBeNull();
+    expect(screen.getByRole('listbox', { name: 'Large tasks' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Continue/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Back/ })).toBeTruthy();
   });
 
-  it('answers with the option you click and moves on to the next step', async () => {
-    serve(createFlow(createStep()), [
-      () => createFlow(createStep({ id: 'plans', title: 'Should agents ask?' })),
-    ]);
+  it('Continue keeps the recommended choices, sending one pick per group', async () => {
+    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts', title: 'Accounts' }))]);
     renderPage();
-    fireEvent.click(await screen.findByRole('option', { name: /Rebase/ }));
-    expect(await screen.findByRole('heading', { name: 'Should agents ask?' })).toBeTruthy();
-    expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'merge', values: ['rebase'] }]);
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }));
+    expect(await screen.findByRole('heading', { name: 'Accounts' })).toBeTruthy();
+    expect(sentReplies()).toEqual([
+      { type: 'answer', stepId: 'defaults', values: ['merge=squash', 'plans=yes'] },
+    ]);
   });
 
-  it('answers from the keyboard: the arrows move through the options and Enter picks one', async () => {
-    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'plans' }))]);
+  it('opens on its first step without sliding, then slides the old step out while the next slides in', async () => {
+    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts', title: 'Accounts' }))]);
     renderPage();
-    const list = await screen.findByRole('listbox', { name: 'How should pull requests be merged?' });
+    const heading = await screen.findByRole('heading', { name: 'How should agents work?' });
+    expect(heading.closest('.onboarding-in')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    const next = await screen.findByRole('heading', { name: 'Accounts' });
+    expect(next.closest('.onboarding-in')).not.toBeNull();
+    const leaving = screen.getByText('How should agents work?').closest('.onboarding-out') as HTMLElement;
+    expect(leaving.hasAttribute('inert')).toBe(true);
+    fireEvent.animationEnd(leaving.firstElementChild as HTMLElement);
+    expect(screen.getByText('How should agents work?')).toBeTruthy();
+    fireEvent.animationEnd(leaving);
+    await waitFor(() => expect(screen.queryByText('How should agents work?')).toBeNull());
+  });
+
+  it('a click changes only its own group’s pick, and nothing is sent until Continue', async () => {
+    serve(createFlow(createStep()), [() => createFlow(createStep({ id: 'accounts' }))]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('option', { name: /Rebase/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Start building/ }));
+    expect(screen.getByRole('option', { name: /Rebase/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('option', { name: /Squash/ }).getAttribute('aria-selected')).toBe('false');
+    expect(sentReplies()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        { type: 'answer', stepId: 'defaults', values: ['merge=rebase', 'plans=no'] },
+      ])
+    );
+  });
+
+  it('the highlight rests on your pick in a pick-one list and goes back to it when the pointer leaves', async () => {
+    serve(createFlow(createStep()));
+    renderPage();
+    const squash = await screen.findByRole('option', { name: /Squash/ });
+    const rebase = screen.getByRole('option', { name: /Rebase/ });
+    expect(squash.getAttribute('data-highlighted')).toBe('true');
+    fireEvent.pointerMove(rebase);
+    expect(rebase.getAttribute('data-highlighted')).toBe('true');
+    expect(squash.getAttribute('data-highlighted')).toBeNull();
+    fireEvent.pointerLeave(screen.getByRole('listbox', { name: 'Merging' }));
+    expect(squash.getAttribute('data-highlighted')).toBe('true');
+    expect(rebase.getAttribute('data-highlighted')).toBeNull();
+  });
+
+  it('picks from the keyboard: the arrows move through a group and Enter picks one', async () => {
+    serve(createFlow(createStep()));
+    renderPage();
+    const list = await screen.findByRole('listbox', { name: 'Merging' });
     await waitFor(() => expect(document.activeElement).toBe(list));
-    fireEvent.keyDown(list, { key: 'Enter' });
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     fireEvent.keyDown(list, { key: 'Tab' });
     expect(list.getAttribute('aria-activedescendant')).toMatch(/-1$/);
     fireEvent.keyDown(list, { key: 'Enter' });
-    await waitFor(() =>
-      expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'merge', values: ['rebase'] }])
-    );
+    expect(screen.getByRole('option', { name: /Rebase/ }).getAttribute('aria-selected')).toBe('true');
+    expect(sentReplies()).toEqual([]);
   });
 
-  it('goes back a step, shows your earlier answer picked and keeps it with Continue', async () => {
-    const back = createFlow(
-      createStep({
-        id: 'model',
-        title: 'Which model should agents use?',
-        options: [createOption({ value: 'opus', label: 'Opus 5.5', chosen: true })],
-      })
-    );
-    serve(createFlow(createStep()), [() => back, () => createFlow(createStep())]);
+  it('goes back a step from the defaults', async () => {
+    serve(createFlow(createStep()), [() => createFlow(PROJECTS)]);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Back/ }));
-    expect(await screen.findByRole('heading', { name: 'Which model should agents use?' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: /Opus/ }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
-    await waitFor(() =>
-      expect(sentReplies()).toEqual([
-        { type: 'open', stepId: 'model' },
-        { type: 'answer', stepId: 'model', values: ['opus'] },
-      ])
-    );
+    await waitFor(() => expect(sentReplies()).toEqual([{ type: 'open', stepId: 'projects' }]));
   });
 
   it('opens any step you already answered from the steps at the top', async () => {
@@ -162,7 +224,13 @@ describe('the setup page', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('lists the Claude accounts with the ones setup imported, and removes one you do not want', async () => {
+  it('lists the Claude accounts and Codex, adds either from Add account, and removes one you do not want', async () => {
+    const codexSignedOut = createProviderLogin({
+      status: 'signed_out',
+      method: null,
+      email: null,
+      fix: 'Sign in with `codex login`.',
+    });
     startFakeServer();
     pushAccounts(
       createSnapshot({
@@ -170,6 +238,7 @@ describe('the setup page', () => {
           createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' }),
           createAccount({ id: 'work', email: 'work@acme.dev', origin: 'cswap', plan: null }),
         ],
+        providers: [codexSignedOut],
       })
     );
     fake = startFakeOnboarding({
@@ -177,7 +246,7 @@ describe('the setup page', () => {
         answer: createFlow(
           createStep({
             id: 'accounts',
-            title: 'Which Claude accounts can agents use?',
+            title: 'Which accounts can agents use?',
             options: [],
             imported: [{ origin: 'cswap', email: 'work@acme.dev', plan: null }],
             notes: ['claude-swap did not hand over side@acme.dev.'],
@@ -189,15 +258,19 @@ describe('the setup page', () => {
       'POST /api/accounts/remove': {
         answer: createSnapshot({
           accounts: [createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' })],
+          providers: [codexSignedOut],
         }),
       },
       'POST /api/accounts/login': { answer: createSnapshot() },
+      'POST /api/accounts/refresh': { answer: createSnapshot() },
     });
     renderPage();
     const work = (await screen.findByText('work@acme.dev')).closest('li') as HTMLElement;
     expect(within(work).getByText('Added')).toBeTruthy();
     expect(within(work).getByText('From claude-swap')).toBeTruthy();
     expect(screen.getByText('claude-swap did not hand over side@acme.dev.')).toBeTruthy();
+    const codex = screen.getByText('Not signed in').closest('li') as HTMLElement;
+    expect(within(codex).getByText('Codex')).toBeTruthy();
     fireEvent.click(within(work).getByRole('button', { name: 'Remove' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Remove account' }));
     await waitFor(() =>
@@ -205,9 +278,22 @@ describe('the setup page', () => {
         accountId: 'work',
       })
     );
+    const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Codex account/ }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith('codex login'));
+    write.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Claude account/ }));
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/login')).toBe(true)
+    );
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() =>
+      expect(fake?.requests.some((request) => request.path === '/api/accounts/refresh')).toBe(true)
     );
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
@@ -235,7 +321,15 @@ describe('the setup page', () => {
     expect(screen.getByRole('button', { name: /Skip for now/ })).toBeTruthy();
     pushAccounts(createSnapshot({ accounts: [] }));
     expect(await screen.findByText('Shinsa found no Claude login on this machine.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sign in to Claude' })).toBeTruthy();
+    pushAccounts(
+      createSnapshot({ accounts: [], providers: [createProviderLogin({ email: 'me@openai.com' })] })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    expect(await screen.findByRole('menuitem', { name: /Sign in to Claude/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Codex account/ }).getAttribute('aria-disabled')).toBe(
+      'true'
+    );
+    expect(screen.getAllByText(/Signed in with ChatGPT/).length).toBeGreaterThan(0);
   });
 
   it('checks the tools again, finishes setup and shows what you set up with a way home', async () => {
@@ -246,13 +340,14 @@ describe('the setup page', () => {
       ready: false,
       submitLabel: 'Finish anyway',
       checks: [
-        { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50', fix: null },
+        { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50', fix: null, command: null },
         {
           id: 'bun',
           label: 'Bun',
           ok: false,
           detail: 'bun: not found',
           fix: 'Install Bun from https://bun.sh.',
+          command: 'curl -fsSL https://bun.sh/install | bash',
         },
       ],
     });
@@ -273,6 +368,75 @@ describe('the setup page', () => {
     expect(location.pathname).toBe('/');
   });
 
+  it('a folder macOS keeps private offers System Settings, checks again when you come back, or leaves it out', async () => {
+    const blocked = createStep({
+      ...ROOTS,
+      options: ROOTS.options.map((option) => ({ ...option, chosen: true })),
+      access: ['/Users/me/oss'],
+    });
+    serve(createFlow(blocked));
+    renderPage();
+    expect(await screen.findByText('macOS keeps ~/oss private')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open System Settings' }));
+    await waitFor(() =>
+      expect(fake?.requests.some((request) => request.path === '/api/onboarding/privacy')).toBe(true)
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(sentReplies()).toHaveLength(1));
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(sentReplies()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('option', { name: /~\/oss/ }));
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(sentReplies()).toHaveLength(3));
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave it out' }));
+    await waitFor(() => expect(sentReplies()).toHaveLength(4));
+    const both = { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer', '/Users/me/oss'] };
+    expect(sentReplies()).toEqual([
+      both,
+      both,
+      both,
+      { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer'] },
+    ]);
+  });
+
+  it('a tool you install by command shows it to copy, and the tools are checked again when you come back', async () => {
+    const tools = createStep({
+      id: 'prerequisites',
+      title: 'The tools Shinsa runs',
+      options: [],
+      ready: false,
+      checks: [
+        {
+          id: 'gh',
+          label: 'GitHub CLI',
+          ok: false,
+          detail: 'gh: not found',
+          fix: 'Install the GitHub CLI with Homebrew.',
+          command: 'brew install gh',
+        },
+      ],
+    });
+    serve(createFlow(tools));
+    renderPage();
+    expect(await screen.findByText('brew install gh')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    const reads = () =>
+      fake?.requests.filter((request) => request.method === 'GET' && request.path === '/api/onboarding/flow')
+        .length;
+    const before = reads();
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(reads()).toBe((before ?? 0) + 1));
+  });
+
   it('lets you leave setup you started again from Settings', async () => {
     serve(createFlow(ROOTS, { revisit: true }));
     renderPage();
@@ -291,6 +455,160 @@ describe('the setup page', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     });
-    expect(await screen.findByRole('heading', { name: 'How should pull requests be merged?' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
+  });
+
+  it('asks for a change in words with your edits, clears the box once it is done, and shows no earlier messages', async () => {
+    const revised = createStep({
+      ...PROJECTS,
+      projects: [
+        {
+          ...(PROJECTS.projects[0] as (typeof PROJECTS.projects)[number]),
+          id: 'revised:0',
+          name: 'Acme Corp',
+        },
+      ],
+      conversation: [{ request: 'rename acme', reply: 'I renamed Acme to Acme Corp.' }],
+      submitLabel: 'Create the project',
+    });
+    serve(createFlow(PROJECTS), [() => createFlow(revised)]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Create Personal' }));
+    const box = screen.getByRole('textbox', { name: 'Change the projects' });
+    expect((screen.getByRole('button', { name: 'Ask' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(box, { target: { value: '  rename acme ' } });
+    fireEvent.submit(box);
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        {
+          type: 'revise',
+          stepId: 'projects',
+          text: 'rename acme',
+          projects: [{ id: 'owner:acme', name: 'Acme', repos: ['/Users/me/Acme/api', '/Users/me/Acme/web'] }],
+        },
+      ])
+    );
+    await waitFor(() =>
+      expect((screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).value).toBe(
+        ''
+      )
+    );
+    expect(screen.queryByText('I renamed Acme to Acme Corp.')).toBeNull();
+    expect(screen.queryByText('rename acme')).toBeNull();
+    expect((screen.getAllByRole('textbox', { name: 'Project name' })[0] as HTMLInputElement).value).toBe(
+      'Acme Corp'
+    );
+    expect(screen.getByRole('button', { name: /Create the project/ })).toBeTruthy();
+  });
+
+  it('keeps what you typed when the change could not be made', async () => {
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: createFlow(PROJECTS) },
+      'POST /api/onboarding/flow': { status: 500, answer: { error: { code: 'x', message: 'No model.' } } },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+    });
+    renderPage();
+    const box = await screen.findByRole('textbox', { name: 'Change the projects' });
+    fireEvent.change(box, { target: { value: 'split acme' } });
+    fireEvent.submit(box);
+    await waitFor(() => expect(sentReplies()).toHaveLength(1));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).disabled
+      ).toBe(false)
+    );
+    expect((screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).value).toBe(
+      'split acme'
+    );
+    fireEvent.change(box, { target: { value: '   ' } });
+    fireEvent.submit(box);
+    expect(sentReplies()).toHaveLength(1);
+  });
+
+  it('going back after the projects were made lists them, and with new ones too says which are set up', async () => {
+    const filed = PROJECTS.projects.map((project) => ({ ...project, projectId: project.id }));
+    serve(
+      createFlow(
+        createStep({ ...PROJECTS, projects: [], filed, title: 'Your projects', submitLabel: 'Continue' })
+      )
+    );
+    renderPage();
+    const list = await screen.findByRole('list', { name: 'Projects already set up' });
+    expect(within(list).getByText('Acme')).toBeTruthy();
+    expect(within(list).getByText('2 repositories · ~/Acme · api, web')).toBeTruthy();
+    expect(screen.queryByText('Already set up')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Change the projects' })).toBeNull();
+    cleanup();
+    serve(createFlow(createStep({ ...PROJECTS, filed: filed.slice(1) })));
+    renderPage();
+    expect(await screen.findByText('Already set up')).toBeTruthy();
+  });
+
+  it('creates every suggested project with one press when you change nothing', async () => {
+    serve(createFlow(PROJECTS), [() => createFlow(createStep())]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Create 2 projects/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        {
+          type: 'answer',
+          stepId: 'projects',
+          values: ['continue'],
+          projects: [
+            { id: 'owner:acme', name: 'Acme', repos: ['/Users/me/Acme/api', '/Users/me/Acme/web'] },
+            { id: 'personal', name: 'Personal', repos: ['/Users/me/code/notes'] },
+          ],
+        },
+      ])
+    );
+  });
+
+  it('sends a renamed project without the repository you left out, and skips one you untick', async () => {
+    serve(createFlow(PROJECTS), [() => createFlow(createStep())]);
+    renderPage();
+    const [acme] = await screen.findAllByRole('textbox', { name: 'Project name' });
+    fireEvent.change(acme as HTMLElement, { target: { value: 'Acme Corp' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create Personal' }));
+    const [toggle] = screen.getAllByRole('button', { name: /Repositories/ });
+    fireEvent.click(toggle as HTMLElement);
+    expect(screen.getByText('2 repositories · ~/Acme')).toBeTruthy();
+    fireEvent.click(screen.getByText('web'));
+    expect(screen.getByText('1 of 2 repositories')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Keep api' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Keep api' }));
+    fireEvent.click(screen.getByRole('button', { name: /Hide/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Create the project/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([
+        {
+          type: 'answer',
+          stepId: 'projects',
+          values: ['continue'],
+          projects: [{ id: 'owner:acme', name: 'Acme Corp', repos: ['/Users/me/Acme/api'] }],
+        },
+      ])
+    );
+  });
+
+  it('cannot create a project you emptied the name of, and with every project left out continues without', async () => {
+    serve(createFlow(PROJECTS));
+    renderPage();
+    const [acme] = await screen.findAllByRole('textbox', { name: 'Project name' });
+    fireEvent.change(acme as HTMLElement, { target: { value: ' ' } });
+    expect(screen.getByRole('button', { name: /Create 2 projects/ }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create this project' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create Personal' }));
+    expect(screen.getByRole('button', { name: /Continue without projects/ }).hasAttribute('disabled')).toBe(
+      false
+    );
+  });
+
+  it('with nothing to suggest it shows the step’s own Continue', async () => {
+    serve(createFlow(createStep({ ...PROJECTS, projects: [], submitLabel: 'Continue' })));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }));
+    await waitFor(() =>
+      expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'projects', values: ['continue'] }])
+    );
   });
 });

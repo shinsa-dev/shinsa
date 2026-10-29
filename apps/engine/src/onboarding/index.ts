@@ -7,14 +7,24 @@ import {
   type Settings,
 } from '@shinsa/core';
 import type { ModelSource } from '../agents/index.ts';
+import type { QuickJson } from '../agents/quick/index.ts';
 import type { ConfigStore, ServerConfig } from '../config/index.ts';
 import type { JsonObject } from '../http/body.ts';
-import type { Roots } from '../repos/index.ts';
+import { createProjectChanges } from '../projects/routes.ts';
+import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { runCommand } from '../shell/index.ts';
 import type { AccountActions, AccountSource } from './accounts.ts';
 import { OnboardingSetup } from './flow.ts';
 import { type CommandRunner, resolvePrerequisites } from './prerequisites.ts';
-import { resolveChosenRoots } from './roots.ts';
+import {
+  createChosenProjects,
+  listFiledProjects,
+  listProjectSuggestions,
+  type ProjectSetup,
+} from './projects.ts';
+import { requestRevision } from './revise.ts';
+import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 
 export type { AccountActions, AccountSource, ClaudeAccount } from './accounts.ts';
@@ -26,6 +36,8 @@ export interface OnboardingContext {
   config: ServerConfig;
   store: ConfigStore;
   roots: Roots;
+  resolveLogin: LoginResolver;
+  ask: QuickJson;
   run?: CommandRunner;
   models: ModelSource;
   accounts: AccountSource;
@@ -61,9 +73,16 @@ function resolveDefaults(fields: JsonObject): Partial<Settings> {
 export class Onboarding {
   readonly #context: OnboardingContext;
   readonly setup: OnboardingSetup;
+  readonly #projects: ProjectSetup;
 
   constructor(context: OnboardingContext) {
     this.#context = context;
+    const { engine, resolveLogin } = context;
+    this.#projects = {
+      engine,
+      resolveLogin,
+      changes: createProjectChanges({ engine, resolveLogin, userHome: context.config.userHome }),
+    };
     this.setup = new OnboardingSetup({
       path: join(context.config.dataDir, 'onboarding.json'),
       steps: ONBOARDING_STEPS,
@@ -73,15 +92,24 @@ export class Onboarding {
       complete: async () => {
         await this.complete();
       },
-      resolveContext: () => ({
+      reviseProjects: async (revision, text, choices) => {
+        const suggestions = await listProjectSuggestions(this.#projects, context.roots.configured, revision);
+        return requestRevision(context.ask, suggestions, revision, text, choices);
+      },
+      resolveContext: (revision) => ({
         userHome: context.config.userHome,
         settings: context.engine.state.settings,
         roots: context.roots.configured,
+        projectCount: Object.keys(context.engine.state.projects).length,
         suggestRoots: () => this.listSuggestions(false),
+        suggestProjects: () => listProjectSuggestions(this.#projects, context.roots.configured, revision),
+        listFiledProjects: () => listFiledProjects(context.engine, context.roots.configured),
         listModels: () => context.models.listModels(),
         listAccounts: context.accounts,
         checkPrerequisites: () => this.resolvePrerequisites(),
         save: (patch, commandId) => this.#saveAnswer(patch, commandId),
+        createProjects: (choices, commandId) =>
+          createChosenProjects(this.#projects, context.roots.configured, choices, commandId, revision),
       }),
     });
   }
@@ -141,6 +169,12 @@ export class Onboarding {
     }
     if (store.config.onboardedAt === null) store.update({ onboardedAt: Date.now() });
     return this.resolveStatus();
+  }
+
+  async openPrivacySettings() {
+    const run = this.#context.run ?? runCommand;
+    const result = await run(['open', PRIVACY_SETTINGS_URL], this.#context.config.userHome);
+    return { ok: result.ok };
   }
 
   resolvePrerequisites() {

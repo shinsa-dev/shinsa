@@ -219,14 +219,17 @@ src/
 │                        (docs/engine.md → Test coverage of the change)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
+│                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,
+│                        without running git); discover.ts (scans the home folder for the folders that hold repositories),
 │                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
 │                        (setup verification before a task's first agent)
-├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional), the setup
-│                        steps: the fixed list, what each shows and saves (steps.ts), the run of setup, going back,
-│                        its saved state and the Claude logins it imports (flow.ts), the accounts it reads and the
-│                        imports it runs (accounts.ts)
+├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
+│                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
+│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
+│                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
+│                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
+│                        back, its saved state and the Claude logins it imports (flow.ts), the accounts it reads and
+│                        the imports it runs (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts

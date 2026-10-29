@@ -72,8 +72,8 @@
   --press-inset-x: 1px;
   --press-inset-y: 0.5px;
 
-  /* Icon sizes: the only three. sm beside 12–13px text, 22/24px controls and
-     rows; md beside 14px+ text and in 26/30px controls; lg for empty states
+  /* Icon sizes: the only three. sm beside 12–13px text, 22/24px controls,
+     every button and rows; md beside 14px+ text and in 26/30px inputs and selects; lg for empty states
      and full-page waits. `Icon` and `Spinner` draw at `--icon-size`, which a
      primitive sets for the glyphs inside it. */
   --icon-size-sm: 0.875rem;

@@ -215,7 +215,7 @@ Only these, and they win over anything below:
      out under `.dark`, so its chrome reads the same on the black in both themes (a `.dark` region reads dark aliases too:
      `globals.css` declares every alias, `foreground`, `popover-foreground`, `muted-foreground`, `primary-*`, `code-*`,
      on `:root, .dark`, so it resolves against the region's tokens): Close, Previous and Next are the
-     kit's `Button` (`outline`, `icon`, 26px with a 16px glyph), and the bar at the bottom is a `rounded-popup`
+     kit's `Button` (`outline`, `icon`, 26px with a 14px glyph), and the bar at the bottom is a `rounded-popup`
      `bg-popover` `shadow-3` strip (`h-8`, `text-xs`, `popover-foreground`; never a pill) with the caption (attachment name, evidence
      title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
      parts (Before, After, or each state's label) that switches the image in place.
@@ -1114,47 +1114,75 @@ Only these, and they win over anything below:
     - **The steps along the top** (`OnboardingStepper`, items from `listStepperItems`): one 26px segmented `Choice`
       with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
       slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
-      answered has the accent checkmark before its label (`Choice` items take `checked`) and its answer as the
-      tooltip ("Opus 5.5"); a step you reached but have not answered again (after going back) is a plain segment;
-      both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
-      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 2 of 6: Model",
+      answered has no mark, only its answer as the tooltip ("Opus 5.5 · Squash · Plan first"), and so has a step
+      you reached but have not answered again (after going back); both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
+      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 3 of 5: Defaults",
       `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
       height on every step and on the finished page.
     - **Each step** (`OnboardingSection`, shared with the finished page) is the `PageHeading` (the question itself as
-      the `text-base` title, "How should pull requests be merged?", its one line of description in `text-xs` `fg-2`
+      the `text-base` title, "How should agents work?", its one line of description in `text-xs` `fg-2`
       under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
-      action (Add account, Check again) and the primary button with the step's label ("Continue", "Skip for now",
-      "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
-      It enters with a 0.5rem slide and a fade (220ms, the strong ease-out; from the left when you went back), only a
-      fade under reduced motion; nothing leaves, so two steps never overlap.
+      action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
+      "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
+      The first step you open, and the finished page when you load it, are simply there. Moving to another step
+      slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
+      (the other way when you go back), both the full width of the column and 360ms on the standard curve
+      (`cubic-bezier(0.4, 0, 0.2, 1)`: it eases in and out without the long settle of a strong ease-out), and
+      neither fades on its own: the track masks only its 24px edges, the column's padding, so a step fades only as
+      it crosses the edge and nothing at rest is ever masked. The mask stays on, so starting a slide adds no layer. The track's one column is `minmax(0, 1fr)`, so a long line truncates inside the column
+      instead of widening the step past the track's clip. The step leaving is `inert` and goes when its slide ends.
+      Under reduced motion the steps swap at once.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
       like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
-      marked with the accent `SelectedMark` at the row's end, as a select or menu marks the current value. The hover
-      and the keyboard highlight are the menus' one surface, which slides to the row on the movement clock. Clicking a
-      one-answer option answers it at once and moves on, a spinner in the mark's slot while it saves; nothing starts
-      chosen on a step you have not answered, so there is no Continue until you go back to one you have, where your
-      answer is marked and Continue keeps it. The list takes focus when the step opens: the arrows, Home and End move
-      the highlight (`aria-activedescendant`) and Enter or Space picks, so setup runs from the keyboard alone; these
-      keys belong to the list, not the page (10).
+      marked with the accent `SelectedMark` at the row's end, centred on the whole row, as a select or menu marks the
+      current value. The hover and the keyboard highlight are the menus' one surface, which slides to the row on the
+      movement clock; in a pick-one list it rests on your pick and slides back to it when the pointer leaves. The first
+      list takes focus when the step opens: the arrows, Home and End move the highlight (`aria-activedescendant`) and
+      Enter or Space picks, so setup runs from the keyboard alone; these keys belong to the list, not the page (10).
+    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Large tasks, each a
+      `SectionLabel` over its list card, 16px apart. The recommended choice of each starts picked, so one Continue
+      keeps them all; a click only moves that list's mark, and nothing is sent until Continue.
+    - **Projects** (`OnboardingProjects`) are one card of the projects Shinsa suggests, all kept: a row each with a
+      `sm` `Checkbox`, the project's colour dot and its name in a `sm` `Input` you can rename, and under it the count,
+      the folder and the first repositories in `text-2xs` `fg-2` ("29 repositories · ~/Developer/Superwall · docs,
+      ios, pwn and 26 more"). A quiet Repositories button opens the project's repositories as checkbox rows, to leave
+      one out ("2 of 3 repositories"). The primary button counts what you keep ("Create 6 projects", "Create the
+      project", "Continue without projects"), is off while a kept project has no name, and shows its spinner while the
+      projects are made; the rows are locked meanwhile. Under the list, outside any card, sits a plain chat box for a change in words
+      (`OnboardingProjectsChat`), with no earlier messages shown: a `default` field
+      ("Ask for a change, like …") with a secondary Ask button, no icon, which sends the request with your edits and
+      shows its spinner; the box clears once the change is made and keeps your words when it is not. The projects you
+      already made are a read-only card (`OnboardingFiledProjects`: the dot, the name, and the count, folder and first
+      repositories), under an "Already set up" `SectionLabel` when new suggestions are shown above it, and alone when
+      you come back to the step after making them.
     - **Folders** pick several: the found folders with their repository counts, each with a `sm` `Checkbox` in the
       row's icon slot, the folders you chose already checked (the one with the most repositories on a first run), and
       as the card's last row a `sm` path field with a secondary Add folder (Settings → Repository folders' row), which
-      adds the folder to the list checked. Continue is off with nothing checked.
+      adds the folder to the list checked. Continue is off with nothing checked. A folder macOS keeps private is never
+      an error: a Settings card above the list (`OnboardingAccess`, the lock icon in `fg-3`, "macOS keeps ~/Documents
+      private" in `text-xs` `fg-4` over why in `text-2xs` `fg-3`) offers Open System Settings (Full Disk Access),
+      Check again and Leave it out, `sm` secondary buttons; your picks stay checked, and coming back to the window
+      checks again by itself (`useWindowReturn`).
     - **Accounts** are already imported when the step opens (the server does it, never a question): one Settings
       card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where it came from
       and its plan in `text-2xs` `fg-2`: "Your Claude Code login · Max plan", "From claude-swap"), "Added" on the ones
       this setup imported, Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
-      words). Until the socket has the accounts the card holds one row with a delayed `LoadingLine`, never "no login
-      found". Add account (Sign in to Claude with none) is in the footer and opens the sign-in dialog. An import that
-      failed is an amber line under the card.
+      words), then Codex's login as a row of its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus
+      plan" or "Not signed in", and the `CopyButton` of `codex login` while it is not). Until the socket has the
+      accounts the card holds one row with a delayed `LoadingLine`, never "no login found". Add account in the footer
+      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, a Codex
+      account copies `codex login` to run in a terminal (off once Codex is signed in, with how it is). Coming back to
+      the window reads the accounts again, so a Codex login you finished in a terminal shows. An import that failed is
+      an amber line under the card.
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
-      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3`, and its
-      version or state at the right in `TOKEN_TEXT`. Check again is in the footer. An optional check that fails (codex
+      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
+      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in
+      `TOKEN_TEXT`. Check again is in the footer, and coming back to the window checks again by itself. An optional check that fails (codex
       and its sign-in) is a skipped row, never a fail, and never holds setup back.
     - **Finished** (`OnboardingFinished`) is "Shinsa is ready" with its line, what you set up as `SettingRow`s in a
-      Settings card (Folders, Model, Merging, Plans, Accounts, the answer at the right in `fg-3`) and Go to Home.
+      Settings card (Folders, Projects, Defaults, Accounts, the answer at the right in `fg-3`) and Go to Home.
       Opening `/onboarding` once the server's run is finished (setup done and not started again) goes Home instead.
     Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
     as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,
@@ -3670,8 +3698,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, every button (icon-only ones too), every select, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -3872,8 +3900,8 @@ it sits with (Where Shinsa differs, 19). No icon has an opacity.
 ### Sizes — one table, keyed by control height
 
 An icon's spacing comes from **the height of the control it sits in**, and its
-size from the three-size scale (Icon sizes): `sm` in 22/24px controls, `md` in
-26/30px ones. Primitives set the size for their glyphs; never override it.
+size from the three-size scale (Icon sizes): `sm` in 22/24px controls and `default` buttons, `md` in
+the other 26/30px ones. Primitives set the size for their glyphs; never override it.
 The pixel columns below are paywall-next's; Shinsa's control heights are
 Where Shinsa differs, 20.
 
@@ -3887,9 +3915,8 @@ Where Shinsa differs, 20.
 
 - **Edge → icon is 1px less than edge → text**: a glyph's box carries empty
   space, so an icon at the text's inset reads indented.
-- **Icon-only buttons** (`icon-sm`, `icon`, `icon-lg`) keep a 16px glyph,
-  centred in the box — with no label, the glyph is the whole control;
-  `icon-xs` takes 14/16px and `icon-xl` 18/20px (see Buttons).
+- **Icon-only buttons** draw a 14px glyph like every button, centred in the
+  box (see Buttons).
 - **Icons centre 0.5px above the label's cap-height middle** (see Buttons).
 - Field affixes (`InputGroupAddon` inline icons) follow the row for the field's
   size for icon and edge → icon, but the **icon → text gap is 2px larger**
@@ -4355,10 +4382,10 @@ trailing alike (Iconography → Icon colour): a trailing chevron or a
 "view all" arrow is the label's ink. On a secondary button the icon rests at
 `icon-2` beside the `fg-2` label and turns `icon-4` with it on hover; on a filled
 button it is the label's white. Icons in a Button never take a size, colour,
-opacity or stroke override: the button's size sets them (`sm` in `xs`/`sm`,
-`md` from `default` up), chevrons and the loading spinner included.
+opacity or stroke override: every size draws them at 14px (`sm`), chevrons
+and the loading spinner included.
 Icon sizes are square: `icon-xs` 24px (14/16px glyph), `icon-sm` 28px,
-`icon` 32px at every width, `icon-lg` 36px (16px glyph), `icon-xl` 40px
+`icon` 32px at every width, `icon-lg` 36px (14px glyph), `icon-xl` 40px
 (18px glyph), each at every width. `list-row` is a
 full-width, left-aligned, `font-normal`, **single 32px line** — its label goes in `Truncate`
 so a long one ends in an ellipsis with the full text in a tooltip. A row that

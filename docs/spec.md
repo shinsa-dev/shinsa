@@ -576,9 +576,12 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup steps): six steps on first run, one at a time, each
-answered with a pick (folders also by path), any earlier one open to change, your Claude logins imported
-for you, and the prerequisites checked. Nothing else opens until setup is complete.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): five steps on first run, one at a time (Folders,
+Projects, Defaults, Accounts, Tools), each with the recommended answer already picked (folders also by path),
+any earlier one open to change. Your projects are suggested from the repositories in your folders and made
+with one press, your Claude logins are imported for you, a folder macOS keeps private asks for access
+instead of failing, and the prerequisites are checked with the command that fixes each. Nothing else opens
+until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own
