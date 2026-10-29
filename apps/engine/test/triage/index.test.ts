@@ -170,6 +170,39 @@ describe('resolveTriage with the model', () => {
   });
 });
 
+describe('the branch triage names', () => {
+  test('starts with a conventional commit type, or the fallback branch is used', async () => {
+    const triage = await resolveTriage(
+      stateWith(),
+      newTask(),
+      LOCAL,
+      answer({ title: 'Fix it', repo: 'none', size: 'small', branch: 'feature/login', waits_on: [] })
+    );
+    expect(triage?.branch).toBe('fix/fix-the-login-button');
+    const perf = await resolveTriage(
+      stateWith(),
+      newTask(),
+      LOCAL,
+      answer({ title: 'Fix it', repo: 'none', size: 'small', branch: 'perf/faster-list', waits_on: [] })
+    );
+    expect(perf?.branch).toBe('perf/faster-list');
+  });
+
+  test('the prompt and the schema list the same commit types', async () => {
+    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, schema });
+      return Promise.resolve(null as T);
+    };
+    await resolveTriage(stateWith(), newTask(), LOCAL, ask);
+    expect(calls[0]?.system).toContain('type one of feat, fix, chore, refactor, docs, perf, test');
+    expect(calls[0]?.schema?.properties.branch).toEqual({
+      type: 'string',
+      pattern: '^(feat|fix|chore|refactor|docs|perf|test)\\/[a-z0-9-]+$',
+    });
+  });
+});
+
 describe('resolveTriage with structured output', () => {
   test('size and waits_on are typed decisions: the schema offers exactly their options and the prompt names each', async () => {
     const state = stateWith((draft) => {

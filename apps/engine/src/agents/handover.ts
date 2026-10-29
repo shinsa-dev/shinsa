@@ -8,13 +8,12 @@ import {
   type Task,
   validateEvidence,
 } from '@shinsa/core';
+import { resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
 import type { EvidenceFolder } from '../store/evidence.ts';
 import type { EvidenceStore } from '../store/index.ts';
 
 export const HANDED_OVER =
   'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.';
-
-const COMMIT_TYPES = /^(feat|fix|chore|refactor|docs|perf|test)$/;
 
 const FIX_COMMIT: Record<NonNullable<Task['fixFor']>, string> = {
   checks: 'make the checks pass',
@@ -25,8 +24,6 @@ const FIX_COMMIT: Record<NonNullable<Task['fixFor']>, string> = {
   update: 'resolve conflicts with the base branch',
   hook: 'make the pre-push hook pass',
 };
-
-const SUBJECT_LIMIT = 72;
 
 export function readString(input: Record<string, unknown>, key: string) {
   const value = input[key];
@@ -40,21 +37,10 @@ export function assertProtocol<T>(result: { ok: true; value: T } | { ok: false; 
   );
 }
 
-function resolveCommitType(task: Task) {
-  const prefix = task.branch?.split('/')[0] ?? '';
-  return COMMIT_TYPES.test(prefix) ? prefix : 'feat';
-}
-
-function lowerFirst(text: string) {
-  return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
 export function resolveCommitMessage(task: Task, run: Run) {
   if (run.purpose !== 'build') return `fix: ${FIX_COMMIT[task.fixFor ?? 'you']}`;
-  const type = resolveCommitType(task);
   const step = task.plan?.document?.phases[run.phaseIndex ?? 0];
-  const subject = lowerFirst(step?.title ?? task.title).replace(new RegExp(`^${type}(es)?\\s+`), '');
-  return `${type}: ${subject}`.slice(0, SUBJECT_LIMIT);
+  return serializeConventionalSubject(resolveCommitType(task.branch), step?.title ?? task.title);
 }
 
 function isWebUrl(url: string) {

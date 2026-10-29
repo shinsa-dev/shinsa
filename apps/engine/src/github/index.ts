@@ -10,12 +10,13 @@ import {
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
+  resolveCurrentRound,
   type Settings,
   serializeMergeStepsMarkdown,
   serializeTestingMarkdown,
   type Task,
 } from '@shinsa/core';
-import { assertRefName } from '../git/index.ts';
+import { assertRefName, resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
 import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 
@@ -374,17 +375,27 @@ export function readStackedPullRequest(repo: Repo, number: number, signal?: Abor
   return readTarget(repo, String(number), signal);
 }
 
+export function serializePullRequestTitle(task: Task) {
+  return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title, null);
+}
+
+function serializeTaskReference(task: Task) {
+  const link = `\`shinsa://task/${task.id}\``;
+  return task.handle ? `Shinsa task: ${task.handle}, ${link}` : `Shinsa task: ${link}`;
+}
+
 export function serializePullRequestBody(task: Task) {
   const testing = serializeTestingMarkdown(assembleReport(task).walkthrough?.testing);
   const steps = serializeMergeStepsMarkdown(listMergeSteps(task));
   return [
-    task.summary ?? '',
-    testing ? `\n${testing}` : '',
-    steps ? `\n${steps}` : '',
-    task.plan ? `\n<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
+    serializeTaskReference(task),
+    task.summary?.trim() ?? '',
+    testing,
+    steps,
+    task.plan ? `<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
   ]
-    .join('\n')
-    .trim();
+    .filter((part) => part.length > 0)
+    .join('\n\n');
 }
 
 export async function createPullRequest(
@@ -407,7 +418,7 @@ export async function createPullRequest(
       '--base',
       assertRefName(baseBranch ?? repo.defaultBranch),
       '--title',
-      task.title,
+      serializePullRequestTitle(task),
       '--body-file',
       '-',
     ],
@@ -421,6 +432,18 @@ export async function retargetPullRequest(repo: Repo, number: number, base: stri
   await runGhOrThrow(['pr', 'edit', String(number), '--base', assertRefName(base)], repo.path, { signal });
 }
 
+async function resolveMergeMessage(
+  repo: Repo,
+  number: number,
+  method: Settings['mergeMethod'],
+  signal?: AbortSignal
+) {
+  if (method === 'rebase') return [];
+  const output = await runGhOrThrow(['pr', 'view', String(number), '--json', 'title'], repo.path, { signal });
+  const title = (JSON.parse(output) as { title?: string }).title?.trim();
+  return title ? ['--subject', `${title} (#${number})`, '--body', ''] : [];
+}
+
 export async function mergePullRequest(
   repo: Repo,
   number: number,
@@ -430,5 +453,8 @@ export async function mergePullRequest(
 ) {
   if (!MERGE_METHODS.has(method)) throw new Error(`"${method}" is not a merge method.`);
   const guard = headSha ? ['--match-head-commit', assertCommitSha(headSha)] : [];
-  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`, ...guard], repo.path, { signal });
+  const message = await resolveMergeMessage(repo, number, method, signal);
+  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`, ...guard, ...message], repo.path, {
+    signal,
+  });
 }
