@@ -1,4 +1,5 @@
 import type {
+  AccountImport,
   AccountSummary,
   OnboardingFlow,
   OnboardingStep,
@@ -215,8 +216,8 @@ const ACCOUNTS = createSampleStep({
   title: 'Which accounts can agents use?',
   description:
     'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
-  imported: [{ origin: 'cswap', email: 'agents@superwall.com', plan: null }],
-  notes: ['claude-swap did not hand over side@superwall.com. Sign in to it instead.'],
+  imported: [{ origin: 'claude', email: 'christo@superwall.com', plan: 'max' }],
+  notes: ['Your Claude Code login is no longer side@superwall.com. Check again.'],
 });
 
 const TOOLS = createSampleStep({
@@ -249,7 +250,7 @@ const TOOLS = createSampleStep({
 
 const SAMPLE_ORIGINS: Record<string, AccountSummary['origin']> = {
   work: 'claude',
-  team: 'cswap',
+  team: 'login',
   lapsed: 'login',
 };
 
@@ -280,8 +281,11 @@ const SAMPLE_PROVIDERS: ProviderLogin[] = [
   },
 ];
 
+const SAMPLE_IMPORTS: AccountImport[] = [{ origin: 'cswap', email: 'swap@superwall.com', plan: null }];
+
 const ACCOUNT_ACTIONS = {
   signIn: () => void acknowledgeSample(),
+  importLogin: () => void acknowledgeSample(),
   remove: () => void acknowledgeSample(),
   copy: () => void acknowledgeSample(),
 };
@@ -299,6 +303,7 @@ function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit
         userHome={USER_HOME}
         accounts={{
           list: accounts,
+          imports: SAMPLE_IMPORTS,
           providers: SAMPLE_PROVIDERS,
           actions: ACCOUNT_ACTIONS,
           refresh: () => void acknowledgeSample(),

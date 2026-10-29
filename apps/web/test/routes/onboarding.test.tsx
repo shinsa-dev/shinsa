@@ -224,6 +224,36 @@ describe('the setup page', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('offers each claude-swap account as a sign-in of its own from Add account', async () => {
+    startFakeServer();
+    pushAccounts(
+      createSnapshot({
+        accounts: [createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' })],
+        imports: [{ origin: 'cswap', email: 'swap@acme.dev', plan: null }],
+      })
+    );
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': {
+        answer: createFlow(
+          createStep({ id: 'accounts', title: 'Which accounts can agents use?', options: [] })
+        ),
+      },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+      'POST /api/accounts/import': { answer: createSnapshot() },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+    const item = await screen.findByRole('menuitem', { name: /Sign in to swap@acme\.dev/ });
+    expect(item.textContent).toBe('Sign in to swap@acme.devFrom claude-swap');
+    fireEvent.click(item);
+    await waitFor(() =>
+      expect(fake?.requests.find((request) => request.path === '/api/accounts/import')?.body).toEqual({
+        origin: 'cswap',
+        email: 'swap@acme.dev',
+      })
+    );
+  });
+
   it('lists the Claude accounts and Codex, adds either from Add account, and removes one you do not want', async () => {
     const codexSignedOut = createProviderLogin({
       status: 'signed_out',

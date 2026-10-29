@@ -100,25 +100,15 @@ describe('account changes', () => {
       'POST /api/accounts/remove': { answer: ACCOUNTS },
       'POST /api/accounts/login/code': { answer: ACCOUNTS },
     });
-    await importAccount({ origin: 'cswap', email: 'two@example.com', plan: 'pro' });
     await updateAccount('a', { paused: true }, 'Paused.');
     await removeAccount('a');
     await submitLoginCode('login-1', 'abc');
     expect(fake.requests.map((request) => [request.path, request.body])).toEqual([
-      ['/api/accounts/import', { origin: 'cswap', email: 'two@example.com' }],
       ['/api/accounts/update', { accountId: 'a', patch: { paused: true } }],
       ['/api/accounts/remove', { accountId: 'a' }],
       ['/api/accounts/login/code', { loginId: 'login-1', code: 'abc' }],
     ]);
-    expect(toasts.success.mock.calls.map(([text]) => text)).toEqual([
-      'Imported two@example.com.',
-      'Paused.',
-      'Account removed.',
-    ]);
-    expect(toasts.success.mock.calls[0]?.[1]).toEqual({
-      description:
-        'Remove it from claude-swap or turn off claude-swap’s auto-switch, so only Shinsa refreshes this login.',
-    });
+    expect(toasts.success.mock.calls.map(([text]) => text)).toEqual(['Paused.', 'Account removed.']);
   });
 
   it('adds your Claude Code login with a plain confirmation, and says why an import failed', async () => {
@@ -127,7 +117,7 @@ describe('account changes', () => {
     expect(toasts.success).toHaveBeenCalledWith('Added your Claude Code login.');
     fake?.stop();
     fake = startFakeOnboarding({ 'POST /api/accounts/import': REFUSED });
-    expect(await importAccount({ origin: 'cswap', email: 'x@example.com', plan: null })).toBe(false);
+    expect(await importAccount({ origin: 'claude', email: 'me@example.com', plan: null })).toBe(false);
     expect(toasts.error).toHaveBeenCalledWith('A sign-in is already running.');
   });
 
@@ -161,10 +151,42 @@ describe('signing in', () => {
     fake = startFakeOnboarding({ 'POST /api/accounts/login': { answer: started } });
     const { result } = renderHook(() => useSignInDialog());
     await act(() => startSignIn('a'));
-    expect(result.current).toEqual({ open: true, accountId: 'a', loginId: 'login-1', failure: null });
+    expect(result.current).toEqual({
+      open: true,
+      accountId: 'a',
+      importing: null,
+      loginId: 'login-1',
+      failure: null,
+    });
     expect(requestsTo('/api/accounts/login')).toEqual([{ accountId: 'a' }]);
     await act(() => retrySignIn());
     expect(requestsTo('/api/accounts/login')).toEqual([{ accountId: 'a' }, { accountId: 'a' }]);
+  });
+
+  it('signs in to an account from claude-swap through the import, and a retry imports it again', async () => {
+    fake = startFakeOnboarding({
+      'POST /api/accounts/import': {
+        answer: createSnapshot({ login: createLogin({ email: 'two@example.com' }) }),
+      },
+    });
+    const { result } = renderHook(() => useSignInDialog());
+    await act(async () => {
+      await importAccount({ origin: 'cswap', email: 'two@example.com', plan: null });
+    });
+    expect(result.current).toEqual({
+      open: true,
+      accountId: null,
+      importing: 'two@example.com',
+      loginId: 'login-1',
+      failure: null,
+    });
+    await act(() => retrySignIn());
+    expect(requestsTo('/api/accounts/import')).toEqual([
+      { origin: 'cswap', email: 'two@example.com' },
+      { origin: 'cswap', email: 'two@example.com' },
+    ]);
+    expect(requestsTo('/api/accounts/login')).toEqual([]);
+    expect(toasts.success).not.toHaveBeenCalled();
   });
 
   it('starts a sign-in for a new account and remembers why it could not start', async () => {

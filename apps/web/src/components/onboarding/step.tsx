@@ -1,4 +1,5 @@
 import type {
+  AccountImport,
   AccountSummary,
   OnboardingFlow,
   OnboardingProjectChoice,
@@ -64,6 +65,7 @@ export interface OnboardingStepActions {
 
 export interface OnboardingAccountsView {
   list: AccountSummary[] | null;
+  imports: AccountImport[];
   providers: ProviderLogin[];
   actions: OnboardingAccountActions;
   refresh: () => void;
@@ -260,6 +262,7 @@ function StepAction({
     return (
       <OnboardingAddAccount
         accounts={accounts.list}
+        imports={accounts.imports}
         providers={accounts.providers}
         actions={accounts.actions}
       />

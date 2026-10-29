@@ -23,11 +23,14 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import {
   ACCOUNT_LABEL,
+  describeCopiedLogin,
   describeDefaultChanged,
   describeDuplicate,
   describeImport,
   describeRemoval,
+  isCopiedLogin,
   MOVE_ACTION,
+  resolveImportIcon,
   resolvePauseAction,
 } from '@/lib/accounts/account.ts';
 import {
@@ -85,7 +88,7 @@ function AddAccountButton({ imports, actions }: { imports: AccountImport[]; acti
           return (
             <DropdownMenuItem
               key={`${entry.origin}-${entry.email}`}
-              icon={entry.origin === 'claude' ? 'IconClaudeai' : 'IconArrowsRepeatRightLeft'}
+              icon={resolveImportIcon(entry)}
               onClick={() => actions.importLogin(entry)}
             >
               <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
@@ -301,6 +304,9 @@ export function AccountsGroup({
           settings={settings}
           actions={actions}
         />
+      ))}
+      {accounts.filter(isCopiedLogin).map((account) => (
+        <SettingsEmpty key={`copied-${account.id}`}>{describeCopiedLogin(account)}</SettingsEmpty>
       ))}
       {duplicates.map((duplicate) => (
         <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate, accounts)}</SettingsEmpty>

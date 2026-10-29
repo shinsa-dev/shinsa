@@ -20,6 +20,7 @@ export const ACCOUNT_LABEL = {
   add: 'Add account',
   addClaude: 'Add a Claude account',
   signInAnother: 'Sign in with another account',
+  addedClaudeLogin: 'Added your Claude Code login.',
   options: 'Account options',
   makeDefault: 'Set as default',
   default: 'Default',
@@ -149,15 +150,6 @@ export function resolvePauseAction(account: AccountSummary): AccountAction {
   return { label: 'Leave out of new work', icon: 'IconPause', done: `New work skips ${label}.` };
 }
 
-export function describeImported(entry: AccountImport) {
-  if (entry.origin === 'claude') return { title: 'Added your Claude Code login.', description: null };
-  return {
-    title: `Imported ${entry.email}.`,
-    description:
-      'Remove it from claude-swap or turn off claude-swap’s auto-switch, so only Shinsa refreshes this login.',
-  };
-}
-
 export function describeDuplicate(duplicate: AccountDuplicate, accounts: AccountSummary[]) {
   const kept = accounts.find((account) => account.id === duplicate.keptId);
   if (kept?.origin === 'claude') {
@@ -166,9 +158,21 @@ export function describeDuplicate(duplicate: AccountDuplicate, accounts: Account
   return `${duplicate.email} is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.`;
 }
 
+export function isCopiedLogin(account: AccountSummary) {
+  return account.origin === 'cswap';
+}
+
+export function resolveImportIcon(entry: AccountImport): IconName {
+  return entry.origin === 'claude' ? 'IconClaudeai' : 'IconArrowsRepeatRightLeft';
+}
+
+export function describeCopiedLogin(account: AccountSummary) {
+  return `${resolveAccountLabel(account)} is a copy of claude-swap’s login, so each one signs the other out. Sign in to it again from its menu to give Shinsa a login of its own.`;
+}
+
 export function describeImport(entry: AccountImport) {
   if (entry.origin === 'claude') return { label: 'Use your Claude Code login', detail: entry.email };
-  return { label: `Import ${entry.email} from claude-swap`, detail: null };
+  return { label: `Sign in to ${entry.email}`, detail: 'From claude-swap' };
 }
 
 export function describeRemoval(account: AccountSummary) {

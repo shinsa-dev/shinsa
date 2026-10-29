@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'bun:test';
 import {
   describeBinding,
+  describeCopiedLogin,
   describeDefaultChanged,
   describeDuplicate,
   describeImport,
-  describeImported,
   describeRemoval,
   describeRerun,
   describeRunsOn,
+  isCopiedLogin,
   listAccountChoices,
   listRerunChoices,
   resolveAccountChoiceValue,
   resolveAccountLabel,
   resolveAccountProvider,
   resolveBoundAccount,
+  resolveImportIcon,
   resolvePauseAction,
   resolveProviderIcon,
   resolveRunAccount,
@@ -119,21 +121,22 @@ describe('imports and switches', () => {
       detail: 'me@example.com',
     });
     expect(describeImport({ origin: 'cswap', email: 'two@example.com', plan: null })).toEqual({
-      label: 'Import two@example.com from claude-swap',
-      detail: null,
+      label: 'Sign in to two@example.com',
+      detail: 'From claude-swap',
     });
+    expect(resolveImportIcon({ origin: 'claude', email: 'me@example.com', plan: null })).toBe('IconClaudeai');
+    expect(resolveImportIcon({ origin: 'cswap', email: 'two@example.com', plan: null })).toBe(
+      'IconArrowsRepeatRightLeft'
+    );
   });
 
-  it('confirms an import, and warns that a claude-swap login must not be refreshed by both', () => {
-    expect(describeImported({ origin: 'claude', email: 'me@example.com', plan: 'max' })).toEqual({
-      title: 'Added your Claude Code login.',
-      description: null,
-    });
-    expect(describeImported({ origin: 'cswap', email: 'two@example.com', plan: null })).toEqual({
-      title: 'Imported two@example.com.',
-      description:
-        'Remove it from claude-swap or turn off claude-swap’s auto-switch, so only Shinsa refreshes this login.',
-    });
+  it('explains why a copied claude-swap login needs signing in, and which logins are copies', () => {
+    const copied = createAccount({ id: 'copy', origin: 'cswap', email: 'two@example.com' });
+    expect(isCopiedLogin(copied)).toBe(true);
+    expect(isCopiedLogin(createAccount({ id: 'mine', origin: 'login' }))).toBe(false);
+    expect(describeCopiedLogin(copied)).toBe(
+      'two@example.com is a copy of claude-swap’s login, so each one signs the other out. Sign in to it again from its menu to give Shinsa a login of its own.'
+    );
   });
 
   it('removing your Claude Code login only stops using it; removing another account signs it out', () => {

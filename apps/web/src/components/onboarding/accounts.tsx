@@ -16,8 +16,10 @@ import { PathRow, SETTING_ROW, SettingsCard, SettingsEmpty } from '@/components/
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import {
   ACCOUNT_LABEL,
+  describeImport,
   describeRemoval,
   resolveAccountLabel,
+  resolveImportIcon,
   resolveProviderIcon,
 } from '@/lib/accounts/account.ts';
 import {
@@ -29,6 +31,7 @@ import {
 
 export interface OnboardingAccountActions {
   signIn: (accountId: string | null) => void;
+  importLogin: (entry: AccountImport) => void;
   remove: (accountId: string) => void;
   copy: (text: string) => void;
 }
@@ -89,10 +92,12 @@ function ProviderRow({ login }: { login: ProviderLogin }) {
 
 export function OnboardingAddAccount({
   accounts,
+  imports,
   providers,
   actions,
 }: {
   accounts: AccountSummary[] | null;
+  imports: AccountImport[];
   providers: ProviderLogin[];
   actions: OnboardingAccountActions;
 }) {
@@ -113,6 +118,21 @@ export function OnboardingAddAccount({
             <span className='text-2xs text-fg-2'>Opens the Claude sign-in</span>
           </span>
         </DropdownMenuItem>
+        {imports.map((entry) => {
+          const { label, detail } = describeImport(entry);
+          return (
+            <DropdownMenuItem
+              key={`${entry.origin}-${entry.email}`}
+              icon={resolveImportIcon(entry)}
+              onClick={() => actions.importLogin(entry)}
+            >
+              <span className='flex min-w-0 flex-1 flex-col'>
+                <span className='text-fg-4'>{label}</span>
+                <span className='text-2xs text-fg-2'>{detail}</span>
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
         {providers.map((login) => {
           const choice = resolveProviderChoice(login);
           return (
