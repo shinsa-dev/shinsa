@@ -87,9 +87,11 @@ src/
                             lib/open.ts, which refuses anything else), and Download Shinsa; the review read from the
                             link's `#review=` fragment (readReviewFragment in lib/open.ts; the task built in
                             lib/open-scene.ts on OPEN_TASK_ID, which the demo server gives no repository;
-                            components/demos/open-review.tsx, which marks `<html data-review>` once it reads). Without a
-                            review it shows the handle and title from `?handle=` and `?title=` and the same buttons,
-                            Download alone and primary under "This link does not lead to a review" when the link names no task. The page is the window's height and
+                            components/demos/open-review.tsx, the page's only content: a `client:only` island that renders
+                            nothing until the fragment is read, so no other layout paints first). Without a review the
+                            same pinned header shows the title from `?title=` and the handle from `?handle=` with the
+                            same buttons and no Review tab, and Download alone and primary under "This link does not
+                            lead to a review" when the link names no task; the tab's title is resolveDocumentTitle. The page is the window's height and
                             never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
