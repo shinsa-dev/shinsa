@@ -77,10 +77,10 @@ describe('resolveRunHeadline', () => {
 
   it('describes the agent reading a data source for an automation and once it reported the read', () => {
     expect(resolveRunHeadline(live({ role: 'agent', purpose: 'intake' }), task, [])).toBe(
-      'Reading a data source'
+      'Checking for new reports'
     );
     expect(resolveRunHeadline(done({ role: 'agent', purpose: 'intake' }), task, [])).toBe(
-      'Read a data source'
+      'Checked for new reports'
     );
   });
 

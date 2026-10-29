@@ -53,12 +53,8 @@ export function findHookUrl(context: ScheduleToolContext, scheduleId: string) {
 }
 
 function describeTarget(state: ShinsaState, schedule: Schedule, ownTaskId: string) {
-  if (schedule.target.kind === 'task' && schedule.target.taskId === ownTaskId) {
-    if (schedule.source) {
-      return `It reads ${schedule.source.server} in this task and files a task for each new report.`;
-    }
+  if (schedule.target.kind === 'task' && schedule.target.taskId === ownTaskId)
     return 'It messages this task.';
-  }
   return `${describeScheduleTarget(schedule, (taskId) => state.tasks[taskId]?.title ?? null)}.`;
 }
 

@@ -106,7 +106,7 @@ export {
   toRoundPullRequest,
 } from './rounds.ts';
 export type * from './schedules.ts';
-export { isScheduleLive, SCHEDULE_LIMITS, SECRET_REF_PATTERN } from './schedules.ts';
+export { isScheduleLive, isWatchHome, SCHEDULE_LIMITS, SECRET_REF_PATTERN } from './schedules.ts';
 export {
   COMPACTION_MODES,
   type CompactionMode,

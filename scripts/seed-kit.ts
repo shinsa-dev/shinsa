@@ -92,6 +92,7 @@ export interface SeedTask {
   forkOf?: string;
   createdBy?: TaskCreator;
   sourceReport?: SourceReport;
+  watchHome?: boolean;
   worktreePath?: string;
   plan?: PlanDocument;
   verification?: PlanCheck[];

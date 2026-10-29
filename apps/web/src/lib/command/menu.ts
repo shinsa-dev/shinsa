@@ -1,4 +1,11 @@
-import { isInFocus, isTaskSettled, resolveQueue, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  isInFocus,
+  isTaskSettled,
+  isWatchHome,
+  resolveQueue,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { listOpenGateCommands } from '@/lib/command/gates.ts';
 import {
   type ChoiceOption,
@@ -95,6 +102,7 @@ export function listTaskKeywords(state: ShinsaState, task: Task) {
 
 export function listMenuTasks(state: ShinsaState) {
   return Object.values(state.tasks)
+    .filter((task) => !isWatchHome(task))
     .sort((a, b) => Number(isTaskSettled(a)) - Number(isTaskSettled(b)) || b.updatedAt - a.updatedAt)
     .slice(0, TASKS_SHOWN);
 }

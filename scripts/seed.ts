@@ -1457,6 +1457,7 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     origin: null,
     ...(task.forkOf ? { forkOf: task.forkOf } : {}),
     ...(task.createdBy ? { createdBy: task.createdBy } : {}),
+    ...(task.watchHome ? { watchHome: true } : {}),
     ...(task.sourceReport
       ? { sourceReport: task.sourceReport, scheduleId: task.sourceReport.scheduleId }
       : {}),
@@ -4146,9 +4147,9 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
     },
     {
       id: 'task-support-intake',
-      request:
-        'Check that you can read The #support channel in Slack through the MCP server `composio-slack` for the automation “Support reports”, and answer with what you found there. On each of its runs, the automation asks you to read it again and file a task for each new report.',
-      title: 'Read #support for reports',
+      request: 'Watches composio-slack for the automation “Support reports”: The #support channel in Slack',
+      title: 'Watches composio-slack for the automation “Support reports”',
+      watchHome: true,
       repo: docs,
       size: 'small',
       shape: 'answer',
@@ -4157,21 +4158,11 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       branch: 'ask/support-reports',
       ageHours: 50,
       runs: [
-        { role: 'answerer', minutes: 2, summary: 'I can read #support.' },
         {
           role: 'agent',
           purpose: 'intake',
           minutes: 3,
           summary: 'Read 14 new messages in #support; filed 1 task and skipped 2 already filed.',
-        },
-      ],
-      extra: [
-        {
-          type: 'task.delivered',
-          taskId: 'task-support-intake',
-          step: 'answer',
-          runId: 'task-support-intake-run-0',
-          body: 'I can read #support through `composio-slack`: 212 messages in the last week, about 30 of them bug reports or feature requests.',
         },
       ],
     },
@@ -4197,7 +4188,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       createdBy: {
         kind: 'intake',
         taskId: 'task-support-intake',
-        runId: 'task-support-intake-run-1',
+        runId: 'task-support-intake-run-0',
         requestKey: 'https://superwall.slack.com/archives/C04SUPPORT/p1761725520',
       },
       sourceReport: {

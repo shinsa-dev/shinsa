@@ -590,8 +590,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Schedules and webhooks start work for you.** An agent can set a schedule (once, every N minutes,
   daily at a time on chosen weekdays) or a webhook that starts a task or messages one. A machine
   that slept runs a missed schedule once, not once per slot; a run is skipped while the last one is
-  still open. A schedule can also read one of a project's data sources (a Slack channel, a support
-  inbox) in one standing task and file a task for each new report in it, with the report kept on the
+  still open. A watch reads one of a project's integrations (a Slack channel, a support inbox,
+  traces) on a clock or a webhook, out of sight, and files a task for each new report in it, with the report kept on the
   task, forked from the task that shipped the feature it is about, and never filed twice.
   Settings → Automations and ⌘K pause, resume and delete them. Webhooks are signed
   (HMAC), deduped by a replay key and rate limited, and what they carry reaches the agent framed as

@@ -414,7 +414,7 @@ describe('resolveGroupPhrase', () => {
   });
 
   it('names a read of a data source the agent reported', () => {
-    expect(resolveGroupPhrase(['report_intake'])).toBe('Reported the read of the data source');
+    expect(resolveGroupPhrase(['report_intake'])).toBe('Reported what the watch found');
   });
 
   it('counts each kind of step in the order it first appeared', () => {

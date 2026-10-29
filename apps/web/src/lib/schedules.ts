@@ -59,12 +59,24 @@ function describeFiled(count: number) {
   return count === 0 ? 'nothing filed yet' : `${formatCount(count, 'task', 'tasks')} filed`;
 }
 
+export type AutomationType = 'Watch' | 'Trigger' | 'Schedule';
+
+export function resolveAutomationType(schedule: Schedule): AutomationType {
+  if (schedule.source) return 'Watch';
+  return schedule.trigger.kind === 'webhook' ? 'Trigger' : 'Schedule';
+}
+
 export function describeScheduleSummary(state: ShinsaState, schedule: Schedule) {
+  const type = resolveAutomationType(schedule);
   const when = lowerFirst(describeScheduleWhen(schedule));
   if (schedule.source) {
-    return `Reads ${schedule.source.server} · ${when} · ${describeFiled(countFiledTasks(state, schedule))}`;
+    return `${type} · ${schedule.source.server} · ${when} · ${describeFiled(countFiledTasks(state, schedule))}`;
   }
-  return `${describeScheduleWhat(state, schedule)} · ${when}`;
+  return `${type} · ${describeScheduleWhat(state, schedule)} · ${when}`;
+}
+
+export function describeOpenTask(schedule: Schedule) {
+  return schedule.source ? 'Show its reads' : 'Open the task';
 }
 
 export function resolveScheduleStatus(schedule: Schedule): ScheduleStatus | null {

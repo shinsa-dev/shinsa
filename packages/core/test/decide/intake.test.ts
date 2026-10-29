@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { type CommandOf, type DomainError, SCHEDULE_LIMITS, type Schedule } from '../../src/index.ts';
+import {
+  type CommandOf,
+  type DomainError,
+  isInFocus,
+  isWatchHome,
+  resolveReferenceCatalog,
+  SCHEDULE_LIMITS,
+  type Schedule,
+  serializeTaskReferences,
+} from '../../src/index.ts';
 import {
   createHarness,
   createTask,
@@ -51,30 +60,11 @@ function createProject() {
   return { harness, repoId, projectId };
 }
 
-function answerFirst(harness: Harness, taskId: string) {
-  harness.send({
-    type: 'task.triage',
-    taskId,
-    title: 'Feedback intake',
-    repoId: null,
-    size: 'small',
-    branch: 'intake',
-    waitsOn: [],
-  });
-  harness.send({
-    type: 'agent.deliver',
-    runId: harness.activeRun(taskId).id,
-    step: 'answer',
-    body: 'I can read #feedback: 40 messages this week.',
-  });
-}
-
 function createIntake() {
   const { harness, repoId, projectId } = createProject();
   write(harness, { source: { projectId, server: 'slack' } });
   const schedule = only(harness);
   const taskId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
-  answerFirst(harness, taskId);
   return { harness, repoId, projectId, taskId };
 }
 
@@ -90,22 +80,79 @@ function reportIntake(harness: Harness, taskId: string, summary = 'Read 12 messa
 }
 
 describe('a schedule that reads a data source', () => {
-  test('written without a target, it creates its intake task, an Ask task that first checks the source', () => {
+  test('a watch gets a home of its own that rests at once, with no handle, no triage and no agent', () => {
     const { harness, projectId } = createProject();
     write(harness, { source: { projectId, server: ' slack ' } });
     const schedule = only(harness);
     expect(schedule.source).toEqual({ projectId, server: 'slack' });
     expect(schedule.target.kind).toBe('task');
     const taskId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
-    const task = harness.task(taskId);
-    expect(task.mode).toBe('ask');
-    expect(task.projectId).toBe(projectId);
-    expect(task.repoId).toBeNull();
-    expect(task.request).toContain('through the MCP server `slack` for the automation “Feedback intake”');
-    expect(task.request).toContain(FEEDBACK.data);
+    const home = harness.task(taskId);
+    expect(home).toMatchObject({
+      watchHome: true,
+      projectId,
+      repoId: null,
+      handle: null,
+      stage: 'done',
+      stageReason: 'waiting for its first read',
+    });
+    expect(isWatchHome(home)).toBe(true);
+    expect(home.request).toBe(`Watches slack for the automation “Feedback intake”: ${FEEDBACK.data}`);
+    expect(Object.values(harness.state.runs).filter((run) => run.taskId === taskId)).toHaveLength(0);
+    expect(harness.effectsOf('task.triage').some((effect) => effect.taskId === taskId)).toBe(false);
   });
 
-  test('an agent’s schedule reads a source of its own task’s project, in its own task', () => {
+  test('a watch’s home is off every list, takes no messages and is no other schedule’s target', () => {
+    const { harness, taskId } = createIntake();
+    const home = harness.task(taskId);
+    expect(isInFocus(harness.state, home, harness.now)).toBe(false);
+    expect(resolveReferenceCatalog(harness.state).tasks.map((task) => task.id)).not.toContain(taskId);
+    expect(serializeTaskReferences(harness.state, 'Watches')).not.toContain(taskId);
+    expect(refusal(() => harness.send({ type: 'task.message', taskId, text: 'Hello?' })).code).toBe(
+      'watch_home'
+    );
+    expect(refusal(() => write(harness, { target: { kind: 'task', taskId } })).code).toBe('watch_home');
+    const agentTask = createTask(harness);
+    expect(
+      refusal(() =>
+        harness.send({
+          type: 'agent.set_schedule',
+          runId: harness.activeRun(agentTask).id,
+          scheduleId: null,
+          name: null,
+          text: 'Nudge it.',
+          trigger: { kind: 'interval', everyMinutes: 30 },
+          target: { kind: 'task', taskId },
+          source: null,
+          enabled: null,
+          maxRuns: null,
+          timeZone: 'UTC',
+        })
+      ).code
+    ).toBe('watch_home');
+    fire(harness);
+    const runId = harness.activeRun(taskId).id;
+    harness.send({ type: 'message.deliver', taskId, text: 'Missed steer.' });
+    expect(harness.activeRun(taskId).id).toBe(runId);
+    expect(harness.task(taskId).stage).toBe('watching');
+  });
+
+  test('deleting a watch closes its home, at rest or in the middle of a read', () => {
+    const resting = createIntake();
+    resting.harness.send({ type: 'schedule.remove', scheduleId: only(resting.harness).id });
+    expect(resting.harness.task(resting.taskId)).toMatchObject({ stage: 'cancelled' });
+    const reading = createIntake();
+    fire(reading.harness);
+    reading.harness.send({ type: 'schedule.remove', scheduleId: only(reading.harness).id });
+    expect(reading.harness.task(reading.taskId).stage).toBe('cancelled');
+    expect(
+      Object.values(reading.harness.state.runs).filter(
+        (run) => run.taskId === reading.taskId && run.endedAt === null
+      )
+    ).toHaveLength(0);
+  });
+
+  test('an agent’s watch reads an integration of its task’s project in a home of its own, never in its task', () => {
     const { harness, projectId } = createProject();
     const taskId = createTask(harness);
     harness.send({
@@ -121,10 +168,38 @@ describe('a schedule that reads a data source', () => {
       maxRuns: null,
       timeZone: 'UTC',
     });
-    expect(only(harness)).toMatchObject({
-      source: { projectId, server: 'slack' },
-      target: { kind: 'task', taskId },
-    });
+    const schedule = only(harness);
+    expect(schedule.source).toEqual({ projectId, server: 'slack' });
+    const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
+    expect(homeId).not.toBe(taskId);
+    expect(harness.task(homeId).watchHome).toBe(true);
+    expect(
+      refusal(() =>
+        harness.send({
+          type: 'agent.set_schedule',
+          runId: harness.activeRun(taskId).id,
+          scheduleId: null,
+          name: null,
+          text: 'Reports.',
+          trigger: { kind: 'interval', everyMinutes: 30 },
+          target: { kind: 'task', taskId: null },
+          source: 'slack',
+          enabled: null,
+          maxRuns: null,
+          timeZone: 'UTC',
+        })
+      ).code
+    ).toBe('source_target');
+  });
+
+  test('a schedule that starts or messages a task cannot become a watch', () => {
+    const { harness, projectId } = createProject();
+    const taskId = createTask(harness);
+    write(harness, { target: { kind: 'task', taskId } });
+    expect(
+      refusal(() => write(harness, { scheduleId: only(harness).id, source: { projectId, server: 'slack' } }))
+        .code
+    ).toBe('source_change');
   });
 
   test('a change that leaves the source out keeps it', () => {
@@ -133,11 +208,11 @@ describe('a schedule that reads a data source', () => {
     expect(only(harness)).toMatchObject({ name: 'Renamed', source: { projectId, server: 'slack' } });
   });
 
-  test('is refused for a server the project does not list, a new task on each run, or another project’s task', () => {
+  test('is refused for an integration the project does not use, or with a target of its own', () => {
     const { harness, projectId } = createProject();
     const unknown = refusal(() => write(harness, { source: { projectId, server: 'maple' } }));
     expect(unknown.code).toBe('source_not_found');
-    expect(unknown.message).toContain('It lists `slack`.');
+    expect(unknown.message).toContain('It uses `slack`.');
     expect(refusal(() => write(harness, { source: { projectId: 'nope', server: 'slack' } })).code).toBe(
       'project_not_found'
     );
@@ -155,11 +230,11 @@ describe('a schedule that reads a data source', () => {
       refusal(() =>
         write(harness, { source: { projectId, server: 'slack' }, target: { kind: 'task', taskId: other } })
       ).code
-    ).toBe('source_project');
+    ).toBe('source_target');
     const otherProject = harness.state.repos[otherRepo]?.projectId ?? '';
     expect(
       refusal(() => write(harness, { source: { projectId: otherProject, server: 'slack' } })).message
-    ).toContain('It lists none yet.');
+    ).toContain('It uses none yet.');
   });
 
   test('an agent outside any project has no source to read', () => {
@@ -249,15 +324,27 @@ describe('an intake turn', () => {
     );
   });
 
-  test('a fire while the task is at work is skipped', () => {
-    const { harness, taskId } = createIntake();
+  test('a fire or a delivery while a read is still going is skipped', () => {
+    const { harness, projectId } = createIntake();
     fire(harness);
-    const schedule = fire(harness);
-    expect(schedule.runs.at(-1)).toMatchObject({ outcome: 'skipped' });
-    reportIntake(harness, taskId);
-    harness.send({ type: 'task.message', taskId, text: 'How many reports came in last week?' });
-    expect(harness.task(taskId).stage).not.toBe('done');
-    expect(fire(harness).runs.at(-1)).toMatchObject({
+    expect(fire(harness).runs.at(-1)).toMatchObject({ outcome: 'skipped' });
+    write(harness, {
+      name: 'Alerts',
+      source: { projectId, server: 'slack' },
+      trigger: { kind: 'webhook', signature: null, replayKey: null },
+    });
+    const hook = Object.values(harness.state.schedules).find((schedule) => schedule.name === 'Alerts');
+    const deliver = (deliveryId: string) =>
+      harness.send({
+        type: 'schedule.deliver',
+        scheduleId: hook?.id ?? '',
+        deliveryId,
+        text: 'A new alert.',
+        replayKey: null,
+      });
+    deliver('d1');
+    deliver('d2');
+    expect(harness.state.schedules[hook?.id ?? '']?.runs.at(-1)).toMatchObject({
       outcome: 'skipped',
       detail: 'The task was at work, so this read was skipped.',
     });
@@ -271,7 +358,6 @@ describe('an intake turn', () => {
     });
     const schedule = only(harness);
     const taskId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
-    answerFirst(harness, taskId);
     harness.send({
       type: 'schedule.deliver',
       scheduleId: schedule.id,
@@ -413,30 +499,6 @@ describe('filing reports from an intake turn', () => {
     ).toBe('fork_intake');
   });
 
-  test('with two automations reading in one task, the report belongs to the one that started this read', () => {
-    const { harness, taskId, projectId } = createIntake();
-    const first = only(harness);
-    fire(harness);
-    reportIntake(harness, taskId);
-    write(harness, {
-      name: 'Webhook intake',
-      source: { projectId, server: 'slack' },
-      target: { kind: 'task', taskId },
-      trigger: { kind: 'webhook', signature: null, replayKey: null },
-    });
-    const second = Object.values(harness.state.schedules).find((schedule) => schedule.id !== first.id);
-    harness.advance(MINUTE);
-    harness.send({
-      type: 'schedule.deliver',
-      scheduleId: second?.id ?? '',
-      deliveryId: 'd1',
-      text: 'A new message.',
-      replayKey: null,
-    });
-    fileReport(harness, taskId);
-    expect(listFiled(harness)[0]?.scheduleId).toBe(second?.id);
-  });
-
   test('a report lands only in a repository of the reading task’s project', () => {
     const { harness, repoId, taskId } = createIntake();
     const elsewhere = registerRepo(harness, 'web', 'Kanna');
@@ -457,12 +519,12 @@ describe('filing reports from an intake turn', () => {
     expect(listFiled(harness)).toHaveLength(0);
   });
 
-  test('only an intake turn files reports, and only while an automation reads in the task', () => {
+  test('only an intake turn files reports, and only while its watch exists', () => {
     const { harness, taskId } = createIntake();
     const builder = createTask(harness);
     expect(refusal(() => fileReport(harness, builder)).code).toBe('wrong_step');
     fire(harness);
-    harness.send({ type: 'schedule.remove', scheduleId: only(harness).id });
+    harness.replay({ type: 'schedule.removed', scheduleId: only(harness).id });
     expect(refusal(() => fileReport(harness, taskId)).code).toBe('schedule_not_found');
   });
 

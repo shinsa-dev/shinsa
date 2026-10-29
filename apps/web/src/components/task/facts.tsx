@@ -420,7 +420,7 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
       )}
       {report.link && <InfoAction label='Open the report' href={report.link} />}
       {reader && (
-        <InfoAction label='Open the task that reads it' onClick={() => navigate(resolveTaskPath(reader))} />
+        <InfoAction label='Show the watch’s reads' onClick={() => navigate(resolveTaskPath(reader))} />
       )}
     </FactPopover>
   );

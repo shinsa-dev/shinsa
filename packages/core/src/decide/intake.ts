@@ -1,10 +1,12 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
+  isTaskClosed,
   isTaskResting,
   SCHEDULE_LIMITS,
   type Schedule,
   type ScheduleSource,
+  type ScheduleTarget,
   type SourceReport,
   type Task,
 } from '../domain/index.ts';
@@ -28,20 +30,41 @@ export function findProjectSource(decider: Decider, source: ScheduleSource) {
   const found = selectProjectSource(decider, source);
   if (found) return found;
   const known = (project.watchSources ?? []).map((candidate) => `\`${candidate.server}\``);
-  const listed = known.length > 0 ? ` It lists ${known.join(', ')}.` : ' It lists none yet.';
+  const listed = known.length > 0 ? ` It uses ${known.join(', ')}.` : ' It uses none yet.';
   throw new DomainError(
     'source_not_found',
-    `The project “${project.name}” has no data source \`${source.server}\`. Add it in Settings → Projects first.${listed}`
+    `The project “${project.name}” does not use the integration \`${source.server}\`. Add it in Settings → Projects first.${listed}`
   );
 }
 
-export function assertIntakeTarget(decider: Decider, source: ScheduleSource, taskId: string) {
-  const task = decider.state.tasks[taskId];
-  if (task?.projectId === source.projectId) return;
-  throw new DomainError(
-    'source_project',
-    'A schedule that reads a data source runs in a task of the same project. Name a task of that project, or leave the target out.'
-  );
+export function createWatchHome(decider: Decider, source: ScheduleSource, name: string): ScheduleTarget {
+  const found = findProjectSource(decider, source);
+  const taskId = decider.context.newId();
+  decider.emit({
+    type: 'task.created',
+    taskId,
+    request: `Watches ${found.server} for the automation “${name}”: ${found.data}`,
+    repoId: null,
+    projectId: source.projectId,
+    priority: 'normal',
+    planFirst: false,
+    origin: null,
+    mode: 'ask',
+    auto: { shape: false, start: false, priority: false },
+    watchHome: true,
+  });
+  decider.stage(taskId, 'done', 'waiting for its first read');
+  return { kind: 'task', taskId };
+}
+
+export function closeWatchHome(decider: Decider, schedule: Schedule) {
+  const home = schedule.target.kind === 'task' ? decider.state.tasks[schedule.target.taskId] : undefined;
+  if (!home?.watchHome || isTaskClosed(home)) return;
+  if (isTaskResting(home)) {
+    decider.stage(home.id, 'cancelled', 'its automation was deleted');
+    return;
+  }
+  settleTask(decider, home.id, 'cancelled', 'its automation was deleted');
 }
 
 function listFiledTasks(decider: Decider, scheduleId: string) {
@@ -55,13 +78,12 @@ function resolveLastSentAt(schedule: Schedule) {
 }
 
 function selectIntakeSchedule(decider: Decider, task: Task) {
-  const reading = Object.values(decider.state.schedules)
-    .filter(
+  return (
+    Object.values(decider.state.schedules).find(
       (candidate) =>
         candidate.source !== null && candidate.target.kind === 'task' && candidate.target.taskId === task.id
-    )
-    .sort((a, b) => resolveLastSentAt(b) - resolveLastSentAt(a));
-  return reading[0] ?? null;
+    ) ?? null
+  );
 }
 
 function findIntakeSchedule(decider: Decider, task: Task) {

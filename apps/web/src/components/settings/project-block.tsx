@@ -278,7 +278,7 @@ export function ProjectBlock({
           path={describeWatchSource(state, source)}
           action={
             <RemoveButton
-              label={`Remove the data source ${source.server}`}
+              label={`Remove ${source.server} from the project`}
               onClick={() => void removeWatchSource(project.id, source.server)}
             />
           }

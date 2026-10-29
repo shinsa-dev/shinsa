@@ -15,7 +15,7 @@ import type { Tone } from '@/lib/format/tone.ts';
 export const WATCHDOGS_TITLE = 'Watchdogs';
 
 export const WATCHDOG_STATUS: Record<WatchdogStatus, { label: string; tone: Tone }> = {
-  needs_source: { label: 'Needs a data source', tone: 'amber' },
+  needs_source: { label: 'Needs an integration', tone: 'amber' },
   awaiting_production: { label: 'Waiting for production', tone: 'amber' },
   watching: { label: 'Watching', tone: 'blue' },
   passed: { label: 'Passed', tone: 'green' },
@@ -64,7 +64,7 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
   const last = describeLastCheck(watchdog);
   switch (watchdog.status) {
     case 'needs_source':
-      return 'Starts once you connect a data source.';
+      return 'Starts once you connect an integration.';
     case 'awaiting_production':
       if (watchdog.runId) return 'Checking whether the change is live in production.';
       return last
@@ -98,7 +98,7 @@ export function resolveWatchingReason(task: Task, now: number) {
   const ends = active.map((watchdog) => watchdog.endsAt).filter((at): at is number => at !== null);
   if (ends.length === 0) {
     const waiting = active.some((watchdog) => watchdog.status === 'awaiting_production');
-    return `${count} · ${waiting ? 'waiting for production' : 'waiting for a data source'}`;
+    return `${count} · ${waiting ? 'waiting for production' : 'waiting for an integration'}`;
   }
   return `${count} · ${formatHours(Math.max(...ends) - now)} left`;
 }
@@ -117,8 +117,7 @@ export function connectWatchdog(task: Task, watchdog: Watchdog, server: string, 
   );
 }
 
-export const WATCH_SOURCE_HINT =
-  'A data source agents can read, such as logs, analytics or a support channel';
+export const WATCH_SOURCE_HINT = 'An integration this project uses, and what agents find in it';
 
 export function describeWatchSource(state: ShinsaState, source: WatchSource) {
   const repos = source.repoIds.map((id) => state.repos[id]?.name ?? id);
@@ -130,6 +129,6 @@ export function describeWatchSource(state: ShinsaState, source: WatchSource) {
 export function removeWatchSource(projectId: string, server: string) {
   return sendCommandWithToast(
     { type: 'watch_source.remove', projectId, server },
-    `Removed ${server} from the data sources.`
+    `Removed ${server} from the project.`
   );
 }

@@ -448,6 +448,7 @@ export interface Task {
   splits?: TaskSplit[];
   scheduleId?: string | null;
   sourceReport?: SourceReport | null;
+  watchHome?: boolean;
   pipeline?: PipelineStep[];
   auto: TaskAuto;
   triageDecisions?: TriageDecisions | null;

@@ -1,5 +1,5 @@
 import { DAY_MS, MINUTE_MS } from './time.ts';
-import type { TaskMode, TaskPriority } from './types.ts';
+import type { Task, TaskMode, TaskPriority } from './types.ts';
 
 export type WebhookEncoding = 'hex' | 'base64';
 
@@ -118,4 +118,8 @@ export const SECRET_REF_PATTERN = /^secret-ref:[0-9a-f]{32}$/;
 
 export function isScheduleLive(schedule: Schedule) {
   return schedule.stopped === null;
+}
+
+export function isWatchHome(task: Pick<Task, 'watchHome'>) {
+  return task.watchHome === true;
 }

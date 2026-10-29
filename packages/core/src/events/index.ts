@@ -92,6 +92,7 @@ type EventBody =
       createdBy?: TaskCreator | null;
       scheduleId?: string | null;
       sourceReport?: SourceReport | null;
+      watchHome?: boolean;
       forkOf?: string | null;
     }
   | DelegationEventBody

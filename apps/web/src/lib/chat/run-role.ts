@@ -81,7 +81,7 @@ function resolveAgentHeadline(
     case 'watch':
       return done ? 'Checked a watchdog' : 'Checking a watchdog';
     case 'intake':
-      return done ? 'Read a data source' : 'Reading a data source';
+      return done ? 'Checked for new reports' : 'Checking for new reports';
   }
 }
 

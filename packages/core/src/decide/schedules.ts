@@ -21,13 +21,14 @@ import { listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
 import {
-  assertIntakeTarget,
+  closeWatchHome,
+  createWatchHome,
   findProjectSource,
   isIntakeBusy,
   selectProjectSource,
   startIntake,
 } from './intake.ts';
-import { messageTask } from './messages.ts';
+import { assertNotWatchHome, messageTask } from './messages.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -135,6 +136,7 @@ function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task)
   const target = decider.state.tasks[input.taskId ?? task.id];
   if (!target)
     throw new DomainError('task_not_found', `No task ${input.taskId}. find_tasks lists the tasks.`);
+  assertNotWatchHome(target);
   if (isTaskClosed(target)) {
     throw new DomainError(
       'task_settled',
@@ -226,15 +228,30 @@ function resolveWrittenName(command: ScheduleWrite, existing: Schedule | null, t
   return named ?? resolveName(null, text);
 }
 
-function assertSourceTarget(decider: Decider, source: ScheduleSource | null, target: ScheduleTarget) {
+function assertSourceChange(source: ScheduleSource | null, existing: Schedule | null, targeted: boolean) {
   if (!source) return;
-  if (target.kind === 'new_task') {
+  if (targeted) {
     throw new DomainError(
       'source_target',
-      'A schedule that reads a data source runs in one task, never a new task on each run. Name a task, or leave the target out.'
+      'A watch reads in a home of its own, never in a task. Leave the target out.'
     );
   }
-  assertIntakeTarget(decider, source, target.taskId);
+  if (existing && !existing.source) {
+    throw new DomainError(
+      'source_change',
+      'This automation starts or messages a task, so it cannot become a watch. Create a new one that reads the integration.'
+    );
+  }
+}
+
+function resolveSourceTarget(
+  decider: Decider,
+  command: ScheduleWrite,
+  existing: Schedule | null,
+  source: ScheduleSource
+) {
+  if (existing) return existing.target;
+  return createWatchHome(decider, source, resolveWrittenName(command, null, resolveText(command, null)));
 }
 
 function resolveWrittenBody(
@@ -244,7 +261,6 @@ function resolveWrittenBody(
   target: ScheduleTarget,
   source: ScheduleSource | null
 ): ScheduleBody {
-  assertSourceTarget(decider, source, target);
   const text = resolveText(command, existing);
   return {
     name: resolveWrittenName(command, existing, text),
@@ -264,14 +280,18 @@ function resolveBody(
   task: Task,
   existing: Schedule | null
 ): ScheduleBody {
+  const source = resolveAgentSource(decider, command, task, existing);
+  assertSourceChange(source, existing, command.target !== null);
+  if (source)
+    return resolveWrittenBody(
+      decider,
+      command,
+      existing,
+      resolveSourceTarget(decider, command, existing, source),
+      source
+    );
   const target = command.target ? resolveTarget(decider, command.target, task) : existing?.target;
-  return resolveWrittenBody(
-    decider,
-    command,
-    existing,
-    target ?? { kind: 'task', taskId: task.id },
-    resolveAgentSource(decider, command, task, existing)
-  );
+  return resolveWrittenBody(decider, command, existing, target ?? { kind: 'task', taskId: task.id }, null);
 }
 
 function resolveAgentSource(
@@ -285,7 +305,7 @@ function resolveAgentSource(
   if (!task.projectId) {
     throw new DomainError(
       'project_required',
-      'This task belongs to no project, so there is no data source to read. Ask the human to add one in Settings → Projects.'
+      'This task belongs to no project, so it has no integration to watch. Ask the human to add one in Settings → Projects.'
     );
   }
   const source = { projectId: task.projectId, server };
@@ -377,6 +397,7 @@ function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTa
   }
   const task = decider.state.tasks[target.taskId];
   if (!task) throw new DomainError('task_not_found', `No task ${target.taskId}.`);
+  assertNotWatchHome(task);
   if (isTaskClosed(task)) {
     throw new DomainError(
       'task_settled',
@@ -397,33 +418,16 @@ function resolveUserSource(
   return source;
 }
 
-function createIntakeTask(
-  decider: Decider,
-  command: CommandOf<'schedule.write'>,
-  source: ScheduleSource
-): ScheduleTarget {
-  const found = findProjectSource(decider, source);
-  const name = resolveWrittenName(command, null, resolveText(command, null));
-  const taskId = createTask(decider, {
-    type: 'task.create',
-    request: `Check that you can read ${found.data} through the MCP server \`${found.server}\` for the automation “${name}”, and answer with what you found there. On each of its runs, the automation asks you to read it again and file a task for each new report.`,
-    repoId: null,
-    projectId: source.projectId,
-    priority: 'normal',
-    mode: 'ask',
-  });
-  return { kind: 'task', taskId };
-}
-
 function selectWrittenTarget(
   decider: Decider,
   command: CommandOf<'schedule.write'>,
   existing: Schedule | null,
   source: ScheduleSource | null
 ) {
+  assertSourceChange(source, existing, command.target !== null);
+  if (source) return resolveSourceTarget(decider, command, existing, source);
   if (command.target) return resolveUserTarget(decider, command.target);
   if (existing) return existing.target;
-  if (source) return createIntakeTask(decider, command, source);
   throw new DomainError(
     'schedule_invalid',
     'Say what it does: start a new task in a repository, or message a task.'
@@ -452,6 +456,7 @@ export function removeOwnSchedule(decider: Decider, command: CommandOf<'agent.de
   const { task } = findCurrentRun(decider, command.runId, 'delete_schedule');
   const schedule = selectOwnSchedule(decider, command.scheduleId, task);
   decider.emit({ type: 'schedule.removed', scheduleId: schedule.id });
+  closeWatchHome(decider, schedule);
 }
 
 function describeStopped(schedule: Schedule) {
@@ -484,8 +489,10 @@ export function enableSchedule(decider: Decider, command: CommandOf<'schedule.en
 }
 
 export function removeSchedule(decider: Decider, command: CommandOf<'schedule.remove'>) {
-  if (!decider.state.schedules[command.scheduleId]) return;
-  decider.emit({ type: 'schedule.removed', scheduleId: command.scheduleId });
+  const schedule = decider.state.schedules[command.scheduleId];
+  if (!schedule) return;
+  decider.emit({ type: 'schedule.removed', scheduleId: schedule.id });
+  closeWatchHome(decider, schedule);
 }
 
 function selectGoneReason(decider: Decider, schedule: Schedule) {

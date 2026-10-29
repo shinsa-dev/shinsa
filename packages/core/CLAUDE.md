@@ -175,8 +175,9 @@ src/
 │   ├── couriers.ts  create_task and split_task
 │   ├── orchestration.ts  Routing the delegation commands
 │   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook deliveries
-│   ├── intake.ts    A schedule that reads a data source: its standing task, a read as a read-only `intake` turn,
-│   │                file_report (dedupe by the filed tasks' reports, forks), report_intake, a read that gives up
+│   ├── intake.ts    A watch (a schedule that reads an integration): its hidden home (createWatchHome, closeWatchHome),
+│   │                a read as a read-only `intake` turn, file_report (dedupe by the filed tasks' reports, forks),
+│   │                report_intake, a read that gives up
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
 │   ├── on-behalf.ts What a user command sent on your behalf records (`on_behalf.acted`, its sentence, task and
 │   │                acting task, kept as `OnBehalfAction`); a system command records nothing here

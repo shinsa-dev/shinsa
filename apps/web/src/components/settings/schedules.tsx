@@ -17,6 +17,7 @@ import {
   canResume,
   copyWebhookUrl,
   describeNextRun,
+  describeOpenTask,
   describeRemoval,
   describeScheduleSummary,
   removeSchedule,
@@ -61,7 +62,7 @@ function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: Sche
             )}
             {taskId && (
               <DropdownMenuItem icon='IconArrowUpRight' onClick={() => actions.open(taskId)}>
-                Open the task
+                {describeOpenTask(schedule)}
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>

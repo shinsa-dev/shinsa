@@ -69,7 +69,7 @@ describe('set_schedule', () => {
     expect(reply).toContain('It is paused. Starts a new task.');
   });
 
-  test('a schedule that reads a data source says it reads it in this task', async () => {
+  test('a watch set by an agent reads in a home of its own and says what it watches', async () => {
     const base = await createWorld();
     await base.engine.dispatch({
       type: 'repo.register',
@@ -93,11 +93,12 @@ describe('set_schedule', () => {
       every_minutes: 60,
       source: 'slack',
     });
-    expect(only(world)).toMatchObject({
-      source: { projectId, server: 'slack' },
-      target: { kind: 'task', taskId: reader.taskId },
-    });
-    expect(reply).toEndWith('It reads slack in this task and files a task for each new report.');
+    const schedule = only(world);
+    expect(schedule.source).toEqual({ projectId, server: 'slack' });
+    const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
+    expect(homeId).not.toBe(reader.taskId);
+    expect(world.engine.state.tasks[homeId]?.watchHome).toBe(true);
+    expect(reply).toEndWith('Watches slack and files a task for each new report.');
   });
 
   test('a message into another task names it', async () => {
@@ -311,21 +312,6 @@ async function startIntakeRead(world: World) {
   });
   const schedule = Object.values(engine.state.schedules).find((candidate) => candidate.source !== null);
   const taskId = schedule?.target.kind === 'task' ? schedule.target.taskId : '';
-  await engine.dispatch({
-    type: 'task.triage',
-    taskId,
-    title: 'Feedback',
-    repoId: null,
-    size: 'small',
-    branch: 'feedback',
-    waitsOn: [],
-  });
-  await engine.dispatch({
-    type: 'agent.deliver',
-    runId: listActiveRuns(engine.state, taskId)[0]?.id ?? '',
-    step: 'answer',
-    body: 'I can read #feedback.',
-  });
   await engine.dispatch({
     type: 'schedule.deliver',
     scheduleId: schedule?.id ?? '',

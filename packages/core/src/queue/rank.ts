@@ -6,6 +6,7 @@ import {
   hasArmedWait,
   isDecisionGate,
   isTaskSettled,
+  isWatchHome,
   PRIORITY_RANK,
   resolveAttentionLimit,
   type Task,
@@ -58,6 +59,7 @@ export function resolveFocusProject(state: ShinsaState, now: number) {
 }
 
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
+  if (isWatchHome(task)) return false;
   const projectId = resolveFocusProject(state, now);
   return projectId === null || resolveTaskProject(state, task) === projectId;
 }
