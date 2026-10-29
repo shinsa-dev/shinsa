@@ -2,6 +2,7 @@ import type { FindingVerdictKind, WorkReport } from '@shinsa/core';
 import * as React from 'react';
 import { ReviewNote } from '@/components/review/note.tsx';
 import { VerdictChoice } from '@/components/review/verdict-choice.tsx';
+import { createVerdictDraft, resolveVerdict } from '@/lib/overview/verdicts.ts';
 import { createDisclosureId, notPersisted } from '@/lib/preferences/disclosure.ts';
 import {
   isFindingItem,
@@ -69,8 +70,8 @@ function Remove() {
 }
 
 function SampleVerdict({ item }: { item: ReviewItem }) {
-  const [verdict, setVerdict] = React.useState<FindingVerdictKind>(
-    item.label === 'Blocking' ? 'fix' : 'dismiss'
+  const [verdict, setVerdict] = React.useState<FindingVerdictKind>(() =>
+    resolveVerdict(createVerdictDraft(SAMPLE_CODE_FINDINGS), item.finding ?? -1)
   );
   return <VerdictChoice value={verdict} onValueChange={setVerdict} />;
 }
@@ -90,7 +91,7 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='A finding · the same card on NoteHead, no bar: a blocking finding and a suggestion, label and title on the left, Fix / Dismiss on the right, the suggested fix below'>
+      <Specimen label='A finding · FindingNote, no bar: a blocking, a should fix and an optional finding, the level over the issue on the left, Fix / Dismiss on the right, the proposed fix below'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
           {FINDINGS.map((item) => (
             <ReviewNote
@@ -114,9 +115,9 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place; a finding and your comment'>
+      <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place; a finding of each level and your comment'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
-          {FINDINGS.slice(0, 1).map((item) => (
+          {FINDINGS.map((item) => (
             <ReviewNote
               key={item.key}
               persistId={notPersisted('a finding card never folds')}

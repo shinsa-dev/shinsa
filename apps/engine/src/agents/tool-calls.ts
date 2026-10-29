@@ -26,7 +26,7 @@ import type { ProviderRegistry } from './providers/index.ts';
 import type { Questions } from './questions.ts';
 import { resolveTaskReading } from './reading.ts';
 import { RepositoryWork } from './repository-work.ts';
-import { handleServiceTool, type TaskServiceRunner } from './services.ts';
+import { handleServiceTool, type ServiceToolName, type TaskServiceRunner } from './services.ts';
 import { handleOrchestrationTool } from './tools/orchestration.ts';
 import { handleProcessTool } from './tools/process.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -106,6 +106,7 @@ export class ToolCalls {
         return this.#note(call, dispatch);
       case 'list_services':
       case 'run_service':
+      case 'add_service':
         return this.#runServiceTool(name, call);
       default:
         if (isSurfaceTool(name)) return this.#manage(name, call);
@@ -218,7 +219,7 @@ export class ToolCalls {
     return Promise.resolve(resolveTaskReading(engine.state, transcripts, taskId));
   }
 
-  async #runServiceTool(name: 'list_services' | 'run_service', { runId, attemptId, input }: ToolCall) {
+  async #runServiceTool(name: ServiceToolName, { runId, attemptId, input }: ToolCall) {
     const { engine, services } = this.#options;
     const { run, task } = this.#findCurrent(runId, attemptId);
     assertRunTool(run, name);

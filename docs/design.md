@@ -45,7 +45,7 @@ Only these, and they win over anything below:
    notice rows and context meter, the schedule and notification rows, the MCP, plugin and skill
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
    chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
-   a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
+   a blocking finding, an optional finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
    Checks list in each state (`routes/ui/checks.tsx`, on `routes/ui/sample-checks.ts`: running, all passed,
    failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
    pull request, a linked test, the plan's Checks, check activity and Always run before review), the
@@ -177,7 +177,9 @@ Only these, and they win over anything below:
      long output capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
-     the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
+     the chat and in evidence: attachments (sent ones, and the image chips in the composer and the new task form, so
+     you can look at a draft before sending it), tool results, evidence, and an evidence or attached recording (a sent
+     video file chip opens it there instead of a new tab), which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
      and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
      CSS pixels) is laid out at that width, never at its file's: a 2560px shot taken at 1280px shows 1280px wide, two
@@ -220,7 +222,8 @@ Only these, and they win over anything below:
      title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
      parts (Before, After, or each state's label) that switches the image in place.
    - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
-     attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
+     attachments sit above it as thumbnails, or as file chips when the browser can't load the path; a video's chip
+     opens the image viewer (`cursor-zoom-in`, `IconExpandSimple` on hover), every other chip a new tab.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
      outside its box so the wash wraps the full-width content instead of sitting flush with it; a delegation card
      opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash. The run's
@@ -620,8 +623,8 @@ Only these, and they win over anything below:
       dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
-      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and
-      the engine moves to the new version once they hand over."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
+      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
+      own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
@@ -1231,10 +1234,13 @@ Only these, and they win over anything below:
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
       "Or write your own answer."
-    - **Review verdicts** (`finding-verdicts.tsx`): each finding opens on `NoteHead` (34, The review card): a
-      full-width row with the severity in `red-text` or `fg-2` (the file as a mono chip when there is no snippet) over
-      the title on the left and the Fix / Dismiss `Choice` on the right, then the message, the file row and the
-      suggested fix full width below; blocking findings start on Fix. The primary action follows the verdicts:
+    - **Review verdicts** (`finding-verdicts.tsx`): each finding is a `FindingNote` (34, The review card): the
+      severity as plain text in its tone (Blocking `red-text`, Should fix `amber-text`, Optional `fg-2`; no dot; the file
+      as a mono chip when there is no snippet) over the issue (the message) on the left and the Fix / Dismiss `Choice`
+      on the right, then the snippet and the proposed fix full width below. The reviewer's title is not shown: the
+      message says the same thing in full. Blocking and Should fix
+      findings start on Fix and Optional ones on Dismiss (`SEVERITY_VERDICT`, `lib/review/findings.ts`), so the default
+      is the reviewer's ranking. The primary action follows the verdicts:
       "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip says so, 13),
       Approve changes when all are dismissed. The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
@@ -1674,14 +1680,12 @@ Only these, and they win over anything below:
       then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
       `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
-      banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
-      (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
-      ("Shinsa 0.5.0 is installed. 2 agents are working, and the engine moves to it once they hand over, by 2:32
-      PM at the latest. New steps wait until then.", from `working` and `restartBy` in `/api/health`), the orange triangle when
-      you must act ("Shinsa 0.5.0 needs its engine restarted. Restarting now pauses working agents for a moment, then
-      they carry on."), and `sm` buttons at the end, the last `primary` as macOS orders them: one alone (Restart now,
-      Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents hand over `primary`. No dismiss: it goes when
-      the versions match. `/ui` shows `EngineCard` in its three states.
+      banner, the same `CARD` row, shown only in the desktop app and only when you must act: the orange triangle
+      and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
+      Shinsa, or "Restart Shinsa’s engine to finish updating to 0.5.0." and the reason when the restart failed. An
+      engine older than the app is restarted at once, without a banner (the page asks for `when: now`, working
+      agents pick up where they were); while it moves, Settings → Updates says so in its Engine row. No dismiss: it
+      goes when the versions match. `/ui` shows `EngineCard` in its two states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
       scales in (`fade-in-0 zoom-in-95`, 200 ms), its tooltip names the version and says the app restarts for a
@@ -1697,17 +1701,20 @@ Only these, and they win over anything below:
       update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
-      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Under it, a wrapping `2xs` `fg-2`
-      line says the one thing people fear about updating: "Updating or quitting the app never stops your agents. The
-      engine keeps running and moves to the new version once the working agents hand over." Update channel: a select
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". While the engine and the app
+      differ, an Engine row of one line: the engine's version (`TOKEN_TEXT`) and "Moving to 1.3.1…", or in orange
+      "Newer than this app" or "Restart it to move to 1.3.1" (`resolveEngineView`'s `status`). Update channel: a select
       of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
       "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
       pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
       pass. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
       place with the same data and engine. ⌘K's Change a setting has Update channel with the same three in the app.
       `/ui` → Settings shows Stable up to date, Beta with an update ready, a beta switched to Stable offered the
-      latest stable, Canary downloading the next canary, a downloaded beta being prepared, and a beta restarting to
-      install.
+      latest stable, Canary downloading the next canary, a downloaded beta being prepared, a beta restarting to
+      install, and the engine moving to the version just installed. Under the card, as the group's `description`
+      (`SettingsGroup`, a `2xs` `fg-2` line), the one thing people fear about updating: "Updating or quitting the app
+      never stops your agents. After an update the engine restarts into the new version on its own, and agents pick
+      up where they were."
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 
@@ -2143,9 +2150,9 @@ Only these, and they win over anything below:
       (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go
       into the round's next commit, and the agent hears which files you edited (`docs/engine.md` → Your edits).
     - **Inline.** Findings sit under their last line as the review card (`ReviewNote`, 34) in its compact form: the
-      author (Agent review), the tone (Blocking red, Suggestion amber), the title, the message as markdown and the
-      suggested fix, with no snippet or place (the line above is the place); at a review gate the row of its label and
-      title carries the same Fix / Dismiss `Choice` on its right as the Review tab and the Overview (`NoteHead`,
+      severity in its tone's text (Blocking red, Should fix amber, Optional neutral), the issue as markdown and the
+      proposed fix, with no snippet or place (the line above is the place); at a review gate the row of the severity and
+      the issue carries the same Fix / Dismiss `Choice` on its right as the Review tab and the Overview (`FindingNote`,
       `components/review/verdict-choice.tsx`, on the
       one review draft, so a verdict set anywhere shows everywhere). Each spot's lines carry their mark in the spot
       gutter (above) and the selected one the `primary-a1` wash. Every note is rendered by React into an element
@@ -2239,8 +2246,8 @@ Only these, and they win over anything below:
       lead with a label (a spot's attention). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
       two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
       them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
-      header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
-      (`startsOpen`); a suggestion's and every spot's stay folded.
+      header, so a finding with a snippet drops its place chip. A finding's snippet starts open when it starts
+      on Fix (`startsOpen`: Blocking and Should fix); an Optional one's and every spot's stay folded.
 34. **Review is the technical read; the Overview is the decision** (`routes/task/review.tsx`,
     `components/review/note.tsx`, `lib/review/report.ts`, since 2026-10-25; the deep read since 2026-10-26). Review is
     a task tab of its own, after Overview and before Code: Overview, Review, Code, Chat. It shows once there is something
@@ -2420,20 +2427,22 @@ Only these, and they win over anything below:
         open and remembers a fold (`task:<id>:review:card:<point>`, 40), and a card you jump to (J and K, the
         index, `?spot=`) opens again. Under the bar, 12px in: a judgement
         call's call (`text-xs` medium `fg-4`), then the body as markdown (`fg-3` under the call, `fg-4` without).
-      - **A finding** (Blocking, Suggestion, a dismissed one in Everything else) has no bar. It opens on the head every
-        finding has (`NoteHead`, `components/text/note-head.tsx`, the Overview's too): one full-width row,
-        `justify-between`, with the label line (`text-2xs`: Agent review in `fg-2`, the tag as a dot and label) and
-        the title (`text-xs` medium `fg-4`) stacked on the left and Fix / Dismiss on the right at a review gate,
-        aligned to the row's top, then the body full width. It does not fold, so the verdict is always in view.
-      Both then show, full width: Why it matters, Also considered, the disagreement, the change snippet of its exact
-      lines open (the header a link into Code at those lines, with the point's key), and the suggested fix on an inset
-      note headed "Suggested fix" (`IconBandage`); the body's markdown has inline code and smart links to tasks, pull
+      - **A finding** (Blocking, Should fix, Optional, a dismissed one in Everything else) has no bar. It is the one finding layout
+        (`FindingNote`, `components/text/finding-note.tsx`, the Overview's too) and shows only the issue and the
+        proposed fix: one full-width row, `justify-between`, with the severity (`text-2xs` medium in its tone's text,
+        no dot, no author: every finding is the agent review's) over the message (`text-xs` `fg-4`) on the left and
+        Fix / Dismiss on the right at a review gate, aligned to the row's top. The reviewer's title is left out, since
+        the message opens the same way. It does not fold, so the verdict is always in view. Then, full width, the change
+        snippet of its exact lines (open on the Review tab for every finding; the Overview folds an Optional one) and
+        the proposed fix on an inset note headed "Proposed fix". A point or a comment shows, full width: Why it matters, Also considered, the disagreement, the
+        change snippet of its exact lines open (the header a link into Code at those lines, with the point's key), and
+        the proposed fix; the body's markdown has inline code and smart links to tasks, pull
       requests, files and branches through the shared reference components. The card you jump to has a 2px
       `primary-a3` outline 2px outside it and scrolls into view; on the Review tab the outline (and a risk row's
       `primary-a1` wash) holds 1.5s and fades over 500ms (`useSpotlight`, `hooks/use-spotlight.ts`, the hold the chat's
       jumped-to run uses), while `?spot=` keeps the place. In the Code tab the same card is compact: no snippet and no
-      place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding's parts on
-      the same `NoteHead`, with the severity as the label line. There is one finding layout with Fix / Dismiss, never a
+      place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding on the same
+      `FindingNote`. There is one finding layout with Fix / Dismiss, never a
       variant with the toggle in a header band; /ui shows both variants (Review: a point, a finding, your comment, and
       both inline in the Code tab).
     - **Instant.** Nothing on the tab waits on a read it could have made earlier: the snippets are slices of the task's
@@ -2572,10 +2581,13 @@ Only these, and they win over anything below:
     - **The footer is always there** (`PANEL_FOOTER`, 41px with its hairline, 8px in on every side, measured: each
       24px button 8px from the footer's top, bottom and sides): Manage (`IconSettingsSliderHor`, disabled while the
       popover lists no service), Add… (`IconPlusMedium`, disabled when there is no project to add to) and, at its
-      end, Terminal, which goes to the Terminal page. With no services the body is the kit's `EmptyState` (`sm`,
-      `IconServer`): "No services in ‹project› yet" (or "No services yet"), "A service is a command you keep running
-      for a project, like its dev server.", with the footer's Add… to add some, and Create a project… in the empty
-      state itself when there is no project. The rows tick every second, since the running time is in them.
+      end, Terminal, which goes to the Terminal page. **A project with no services opens on what was found**
+      (`resolveShownServicesView`'s `found` view): Add services itself, titled "No services in ‹project› yet" with
+      "These were found in its folders. Each runs in a terminal of its own.", the recommended ones ticked and no
+      Back, so a new project's services are one press away. Only when nothing is found, or there is no project, is
+      the body the kit's `EmptyState` (`sm`, `IconServer`): "No services in ‹project› yet" (or "No services yet"),
+      "A service is a command you keep running for a project, like its dev server.", with the footer's Add… to add
+      some, and Create a project… in the empty state itself when there is no project. The rows tick every second, since the running time is in them.
     - **Everything happens in the popover, never in a dialog.** Adding, editing and removing services are views of
       the same popover (`lib/terminal/services-panel.ts`: `reduceServicesPanel` moves between the list, Manage, Add
       services, the custom form and a service's form, and `resolveShownServicesView` falls back to the list when a
@@ -2592,7 +2604,13 @@ Only these, and they win over anything below:
       slot, `outline` like Manage's, the name over the command in mono and its folder by the project's place, "bun run dev in
       shop/apps/api"); and last Custom service… (`IconPlusMedium`). The recommended ones start ticked, so the common
       case is one press of the primary "Add 2 services" (disabled at none) beside Back; what you already added is not
-      listed. While it reads, "Looking for services" after 300ms. Once added, the popover is the list again.
+      listed. While it reads, "Looking for services" after 300ms. **Then an AI check**: the list shows as soon as
+      the scan answers, and the popover asks again with `refine=1` (`docs/engine.md` → Services → Refined by a quick
+      call), "Checking names and ports with AI" under the list (`LoadingLine`, 2xs) meanwhile. When it answers, its
+      list replaces the scan's, names, commands (a `--port $PORT` where the server needs one) and preview URLs
+      included, which Add services sends; the ticks become its recommendations, unless you changed them, in which
+      case each keeps its place in the list (`resolveSuggestionPicks`). When it fails the scan's list stays, and you
+      can tick and add at any point. Once added, the popover is the list again.
     - **The form** (Custom service…, "Add a service"; or a service's, "Edit ‹name›") is short: Name, Folder (a
       select of the project's repositories and folders, never a typed path), Command and Preview URL (optional,
       `http://localhost:{port}` as its placeholder, the note "Where Open takes you. Shinsa puts the run's port where

@@ -146,7 +146,7 @@ describe('serializeReviewPayload', () => {
       reviewSummary: 'Looks right.',
       findings: [
         {
-          severity: 'suggestion',
+          severity: 'optional',
           file: 'src/a.ts',
           line: 4,
           title: 'Name it',
@@ -160,7 +160,7 @@ describe('serializeReviewPayload', () => {
     expect(payload.review).toEqual({
       summary: 'Looks right.',
       findings: [
-        { severity: 'suggestion', file: null, line: null, title: 'Name it', message: 'Give the map a name.' },
+        { severity: 'optional', file: null, line: null, title: 'Name it', message: 'Give the map a name.' },
         { severity: 'blocking', file: null, line: null, message: 'Breaks the build.' },
       ],
     });
@@ -169,7 +169,7 @@ describe('serializeReviewPayload', () => {
   });
 
   test('leaves out every finding you judged, so a dismissed one never shows as open', () => {
-    const open = { severity: 'suggestion' as const, file: null, line: null, message: 'Still open.' };
+    const open = { severity: 'optional' as const, file: null, line: null, message: 'Still open.' };
     const task: Task = {
       ...reviewedTask(),
       reviewSummary: 'Two notes.',
@@ -419,7 +419,7 @@ describe('listReviewPayloadFits', () => {
       ...reviewedTask(),
       stage: 'awaiting_merge',
       reviewSummary: 'Fine.',
-      findings: [{ severity: 'suggestion', file: null, line: null, message: 'Rename it.' }],
+      findings: [{ severity: 'optional', file: null, line: null, message: 'Rename it.' }],
     };
     const shot = {
       id: 'e1',

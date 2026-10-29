@@ -64,17 +64,19 @@ export function reduceServicesPanel(
   }
 }
 
-export type ServicesPanelView = ServicesPanelState['view'];
+export type ServicesPanelView = ServicesPanelState['view'] | 'found';
 
 export type ServicesPanelHeight = 'content' | 'fixed';
 
 export function resolveShownServicesView(
   panel: ServicesPanelState,
   canAdd: boolean,
-  canEdit: boolean
+  canEdit: boolean,
+  empty: boolean
 ): ServicesPanelView {
   if ((panel.view === 'add' || panel.view === 'custom') && canAdd) return panel.view;
   if (panel.view === 'edit' && canEdit) return 'edit';
+  if (empty && canAdd && !panel.manage) return 'found';
   return 'list';
 }
 

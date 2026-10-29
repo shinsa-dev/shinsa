@@ -101,7 +101,7 @@ describe('createOpenState', () => {
   });
 
   test('shows the agent review only when the link carries what it found', () => {
-    const finding = { severity: 'suggestion' as const, file: null, line: null, message: 'Name the map.' };
+    const finding = { severity: 'optional' as const, file: null, line: null, message: 'Name the map.' };
     const { task } = createOpenState(
       {
         v: 1,

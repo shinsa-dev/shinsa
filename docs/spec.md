@@ -817,7 +817,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   files. The walkthrough split inside Code, with its order switch and its spot stepper, is gone.
 - **It reads top to bottom, like the Overview.** What the change does in a sentence, with the decision (Approve
   changes, Fix N findings, Merge #N) where it is on the Overview; then what needs your attention, most critical first:
-  blocking findings, critical spots, spots to read carefully, suggestions, judgement calls; then the walkthrough by
+  blocking findings, critical spots, spots to read carefully, should fix and optional findings, judgement calls; then the walkthrough by
   section with its snippets; then the agent review's summary and the checks; then everything else, collapsed.
 - **Every review comment is one rich card**: author (Agent review, Agent, You), severity in its tone, a short title,
   the reason as markdown with smart links, the exact lines as a snippet whose header opens Code there, and the
@@ -879,6 +879,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Services per task (2026-10-27).** A project's services run for a task in its worktree, started by you or by the
   task's agent (`list_services`, `run_service`), shown under each service and among the task's facts
   (`docs/engine.md` → Services → Runs for a task).
+- **Agents add services (2026-10-29).** The task's agent adds a service the project lacks (`add_service`), such as
+  the dev server that shows its change, so it can run it and attach the preview (`docs/engine.md` → Services →
+  Agents add the services they need).
 - **Local previews (2026-10-29).** A service's preview URL and port variable, a free port per task run, Open in
   the Services popovers, a task's Services fact and the Terminal toolbar, and the agent's `preview` evidence before
   the review (`docs/engine.md` → Services → A live preview).

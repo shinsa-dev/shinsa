@@ -17,7 +17,13 @@ import { createGate } from '../../support/state.ts';
 
 const FINDINGS: ReviewFinding[] = [
   { severity: 'blocking', file: 'a.ts', line: 1, message: 'Off by one.' },
-  { severity: 'suggestion', file: null, line: null, message: 'Rename it.' },
+  { severity: 'optional', file: null, line: null, message: 'Rename it.' },
+];
+
+const RANKED: ReviewFinding[] = [
+  { severity: 'optional', file: null, line: null, message: 'Rename it.' },
+  { severity: 'should_fix', file: 'b.ts', line: 4, message: 'The empty list is never handled.' },
+  { severity: 'blocking', file: 'a.ts', line: 1, message: 'Off by one.' },
 ];
 
 describe('finding verdicts', () => {
@@ -26,7 +32,15 @@ describe('finding verdicts', () => {
     expect(resolveVerdictDraft(FINDINGS, {})).toEqual({ 0: 'fix', 1: 'dismiss' });
   });
 
-  it('starts with blocking findings to fix and suggestions dismissed', () => {
+  it('starts blocking and should fix findings on Fix, and only optional ones on Dismiss', () => {
+    expect(createVerdictDraft(RANKED)).toEqual({ 0: 'dismiss', 1: 'fix', 2: 'fix' });
+    expect(resolveVerdictAction(RANKED, createVerdictDraft(RANKED))).toEqual({
+      reply: 'fixFindings',
+      label: 'Fix 2 findings',
+    });
+  });
+
+  it('starts with blocking findings to fix and optional ones dismissed', () => {
     const draft = createVerdictDraft(FINDINGS);
     expect(draft).toEqual({ 0: 'fix', 1: 'dismiss' });
     expect(listVerdicts(FINDINGS, draft)).toEqual([

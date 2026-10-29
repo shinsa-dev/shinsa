@@ -26,7 +26,7 @@ export const REVIEW_FINDINGS: ReviewFinding[] = [
     fix: 'Insert the store and delete the draft in one `db.transaction`.',
   },
   {
-    severity: 'suggestion',
+    severity: 'should_fix',
     file: 'src/onboarding/progress-dots.tsx',
     line: lineOf(PROGRESS_DOTS_AFTER, 'aria-label'),
     title: 'Label the whole progress row',

@@ -14,7 +14,7 @@ const TASK = createTask({
   id: 'verdict-task',
   findings: [
     { severity: 'blocking', file: 'a.ts', line: 1, message: 'Breaks.' },
-    { severity: 'suggestion', file: 'a.ts', line: 2, message: 'Tidy.' },
+    { severity: 'optional', file: 'a.ts', line: 2, message: 'Tidy.' },
   ],
 });
 

@@ -108,6 +108,6 @@ export function describeWatchdogsForReview(watchdogs: readonly WatchdogSpec[]) {
   return [
     '',
     ...listed,
-    'Check them against the change: a watchdog whose check is vague or names no number or signal is a suggestion, and so is a change that sends data somewhere (logs, analytics, an API other services call) with no watchdog on it. A source request with no evidence in the code is a finding.',
+    'Check them against the change: a watchdog whose check is vague or names no number or signal is `should_fix`, and so is a change that sends data somewhere (logs, analytics, an API other services call) with no watchdog on it. A source request with no evidence in the code is a finding.',
   ].join('\n');
 }

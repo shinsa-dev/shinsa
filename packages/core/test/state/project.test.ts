@@ -80,6 +80,39 @@ describe('task activity', () => {
     expect(checks.map((entry) => entry.text)).toEqual(['The check passed']);
   });
 
+  test('says how many findings the agent review ranked blocking and should fix', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const finding = (severity: 'blocking' | 'should_fix' | 'optional') => ({
+      severity,
+      file: 'a.ts',
+      line: 1,
+      message: 'Look.',
+    });
+    const texts = [
+      [],
+      [finding('optional')],
+      [finding('should_fix'), finding('should_fix'), finding('optional')],
+      [finding('blocking'), finding('should_fix')],
+    ].map((findings, index) => {
+      const state = applyEvent(harness.state, {
+        type: 'review.reported',
+        taskId,
+        summary: null,
+        findings,
+        seq: harness.state.seq + 1,
+        at: index + 1,
+      });
+      return state.tasks[taskId]?.activity.at(-1)?.text;
+    });
+    expect(texts).toEqual([
+      'Agent review found nothing',
+      'Agent review found 1 issue',
+      'Agent review found 3 issues, 2 should fix',
+      'Agent review found 2 issues, 1 blocking, 1 should fix',
+    ]);
+  });
+
   test('keeps the last 200 entries', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -195,7 +228,7 @@ describe('applying the process events', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
-    const findings = [{ severity: 'suggestion' as const, file: 'a.ts', line: 1, message: 'Rename.' }];
+    const findings = [{ severity: 'optional' as const, file: 'a.ts', line: 1, message: 'Rename.' }];
     const base = structuredClone(harness.state);
     const task = base.tasks[taskId];
     if (!task) throw new Error('no task');

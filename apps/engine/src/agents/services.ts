@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
+import { isAbsolute, join, normalize } from 'node:path';
 import {
   isServiceActive,
   listTaskServices,
+  listTerminalPlaces,
   resolveServiceUrl,
   resolveTaskProject,
+  type ServiceDefinition,
   type ServiceView,
   type ShinsaState,
   type Task,
@@ -11,8 +14,8 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import type { ServiceRun } from '../terminals/index.ts';
-import { resolveServiceRunIn } from '../terminals/routes.ts';
+import type { ServiceInput, ServiceRun } from '../terminals/index.ts';
+import { readServiceInput, resolveServiceRunIn } from '../terminals/routes.ts';
 import { readString } from './handover.ts';
 
 export const SERVICE_OUTPUT_LINES = 60;
@@ -28,7 +31,10 @@ export interface TaskServiceRunner {
   stopService(id: string, taskId: string | null): Promise<void>;
   restartService(id: string, run: ServiceRun): Promise<TerminalInfo>;
   readServiceOutput(id: string, taskId: string | null, lines: number): Promise<string[]>;
+  addService(projectId: string, input: ServiceInput): ServiceDefinition;
 }
+
+export type ServiceToolName = 'list_services' | 'run_service' | 'add_service';
 
 interface ServiceToolContext {
   state: ShinsaState;
@@ -40,7 +46,7 @@ interface ServiceToolContext {
 function describeNone(snapshot: TerminalsSnapshot, task: Task, state: ShinsaState) {
   const project = resolveTaskProject(state, task);
   const any = snapshot.services.some((service) => service.projectId === project);
-  if (!any) return 'The project has no services. The human adds them in Shinsa under Services.';
+  if (!any) return 'The project has no services. Add the one you need with add_service.';
   return 'None of the project’s services can run for this task: their folders are outside this task’s repository, or the task has no worktree of its own.';
 }
 
@@ -115,10 +121,61 @@ async function runService(input: Record<string, unknown>, context: ServiceToolCo
   return `${action === 'start' ? 'Started' : 'Restarted'} ${name} for this task in ${run.cwd}.${preview} Read its output with list_services and the service’s name.`;
 }
 
-export function handleServiceTool(
-  name: 'list_services' | 'run_service',
+function resolveServiceFolder(repoPath: string, input: Record<string, unknown>) {
+  const path = readString(input, 'path')?.trim() ?? '.';
+  const relative = normalize(path).replace(/\/+$/, '');
+  if (isAbsolute(relative) || relative === '..' || relative.startsWith('../'))
+    throw new Error('path must be a folder inside this task’s repository, relative to its root.');
+  return {
+    relative: relative === '.' ? '' : relative,
+    cwd: relative === '.' ? repoPath : join(repoPath, relative),
+  };
+}
+
+function describeFolder(relative: string) {
+  return relative ? `\`${relative}\`` : 'the repository’s root';
+}
+
+function readEnvInput(input: Record<string, unknown>) {
+  return input.env === undefined || input.env === null ? {} : input.env;
+}
+
+function addService(input: Record<string, unknown>, context: ServiceToolContext) {
+  const { state, task, runner } = context;
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  const projectId = resolveTaskProject(state, task);
+  if (!(repo && projectId)) throw new Error('add_service needs a task that works in a project’s repository.');
+  const { relative, cwd } = resolveServiceFolder(repo.path, input);
+  if (!existsSync(cwd))
+    throw new Error(
+      `${describeFolder(relative)} is not in the repository’s own checkout yet. A service runs from a folder on the default branch.`
+    );
+  const others = runner.snapshot().services.filter((each) => each.projectId === projectId);
+  const added = runner.addService(
+    projectId,
+    readServiceInput(
+      {
+        name: input.name ?? '',
+        path: cwd,
+        command: input.command ?? '',
+        env: readEnvInput(input),
+        previewUrl: input.preview_url ?? null,
+        portVariable: input.port_variable ?? null,
+      },
+      others,
+      listTerminalPlaces(state, projectId),
+      runner.home
+    )
+  );
+  return `Added ${added.name} to the project: \`${added.command}\` in ${describeFolder(relative)}. The human sees it under Services. Start it for this task with run_service.`;
+}
+
+export async function handleServiceTool(
+  name: ServiceToolName,
   input: Record<string, unknown>,
   context: ServiceToolContext
 ) {
-  return name === 'list_services' ? listServices(input, context) : runService(input, context);
+  if (name === 'add_service') return addService(input, context);
+  if (name === 'list_services') return await listServices(input, context);
+  return await runService(input, context);
 }

@@ -215,7 +215,7 @@ export interface PlanDocument {
 }
 
 export interface ReviewFinding {
-  severity: 'blocking' | 'suggestion';
+  severity: 'blocking' | 'should_fix' | 'optional';
   file: string | null;
   line: number | null;
   end?: number | null;

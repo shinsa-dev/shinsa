@@ -27,5 +27,5 @@ export function InsetNote({
 }
 
 export function SuggestedFix({ text }: { text: string }) {
-  return <InsetNote label='Suggested fix' icon='IconBandage' text={text} />;
+  return <InsetNote label='Proposed fix' text={text} />;
 }

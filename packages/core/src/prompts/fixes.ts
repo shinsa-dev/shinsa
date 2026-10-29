@@ -4,9 +4,18 @@ import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../doma
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import { describeFindingPlace } from './context.ts';
 
+const SEVERITY_WORDS: Record<ReviewFinding['severity'], string> = {
+  blocking: 'blocking',
+  should_fix: 'should fix',
+  optional: 'optional',
+};
+
 function describeFindingLines(findings: ReviewFinding[]) {
   return findings
-    .map((finding) => `- [${finding.severity}] ${describeFindingPlace(finding)}${finding.message}`)
+    .map(
+      (finding) =>
+        `- [${SEVERITY_WORDS[finding.severity]}] ${describeFindingPlace(finding)}${finding.message}`
+    )
     .join('\n');
 }
 

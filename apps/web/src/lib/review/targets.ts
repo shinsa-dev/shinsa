@@ -1,4 +1,5 @@
 import type { Attention, CodeSpot, ReviewFinding, WorkReport } from '@shinsa/core';
+import { SEVERITY_ATTENTION } from '@/lib/review/findings.ts';
 
 export interface ReviewTarget {
   key: string;
@@ -69,7 +70,7 @@ export function listFindingTargets(findings: ReviewFinding[]): ReviewTarget[] {
             file: finding.file,
             start: finding.line,
             end: finding.end ?? finding.line,
-            attention: finding.severity === 'blocking' ? ('critical' as const) : ('high' as const),
+            attention: SEVERITY_ATTENTION[finding.severity],
             why: finding.message,
             section: 'Agent review',
           },
