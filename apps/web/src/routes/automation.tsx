@@ -1,4 +1,4 @@
-import type { Schedule, ShinsaState } from '@shinsa/core';
+import type { Gate, Schedule, ShinsaState, Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
@@ -6,6 +6,9 @@ import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskLink } from '@/components/links/task.tsx';
+import { QuestionCard } from '@/components/overview/now-card.tsx';
+import { SecretCard } from '@/components/overview/secret-card.tsx';
+import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { createScheduleActions, ScheduleMenu } from '@/components/settings/schedules.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -13,6 +16,7 @@ import {
   describeAutomationFacts,
   describeReadsEmpty,
   listAutomationFiled,
+  listAutomationGates,
   listAutomationReads,
 } from '@/lib/automations.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -40,9 +44,21 @@ function ReadRow({ state, read }: { state: ShinsaState; read: AutomationRead }) 
   );
 }
 
+function WatchGate({ state, home, gate }: { state: ShinsaState; home: Task; gate: Gate }) {
+  switch (gate.type) {
+    case 'sign_in':
+      return <SignInCard state={state} task={home} gate={gate} />;
+    case 'secret':
+      return <SecretCard state={state} task={home} gate={gate} />;
+    default:
+      return <QuestionCard state={state} task={home} gate={gate} />;
+  }
+}
+
 function AutomationBody({ state, schedule }: { state: ShinsaState; schedule: Schedule }) {
   const reads = listAutomationReads(state, schedule);
   const filed = listAutomationFiled(state, schedule);
+  const gates = listAutomationGates(state, schedule);
   return (
     <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-6')}>
       <div className='flex items-start gap-3'>
@@ -53,6 +69,9 @@ function AutomationBody({ state, schedule }: { state: ShinsaState; schedule: Sch
         />
         <ScheduleMenu schedule={schedule} actions={createScheduleActions(state)} showOpen={false} />
       </div>
+      {gates.map(({ home, gate }) => (
+        <WatchGate key={gate.id} state={state} home={home} gate={gate} />
+      ))}
       <section className='flex flex-col gap-1'>
         <SectionLabel count={filed.length} className='px-1'>
           Tasks it filed

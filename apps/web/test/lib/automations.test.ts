@@ -7,6 +7,7 @@ import {
   describeAutomationSaved,
   describeReadsEmpty,
   listAutomationFiled,
+  listAutomationGates,
   listAutomationReads,
   listRepoItems,
   listSourceItems,
@@ -26,6 +27,7 @@ import {
   stopFakeServer,
 } from '../support/server.ts';
 import {
+  createGate,
   createProject,
   createRepo,
   createRun,
@@ -238,5 +240,32 @@ describe('a watch’s page', () => {
   it('says why it has no read yet', () => {
     expect(describeReadsEmpty(watch)).toBe('No read yet. The first one starts at its next run.');
     expect(describeReadsEmpty({ ...watch, enabled: false })).toBe('No read yet, and it is paused.');
+  });
+});
+
+describe('the decisions a watch waits on', () => {
+  const watch = createSchedule({
+    id: 'w',
+    source: { projectId: 'p1', server: 'slack' },
+    target: { kind: 'task', taskId: 'home' },
+  });
+
+  it('lists its home’s open question, sign-in and secret gates, and nothing for a plain schedule', () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'home', watchHome: true }), createTask({ id: 'plain' })],
+      gates: [
+        createGate({ id: 'q', taskId: 'home', type: 'question' }),
+        createGate({ id: 's', taskId: 'home', type: 'sign_in' }),
+        createGate({ id: 'k', taskId: 'home', type: 'secret' }),
+        createGate({ id: 'old', taskId: 'home', type: 'question', status: 'answered' }),
+        createGate({ id: 'r', taskId: 'home', type: 'review' }),
+      ],
+      patch: { schedules: { w: watch } },
+    });
+    expect(listAutomationGates(state, watch).map(({ gate }) => gate.id)).toEqual(['q', 's', 'k']);
+    expect(listAutomationGates(state, watch)[0]?.home.id).toBe('home');
+    const message = createSchedule({ id: 'm', target: { kind: 'task', taskId: 'plain' } });
+    expect(listAutomationGates(state, message)).toEqual([]);
+    expect(listAutomationGates(state, createSchedule({ id: 'n' }))).toEqual([]);
   });
 });

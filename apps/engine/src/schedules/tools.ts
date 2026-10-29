@@ -2,6 +2,7 @@ import {
   DomainError,
   describeScheduleTarget,
   describeScheduleTrigger,
+  listProjectRepos,
   listSchedules,
   type Schedule,
   type ScheduleRequest,
@@ -12,6 +13,7 @@ import {
   validateScheduleRequest,
 } from '@shinsa/core';
 import { assertProtocol, readString } from '../agents/handover.ts';
+import { findForkSource } from '../agents/tools/forks.ts';
 import { describeError } from '../log/index.ts';
 import type { SecretStore } from '../secrets/index.ts';
 import { WEBHOOK_ROUTE_PREFIX } from './webhook.ts';
@@ -191,21 +193,10 @@ async function removeSchedule(input: Record<string, unknown>, call: ScheduleTool
   return `Deleted “${name ?? scheduleId}”.`;
 }
 
-function resolveFiledFork(state: ShinsaState, reference: string | null) {
-  if (reference === null) return null;
-  const handle = reference.toUpperCase();
-  const task =
-    state.tasks[reference] ?? Object.values(state.tasks).find((candidate) => candidate.handle === handle);
-  if (!task) {
-    throw new Error(`There is no task "${reference}" to fork. Find it with find_tasks and pass its id.`);
-  }
-  return task.id;
-}
-
 function resolveFiledRepo(state: ShinsaState, runId: string, name: string | null) {
   if (name === null) return null;
-  const projectId = findTaskOf(state, runId).projectId ?? null;
-  const repos = Object.values(state.repos).filter((candidate) => candidate.projectId === projectId);
+  const projectId = findTaskOf(state, runId).projectId;
+  const repos = projectId ? listProjectRepos(state, projectId) : [];
   const repo = repos.find((candidate) => candidate.name === name);
   if (repo) return repo.id;
   const known = repos.map((candidate) => candidate.name);
@@ -222,7 +213,7 @@ async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall
     runId: call.runId,
     attemptId: call.attemptId,
     ...filing,
-    forkOf: resolveFiledFork(state, forkFrom),
+    forkOf: forkFrom === null ? null : findForkSource(state, forkFrom),
     repoId: resolveFiledRepo(state, call.runId, repository),
   });
   const created = events.find((event) => event.type === 'task.created');

@@ -4,7 +4,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { AutomationPage } from '@/routes/automation.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { createSchedule } from '../support/schedules.ts';
-import { createProject, createRun, createShinsaState, createTask, NOW } from '../support/state.ts';
+import {
+  createGate,
+  createProject,
+  createRun,
+  createShinsaState,
+  createTask,
+  NOW,
+} from '../support/state.ts';
 
 const watch = createSchedule({
   id: 'w',
@@ -79,6 +86,23 @@ describe('an automation’s page', () => {
     );
     expect(screen.getByText('Nothing filed yet.')).toBeDefined();
     expect(screen.getByText('No read yet. The first one starts at its next run.')).toBeDefined();
+  });
+
+  it('shows a question the watch asked, to answer on its page', () => {
+    const asking = createShinsaState({
+      tasks: [createTask({ id: 'home', title: 'Watches slack', watchHome: true })],
+      gates: [
+        createGate({ id: 'q', taskId: 'home', type: 'question', title: 'Which channel is #feedback?' }),
+      ],
+      patch: { schedules: { w: watch } },
+    });
+    render(
+      <TooltipProvider>
+        <AutomationPage state={asking} scheduleId='w' />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Which channel is #feedback?')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Send answer' })).toBeDefined();
   });
 
   it('sends a watch’s home task to the watch’s page', async () => {

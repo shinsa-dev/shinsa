@@ -1733,8 +1733,9 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   home's activity lists each task it filed. Settings → Automations shows a watch as "Watch · <server> · <when> ·
   N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
   `routes/automation.tsx`): what it reads and when, the tasks it filed and every read with its summary, newest first,
-  with the runs it skipped or failed. The home never shows as a task page: `/tasks/<home>` replaces itself with the
-  watch's page. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
+  with the runs it skipped or failed, and above them any question, sign-in or secret its read waits on, answered there
+  (`listAutomationGates`). The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
+  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
   automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
 - **New automation** (Settings → Automations): a form that writes a Schedule (every N minutes, a new task in a
   repository or the one triage picks), a Trigger (a webhook that starts a new task, its URL in the row's menu) or a

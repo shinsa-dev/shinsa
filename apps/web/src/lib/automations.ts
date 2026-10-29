@@ -1,4 +1,12 @@
-import type { Run, Schedule, ShinsaState, Task, UserCommand } from '@shinsa/core';
+import {
+  type Gate,
+  listOpenGates,
+  type Run,
+  type Schedule,
+  type ShinsaState,
+  type Task,
+  type UserCommand,
+} from '@shinsa/core';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { sendCommand } from '@/lib/connection/socket.ts';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -131,6 +139,16 @@ export function selectWatchOfHome(state: ShinsaState, taskId: string) {
         schedule.source !== null && schedule.target.kind === 'task' && schedule.target.taskId === taskId
     ) ?? null
   );
+}
+
+const WATCH_GATE_TYPES: ReadonlySet<Gate['type']> = new Set<Gate['type']>(['question', 'sign_in', 'secret']);
+
+export function listAutomationGates(state: ShinsaState, schedule: Schedule) {
+  const home = schedule.target.kind === 'task' ? state.tasks[schedule.target.taskId] : undefined;
+  if (!home?.watchHome) return [];
+  return listOpenGates(state, home.id)
+    .filter((gate) => WATCH_GATE_TYPES.has(gate.type))
+    .map((gate) => ({ home, gate }));
 }
 
 export function selectWatchSource(state: ShinsaState, schedule: Schedule) {
