@@ -2,6 +2,7 @@ import type { FindingVerdictKind, WorkReport } from '@shinsa/core';
 import * as React from 'react';
 import { ReviewNote } from '@/components/review/note.tsx';
 import { VerdictChoice } from '@/components/review/verdict-choice.tsx';
+import { createVerdictDraft, resolveVerdict } from '@/lib/overview/verdicts.ts';
 import { createDisclosureId, notPersisted } from '@/lib/preferences/disclosure.ts';
 import {
   isFindingItem,
@@ -69,8 +70,8 @@ function Remove() {
 }
 
 function SampleVerdict({ item }: { item: ReviewItem }) {
-  const [verdict, setVerdict] = React.useState<FindingVerdictKind>(
-    item.label === 'Blocking' ? 'fix' : 'dismiss'
+  const [verdict, setVerdict] = React.useState<FindingVerdictKind>(() =>
+    resolveVerdict(createVerdictDraft(SAMPLE_CODE_FINDINGS), item.finding ?? -1)
   );
   return <VerdictChoice value={verdict} onValueChange={setVerdict} />;
 }

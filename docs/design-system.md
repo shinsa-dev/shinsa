@@ -10750,7 +10750,7 @@ the report. A reviewer is a signal for the person who decides, never the approva
    value in a step is blocking, a step the agent could have done itself is a finding.
 6. **Read what the tests miss.** Uncovered changed lines that decide something (a branch, error handling, a
    calculation) are a finding; a log line or a type is not. A covered line with no assertion on its result is still
-   worth a suggestion.
+   worth a `should_fix`.
 7. **Prove it.** Each blocking finding names `file:line`, what breaks and how you saw it. For a fix, revert it and
    watch the test fail, then restore it; a test that passes either way covers nothing. For a clean baseline copy the
    files aside or use `git worktree add`; never let `git stash` guess which stash.
