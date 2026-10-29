@@ -17,6 +17,7 @@ import { SERVICE_SPECS } from './services.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
 import { SYSTEM_SPECS } from './system.ts';
 import { TASK_SPECS } from './tasks.ts';
+import { WATCHDOG_SPECS } from './watchdogs.ts';
 import { WORK_SPECS } from './work.ts';
 
 export { type CommandReceipt, resolveCommandKey, type SurfaceClient } from './client.ts';
@@ -57,6 +58,7 @@ export const SURFACE: SurfaceSpec[] = [
   ...SYSTEM_SPECS,
   ...SERVICE_SPECS,
   ...EXTENSION_SPECS,
+  ...WATCHDOG_SPECS,
   COMMAND_SPEC,
 ];
 
@@ -181,6 +183,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['runs', 'Snooze or dismiss the warning that an agent has gone quiet.'],
       ['delegations', 'List the work a step handed to other agents, or stop it.'],
       ['suggestions', 'Accept, keep or dismiss the follow-up tasks agents suggest.'],
+      ['watchdogs', 'Stop a watchdog on a merged change, or connect the data source it waits for.'],
     ],
   },
   {
@@ -200,6 +203,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
     title: 'Set up projects, repositories and accounts',
     groups: [
       ['projects', 'Group repositories and folders into projects, with a key for task handles.'],
+      ['sources', 'List, add or remove the data sources a project’s watchdogs read.'],
       ['focus', 'Show only one project’s work, for a while or until you clear it.'],
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],
       ['folders', 'Choose the folders Shinsa searches for repositories.'],

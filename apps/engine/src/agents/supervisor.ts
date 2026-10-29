@@ -13,7 +13,6 @@ import {
   type Run,
   type RunAccount,
   type RunFailure,
-  type RunRole,
   type RunUsage,
   resolveAgentModel,
   resolveAgentProvider,
@@ -74,7 +73,7 @@ import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
-  resolveHandoffPlan,
+  resolveRestorePlan,
   resolveTurnBrief,
   resolveTurnPlan,
   resolveTurnPrompt,
@@ -144,8 +143,9 @@ function resolveDriveFailure(error: unknown): AgentSessionResult {
   return { outcome: 'failed', summary };
 }
 
-function resolveRoleCwd(role: RunRole, task: Task, repo: Repo) {
-  if (role === 'answerer') return repo.path;
+function resolveRoleCwd(run: Run, task: Task, repo: Repo) {
+  const role = run.role;
+  if (role === 'answerer' || run.purpose === 'watch') return repo.path;
   if (role === 'researcher') return task.worktreePath ?? repo.path;
   return task.worktreePath;
 }
@@ -315,7 +315,7 @@ export class RunSupervisor {
   }
 
   #resolveCwd(run: Run, task: Task, repo: Repo) {
-    if (!isDelegatedRun(run)) return resolveRoleCwd(run.role, task, repo);
+    if (!isDelegatedRun(run)) return resolveRoleCwd(run, task, repo);
     if (run.delegation.isolation === 'worktree') {
       return resolveIsolatedPath(this.#config.worktreesDir, task.id, run.id);
     }
@@ -400,8 +400,7 @@ export class RunSupervisor {
         if (result.failure?.class === 'session_lost' && plan.resume !== null && !restored) {
           restored = true;
           carryUndelivered(active, result.undelivered);
-          await this.#recordSessionLost(run.id, plan.resume);
-          plan = resolveHandoffPlan(this.#context(turn), 'session_restore', plan.resume, provider.id);
+          plan = await this.#restoreLost(turn, plan, plan.resume);
           continue;
         }
         if (this.#isOverloadRetry(active, result)) {
@@ -450,6 +449,11 @@ export class RunSupervisor {
       },
     });
     await waitToRetry(active, delay);
+  }
+
+  async #restoreLost(turn: Turn, plan: TurnPlan, sessionId: string) {
+    if (!plan.fork) await this.#recordSessionLost(turn.run.id, sessionId);
+    return resolveRestorePlan(this.#context(turn), plan, sessionId);
   }
 
   #recordSessionLost(runId: string, sessionId: string) {
@@ -586,7 +590,7 @@ export class RunSupervisor {
       return this.#tools.handle(name, { runId: run.id, attemptId, input, signal, requestId });
     };
     const startSession = this.#startSession ?? provider.startSession;
-    let sessionId = plan.resume;
+    let sessionId = plan.fork ? null : plan.resume;
     const options = await this.#resolveSpeed(run, provider, active.lease, true);
     const session = startSession({
       role: run.role,
@@ -595,6 +599,7 @@ export class RunSupervisor {
       prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt, turn.brief),
       model: this.#resolveModel(turn),
       resume: plan.resume,
+      fork: plan.fork,
       defaultBranch: turn.defaultBranch,
       pluginDir: this.#config.pluginDir,
       tools: createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [

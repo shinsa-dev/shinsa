@@ -3,6 +3,7 @@ import {
   type Handoff,
   type HandoffSource,
   type Run,
+  type RunFork,
   type RunHandoff,
   type RunHandoffReason,
   resolveHandoff,
@@ -19,6 +20,7 @@ import type { Transcripts } from './transcripts/index.ts';
 
 export interface TurnPlan {
   resume: string | null;
+  fork: boolean;
   handoff: Handoff | null;
   record: RunHandoff | null;
 }
@@ -33,11 +35,17 @@ export interface TurnContext {
   recordLost: (sessionId: string) => Promise<void>;
 }
 
-const FRESH: TurnPlan = { resume: null, handoff: null, record: null };
+const FRESH: TurnPlan = { resume: null, fork: false, handoff: null, record: null };
+
+function resolveSessionTaskId(context: TurnContext, sessionId: string) {
+  const fork = context.run.fork;
+  return fork && fork.sessionId === sessionId ? fork.taskId : context.run.taskId;
+}
 
 function listSessionRuns(context: TurnContext, sessionId: string) {
+  const taskId = resolveSessionTaskId(context, sessionId);
   return Object.values(context.state.runs)
-    .filter((run) => run.taskId === context.run.taskId && run.sessionId === sessionId)
+    .filter((run) => run.taskId === taskId && run.sessionId === sessionId)
     .sort((a, b) => a.startedAt - b.startedAt);
 }
 
@@ -48,7 +56,7 @@ function listConversation(context: TurnContext, sessionId: string): HandoffSourc
   }));
 }
 
-export function resolveHandoffPlan(
+function resolveHandoffPlan(
   context: TurnContext,
   reason: RunHandoffReason,
   sessionId: string,
@@ -70,6 +78,7 @@ export function resolveHandoffPlan(
   if (!handoff) return FRESH;
   return {
     resume: null,
+    fork: false,
     handoff,
     record: {
       reason,
@@ -81,10 +90,36 @@ export function resolveHandoffPlan(
   };
 }
 
+async function resolveForkPlan(context: TurnContext, fork: RunFork): Promise<TurnPlan> {
+  const { provider } = context;
+  const source = context.state.runs[fork.runId];
+  const owner = source?.sessionProvider ?? source?.provider ?? provider.id;
+  const capabilities = resolveCapabilities(provider);
+  if (owner !== provider.id || !capabilities.sessions.fork) {
+    return resolveHandoffPlan(context, 'fork', fork.sessionId, owner);
+  }
+  if (!capabilities.sessions.inspect || !provider.inspectSession) {
+    return { ...FRESH, resume: fork.sessionId, fork: true };
+  }
+  const status = await provider.inspectSession({ cwd: context.cwd, sessionId: fork.sessionId });
+  if (status !== 'missing' && status !== 'empty') return { ...FRESH, resume: fork.sessionId, fork: true };
+  log.warn('[Runs] The session to fork is gone; restoring it from the source task’s transcript', {
+    runId: context.run.id,
+    sourceTaskId: fork.taskId,
+    sessionId: fork.sessionId,
+    status,
+  });
+  return resolveHandoffPlan(context, 'fork', fork.sessionId, owner);
+}
+
+export function resolveRestorePlan(context: TurnContext, plan: TurnPlan, sessionId: string) {
+  return resolveHandoffPlan(context, plan.fork ? 'fork' : 'session_restore', sessionId, context.provider.id);
+}
+
 export async function resolveTurnPlan(context: TurnContext): Promise<TurnPlan> {
   const { run, provider } = context;
   const sessionId = run.sessionId;
-  if (!sessionId) return FRESH;
+  if (!sessionId) return run.fork ? resolveForkPlan(context, run.fork) : FRESH;
   const owner = run.sessionProvider ?? run.provider;
   if (owner !== provider.id) return resolveHandoffPlan(context, 'provider_switch', sessionId, owner);
   const capabilities = resolveCapabilities(provider);

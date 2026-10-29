@@ -124,6 +124,14 @@ function resolveHandoffLine(item: TimelineItemOf<'handoff'>): NoticeLineView {
       detail: `From ${item.fromProvider} to ${item.toProvider}. ${carried}`,
     };
   }
+  if (item.reason === 'fork') {
+    return {
+      icon: 'IconArrowRotateClockwise',
+      label: 'Forked from the transcript',
+      meta: null,
+      detail: `The session of the task this one was forked from could not be copied, so a new one started from its transcript. ${carried}`,
+    };
+  }
   return {
     icon: 'IconArrowRotateClockwise',
     label: 'Session restored from the transcript',

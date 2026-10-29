@@ -51,7 +51,7 @@ cache (Sessions and the prompt cache, The agent loop).
 Phases stay checkpoints. `complete_phase` still commits the phase and moves the progress on, but the next phase is the
 same session's next turn with a short "Now build phase 2 of 3: …" instruction, not a new agent's full brief. Each turn
 is still a run of its own (its attempts, its account, its usage), so every run of a task shares one session, and an
-Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix` or `operate`). Long
+Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix`, `operate` or `watch`). Long
 tasks rely on compaction (eunoe's folds or Claude Code's, Compaction and fast mode below) to stay inside the window.
 
 Each role's provider (Claude or Codex) and model are set in Settings → Agents → Models: Task agents (Opus) and Quick
@@ -62,7 +62,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, and checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; what a watchdog check found (`report_watch`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -282,6 +282,54 @@ or modifies, the ones the report marks executable, and of those the ones a test 
   important new logic no test runs; the Agent's phase instruction and the handover skill tell it to cover new logic
   with tests and that Shinsa measures it, unless the repository turned coverage off. All of it is in the user turn,
   never a system prompt (Caching).
+
+### Forking a task
+
+A fork is a new task whose Agent carries on from another task's conversation: feature A shipped, a user reports an
+edge case in it, and the fix becomes its own task, kept apart on screen with its own branch, worktree, review and pull
+request, while its Agent still knows everything A's Agent learned. It is the one place a task's first session is not
+fresh, and it keeps the first rule: the fork has one session of its own from then on, and the source's session is
+never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`, the fold in `state/forks.ts`).
+
+- **Asking for one.** `task.create` and `agent.create_task` take `forkOf`, the source task's id; an unknown id is
+  refused (`task_not_found`) before anything is created. You fork with `shinsa tasks create --fork-from <task>`, and
+  an agent with `create_task`'s `fork_from` (a task's id or handle, its own task included; an unknown one is the
+  tool's error), for follow-up work on what a task did. The task keeps it as `Task.forkOf`, and both tasks record it
+  in their activity (`kind: 'fork'`: "Forked from LOC-14 “…”" on the new one, "Forked into LOC-15 “…”" with the
+  request on the source, which a courier forking its own task records only as the task it created).
+- **The first session is a copy.** The forked task's first run of a task-session role (planning, or an inquiry)
+  carries `Run.fork {taskId, runId, sessionId}`: the source's session as `Decider.taskSession` reads it, with
+  `resume: false` and `sessionId: null`. The provider copies that session (Claude's `forkSession`, Codex
+  `thread/fork`) and the run links the copy's own id, so every later run resumes the copy (`Decider.taskSession`) and
+  the source session is never touched. A fork run that failed before it linked a session forks again on its retry.
+  In the engine the fork is a turn plan (`resolveForkPlan` in `agents/turns.ts`): a provider with `sessions.fork`
+  that owns the source session and still has it (`inspectSession`) gets it as `resume` with `fork: true`, which
+  Claude passes as the SDK's `forkSession` and Codex sends as `thread/fork` with the run's own sandbox and tools, and
+  the session the provider reports is the fork's own. Otherwise (a provider without `sessions.fork`, the session on
+  another provider, the source session missing, or a fork the provider refuses as `session_lost` mid-start) the run
+  starts fresh with a handoff of the source task's transcripts (`reason: 'fork'`, "Forked from the transcript" in
+  the chat), read the same way as a lost session's (Resume fallback), and the source run's session is not marked
+  lost. The house rules are not sent again when the source session has them, and the first turn says where the
+  fork works (`resolveMovedNote`): its own worktree, not the source's.
+  Its prompt ends with what happened (`resolveForkNote`): everything above was the source task's work, that task stays
+  as it is, and from here on the agent works on this task only, with its own request. It also says where the source's
+  code is (`describeForkPlace`): merged in its pull request, so the default branch the fork starts from has it, or not
+  merged yet, on its branch and open pull request, so the fork's worktree does not; while it is unmerged, the source's
+  worktree to read (never to change); and the source's id for `read_task`. A fork only ever copies a session, never a
+  worktree or a branch. A fork of a fork copies the middle task's own session, and a restart while the fork's first
+  run plans resumes the fork's copy, never the source. The system prompt and tools are the same, so the copy keeps the
+  source's prompt-cache prefix (Caching).
+- **No session to copy, a brief instead.** When the source has no session, its session is on another provider than
+  the run's, or the provider lost it, or the fork's own session once existed and can no longer go on (a context
+  overflow), the run starts fresh and its prompt ends with the source's brief (`describeForkSource`): the source's
+  request and its rounds, each with its state, pull request and headline, result or goal, and `read_task` for more. A
+  fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
+- **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
+  is not told about the source.
+- **Forking from the web.** Fork into a new task (the task menu, a roadmap row's menu and ⌘K, on every task but a
+  cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
+  sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
+  into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
 
 ### Who is who
 
@@ -1177,6 +1225,84 @@ steps takes its step out again.
   and the pull request's description list them as task lists (`serializeMergeStepsMarkdown`), and the activity
   records each tick. Nothing runs a step for you: a step's command opens in a terminal only when you ask (Run in
   terminal).
+
+### Watchdogs
+
+You cannot verify everything before a merge: an edge case in one browser, an API whose callers break, events that
+stop arriving. A **watchdog** watches one shipped change for a window after its merge, through data the tests never
+see, and turns what it finds into work. It is a task-scoped automation: the Agent writes it, the task owns it, and it
+stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/watchdogs.ts`, the folds in
+`state/watchdogs.ts`, the prompts in `prompts/watchdogs.ts`); the clock is the engine's (`runtime/watchdogs.ts`).
+
+- **The Agent writes them.** The last phase's walkthrough takes `watchdogs` (at most 5; `WatchdogSpec`: a `title`, a
+  `check` with what counts as an issue, an optional schedule (`first_check_minutes`, `max_gap_hours`, `for_hours`, up to
+  720 hours; each left out takes the setting's default, below), `starts` `merge` or `production` with the
+  `production_check` that tells the change is live there, and either a `source`
+  `{server, data}`, an MCP server that holds the data, or a `source_request` `{data, evidence, suggestions}` when no
+  server it has does; `validatePhaseHandOver` refuses both or neither, a repeated title, and a check slower than its
+  window, and a production start with no `production_check`). The last phase's instruction lists the project's data sources for the repository
+  (`describeWatchdogGuide`, in the user turn), the handover skill says when one is worth it, a fix revises them like
+  `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
+- **Data sources live on the project.** `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
+  covers, none meaning every repository, `addedBy` `you` or `agent`), at most 20. A watchdog whose server the project
+  does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
+  repository finds it; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
+  them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
+  connects one for you.
+- **Armed by the merge.** After every command, `syncWatchdogs` looks at the tasks it changed: a round whose pull
+  request merged with watchdogs in its walkthrough arms each once (`watchdog.armed`, keyed by the round). One with a
+  source starts watching at once (`endsAt` the merge plus its window, `nextCheckAt` its first check in); one with a source
+  request waits (`needs_source`) and asks you on the Overview, with the data it needs, where the code sends it and the
+  servers it suggests. Connecting one (`watchdog.connect {server, data}`, or `shinsa watchdogs connect`) adds the server
+  to the project's sources for the repository and starts its window then (`watchdog.started`).
+- **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
+  doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
+  so far), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
+  leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
+  default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
+  read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
+- **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
+  branch, a manual deploy), the agent sets `starts: production` and says how to tell (`production_check`). Armed, the
+  watchdog waits (`awaiting_production`, from `awaitingSince`) and its checks only ask whether the change is live
+  (`resolveProductionPrompt`). Each costs a turn of the task's whole session, so they back off: the next one comes
+  after as long as the watchdog has already waited, at least 30 minutes (`productionPollMinutes`) and at most 6 hours
+  (`productionPollMaxMinutes`), about 30 turns in a week rather than one every half hour. One answer counts for every
+  watchdog of the task that waits for production, since they wait for the same change: `report_watch {live: false}`
+  asks again later for all of them (`watchdog.deferred`), and `live: true` starts every one's window then
+  (`watchdog.live`), with that turn's check as the first of the one that asked. A change that is not live within a week
+  of `awaitingSince` (`productionWaitHours`; for a watchdog that waited for a data source first, a week from when you
+  connected it) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves out `live` is refused
+  (`live_required`).
+- **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
+  `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
+  slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the
+  end runs late once the task rests; if the task is still at work then, the watchdog stops (`watchdog.missed` with no
+  next check) rather than passing without it. A watchdog passes only on a check's report. A task that is not resting, or has a
+  live run (a later round at work), defers it 15 minutes (`watchdog.deferred`), so a check never shares the session
+  with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
+  (`isReadOnlyRun`), in the repository itself, resuming the task's session (`Decider.taskSession`), so it knows what
+  shipped; its prompt (`resolveWatchPrompt`) names the watchdog, its check, its source and its last checks. It hands
+  over with `report_watch {healthy, summary, issue?}` (`validateWatchReport`; `PURPOSE_HAND_OVERS.watch`).
+- **What a check leads to.** A healthy check is kept (`watchdog.checked`, the last 20), and the next one is due an
+  interval later; when that would fall past the window, the watchdog passes. An issue trips it: Shinsa files a new
+  task forked from this one (`createdBy: {kind: 'watchdog'}`, its request the issue's title and request and which
+  watchdog found it), so the fix starts from this conversation and goes through every gate. Either way the task rests
+  again (`merged`). A check run that fails or ends without `report_watch` is recovered like any run (its nudged or
+  resumed run takes the check over, `watchdog.checking`), but where any other run would open a failure gate, the check
+  gives up instead (`missWatchCheck`, `watchdog.missed` with the reason): no gate, the task rests again, and the next
+  check is due an interval later; when that falls past the window, the watchdog stops (`stopped`, never `passed`,
+  since its last check never ran). One broken check never freezes the watchdog or the task's other watchdogs. A message while it checks steers it, and Retry at `watching` starts it again.
+- **You stop them.** `watchdog.stop` (Stop on the Overview, `shinsa watchdogs stop`) ends one, and its check if it is
+  running. Marking the task done or cancelling it stops every active one; an agent cannot mark a task done while one
+  is watching or waits for a source (`task_open`). While one is active the merged task's status reads Watching and its
+  Now card says its watchdogs keep watching the change; the task's steps end with Watching after Merge
+  (`resolveTaskProgress`: current while one of the round's watchdogs is active, "1 of 4 done", done once they all
+  ended; a check running at stage `watching` keeps every earlier step done), and the Watchdogs panel lists each with
+  its status, where it stands and one sentence on how it is going (its schedule and source on its title's card). `read_task` lists them too.
+- **Why a turn of the task's session, not an agent of its own.** The engine's first rule (Agents, above): a check is
+  the same work as the change, read back, and the agent that built it knows what to look for. A check resumes a
+  session that may be long and cold, so it costs a read of the whole context each time; compaction keeps that
+  bounded, and the interval is the Agent's to choose.
 
 ### Evidence
 
@@ -2769,7 +2895,7 @@ and a session is resumed only by the provider that owns it. Two providers are re
 | --- | --- |
 | `id`, `label` | `claude` / `Claude`, `codex` / `Codex`. The id is what `settings.defaultProvider` and `settings.agentProviders` store |
 | `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no whole test suite) |
-| `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
+| `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`, `fork`: it can copy a session into a new one), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
 | `inspectSession({ cwd, sessionId })` | Optional. Whether the provider still has a session: `present`, `missing`, `empty` (metadata only, so it can neither be resumed nor recreated) or `unknown` |
 | `AgentSession.done` | Resolves to `{ outcome: completed \| failed \| cancelled, summary, failure?, undelivered?, usage?, subagentUsage?, context? }` when the run ends: `failure` is the classified `RunFailure`, `undelivered` the steered messages the agent never answered, `usage` the session's running totals (metered with `run.meter`), `subagentUsage` the totals of each agent it started on its own thread (Codex), `context` the tokens in use, when the prompt cache expires and whether background work is pending (idle compaction reads it) |
 | `AgentSession.steer(text)` | Delivers a message into the running turn; returns false when it no longer can, and the supervisor hands the message to the next run instead (`message.deliver`) |
@@ -2787,7 +2913,7 @@ What each provider declares:
 
 | Capability | Claude | Codex |
 | --- | --- | --- |
-| `sessions.resume` / `inspect` | yes / yes (session files) | yes / no: a resume Codex refuses comes back as `session_lost` |
+| `sessions.resume` / `inspect` / `fork` | yes / yes (session files) / yes (`forkSession`) | yes / no / yes (`thread/fork`): a resume or fork Codex refuses comes back as `session_lost` |
 | `turns.steering` | yes (prompt ids) | yes (`turn/steer`) |
 | `approvals` | yes (the PreToolUse hook) | yes (a writing role runs `approvalPolicy: untrusted`, every unknown command asked; a read-only role `never`, in the `read-only` sandbox) |
 | `planning.readOnly` | yes (no Edit or Write tools) | yes (the `read-only` sandbox) |

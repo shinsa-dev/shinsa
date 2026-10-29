@@ -23,6 +23,7 @@ import {
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
+  listWatchdogSettingItems,
   MERGE_ITEMS,
   MIXED_VALUE,
   MODELS_TITLE,
@@ -41,8 +42,11 @@ import {
   resolvePlanValue,
   resolveSpeedAvailability,
   resolveSpeedValue,
+  resolveWatchdogSettingValue,
   type SettingItem,
   updateSettings,
+  WATCHDOG_SETTING_FIELDS,
+  WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
 import { DelegationLimitDialog } from './delegation-limit-dialog.tsx';
 import { SETTING_ROW, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
@@ -284,6 +288,18 @@ export function AgentSettings({ settings }: { settings: Settings }) {
             onValueChange={(mergeMethod) => void updateSettings({ mergeMethod })}
           />
         </SettingRow>
+      </SettingsGroup>
+      <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
+        {WATCHDOG_SETTING_FIELDS.map((field) => (
+          <SettingRow key={field.key} title={field.title}>
+            <SelectField
+              label={field.title}
+              items={listWatchdogSettingItems(field, settings)}
+              value={resolveWatchdogSettingValue(field, settings)}
+              onValueChange={(value) => void updateSettings({ [field.key]: Number(value) })}
+            />
+          </SettingRow>
+        ))}
       </SettingsGroup>
     </>
   );

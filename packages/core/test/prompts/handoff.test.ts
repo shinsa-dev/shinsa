@@ -124,6 +124,18 @@ describe('resolveHandoff', () => {
     expect(handoff?.text).toContain('This step is being handed to you from another coding agent (Codex).');
   });
 
+  test('a fork whose session could not be copied says the conversation is the source task’s', () => {
+    const handoff = resolveHandoff({
+      reason: 'fork',
+      fromProvider: 'Claude',
+      sources: conversation({ type: 'agent', phase: 'final', text: 'ok' }),
+    });
+    expect(handoff?.text).toContain(
+      'The conversation below is the one of the task this task was forked from.'
+    );
+    expect(handoff?.text).not.toContain('another coding agent');
+  });
+
   test('large tool output outside the recent window is left out with a pointer to the transcript', () => {
     const big = 'x'.repeat(3_000);
     const recent = 'y'.repeat(101_000);

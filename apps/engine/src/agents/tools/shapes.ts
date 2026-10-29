@@ -2,11 +2,13 @@ import {
   type ChangeProposalInput,
   COMPOSABLE_STEPS,
   type DeliveringStep,
+  PROTOCOL_LIMITS,
   SHAPE_LIMITS,
   type ShinsaEvent,
   STEP_SCHEMA,
   validateDelivery,
   validateReshape,
+  validateWatchReport,
 } from '@shinsa/core';
 import { assertProtocol, HANDED_OVER } from '../handover.ts';
 import type { ProcessToolCall } from './process.ts';
@@ -89,6 +91,43 @@ export const SHAPE_TOOL_SPECS = {
       required: ['outcome'],
     },
   },
+  report_watch: {
+    name: 'report_watch',
+    description:
+      'Report a watchdog check, then stop without restating it: what you looked at and whether the shipped change is healthy. An issue becomes a new task forked from this one, so its agent starts from this conversation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        live: {
+          type: 'boolean',
+          description:
+            'Only for a watchdog waiting for production: true once the change is live there (then also check it), false while it is not.',
+        },
+        healthy: {
+          type: 'boolean',
+          description:
+            'True when nothing is wrong with what the watchdog watches. Not needed while live is false.',
+        },
+        summary: limitedText(
+          'What you looked at and what you saw, with the numbers.',
+          PROTOCOL_LIMITS.watchSummary
+        ),
+        issue: {
+          type: 'object',
+          description: 'Only when healthy is false: the issue the change caused.',
+          properties: {
+            title: limitedText('The issue in a few words.', PROTOCOL_LIMITS.watchIssueTitle),
+            request: limitedText(
+              'The fix as the human would ask for it, with the evidence: what broke, where and since when.',
+              PROTOCOL_LIMITS.watchIssueRequest
+            ),
+          },
+          required: ['title', 'request'],
+        },
+      },
+      required: ['summary'],
+    },
+  },
   reshape_task: {
     name: 'reshape_task',
     description:
@@ -139,6 +178,11 @@ export async function handleShapeTool(name: string, input: Record<string, unknow
   if (step) {
     const { body, proposal } = assertProtocol(validateDelivery(step, input));
     await call.dispatch({ type: 'agent.deliver', runId, attemptId, step, body, ...withProposal(proposal) });
+    return HANDED_OVER;
+  }
+  if (name === 'report_watch') {
+    const watch = assertProtocol(validateWatchReport(input));
+    await call.dispatch({ type: 'agent.report_watch', runId, attemptId, ...watch });
     return HANDED_OVER;
   }
   if (name === 'reshape_task') {

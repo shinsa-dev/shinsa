@@ -10,6 +10,7 @@ import {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
 } from '../../src/index.ts';
@@ -53,8 +54,29 @@ describe('the settings a command may change', () => {
       compactionLeadMinutes: 2,
       compaction: 'eunoe_compact',
       fastMode: false,
+      watchdogHours: 72,
+      watchdogFirstCheckMinutes: 30,
+      watchdogMaxGapHours: 6,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
+  });
+});
+
+describe('resolveWatchdogDefaults', () => {
+  test('watches for 72 hours, first after 30 minutes, gaps up to 6 hours, unless the settings say otherwise', () => {
+    expect(resolveWatchdogDefaults(createSettings())).toEqual({
+      hours: 72,
+      firstCheckMinutes: 30,
+      maxGapHours: 6,
+    });
+    expect(
+      resolveWatchdogDefaults({
+        ...createSettings(),
+        watchdogHours: undefined,
+        watchdogFirstCheckMinutes: undefined,
+        watchdogMaxGapHours: 2,
+      })
+    ).toEqual({ hours: 72, firstCheckMinutes: 30, maxGapHours: 2 });
   });
 });
 

@@ -128,6 +128,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          forkOf: 't0',
         },
         {
           type: 'task.create',
@@ -137,6 +138,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          forkOf: 't0',
         },
       ],
       [
@@ -690,6 +692,14 @@ describe('schedules and idle compaction from Settings', () => {
     expect(() =>
       parseUserCommand({ type: 'settings.change', patch: { compactionLeadMinutes: '3' } })
     ).toThrow('compactionLeadMinutes must be a whole number.');
+  });
+
+  test('takes the watchdog defaults: how long, the first check and the longest gap', () => {
+    const patch = { watchdogHours: 72, watchdogFirstCheckMinutes: 30, watchdogMaxGapHours: 6 };
+    expect(parseUserCommand({ type: 'settings.change', patch })).toEqual({ type: 'settings.change', patch });
+    expect(() => parseUserCommand({ type: 'settings.change', patch: { watchdogHours: 'long' } })).toThrow(
+      'watchdogHours must be a whole number.'
+    );
   });
 
   test('takes the compaction choice and the fast mode switch, and refuses anything else', () => {

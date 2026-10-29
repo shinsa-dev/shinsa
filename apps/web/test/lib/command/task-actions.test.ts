@@ -32,6 +32,7 @@ describe('task action commands', () => {
       ['run', 'Open in editor', undefined],
       ['run', 'Open a terminal', undefined],
       ['run', 'Show in Finder', undefined],
+      ['run', 'Fork into a new task', undefined],
       ['run', 'Restart the current step', undefined],
       ['run', 'Mark as done', undefined],
       ['page', 'Cancel task', undefined],
@@ -42,6 +43,6 @@ describe('task action commands', () => {
     const task = createTask({ id: 't', stage: 'done', closedAt: 1 });
     expect(
       listTaskActionCommands(createShinsaState({ tasks: [task] }), task).map((command) => command.label)
-    ).toEqual(['Set priority']);
+    ).toEqual(['Set priority', 'Fork into a new task']);
   });
 });

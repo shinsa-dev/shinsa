@@ -22,6 +22,7 @@ export const SHINSA_TOOL_NAMES = [
   'report_diagnosis',
   'submit_report',
   'report_outcome',
+  'report_watch',
   'reshape_task',
   'delegate_task',
   'delegation_status',
@@ -46,6 +47,7 @@ const HAND_OVER_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
   'report_diagnosis',
   'submit_report',
   'report_outcome',
+  'report_watch',
   'reshape_task',
 ]);
 
@@ -58,6 +60,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'complete_phase',
     'complete_fix',
     'report_outcome',
+    'report_watch',
     'ask',
     'attach_evidence',
     'remove_evidence',
@@ -101,6 +104,7 @@ export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> =
   build: ['complete_phase'],
   fix: ['complete_fix'],
   operate: ['report_outcome'],
+  watch: ['report_watch'],
 };
 
 const DELEGATE_TOOLS: readonly ShinsaToolName[] = [

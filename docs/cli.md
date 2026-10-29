@@ -304,7 +304,7 @@ Every task agent's tool: `tasks_diff` (reads).
 Create a task. Shinsa classifies it, plans it and builds it.
 
 ```
-shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--ask] [--after <list>] [--account <text>] [--json]
+shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--ask] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
 ```
 
 Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create`.
@@ -318,6 +318,7 @@ Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create
 | `--plan-first` | boolean, optional | Wait for you to approve the plan before building. |
 | `--ask` | boolean, optional | Only answer a question: no changes, branch or pull request. |
 | `--after` | list, optional | Tasks it waits on before it starts. |
+| `--fork-from` | text, optional | A task to fork: the new task’s agent starts from a copy of its conversation. |
 | `--account` | text, optional | Run it on this Claude account (id or email). |
 
 #### shinsa tasks message
@@ -1135,7 +1136,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours. |
 
 #### shinsa settings set
 
@@ -1149,7 +1150,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit. |
 | `<value>` | text, required | The new value. |
 
 ### projects
@@ -1855,6 +1856,88 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<plugin>` | text, required | The plugin (its id or name). |
+
+### watchdogs
+
+#### shinsa watchdogs stop
+
+Stop a watchdog that watches a merged change.
+
+```
+shinsa watchdogs stop <task> <watchdog> [--json]
+```
+
+Every task agent's tool: `watchdogs_stop`. Sends `watchdog.stop`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<watchdog>` | text, required | The watchdog: its number in `shinsa tasks show`, from 1, or its title. |
+
+#### shinsa watchdogs connect
+
+Give a watchdog that waits for a data source its MCP server, and add the server to the project’s data sources.
+
+```
+shinsa watchdogs connect <task> <watchdog> --server <text> --data <text> [--json]
+```
+
+Every task agent's tool: `watchdogs_connect`. Sends `watchdog.connect`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<watchdog>` | text, required | The watchdog: its number in `shinsa tasks show`, from 1, or its title. |
+| `--server` | text, required | The MCP server that holds the data, by name, as Settings → Integrations lists it. |
+| `--data` | text, required | What the server holds that the check reads. |
+
+### sources
+
+#### shinsa sources list
+
+List a project’s data sources: the MCP servers watchdogs read, and what each holds.
+
+```
+shinsa sources list <project> [--json]
+```
+
+Every task agent's tool: `sources_list` (reads).
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+
+#### shinsa sources write
+
+Add a data source to a project, or change one: an MCP server watchdogs read, and what it holds.
+
+```
+shinsa sources write <project> --server <text> --data <text> [--repos <list>] [--json]
+```
+
+Every task agent's tool: `sources_write`. Sends `watch_source.write`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+| `--server` | text, required | The MCP server that holds the data, by name, as Settings → Integrations lists it. |
+| `--data` | text, required | What the server holds. |
+| `--repos` | list, optional | The repositories it covers. Left out, every one. |
+
+#### shinsa sources remove
+
+Remove a data source from a project.
+
+```
+shinsa sources remove <project> --server <text> [--json]
+```
+
+Every task agent's tool: `sources_remove`. Sends `watch_source.remove`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+| `--server` | text, required | The MCP server that holds the data, by name, as Settings → Integrations lists it. |
 
 ### command
 

@@ -26,6 +26,7 @@ const PURPOSE_STAGE: Record<RunPurpose, TaskStage> = {
   build: 'building',
   fix: 'fixing',
   operate: 'operating',
+  watch: 'watching',
 };
 
 const FRESH_FAILURES: ReadonlySet<RunFailureClass> = new Set<RunFailureClass>([
@@ -87,10 +88,36 @@ export function assertAgentInvariants(state: ShinsaState, task: Task, context: s
   }
 }
 
+function hasHadSession(state: ShinsaState, started: Run) {
+  return Object.values(state.runs).some(
+    (run) =>
+      run.taskId === started.taskId &&
+      run.id !== started.id &&
+      !isDelegatedRun(run) &&
+      SESSION_ROLES.has(run.role) &&
+      run.sessionId !== null
+  );
+}
+
+function assertForkStartsSession(state: ShinsaState, started: Run, context: string) {
+  if (!started.fork) return;
+  const task = state.tasks[started.taskId];
+  expect(started.fork.taskId, `${context}: a fork of another task than the task's source`).toBe(
+    task?.forkOf ?? ''
+  );
+  expect(SESSION_ROLES.has(started.role), `${context}: a ${started.role} run that forks`).toBe(true);
+  expect(hasHadSession(state, started), `${context}: a fork after the task had a session`).toBe(false);
+  expect(started, `${context}: a fork that also resumes`).toMatchObject({ resume: false, sessionId: null });
+  expect(state.runs[started.fork.runId]?.sessionId, `${context}: a fork of a session its run never had`).toBe(
+    started.fork.sessionId
+  );
+}
+
 export function assertOneSessionPerTask(state: ShinsaState, event: ShinsaEventInput, context: string) {
   if (event.type !== 'run.started' || isDelegatedRun(event.run)) return;
   if (!SESSION_ROLES.has(event.run.role) && event.run.role !== 'reviewer') return;
   const last = selectSessionHolder(state, event.run);
+  assertForkStartsSession(state, event.run, context);
   if (!last || (event.run.resume === false && isRecoveredFresh(state, event.run))) return;
   if (!isSameProvider(last, event.run)) {
     expect(

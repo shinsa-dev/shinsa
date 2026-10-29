@@ -101,6 +101,15 @@ import {
   triageTask,
   waitOnTasks,
 } from './tasks.ts';
+import {
+  connectWatchdog,
+  fireWatchdog,
+  removeWatchSource,
+  reportWatch,
+  stopWatchdog,
+  syncWatchdogs,
+  writeWatchSource,
+} from './watchdogs.ts';
 
 export type { DecideContext, Decision } from './decider.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
@@ -316,6 +325,18 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return failSchedule(decider, command);
     case 'run.compact':
       return recordCompaction(decider, command);
+    case 'watchdog.stop':
+      return stopWatchdog(decider, command);
+    case 'watchdog.connect':
+      return connectWatchdog(decider, command);
+    case 'watchdog.fire':
+      return fireWatchdog(decider, command);
+    case 'watch_source.write':
+      return writeWatchSource(decider, command);
+    case 'watch_source.remove':
+      return removeWatchSource(decider, command);
+    case 'agent.report_watch':
+      return reportWatch(decider, command);
   }
 }
 
@@ -327,6 +348,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   }
   apply(decider, command);
   releaseWaiting(decider);
+  syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);
   syncMergeSteps(decider);

@@ -1306,7 +1306,7 @@ describe('resume fallback', () => {
     expect(lost.sessions.started[0]?.input.resume).toBeNull();
     expect(checked).toBe(0);
     const sessionless = restoreSetup(() => undefined, {
-      capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false } },
+      capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false, fork: false } },
     });
     await runOnce(sessionless);
     expect(sessionless.sessions.started[0]?.input.prompt).toContain('<handoff_transcript>');
@@ -1348,7 +1348,7 @@ describe('resume fallback', () => {
     const plain = restoreSetup(() => undefined, {
       capabilities: {
         ...CLAUDE_CAPABILITIES,
-        sessions: { resume: false, inspect: false },
+        sessions: { resume: false, inspect: false, fork: false },
         contextHandoff: false,
       },
     });
