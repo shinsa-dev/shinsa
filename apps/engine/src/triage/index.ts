@@ -2,6 +2,7 @@ import {
   isTaskSettled,
   listProjectRepos,
   type Project,
+  resolveRoundTitle,
   resolveTaskProject,
   resolveTaskShape,
   type ShinsaState,
@@ -401,7 +402,7 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
   const candidates = bound ? [bound] : offered;
   const asks = resolveAsks(task);
   const size = resolveFallbackSize(task);
-  const title = task.request.split('\n')[0]?.slice(0, TITLE_LIMIT).trim() || 'Untitled task';
+  const title = resolveRoundTitle(task.request).slice(0, TITLE_LIMIT).trim() || 'Untitled task';
   const open = listOpenTasks(state, task, pool.project);
   return {
     task,

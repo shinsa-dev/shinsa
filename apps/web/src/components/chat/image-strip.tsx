@@ -14,12 +14,14 @@ const THUMB_SIZE = {
 function ImageThumb({
   image,
   size,
+  corner,
   onOpen,
   onBroken,
   originRef,
 }: {
   image: ViewerImage;
   size: keyof typeof THUMB_SIZE;
+  corner: string | undefined;
   onOpen: () => void;
   onBroken: () => void;
   originRef: (element: HTMLElement | null) => void;
@@ -33,6 +35,7 @@ function ImageThumb({
         aria-label={label}
         className={cn(
           INSET,
+          corner,
           'max-w-full cursor-zoom-in overflow-hidden bg-bg-a1 hover:border-fg-a1 active:border-fg-a1'
         )}
       >
@@ -53,10 +56,12 @@ function ImageThumb({
 export function ImageStrip({
   images,
   size = 'sm',
+  corner,
   className,
 }: {
   images: (string | ViewerImage)[];
   size?: keyof typeof THUMB_SIZE;
+  corner?: string;
   className?: string;
 }) {
   const [broken, setBroken] = React.useState<string[]>([]);
@@ -77,6 +82,7 @@ export function ImageStrip({
           key={`${index}-${image.src}`}
           image={image}
           size={size}
+          corner={corner}
           onOpen={() => viewer.show(index)}
           onBroken={() => setBroken((current) => [...current, image.src])}
           originRef={viewer.recordOrigin(index)}

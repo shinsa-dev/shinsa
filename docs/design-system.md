@@ -7629,7 +7629,7 @@ A progress strip lists only the steps this process takes, in order, and stays on
 
 - Steps are 16px marks (done: `grid size-4 shrink-0 place-items-center rounded-full bg-green-4/29` with a
   `text-green-text` check, the one green check in Shinsa: every other checkmark is the accent; current: `bg-primary-a3` with a blue pulse; waiting on you: `bg-amber-a3` with a `size-1.5 rounded-full bg-amber-4` dot; skipped:
-  `IconCircleDotted` `text-fg-2`; not reached: `size-4 rounded-full border-2 border-bg-a3`), joined by
+  `IconCircleDotted` `text-fg-2`; not reached: `size-4 rounded-full border border-bg-a3`), joined by
   `h-px min-w-2 flex-1` connectors (`bg-green-4` once the step is done or skipped, else `bg-bg-a3`) in
   `flex w-full min-w-0 items-center gap-1.5`.
 - A strip of more than 6 steps (the Pre-merge and Post-merge steps count twice, for their long labels) folds the

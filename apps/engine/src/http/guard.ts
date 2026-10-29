@@ -42,3 +42,9 @@ export function resolveBodyRefusal(request: Request): string | null {
   if (!type.toLowerCase().startsWith('application/json')) return 'Send the request body as application/json.';
   return null;
 }
+
+export function resolveBodySizeRefusal(request: Request, limit: number): string | null {
+  const length = Number(request.headers.get('content-length') ?? 0);
+  if (length <= limit) return null;
+  return `The request body is over ${Math.floor(limit / 1024 / 1024)} MB.`;
+}

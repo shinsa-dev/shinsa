@@ -2565,6 +2565,25 @@ names: a provider adapter maps into it, and the web renders only it. Each entry 
 | `error` | `text` | The session failed |
 | `notice` | `notice` (keyed by `kind`) | Something about the run rather than the conversation: `interrupted`, `compaction` (`trigger`: `auto`, `manual` or `fold`, `preTokens`, the `summary` once the agent writes it, and `by: 'eunoe'` when eunoe compacted or folded on the wire), `proxy` (`proxy: 'eunoe'`, `status: 'unavailable'`, `detail`: eunoe could not be reached, so the run went direct), `fast_mode` (`status`: `unavailable` or `cooldown`, `reason`: fast mode was asked for and is not running), `extensions` (what the run loaded and what the optimizer left out; MCP servers, plugins and skills, below), `context` (`usedTokens`, `maxTokens`, `totalProcessedTokens`), `account` (`email`, `organization`, `plan`), `rate_limit` (`status`, `limit`, `resetsAt`, `utilization`), `account_switched` (`email`, `previous`, `reason`: `usage_limit`, `signed_out`, `headroom` or `bound`; written by the supervisor when an attempt runs on another account than the task's last one), `delegation` (`event`: `started` or `reported`, `runIds`; written when the step delegates a task and when reports reach it) and `handoff` (`reason`, `fromProvider`, `toProvider`, entry counts) |
 
+### Attachments
+
+You can attach files and images to a new task's request and to any message in a task. The web uploads each file as
+it is picked, pasted or dropped: `POST /api/attachments` with `{ name, mimeType, data }` (`data` in base64, since the
+guard takes JSON bodies only) writes it to `<data>/attachments/<UUIDv7>/<safe file name>` (`AttachmentStore`, 25 MB a
+file; this route alone takes a body up to the base64 of that, every other one stays at 8 MB) and answers with a
+`StoredAttachment`: `{ kind, name, url, path, mimeType, size }`. `GET /api/attachments/<id>/<file name>` serves it
+like evidence (immutable, byte ranges), with `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`, and as a download unless it is a PNG, JPEG, GIF, WebP or AVIF image, so an uploaded page never runs on Shinsa's origin (`resolveAttachmentHeaders`); only names of that shape resolve. Inspect mode refuses the upload like every
+other write.
+
+The files travel inside the text, never beside it: core's `serializeAttachments` appends one `<attachments>` block
+to the request or message, one `<attachment kind display_name mime_type size_bytes path url />` per file, so every
+path a message takes (a steer, the wake queue, a gate reply, planning, a fix, a new round, a new task) carries them
+without a field of its own. The agent reads `path`, the absolute file, with its own tools (Claude's Read shows it an
+image). `splitMessageAttachments` takes the block back out wherever text is shown, preferring `url`, so the page
+renders thumbnails and file chips instead of markup, and `resolveRoundTitle` skips it (a round of attachments
+alone is titled by their names). The same parser reads the attachment blocks of imported Kanna transcripts. Nothing
+removes an upload when its task goes.
+
 `agent`, `tool_call` and `tool_result` carry `parentCallId` when a subagent produced them: the
 `callId` of the `task` call that started it. Such entries are never a final reply
 (`isSubagentEvent`, `markFinalReplies`), the web leaves them out of the main timeline, and a handoff
@@ -3613,6 +3632,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
+    ├── attachments/   The files and images you attached to a request or a message, one folder per upload
+    │                  (`<UUIDv7>/<file name>`; The chat protocol → Attachments, below)
     ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
     │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
