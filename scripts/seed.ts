@@ -1413,6 +1413,7 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     priority: task.priority ?? 'normal',
     planFirst: task.planFirst ?? false,
     origin: null,
+    ...(task.forkOf ? { forkOf: task.forkOf } : {}),
     ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
     auto: task.auto ?? CHOSEN_BY_YOU,
   });
@@ -3972,6 +3973,21 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       merged: true,
       extra: listDocsGateWatchdogs(),
     },
+    {
+      id: 'task-docs-safari',
+      request:
+        'The framework docs show a blank page in Safari 17\n\nSince #339 merged, Maple shows 41 `TypeError: undefined is not an object` errors from `/docs/framework` in Safari 17, and none in Chrome or Firefox. The page renders nothing for those visitors. Find the cause and fix it so the page works in Safari 17.\n\nFound by the watchdog “Docs errors in Safari and Chrome” of SW-2 after its change merged.',
+      title: 'Fix the blank framework docs page in Safari 17',
+      repo: docs,
+      size: 'small',
+      priority: 'high',
+      stage: 'planning',
+      reason: 'planning the phases',
+      branch: 'fix/docs-safari-blank',
+      ageHours: 0.3,
+      forkOf: 'task-docs-gate',
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
+    },
   ];
 }
 
@@ -3986,7 +4002,46 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
     awaitingSince: null,
     startedAt: mergedAt,
   };
+  const tripped = 'watchdog-docs-errors';
   return [
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: tripped,
+        title: 'Docs errors in Safari and Chrome',
+        check: 'No new client errors from /docs/framework in any browser since the merge.',
+        source: { server: 'maple', data: 'OpenTelemetry traces and logs of the docs site and the API' },
+        firstCheckMinutes: 30,
+        maxGapMinutes: 6 * 60,
+        forMinutes: 72 * 60,
+        startsOn: 'merge',
+        productionCheck: null,
+        status: 'watching',
+        endsAt: mergedAt + 72 * HOUR,
+        nextCheckAt: NOW - HOUR,
+        checks: [
+          { at: mergedAt + 30 * MINUTE, healthy: true, summary: 'No client errors from /docs/framework.' },
+          { at: mergedAt + 90 * MINUTE, healthy: true, summary: 'No client errors from /docs/framework.' },
+        ],
+        endedAt: null,
+      },
+    },
+    {
+      type: 'watchdog.checked',
+      taskId: 'task-docs-gate',
+      watchdogId: tripped,
+      check: {
+        at: NOW - HOUR,
+        healthy: false,
+        summary:
+          '41 `TypeError: undefined is not an object` errors from /docs/framework in Safari 17 since 03:10, none in Chrome or Firefox.',
+      },
+      status: 'tripped',
+      nextCheckAt: null,
+      forkTaskId: 'task-docs-safari',
+    },
     {
       type: 'watch_source.written',
       projectId: 'project-superwall',

@@ -83,6 +83,7 @@ export interface SeedTask {
   ageHours: number;
   planFirst?: boolean;
   waitsOn?: string[];
+  forkOf?: string;
   worktreePath?: string;
   plan?: PlanDocument;
   report?: WorkReport;
