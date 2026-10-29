@@ -161,6 +161,35 @@ describe('project suggestions', () => {
     expect(names).toEqual(['Acme', 'Buzzkit', 'Studio']);
   });
 
+  test('a word that only ends like a suffix keeps its whole name', () => {
+    const owners = ['audio', 'radio', 'portfolio', 'steam', 'cyborg', 'slabs'];
+    const names = summarize({
+      roots: [],
+      repos: owners.flatMap((owner) => [
+        repo(`/c/${owner}-a`, `github.com/${owner}/a`),
+        repo(`/c/${owner}-b`, `github.com/${owner}/b`),
+      ]),
+      login: null,
+      projects: [],
+    }).map((entry) => entry.name);
+    expect(names.sort()).toEqual(['Audio', 'Cyborg', 'Portfolio', 'Radio', 'Slabs', 'Steam']);
+  });
+
+  test('a folder holding a repository another project has is never offered, so nothing moves out of it', () => {
+    const [suggestion] = resolveProjectSuggestions({
+      roots: ['/code/acme'],
+      repos: [
+        repo('/code/acme/api', 'github.com/acme/api', 'old'),
+        repo('/code/acme/cli', 'github.com/acme/cli'),
+        repo('/code/acme/web', 'github.com/acme/web'),
+      ],
+      login: null,
+      projects: [project({ id: 'old', name: 'Old' })],
+    });
+    expect(suggestion).toMatchObject({ name: 'Acme', folders: [] });
+    expect(suggestion?.repos.map((entry) => entry.name)).toEqual(['cli', 'web']);
+  });
+
   test('a product splits off its owner only with three remotes of its own and not all of the owner', () => {
     const split = (names: string[]) =>
       summarize({

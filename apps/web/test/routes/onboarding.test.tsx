@@ -326,10 +326,17 @@ describe('the setup page', () => {
       window.dispatchEvent(new Event('focus'));
     });
     await waitFor(() => expect(sentReplies()).toHaveLength(2));
-    fireEvent.click(await screen.findByRole('button', { name: 'Leave it out' }));
+    fireEvent.click(screen.getByRole('option', { name: /~\/oss/ }));
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
     await waitFor(() => expect(sentReplies()).toHaveLength(3));
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave it out' }));
+    await waitFor(() => expect(sentReplies()).toHaveLength(4));
     const both = { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer', '/Users/me/oss'] };
     expect(sentReplies()).toEqual([
+      both,
       both,
       both,
       { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer'] },

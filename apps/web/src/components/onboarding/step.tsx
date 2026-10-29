@@ -118,7 +118,7 @@ function FoldersBody({
           disabled={busy}
           actions={{
             openSettings: actions.openPrivacy,
-            check: () => actions.answer(step.id, values, ACCESS_KEY),
+            check: () => actions.answer(step.id, listChosenValues(step), ACCESS_KEY),
             leaveOut: () => {
               const readable = listReadableRoots(values, step.access, userHome);
               onChange(readable);
@@ -352,7 +352,7 @@ export function OnboardingStepView({
   useWindowReturn(() => {
     if (pending !== null) return;
     if (step.id === 'prerequisites') actions.refresh();
-    else actions.answer(step.id, values, ACCESS_KEY);
+    else actions.answer(step.id, listChosenValues(step), ACCESS_KEY);
   }, waiting);
   return (
     <OnboardingSection

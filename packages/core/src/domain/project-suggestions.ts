@@ -42,7 +42,7 @@ const MIN_STEM_REMOTES = 3;
 
 const FOLDER_SHARE = 2 / 3;
 
-const OWNER_SUFFIX = /[-_]?(dev|hq|inc|labs|studio|team|org|app|io)$/i;
+const OWNER_SUFFIX = /[-_](dev|hq|inc|labs|studio|team|org|app|io)$|(hq|studio)$/i;
 
 function readRemote(remote: string | null) {
   if (!remote) return null;
@@ -164,9 +164,14 @@ function placeLoose(groups: Map<string, Group>, loose: SuggestionRepo[]) {
   }
 }
 
-function listGroupFolders(groups: Map<string, Group>, roots: string[]) {
+function isInsideFolder(folder: string, path: string) {
+  return path.startsWith(`${folder.replace(/\/+$/, '')}/`);
+}
+
+function listGroupFolders(groups: Map<string, Group>, roots: string[], covered: SuggestionRepo[]) {
   const folders = new Map<string, string[]>();
   for (const root of roots) {
+    if (covered.some((repo) => isInsideFolder(root, repo.path))) continue;
     const group = selectFolderGroup(groups, root);
     if (group) folders.set(group.id, [...(folders.get(group.id) ?? []), root]);
   }
@@ -185,10 +190,11 @@ function compareGroups(a: Group, b: Group) {
 export function resolveProjectSuggestions(input: SuggestionInput): ProjectSuggestion[] {
   const login = input.login?.toLowerCase() ?? null;
   const fresh = input.repos.filter((repo) => !isCovered(repo, input.projects));
+  const covered = input.repos.filter((repo) => !fresh.includes(repo));
   const { groups, loose } = groupByOwner(fresh, login);
   splitStems(groups);
   placeLoose(groups, loose);
-  const folders = listGroupFolders(groups, input.roots);
+  const folders = listGroupFolders(groups, input.roots, covered);
   const existing = new Map(input.projects.map((project) => [project.name.toLowerCase(), project]));
   const taken = input.projects.map((project) => project.key);
   return [...groups.values()].sort(compareGroups).map((group, index) => {

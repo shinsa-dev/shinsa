@@ -171,6 +171,35 @@ describe('the projects step', () => {
     });
   });
 
+  test('a repository already in another project stays there, and its folder is not given to the new one', async () => {
+    const world = await setup();
+    await world.engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Old', color: 'green', key: 'OLD' },
+    });
+    const old = Object.values(world.engine.state.projects)[0];
+    await world.engine.dispatch({
+      type: 'repo.register',
+      repo: {
+        path: world.repos.api,
+        name: 'api',
+        defaultBranch: 'main',
+        remote: 'github.com/acme/api',
+        checkCommands: [],
+      },
+      projectName: null,
+      projectId: old?.id ?? null,
+    });
+    await createRepo(world.acme, 'cli', 'acme/cli');
+    const flow = await answerFolders(world);
+    expect(flow.step?.projects[0]).toMatchObject({ name: 'Acme', folders: [] });
+    await answerProjects(world.onboarding);
+    expect(listProjects(world.engine).slice(0, 2)).toEqual([
+      { name: 'Old', key: 'OLD', folders: [], repos: ['api'] },
+      { name: 'Acme', key: 'ACM', folders: [], repos: ['cli', 'web'] },
+    ]);
+  });
+
   test('a repository Shinsa registered deeper in a folder, outside any project, is offered too', async () => {
     const world = await setup();
     const deep = await createRepo(join(world.acme, 'tools'), 'cli', 'acme/cli');
