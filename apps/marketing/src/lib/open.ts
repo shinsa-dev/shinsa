@@ -1,3 +1,5 @@
+import { parseReviewPayload, type ReviewPayload } from '@shinsa/core';
+
 const TASK_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 
 const TASK_HANDLE = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
@@ -21,4 +23,17 @@ export function resolveTaskInvite(search: string): TaskInvite | null {
     handle: handle && TASK_HANDLE.test(handle) ? handle : null,
     title: title || null,
   };
+}
+
+export async function readReviewFragment(hash: string): Promise<ReviewPayload | null> {
+  const encoded = new URLSearchParams(hash.replace(/^#/, '')).get('review');
+  if (!encoded || !/^[\w-]+$/.test(encoded)) return null;
+  try {
+    const base64 = encoded.replaceAll('-', '+').replaceAll('_', '/');
+    const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return parseReviewPayload(JSON.parse(await new Response(stream).text()));
+  } catch {
+    return null;
+  }
 }

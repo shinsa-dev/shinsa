@@ -117,6 +117,8 @@ const SHINSA: Repository = {
 
 export const SHINSA_TASK_ID = 'review-shinsa-tint';
 
+export const OPEN_TASK_ID = 'open-pull-request';
+
 function selectRepository(taskId: string) {
   return taskId === SHINSA_TASK_ID ? SHINSA : NORTHWIND;
 }
@@ -267,6 +269,7 @@ function createRefs(repo: Repository): TaskRefs {
 }
 
 export function answerCodeRead(taskId: string, name: string, params: URLSearchParams): unknown {
+  if (taskId === OPEN_TASK_ID) return null;
   const repo = selectRepository(taskId);
   const ref = params.get('ref') ?? repo.head;
   switch (name) {

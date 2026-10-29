@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, extname } from 'node:path';
+import { deflateRawSync } from 'node:zlib';
 import {
   type Evidence,
   type EvidenceUpload,
@@ -7,6 +8,7 @@ import {
   type Repo,
   resolvePublicUrl,
   serializePullRequestMarkdown,
+  serializeReviewPayload,
   type Task,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
@@ -29,6 +31,14 @@ const ATTACHMENT_TYPES: Record<string, { contentType: string; limit: number }> =
   '.mov': { contentType: 'video/quicktime', limit: VIDEO_LIMIT_BYTES },
   '.webm': { contentType: 'video/webm', limit: VIDEO_LIMIT_BYTES },
 };
+
+const REVIEW_LINK_LIMIT = 24_000;
+
+export function serializeReviewLink(task: Task, evidence: readonly Evidence[]) {
+  const payload = JSON.stringify(serializeReviewPayload(task, evidence));
+  const encoded = deflateRawSync(Buffer.from(payload)).toString('base64url');
+  return encoded.length <= REVIEW_LINK_LIMIT ? encoded : null;
+}
 
 interface PullRequestDescription {
   body: string;
@@ -70,7 +80,8 @@ export class PullRequestDescriptions {
           return text === null ? [] : [[piece.id, text]];
         })
     );
-    return { body: serializePullRequestMarkdown({ task, evidence: published, notes }), uploads };
+    const review = serializeReviewLink(task, published);
+    return { body: serializePullRequestMarkdown({ task, evidence: published, notes, review }), uploads };
   }
 
   #selectPath(piece: Evidence) {

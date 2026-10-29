@@ -44,6 +44,13 @@ export {
   serializePullRequestMarkdown,
 } from './pull-request.ts';
 export {
+  parseReviewPayload,
+  REVIEW_PAYLOAD_VERSION,
+  type ReviewPayload,
+  type ReviewPayloadEvidence,
+  serializeReviewPayload,
+} from './review-link.ts';
+export {
   createTesting,
   hasTesting,
   isWebUrl,

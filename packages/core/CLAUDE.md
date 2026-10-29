@@ -206,7 +206,8 @@ src/
 │                    around the merge with their ticks (merge-steps.ts: listMergeSteps, resolveMergeStepKey), how to
 │                    test the change (testing.ts: MANUAL_TEST_TARGETS, parseTestFile, listTestingLines), the pull request
 │                    description (pull-request.ts: serializePullRequestMarkdown, replacePullRequestBlock,
-│                    listPullRequestEvidence, resolvePublicUrl, resolveShinsaTaskUrl), the
+│                    listPullRequestEvidence, resolvePublicUrl, resolveShinsaTaskUrl), the copy of the review the open page reads
+│                    (review-link.ts: serializeReviewPayload, parseReviewPayload), the
 │                    checklist shape every list you tick shares (checklist.ts: ChecklistItem, Checklist,
 │                    resolveChecklistProgress, listOpenChecklistItems)
 ├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking, a task as text for

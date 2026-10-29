@@ -83,8 +83,11 @@ src/
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the task's handle
                             and title from `?handle=` and `?title=` as its headline, a button that opens
                             `shinsa://task/<id>` from `?task=` (resolveTaskInvite, lib/open.ts, which refuses
-                            anything else), the download, the Review demo in its window and Closing; copy in
-                            content.ts `openTask`; left out of the sitemap), og.png, llms.txt and design.md; public/ holds the
+                            anything else), the download as the main button, and the pull request's own review in the
+                            app's Review tab, read from the link's `#review=` fragment (readReviewFragment in
+                            lib/open.ts; the task built in lib/open-scene.ts on OPEN_TASK_ID, which the demo server
+                            gives no repository; components/demos/open-review.tsx, shown only when the fragment
+                            reads); copy in content.ts `openTask`; left out of the sitemap), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket

@@ -2491,17 +2491,26 @@ The description is one block Shinsa writes between `<!-- shinsa:start -->` and `
 naming the task (handle and title) with a link to open it in Shinsa, the summary, the earlier rounds in this pull
 request (when a later round ships onto it: each one's title, goal or headline, result and phases, from its
 `outcome`), Approach (the walkthrough's approach), Evidence (the screenshots, recordings, notes and previews, then
-the checks as a table of each with ✓, ✗ or –, the count that passed and the changed-line coverage when it was
+the checks as a table of each with its mark, the count that passed and the changed-line coverage when it was
 measured, then the tests the walkthrough names), How it works (the walkthrough's flow), the judgement calls with the
 options turned down, the risks, How to test (the steps to try), the steps around the merge, and a one-line footer
-linking shinsa.dev. The plan, the goal and each phase's summary stay in Shinsa.
+linking shinsa.dev. The plan, the goal and each phase's summary stay in Shinsa. Each section from Approach to How
+to test is an open `<details>` with its title as an `<h3>`, so a reader folds what they have read. Colour comes from
+emoji, since GitHub draws no alert inside a `<details>`: the checks open with ✅ when all passed or ❌ naming how many
+did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
 
 - **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to
   `https://shinsa.dev/open?task=<id>&handle=<handle>&title=<title>` (`resolveShinsaTaskUrl`, the title cut to 120
-  characters), a static page of the site (`apps/marketing/src/pages/open.astro`) that shows the task's handle and title,
-  a button that opens `shinsa://task/<id>` in the Mac app, the download for anyone without it, and the Review tab on
-  sample work, so a teammate sees what waits in the task. The page never opens the
-  app by itself: browsers refuse an external scheme without a click.
+  characters) plus `#review=<data>`, a static page of the site (`apps/marketing/src/pages/open.astro`) that shows the
+  task's handle and title, the download, a button that opens `shinsa://task/<id>` in the Mac app, and this pull
+  request's own review in the app's Review tab. The data is a compact copy of the review (`serializeReviewPayload`,
+  `packages/core/src/report/review-link.ts`: the summary, the walkthrough, the checks, the judgement calls and every
+  piece of evidence with a web address, without the code), JSON deflated and in base64url (`serializeReviewLink`,
+  `apps/engine/src/github/description.ts`), left out when it is longer than 24,000 characters. It rides in the
+  fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
+  repository's review never leaves the reader's browser; the page reads it back through `parseReviewPayload`, which
+  keeps only well-formed fields and http or https addresses. The page never opens the app by itself: browsers refuse
+  an external scheme without a click.
 - **Evidence.** The evidence of the current round and of every earlier round on the same pull request, as items (`listPullRequestEvidence`), without linked tests
   and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part
   (Before, After or the part's label); a comparison with a recording lists its parts in turn, since GitHub plays a

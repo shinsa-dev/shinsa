@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Evidence, Task } from '@shinsa/core';
-import { PullRequestDescriptions } from '../../src/github/description.ts';
+import { inflateRawSync } from 'node:zlib';
+import { type Evidence, parseReviewPayload, type Task } from '@shinsa/core';
+import { PullRequestDescriptions, serializeReviewLink } from '../../src/github/description.ts';
 import { log } from '../../src/log/index.ts';
 import { EvidenceStore } from '../../src/store/evidence.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
@@ -131,5 +133,26 @@ describe('PullRequestDescriptions', () => {
       expect.objectContaining({ taskId: task.id, evidenceId: 'shot' })
     );
     warn.mockRestore();
+  });
+});
+
+describe('serializeReviewLink', () => {
+  test('packs the review into a fragment the open page reads back, and leaves out one too long for a link', async () => {
+    useFakeGitHub();
+    const { store } = createStore();
+    const task = createTask({ handle: 'LOC-28', summary: 'Did it.' });
+    const evidence = [piece(task, 'web', { kind: 'screenshot', uri: 'https://cdn.example.com/web.png' })];
+    const description = await new PullRequestDescriptions(store).describe(
+      createRepo({ path: createTempDir() }),
+      task,
+      evidence
+    );
+    const encoded = /#review=([\w-]+)\)/.exec(description.body)?.[1] ?? '';
+    const payload = parseReviewPayload(
+      JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString())
+    );
+    expect(payload?.task).toMatchObject({ id: task.id, handle: 'LOC-28', summary: 'Did it.' });
+    expect(payload?.evidence.map((part) => part.url)).toEqual(['https://cdn.example.com/web.png']);
+    expect(serializeReviewLink({ ...task, summary: randomBytes(40_000).toString('hex') }, [])).toBeNull();
   });
 });

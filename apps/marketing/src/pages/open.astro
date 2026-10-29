@@ -1,8 +1,5 @@
 ---
-import { Icon } from '@shinsa/ui/components/icon';
-import { ReviewDemo } from '../components/demos/review';
-import DemoWindow from '../components/layout/DemoWindow.astro';
-import Closing from '../components/sections/Closing.astro';
+import { OpenReview } from '../components/demos/open-review';
 import Button from '../components/ui/Button.astro';
 import Site from '../layouts/Site.astro';
 import { openTask } from '../lib/content';
@@ -10,54 +7,26 @@ import { site } from '../lib/site';
 ---
 
 <Site title='Open a task · Shinsa' description={site.description} noindex>
-  <section id='top' class='flex flex-col px-6 pt-16 pb-6 md:pt-24 md:pb-10'>
-    <div class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
-      <p class='flex items-center gap-2 rounded-full border border-bg-3 bg-bg-1 px-3 py-1 text-fg-2 text-sm'>
-        <span
-          data-open-handle
-          hidden
-          class='-ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-medium font-mono text-primary text-xs'
-        ></span>
-        <span>{openTask.eyebrow}</span>
-      </p>
+  <section class='flex flex-col px-6 pt-16 pb-16 md:pt-20 md:pb-24'>
+    <div class='mx-auto flex max-w-2xl flex-col items-center gap-4 text-center'>
+      <p data-open-handle hidden class='font-medium font-mono text-fg-2 text-sm'></p>
       <h1
         data-open-title
-        class='font-medium text-4xl text-fg-4 leading-[1.08] tracking-tight text-balance md:text-5xl'
+        class='font-medium text-3xl text-fg-4 leading-[1.1] tracking-tight text-balance md:text-4xl'
       >
         {openTask.title}
       </h1>
-      <p class='max-w-[38rem] text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{openTask.text}</p>
-      <p data-open-missing hidden class='max-w-[38rem] text-fg-2 text-sm'>{openTask.missing}</p>
+      <p class='max-w-xl text-base text-fg-2 leading-relaxed text-pretty'>{openTask.text}</p>
+      <p data-open-missing hidden class='max-w-xl text-fg-2 text-sm'>{openTask.missing}</p>
       <div class='mt-2 flex flex-wrap items-center justify-center gap-2'>
-        <Button href='shinsa://' icon='IconArrowUpRight' class='data-[missing]:hidden'>{openTask.primary}</Button>
-        <Button href={site.downloadUrl} variant='secondary'>{openTask.secondary}</Button>
+        <Button href={site.downloadUrl}>{openTask.primary}</Button>
+        <Button href='shinsa://' variant='secondary' icon='IconArrowUpRight' class='data-[missing]:hidden'>
+          {openTask.secondary}
+        </Button>
       </div>
     </div>
-    <div class='@container mx-auto mt-12 w-full max-w-5xl md:mt-16' data-chip>
-      <DemoWindow width={1040} height={744} narrow={684} reserve={303}>
-        <ReviewDemo client:load />
-      </DemoWindow>
-    </div>
-    <p class='mx-auto mt-5 max-w-xl text-center text-fg-2 text-sm text-pretty'>{openTask.caption}</p>
+    <OpenReview client:only='react' />
   </section>
-  <section class='px-6 py-12 md:py-16'>
-    <div class='mx-auto grid w-full max-w-5xl gap-x-10 gap-y-8 sm:grid-cols-3'>
-      {
-        openTask.points.map((point) => (
-          <div class='flex flex-col gap-1.5'>
-            <h2 class='flex items-center gap-2 font-medium text-base text-fg-4 [--icon-size:var(--icon-size-md)]'>
-              <span class='text-fg-2'>
-                <Icon name={point.icon} />
-              </span>
-              {point.title}
-            </h2>
-            <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{point.text}</p>
-          </div>
-        ))
-      }
-    </div>
-  </section>
-  <Closing />
 </Site>
 
 <script>

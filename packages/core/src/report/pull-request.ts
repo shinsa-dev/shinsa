@@ -4,7 +4,6 @@ import type { Evidence, Task } from '../domain/types.ts';
 import { assembleReport } from './assemble.ts';
 import {
   bulletList,
-  CHECK_MARK,
   CHECK_NOTE,
   describeManualStep,
   describeSection,
@@ -25,9 +24,20 @@ const OPEN_TITLE_LIMIT = 120;
 
 const LOCAL_HOST = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?:[:/]|$)/i;
 
+const PULL_REQUEST_CHECK_MARK: Record<ReportCheck['outcome'], string> = {
+  pass: '✅',
+  fail: '❌',
+  skipped: '➖',
+};
+
 const STAGE_WORDS: Record<NonNullable<Evidence['stage']>, string> = { before: 'Before', after: 'After' };
 
 type EvidenceGroup = ReturnType<typeof listEvidenceItems>[number];
+
+function describeFold(title: string, body: string) {
+  if (!body) return '';
+  return `<details open>\n<summary><h3>${title}</h3></summary>\n\n${body}\n\n</details>`;
+}
 
 interface Section {
   text: string;
@@ -38,6 +48,7 @@ export interface PullRequestSource {
   task: Task;
   evidence: readonly Evidence[];
   notes: Readonly<Record<string, string>>;
+  review?: string | null;
 }
 
 export function resolveShinsaTaskUrl(task: Pick<Task, 'id' | 'handle' | 'title'>) {
@@ -142,13 +153,13 @@ function serializeEvidence(source: PullRequestSource, report: WorkReport, taskUr
   );
   const tests = describeSection('**Tests**', bulletList(report.walkthrough?.testing.automated ?? []));
   const parts = [...blocks, serializeChecks(source.task, report), tests].filter(Boolean);
-  return describeSection('### Evidence', parts.join('\n\n'));
+  return describeFold('Evidence', parts.join('\n\n'));
 }
 
 function describeCheckRow(check: ReportCheck) {
   const note = check.note ? ` (${CHECK_NOTE[check.note]})` : '';
   const command = `\`${check.command.replaceAll('|', '\\|')}\``;
-  return `| ${CHECK_MARK[check.outcome]} | ${check.label}${note} | ${command} |`;
+  return `| ${PULL_REQUEST_CHECK_MARK[check.outcome]} | ${check.label}${note} | ${command} |`;
 }
 
 function serializeChecks(task: Task, report: WorkReport) {
@@ -159,7 +170,12 @@ function serializeChecks(task: Task, report: WorkReport) {
     task.coverage?.status === 'measured' && task.coverage.executable > 0
       ? `\n\nThe tests cover ${task.coverage.covered} of ${task.coverage.executable} changed lines.`
       : '';
-  return `**Checks**: ${passed} of ${report.checks.length} passed.\n\n${rows.join('\n')}${coverage}`;
+  const failed = report.checks.length - passed;
+  const verdict =
+    failed === 0
+      ? `✅ **Checks**: all ${passed} passed.`
+      : `❌ **Checks**: ${failed} of ${report.checks.length} did not pass.`;
+  return `${verdict}\n\n${rows.join('\n')}${coverage}`;
 }
 
 function describeEarlierRound(round: Round) {
@@ -173,15 +189,12 @@ function describeEarlierRound(round: Round) {
 }
 
 function serializeEarlierRounds(rounds: readonly Round[]) {
-  return describeSection(
-    '### Earlier rounds in this pull request',
-    bulletList(rounds.map(describeEarlierRound))
-  );
+  return describeFold('Earlier rounds in this pull request', bulletList(rounds.map(describeEarlierRound)));
 }
 
 function serializeJudgementCalls(report: WorkReport) {
-  return describeSection(
-    '### Judgement calls',
+  return describeFold(
+    'Judgement calls',
     bulletList(
       report.judgementCalls.map((call) => {
         const rejected = (call.alternatives ?? []).map(
@@ -194,15 +207,15 @@ function serializeJudgementCalls(report: WorkReport) {
 }
 
 function serializeRisks(report: WorkReport) {
-  return describeSection(
-    '### Risks',
-    bulletList((report.walkthrough?.risks ?? []).map((risk) => `**${risk.title}**: ${risk.risk}`))
+  return describeFold(
+    'Risks',
+    bulletList((report.walkthrough?.risks ?? []).map((risk) => `⚠️ **${risk.title}**: ${risk.risk}`))
   );
 }
 
 function serializeManualTesting(report: WorkReport) {
   const steps = report.walkthrough?.testing.manual ?? [];
-  return describeSection('### How to test', steps.map(describeManualStep).join('\n'));
+  return describeFold('How to test', steps.map(describeManualStep).join('\n'));
 }
 
 function serializeHeader(task: Task, taskUrl: string) {
@@ -215,12 +228,15 @@ function serializeSections(source: PullRequestSource): Section[] {
   const report = assembleReport(task);
   const taskUrl = resolveShinsaTaskUrl(task);
   return [
-    { text: serializeHeader(task, taskUrl), drop: Number.POSITIVE_INFINITY },
+    {
+      text: serializeHeader(task, source.review ? `${taskUrl}#review=${source.review}` : taskUrl),
+      drop: Number.POSITIVE_INFINITY,
+    },
     { text: task.summary?.trim() ?? '', drop: Number.POSITIVE_INFINITY },
     { text: serializeEarlierRounds(listEarlierRounds(task)), drop: 1 },
-    { text: describeSection('### Approach', report.walkthrough?.approach ?? ''), drop: 5 },
+    { text: describeFold('Approach', report.walkthrough?.approach ?? ''), drop: 5 },
     { text: serializeEvidence(source, report, taskUrl), drop: 9 },
-    { text: describeSection('### How it works', report.walkthrough?.flow?.trim() ?? ''), drop: 3 },
+    { text: describeFold('How it works', report.walkthrough?.flow?.trim() ?? ''), drop: 3 },
     { text: serializeJudgementCalls(report), drop: 2 },
     { text: serializeRisks(report), drop: 4 },
     { text: serializeManualTesting(report), drop: 6 },

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveTaskInvite } from '../../src/lib/open';
+import { deflateRawSync } from 'node:zlib';
+import { readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
+
+function encode(value: unknown) {
+  return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
+}
 
 describe('resolveTaskInvite', () => {
   test('turns the task in the query into a link the Mac app opens, with its handle and title', () => {
@@ -27,5 +32,25 @@ describe('resolveTaskInvite', () => {
     expect(resolveTaskInvite('?task=../settings')).toBeNull();
     expect(resolveTaskInvite('?task=javascript:alert(1)')).toBeNull();
     expect(resolveTaskInvite(`?task=${'a'.repeat(65)}`)).toBeNull();
+  });
+});
+
+describe('readReviewFragment', () => {
+  const review = {
+    v: 1,
+    task: { id: 'task-1', handle: 'LOC-28', title: 'Fix the tabs', summary: 'Tabs stay put.' },
+    report: { headline: 'H', sections: [], checks: [], judgementCalls: [], walkthrough: null },
+    evidence: [],
+  };
+
+  test('reads the review the pull request link carries in its fragment', async () => {
+    expect(await readReviewFragment(`#review=${encode(review)}`)).toEqual({ ...review, v: 1 });
+  });
+
+  test('reads nothing from a missing, malformed or foreign fragment', async () => {
+    expect(await readReviewFragment('')).toBeNull();
+    expect(await readReviewFragment('#review=not+base64')).toBeNull();
+    expect(await readReviewFragment('#review=AAAA')).toBeNull();
+    expect(await readReviewFragment(`#review=${encode({ v: 9 })}`)).toBeNull();
   });
 });
