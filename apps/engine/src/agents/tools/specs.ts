@@ -1,6 +1,7 @@
 import {
   ATTACHED_EVIDENCE_KINDS,
   ATTENTION_LEVELS,
+  CHECK_CHANGE_ACTIONS,
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
   FINDING_SEVERITIES,
@@ -235,6 +236,49 @@ const WALKTHROUGH_PARTS = {
   },
 };
 
+const CHECK_LABEL = limitedText('What it proves, in a few words: "Paywall list tests".', L.checkLabel);
+
+const CHECK_COMMAND = limitedText(
+  "The exact shell command, run from the repository root and scoped to what the change touches: the test files or folder (`bun test apps/web/test/paywalls`), one package's type check (`bun run --cwd apps/web check-types`), the linter on the changed paths.",
+  L.checkCommand
+);
+
+const CHECK_PHASES = {
+  type: 'array',
+  description: 'The phases it covers, numbered from 1. Shinsa runs it after each of them.',
+  minItems: 1,
+  maxItems: L.planPhases,
+  items: { type: 'integer', minimum: 1, maximum: L.planPhases },
+};
+
+const CHECK = {
+  type: 'object',
+  properties: { label: CHECK_LABEL, command: CHECK_COMMAND, phases: CHECK_PHASES },
+  required: ['label', 'command', 'phases'],
+};
+
+const CHECK_CHANGES = {
+  type: 'array',
+  description: `Changes to your checks, when the work outgrew them: add one for new test files or a package you now touch, change a command, or remove one that no longer applies. At most ${L.checkChanges}. Shinsa runs the ones you add or change right after this hand-over. The repository's own checks (ids r1, r2…) are the human's.`,
+  maxItems: L.checkChanges,
+  items: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: [...CHECK_CHANGE_ACTIONS] },
+      id: limitedText('The check to change or remove, like c2. Leave it out to add one.', L.checkId),
+      label: CHECK_LABEL,
+      command: CHECK_COMMAND,
+      phases: {
+        ...CHECK_PHASES,
+        description:
+          'The phases it covers, numbered from 1. An added check covers this phase onward by default.',
+      },
+      reason: limitedText('Why, in one sentence.', L.checkReason),
+    },
+    required: ['action', 'reason'],
+  },
+};
+
 const WALKTHROUGH = {
   type: 'object',
   description:
@@ -292,11 +336,12 @@ export const TOOL_SPECS = {
           },
         },
         out_of_scope: textList('What this deliberately does not do.', L.listItems, L.listItem),
-        verification: textList(
-          `The verification plan, required for any task that changes code: ${resolveRequirement('code.verification_plan')} One item per proof: the tests, checks, runs or screenshots that show it works.`,
-          L.listItems,
-          L.listItem
-        ),
+        verification: {
+          type: 'array',
+          description: `The checks Shinsa runs for you, required for any task that changes code; empty for any other task. ${resolveRequirement('code.verification_plan')} ${resolveRequirement('code.checks')} Never the whole suite: CI runs that on the pull request.`,
+          maxItems: L.checks,
+          items: CHECK,
+        },
         impact: limitedText(
           `Required for any task that runs an operation: ${resolveRequirement('operation.impact')} Leave it out otherwise.`,
           L.impact
@@ -308,11 +353,6 @@ export const TOOL_SPECS = {
           uniqueItems: true,
           items: { type: 'string', enum: [...PLAN_EVIDENCE_KINDS] },
         },
-        checks: textList(
-          `Commands Shinsa runs in the worktree after the repository's own checks. ${resolveRequirement('code.checks')} Leave it out when the repository's checks prove the change. At most ${L.planChecks} commands of ${L.checkCommand} characters each. ${CODE_ONLY}`,
-          L.planChecks,
-          L.checkCommand
-        ),
         approval: {
           type: 'boolean',
           description:
@@ -357,7 +397,7 @@ export const TOOL_SPECS = {
   complete_phase: {
     name: 'complete_phase',
     description:
-      'Hand your finished phase over, then stop without restating it. Shinsa commits the changes and starts the next phase, or runs the checks after the last one. The summary and spots are what the human reads at review; a hand-over that breaks a limit is rejected with the reasons.',
+      'Hand your finished phase over, then stop without restating it. Shinsa commits the changes, runs the checks that cover this phase and starts the next one. The summary and spots are what the human reads at review; a hand-over that breaks a limit is rejected with the reasons.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -402,6 +442,7 @@ export const TOOL_SPECS = {
           },
         },
         walkthrough: WALKTHROUGH,
+        check_changes: CHECK_CHANGES,
       },
       required: ['summary', 'spots', 'judgement_calls'],
     },
@@ -409,7 +450,7 @@ export const TOOL_SPECS = {
   complete_fix: {
     name: 'complete_fix',
     description:
-      'Hand your fix over, then stop without restating it. Shinsa commits it and runs the checks and the agent review again, or pushes it to the pull request.',
+      'Hand your fix over, then stop without restating it. Shinsa commits it and runs the failing checks again, with any you name or change, then the agent review, or pushes it to the pull request.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -418,6 +459,23 @@ export const TOOL_SPECS = {
           L.phaseSummary
         ),
         walkthrough: WALKTHROUGH_REVISION,
+        checks: {
+          type: 'array',
+          description:
+            'Checks to run again besides the failing ones and those of the phases whose files your fix changes, by id (c1, r1), when your fix touches what they cover.',
+          maxItems: L.checks,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.checkId },
+        },
+        check_changes: CHECK_CHANGES,
+        evidence_kept: {
+          type: 'array',
+          description:
+            'Earlier evidence your fix touched that still shows the work as it is, by key or id. Shinsa refuses the fix while an item whose files it changed is not replaced, removed or named here.',
+          maxItems: L.evidenceItems,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.evidenceKey },
+        },
       },
       required: ['summary'],
     },
@@ -485,7 +543,7 @@ export const TOOL_SPECS = {
   attach_evidence: {
     name: 'attach_evidence',
     description:
-      'Attach proof that the work does what was asked: a comparison of one view before and after, a screenshot or recording file, a test or check run, a note, or a preview URL. The human sees it in the review before the diff, each call as one item. Give exactly one of path, url or text, or for a comparison its parts. For screenshots set width, theme and stage; a before shot and an after shot with the same title, width and theme show as one comparison, so a before taken early and its after taken later still pair.',
+      'Attach proof that the work does what was asked: a comparison of one view before and after, a screenshot or recording file, a check Shinsa runs, a note, or a preview URL. The human sees it in the review before the diff, each call as one item. Give exactly one of path, url or text, for a comparison its parts, and for a test or check only `check`. For screenshots set width, theme and stage; a before shot and an after shot with the same key show as one comparison, so a before taken early and its after taken later still pair. Evidence shows the work as it is now: a new item with the same key replaces the earlier one (an after replaces the earlier after), so after a change attach it again rather than beside it, and remove what no longer applies with `remove_evidence`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -493,13 +551,27 @@ export const TOOL_SPECS = {
           type: 'string',
           enum: [...ATTACHED_EVIDENCE_KINDS],
           description:
-            'comparison: one view in two or more states (before and after) as one item, with parts; screenshot: one image; recording: a short video of an interaction; test or check: run output; note: markdown, a table for measurements; preview: a URL.',
+            'comparison: one view in two or more states (before and after) as one item, with parts; screenshot: one image; recording: a short video of an interaction; test or check: one of your checks, by id, which links its latest run; note: markdown, a table for measurements; preview: a URL.',
         },
         title: limitedText(
-          'What it shows, in a few words: the screen or flow, never the file name.',
+          'What it shows, in a few words: the screen or flow, never the file name. Required for every kind but a test or check, which shows its check’s label.',
           L.evidenceTitle
         ),
         detail: limitedText('What to look at in it, in one sentence.', L.evidenceDetail),
+        key: {
+          type: 'string',
+          description:
+            'What it shows, the same every time you capture it again: lower-case words and hyphens, like settings-dark-900. Without one, its title, width and theme are its key. Not for a test or check, whose check is its key.',
+          maxLength: L.evidenceKey,
+        },
+        replaces: {
+          type: 'array',
+          description:
+            'Earlier items this one replaces, by key or id, when their key differs from this one. An item with the same key is replaced without naming it.',
+          maxItems: L.evidenceItems,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.evidenceKey },
+        },
         width: {
           type: 'integer',
           description: 'The viewport width in CSS pixels, for a screenshot or recording.',
@@ -518,7 +590,11 @@ export const TOOL_SPECS = {
         },
         path: limitedPath('A file (image, video, log), absolute or relative to the worktree.'),
         url: limitedText('A URL, for previews.', L.evidenceUrl),
-        text: limitedText('Text evidence: test or check output, or a note in markdown.', L.evidenceText),
+        text: limitedText('A note in markdown.', L.evidenceText),
+        check: limitedText(
+          'For a test or check: the id of the check whose run proves it, like c1. Add the command with `check_changes` first when it is not a check yet.',
+          L.checkId
+        ),
         parts: {
           type: 'array',
           description:
@@ -539,7 +615,27 @@ export const TOOL_SPECS = {
           },
         },
       },
-      required: ['kind', 'title'],
+      required: ['kind'],
+    },
+  },
+  remove_evidence: {
+    name: 'remove_evidence',
+    description:
+      'Remove evidence you attached this round that no longer applies, so the human never reads it as the current state. Shinsa keeps it under Earlier versions in the review. To show the new state instead, attach it with the same key: that replaces it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'The items to remove, by key or id.',
+          minItems: 1,
+          maxItems: L.evidenceItems,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.evidenceKey },
+        },
+        reason: limitedText('Why it no longer applies, in one sentence.', L.evidenceReason),
+      },
+      required: ['items', 'reason'],
     },
   },
   find_tasks: {
@@ -577,6 +673,30 @@ export const TOOL_SPECS = {
     description:
       'List the other open tasks in the repository this task works in, as ready shinsa:// markdown links: each with its stage, its branch, what that branch is stacked on, the files it changed (committed or not) and whether an agent works on it now. Use it before you change files another task may be changing. It only reads.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  list_services: {
+    name: 'list_services',
+    description:
+      'List the project’s services this task can run (its dev servers and the like), each with its command, the folder in this task’s worktree and whether it runs for this task. Name one in `service` to read the last lines of its output. It only reads.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'A service’s name, to read its output.' },
+      },
+    },
+  },
+  run_service: {
+    name: 'run_service',
+    description:
+      'Start, stop or restart one of the project’s services for this task only, in its own terminal in this task’s worktree; never the human’s own run or another task’s. Two runs of one service may want the same port: when it fails, read its output with `list_services`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'The service’s name, from list_services.' },
+        action: { type: 'string', enum: ['start', 'stop', 'restart'] },
+      },
+      required: ['service', 'action'],
+    },
   },
   note: {
     name: 'note',

@@ -11,15 +11,15 @@ import {
 import { resolveHumanFixPrompt, resolveVerdictFixPrompt } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
-import { answerConfiguration, assertConfigurationAnswer } from './config.ts';
-import { updateWorkspace } from './conflicts.ts';
+import { startEditsChecks } from './checks.ts';
+import { answerConfiguration } from './config.ts';
 import { acknowledgeBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
-import { settleTask, startChecks, startPlanning } from './lifecycle.ts';
+import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
-import { requestPush, shipReviewedWork, startMerge } from './pull-requests.ts';
+import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
 import { retryTask } from './retry.ts';
 import { assertSecretAnswer } from './secrets.ts';
 import { answerOperation, answerProposal, startAfterPlan } from './shapes.ts';
@@ -139,8 +139,8 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled after a failure');
     return;
   }
-  if (gate.cause === 'workspace_update') {
-    updateWorkspace(decider, gate.taskId, decision === 'reply' ? response : null);
+  if (gate.cause === 'push_hook') {
+    retryHookFix(decider, gate.taskId, decision === 'reply' ? response : null);
     return;
   }
   decider.resetRecoveries(gate.taskId);
@@ -152,15 +152,16 @@ function approveReview(decider: Decider, taskId: string) {
   clearFixLoop(decider, taskId);
   if (resolveApprovalPath(decider.task(taskId), 'review') === 'check_edits') {
     recordEditsApproval(decider, taskId, 'review');
-    startChecks(decider, taskId, 'committing your edits and running the checks');
+    startEditsChecks(decider, taskId);
     return;
   }
   shipReviewedWork(decider, taskId);
 }
 
-function approveMerge(decider: Decider, taskId: string) {
+function approveMerge(decider: Decider, gate: Gate) {
+  const { taskId } = gate;
   if (resolveApprovalPath(decider.task(taskId), 'merge') === 'merge') {
-    startMerge(decider, taskId);
+    startMerge(decider, taskId, gate.commit ?? null);
     return;
   }
   recordEditsApproval(decider, taskId, 'merge');
@@ -208,7 +209,7 @@ function answerDecision(
     approveReview(decider, taskId);
     return;
   }
-  if (gate.type === 'merge') approveMerge(decider, taskId);
+  if (gate.type === 'merge') approveMerge(decider, gate);
 }
 
 export function answerGate(
@@ -223,7 +224,6 @@ export function answerGate(
   assertCurrentPlan(decider, gate, decision, options.planVersion);
   assertVerdicts(decider, gate, decision, options.verdicts);
   assertComments(gate, decision, options.comments);
-  assertConfigurationAnswer(decider, gate, decision);
   assertMergeStepsDone(decider, gate, decision);
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};

@@ -6,7 +6,7 @@ import { RoadmapRow } from '@/components/roadmap/row.tsx';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
 const STATE = createShinsaState({
   tasks: [
@@ -108,41 +108,6 @@ describe('the row context menu', () => {
     );
   });
 
-  it('shows the task a stacked task sits on as stacked, and keeps it when it stops waiting', async () => {
-    const stacked = createTask({
-      id: 'stacked',
-      title: 'Stream the export',
-      stage: 'building',
-      waitsOn: ['lower', 'other'],
-      stackedOn: { taskId: 'lower', branch: 'fix/export' },
-    });
-    const state = createShinsaState({
-      tasks: [
-        stacked,
-        createTask({ id: 'lower', title: 'Rework the exporter', stage: 'building', branch: 'fix/export' }),
-        createTask({ id: 'other', title: 'Tidy the settings page', stage: 'building' }),
-      ],
-    });
-    pushState(state);
-    renderRow(stacked, 'working', 0, state);
-    await openContextMenu();
-    const trigger = screen.getByRole('menuitem', { name: 'Merge after another task' });
-    await act(async () => {
-      fireEvent.pointerEnter(trigger);
-      fireEvent.mouseEnter(trigger);
-      fireEvent.pointerMove(trigger);
-      fireEvent.mouseMove(trigger);
-    });
-    const locked = await screen.findByRole('menuitemcheckbox', { name: 'Stacked on “Rework the exporter”' });
-    expect(locked.getAttribute('aria-disabled')).toBe('true');
-    expect(locked.getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(locked);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Stop waiting' }));
-    await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.wait_on', taskId: 'stacked', waitsOn: ['lower'] }])
-    );
-  });
-
   it('cancels the task', async () => {
     renderRow(findTask('docs'), 'waiting', 1);
     await openContextMenu();
@@ -199,6 +164,31 @@ describe('the repository column', () => {
       'working'
     );
     expect(screen.getByText('No repository')).toBeTruthy();
+  });
+
+  it('names the repository beside its GitHub mark in its project’s colour, the project on hover', async () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'web', title: 'Fix the paywall', repoId: 'web' })],
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
+      repos: [
+        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p', remote: 'git@github.com:sw/web.git' }),
+      ],
+    });
+    const view = renderRow(state.tasks.web as Task, 'working', 0, state);
+    const ink = view.container.querySelector('[data-project-ink]') as SVGElement;
+    expect(ink.getAttribute('data-project-ink')).toBe('purple');
+    expect(screen.getByText('paywall-next')).toBeTruthy();
+    expect(await findTooltipText(ink.parentElement as HTMLElement)).toBe('Superwall project');
+  });
+
+  it('leaves a repository with no project its plain mark and no hint', () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'loose', title: 'Try a thing', repoId: 'scratch' })],
+      repos: [createRepo({ id: 'scratch', name: 'scratch' })],
+    });
+    const view = renderRow(state.tasks.loose as Task, 'working', 0, state);
+    expect(view.container.querySelector('[data-project-ink]')).toBeNull();
+    expect(screen.getByText('scratch')).toBeTruthy();
   });
 });
 

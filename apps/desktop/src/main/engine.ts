@@ -5,10 +5,12 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import {
   APP_ID,
+  ENGINE_LOCK,
   ENGINE_LOG,
   ENGINE_PLIST,
   type EngineScreen,
   isCrashing,
+  isOnOtherPort,
   isSpawnRefused,
   listEngineVariables,
   parseLaunchdJob,
@@ -106,6 +108,7 @@ export class EngineSupervisor {
     if (running) return { health: running };
     if (!app.isPackaged) return { screen: { kind: 'dev' } };
     onStarting();
+    await this.#moveToThisPort();
     await this.#retireOldService();
     const registration = await this.#register();
     if (registration === 'requires-approval') return { screen: { kind: 'approval' } };
@@ -134,6 +137,13 @@ export class EngineSupervisor {
     return [`Engine log: ${join(this.dataDir, ENGINE_LOG)}`, this.#readLogTail()]
       .filter(Boolean)
       .join('\n\n');
+  }
+
+  async #moveToThisPort() {
+    const port = Number(new URL(this.origin).port);
+    if (!port) return;
+    const job = parseLaunchdJob((await launchctl(['print', resolveEngineTarget(uid)])).output);
+    if (isOnOtherPort(job, this.#readText(ENGINE_LOCK), port)) await this.restart();
   }
 
   async #retireOldService() {
@@ -210,11 +220,15 @@ export class EngineSupervisor {
     return { kind: 'stopped', detail };
   }
 
-  #readLogTail() {
+  #readText(file: string) {
     try {
-      return resolveLogTail(readFileSync(join(this.dataDir, ENGINE_LOG), 'utf8'));
+      return readFileSync(join(this.dataDir, file), 'utf8');
     } catch {
-      return '';
+      return null;
     }
+  }
+
+  #readLogTail() {
+    return resolveLogTail(this.#readText(ENGINE_LOG) ?? '');
   }
 }

@@ -2,10 +2,13 @@ import { afterAll, afterEach } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { removeTempDirs } from './temp.ts';
 
 const STRAY_GH_WAIT_MS = 3_000;
 
-const home = mkdtempSync(join(tmpdir(), 'shinsa-test-home-'));
+const scratch = mkdtempSync(join(tmpdir(), 'shinsa-test-run-'));
+process.env.TMPDIR = scratch;
+const home = mkdtempSync(join(scratch, 'shinsa-test-home-'));
 const gitConfig = join(home, 'gitconfig');
 const ghRegistry = join(home, 'gh-processes');
 mkdirSync(ghRegistry);
@@ -32,8 +35,6 @@ process.env.FAKE_GH_REGISTRY = ghRegistry;
 process.env.FAKE_CODEX_REGISTRY = codexRegistry;
 process.env.FAKE_EUNOE_REGISTRY = eunoeRegistry;
 process.env.FAKE_MCP_REGISTRY = mcpRegistry;
-process.env.FAKE_BUT_HOME = join(home, 'but');
-mkdirSync(process.env.FAKE_BUT_HOME);
 delete process.env.CODEX_EXECUTABLE;
 
 function signal(pid: number, name: NodeJS.Signals | 0) {
@@ -89,5 +90,18 @@ async function assertNoStrays() {
   await assertNoStray(mcpRegistry, 'MCP stdio server');
 }
 
-afterEach(assertNoStrays);
-afterAll(assertNoStrays);
+afterEach(async () => {
+  try {
+    await assertNoStrays();
+  } finally {
+    removeTempDirs();
+  }
+});
+
+afterAll(async () => {
+  try {
+    await assertNoStrays();
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});

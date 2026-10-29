@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { APP_IDENTITY } from '@shinsa/core';
 
 export type Env = Record<string, string | undefined>;
 
@@ -31,7 +32,7 @@ export function resolveShinsaPaths(env: Env): ShinsaPaths {
     };
   }
   const user = resolveUserHome(env);
-  const home = join(env.XDG_CONFIG_HOME || join(user, '.config'), 'shinsa');
+  const home = join(env.XDG_CONFIG_HOME || join(user, '.config'), APP_IDENTITY.configDir);
   return {
     home,
     configPath: join(home, CONFIG_FILE),

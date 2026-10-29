@@ -23,12 +23,13 @@ import { SHINSA_INSTRUCTIONS } from '../instructions.ts';
 import type { AgentSession, AgentSessionInput, AgentSessionResult } from '../types.ts';
 import { AsyncQueue } from './async-queue.ts';
 import {
+  cleanProcessError,
   createSetupFailure,
-  createTransportFailure,
   createTurnEvidence,
   recordAssistantError,
   recordRateLimit,
   resolveClaudeVerdict,
+  resolveEndedFailure,
   type TurnVerdict,
 } from './classify.ts';
 import { listBackgroundWork, resolveCacheExpiry } from './context.ts';
@@ -365,29 +366,27 @@ export function startClaudeSession(
     }
   };
 
+  const endEarly = (text: string, undelivered: string[]): AgentSessionResult => {
+    const failure = resolveEndedFailure(text, evidence);
+    input.onEntry({ type: 'error', text });
+    return { outcome: 'failed', summary: failure.message, failure, undelivered };
+  };
+
   const crash = (error: unknown): AgentSessionResult => {
+    const settled = ledger.pending.length === 0 ? verdict?.failure : null;
     close();
     recorder.flush('interim');
     const undelivered = ledger.listUndelivered();
     if (cancelled) return { outcome: 'cancelled', summary: null, undelivered };
-    const text = describeError(error);
-    input.onEntry({ type: 'error', text });
-    return { outcome: 'failed', summary: text, failure: createTransportFailure(text), undelivered };
+    if (settled) return { outcome: 'failed', summary, failure: settled, undelivered };
+    return endEarly(cleanProcessError(describeError(error)), undelivered);
   };
 
   const finish = (): AgentSessionResult => {
     recorder.flush('interim');
     const undelivered = ledger.listUndelivered();
     if (cancelled) return { outcome: 'cancelled', summary, undelivered };
-    if (!verdict) {
-      input.onEntry({ type: 'error', text: STREAM_ENDED });
-      return {
-        outcome: 'failed',
-        summary: STREAM_ENDED,
-        failure: createTransportFailure(STREAM_ENDED),
-        undelivered,
-      };
-    }
+    if (!verdict) return endEarly(STREAM_ENDED, undelivered);
     const failure: RunFailure | null = verdict.failure;
     return {
       outcome: verdict.status === 'completed' ? 'completed' : 'failed',

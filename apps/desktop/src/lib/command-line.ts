@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { APP_IDENTITY } from '@shinsa/core';
 
 const COMMAND_DIR = '.local/bin';
 
@@ -25,7 +26,7 @@ export function resolveCommandDir(home: string) {
 }
 
 export function resolveCommandLink(home: string) {
-  return join(resolveCommandDir(home), 'shinsa');
+  return join(resolveCommandDir(home), APP_IDENTITY.command);
 }
 
 export function planCommandLink(link: CommandLink, program: string): LinkPlan {

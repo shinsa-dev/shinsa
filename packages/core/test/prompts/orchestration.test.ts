@@ -63,18 +63,11 @@ describe('the orchestration rules every step agent reads', () => {
     const rules = resolvePlanningPrompt(task, repo, [], null);
     for (const phrase of [
       '`delegate_task`',
-      'Delegate only work whose context should stay apart from yours',
+      'only for work whose context should stay apart from yours',
       'never hand each phase, or each problem type, to its own agent',
-      'starts from your brief alone',
-      '`mode: "wait"`',
-      '10 by default, 60 at most',
-      '`isolation: "worktree"`',
+      'The tool says how to brief it, wait for it and isolate it.',
       '`delegation_answer`',
-      'a new `client_request_id` for each round',
-      '`delegation_status`',
-      '`delegation_cancel`',
       'Delegations nest at most 3 deep.',
-      '`create_task`',
       'Your hand-over tools wait for your delegations',
       'ask them with `ask` first',
     ]) {

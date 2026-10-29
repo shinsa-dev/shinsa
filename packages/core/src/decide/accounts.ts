@@ -4,6 +4,7 @@ import {
   DomainError,
   type Gate,
   isTaskClosed,
+  MINUTE_MS,
   RUN_STAGES,
   type Run,
   type RunAccount,
@@ -20,6 +21,8 @@ import { moveWatchCheck } from './watchdogs.ts';
 const WAITING = 'waiting for the usage limit to reset';
 
 const PAUSED_UNTIL_RESET = 'paused until the usage limit resets';
+
+const ESTIMATED_RESET_MS = 15 * MINUTE_MS;
 
 const SIGNED_OUT_CODES: ReadonlySet<string> = new Set([
   'login_required',
@@ -43,14 +46,18 @@ function isUsageWaitLoop(task: Task, run: Run, resetAt: number) {
   return Boolean(run.usageWaitId && previous?.id === run.usageWaitId && resetAt <= previous.resetAt);
 }
 
+function resolveWaitUntil(task: Task, run: Run, resetAt: number | null, now: number) {
+  const estimate = now + ESTIMATED_RESET_MS;
+  if (resetAt === null || resetAt <= now) return estimate;
+  return isUsageWaitLoop(task, run, resetAt) ? Math.max(resetAt, estimate) : resetAt;
+}
+
 export function waitForUsageReset(decider: Decider, run: Run, failure: RunFailure) {
   const settings = decider.state.settings;
   const autoResume = settings.autoResume ?? true;
   if (!autoResume && !(settings.snoozeLimited ?? true)) return false;
-  const resetAt = failure.resetAt;
-  if (resetAt === null || resetAt <= decider.context.now) return false;
   const task = decider.task(run.taskId);
-  if (isUsageWaitLoop(task, run, resetAt)) return false;
+  const resetAt = resolveWaitUntil(task, run, failure.resetAt, decider.context.now);
   const wait: UsageWait = {
     id: decider.context.newId(),
     runId: run.id,
@@ -128,8 +135,7 @@ export function changeUsageWait(decider: Decider, command: CommandOf<'usage_wait
 }
 
 function describeSignIn(provider: string, email: string | null) {
-  const label = resolveProviderLabel(provider);
-  return email ? `Sign in to ${label} as ${email}` : `Sign in to ${label}`;
+  return `Paused: ${email ?? resolveProviderLabel(provider)} needs signing in`;
 }
 
 function describeSignInReason(failure: RunFailure, provider: string) {

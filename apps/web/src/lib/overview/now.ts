@@ -17,7 +17,8 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
-import { type Check, countPassing } from '@/lib/tasks/pull-request.ts';
+import { describeChecksPassed } from '@/lib/tasks/checks.ts';
+import { describeConflict } from '@/lib/tasks/now.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
@@ -50,10 +51,11 @@ export function resolveNowTitle(
   run: Run | undefined
 ) {
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
+  if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
   if (!run && isWatchedTask(task)) return WATCHED_TITLE;
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
-  return capitalise(task.stageReason);
+  return describeConflict(task) ?? capitalise(task.stageReason);
 }
 
 export function describeFollowUpNote(step: DeliveringStep, role: Run['role'] | null) {
@@ -86,17 +88,6 @@ export function resolveResultPlace(state: ShinsaState, task: Task, gate: Gate | 
   return resolveNowKind(state, task, gate) === 'result' ? 'now_card' : 'panel';
 }
 
-export function describeChecksPassed(checks: Check[]) {
-  const passed = countPassing(checks);
-  if (checks.length === 1) return passed === 1 ? 'The check passed' : 'The check failed';
-  if (passed === checks.length) return `All ${checks.length} checks passed`;
-  return `${passed} of ${formatCount(checks.length, 'check', 'checks')} passed`;
-}
-
-export function hasFailingCheck(checks: Check[]) {
-  return checks.some((check) => check.outcome === 'fail');
-}
-
 export function isAgentWorking(state: ShinsaState, task: Task) {
   return AGENT_STAGES.has(task.stage) && listOpenGates(state, task.id).length === 0;
 }
@@ -105,7 +96,7 @@ export function isTaskWatchable(state: ShinsaState, task: Task) {
   return resolveTaskStatus(state, task).tone !== 'neutral';
 }
 
-export function describeReviewFacts(task: Task, merge: boolean, spent: string | null) {
+export function describeReviewFacts(task: Task, merge: boolean) {
   const checks = task.checkResults ?? [];
   const findings = task.findings;
   const facts = [
@@ -114,7 +105,6 @@ export function describeReviewFacts(task: Task, merge: boolean, spent: string | 
       ? 'agent review found nothing'
       : `agent review left ${formatCount(findings.length, 'note', 'notes')}`,
     merge && task.pullRequest ? `PR #${task.pullRequest.number} is clean` : null,
-    spent,
   ];
   return capitalise(facts.filter(Boolean).join(' · '));
 }
@@ -136,4 +126,10 @@ export function listFeedLines(entries: ChatEntry[], limit: number) {
   const latest = lines.at(-1);
   if (latest?.label) lines[lines.length - 1] = { ...latest, label: resolvePresentVerb(latest.label) };
   return lines;
+}
+
+export function resolveLatestActivity(entries: ChatEntry[]) {
+  const [line] = listFeedLines(entries, 1);
+  if (!line) return null;
+  return [line.label, line.text].filter(Boolean).join(' ');
 }

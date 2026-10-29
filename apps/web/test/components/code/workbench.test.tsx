@@ -83,7 +83,7 @@ const REPORT: WorkReport = {
       ],
     },
   ],
-  checks: [{ name: 'bun test', outcome: 'pass', detail: '12 tests' }],
+  checks: [{ id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: '12 tests' }],
   judgementCalls: [
     {
       title: 'Keep the old reader',

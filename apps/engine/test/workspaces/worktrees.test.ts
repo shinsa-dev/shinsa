@@ -18,19 +18,20 @@ describe('worktrees', () => {
   test('a task gets a worktree of its own on a fresh branch, and commits and pushes from it', async () => {
     const { repo, origin, strategy, checkout, task } = await startTask();
     expect(checkout.branch).toBe('fix/tab-scroll');
-    writeFiles(checkout.path, { 'a.txt': 'a\n' });
+    writeFiles(checkout.path, { 'a.txt': 'a\n', 'docs/ä b.md': 'b\n' });
     const commit = await strategy.commit(repo, task, 'feat: a');
     expect(commit.treeHash).toBe(await git(checkout.path, 'rev-parse', 'HEAD^{tree}'));
+    expect(commit.files).toEqual(['a.txt', 'docs/ä b.md']);
     const sha = await strategy.push(repo, task);
     expect(await git(origin, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(sha);
     await commit.undo();
-    expect(await git(checkout.path, 'status', '--porcelain')).toBe('A  a.txt');
+    expect(await git(checkout.path, 'status', '--porcelain')).toContain('A  a.txt');
     await git(checkout.path, 'reset', '-q', '--hard');
     const head = await git(checkout.path, 'rev-parse', 'HEAD');
     const nothing = await strategy.commit(repo, task, 'feat: nothing');
+    expect(nothing.files).toEqual([]);
     await nothing.undo();
     expect(await git(checkout.path, 'rev-parse', 'HEAD')).toBe(head);
-    expect(await (await strategy.claim())()).toBeUndefined();
   });
 
   test('a resolved merge of the base is committed as git’s merge, and undo puts it back in progress', async () => {

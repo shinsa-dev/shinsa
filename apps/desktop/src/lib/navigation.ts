@@ -1,4 +1,4 @@
-import { parseDeepLink, URL_SCHEME } from './deep-link.ts';
+import { isLinkProtocol, parseDeepLink } from './deep-link.ts';
 
 export type Navigation =
   | { kind: 'app'; path: string }
@@ -39,7 +39,7 @@ export function resolveNavigation(target: string, origin: string): Navigation {
   } catch {
     return { kind: 'blocked' };
   }
-  if (url.protocol === `${URL_SCHEME}:`) return { kind: 'link', path: parseDeepLink(target) ?? '/' };
+  if (isLinkProtocol(url.protocol)) return { kind: 'link', path: parseDeepLink(target) ?? '/' };
   if (isAppUrl(url, origin)) return { kind: 'app', path: `${url.pathname}${url.search}${url.hash}` };
   if (EXTERNAL_PROTOCOLS.has(url.protocol)) return { kind: 'external', url: url.toString() };
   return { kind: 'blocked' };

@@ -1,13 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import {
-  type ChangedLines,
   COVERAGE_LIMITS,
   type Coverage,
   type CoverageDetection,
-  type CoverageSetting,
-  mapChangedLines,
+  type CoverageHits,
   measureCoverage,
   parseChangedLines,
   parseCoverageReport,
@@ -16,36 +14,46 @@ import {
   resolveRepoCoverage,
   type Task,
 } from '@shinsa/core';
-import { CHECK_ENV, CHECK_TIMEOUT_MS } from '../checks/index.ts';
-import { readChangedLinesPatch, readCommitLinesPatch } from '../git/diff.ts';
+import { CHECK_TIMEOUT_MS, runCheckCommand } from '../checks/index.ts';
+import { readChangedLinesPatch } from '../git/diff.ts';
 import { resolveTaskRefs } from '../git/task-refs.ts';
 import { describeError } from '../log/index.ts';
-import { runCommand } from '../shell/index.ts';
-import type { LedgerStore } from '../workspaces/ledger.ts';
-import { type CoveragePlan, resolveCoveragePlan, resolveGoModule } from './detect.ts';
+import { type CoverageRun, resolveCoverageDetection, resolveCoverageRun, resolveGoModule } from './detect.ts';
 
 export interface CoverageRequest {
   repo: Repo;
   task: Task;
-  ledgers: LedgerStore;
+  commands: readonly string[];
   baseBranch: string | null;
   signal: AbortSignal;
   timeoutMs?: number;
 }
 
-type PlanChoice = { plan: CoveragePlan } | { refusal: string; command: string } | null;
-
-const DISPLAY_DIR = '<report folder>';
+type RunChoice = { runs: CoverageRun[] } | { refusal: string; command: string } | null;
 
 function resolveUnavailable(command: string, reason: string): Coverage {
-  return { status: 'unavailable', command, reason: reason.slice(0, COVERAGE_LIMITS.reason) };
+  return {
+    status: 'unavailable',
+    command: command.slice(0, COVERAGE_LIMITS.command),
+    reason: reason.slice(0, COVERAGE_LIMITS.reason),
+  };
 }
 
-function resolvePlanChoice(setting: CoverageSetting, worktree: string, dir: string): PlanChoice {
+function listTestRuns(commands: readonly string[], worktree: string, dir: string) {
+  const runs: CoverageRun[] = [];
+  for (const command of new Set(commands)) {
+    const run = resolveCoverageRun(command, worktree, join(dir, String(runs.length + 1)));
+    if (run) runs.push(run);
+  }
+  return runs;
+}
+
+function resolveRunChoice(request: CoverageRequest, worktree: string, dir: string): RunChoice {
+  const setting = resolveRepoCoverage(request.repo);
   if (setting.mode === 'off') return null;
   if (setting.mode === 'auto') {
-    const plan = resolveCoveragePlan(worktree, dir);
-    return plan ? { plan } : null;
+    const runs = listTestRuns(request.commands, worktree, dir);
+    return runs.length > 0 ? { runs } : null;
   }
   const format = resolveCustomFormat(setting);
   if (!format) {
@@ -54,9 +62,8 @@ function resolvePlanChoice(setting: CoverageSetting, worktree: string, dir: stri
       refusal: `Shinsa cannot tell the format of ${setting.report} from its name.`,
     };
   }
-  return {
-    plan: { tool: 'custom', command: setting.command, report: join(worktree, setting.report), format },
-  };
+  const report = join(worktree, setting.report);
+  return { runs: [{ tool: 'custom', command: setting.command, cwd: worktree, report, format }] };
 }
 
 function listRoots(worktree: string) {
@@ -64,70 +71,65 @@ function listRoots(worktree: string) {
   return real === worktree ? [worktree] : [worktree, real];
 }
 
-function mergeChangedLines(into: ChangedLines, from: ChangedLines) {
-  for (const [path, lines] of from) into.set(path, [...(into.get(path) ?? []), ...lines]);
-  return into;
+async function readTaskChangedLines(request: CoverageRequest, worktree: string, base: string) {
+  return parseChangedLines(await readChangedLinesPatch(worktree, base, request.signal));
 }
 
-interface ChangeRange {
-  base: string;
-  head: string;
+function resolveReportKey(path: string, run: CoverageRun) {
+  if (run.format === 'go' || isAbsolute(path)) return path;
+  return join(run.cwd, path);
 }
 
-async function readBranchChangedLines(request: CoverageRequest, worktree: string, range: ChangeRange) {
-  const { signal } = request;
-  const committed = parseChangedLines(
-    await readCommitLinesPatch(request.repo.path, range.base, range.head, signal)
-  );
-  if (committed.size === 0) return committed;
-  const drift = await readChangedLinesPatch(worktree, range.head, signal, [...committed.keys()]);
-  return mapChangedLines(committed, drift);
+function mergeHits(into: CoverageHits, run: CoverageRun, hits: CoverageHits) {
+  for (const [path, lines] of hits) {
+    const key = resolveReportKey(path, run);
+    const known = into.get(key) ?? new Map<number, number>();
+    for (const [line, count] of lines) known.set(line, (known.get(line) ?? 0) + count);
+    into.set(key, known);
+  }
 }
 
-async function readOwnedChangedLines(request: CoverageRequest, worktree: string, range: ChangeRange) {
-  const changed = await readBranchChangedLines(request, worktree, range);
-  const owned = [...request.ledgers.listOwned(request.repo.id, request.task.id)];
-  if (owned.length === 0) return changed;
-  const uncommitted = await readChangedLinesPatch(worktree, 'HEAD', request.signal, owned);
-  return mergeChangedLines(changed, parseChangedLines(uncommitted));
-}
-
-async function readTaskChangedLines(request: CoverageRequest, worktree: string, range: ChangeRange) {
-  if (request.task.workspace === 'gitbutler') return readOwnedChangedLines(request, worktree, range);
-  return parseChangedLines(await readChangedLinesPatch(worktree, range.base, request.signal));
-}
-
-async function measurePlan(request: CoverageRequest, worktree: string, plan: CoveragePlan) {
-  const { signal } = request;
+async function runCoverage(request: CoverageRequest, worktree: string, run: CoverageRun) {
   const timeoutMs = request.timeoutMs ?? CHECK_TIMEOUT_MS;
-  rmSync(plan.report, { force: true });
-  const result = await runCommand(['sh', '-c', plan.command], worktree, {
-    env: CHECK_ENV,
+  rmSync(run.report, { force: true });
+  mkdirSync(dirname(run.report), { recursive: true });
+  const result = await runCheckCommand(['sh', '-c', run.command], worktree, {
     timeoutMs,
-    signal,
+    signal: request.signal,
   });
-  if (signal.aborted) return null;
-  if (result.timedOut) {
-    return resolveUnavailable(plan.command, 'It ran too long and was stopped.');
+  if (result.timedOut) return 'It ran too long and was stopped.';
+  if (!existsSync(run.report)) return `It wrote no report at ${run.report} (exit ${result.code}).`;
+  const hits = parseCoverageReport(run.format, readFileSync(run.report, 'utf8'));
+  return hits.size === 0 ? `The report at ${run.report} lists no files.` : hits;
+}
+
+async function collectHits(request: CoverageRequest, worktree: string, runs: readonly CoverageRun[]) {
+  const hits: CoverageHits = new Map();
+  const problems: string[] = [];
+  for (const run of runs) {
+    if (request.signal.aborted) return null;
+    const read = await runCoverage(request, worktree, run);
+    if (typeof read === 'string') problems.push(read);
+    else mergeHits(hits, run, read);
   }
-  if (!existsSync(plan.report)) {
-    return resolveUnavailable(plan.command, `It wrote no report at ${plan.report} (exit ${result.code}).`);
-  }
-  const hits = parseCoverageReport(plan.format, readFileSync(plan.report, 'utf8'));
-  if (hits.size === 0)
-    return resolveUnavailable(plan.command, `The report at ${plan.report} lists no files.`);
+  return { hits, problems };
+}
+
+async function measureRuns(request: CoverageRequest, worktree: string, runs: readonly CoverageRun[]) {
+  const { signal } = request;
+  const command = runs.map((run) => run.command).join('\n');
+  const collected = await collectHits(request, worktree, runs);
+  if (!collected || signal.aborted) return null;
+  if (collected.hits.size === 0) return resolveUnavailable(command, collected.problems.join(' '));
   const refs = await resolveTaskRefs(request.repo, request.task, request.baseBranch, signal);
   if (!refs.base) {
-    return resolveUnavailable(
-      plan.command,
-      'Shinsa could not find the commit the task’s branch started from.'
-    );
+    return resolveUnavailable(command, 'Shinsa could not find the commit the task’s branch started from.');
   }
-  const changed = await readTaskChangedLines(request, worktree, { base: refs.base, head: refs.head });
+  const changed = await readTaskChangedLines(request, worktree, refs.base);
   return measureCoverage({
-    command: plan.command,
+    command: command.slice(0, COVERAGE_LIMITS.command),
     changed,
-    hits,
+    hits: collected.hits,
     roots: listRoots(worktree),
     modulePath: resolveGoModule(worktree),
   });
@@ -138,22 +140,17 @@ export async function measureTaskCoverage(request: CoverageRequest): Promise<Cov
   if (!worktree || request.signal.aborted) return null;
   const dir = mkdtempSync(join(tmpdir(), 'shinsa-coverage-'));
   try {
-    const choice = resolvePlanChoice(resolveRepoCoverage(request.repo), worktree, dir);
+    const choice = resolveRunChoice(request, worktree, dir);
     if (!choice) return null;
     if ('refusal' in choice) return resolveUnavailable(choice.command, choice.refusal);
     try {
-      return await measurePlan(request, worktree, choice.plan);
+      return await measureRuns(request, worktree, choice.runs);
     } catch (error) {
-      return resolveUnavailable(choice.plan.command, describeError(error));
+      return resolveUnavailable(choice.runs.map((run) => run.command).join('\n'), describeError(error));
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-}
-
-function resolveCoverageDetection(path: string): CoverageDetection | null {
-  const plan = resolveCoveragePlan(path, DISPLAY_DIR);
-  return plan ? { tool: plan.tool, command: plan.command } : null;
 }
 
 export function listCoverageDetections(repos: readonly Pick<Repo, 'id' | 'path'>[]) {

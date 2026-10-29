@@ -3,13 +3,13 @@ import { parseConfigPort, resolveConfigPath, resolveServerUrl } from '../../src/
 
 describe('resolveServerUrl', () => {
   it('uses the server on the port the command line uses', () => {
-    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null })).toBe('http://127.0.0.1:5180');
+    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null })).toBe('http://127.0.0.1:7446');
     expect(resolveServerUrl({ env: {}, packaged: true, configPort: 5300 })).toBe('http://127.0.0.1:5300');
     expect(resolveServerUrl({ env: { SHINSA_PORT: '5400' }, packaged: true, configPort: 5300 })).toBe(
       'http://127.0.0.1:5400'
     );
     expect(resolveServerUrl({ env: { SHINSA_PORT: 'abc' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:5180'
+      'http://127.0.0.1:7446'
     );
   });
 
@@ -26,10 +26,10 @@ describe('resolveServerUrl', () => {
       })
     ).toBe('http://localhost:5190');
     expect(resolveServerUrl({ env: { SHINSA_URL: 'ftp://host' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:5180'
+      'http://127.0.0.1:7446'
     );
     expect(resolveServerUrl({ env: { SHINSA_URL: 'not a url' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:5180'
+      'http://127.0.0.1:7446'
     );
   });
 });

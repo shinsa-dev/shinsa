@@ -10,6 +10,7 @@ export const STATE_RECORDS = [
   'evidence',
   'briefings',
   'schedules',
+  'memories',
   'sessionUsage',
 ] as const;
 

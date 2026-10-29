@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import {
   type AgentProviderInfo,
   DomainError,
@@ -30,16 +31,20 @@ import { createLoginResolver, type LoginResolver, type RootSource } from '../rep
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
-import type { EvidenceStore } from '../store/index.ts';
+import {
+  ATTACHMENT_REQUEST_LIMIT_BYTES,
+  AttachmentStore,
+  type EvidenceStore,
+  readAttachmentUpload,
+} from '../store/index.ts';
 import { type Classifier, routeUserCommand } from '../triage/message.ts';
 import type { Versions } from '../versions/index.ts';
 import { createVersionRoutes } from '../versions/routes.ts';
 import type { Workspaces } from '../workspaces/index.ts';
-import { LedgerStore } from '../workspaces/ledger.ts';
 import { type JsonObject, readJson, readJsonObject } from './body.ts';
 import { createCodeRoutes } from './code.ts';
 import { createEditRoutes } from './edits.ts';
-import { respondEvidenceFile } from './evidence.ts';
+import { resolveAttachmentHeaders, respondEvidenceFile } from './evidence.ts';
 import { resolveInside } from './paths.ts';
 import { createReadRoutes } from './reads.ts';
 
@@ -163,7 +168,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
   }
 
   return [
-    ...createCodeRoutes(engine, new LedgerStore(context.config.dataDir)),
+    ...createCodeRoutes(engine),
     ...(context.workspaces ? createEditRoutes(engine, context.workspaces) : []),
     {
       method: 'POST',
@@ -181,11 +186,25 @@ function readRestartWhen(body: JsonObject): EngineRestartWhen {
 function createServerRoutes(context: ApiContext): ApiRoute[] {
   const { engine, config, evidence, models, providers, classify, restarter } = context;
   const instance = context.instance ?? createServerInstance();
+  const attachments = new AttachmentStore(config.attachmentsDir);
   async function respondCommand(request: Request) {
     const key = readIdempotencyKey(request);
     const taskId = await dispatchUserCommand(engine, await readJson(request), key, classify ?? null);
     const handle = taskId ? (engine.state.tasks[taskId]?.handle ?? null) : null;
     return respondJson({ ok: true, taskId, handle });
+  }
+
+  async function respondAttachmentUpload(request: Request) {
+    const body = await readJsonObject(request, ATTACHMENT_REQUEST_LIMIT_BYTES);
+    return respondJson(attachments.write(readAttachmentUpload(body)));
+  }
+
+  function respondAttachment(name: string, request: Request) {
+    const path = attachments.selectFile(name);
+    if (!path) return Promise.resolve(new Response('Not found', { status: 404 }));
+    const file = Bun.file(path);
+    const headers = resolveAttachmentHeaders(file.type, basename(path));
+    return Promise.resolve(respondEvidenceFile(file, request.headers.get('range'), headers));
   }
 
   function respondEvidence(name: string, request: Request) {
@@ -246,6 +265,16 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       method: 'GET',
       pattern: /^\/api\/evidence\/(.+)$/,
       respond: ([, name = ''], request) => respondEvidence(name, request),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/attachments$/,
+      respond: (_match, request) => respondAttachmentUpload(request),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/attachments\/(.+)$/,
+      respond: ([, name = ''], request) => respondAttachment(name, request),
     },
   ];
 }

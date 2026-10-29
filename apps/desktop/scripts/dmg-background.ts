@@ -24,15 +24,18 @@ const INK = {
   strong: '#18181b',
   muted: '#71717a',
   accent: '#0a7aff',
-  betaTile: '#e0edff',
-  betaInk: '#0a6cdc',
 };
 
 const WORDMARK = { size: 20, width: 62.72, mark: 20, gap: 9, y: 58 };
 
-const BETA = { size: 11, width: 23.73, padX: 7, height: 19, gap: 9 };
+const PILL = { size: 11, padX: 7, height: 19, gap: 9 };
 
-const HINT = { size: 13, y: 330, text: 'Drag Shinsa into Applications to install' };
+const PILLS = {
+  beta: { label: 'Beta', width: 23.73, tile: '#e0edff', ink: '#0a6cdc' },
+  canary: { label: 'Canary', width: 36.51, tile: '#fdf0d2', ink: '#9a5b00' },
+};
+
+const HINT = { size: 13, y: 330 };
 
 const desktopDir = resolve(import.meta.dirname, '..');
 
@@ -42,9 +45,9 @@ const fontsDir = resolve(desktopDir, '../marketing/src/assets/fonts');
 
 const logoPath = resolve(desktopDir, '../../packages/ui/src/components/logo.tsx');
 
-type Channel = 'stable' | 'beta';
+type Channel = 'stable' | 'beta' | 'canary';
 
-const CHANNELS: Channel[] = ['stable', 'beta'];
+const CHANNELS: Channel[] = ['stable', 'beta', 'canary'];
 
 function listMarkPaths() {
   const source = readFileSync(logoPath, 'utf8');
@@ -114,7 +117,8 @@ function serializeGuide() {
 }
 
 function serializeWordmark(channel: Channel) {
-  const badge = channel === 'beta' ? BETA.gap + BETA.width + BETA.padX * 2 : 0;
+  const pill = channel === 'stable' ? null : PILLS[channel];
+  const badge = pill ? PILL.gap + pill.width + PILL.padX * 2 : 0;
   const total = WORDMARK.mark + WORDMARK.gap + WORDMARK.width + badge;
   const left = (WIDTH - total) / 2;
   const scale = WORDMARK.mark / 365;
@@ -126,16 +130,16 @@ function serializeWordmark(channel: Channel) {
   const baseline = WORDMARK.y + WORDMARK.size * 0.358;
   const mark = `<g transform="translate(${left} ${markY}) scale(${scale.toFixed(6)})" fill="${INK.strong}">${marks}</g>`;
   const word = `<text x="${textX}" y="${baseline}" font-size="${WORDMARK.size}" font-weight="500" fill="${INK.strong}">Shinsa</text>`;
-  if (channel === 'stable') return `${mark}${word}`;
-  const pillX = textX + WORDMARK.width + BETA.gap;
-  const pillWidth = BETA.width + BETA.padX * 2;
-  const pill = `<rect x="${pillX}" y="${WORDMARK.y - BETA.height / 2}" width="${pillWidth}" height="${BETA.height}" rx="${BETA.height / 2}" fill="${INK.betaTile}"/>`;
-  const label = `<text x="${pillX + pillWidth / 2}" y="${WORDMARK.y + BETA.size * 0.358}" font-size="${BETA.size}" font-weight="500" fill="${INK.betaInk}" text-anchor="middle">Beta</text>`;
-  return `${mark}${word}${pill}${label}`;
+  if (!pill) return `${mark}${word}`;
+  const pillX = textX + WORDMARK.width + PILL.gap;
+  const pillWidth = pill.width + PILL.padX * 2;
+  const tile = `<rect x="${pillX}" y="${WORDMARK.y - PILL.height / 2}" width="${pillWidth}" height="${PILL.height}" rx="${PILL.height / 2}" fill="${pill.tile}"/>`;
+  const label = `<text x="${pillX + pillWidth / 2}" y="${WORDMARK.y + PILL.size * 0.358}" font-size="${PILL.size}" font-weight="500" fill="${pill.ink}" text-anchor="middle">${pill.label}</text>`;
+  return `${mark}${word}${tile}${label}`;
 }
 
 function serializeHint() {
-  return `<text x="${WIDTH / 2}" y="${HINT.y}" font-size="${HINT.size}" fill="${INK.muted}" text-anchor="middle">${HINT.text}</text>`;
+  return `<text x="${WIDTH / 2}" y="${HINT.y}" font-size="${HINT.size}" fill="${INK.muted}" text-anchor="middle">Drag Shinsa into Applications to install</text>`;
 }
 
 function serializeBackground(channel: Channel) {

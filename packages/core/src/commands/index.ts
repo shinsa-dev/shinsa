@@ -25,11 +25,14 @@ import type {
   TaskPriority,
   TaskShape,
   TaskSize,
+  WeeklyReading,
 } from '../domain/index.ts';
-import type { PullRequestRemark } from '../domain/pull-requests.ts';
+import type { PullRequestRemark, RepoCi, ShippingStep, ShippingStepKind } from '../domain/pull-requests.ts';
 import type {
+  CheckChangeHandOver,
   CodeSpot,
   JudgementCall,
+  LinkedEvidenceKind,
   PlanDocument,
   ReportCheck,
   ReportWalkthrough,
@@ -43,6 +46,7 @@ import type {
   DelegationSystemCommand,
   DelegationUserCommand,
 } from './delegations.ts';
+import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
 import type { WatchdogAgentCommand, WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
@@ -99,6 +103,7 @@ export type UserCommand =
   | { type: 'round.ship'; taskId: string; number: number; shipping: RoundShipping }
   | { type: 'round.update'; taskId: string; number: number; request: string }
   | { type: 'round.remove'; taskId: string; number: number }
+  | { type: 'round.send'; taskId: string; number: number }
   | {
       type: 'gate.answer';
       gateId: string;
@@ -120,7 +125,8 @@ export type UserCommand =
   | { type: 'usage_wait.resume_now'; taskId: string }
   | DelegationUserCommand
   | ScheduleUserCommand
-  | WatchdogUserCommand;
+  | WatchdogUserCommand
+  | MemoryUserCommand;
 
 type AgentCommand =
   | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
@@ -131,14 +137,20 @@ type AgentCommand =
       spots: CodeSpot[];
       judgementCalls: JudgementCall[];
       walkthrough?: ReportWalkthrough | null;
+      checkChanges?: CheckChangeHandOver[];
       treeHash?: string | null;
+      files?: string[];
     }
   | {
       type: 'agent.complete_fix';
       runId: string;
       summary: string;
       walkthrough?: ReportWalkthroughRevision | null;
+      checks?: string[];
+      checkChanges?: CheckChangeHandOver[];
+      evidenceKept?: string[];
       treeHash?: string | null;
+      files?: string[];
     }
   | {
       type: 'agent.report_review';
@@ -159,13 +171,15 @@ type AgentCommand =
   | {
       type: 'agent.attach_evidence';
       runId: string;
-      kind: EvidenceKind;
+      kind: Exclude<EvidenceKind, LinkedEvidenceKind>;
       title: string;
       uri: string;
       detail?: string | null;
       width?: number | null;
       theme?: EvidenceTheme | null;
       stage?: EvidenceStage | null;
+      key?: string | null;
+      replaces?: string[];
     }
   | {
       type: 'agent.attach_comparison';
@@ -175,7 +189,18 @@ type AgentCommand =
       detail?: string | null;
       width?: number | null;
       theme?: EvidenceTheme | null;
+      key?: string | null;
+      replaces?: string[];
     }
+  | {
+      type: 'agent.attach_check';
+      runId: string;
+      kind: LinkedEvidenceKind;
+      checkId: string;
+      detail?: string | null;
+      replaces?: string[];
+    }
+  | { type: 'agent.remove_evidence'; runId: string; items: string[]; reason: string }
   | { type: 'agent.note'; runId: string; note: string }
   | {
       type: 'agent.wait_for';
@@ -200,7 +225,8 @@ type AgentCommand =
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
   | ScheduleAgentCommand
-  | WatchdogAgentCommand;
+  | WatchdogAgentCommand
+  | MemoryAgentCommand;
 
 type SystemCommand =
   | {
@@ -223,8 +249,6 @@ type SystemCommand =
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }
   | { type: 'worktree.gone'; taskId: string }
-  | { type: 'task.stack'; taskId: string; branch: string }
-  | { type: 'task.record_conflict'; taskId: string; branch: string }
   | { type: 'task.record_edit'; taskId: string; path: string; changed: boolean }
   | { type: 'task.commit_edits'; taskId: string; treeHash: string | null }
   | {
@@ -233,7 +257,6 @@ type SystemCommand =
       overlaps: { taskId: string; paths: string[] }[];
       from: string;
     }
-  | { type: 'task.record_workspace_update'; taskId: string; guidance: string | null }
   | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider: string }
   | {
       type: 'run.end';
@@ -264,13 +287,14 @@ type SystemCommand =
       pullRequest: PullRequest;
       remarks?: PullRequestRemark[] | null;
       viewer?: string | null;
+      ci?: RepoCi;
     }
   | { type: 'pull_request.read_failed'; taskId: string; detail: string }
   | {
       type: 'checks.record';
       taskId: string;
       results: ReportCheck[];
-      evidence?: CheckEvidence;
+      outputs?: CheckEvidence[];
       coverage?: Coverage;
     }
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
@@ -280,10 +304,28 @@ type SystemCommand =
   | { type: 'message.drop'; taskId: string; messageIds: string[]; reason: string }
   | { type: 'runs.dispatch' }
   | { type: 'monitor.fire'; taskId: string; monitorId: string; attempt: number }
-  | { type: 'run.meter'; runId: string; usage: RunUsage; sessionId?: string | null; weeklyPercent?: number }
+  | {
+      type: 'run.meter';
+      runId: string;
+      usage: RunUsage;
+      sessionId?: string | null;
+      readings?: WeeklyReading[];
+    }
   | { type: 'run.silence'; runId: string; since: number | null }
   | { type: 'config.record'; taskId: string; problems: ConfigProblem[]; repoId?: string }
   | { type: 'pull_request.record_push'; taskId: string; sha: string }
+  | { type: 'pull_request.record_step'; taskId: string; step: ShippingStep }
+  | {
+      type: 'pull_request.record_retry';
+      taskId: string;
+      step: ShippingStepKind;
+      attempt: number;
+      attempts: number;
+      retryAt: number;
+      detail: string;
+    }
+  | { type: 'pull_request.record_update_conflict'; taskId: string; base: string; files: string[] }
+  | { type: 'pull_request.record_hook_failure'; taskId: string; output: string; failures: string[] | null }
   | { type: 'usage_wait.resume'; taskId: string; waitId: string }
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }

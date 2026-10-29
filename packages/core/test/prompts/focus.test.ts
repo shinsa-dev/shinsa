@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
   resolveChecksFixPrompt,
-  resolveConflictFixPrompt,
   resolveFixFocus,
   resolveHouseRules,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
-  resolveWorkspaceUpdatedFixPrompt,
 } from '../../src/prompts/index.ts';
 import { buildAll, createHarness, createTask, failing, pullRequest } from '../harness.ts';
 
@@ -21,13 +21,20 @@ function briefed(instruction: string) {
 describe('resolveFixFocus', () => {
   test('names what each fix prompt is for, after the house rules', () => {
     const cases = [
-      [resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]), 'checks'],
+      [
+        resolveChecksFixPrompt(
+          [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+          false
+        ),
+        'checks',
+      ],
       [resolveReviewFixPrompt([finding]), 'review'],
       [resolveHumanFixPrompt('Rename it.', []), 'changes'],
       [resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []), 'changes'],
       [resolvePullRequestFixPrompt(pullRequest({ number: 42 })), 'pull_request'],
-      [resolveConflictFixPrompt('feat/banner'), 'conflicts'],
-      [resolveWorkspaceUpdatedFixPrompt('feat/banner', null), 'conflicts'],
+      [resolvePullRequestFixPrompt(pullRequest({ number: 42, mergeable: false })), 'conflicts'],
+      [resolveUpdateConflictFixPrompt('main', ['a.ts']), 'conflicts'],
+      [resolvePushHookFixPrompt('FAIL', null, null), 'push_hook'],
     ] as const;
     for (const [instruction, focus] of cases) {
       expect(resolveFixFocus({ purpose: 'fix', prompt: briefed(instruction) })).toBe(focus);

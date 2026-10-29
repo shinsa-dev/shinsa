@@ -46,8 +46,13 @@ Only these, and they win over anything below:
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
    chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
    a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
+   Checks list in each state (`routes/ui/checks.tsx`, on `routes/ui/sample-checks.ts`: running, all passed,
+   failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
+   pull request, a linked test, the plan's Checks, check activity and Always run before review), the
    Review tab's Evidence panel (`routes/ui/evidence.tsx`: `EvidencePanel` with a before and after pair, a recording,
-   test output, Shinsa's own check run and a markdown note with a table, on sample files in `apps/web/public/samples/evidence` that
+   a test the agent linked (read as its check), a check Shinsa ran and a markdown note with a table, and a second panel
+   after a revision: a shot marked "Updated after your review" with the replaced shot and a removed note under Earlier
+   versions, on sample files in `apps/web/public/samples/evidence` that
    `scripts/seed-media/generate.ts` renders, 34), and the error fallbacks in their three sizes (`routes/ui/errors.tsx`,
    38). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
@@ -169,7 +174,10 @@ Only these, and they win over anything below:
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
      the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
-     and morphing out of its thumbnail. A recording never morphs: it mounts at its fitted size, from the thumbnail's
+     and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
+     CSS pixels) is laid out at that width, never at its file's: a 2560px shot taken at 1280px shows 1280px wide, two
+     file pixels to a CSS pixel, so it stays sharp on a Retina screen (`resolveShownSize`, `lib/image-view.ts`), and
+     its 100% is that size. A recording never morphs: it mounts at its fitted size, from the thumbnail's
      own `videoWidth` or a hidden probe's metadata, with that width and height set on the element, so Chromium lays out
      its controls once at the right width; scaling a video while it opens leaves its controls at the size they started.
      Click toggles fit and 100% (2× for small images) around the pointer, and so does a double-click; the wheel, a
@@ -223,10 +231,26 @@ Only these, and they win over anything below:
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from the All tasks roadmap (`lib/tasks/roadmap.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
-   20px gate or stage tile, title, status line and age. There Needs you becomes Also needs you
-   and leaves out the tasks the guide above already names (hidden when none are left).
+   20px gate or stage tile, title, status line and age. **A row is a small overview card on two lines**, so you can tell
+   where a task is without opening it: the title, then one summary line (`RowSummary`,
+   `components/queue/row-summary.tsx`) laid out across the row: the handle and status (`resolveRowStatus`: the task's status, but its stage
+   while the agent waits to check in again, which the row's snooze tile already says), then `MiniTrack`
+   (`components/overview/mini-track.tsx`), the Overview track's steps (`resolveSteps`) as 6px dots
+   joined by 8px hairlines, green done, a blue pulse current, amber waiting on you, a dashed ring skipped
+   and a hollow ring not started, one `role="img"` labelled "Step 4 of 7: Build 1/2"
+   (`describeTrackPosition`), no tooltip per dot since the row is already a button. After the dots,
+   while the task's agent runs and no decision is open, that run's latest action in the present tense,
+   shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
+   over the run's transcript, which the row follows only while it is mounted); otherwise the current
+   step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
+   ("Pre-merge · 1 step left"), and nothing more. The
+   queue rows carry no now line or stage reason: the status and the dots already say it, and a static
+   description only repeats them. While the steps can still change (triage, or the agent planning
+   before its plan) a spinner stands in for the dots, followed by the planning agent's latest action or
+   "Working out the steps". The guide above is a short summary of
+   these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
-   the greeting, the guide and the composer, then Also needs you, In progress, Recently finished
+   the greeting, the guide and the composer, then Needs you, In progress, Recently finished
    (merged or done in the last 24 hours, five at most), Recent conversations (the latest agent message
    of five tasks, opening their chat) and Waiting on another task. Recently
    finished is closure news, so it follows the work still moving; Recent conversations is how you
@@ -235,9 +259,9 @@ Only these, and they win over anything below:
    (`resolveHomeSections` in `lib/home.ts` splits the queue around it). **A task shows in one section only**:
    the queue's sections own their tasks, Recently finished leaves those out, and Recent conversations shows
    only tasks no other section holds (its five are picked after that), so a finished task is in Recently
-   finished and never again under Recent conversations. Both also leave out every task the guide names: the
-   ones it leads with, the ones its reasons and note link or quote, and the running ones
-   (`listGuideTaskIds`). The rows of Recently finished and
+   finished and never again under Recent conversations. What the guide names plays no part in this:
+   every section lists its tasks whether or not the guide leads with them, links or quotes them.
+   The rows of Recently finished and
    Recent conversations start with the task's handle like the queue's (`TaskHandlePrefix`,
    `components/task/handle.tsx`). **The focus filters all of Home**: the guide, every section, every
    count and every row (Recently finished and Recent conversations through `isInFocus` in
@@ -247,7 +271,7 @@ Only these, and they win over anything below:
    search of every task, reaches past it. **Every Home section folds** from its `SectionLabel` header (a chevron, `aria-expanded`), is
    open until you fold it, the long tail included, and Home remembers each choice like every collapsible
    (`home:section:<section>`, `resolveHomeSectionId`, 40), apart from the compact queue's, where Waiting
-   still starts folded: folding Also needs you on Home never hides a decision in the queue button's
+   still starts folded: folding Needs you on Home never hides a decision in the queue button's
    list. The sections stack in `WideSections` (`components/queue/queue.tsx`) with one `gap-6` between
    them, and the visible gap is the same open or folded: a folded section is just its header, whose
    title (a 16px line, `leading-4`, in the 24px header) keeps 4px under it, so an open section
@@ -276,14 +300,14 @@ Only these, and they win over anything below:
    (`TaskLink`) is a 16px state tile (gate or stage glyph) and the title, medium `fg-4`,
    underlined on hover; the tile and first word never part at a wrap. It goes where the work is
    (`?tab=review` for a review, `?tab=chat&run=` for a question or a running agent) and, on hover,
-   opens a preview card: status in its tone, what is happening now, repository, branch and pull
-   request (each with its icon), how long it has waited (`TimeAgo`, exact time on hover) and its
+   opens a preview card: status in its tone, what is happening now, repository (its mark in its project's
+   colour), branch and pull request (each with its icon), how long it has waited (`TimeAgo`, exact time on hover) and its
    one action as a button. A pull request link (`PrLink`) is a tile in the pull request's tone
    (green open, red failing, amber running, purple merged) and `#N`; it opens GitHub and its card
    (`PullRequestDetails`, the same body as the overview's pull request fact) shows the task, CI,
    unresolved comments, conflicts and the checks. `RepoChip` and `BranchChip` are a 14px `fg-2`
-   icon and the name (the branch in mono); their cards are the overview's repository and branch
-   facts. A file link (`FileLink`) is inline code; on a task with a repository it opens the file in the
+   icon and the name (the branch in mono; the repository's GitHub or folder mark in its project's colour); their
+   cards are the overview's repository and branch facts. A file link (`FileLink`) is inline code; on a task with a repository it opens the file in the
    Code tab at its lines (a diff tab in Changes once the task has changes, `?tab=code&mode=changes&file=&diff=1&line=`,
    the file in Files before that), with a tooltip naming the path and lines; elsewhere it stays plain code. Smart anchors carry `data-smart`, so prose link styling
    (blue, underlined) never applies to them.
@@ -321,25 +345,30 @@ Only these, and they win over anything below:
      moment you press send (the outbox) through the server's acceptance and the classifier's pass over the task's
      `inbox`, until it is routed into the task (steered into the running turn, a fix, a follow-up, a revised plan),
      and for a round that started from the queue until the round's first run starts (`isRoundDelivering` in
-     `lib/tasks/message-queue.ts`). No text: the bubble, border included, is at 50% opacity, and a blue light
+     `lib/tasks/message-queue.ts`). No text: the bubble stays at full opacity, and a blue light
      travels around its border (`DeliveryEdge`, the `message-delivery` classes in `app.css`): a 1px ring masked over
-     the border, outside the dimmed bubble so it keeps its strength, a conic gradient of the accent (`primary-4`, in
+     the border, a conic gradient of the accent (`primary-4`, in
      both themes) with a soft tail, turning once every 2.4s on `transform` alone, linear like a spinner since it
-     loops. It fades in. Once the message is delivered the light fades out and the bubble eases to full opacity,
-     both over 400ms (`useSettling`, `SETTLE_MS`; the bubble's `transition-opacity duration-400`) on the strong
-     ease-out, so only opacity and transform ever animate. Under reduced motion the bubble is still at 50% and the
-     ring is a still `primary-4` border, and the bubble turns opaque at once. "Sending" is in an `sr-only` span.
+     loops. It fades in. Once the message is delivered the light fades out over 400ms (`useSettling`, `SETTLE_MS`) on the strong
+     ease-out, so only opacity and transform ever animate. Under reduced motion the ring is a still `primary-4`
+     border. "Sending" is in an `sr-only` span.
      The queue docked above the composer keeps its own look.
    - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
      `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
      bubble in the chat: the queue docks above the composer on the Chat and Overview tabs (`Composer`'s `dock`), a
-     `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then "· Sends once round 2 is
-     finished." or "· Sends once round 2 is finished, one round at a time." in `fg-2`, `describeQueue`) over one
-     row per waiting round: its text `text-xs fg-3`, three lines at most, then Edit message (`IconPencil`) and Remove
-     from the queue (`IconCrossSmall`), `secondary` `icon-xs` buttons 1px apart. The list scrolls past 176px
-     (`ScrollArea`). Edit turns the row into the kit's `Textarea` with Cancel and Save (Enter saves, Escape cancels,
-     `round.update`); Remove sends `round.remove` and dims the row while it goes. Both are optimistic. When the round
+     `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then when it sends in `fg-2`,
+     `describeQueue` over core's `resolveRoundRelease`: "· Sends once round 2 is finished." while the round works
+     and finishes by itself, and what you have to do first while it waits for you: "· Sends after you merge round
+     2.", "· Sends after you approve round 2." or "· Sends after you approve and merge round 2."; ", one round at a
+     time" before the full stop when several wait; the Rounds panel says the same of the first waiting round, "It
+     starts after you merge round 2.") over one row per waiting round: its text `text-xs fg-3`, three lines at most,
+     then Send now (`IconArrowUp`, its `Hint` "It goes to round 2 now, as a message."), Edit message (`IconPencil`)
+     and Remove from the queue (`IconCrossSmall`), `secondary` `icon-xs` buttons 1px apart. The list scrolls past
+     176px (`ScrollArea`). Edit turns the row into the kit's `Textarea` with Cancel and Save (Enter saves, Escape
+     cancels, `round.update`); Send now sends `round.send`, which gives the text to the current round as your
+     message (at the merge gate a change before the merge, with the agent working a steer), and Remove sends
+     `round.remove`; both dim the row while they go. Edit and Remove are optimistic. When the round
      starts, its message joins the chat under its round's divider as your bubble, delivering, then settles. Several
      messages routed together are one round, so one row, delivered together.
    Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
@@ -376,7 +405,8 @@ Only these, and they win over anything below:
     The scale applies wherever the icon draws (the rail's rows, the Overview tab's house), never per call site;
     each shows its filled icon in `fg-4` with `aria-current="page"` on its own page (19), and Home has no buttons of
     its own for them. The queue button sits after Services, because that corner is navigation and nothing on the right (Focus) moves when it comes and
-    goes; it shows on every task page at every width, and it is the only place Cards lists the
+    goes; it shows on every page but Home, All tasks and setup (`isQueueButtonShown`), at every width: a task, Settings,
+    the Terminal page, /ui. It is the only place Cards lists the
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
     the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
     Services and Settings, each filled on its own page. From
@@ -494,8 +524,8 @@ Only these, and they win over anything below:
     - **Task facts.** What a details panel would hold is one quiet wrapped row under the heading on
       every tab (`components/task/facts.tsx`, rendered by `TaskHeader`): state, repository, branch, pull request,
       priority, started (added, for a task that has not started), and, when they apply, what it
-      waits on and what it unblocks (or the checks,
-      when there is no pull request yet), and the coverage of the change once the checks measured it
+      waits on and what it unblocks (or the checks, when there is no pull request yet: the Checks list's summary
+      with its glyph, "All 4 checks passed", "Running 2 checks", and the list in its popover), and the coverage of the change once the checks measured it
       (`IconShieldCheck`, "86% of changed lines covered" or "All changed lines covered", a link to Review → How to
       test whose delayed tooltip is the full summary; nothing when coverage is off or could not be measured). Waits on reads "Waits on ‹A›, ‹B›" and is a click menu,
       not a popover (`WaitsOnItems`): the tasks it waits on (each opens, with its status), then
@@ -504,12 +534,31 @@ Only these, and they win over anything below:
       waiting (clears them all). Each item is an `h-6`
       chip, a 14px icon 6px from `text-xs` `fg-3`, `px-1.5` and pulled out by the same amount so
       the first icon sits on the column edge. Items with more to say open an `InfoPopover` on
-      hover (see 15), never a tooltip: the pull request shows CI, unresolved comments, mergeable, each
-      check with its state and a link to GitHub; the branch its full name and base; the
-      repository its path, project and default branch; several related tasks list as links. A task with no
+      hover (see 15), never a tooltip: the pull request shows unresolved comments, mergeable, the Checks list in
+      both stages (Building, then CI) and a link to GitHub; the branch its full name and base; the
+      repository (its folder, the place the agent works, in its project's colour) its path, project and default
+      branch; several related tasks list as links. A task with no
       repository (a greeting, a general question) has no repository fact at all, and no branch; nothing in the web
       assumes `task.repoId` is set (the roadmap row's hint reads "No repository").
       Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/status/priority-icon.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
+    - **The Checks list** (`components/checks/checks-list.tsx`, built by `resolveChecksView` in
+      `lib/tasks/checks.ts`, since 2026-10-27) is one list in two stages, a bonus that shows what was checked and never
+      a wall. **Building** (before the pull request) holds the task's checks: the plan's ("From the plan · phases 1 to
+      3"), the ones the agent added ("Added by the agent · phase 3") and the repository's Always run before review
+      commands ("Repository · before review"), each with its label (`text-xs fg-4`), who added it beside it
+      (`text-2xs fg-2`), its command (mono `text-2xs fg-3`, selectable) and its latest result: Passed (the accent
+      `IconCheckCircle2Filled`), Failed (red, with what failed under the command in `red-text`), Not run yet
+      (`IconCircleDotted`), Running (the kit's `Spinner` in the accent, while the stage is `checking` and the check is
+      in the current run, as core records it in `Task.runningChecks`), Passed with "Passed when re-run alone"
+      under it, or "Already failing on main, so it does not block" (a grey `IconCircleXFilled`, "Not blocking").
+      **CI** (after the pull request) holds the pull request's checks, each named and linked to its run, "Required"
+      or "Optional" beside it. Each stage's header is its title and summary ("All 4 passed", "1 of 4 failed", "Running
+      2 checks", "2 passed, 2 not run yet", in the accent, red or blue); the rows sit in one `INSET` with hairlines
+      between them, the state's word at the end, and Show the output (`OutputToggle`) when Shinsa kept the check's
+      output: the latest piece Shinsa attached for it, read in a capped code block. It shows on the Overview's review
+      card and, while the checks run, on the now card (whose title is then the stage reason, "Running the checks for
+      phase 1 of 3", never the next phase), in Review → How to test, and, compact (`ChecksSections`: an
+      `InfoSection` per stage, no output), in the checks fact's and the pull request's popovers.
     - **Who worked on this.** Once an agent has run, the facts row ends with `IconAgents` and "3 agents"; its
       `InfoPopover` is a small tree headed "Who worked on this" (`listTaskAgents` in `lib/chat/agents.ts`): each
       role once, in the order it first worked, with its `RoleMark` icon, its name and "2 runs" ("· working now" with
@@ -531,7 +580,7 @@ Only these, and they win over anything below:
       still open the task (core's `selectTaskByReference`) and are replaced by the canonical URL. Until triage gives
       a task its handle, its URL and links use the id and nothing shows a handle.
     - **The facts row is one colour.** Every fact under the title (the handle, the status, the repository, the
-      branch, priority, times, cost, account, related tasks) is `text-xs` `fg-2`, the muted
+      branch, priority, times, the cost icon, account, related tasks) is `text-xs` `fg-2`, the muted
       foreground the handle always had (`FACT` in `components/task/facts.tsx`), turning `fg-4` on hover when it opens
       something. A state glyph or a warning note (the status's icon, failing checks, a pull request's conflicts, a
       budget gone over) keeps its own colour; the words around them do not.
@@ -663,8 +712,7 @@ Only these, and they win over anything below:
       group by a disabled match, the first highlighted row is the first enabled one, and a choice page opens on
       the current value only when it is enabled (`isDisabled`, `resolveFirstValue` in `lib/command/menu.ts`).
       The reasons are plain sentences: "Send or clear your comments first" on Approve the changes, "Updating…"
-      on an update that runs, "Unavailable: needs usage credits" on Fast, why GitButler is not set up yet on
-      Where agents work, and "Kept until it merges or is cancelled" on the task a task is stacked on.
+      on an update that runs, and "Unavailable: needs usage credits" on Fast.
     - **On a task page** (`TaskHeader` calls `useTaskPageCommands`, so Sidebar and Cards share
       it) the task leads: its decision first, each named for what it does (Approve the plan /
       Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
@@ -735,7 +783,7 @@ Only these, and they win over anything below:
     - **Label and value pairs** in popovers and tooltips sit apart: label left, value right
       (`justify-between`, `gap-4`), via `InfoRow` or `InfoLine` for tooltips. Never a value run on
       after its label with a space. A status the icon already says is not printed: no "Done",
-      "Complete", "Passed" or "Passing" next to a check (the progress track's step tooltips are the exception: every step says its status, "Done" included); "In progress", "Failed", "Running",
+      "Complete", "Passed" or "Passing" next to a check (the progress track's step tooltips are the exception: every step says its status, "Done" included, and the current step names a conflict the agent is resolving, "Resolving conflicts with main", in place of "In progress"); "In progress", "Failed", "Running",
       "Waiting on you" stay.
     - **Checkmarks are the accent**, everywhere: check and to-do glyphs, the current value in a
       menu, a select or ⌘K, copy confirmations, done tiles, settled tasks in ⌘K, the "decision"
@@ -757,7 +805,7 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Setup, Updates), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
+      Attention, Notifications, Context, Updates, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
       folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
       tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
       floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
@@ -785,15 +833,18 @@ Only these, and they win over anything below:
       project are named SW-1, SW-2…"), then a secondary `xs` Add and the `•••` (Rename…, Change key…, Edit or Add
       description…, Colour, Remove project). The shelf is one list of what the project holds: each repository
       (GitHub or local icon) and each folder (`IconFolders`, the folder's name), all as `PathRow`s (a 14px icon 8px
-      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of its test coverage (Auto coverage,
+      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of what always runs before review
+      (Nothing before review, the default: only the checks the agent chose run; or "2 commands before review", which
+      opens the Always run before review dialog, one command per line, with a pencil button beside the select to edit
+      them again; `components/settings/baseline-select.tsx`, `lib/baseline.ts`; the commands join every task's
+      Building checks as the repository's baseline, 12), a ghost `sm` select of its test coverage (Auto coverage,
       Custom coverage, Coverage off, `components/settings/coverage-select.tsx`: Auto's hint says what the server
       found, "Measures with Vitest." or "Found no coverage tool here, so nothing is measured.", from GET
       /api/repos/coverage; choosing Custom opens the Custom test coverage dialog with the command, the report's path
       inside the repository and its format, Infer from the path until the path says nothing, and a pencil button
-      beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees,
-      GitButler, Main checkout, each with its one-line hint; GitButler is disabled with the reason until `but` is
-      installed and the repository is a GitButler workspace, `components/settings/workspace-select.tsx`), a remove ×;
-      repositories without a project have the two selects alone), and "No repositories or folders yet." when
+      beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees or
+      Main checkout, each with its one-line hint, `components/settings/workspace-select.tsx`), a remove ×;
+      repositories without a project have the three selects alone), and "No repositories or folders yet." when
       empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
       by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
       description lives only in its dialog.
@@ -806,6 +857,15 @@ Only these, and they win over anything below:
       Add services, an MCP server's Where agents use it), the MCP menu's Use in a project and ⌘K's choices (an option's
       `dot`; All work is grey, as in the Focus menu). `test/components/status/project-option.test.tsx` and ⌘K's
       focus choice in `test/components/command/menu.test.tsx` fail when one renders a project without it.
+    - **A project and a repository are two things, kept apart.** A project is its dot and its name; a repository is
+      its own name after its mark, never the project's name. The mark is tinted in its project's colour so you see
+      which project it belongs to (`RepoIcon` in `components/links/repo.tsx`, `resolveProjectInk` in
+      `lib/projects.ts`, the same ink as the dot), plain `fg-2` when the repository has no project. Where the
+      repository is a place it is `IconGithub` with a remote and `IconFolder1` without (`resolveRepoIcon`): a task
+      link's hover card, the roadmap's Repository column (its tooltip names the project, "Superwall project") and a
+      repository link (`RepoChip`). Where it is a folder something works in, it is always `IconFolder1`: the task's
+      facts row, an MCP server's "Only in ‹repo›" choice and the Terminal page's Repositories (a menu row's icon takes
+      the ink through `resolveProjectMark`).
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
       padding of its own, so nothing doubles up. Settings groups are `p-1.5` (`SettingsCard`, which setup's cards use too; 6px on every side,
@@ -872,9 +932,8 @@ Only these, and they win over anything below:
       choice, `value` a list, every current one checked, "Stop waiting"). Several at once is the
       normal case: every list adds or removes one task and never replaces the others. Before building
       starts the label is Wait for another task; once building has started it is Merge after
-      another task, because that is all a new dependency can still do. The task a GitButler task is stacked on
-      shows ticked and disabled as "Stacked on “‹title›”"; Stop waiting keeps it, and is not offered when it is the
-      only one (core refuses removing it while the stack stands, `docs/engine.md` → Where agents work).
+      another task, because that is all a new dependency can still do. Stop waiting clears every one at once
+      ("No longer waiting.").
     - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
       Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
@@ -882,6 +941,15 @@ Only these, and they win over anything below:
       delegations are blue like working. The All tasks section icons,
       the queue's section icons, the gate tiles, ⌘K's task icons and the status labels all read
       them (`resolveTaskGlyph`, `resolveTaskStatus`).
+    - **Resolving conflicts** is the status of a task fixing a conflict with its base (`fixFor` `conflict`, a pull
+      request that cannot merge, or `update`, a conflict while updating onto the base before a push;
+      `isResolvingConflicts`, `resolveStageLabel` in `lib/tasks/status.ts`), never Fixing: on the status labels
+      (the rail, Home, All tasks, the task's facts, ⌘K, the working tile's tooltip), and the now line and the now
+      card's title show the stage reason, "Resolving conflicts with main". Home's guide says "resolving conflicts
+      on ‹task›", the chat heads the run "Resolving conflicts", and the progress track has it on Pull request. A
+      shipping task whose pull request conflicts with no fix running (the watch stopped, a fix that is paused)
+      never says Waiting for CI: its now line and the now card's title read "PR #42 conflicts with main"
+      (`describeConflict` in `lib/tasks/now.ts`).
     - **Hover is never the only feedback**: every `hover:` class has the same `active:` value on
       the same line (`group-hover:` pairs with `group-active:`, unless it only reveals something
       from `opacity-0`). The lint checks that an `active:` is there, not that its value matches.
@@ -1006,7 +1074,9 @@ Only these, and they win over anything below:
     the page, a card and a dialog. A dark popover is itself `bg-2`, so inside one (`.dark
     [data-slot="popover-content"]` in `globals.css`) a field fills `bg-3` and hovers `bg-4`; without that it drew as
     bare text (the Services popover's form, measured: popover and field both `oklch(0.228 …)`, now the field
-    `oklch(0.257 …)`). Never a border or a call-site fill to make a field show.
+    `oklch(0.257 …)`). A Settings shelf (`SETTINGS_SHELF`, a card's rows on `bg-a1`) lands on the field's own fill too, so
+    it sets the same `--input` step in both themes for every form inside it (Memory's rule editor, a folder you add). Never a
+    border or a call-site fill to make a field show.
     `Checkbox` is `filled` (the default: the page's fill at rest, an accent fill and a white check once ticked) or
     `outline` (no fill at rest, only its edge; ticked it fills like `filled`), the second for a list of boxes inside a popover (the Services
     popover's Manage and Add services). `Button` `bare` is an icon-only action with no wash at all, only its glyph
@@ -1090,15 +1160,38 @@ Only these, and they win over anything below:
       link. Every failure gate uses it, an agent's wait that ran out ("The agent’s wait ran out", or "The agent’s
       wait ran out of checks") included; a task
       stopped at its usage or cost limit ("Reached its usage limit", "Reached its cost limit") names its Retry
-      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too.
+      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too; its body
+      names the limit it reached ("This task reached its $5.00 cost limit, so the next step did not start."), never
+      what the task spent.
+      A pre-push hook that rejected the push again with the same failures ("The pre-push hook failed again") names
+      its Retry "Send to the agent again" (`resolveRetryLabel`, toast "Sent to the agent again."), in ⌘K too; its body
+      lists the failures and shows the hook's last lines in a code block, and nothing on the card or in ⌘K pushes
+      without the hook.
+    - **A push in progress** has no card of its own: the now card's title is the stage reason, which says each step
+      as it happens: "Updating the branch onto main", "Pushing the branch (the repository’s pre-push hook is
+      running)" ("Pushing the changes (…)" to an open pull request), "Opening the pull request", and on a retry
+      "Pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com". Each retry is also one activity
+      entry ("Pushing failed on attempt 1 of 5, trying again in 30s", the error as its detail), and a hook fix run is
+      headed "Fixing what the pre-push hook found".
+    - **Waiting for CI** is the stage reason while the pull request's checks run, and also while a new head has no
+      checks yet and Shinsa does not know the repository has no CI (`docs/engine.md` → The pull request watch). The
+      task never shows Ready to merge and then Waiting for CI again on one commit: once the merge gate is open,
+      checks that start on the same commit leave it open, and only a new commit, a failing check or a new comment
+      takes it back. The activity gets one stage entry per real change of stage: "Opening the pull request" only
+      while the task has no pull request; going back to shipping with one open says why, from the stage reason
+      ("Pushing the changes", "Waiting for CI", "The branch changed before the merge").
     - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
       `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Verify
-      again (primary, `approve`) and Start without checks (outline, `waive`, only when checks are all that is
-      missing) at the top right, and Cancel task as the footer's quiet link.
+      again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without
+      check commands is not a problem: nothing extra runs.
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
-      plan an inset (`bg-bg-a1` on `INSET`) shows "You asked" with your words, then "What changed"
-      with the agent's summary and the computed changes as a quiet `·` list. Approve plan sends
-      the version on screen.
+      plan an inset (`bg-bg-a1` on `INSET`, `PlanFeedback`) holds only "You asked" and your words, and
+      none at all when the revision came without a message. In the plan itself "What changed" with the
+      agent's summary sits right before the goal (`PlanChangeSummary`), and each phase the revision added
+      or reworked carries a quiet `Badge` `sm` beside its title, "New" or "Changed" (`PlanPhaseTitle`,
+      core's `resolvePhaseChange`); a dropped phase is not listed and a changed goal or approach gets no
+      mark, the summary says it. The chat's Revised the plan card renders the same three pieces, so the
+      two never disagree. Approve plan sends the version on screen.
     - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
@@ -1126,7 +1219,9 @@ Only these, and they win over anything below:
     - **A quiet agent** (`silence-note.tsx`): a `bg-bg-a1` `rounded-lg` strip above the live
       feed, "No output for 23 minutes" (`fg-3`, orange from 15 minutes; the thresholds are
       `docs/engine.md` → Silent runs) with Snooze and Dismiss as quiet links. It never changes the
-      task's status.
+      task's status. While a tool call is still running it says so instead: "A command has been
+      running for 23 minutes" followed by the command's first line in mono (`fg-2`, `Truncate`, so a cut
+      line shows whole in its tooltip), or "A tool has been running for 23 minutes" for any other tool.
     - **Held up by another task**: under "Waits on ‹A›" the work card names the stalled leaf of
       the chain with its `TaskLink`: "Held up because ‹C› is waiting on you."
     - **Suggested tasks** is a `Panel` right under the now card; a suggested task's
@@ -1200,15 +1295,35 @@ Only these, and they win over anything below:
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
       each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the agent must attach, as a
-      `·` list: Screenshot, Recording, Test output, Note, Preview link), **Extra checks** (each command a mono chip)
+      `·` list: Screenshot, Recording, Linked test, Note, Preview link), **Checks** (the plan's `verification`: each
+      label in `fg-3`, its phases beside it in `text-2xs fg-2`, "Phases 1 to 3", and its command a mono chip)
       and, when the agent asked for your approval, the quiet line "The agent asked for your approval."
-    - **Cost** is a task fact (`IconCoins`, the icon orange past a limit, the total beside it) whose `InfoPopover`
-      breaks it down by step and by phase; its header reads "$1.75 · 12% of the weekly limit" once a step was
-      measured against an account's weekly window, or against a limit "12% of the weekly limit, 10% allowed" (the
-      usage limit) or "$1.75 of $5.00" (the cost limit). The review card's facts line ends with "$3.56 so far".
-      Unknown prices read "Unknown" or "$0.30 + unknown", never $0.
+    - **Cost shows in one place: the facts row's cost control, icon and value.** A task's cost, its share of the
+      weekly limit and its tokens appear nowhere else: not on the now card, a run or round divider, a row of All
+      tasks, Home or the rail, an activity entry, the Review tab, a preview card or ⌘K. The control is the unit's
+      icon and the amount ("$18.55", or "1.8%" of the weekly limit on a subscription), and hovering it opens the
+      popover with the heading, the tokens and the split by step and by phase. The
+      account's usage (the top bar's usage menu, Settings → Agent usage) is not a task's cost and stays where it is;
+      the limits (Settings → Limits, the paused card and its Allow another) keep working and name the limit, never
+      what the task spent.
+    - **Cost** is in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
+      on a subscription shows its share of the weekly window (`IconGauge`, "1.8% of the weekly limit"), and a task on an
+      API key, or on a provider with no weekly window, its dollars (`IconCoins`, "$1.75"). The two are never shown
+      side by side as rival totals: the popover's header is the primary one ("1.8% of the weekly limit", or
+      "$1.75"), the line under it carries the other ("$4.31 and 8.2M tokens, as estimated by the agent provider.")
+      and, for a share, what it was learned from ("The share is learned from 12 tasks on this account."), and its rows
+      by step and by phase use the task's unit. While the account's rate is still being learned the task shows
+      dollars, and the line ends "The share of the weekly limit shows once a few more tasks have run on this
+      account."; nothing else marks a share as an estimate. A share follows the account's current rate, so it can
+      move a little as the rate improves. Shares show a tenth below 10% ("0.4%", "<0.1%") and
+      whole percentages above. The icon turns orange past a limit; against a limit the header reads "12% of the
+      weekly limit, 10% allowed" (the usage limit) or "$1.75 of $5.00" (the cost limit): a limit already passed
+      always shows, otherwise only the limit in the task's unit (a learning task that passed its usage limit on an
+      early estimate shows that header over its dollars; the gate says it is an estimate). Unknown prices read "Unknown" or "$0.30 + unknown", never $0. Tasks
+      from before weekly readings were kept (`docs/engine.md` → Cost) get their share from their cost once the
+      account's rate is learned.
     - ⌘K adds, on the task: Answer "‹choice›" per choice (Recommended as its hint), Verify the
-      setup again / Start without checks, Check in now, Snooze / Dismiss the quiet-agent warning,
+      setup again, Check in now, Snooze / Dismiss the quiet-agent warning,
       Add the suggested task “‹title›” (a page with the same two starts, the agent's pick first with
       Suggested as its hint) / Dismiss the suggested task “‹title›”; at the bottom while typing, "Ask: ‹text›" next to
       Create task. Settings → Limits has Usage limit per task (and Cost limit per task where it applies, 26);
@@ -1305,17 +1420,29 @@ Only these, and they win over anything below:
       only for a program that is installed and not set by an override; Update Claude Code is there before the
       versions are read.
     - **Settings → Limits** is titles-only rows: Usage limit per task (No limit, the default, or 5, 10, 20, 30 or
-      50% of the weekly limit; `docs/engine.md` → Cost; Codex's weekly limit counts too), Cost limit per task (only
-      while one is set or when no account reports a weekly window: API keys), Switch accounts at (Other…
+      50% of the weekly limit, counted against the task's share of it; `docs/engine.md` → Cost; Codex's weekly limit
+      counts too), Cost limit per task (only
+      while one is set, when no account reports a weekly window (API keys), or while an account that reports one is
+      still learning its rate, when it is the limit that holds), with only the usage limit set while an account is
+      learning, a muted `SettingsEmpty` row under it ("While Shinsa learns an account's rate, the usage limit counts
+      an early estimate, and nothing before the first measured step. A cost limit holds from the start."), Switch
+      accounts at (Other…
       opens the same percentage dialog as an account's), After a usage limit (Resume automatically /
       Wait for me) and, only while that is Wait for me, Ask me what to do (When the limit resets / Right
-      away: the task waits as "Paused until the usage limit resets" and its failure gate opens at the
+      away: the task waits as "Waiting for usage: pauses for you at 3:40 PM" and its failure gate opens at the
       reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
       rows, without Other….
     - **Settings → Agents → Engine** is titles-only rows: Approve plans, Automatic fix rounds, Delegations at once
       (No limit, the default, or 2, 4, 8 or 16 at once, a stored number not in the list added in order, and
       Custom…, which opens a dialog for any whole number of 1 or more; `delegationLimit`, `docs/engine.md` →
       Delegation) and Merge with. ⌘K's Change a setting has the same rows, without Custom….
+    - **Settings → Agents → Memory** (`components/settings/memory.tsx`, `lib/memory.ts`; `docs/engine.md` → Memory)
+      sits between Engine and Versions: the rules agents proposed first (each with its project and why, Keep, Edit and
+      Dismiss), then Every project, then a block per project that has rules, each headed by its count of 20 ("3 of
+      20"), each rule with Edit and Remove. New rule and Edit open the rule in place: a field on a line of its own that
+      grows with the text (Enter saves, Shift Enter breaks, Escape cancels), and under it the scope, the length out of
+      240, Cancel and the primary Add rule, Save or, for a proposal, Keep, which keeps it with your words. Errors stay in the row ("Keep it to 240 characters. It
+      has 251."). A `remember` call in the chat is a card with the rule, the agent's why and "In Settings → Memory".
     - **The sign-in dialog** (`sign-in-dialog.tsx`, one `Dialog` mounted by `Root`, opened by
       `startSignIn`): Starting sign-in… with a spinner; "Sign in to Claude" with the browser note,
       the sign-in page as a link and a code field, Submit code the form's primary button; Finishing
@@ -1342,12 +1469,13 @@ Only these, and they win over anything below:
       quiet context. A link inside it turns `fg-4` on hover.
     - **The usage menu, Agent usage** (`usage-menu.tsx`, `aria-label` "Agent usage"): an `sm` secondary button with
       `IconGauge` and the figure of what the next run uses, in the usage tone from 75%: when the agent runs on a
-      provider with a reading of its own (Codex) its 5-hour window, otherwise the Claude account picked by the same
+      provider with a reading of its own (Codex) its glance window, otherwise the Claude account picked by the same
       core picker the server leases with (`selectNextAccount` over `pickAccount`, `docs/engine.md` → Accounts and
-      usage limits) and its 5-hour window (`resolveUsageGlance`, `selectGlanceRow`; the fullest window that applies
-      to the agent's model only when there is no 5-hour one). A weekly window that applies to the agent's model
-      and is at 100% takes the 5-hour one's place, so a spent account never reads low while it is blocked; otherwise
-      the weekly windows stay in Settings → Agent usage.
+      usage limits) and its glance window (`resolveUsageGlance`, `selectGlanceRow`). The glance window is the one
+      closest to running out: the fullest of the windows that apply to the agent's model (the same rule as core's
+      `resolveUsedPercent`), the 5-hour one when two are as full once rounded. So an empty 5-hour window never hides
+      a nearly spent weekly one, and the row's label says which limit binds; every window stays in Settings → Agent
+      usage.
       Claude's and Codex's 5-hour window are both labelled "5-hour limit", everywhere. It reads "Agent usage" without a figure. It sits
       in the Cards top bar before Focus and in the rail header before search, opens an `InfoPopover` on hover, titled
       just "Agent usage" (no description), with every Claude account and then every connected provider
@@ -1356,6 +1484,14 @@ Only these, and they win over anything below:
       next turn uses (`isNextAccount`, `isNextProvider` over the glance) carries a 6px blue dot (`TONE_FILL.blue`)
       right after its name, "Used for the next turn" in its tooltip and `aria-label`. A click goes to Settings →
       Agent usage → Accounts. Hidden without accounts or a provider reading.
+    - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
+      Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
+      in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
+      hidden; a hidden page that comes back reads again when the last read is a minute old. Every read, Refresh usage
+      and the Sign in card's check included, goes through one request: a read already on its way is shared, never
+      sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
+      of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
+      failure shows on its account at once).
     - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Agent usage, the
       usage popover) it reads "Claude · a@b.com" or "Codex · a@b.com" ("Codex" alone without an email) after the
       provider's icon (`IconClaudeai`, `IconOpenaiCodex`; `IconRobot` for one Shinsa does not know): one helper,
@@ -1363,15 +1499,22 @@ Only these, and they win over anything below:
       `resolveProviderIcon` Settings → Agents uses for its model groups), rendered by `AccountName`
       (`components/accounts/account-name.tsx`: the icon at `size='sm'`, then the label as a `Truncate`).
     - **Sign in needed** (`sign-in-card.tsx`): a `sign_in` gate is orange with `IconUserKey`, in the
-      Paused group; the card shows the gate's title and body, Sign in (primary) opens the dialog for
-      that account, and Retry anyway / Cancel task are the footer's quiet links. The card reads the gate's provider
+      Paused group; the card shows the gate's title ("Paused: a@b.com needs signing in", the one status for that
+      cause) and body, Sign in (primary) opens the dialog for
+      that account, and Retry anyway / Cancel task are the footer's quiet links. For a login Claude could not
+      refresh the body names the account, the others that need signing in too, and what to run, from where the login
+      comes from ("…or sign in to Claude Code as a@b.com and run `cswap add`: Shinsa takes the new login from
+      claude-swap.", "…or run `claude auth login` in a terminal."), and the gate closes by itself once that login
+      works again (`docs/engine.md` → A login Claude could not refresh). The card reads the gate's provider
       (`resolveSignInProvider(gate)` over `gate.provider`: `claude` is a Claude account, anything else a provider with a
       sign-in of its own). A gate for such a provider (Codex) has no Sign in: Shinsa never signs Codex in. Its
       primary is "Check the Codex sign-in again" (it refreshes the sign-ins, and one that finds Codex signed in
       answers the gate), and under the body, on a `bg-bg-a1` `rounded-lg` strip, the fix with its `CopyButton`
       ("Run `codex login` in a terminal, then refresh."); ⌘K offers the same check. **Waiting for the
-      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled
-      "Resumes when the usage limit resets" or "Paused until the usage limit resets", the reset in
+      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled in one
+      line with when and where it carries on, "Waiting for usage: continues at 3:40 PM on a@b.com" or, with automatic
+      resume off, "Waiting for usage: pauses for you at 3:40 PM on a@b.com" (`formatMoment`: a weekday or date
+      before the time when it is not today; no account when the wait names none), the reset in
       the eyebrow, Resume now (outline) and the quiet "Don’t resume automatically" / "Resume at the
       reset".
     - **Run on account**: a bound task has a "Runs on a@b.com" fact whose click menu, the task
@@ -1385,9 +1528,12 @@ Only these, and they win over anything below:
       the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
       Earlier runs show the account as plain text.
     - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
-      these. Six are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
-      happened, the meta the value, and opening it shows the reason): `account_switched`
-      (`IconArrowsRepeatRightLeft`, "Account switched" · "a@b.com", the reason), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
+      these. Seven are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
+      happened, the meta the value, and opening it shows the reason): `retrying` (`IconArrowRotateClockwise`, "Claude
+      was busy, trying again" · "1 of 3", the provider's message and "Shinsa tries the same step again by itself at
+      3:41 PM."; an overloaded provider is never shown as an error), `account_switched`
+      (`IconArrowsRepeatRightLeft`, "Account switched" · "a@b.com", the reason; after a sign-out it names both
+      accounts: "Claude account a@b.com needed signing in again; continued on c@d.com."), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
       compacted", why: the context filled up and the agent summarised it, or idle compaction; eunoe's: `IconMinimize`, "Conversation compacted by Eunoe"
       at the limit, or `IconLayersTwo`, "Finished turns folded" for a fold, the tooltip saying nothing was
       summarised), `proxy` (`IconCloudSimpleDisconnected`, "Eunoe unavailable · Claude Code compacts this run",
@@ -1408,6 +1554,10 @@ Only these, and they win over anything below:
       tones (neutral, amber from 75%, red from 90%), "84k of 200k tokens" over a muted "Context 42% full" in
       its tooltip. `rate_limit`, `account` and `interrupted` stay in the transcript and are not shown: the
       usage menu and the `account_switched` row already say it.
+      A turn's errors (`ErrorLine`: `IconExclamationCircle`, `red-text`) are one line per message: the same message
+      said again in a turn collapses into its first line, which ends in a `fg-2` "3 times" (`collapseErrors` in
+      `lib/chat/timeline.ts`), so a cause shows once however many attempts hit it. The task's state is the Overview's
+      one card for it (Sign in needed, Waiting for the usage limit), never a stack of errors.
     - **Delegations** (`components/chat/delegation-card.tsx`, `lib/chat/delegations.ts`) never
       gets a run section of its own: it lives in the turn of the step that delegated it. A
       `delegation` `started` notice is a spawn card (`CARD`, 36px row): a status mark (a pulse
@@ -1503,15 +1653,22 @@ Only these, and they win over anything below:
     - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
       `apps/desktop`'s, `docs/release.md` → Channels and updates) is the last group of General. In the app: a
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
-      dialog), then two 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`) and, once the updater has
-      something to say, its status ("Checking for updates…", "Up to date", "Downloading 1.3.1…", the failure in orange,
-      or "1.3.1 is ready" in blue with a secondary `sm` Restart to update, `IconArrowRotateClockwise`; a beta on
-      Stable that is newer than the latest stable reads "Go back to 1.2.0 (stable)?" in blue with two secondary `sm`
-      buttons, Stay on this beta, then Download and install with `IconArrowDown`), over "Beta
-      channel · Updates install when you quit Shinsa". Update channel: a select of Stable (`IconShieldCheck`) and Beta
-      (`IconTestTube`) over what the chosen one gets: "Releases only. Coming from a beta, you can go back to the
-      latest stable." or "New versions first, as pre-releases, and every stable release once it
-      is newer than yours." Switching checks again at once. ⌘K's Change a setting has Update channel in the app only.
+      dialog), then 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`)
+      and, once the updater has something to say, its status ("Checking for updates…", "Up to date", "Downloading
+      1.3.1… 42%", "Preparing 1.3.1…" while macOS's installer unpacks and verifies it, the failure in orange,
+      "Restarting to install 1.3.1…" after the click, or "1.3.1 is ready" in blue with a secondary `sm` Restart to
+      update, offered only once nothing is left to wait for,
+      `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
+      (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: a select
+      of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
+      "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
+      pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
+      pass. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
+      place with the same data and engine. ⌘K's Change a setting has Update channel with the same three in the app.
+      `/ui` → Settings shows Stable up to date, Beta with an update ready, a beta switched to Stable offered the
+      latest stable, Canary downloading the next canary, a downloaded beta being prepared, and a beta restarting to
+      install.
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 
@@ -1667,10 +1824,10 @@ Only these, and they win over anything below:
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
 
 31. **The desktop app is the same page in a Mac window** (`apps/desktop`, its `CLAUDE.md`; `lib/desktop.ts` on the
-    web side). It loads the UI from the server (the CLI's port, `http://127.0.0.1:5180` by default), so the app, a
+    web side). It loads the UI from the server (the CLI's port, `http://127.0.0.1:7446` by default), so the app, a
     browser tab and Floaty always show one version; Floaty stays the floating window and the app is the full one.
     The page learns it runs in the app only from the preload bridge `window.shinsaDesktop`; a browser and Floaty
-    have none and nothing below applies there.
+    have none and nothing below applies there. Every update channel, Canary included, is this one app.
     - **The title bar is the top bar.** The traffic lights sit inset over the 44px top bar, centred on it.
       `applyDesktop` (called from `main.tsx`) sets `data-desktop` on `<html>` (`window`, or `fullscreen` when the
       lights are gone), and the `desktop:` variant (`app.css`) holds the room they take: the Cards top bar
@@ -1708,7 +1865,7 @@ Only these, and they win over anything below:
     - **The engine's status page**: the app starts its own engine, so there is no dialog and nothing to run. While the
       engine starts the window shows one quiet page with a small spinner ("Starting Shinsa"); when it cannot run, the
       same page says why and offers the fix, the first button `primary`: Allow Shinsa to run in the background (Open
-      Login Items, Try again), Port 5180 is taken, The engine keeps stopping (Start engine, Copy details, with the
+      Login Items, Try again), Port 7446 is taken, The engine keeps stopping (Start engine, Copy details, with the
       engine log's warnings and errors under it), or The engine is not running (Start engine, Open Privacy & Security,
       Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
       the engine stops answering for 15 s while you work (`apps/desktop/src/lib/engine.ts`,
@@ -1804,6 +1961,14 @@ Only these, and they win over anything below:
       address names, `hasFileInAddress`), scrolls the line to the centre, opening any fold over it (in side by side
       both sides' folds, `revealSplitLines`), and washes the line or range `primary-a3` for 2 s
       (`FOCUS_FLASH_MS`), then leaves it `primary-a1` while the file stays open.
+    - **A changed file opens at its first change** (`revealFirstChange`, `lib/code/editor/first-change.ts`). Opened
+      without a line (from Changes, the Files tree, quick open, a search's file, a Review place or a smart link with no
+      line), a diff in either layout, or a changed file opened as a plain file (read against the base, `baselinePath`),
+      scrolls once the editor has measured so its first changed hunk sits near the top with 3 lines of context above it
+      (the margin a fold keeps, so the change is never behind a fold); when the change already starts in the top half
+      of the pane nothing moves, and an unchanged file opens at the top. A line or spot in the address keeps going to
+      that target. Each file is placed once: coming back to it puts back where you left it, and a show, hide and show
+      again before a frame (React's StrictMode in development) keeps that place (`EditorSession`'s settling entry).
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
       each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
@@ -1921,8 +2086,7 @@ Only these, and they win over anything below:
       other lines, and otherwise the disk version shows with "This file changed on disk where you were typing, so it
       shows the new version." in a one-line strip under the toolbar (`IconCircleInfo`, `text-2xs` `fg-2`). Once you
       edited a file, the Code tab reads it from the working copy, so a reload shows your edit and not the commit
-      (`isEditedPath`; in GitButler the working copy is the files the task owns read from disk and the rest from its
-      branch, `docs/engine.md` → Your edits). Elsewhere the
+      (`isEditedPath`, `docs/engine.md` → Your edits). Elsewhere the
       editor is read-only and the same strip (`IconLock`) says why: an earlier commit or the base ("This is an earlier
       commit, so it is read-only. Pick Head of the branch to edit."), a merged task, a finished one, one with no checkout
       (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go
@@ -2051,18 +2215,21 @@ Only these, and they win over anything below:
     - **Evidence, before the code** (`components/evidence/`, `lib/evidence/`, since 2026-10-26). Right under it, an
       **Evidence** `Panel` (`IconImages1`, the count of items after the title) shows what the agents attached this round
       (`docs/engine.md` → Evidence) as items grouped by kind, each group under a `SectionLabel` naming its kind
-      (Comparison, Recording, Screenshot, Test run, Check run, Note, Preview; plural with the count beside it when the
+      (Comparison, Recording, Screenshot, Test, Check, Note, Preview; plural with the count beside it when the
       group has more than one), in that order (`resolveEvidenceLayout`, from core's `listEvidenceItems`). A comparison
       is one item: its title and facts ("1280px · Dark"), what to look at, then its parts side by side (three across
       from `sm` when it has more than two), each labelled Before, After or its state. One view shot in light and in dark
       is one comparison too, its parts labelled Light and Dark and its facts the width alone ("1280px"), since its parts
       differ in theme. Recordings and screenshots sit in
       a two-column grid (one below `sm`), each with its title, facts and what to look at; a lone screenshot shows no
-      stage, since it has no before. A test or check run reads as its result: a bordered list of each command it ran
-      (`lib/evidence/runs.ts`: a `$ ` line starts a command, else the first line is the command), each with the check
-      glyph (`CheckOutcomeIcon`) and its counts ("2 pass, 0 fail") or, without counts, Passed or Failed; the raw output
-      stays behind Show the output (`secondary` `xs`, chevron) in the caption's trailing slot. The checks Shinsa ran
-      itself are a Check run titled "Checks run by Shinsa: …" (`docs/engine.md` → Evidence). A note is markdown
+      stage, since it has no before. A test or a check is a reference to one of the task's checks, never a text of its
+      own: every piece with a `checkId` (the agent's link, `shinsa://check/<id>`, and the output Shinsa kept each time it
+      ran the check) folds into one item per check (`resolveEvidenceLayout`), a Test when the agent linked it as one,
+      else a Check. It renders as the check's row from the Checks list (`CheckRowItem`, 12): its label, who added it, its
+      command and outcome, the agent's note on what it proves under it (with the review mark when the reviewer linked
+      it), and Show the output on the latest output Shinsa kept this round; a check the task no longer has reads "No
+      longer one of the task’s checks". A test or check piece without a `checkId` still reads as its result: a
+      bordered list of each command it ran (`lib/evidence/runs.ts`), each with `CheckOutcomeIcon` and its counts. A note is markdown
       (`IconNote1` in its caption): the shared `Markdown` renderer, `text-xs` in an `INSET` (`px-3.5 py-2.5`), so its
       tables, lists, code and smart links (a file, a task or a pull request in the reference syntax, 8) read as they
       do everywhere else. A run whose text names no command is a code block (`CodeFence`, monospace, copy on hover, at
@@ -2072,12 +2239,21 @@ Only these, and they win over anything below:
       image viewer on it, whose arrows step item by item ("1 of 4") and whose bar switches Before and After inside a
       comparison. A recording's frame shows its first frame (muted, metadata preloaded) under a round play glyph, and
       plays only in the viewer, with its controls (the server answers byte ranges so it seeks). An item the reviewer
-      attached carries a purple "From the agent review" badge: evidence from outside the author. With nothing
+      attached carries a purple "From the agent review" badge: evidence from outside the author. Only current evidence
+      shows (`docs/engine.md` → Evidence): an item that replaced an earlier one says so beside its title in a quiet
+      `text-2xs` `fg-2` line, never a badge ("Updated after your review", "Updated after the agent review", "Updated
+      after the checks", "Updated after the pull request feedback", else "Updated"), and the replaced and removed items
+      sit under a collapsed **Earlier versions** line at the end of the panel (`DisclosureHeader` as Advanced in a
+      service form: `line`, `glyph`, `text-2xs` `fg-2`, the count beside it; `task:<taskId>:evidence:panel:earlier`),
+      each over its status ("Replaced by a later version", "Removed: " and the agent's reason) and drawn as in the panel
+      (the image viewer steps through them only while the line is open), so stale proof is never read as the work as
+      it is. With every item removed the panel says "The agents removed
+      the evidence they attached this round." over that line. With nothing
       attached, the panel says so ("No screenshots, recordings or test runs were attached this round. Request changes
       to ask the agent for them."), so a missing proof is visible, not silent. 20px between groups, 4px from a group's
       label to its items. When the task has no work report and its changes cannot be read (a merged branch that was
       cleaned up), the tab says so in one quiet line and still shows this panel under it, since the Overview points
-      here with one line that counts the items by kind ("1 comparison, 1 recording and 2 test runs in the review",
+      here with one line that counts the items by kind ("1 comparison, 1 recording and 2 tests in the review",
       `describeEvidenceSummary`).
     - **Reading order, by context.** The chapters follow how you come to understand a change: **How it's built**
       (Approach, How it works, How to test, then **Pre-merge steps** and **Post-merge steps** when the agent left
@@ -2150,8 +2326,7 @@ Only these, and they win over anything below:
         panel: each risk the agent named as a row with its title, the risk and its snippet, the row you are on washed `primary-a1`.
       - **How to test** (`components/review/testing.tsx`, `TestingPanel`): two parts, each under a quiet `text-2xs`
         label, and never a checklist. **Covered by tests**: the agent's one or two lines on what the tests cover, as
-        plain text, then one line on the checks ("All 4 checks passed. The Overview lists each check."); the checks
-        themselves are the Overview's. Under them, when the checks measured it, the changed-line coverage in one
+        plain text, then the Checks list in both stages (12, The Checks list). Under them, when the checks measured it, the changed-line coverage in one
         `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines.", or "All 42 changed
         lines are covered.") and a quiet `text-2xs` toggle, Show 3 files, that opens the files: each a `FileLink`, "10
         of 14 lines" and, when some are missed, "Not covered:" with each range a `FileLink` into Code at those lines
@@ -2178,7 +2353,7 @@ Only these, and they win over anything below:
     - **Your comments**, each with Remove; then **Everything else**, collapsed: the changed files nothing above points
       at, each a file link with its counts, and the findings you dismissed in earlier rounds, compact.
     - **Every point once.** A point appears in one chapter only; there is no separate attention list, no phase
-      walkthrough (What changed is the Overview's) and no checks list.
+      walkthrough (What changed is the Overview's) and no second checks list: the Checks list is How to test's.
     - **The review card** is how every point and every review comment looks, anywhere: a `CARD`
       (`components/review/note.tsx`, `ReviewNote`) in one of two variants, picked by what it is (`isFindingItem` in
       `lib/review/report.ts`: a finding is the one the agent review wrote).
@@ -2301,11 +2476,19 @@ Only these, and they win over anything below:
       as a queue section folds, and each project remembers its fold (`services:project:<projectId>`, `resolveServiceGroupId`, 40). When two or more of
       the project's services are not running, the header ends with a play button (`icon-sm`, `IconPlay`, no text,
       the tooltip "Start all services in ‹project›", `describeStartAll`; the section's action, so a press on it never
-      folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as a row does, so the play
-      button stands in the column of each row's last button, while the chevron stays after the counts. The rows follow one
+      folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as every row does, so the play
+      button stands in the column of each row's last button, while the chevron stays after the counts. A row's last
+      button sits 4px from the row's end, as far as a task run's 24px buttons sit from the top and bottom of its 32px
+      row (measured: 4px right, 4px top), so every Start, Restart and Stop and the header's play button share one x and
+      no row's button sits tighter to its edge than another's (a 2px inset, tried on 2026-10-28, matched the task runs
+      and crowded the two-line service rows). The rows follow one
       another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
       (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
-      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). A row
+      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). Its bottom is inset by as much
+      only while the last project is folded (`has-[>section:last-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
+      a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
+      popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
+      sits from the popover's sides. A row
       (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
       mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
@@ -2374,6 +2557,29 @@ Only these, and they win over anything below:
       disabled, at none) and Done. Remove asks in the footer itself, with no dialog: "Remove 2 services?" over "They
       stop and their terminals close.", Cancel and Remove; Remove removes them all in one call (`POST
       /api/services/remove`) and clears the ticks, and a refusal keeps them.
+    - **A task's runs under its service** (since 2026-10-27; `docs/engine.md` → Services → Runs for a task). Under
+      a service's row the popover lists each task that runs it, or whose run failed (`listTaskServiceRuns`; a stopped
+      one is left out, so the list stays what is running): `TaskRunRow`, indented 24px (`ps-6`) under the row and
+      joined to it by a tree line, as the Code tab's file tree draws its guides (`bg-bg-a4`, 1px): a vertical line that
+      starts 4px under the service's tile (drawn in the service's row, `top-7.5`, centred under the tile), runs through
+      each run and ends at the last one's middle, and a short arm into each run that stops 5px before its tile; each run
+      is 32px tall (`h-8`); then one
+      line of the state's small tile, the task's handle and title ("LOC-10 Add task-scoped services", `fg-3`,
+      `text-xs`, truncated; "A finished task" once it is gone) and the state at its end in its tone, then the same
+      run buttons as a service's row. Pressing it opens that run's terminal. The trigger and a project's header still
+      count your own runs only, so a task starting its dev server never turns the top bar's label. On the Terminal
+      page a task run's tab is a service tab like yours: the toolbar's Restart and Stop act on that run
+      (`listProjectServiceRuns` finds the service in front among every run).
+    - **A task's Services** (`components/services/task-menu.tsx`, `TaskServicesFact`). A task's facts (its status,
+      repository, branch, checks, priority…) have a Services item whenever its project has a service the task can run
+      (`listTaskServices`, core); none, and it is not there. It is a fact like the others (`FACT` and
+      `FACT_INTERACTIVE`, `components/task/fact.ts`): the server glyph and "Services", or "1 service running", "2
+      services starting", "1 service failed" in its tone (`describeTaskServicesFact`), and a press opens its popover,
+      washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
+      ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
+      `ServiceRow` per service for this task, the list inset 6px on every side (`p-1.5`) so the first tile sits 12px
+      from the popover's side and 12px from the header's hairline: its state is the task's run's, Start starts it in
+      the worktree, and the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
@@ -2389,8 +2595,9 @@ Only these, and they win over anything below:
       stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
     - **Tabs** (`tab-bar.tsx`). A tab is the kit's segmented tab, 22px inside the 26px list: its mark, the label (the
-      name you gave it, else the shell's title, else the folder's name; a service's tab is its name;
-      `resolveTerminalLabel` in core), and a close button (`icon-2xs`, 18px) revealed on hover and always on the
+      name you gave it, else the shell's title, else the folder's name; a service's tab is its name, and a task's
+      run of one adds the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core, `resolveTerminalTabLabel`),
+      and a close button (`icon-2xs`, 18px) revealed on hover and always on the
       active tab. The button sits in an even 2px inset: 2px from the tab's top and bottom, and the tab's end padding
       is 2px too (`pe-0.5` over the kit's `px-2`; measured), so the × is centred in its corner. A shell's mark is
       `IconConsole`, `IconConsoleFilled` on the tab in front (19, the filled rule); a service's is its state's glyph
@@ -2561,7 +2768,7 @@ Only these, and they win over anything below:
       `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:`, never an array index:
       `task:<taskId>:review:card:<point>` (the point's kind and a hash of its place and text,
       `resolveReviewItemIdentity`), `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`
-      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`,
+      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`, `task:<taskId>:evidence:panel:earlier`,
       `task:<taskId>:chat:tool:<callKey>` (the chat's rows under `DisclosureScope`, `useDisclosureScope`),
       `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`,
       `services:project:<id>`, `roadmap:group:<group>`, `settings:mcp:server:<id>`, and `ui:…` for `/ui`.
@@ -3439,8 +3646,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, toasts, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -5040,8 +5247,11 @@ anchor (`sideOffset` 4).
   differs, 13); without it nothing opens.
 - **Toast.** Neutral surface; the type sets only the icon. Content `p-3`,
   `text-sm`, 2px between title and description, 8px to the action. Icons
-  follow the 32px row (14px, 8px to the text, 11px from
-  the edge). `Alert` shares the 12px inset and the 2px title → description.
+  are `sm` (14px, the size beside the toast's 13px text), 11px from the edge
+  and 6px to the text, the icon ↔ label of a menu row or a button (Where Shinsa
+  differs, 20): the toast's 8px gap less the icon box's -2px end margin, so the
+  action stays 8px from the text. A one-line toast centres the icon on the
+  title's cap height; with a description it sits on the title, 2.5px up. `Alert` shares the 12px inset and the 2px title → description.
   A status alert's buttons speak in its status: an outline or secondary
   button takes the hue's 8% fill (14% hover) and a 32% border (48% hover)
   with the status ink; a ghost button the ink and an 8% hover wash. `Alert`

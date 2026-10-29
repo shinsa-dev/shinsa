@@ -3,7 +3,6 @@ import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { useCoverageDetection } from '@/lib/connection/coverage.ts';
-import { useWorkspaceSupport } from '@/lib/connection/workspaces.ts';
 import { listLooseRepos, listProjects, PROJECT_ACTIONS, type ProjectActions } from '@/lib/projects.ts';
 import { resolveRepoKey } from '@/lib/workspaces.ts';
 import { SettingsBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
@@ -40,7 +39,6 @@ export function ProjectSettings({
   const projects = listProjects(state);
   const loose = listLooseRepos(state);
   const repoKey = resolveRepoKey(Object.values(state.repos));
-  const support = useWorkspaceSupport(repoKey);
   const detected = useCoverageDetection(repoKey);
   return (
     <SettingsGroup
@@ -57,7 +55,6 @@ export function ProjectSettings({
           state={state}
           project={project}
           actions={actions}
-          support={support}
           detected={detected}
         />
       ))}
@@ -71,7 +68,7 @@ export function ProjectSettings({
           }
         >
           {loose.map((repo) => (
-            <LooseRepoRow key={repo.id} repo={repo} actions={actions} support={support} detected={detected} />
+            <LooseRepoRow key={repo.id} repo={repo} actions={actions} detected={detected} />
           ))}
         </SettingsBlock>
       )}

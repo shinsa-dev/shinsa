@@ -50,7 +50,9 @@ export {
   type EngineFit,
   type EngineRestartWhen,
   isPrereleaseVersion,
+  type ReleaseChannel,
   resolveEngineFit,
+  resolveReleaseChannel,
   resolveVersionOrder,
   type ShinsaBuild,
 } from './engine.ts';
@@ -84,6 +86,7 @@ export {
   sumLoadedTokens,
   type UsageFacts,
 } from './extensions.ts';
+export { APP_IDENTITY, resolveEngineLabel } from './identity.ts';
 export {
   type ClientMessage,
   type DiffFile,
@@ -120,9 +123,12 @@ export {
   isServiceActive,
   isServiceEnvKey,
   listProjectServices,
+  listServiceTaskRuns,
+  listTaskServices,
   resolveServiceState,
   resolveServicesSummary,
   resolveServiceView,
+  resolveTaskServiceCwd,
   SERVICE_LIMITS,
   type ServiceDefinition,
   type ServiceSource,
@@ -131,6 +137,8 @@ export {
   type ServicesSummary,
   type ServiceView,
   selectService,
+  selectServiceTerminal,
+  type TaskServiceView,
 } from './services.ts';
 export {
   listTerminalPlaces,

@@ -6,6 +6,7 @@ import {
   createTask,
   type Harness,
   linkSession,
+  PASSING,
   proposePlan,
   reachReviewGate,
   readyWorktree,
@@ -150,7 +151,7 @@ describe('forking a task', () => {
     proposePlan(harness, forkId);
     completePhase(harness, forkId);
     completePhase(harness, forkId);
-    harness.send({ type: 'checks.record', taskId: forkId, results: [] });
+    harness.send({ type: 'checks.record', taskId: forkId, results: PASSING });
     const reviewer = harness.activeRun(forkId);
     expect(reviewer.role).toBe('reviewer');
     expect(reviewer.fork).toBeUndefined();

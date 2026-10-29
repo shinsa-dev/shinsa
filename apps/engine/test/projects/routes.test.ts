@@ -141,17 +141,7 @@ describe('a project’s repositories and folders', () => {
     ]);
   });
 
-  test('every registered repository says whether GitButler can hold its agents', async () => {
-    const { home, engine, call, projectId } = await setup();
-    const app = await createGitRepo({ root: home, name: 'app', remote: false });
-    await call('POST', `/api/projects/${projectId}/repos`, { path: app.path });
-    const repoId = Object.keys(engine.state.repos)[0] ?? '';
-    expect(await call('GET', '/api/repos/workspaces')).toEqual({
-      support: { [repoId]: { butInstalled: true, gitButlerWorkspace: false } },
-    });
-  });
-
-  test('every registered repository says which coverage command Auto would run, or none', async () => {
+  test('every registered repository says which coverage tool Auto would use, or none', async () => {
     const { home, engine, call, projectId } = await setup();
     const app = await createGitRepo({
       root: home,
@@ -167,7 +157,7 @@ describe('a project’s repositories and folders', () => {
       detected: {
         [ids.app ?? '']: {
           tool: 'go test',
-          command: "go test ./... -coverprofile='<report folder>/cover.out'",
+          command: "The test checks of each task, run once more with go test's coverage report.",
         },
         [ids.web ?? '']: null,
       },

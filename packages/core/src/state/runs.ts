@@ -1,9 +1,10 @@
-import { addUsage } from '../costs/index.ts';
+import { addUsage, resolveMeterWindow } from '../costs/index.ts';
 import {
   DELEGATE_ROLES,
   DomainError,
   isDelegatedRun,
   type Run,
+  type RunMeter,
   type RunPurpose,
   type RunRole,
   type RunSilence,
@@ -96,14 +97,29 @@ function applyRunSessionLost(state: ShinsaState, event: EventOf<'run.session_los
   }
 }
 
+function recordMeter(run: Run, event: EventOf<'run.metered'>): RunMeter[] | null {
+  const attempt = run.attempts?.at(-1);
+  if (!attempt) return null;
+  const meters = run.meters ?? [];
+  const meter = meters.find((candidate) => candidate.attemptId === attempt.attemptId);
+  const recorded: RunMeter = {
+    attemptId: attempt.attemptId,
+    window: resolveMeterWindow(attempt),
+    from: attempt.startedAt,
+    to: event.at,
+    usage: addUsage(meter?.usage, event.usage),
+    readings: [...(meter?.readings ?? []), ...(event.readings ?? [])],
+  };
+  if (!meter) return [...meters, recorded];
+  return meters.map((candidate) => (candidate === meter ? recorded : candidate));
+}
+
 function applyRunMetered(state: ShinsaState, event: EventOf<'run.metered'>) {
   const run = state.runs[event.runId];
-  updateRun(state, event.runId, {
-    usage: addUsage(run?.usage, event.usage),
-    ...(event.weeklyPercent === undefined
-      ? {}
-      : { weeklyPercent: (run?.weeklyPercent ?? 0) + event.weeklyPercent }),
-  });
+  if (run) {
+    const meters = recordMeter(run, event);
+    updateRun(state, event.runId, { usage: addUsage(run.usage, event.usage), ...(meters ? { meters } : {}) });
+  }
   if (event.sessionId && event.sessionUsage)
     writeEntry(state, 'sessionUsage', event.sessionId, event.sessionUsage);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { findDeepLink, parseDeepLink } from '../../src/lib/deep-link.ts';
+import { findDeepLink, isLinkProtocol, parseDeepLink } from '../../src/lib/deep-link.ts';
 
 describe('parseDeepLink', () => {
   it('opens a task by its handle or id', () => {
@@ -30,6 +30,15 @@ describe('parseDeepLink', () => {
   it('ignores what is not a Shinsa link', () => {
     expect(parseDeepLink('https://example.com/task/LOC-4')).toBeNull();
     expect(parseDeepLink('not a url')).toBeNull();
+  });
+});
+
+describe('isLinkProtocol', () => {
+  it('opens only shinsa:// links, in any case, on every update channel', () => {
+    expect(isLinkProtocol('SHINSA:')).toBe(true);
+    expect(isLinkProtocol('shinsa-canary:')).toBe(false);
+    expect(parseDeepLink('shinsa-canary://task/LOC-4')).toBeNull();
+    expect(findDeepLink(['/Applications/Shinsa.app', 'shinsa-canary://home'])).toBeNull();
   });
 });
 

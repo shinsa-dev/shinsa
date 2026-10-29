@@ -1,12 +1,12 @@
 export {
   resolveChecksFixPrompt,
-  resolveConflictFixPrompt,
-  resolveConflictSteer,
+  resolveCodeFence,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
-  resolveWorkspaceUpdatedFixPrompt,
 } from './fixes.ts';
 export { type FixFocus, resolveFixFocus } from './focus.ts';
 export { resolveFollowUpPrompt } from './follow-up.ts';
@@ -29,6 +29,7 @@ export {
 } from './orchestration.ts';
 export { resolveProjectContext } from './project.ts';
 export {
+  describeEvidenceForFix,
   resolveAgentPrompt,
   resolveAnswererPrompt,
   resolveInvestigatorPrompt,

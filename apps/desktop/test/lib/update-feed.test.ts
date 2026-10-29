@@ -4,7 +4,7 @@ import type { AppUpdater } from 'electron-updater';
 import type { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor.js';
 import { GitHubProvider } from 'electron-updater/out/providers/GitHubProvider.js';
 import type { UpdateChannel } from '../../src/lib/bridge.ts';
-import { resolveDowngradeOffer, resolveUpdaterOptions } from '../../src/lib/update-channel.ts';
+import { resolveDowngradeOffer, resolveUpdaterOptions, UPDATE_FEED } from '../../src/lib/update-channel.ts';
 
 const REPO = '/shinsa-dev/shinsa/releases';
 
@@ -45,18 +45,17 @@ async function resolveFeedUpdate(channel: UpdateChannel, current: string, releas
       if (request.path === `${REPO}/latest`) return JSON.stringify({ tag_name: latest?.tag });
       const [tag, file] = request.path.replace(`${REPO}/download/`, '').split('/');
       const release = releases.find((entry) => entry.tag === tag);
-      const files = release?.prerelease ? ['beta-mac.yml'] : ['latest-mac.yml', 'beta-mac.yml'];
+      const files = !release?.prerelease
+        ? ['latest-mac.yml', 'beta-mac.yml']
+        : [tag?.includes('-canary.') ? 'canary-mac.yml' : 'beta-mac.yml'];
       if (!tag || !file || !files.includes(file)) throw new Error(`No ${request.path}`);
       return writeUpdateFile(tag);
     },
   } as unknown as ElectronHttpExecutor;
   const options = resolveUpdaterOptions(channel);
   const updater = { ...options, currentVersion: current, fullChangelog: false } as unknown as AppUpdater;
-  const provider = new GitHubProvider({ provider: 'github', owner: 'shinsa-dev', repo: 'shinsa' }, updater, {
-    isUseMultipleRangeRequest: false,
-    platform: 'darwin',
-    executor,
-  });
+  const runtime = { isUseMultipleRangeRequest: false, platform: 'darwin' as const, executor };
+  const provider = new GitHubProvider(UPDATE_FEED, updater, runtime);
   const info = await provider.getLatestVersion();
   const file = requested.at(-1)?.split('/').slice(-2).join('/');
   const order = resolveVersionOrder(info.version, current);
@@ -118,5 +117,54 @@ describe('the release feed, read by electron-updater as each channel sets it up'
       offered: true,
     });
     expect((await resolveFeedUpdate('beta', '4.1.0-beta.1', releases)).offered).toBe(false);
+  });
+
+  it('never offers a canary on Beta or Stable, even when it was published last', async () => {
+    const releases = [
+      { tag: 'v3.1.1-canary.2', prerelease: true },
+      { tag: 'v3.1.0-beta.1', prerelease: true },
+      STABLE_3,
+    ];
+    expect(await resolveFeedUpdate('beta', '3.0.0', releases)).toEqual({
+      version: '3.1.0-beta.1',
+      file: 'v3.1.0-beta.1/beta-mac.yml',
+      offered: true,
+    });
+    expect(await resolveFeedUpdate('stable', '2.9.0', releases)).toEqual({
+      version: '3.0.0',
+      file: 'v3.0.0/latest-mac.yml',
+      offered: true,
+    });
+  });
+
+  it('offers the newest canary on Canary, even when a beta or stable release came after it', async () => {
+    const releases = [
+      { tag: 'v3.1.0-beta.1', prerelease: true },
+      { tag: 'v3.0.1', prerelease: false },
+      { tag: 'v3.1.1-canary.2', prerelease: true },
+      { tag: 'v3.1.1-canary.1', prerelease: true },
+      STABLE_3,
+    ];
+    expect(await resolveFeedUpdate('canary', '3.1.1-canary.1', releases)).toEqual({
+      version: '3.1.1-canary.2',
+      file: 'v3.1.1-canary.2/canary-mac.yml',
+      offered: true,
+    });
+    expect((await resolveFeedUpdate('canary', '3.1.1-canary.2', releases)).offered).toBe(false);
+  });
+
+  it('offers the newest canary to a stable or beta build switched to Canary', async () => {
+    const releases = [{ tag: 'v3.0.1-canary.3', prerelease: true }, STABLE_3];
+    expect(await resolveFeedUpdate('canary', '3.0.0', releases)).toEqual({
+      version: '3.0.1-canary.3',
+      file: 'v3.0.1-canary.3/canary-mac.yml',
+      offered: true,
+    });
+    const afterBeta = [{ tag: 'v3.0.2-canary.1', prerelease: true }, BETA_3_0_1, STABLE_3];
+    expect(await resolveFeedUpdate('canary', '3.0.1-beta.1', afterBeta)).toEqual({
+      version: '3.0.2-canary.1',
+      file: 'v3.0.2-canary.1/canary-mac.yml',
+      offered: true,
+    });
   });
 });

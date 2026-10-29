@@ -8,6 +8,7 @@ import {
   resolveIdleCompaction,
   resolveRepoWorkspace,
   type Settings,
+  type UsageRate,
 } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
@@ -23,7 +24,6 @@ import {
 } from '@/lib/accounts/limits.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
-import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
@@ -94,7 +94,7 @@ import {
   resolveSettingsPath,
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
-import { UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
+import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate } from '@/router.ts';
@@ -130,6 +130,11 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     keywords: ['compaction', 'compact', 'eunoe', 'fold', 'idle sessions', 'context window'],
   },
   { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'delegations', 'merge'] },
+  {
+    title: 'Memory',
+    icon: 'IconLightbulbGlow',
+    keywords: ['rules', 'remember', 'preferences', 'instructions'],
+  },
   {
     title: VERSIONS_SECTION,
     icon: 'IconArrowDown',
@@ -188,7 +193,6 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
       'colours',
       'where agents work',
       'worktrees',
-      'gitbutler',
       'checkout',
     ],
   },
@@ -396,7 +400,11 @@ function listRoleChoices(
   });
 }
 
-function listUsageChoices(settings: Settings, snapshot: AccountsSnapshot | null): Command[] {
+function listUsageChoices(
+  settings: Settings,
+  snapshot: AccountsSnapshot | null,
+  rates: Map<string, UsageRate | null> | null
+): Command[] {
   const choices = [
     settingChoice(
       'usage-limit',
@@ -406,7 +414,7 @@ function listUsageChoices(settings: Settings, snapshot: AccountsSnapshot | null)
       (value) => patchSettings({ taskUsageLimit: parseUsageLimit(value) })
     ),
   ];
-  if (needsCostLimit(settings, snapshot?.accounts ?? null)) {
+  if (needsCostLimit(settings, snapshot?.accounts ?? null, rates)) {
     choices.push(
       settingChoice(
         'budget',
@@ -439,25 +447,29 @@ function listUsageChoices(settings: Settings, snapshot: AccountsSnapshot | null)
   return choices;
 }
 
-export interface WorkspaceChoices {
-  repos: Repo[];
-  support: WorkspaceSupportMap | null;
-}
-
-function listWorkspaceChoices({ repos, support }: WorkspaceChoices): Command[] {
+function listWorkspaceChoices(repos: Repo[]): Command[] {
   return [...repos]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((repo) => {
       const choice = settingChoice(
         `workspace.${repo.id}`,
         `${WORKSPACE_TITLE} in ${repo.name}`,
-        listWorkspaceItems(repo, support),
+        listWorkspaceItems(),
         resolveRepoWorkspace(repo),
         (value) => void changeWorkspace(repo, value as Parameters<typeof changeWorkspace>[1]),
         true
       );
-      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'gitbutler', 'main checkout'] };
+      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'main checkout'] };
     });
+}
+
+function listChannelChoices(channel: UpdateChannel | null): Command[] {
+  if (!channel) return [];
+  return [
+    settingChoice('update-channel', UPDATES_LABEL.channel, UPDATE_CHANNEL_ITEMS, channel, (value) =>
+      applyDesktopChannel(parseUpdateChannel(value))
+    ),
+  ];
 }
 
 export function listSettingsSections(
@@ -465,9 +477,10 @@ export function listSettingsSections(
   providers: AgentProviderInfo[],
   notifications: NotificationPreferences,
   snapshot: AccountsSnapshot | null = null,
-  workspaces: WorkspaceChoices = { repos: [], support: null },
+  repos: Repo[] = [],
   explorerSide: ExplorerSide = 'left',
-  updateChannel: UpdateChannel | null = null
+  updateChannel: UpdateChannel | null = null,
+  rates: Map<string, UsageRate | null> | null = null
 ): CommandSection[] {
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
@@ -480,22 +493,12 @@ export function listSettingsSections(
         ...listWorkflowChoices(settings),
         ...listGroupChoices(settings, providers, snapshot),
         ...listRoleChoices(settings, providers, snapshot),
-        ...listUsageChoices(settings, snapshot),
-        ...listWorkspaceChoices(workspaces),
+        ...listUsageChoices(settings, snapshot, rates),
+        ...listWorkspaceChoices(repos),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),
-        ...(updateChannel
-          ? [
-              settingChoice(
-                'update-channel',
-                UPDATES_LABEL.channel,
-                UPDATE_CHANNEL_ITEMS,
-                updateChannel,
-                (value) => applyDesktopChannel(value === 'beta' ? 'beta' : 'stable')
-              ),
-            ]
-          : []),
+        ...listChannelChoices(updateChannel),
       ],
     },
     {

@@ -102,6 +102,43 @@ describe('reading what a message asks for', () => {
     expect(call?.prompt).toContain('Message:\nAlso add search');
   });
 
+  test.each([
+    ['awaiting_merge', 'merge'],
+    ['awaiting_review', 'review'],
+  ] as const)(
+    'a round waiting at your %s asks whether the message is about that round',
+    async (stage, decision) => {
+      const asked: string[] = [];
+      const ask: QuickJson = <T>(_system: string, prompt: string) => {
+        asked.push(prompt);
+        return Promise.resolve({
+          kind: 'feedback',
+          shape: 'answer',
+          title: 'Dev server',
+          why: 'To try it.',
+        } as T);
+      };
+      const task = createTask({ title: 'Add MCP v2', stage, stageReason: 'waiting for you' });
+      expect(
+        await resolveMessageClass(task, 'Can you start the dev server so I can test the UI?', ask)
+      ).toEqual({
+        kind: 'feedback',
+        title: 'Dev server',
+        why: 'To try it.',
+        shape: 'answer',
+      });
+      const [read] = asked;
+      expect(read).toContain(`Now: round 1 is finished and waits for the human to ${decision} it.`);
+      expect(read).toContain(
+        `The work of the current round is finished and waits for the human to ${decision} it. Nothing else is in progress. What is this message?`
+      );
+      expect(read).toContain(
+        `"feedback": about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script)`
+      );
+      expect(read).toContain('not something needed to try or finish this round');
+    }
+  );
+
   test('an answer outside the options, or none, leaves the message to Shinsa’s default', async () => {
     const task = createTask();
     expect(await resolveMessageClass(task, 'x', answer(null))).toBeNull();
@@ -455,7 +492,7 @@ const OPERATION_PLAN: PlanDocument = {
   approach: 'Move, then list.',
   files: [],
   outOfScope: [],
-  verification: ['List the folders after the move.'],
+  verification: [],
   questions: [],
   impact: 'Moves 39 folders; the dry run lists them. Undo by moving them back.',
 };

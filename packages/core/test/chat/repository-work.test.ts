@@ -4,7 +4,6 @@ import {
   createHarness,
   createTask,
   type Harness,
-  proposePlan,
   pullRequest,
   reachShipping,
   registerRepo,
@@ -56,24 +55,12 @@ describe('other work in the repository', () => {
     expect(serializeRepositoryWork(harness.state, taskId, { [quiet]: many })).toContain('f39.ts and 2 more.');
   });
 
-  test('shows a GitButler stack from both sides', () => {
+  test('lists the most recently active task first', () => {
     const harness = createHarness();
-    const repoId = registerRepo(harness);
-    harness.send({ type: 'repo.update', repoId, patch: { workspace: 'gitbutler' } });
-    const below = createTask(harness, { request: 'Rework the exporter' });
-    const above = createTask(harness, { request: 'Stream the export' });
-    const third = createTask(harness, { request: 'Log the export' });
-    proposePlan(harness, above);
-    harness.send({ type: 'task.stack', taskId: above, branch: `fix/${below}` });
-    expect(serializeRepositoryWork(harness.state, above, {})).toContain(
-      `fix/${below} · this task is stacked on it ·`
-    );
-    expect(serializeRepositoryWork(harness.state, below, {})).toContain(
-      `fix/${above} · stacked on this task ·`
-    );
-    expect(serializeRepositoryWork(harness.state, third, {})).toContain(
-      `fix/${above} · stacked on ${link(harness, below)} ·`
-    );
+    const taskId = createTask(harness, { request: 'Fix the login' });
+    const older = createTask(harness, { request: 'Rework the session' });
+    const newer = createTask(harness, { request: 'Stream the export' });
+    expect(listRepositoryWork(harness.state, taskId).map((task) => task.id)).toEqual([newer, older]);
   });
 
   test('shows a round stacked on the task’s own open pull request', () => {

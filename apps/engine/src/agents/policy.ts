@@ -1,4 +1,4 @@
-import { HUMAN_ONLY_SETTINGS } from '@shinsa/core';
+import { HUMAN_ONLY_SETTINGS, isWholeSuiteCommand } from '@shinsa/core';
 import { HUMAN_ONLY_ENGINE_COMMANDS } from '../cli/engine.ts';
 import { SURFACE } from '../surface/index.ts';
 
@@ -8,8 +8,6 @@ interface ForbiddenCommand {
 }
 
 const GIT = String.raw`\bgit(?:\s+(?:-[cC]\s+\S+|--[\w-]+(?:=\S+)?))*\s+`;
-
-const BUT = String.raw`(?:^|[;&|(\n]|\$\()\s*(?:\w+=\S*\s+)*but(?:\s+(?:-C\s+\S+|--[\w-]+(?:=\S+)?))*\s+`;
 
 function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -40,9 +38,9 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
     },
     {
       pattern:
-        /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|waive-checks|workspace|coverage(?:-command|-report|-format)?)(?![\w-])/,
+        /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|workspace|coverage(?:-command|-report|-format)?)(?![\w-])/,
       reason:
-        'Only the human changes a repository’s check commands, works without checks, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
+        'Only the human changes a repository’s check commands, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
     },
     {
       pattern: /\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
@@ -68,16 +66,14 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
       ),
       reason: 'Stay on the task branch.',
     },
-    {
-      pattern: new RegExp(
-        `${BUT}(?!(?:status|diff|show|help|resolve\\s+(?:conflicts|apply|status))(?![\\w-])|-)`
-      ),
-      reason:
-        'In a GitButler workspace Shinsa commits, pushes and moves branches, and only the human updates it. Read it with `but status`, `but diff` and `but show`, and resolve a conflicted commit in place with `but resolve conflicts` and `but resolve apply`.',
-    },
   ];
 }
 
+const WHOLE_SUITE_REASON =
+  'This runs the whole suite, which is slow and slows every other agent on this machine. Run the test files or folders you changed (`bun test src/parser`), or your task’s checks; Shinsa runs the checks itself after you hand over, and CI runs the whole suite on the pull request.';
+
 export function resolveForbiddenReason(command: string, defaultBranch: string) {
-  return listForbiddenCommands(defaultBranch).find((rule) => rule.pattern.test(command))?.reason ?? null;
+  const rule = listForbiddenCommands(defaultBranch).find((forbidden) => forbidden.pattern.test(command));
+  if (rule) return rule.reason;
+  return isWholeSuiteCommand(command) ? WHOLE_SUITE_REASON : null;
 }

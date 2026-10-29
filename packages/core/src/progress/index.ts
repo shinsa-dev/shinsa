@@ -1,4 +1,5 @@
 import {
+  type FixReason,
   isWatchdogActive,
   needsRepository,
   type PipelineStep,
@@ -152,12 +153,22 @@ function resolveStepsKey(task: Task, keys: DisplayKey[]): DisplayKey | null {
   return null;
 }
 
+function isPullRequestFix(reason: FixReason | null) {
+  return reason === 'pull_request' || reason === 'conflict' || reason === 'update';
+}
+
+function isBuilding(task: Task) {
+  const reported = new Set(task.phaseReports.map((report) => report.index)).size;
+  return reported < (task.plan?.document?.phases.length ?? 0);
+}
+
 function resolveStageKey(task: Task, keys: DisplayKey[]) {
-  if (task.stage === 'fixing' && task.fixFor === 'pull_request') return 'pull-request';
+  if (task.stage === 'fixing' && isPullRequestFix(task.fixFor)) return 'pull-request';
   const steps = resolveStepsKey(task, keys);
   if (steps) return steps;
   const key = STAGE_DISPLAY[task.stage];
-  return key === 'check' && !keys.includes(key) ? 'build' : key;
+  if (key !== 'check') return key;
+  return keys.includes(key) && !isBuilding(task) ? key : 'build';
 }
 
 function resolveCurrentIndex(task: Task, keys: DisplayKey[]) {

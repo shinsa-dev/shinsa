@@ -32,6 +32,43 @@ function createUsageWaitTask(now: number, id: string, autoResume: boolean) {
   };
 }
 
+const BUDGET_USAGE = {
+  inputTokens: 1_840_000,
+  outputTokens: 92_000,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  costUsd: 5.42,
+};
+
+function listUsageHistory(now: number) {
+  return Array.from({ length: 5 }, (_, index) => {
+    const from = now - (5 - index * 0.5) * HOUR;
+    const usage = { ...BUDGET_USAGE, costUsd: 2.71 };
+    return createSampleRun(now, {
+      id: `history-${index}`,
+      taskId: `history-${index}`,
+      status: undefined,
+      startedAt: from,
+      endedAt: from + 10 * MINUTE,
+      outcome: 'completed',
+      usage,
+      meters: [
+        {
+          attemptId: `history-${index}`,
+          window: 'account:work',
+          from,
+          to: from + 10 * MINUTE,
+          usage,
+          readings: [
+            { percent: index * 6, at: from, resetsAt: null },
+            { percent: index * 6 + 6, at: from + 10 * MINUTE, resetsAt: null },
+          ],
+        },
+      ],
+    });
+  });
+}
+
 const POST_MERGE: Task['pipeline'] = [
   'plan',
   'build',
@@ -69,12 +106,14 @@ function createBackfillDocument(): PlanDocument {
     approach: '',
     files: [],
     outOfScope: [],
-    verification: ['A test for a product without a currency', 'The dry run’s count on staging'],
+    verification: [
+      { label: 'Currency tests', command: 'bun test apps/api/test/currency.test.ts', phases: [1] },
+      { label: 'Backfill dry run', command: 'bun scripts/backfill-currency.ts --dry-run', phases: [2] },
+    ],
     questions: [],
     operation: BACKFILL_STEPS,
     impact: BACKFILL_IMPACT,
     evidence: ['test', 'screenshot'],
-    checks: ['bun test apps/api/test/currency.test.ts', 'bun scripts/backfill-currency.ts --dry-run'],
     approval: true,
   };
 }
@@ -163,7 +202,7 @@ export function createOverviewScene(now: number) {
       title: 'Add a dark mode toggle to the paywall editor',
       stage: 'triage',
       stageReason: 'waiting for the setup to be fixed',
-      configProblems: [{ kind: 'check_commands', detail: 'paywall-next has no check commands.' }],
+      configProblems: [{ kind: 'default_branch', detail: 'paywall-next has no default branch.' }],
     }),
     signIn: createSampleTask(now, { id: 'sign-in', title: 'Retry failed webhook deliveries' }),
     monitor: createSampleTask(now, {
@@ -175,7 +214,26 @@ export function createOverviewScene(now: number) {
     }),
     secret: createSampleTask(now, { id: 'secret', title: 'Test the checkout flow end to end' }),
     failure: createSampleTask(now, { id: 'failure', title: 'Stream MCP tool results', stage: 'fixing' }),
+    conflict: createSampleTask(now, {
+      id: 'conflict',
+      title: 'Move the paywall cache to the edge',
+      stage: 'fixing',
+      fixFor: 'conflict',
+      stageReason: 'resolving conflicts with main',
+      branch: 'feat/edge-cache',
+      pullRequest: {
+        number: 427,
+        url: 'https://github.com/superwall/paywall-next/pull/427',
+        state: 'open',
+        base: 'main',
+        checks: 'passing',
+        unresolvedComments: 0,
+        mergeable: false,
+        updatedAt: now - 4 * MINUTE,
+      },
+    }),
     budget: createSampleTask(now, { id: 'budget', title: 'Rewrite the framework commands' }),
+    keyed: createSampleTask(now, { id: 'keyed', title: 'Rename the billing webhooks' }),
     ranOut: createSampleTask(now, { id: 'ran-out', title: 'Check the preview link once staging deploys' }),
     question: createSampleTask(now, { id: 'question', title: 'Remove the v1 chat endpoint' }),
     review: createSampleTask(now, {
@@ -231,8 +289,10 @@ export function createOverviewScene(now: number) {
         feedback: 'Keep the folder step first; people expect it.',
         changeSummary: 'Moved the folder step back to the start and merged the two account steps.',
         changes: [
-          { kind: 'phases_reordered' },
+          { kind: 'phase_changed', title: 'Check accounts and tools in one step' },
+          { kind: 'phase_added', title: 'Save each answer as it is given' },
           { kind: 'phase_removed', title: 'Ask for a second account' },
+          { kind: 'phases_reordered' },
           { kind: 'files', added: 1, removed: 2 },
         ],
       },
@@ -385,19 +445,19 @@ export function createOverviewScene(now: number) {
       id: 'setup-gate',
       taskId: 'setup',
       type: 'configuration',
-      title: 'No checks to run',
+      title: 'The default branch is missing',
       body: [
         'Shinsa stopped before any agent started because the setup is not complete:',
-        '- paywall-next has no check commands.',
+        '- paywall-next has no default branch.',
         '',
-        'Add check commands in the repository settings, or continue without checks.',
+        'Set the default branch in the repository settings, then verify the setup again.',
       ].join('\n'),
     }),
     signIn: createSampleGate(now, {
       id: 'sign-in-gate',
       taskId: 'sign-in',
       type: 'sign_in',
-      title: 'Sign in to Claude as christo@example.com',
+      title: 'Paused: christo@example.com needs signing in',
       body: 'Claude signed this account out, so the agent stopped. Signing in starts the step again.',
       provider: 'claude',
       account: { id: 'side', email: 'christo@example.com' },
@@ -421,7 +481,7 @@ export function createOverviewScene(now: number) {
       taskId: 'budget',
       cause: 'budget',
       title: 'Reached its usage limit',
-      body: 'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. Continue to allow another 10%, or cancel the task.',
+      body: 'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. Continue to allow another 10%, or cancel the task.',
     }),
     ranOut: createSampleGate(now, {
       id: 'ran-out-gate',
@@ -504,6 +564,7 @@ export function createOverviewScene(now: number) {
   const runs = {
     quietShort: createQuietRun(now, 'quiet-short', 6),
     quietLong: createQuietRun(now, 'quiet-long', 23),
+    conflict: createSampleRun(now, { id: 'conflict-run', taskId: 'conflict', purpose: 'fix' }),
   };
   const state = createSampleState({
     tasks: [...Object.values(tasks), ...usageWaits.map((entry) => entry.task)],
@@ -518,14 +579,40 @@ export function createOverviewScene(now: number) {
         status: undefined,
         endedAt: now - 2 * MINUTE,
         outcome: 'completed',
-        usage: {
-          inputTokens: 1_840_000,
-          outputTokens: 92_000,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          costUsd: 5.42,
-        },
-        weeklyPercent: 12,
+        usage: BUDGET_USAGE,
+        attempts: [
+          {
+            attemptId: 'budget-attempt',
+            provider: 'claude',
+            model: null,
+            resumed: false,
+            handoff: null,
+            startedAt: now - 40 * MINUTE,
+            account: { id: 'work', email: 'work@example.com' },
+          },
+        ],
+        meters: [
+          {
+            attemptId: 'budget-attempt',
+            window: 'account:work',
+            from: now - 40 * MINUTE,
+            to: now - 2 * MINUTE,
+            usage: BUDGET_USAGE,
+            readings: [
+              { percent: 30, at: now - 40 * MINUTE, resetsAt: null },
+              { percent: 42, at: now - 2 * MINUTE, resetsAt: null },
+            ],
+          },
+        ],
+      }),
+      ...listUsageHistory(now),
+      createSampleRun(now, {
+        id: 'keyed-run',
+        taskId: 'keyed',
+        status: undefined,
+        endedAt: now - 5 * MINUTE,
+        outcome: 'completed',
+        usage: { ...BUDGET_USAGE, costUsd: 1.75 },
       }),
       ...delegations.runs,
     ],

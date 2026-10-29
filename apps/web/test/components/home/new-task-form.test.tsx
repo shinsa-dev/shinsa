@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
@@ -66,6 +66,72 @@ beforeEach(() => {
 
 afterEach(() => {
   stopFakeServer();
+});
+
+function serveUploads() {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = mock(async (_url: string, init: RequestInit) => {
+    const { name, mimeType } = JSON.parse(String(init.body)) as { name: string; mimeType: string | null };
+    return Response.json({
+      kind: mimeType?.startsWith('image/') ? 'image' : 'file',
+      name,
+      url: `/api/attachments/1/${name}`,
+      path: `/data/attachments/1/${name}`,
+      mimeType,
+      size: 1,
+    });
+  }) as unknown as typeof globalThis.fetch;
+  const created = spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+  return () => {
+    globalThis.fetch = realFetch;
+    created.mockRestore();
+  };
+}
+
+describe('NewTaskForm attachments', () => {
+  it('sends a pasted image and a dropped file with the request, as the attachments block', async () => {
+    const restore = serveUploads();
+    renderForm();
+    fireEvent.paste(field(), {
+      clipboardData: { files: [new File(['x'], 'shot.png', { type: 'image/png' })] },
+    });
+    const form = field().parentElement as HTMLElement;
+    const dataTransfer = { files: [new File(['y'], 'log.txt', { type: 'text/plain' })], types: ['Files'] };
+    fireEvent.dragOver(form, { dataTransfer });
+    fireEvent.dragLeave(form, { dataTransfer, relatedTarget: null });
+    fireEvent.dragOver(form, { dataTransfer: { files: [], types: ['text/plain'] } });
+    fireEvent.drop(form, { dataTransfer: { files: [], types: ['text/plain'] } });
+    fireEvent.drop(form, { dataTransfer });
+    await waitFor(() => expect(screen.queryAllByLabelText(/^Attaching/)).toHaveLength(0));
+    expect(screen.getByRole('img', { name: 'shot.png' })).toBeTruthy();
+    expect(screen.getByText('log.txt')).toBeTruthy();
+    await send('Start');
+    const [command] = listSentCommands() as { request: string }[];
+    expect(command?.request).toBe(
+      [
+        '<attachments>',
+        '<attachment kind="image" display_name="shot.png" mime_type="image/png" size_bytes="1" path="/data/attachments/1/shot.png" url="/api/attachments/1/shot.png" />',
+        '<attachment kind="file" display_name="log.txt" mime_type="text/plain" size_bytes="1" path="/data/attachments/1/log.txt" url="/api/attachments/1/log.txt" />',
+        '</attachments>',
+      ].join('\n')
+    );
+    expect(screen.queryByRole('list', { name: 'Attachments' })).toBeNull();
+    restore();
+  });
+
+  it('attaches from the file picker and removes a file you take back', async () => {
+    const restore = serveUploads();
+    renderForm();
+    const input = document.querySelector('input[type=file]') as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Attach files' }));
+    fireEvent.change(input, { target: { files: [new File(['z'], 'spec.md')] } });
+    fireEvent.change(input, { target: { files: null } });
+    await waitFor(() => expect(screen.getByText('spec.md')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Remove spec.md' }));
+    expect(screen.queryByText('spec.md')).toBeNull();
+    fireEvent.paste(field(), { clipboardData: { files: [] } });
+    restore();
+  });
 });
 
 describe('NewTaskForm', () => {

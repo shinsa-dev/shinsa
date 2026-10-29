@@ -29,7 +29,7 @@ describe('other work in the repository', () => {
         approach: 'Write them.',
         files: [],
         out_of_scope: [],
-        verification: ['The checks pass.'],
+        verification: [{ label: 'Round file', command: 'true', phases: [1] }],
         questions: [],
       });
     });

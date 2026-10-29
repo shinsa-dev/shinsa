@@ -1,4 +1,5 @@
 import type { FileSink, Subprocess } from 'bun';
+import { resolveBrowserEnv } from '../../../extensions/definitions.ts';
 import { describeError } from '../../../log/index.ts';
 import { killProcessGroup } from '../../../shell/index.ts';
 
@@ -63,7 +64,7 @@ function parseLine(line: string): Params | null {
 
 function resolveCodexEnv(extra: Record<string, string | undefined>) {
   const { CLAUDECODE: _claudeCode, ...env } = Bun.env;
-  return { ...env, ...extra };
+  return { ...resolveBrowserEnv(env), ...extra };
 }
 
 async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: string) => void) {
@@ -107,7 +108,7 @@ export class CodexClient {
     const stderr = readLines(this.#process.stderr, (line) => this.#keepStderr(line));
     this.exited = Promise.allSettled([this.#process.exited, stdout, stderr]).then(([code]) => {
       const exit = code.status === 'fulfilled' ? code.value : 'unknown';
-      this.#end(`Codex’s app server exited with code ${exit}.`);
+      this.#end(`Codex stopped unexpectedly (exit code ${exit}).`);
     });
   }
 
@@ -150,8 +151,12 @@ export class CodexClient {
 
   #write(message: Params) {
     if (this.#closed) return;
-    this.#stdin.write(`${JSON.stringify(message)}\n`);
-    this.#stdin.flush();
+    try {
+      this.#stdin.write(`${JSON.stringify(message)}\n`);
+      this.#stdin.flush();
+    } catch {
+      killProcessGroup(this.#process.pid);
+    }
   }
 
   #keepStderr(line: string) {

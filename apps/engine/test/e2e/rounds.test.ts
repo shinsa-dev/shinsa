@@ -22,6 +22,7 @@ const BUILD: AgentScript = async (agent) => {
   const phase = (agent.phaseIndex ?? 0) + 1;
   const { round } = agent;
   agent.write(`round-${round}-phase-${phase}.txt`, `round ${round}, phase ${phase}\n`);
+  agent.write('a.txt', `greeting of round ${round}\n`);
   await agent.call('complete_phase', {
     summary: `Wrote round ${round}, phase ${phase}.`,
     spots: [
@@ -238,7 +239,7 @@ describe('a task that runs in rounds', () => {
         approach: 'Directly.',
         files: [],
         out_of_scope: [],
-        verification: ['The checks pass.'],
+        verification: [{ label: 'Round file', command: 'true', phases: [1] }],
         questions: [],
       });
     });
@@ -294,7 +295,7 @@ describe('a task that runs in rounds', () => {
         approach: 'Directly.',
         files: [],
         out_of_scope: [],
-        verification: ['The checks pass.'],
+        verification: [{ label: 'Round file', command: 'true', phases: [1] }],
         questions: [],
         approval: true,
       });

@@ -376,7 +376,7 @@ describe('services over HTTP', () => {
     const add = (name: string) =>
       terminals.addService(projectId, { name, cwd: repoPath, command: 'sleep 30', env: {} });
     const [api, web, docs] = [add('api'), add('web'), add('docs')];
-    const started = terminals.startService(api.id, 'repository');
+    const started = terminals.startService(api.id, { cwd: repoPath, place: 'repository', taskId: null });
     const refusal = async (body: unknown, origin: string | null = ORIGIN) =>
       ((await (await post('/api/services/remove', body, origin)).json()) as { error: { code: string } }).error
         .code;
@@ -424,6 +424,57 @@ describe('services over HTTP', () => {
     };
     expect(outside.error.code).toBe('service_place_invalid');
     expect(resolveServicePlace([], root, root)).toBe('folder');
+  });
+});
+
+describe('services for a task over HTTP', () => {
+  test('starts, restarts and stops a service in a task’s worktree beside its main run', async () => {
+    const { post, projectId, repoPath, root, terminals, engine } = await start();
+    const appPath = join(repoPath, 'apps/api');
+    mkdirSync(appPath, { recursive: true });
+    const service = terminals.addService(projectId, {
+      name: 'api',
+      cwd: appPath,
+      command: 'sleep 30',
+      env: {},
+    });
+    const repoId = Object.keys(engine.state.repos)[0] ?? '';
+    await engine.dispatch({ type: 'task.create', request: 'Change the api', repoId });
+    const taskId = Object.keys(engine.state.tasks)[0] ?? '';
+    await engine.dispatch({
+      type: 'task.triage',
+      taskId,
+      title: 'Change the api',
+      repoId,
+      size: 'small',
+      branch: 'feat/api',
+      waitsOn: [],
+    });
+    const worktree = join(root, 'wt');
+    await engine.dispatch({ type: 'worktree.ready', taskId, path: worktree, branch: 'feat/api' });
+    const call = async (id: string, action: string, body: unknown) =>
+      (await (await post(`/api/services/${id}/${action}`, body, null)).json()) as TerminalsSnapshot & {
+        terminal?: TerminalInfo;
+        error?: { code: string; message: string };
+      };
+    expect((await call(service.id, 'start', { taskId })).error?.code).toBe('terminal_place_missing');
+    mkdirSync(join(worktree, 'apps/api'), { recursive: true });
+    const started = await call(service.id, 'start', { taskId });
+    expect(started.terminal).toMatchObject({ taskId, place: 'worktree', cwd: join(worktree, 'apps/api') });
+    const onMain = await call(service.id, 'start', undefined);
+    expect(onMain.terminal).toMatchObject({ taskId: null, cwd: appPath });
+    const restarted = await call(service.id, 'restart', { taskId });
+    expect(restarted.terminal?.id).toBe(started.terminal?.id);
+    const stopped = await call(service.id, 'stop', { taskId });
+    expect(stopped.terminals.map((each) => [each.taskId, each.status])).toEqual([
+      [taskId, 'stopped'],
+      [null, 'running'],
+    ]);
+    expect((await call(service.id, 'start', { taskId: 'nope' })).error?.code).toBe('task_not_found');
+    const outside = terminals.addService(projectId, { name: 'notes', cwd: root, command: 'ls', env: {} });
+    const refused = await call(outside.id, 'start', { taskId });
+    expect(refused.error?.code).toBe('service_place_invalid');
+    expect(refused.error?.message).toContain('cannot run for this task');
   });
 });
 

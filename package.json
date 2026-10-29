@@ -17,7 +17,7 @@
     "seed": "bun scripts/seed.ts",
     "start": "bun run --cwd apps/engine start",
     "test": "turbo run test test:scripts",
-    "test:scripts": "bun test"
+    "test:scripts": "bun test --randomize"
   },
   "devDependencies": {
     "@babel/parser": "^8.0.5",

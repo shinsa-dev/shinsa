@@ -26,9 +26,9 @@ export function useServiceActions({ state, onNavigate }: { state: ShinsaState; o
   const home = useTerminals()?.home ?? null;
 
   const handlers: ServiceHandlers = {
-    start: (view) => void startService(view.service.id),
-    stop: (view) => void stopService(view.service.id),
-    restart: (view) => void restartService(view.service.id),
+    start: (view) => void startService(view.service.id, view.taskId),
+    stop: (view) => void stopService(view.service.id, view.taskId),
+    restart: (view) => void restartService(view.service.id, view.taskId),
     startAll: (project) => void startAllServices(project.id),
     open: (view, project) => {
       if (!view.terminal) return;

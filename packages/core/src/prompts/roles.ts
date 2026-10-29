@@ -24,15 +24,16 @@ import { resolveRepoCoverage } from '../test-coverage/setting.ts';
 import {
   describeApprovedPlan,
   describeBases,
-  describeCheckCommands,
   describeDismissedFindings,
   describeEarlierWork,
   describeGoal,
   describeNoRepository,
+  describePhaseChecks,
   describePlan,
   describePreviousPhases,
   describeRepository,
   describeRounds,
+  describeTaskChecks,
   describeTaskLink,
   describeWhatFollows,
   isStacked,
@@ -104,7 +105,7 @@ function describeReshapeNote(task: Task) {
     describeStepCatalog(),
     'The rules, which Shinsa checks. A question, research or an investigation that changes nothing takes none of the verification steps; anything that changes code or runs an operation takes all of them:',
     describeStepRules(),
-    'You cannot add a step or a gate of your own. You set the parameters in the plan instead: the verification plan, the evidence, extra checks, the impact of an operation, and whether the human approves the plan first.',
+    'You cannot add a step or a gate of your own. You set the parameters in the plan instead: the checks in `verification`, the evidence, the impact of an operation, and whether the human approves the plan first.',
     'For example, find the cause and then run an operation from the diagnosis: `investigate`, `your_ok`, `plan`, `operate`. Research the options, then change the code: `research`, `your_ok`, `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`. Ship a change, then backfill the data it needs: `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`, `operate`.',
     `Shinsa checks the steps and tells you what to fix. \`reason\` says in one sentence why the task takes these steps, at most ${SHAPE_LIMITS.reason} characters.`,
   ].join('\n');
@@ -181,7 +182,8 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
       ? 'Before you edit anything a user sees, run the app and capture those screens as they are now, with `stage: "before"`: the human sees each with its after shot as one comparison.'
       : '',
     'For user-facing changes, run the app and capture the evidence the evidence skill describes: a before and after comparison of every screen you changed at the widths and in the themes it lists (the after shot with `stage: "after"` and the same title, width and theme as its before shot, or both at once as `kind: "comparison"` with `parts`), a short recording for an interaction, the browser console read. Attach each with `attach_evidence`.',
-    'For logic, write the test that fails without your change and passes with it, and attach its run output (`kind: "test"`, `text`).',
+    'Give each item a `key` for what it shows (like `settings-dark-900`). When a later change alters it, attach the new one with the same `key`: it replaces the old one, so never add a second; remove what no longer applies with `remove_evidence`.',
+    'For logic, write the test that fails without your change and passes with it, make sure one of the checks runs it (add one with `check_changes` when none does), and link that check with `attach_evidence` (`kind: "test"`, `check`: its id). Shinsa runs it and shows its command, outcome and output; never paste test output as evidence.',
     describeCoverageForPhase(repo),
     last && kinds.length > 0
       ? 'Attach all of it before you call `complete_phase`: Shinsa refuses the last phase until each kind is there.'
@@ -208,7 +210,7 @@ export function resolvePhaseInstruction(
       : 'Now build the whole change.',
     describeOperationForBuilder(task),
     'Do this phase completely, and only this phase. Work until it is done and verified, not until it compiles.',
-    describeCheckCommands(repo),
+    describePhaseChecks(task, repo, index + 1, last),
     last
       ? 'This is the last phase: the whole change must work end to end when you finish.'
       : 'Later phases build on this one; leave the code in a working state.',
@@ -332,21 +334,32 @@ function describeCoverageForReview(task: Task) {
 const REVIEW_AGAIN =
   'You reviewed earlier work on this task in this conversation. Judge this review on its own: check that your earlier blocking findings are fixed, read the new commits as closely as the first time, and never pass something because you passed it before.';
 
-function describeEvidenceItem({ kind, title, parts }: EvidenceItem) {
+function describeEvidenceItem({ key, kind, title, parts }: EvidenceItem) {
   const [first] = parts;
   const names =
     kind === 'comparison' ? parts.map((part) => part.label ?? part.stage).join(' and ') : first?.stage;
   const facts = [names, first?.width ? `${first.width}px` : null, first?.theme].filter(Boolean).join(', ');
-  return `- ${kind}: ${title}${facts ? ` (${facts})` : ''}`;
+  return `- \`${key}\`, ${kind}: ${title}${facts ? ` (${facts})` : ''}`;
+}
+
+export function describeEvidenceForFix(evidence: readonly Evidence[]) {
+  const items = listEvidenceItems(evidence).filter((item) => !item.parts.some((part) => part.checkId));
+  if (items.length === 0) return '';
+  return [
+    'The evidence you attached this round, which the human sees in the review:',
+    ...items.map(describeEvidenceItem),
+    'If your fix changes what one shows, replace it before you hand over (attach a new one with the same `key`). Shinsa refuses `complete_fix` while an item whose files your fix changed is not replaced, removed with `remove_evidence`, or named in `evidence_kept`.',
+  ].join('\n');
 }
 
 function describeEvidenceForReview(evidence: readonly Evidence[]) {
-  if (evidence.length === 0) {
+  const items = listEvidenceItems(evidence);
+  if (items.length === 0) {
     return 'The agent attached no evidence this round. If the change is visible to a user, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.';
   }
   return [
     'The evidence the agent attached this round (the human sees it in the review):',
-    ...listEvidenceItems(evidence).map(describeEvidenceItem),
+    ...items.map(describeEvidenceItem),
     'Check it shows what the change claims. Where a user-visible claim has none, or you doubt one, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.',
   ].join('\n');
 }
@@ -385,7 +398,8 @@ export function resolveReviewerPrompt(
     describeEvidenceForReview(evidence),
     '',
     describeReviewScope(task, repo, stacked?.branch ?? null),
-    'Shinsa already ran the checks and they pass. Look for what checks miss.',
+    describeTaskChecks(task, repo),
+    "None of them blocks: a check that fails on the base branch too is not the change's, and CI runs the whole suite on the pull request. Look for what the checks miss, and run what the change touches that no check covers.",
     'A blocking finding is a bug, a missed requirement, a broken repository rule or a security problem. Everything optional is a suggestion.',
     'Check the new code follows the patterns of the code around it: a helper, component or query the repository already has re-implemented, or a new way of doing what it does one way everywhere, is a finding that names the existing code. It is blocking when the repository’s rules name the pattern.',
     'Anchor every finding to a file and line range. Reproduce a finding before you report it; one you cannot reproduce is a guess.',

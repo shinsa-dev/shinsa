@@ -15,6 +15,7 @@ import {
   resolveTerminalEntry,
   resolveTerminalPath,
   resolveTerminalProject,
+  resolveTerminalTabLabel,
 } from '@/lib/terminal/tabs.ts';
 import { NOW } from '../../support/state.ts';
 import { createTerminal, createTerminalState, createTerminalsSnapshot } from '../../support/terminals.ts';
@@ -97,6 +98,14 @@ describe('places', () => {
       ['Folders', ['notes']],
       ['Task worktrees', ['SH-4 Fix the cart']],
     ]);
+    expect(groupTerminalPlaces(STATE, 'shop').map((group) => group.icon)).toEqual([
+      {
+        name: 'IconFolder1',
+        style: Object.fromEntries([['--icon-color', `var(--${STATE.projects.shop?.color}-4, var(--fg-2))`]]),
+      },
+      'IconFolders',
+      'IconBranch',
+    ]);
   });
 
   it('opens a new terminal in the first place, or the home folder for a project with none', () => {
@@ -129,6 +138,15 @@ describe('the words', () => {
     );
     expect(describeTerminalTab({ ...ONE, status: 'exited', exitCode: 0 })).toStartWith('Exited ·');
     expect(describeTerminalTab({ ...ONE, status: 'stopped' })).toStartWith('Ended when the engine restarted');
+  });
+
+  it('names a service’s run for a task with the task’s handle', () => {
+    const tasks = { fix: { handle: 'SH-4' }, raw: { handle: null } };
+    const run = { ...ONE, name: 'api', serviceId: 'api', taskId: 'fix' };
+    expect(resolveTerminalTabLabel(run, tasks)).toBe('api · SH-4');
+    expect(resolveTerminalTabLabel({ ...run, taskId: 'raw' }, tasks)).toBe('api');
+    expect(resolveTerminalTabLabel({ ...run, taskId: null }, tasks)).toBe('api');
+    expect(resolveTerminalTabLabel({ ...run, serviceId: null }, tasks)).toBe('api');
   });
 
   it('warns what closing a terminal with a program in front stops', () => {

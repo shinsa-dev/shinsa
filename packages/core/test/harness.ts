@@ -9,6 +9,7 @@ import {
   type PullRequest,
   type ReportCheck,
   type Run,
+  resolveTaskPipeline,
   type ShinsaCommand,
   type ShinsaEffect,
   type ShinsaEvent,
@@ -101,7 +102,8 @@ export function createHarness() {
 export function registerRepo(
   harness: Harness,
   name = 'paywall-next',
-  projectName: string | null = 'Superwall'
+  projectName: string | null = 'Superwall',
+  checkCommands = ['bun lint', 'bun check-types']
 ) {
   harness.send({
     type: 'repo.register',
@@ -110,7 +112,7 @@ export function registerRepo(
       path: `/code/${name}`,
       defaultBranch: 'main',
       remote: `github.com/superwall/${name}`,
-      checkCommands: ['bun lint', 'bun check-types'],
+      checkCommands,
     },
     projectName,
   });
@@ -127,23 +129,32 @@ export const PLAN: PlanDocument = {
   approach: 'Carefully.',
   files: [],
   outOfScope: [],
-  verification: ['A test renders the panel at 320 pixels and finds no horizontal scroll.'],
+  verification: [{ label: 'Panel tests', command: 'bun test src/panel', phases: [2] }],
   questions: [],
 };
 
 export const IMPACT =
   'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 
+const CHECK_COMMANDS: Record<string, string> = {
+  c1: 'bun test src/panel',
+  r1: 'bun lint',
+  r2: 'bun check-types',
+};
+
+export function checkResult(id: string, outcome: ReportCheck['outcome'], detail: string | null = null) {
+  const command = CHECK_COMMANDS[id] ?? id;
+  return { id, label: id === 'c1' ? 'Panel tests' : command, command, outcome, detail };
+}
+
 export const PASSING: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
+  checkResult('c1', 'pass'),
+  checkResult('r1', 'pass'),
+  checkResult('r2', 'pass'),
 ];
 
-export function failing(name = 'bun check-types', detail = 'src/a.ts(3,1): error TS2322'): ReportCheck[] {
-  return [
-    { name: 'bun lint', outcome: 'pass', detail: null },
-    { name, outcome: 'fail', detail },
-  ];
+export function failing(id = 'r2', detail = 'src/a.ts(3,1): error TS2322'): ReportCheck[] {
+  return [checkResult('r1', 'pass'), checkResult(id, 'fail', detail)];
 }
 
 export function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
@@ -229,9 +240,15 @@ export function shipAndMerge(harness: Harness, taskId: string) {
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
 }
 
+function resolveHarnessPlan(harness: Harness, taskId: string, plan: PlanDocument) {
+  const pipeline = resolveTaskPipeline(harness.task(taskId));
+  const operates = pipeline.includes('operate') && plan.impact === undefined;
+  const withImpact = operates ? { ...plan, impact: IMPACT } : plan;
+  return plan === PLAN && !pipeline.includes('build') ? { ...withImpact, verification: [] } : withImpact;
+}
+
 export function proposePlan(harness: Harness, taskId: string, plan: PlanDocument = PLAN) {
-  const operates = harness.task(taskId).pipeline?.includes('operate') && plan.impact === undefined;
-  const document = operates ? { ...plan, impact: IMPACT } : plan;
+  const document = resolveHarnessPlan(harness, taskId, plan);
   harness.send({ type: 'agent.propose_plan', runId: harness.activeRun(taskId).id, document });
 }
 

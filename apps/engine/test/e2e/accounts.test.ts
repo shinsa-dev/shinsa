@@ -172,9 +172,8 @@ describe('accounts end to end', () => {
     expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id]);
     expect(world.task(taskId).usageWait?.account).toEqual({ id: bound.id, email: 'b@example.com' });
     await passReset(clock, resetAt);
-    await world.untilStage(taskId, 'building');
-    expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id, bound.id]);
     await world.until('the builder', () => world.agents.of('build').length > 0);
+    expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id, bound.id]);
     expect(world.agents.of('build')[0]?.account).toBe(bound.id);
   });
 
@@ -198,17 +197,22 @@ describe('accounts end to end', () => {
     expect(world.agents.of('plan')).toHaveLength(2);
   });
 
-  test('a window that is still spent after its reset pauses the task instead of looping', async () => {
+  test('a window that is still spent after its reset waits a while more instead of looping or failing', async () => {
     const { world, clock } = await createBench(['a@example.com']);
     const resetAt = Date.now() + RESET_IN_MS;
     world.agents.queue('plan', limitAt(resetAt), limitAt(resetAt));
     const taskId = await world.createTask();
     await world.until('the wait', () => world.task(taskId).usageWait?.status === 'armed');
+    const first = world.task(taskId).usageWait?.id;
     await passReset(clock, resetAt);
-    const gate = await world.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('The agent hit its usage limit');
+    await world.until('the second wait', () => {
+      const wait = world.task(taskId).usageWait;
+      return wait?.status === 'armed' && wait.id !== first;
+    });
+    const wait = world.task(taskId).usageWait;
+    expect((wait?.resetAt ?? 0) - (wait?.armedAt ?? 0)).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(world.gates(taskId)).toEqual([]);
     expect(world.agents.of('plan')).toHaveLength(2);
-    expect(world.task(taskId).usageWait).toBeNull();
   });
 
   test('an account that is signed out opens a sign-in gate, and signing in again carries on', async () => {
@@ -230,7 +234,7 @@ describe('accounts end to end', () => {
     );
     const taskId = await world.createTask();
     const gate = await world.untilGate(taskId, 'sign_in');
-    expect(gate).toMatchObject({ title: 'Sign in to Claude as a@example.com', account: { id: only.id } });
+    expect(gate).toMatchObject({ title: 'Paused: a@example.com needs signing in', account: { id: only.id } });
     expect(world.agents.of('plan')).toHaveLength(1);
     expect(accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
     await accounts.startLogin(only.id);

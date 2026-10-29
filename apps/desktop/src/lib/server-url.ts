@@ -1,8 +1,7 @@
 import { join } from 'node:path';
+import { APP_IDENTITY } from '@shinsa/core';
 
 type Env = Record<string, string | undefined>;
-
-const DEFAULT_PORT = 5180;
 
 const DEV_PORT = 5181;
 
@@ -26,7 +25,11 @@ function parseOrigin(value: string | undefined) {
 export function resolveConfigPath(env: Env, home: string) {
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'config.json');
   if (env.SHINSA_DATA_DIR) return join(env.SHINSA_DATA_DIR, 'config.json');
-  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), 'shinsa', 'config.json');
+  return join(
+    env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'),
+    APP_IDENTITY.configDir,
+    'config.json'
+  );
 }
 
 export function parseConfigPort(text: string | null) {
@@ -53,5 +56,5 @@ export function resolveServerUrl({
   const configured = parseOrigin(env.SHINSA_URL);
   if (configured) return configured;
   if (!packaged) return `http://${HOST}:${DEV_PORT}`;
-  return `http://${HOST}:${parsePort(env.SHINSA_PORT) ?? configPort ?? DEFAULT_PORT}`;
+  return `http://${HOST}:${parsePort(env.SHINSA_PORT) ?? configPort ?? APP_IDENTITY.port}`;
 }

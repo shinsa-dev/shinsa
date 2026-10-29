@@ -98,9 +98,9 @@ describe('the app’s own update', () => {
 
   it('reads the app’s version and update, hears each change, and asks the app to install or check', () => {
     fake = installDesktop();
-    fake.bridge.update = { status: 'downloading', version: '0.6.0' };
+    fake.bridge.update = { status: 'downloading', version: '0.6.0', percent: 10 };
     expect(selectDesktopBuild()).toEqual({ version: '0.0.0', protocol: 1 });
-    expect(readDesktopUpdate()).toEqual({ status: 'downloading', version: '0.6.0' });
+    expect(readDesktopUpdate()).toEqual({ status: 'downloading', version: '0.6.0', percent: 10 });
     let heard = 0;
     const stop = subscribeDesktopUpdate(() => {
       heard += 1;

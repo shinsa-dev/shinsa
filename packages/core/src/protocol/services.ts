@@ -1,3 +1,7 @@
+import { isTaskSettled } from '../domain/stages.ts';
+import type { Task } from '../domain/types.ts';
+import type { ShinsaState } from '../state/project.ts';
+import { resolveTaskProject } from '../state/queries.ts';
 import type { TerminalInfo, TerminalsSnapshot } from './terminals.ts';
 
 export interface ServiceDefinition {
@@ -32,10 +36,16 @@ export type ServiceState = 'stopped' | 'starting' | 'running' | 'exited' | 'fail
 
 export interface ServiceView {
   service: ServiceDefinition;
+  taskId: string | null;
   terminal: TerminalInfo | null;
   state: ServiceState;
   exitCode: number | null;
   since: number | null;
+}
+
+export interface TaskServiceView extends ServiceView {
+  taskId: string;
+  cwd: string;
 }
 
 export interface ServicesSummary {
@@ -75,11 +85,19 @@ export function resolveServiceState(terminal: TerminalInfo | null, now: number):
 export function resolveServiceView(
   service: ServiceDefinition,
   terminal: TerminalInfo | null,
-  now: number
+  now: number,
+  taskId: string | null = terminal?.taskId ?? null
 ): ServiceView {
   const state = resolveServiceState(terminal, now);
   const since = terminal ? (terminal.status === 'running' ? terminal.startedAt : terminal.endedAt) : null;
-  return { service, terminal, state, exitCode: terminal?.exitCode ?? null, since };
+  return { service, taskId, terminal, state, exitCode: terminal?.exitCode ?? null, since };
+}
+
+export function selectServiceTerminal(snapshot: TerminalsSnapshot, serviceId: string, taskId: string | null) {
+  return (
+    snapshot.terminals.find((terminal) => terminal.serviceId === serviceId && terminal.taskId === taskId) ??
+    null
+  );
 }
 
 export function listProjectServices(
@@ -90,13 +108,49 @@ export function listProjectServices(
   if (!snapshot || !projectId) return [];
   return (snapshot.services ?? [])
     .filter((service) => service.projectId === projectId)
-    .map((service) =>
-      resolveServiceView(
-        service,
-        snapshot.terminals.find((terminal) => terminal.serviceId === service.id) ?? null,
-        now
-      )
-    );
+    .map((service) => resolveServiceView(service, selectServiceTerminal(snapshot, service.id, null), now));
+}
+
+function isInside(path: string, folder: string) {
+  const base = folder.replace(/\/+$/, '');
+  return path === base || path.startsWith(`${base}/`);
+}
+
+export function resolveTaskServiceCwd(state: ShinsaState, service: ServiceDefinition, task: Task) {
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  if (!(repo && task.worktreePath) || isTaskSettled(task)) return null;
+  if (resolveTaskProject(state, task) !== service.projectId) return null;
+  const root = repo.path.replace(/\/+$/, '');
+  const worktree = task.worktreePath.replace(/\/+$/, '');
+  if (worktree === root || !isInside(service.cwd, root)) return null;
+  return `${worktree}${service.cwd.slice(root.length).replace(/\/+$/, '')}`;
+}
+
+export function listTaskServices(
+  state: ShinsaState,
+  snapshot: TerminalsSnapshot | null,
+  task: Task,
+  now: number
+): TaskServiceView[] {
+  if (!snapshot) return [];
+  return (snapshot.services ?? []).flatMap((service) => {
+    const cwd = resolveTaskServiceCwd(state, service, task);
+    if (cwd === null) return [];
+    const terminal = selectServiceTerminal(snapshot, service.id, task.id);
+    return [{ ...resolveServiceView(service, terminal, now, task.id), taskId: task.id, cwd }];
+  });
+}
+
+export function listServiceTaskRuns(
+  snapshot: TerminalsSnapshot | null,
+  serviceId: string,
+  now: number
+): ServiceView[] {
+  const service = snapshot?.services.find((each) => each.id === serviceId);
+  if (!(snapshot && service)) return [];
+  return snapshot.terminals
+    .filter((terminal) => terminal.serviceId === serviceId && terminal.taskId !== null)
+    .map((terminal) => resolveServiceView(service, terminal, now));
 }
 
 export function resolveServicesSummary(views: ServiceView[]): ServicesSummary {

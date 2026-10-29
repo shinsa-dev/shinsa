@@ -2,14 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { APP_IDENTITY } from '@shinsa/core';
 import {
-  DEFAULT_PORT,
   prepareDataDir,
   resolveConfig,
   resolveServerAddress,
   resolveShinsaPaths,
 } from '../../src/config/index.ts';
 import { createTempDir } from '../helpers/index.ts';
+
+const DEFAULT_PORT = APP_IDENTITY.port;
 
 describe('resolveShinsaPaths', () => {
   test('lives in ~/.config/shinsa, with the data beside config.json', () => {
@@ -51,6 +53,8 @@ describe('resolveConfig', () => {
       SHINSA_EDITOR: 'zed',
       SHINSA_TERMINAL: 'Ghostty',
       SHINSA_SETTLE_DELAY_MS: '10',
+      SHINSA_PUSH_RETRY_MS: '20',
+      SHINSA_OVERLOAD_RETRY_MS: '30',
     });
     expect(config).toMatchObject({
       home,
@@ -63,6 +67,8 @@ describe('resolveConfig', () => {
       editor: 'zed',
       terminal: 'Ghostty',
       settleDelayMs: 10,
+      pushRetryMs: 20,
+      overloadRetryMs: 30,
       userHome: '/home/me',
       roots: ['/work', '/more'],
     });
@@ -122,8 +128,19 @@ describe('resolveConfig', () => {
       editor: null,
       terminal: 'Terminal',
       settleDelayMs: 15_000,
+      pushRetryMs: 30_000,
+      overloadRetryMs: 15_000,
       roots: [],
     });
+  });
+
+  test('the installed app defaults to 7446, and a dev engine pins 5180 so the two never meet', async () => {
+    expect(resolveConfig({ SHINSA_HOME: createTempDir() }, null).port).toBe(7446);
+    const { scripts } = await Bun.file(join(import.meta.dir, '../../package.json')).json();
+    for (const script of [scripts.dev, scripts.start]) {
+      expect(script).toMatch(/^SHINSA_PORT=\$\{SHINSA_PORT:-5180\} /);
+    }
+    expect(APP_IDENTITY.port).not.toBe(5180);
   });
 });
 

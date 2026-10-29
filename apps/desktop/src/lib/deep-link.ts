@@ -1,4 +1,6 @@
-export const URL_SCHEME = 'shinsa';
+import { APP_IDENTITY } from '@shinsa/core';
+
+export const URL_SCHEME = APP_IDENTITY.scheme;
 
 const TASK_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 
@@ -34,7 +36,7 @@ export function parseDeepLink(raw: string) {
   } catch {
     return null;
   }
-  if (url.protocol !== `${URL_SCHEME}:`) return null;
+  if (!isLinkProtocol(url.protocol)) return null;
   const [kind = '', reference, ...rest] = listSegments(url);
   const name = kind.toLowerCase();
   if (name === 'task' && rest.length === 0) return resolveTaskPath(reference);
@@ -42,6 +44,10 @@ export function parseDeepLink(raw: string) {
   return '/';
 }
 
+export function isLinkProtocol(protocol: string) {
+  return protocol.toLowerCase() === `${URL_SCHEME}:`;
+}
+
 export function findDeepLink(argv: readonly string[]) {
-  return argv.find((argument) => argument.toLowerCase().startsWith(`${URL_SCHEME}:`)) ?? null;
+  return argv.find((argument) => isLinkProtocol(/^[a-z-]+:/i.exec(argument)?.[0] ?? '')) ?? null;
 }

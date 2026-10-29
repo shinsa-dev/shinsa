@@ -11,6 +11,7 @@ import {
   MINUTE_MS,
   type Run,
   resolveNextRoundNumber,
+  SHAPE_PIPELINES,
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
@@ -23,7 +24,7 @@ import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
-import { queueRound } from './rounds.ts';
+import { findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
   acceptsFollowUp,
   answerFollowUp,
@@ -217,6 +218,10 @@ function resolveMessageKind(
   return scheduled && isTaskResting(task) ? 'new_round' : 'feedback';
 }
 
+function isNewWork(kind: MessageKind) {
+  return kind === 'new_round' || kind === 'separate_task';
+}
+
 function isOnlyRecorded(kind: MessageKind, delivery: MessageDelivery) {
   return kind === 'acknowledge' && delivery.effect !== 'supersede_question';
 }
@@ -276,7 +281,10 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
     suggestSplitOff(decider, task.id, text, send.title ?? null, send.why ?? null);
     return;
   }
-  if (kind === 'new_round' || kind === 'separate_task') {
+  if (
+    isNewWork(kind) &&
+    !isHeldByYourDecision(decider.state, task, SHAPE_PIPELINES[send.shape ?? 'change'])
+  ) {
     startNewWork(decider, task, send, texts, text);
     return;
   }
@@ -295,6 +303,12 @@ export function messageTask(
 ) {
   const { type: _type, text, ...route } = command;
   sendMessages(decider, { ...route, texts: [text] }, scheduleId);
+}
+
+export function sendQueuedRound(decider: Decider, command: CommandOf<'round.send'>) {
+  const round = findWaitingRound(decider.task(command.taskId), command.number);
+  decider.emit({ type: 'round.removed', taskId: command.taskId, number: round.number });
+  sendMessages(decider, { taskId: command.taskId, texts: [round.request], kind: 'feedback' }, null);
 }
 
 export function redeliverMessage(decider: Decider, command: CommandOf<'message.deliver'>) {

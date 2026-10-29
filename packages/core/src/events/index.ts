@@ -39,10 +39,17 @@ import type {
   TaskSuggestion,
   TriageDecisions,
   UsageWait,
+  WeeklyReading,
   WorkspaceMode,
 } from '../domain/index.ts';
-import type { PullRequestWatch, PullRequestWatchChange } from '../domain/pull-requests.ts';
 import type {
+  PullRequestWatch,
+  PullRequestWatchChange,
+  PushHookFailure,
+  ShippingStepKind,
+} from '../domain/pull-requests.ts';
+import type {
+  CheckChange,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -52,6 +59,7 @@ import type {
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
+import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 import type { WatchdogEventBody } from './watchdogs.ts';
 
@@ -87,6 +95,7 @@ type EventBody =
   | DelegationEventBody
   | ScheduleEventBody
   | WatchdogEventBody
+  | MemoryEventBody
   | {
       type: 'task.triaged';
       taskId: string;
@@ -151,15 +160,12 @@ type EventBody =
       returnBranch?: string;
     }
   | { type: 'worktree.removed'; taskId: string }
-  | { type: 'task.stacked'; taskId: string; onTaskId: string; branch: string }
   | { type: 'task.edited'; taskId: string; path: string; changed: boolean }
   | { type: 'task.edits_told'; taskId: string }
   | { type: 'task.overlapped'; taskId: string; otherTaskId: string; paths: string[] }
   | { type: 'task.overlaps_told'; taskId: string }
   | { type: 'task.edits_committed'; taskId: string }
   | { type: 'task.edits_approved'; taskId: string; gate: EditsApproval | null }
-  | { type: 'task.conflict_held'; taskId: string; branch: string | null }
-  | { type: 'task.unstacked'; taskId: string; fromTaskId: string }
   | {
       type: 'plan.proposed';
       taskId: string;
@@ -192,6 +198,8 @@ type EventBody =
       treeHash?: string | null;
     }
   | { type: 'checks.recorded'; taskId: string; results: ReportCheck[]; coverage?: Coverage }
+  | { type: 'checks.changed'; taskId: string; changes: CheckChange[]; runId: string }
+  | { type: 'checks.started'; taskId: string; checkIds: string[] }
   | { type: 'gate.opened'; gate: Gate }
   | {
       type: 'gate.answered';
@@ -228,7 +236,8 @@ type EventBody =
   | { type: 'run.continued'; runId: string; reason: RunContinuationReason }
   | { type: 'run.session_lost'; runId: string; sessionId: string }
   | { type: 'run.compacted'; runId: string; sessionId: string }
-  | { type: 'evidence.attached'; evidence: Evidence }
+  | { type: 'evidence.attached'; evidence: Evidence; replaces?: string[] }
+  | { type: 'evidence.removed'; taskId: string; ids: string[]; reason: string; runId: string }
   | { type: 'pull_request.opened'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.updated'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.push_requested'; taskId: string }
@@ -236,6 +245,16 @@ type EventBody =
   | { type: 'pull_request.head_moved'; taskId: string; sha: string }
   | { type: 'pull_request.read_failed'; taskId: string; failures: number; detail: string }
   | { type: 'pull_request.read_failures_cleared'; taskId: string }
+  | {
+      type: 'pull_request.push_retrying';
+      taskId: string;
+      step: ShippingStepKind;
+      attempt: number;
+      attempts: number;
+      retryAt: number;
+      detail: string;
+    }
+  | { type: 'pull_request.hook_failed'; taskId: string; failure: PushHookFailure }
   | {
       type: 'pull_request.watched';
       taskId: string;
@@ -254,7 +273,7 @@ type EventBody =
       usage: RunUsage;
       sessionId?: string;
       sessionUsage?: RunUsage;
-      weeklyPercent?: number;
+      readings?: WeeklyReading[];
     }
   | { type: 'run.silenced'; runId: string; since: number | null }
   | { type: 'run.silence_snoozed'; runId: string; until: number }

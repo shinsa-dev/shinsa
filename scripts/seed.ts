@@ -6,9 +6,11 @@ import { EventLog } from '../apps/engine/src/store/index.ts';
 import type {
   CodeSpot,
   Gate,
+  MemoryEntry,
   PipelineStep,
   PlanDocument,
   Project,
+  PullRequest,
   Repo,
   RunPurpose,
   RunRole,
@@ -37,9 +39,11 @@ import { listSeedEvidenceEvents, writeSeedEvidence } from './seed-evidence.ts';
 import {
   CHOSEN_BY_YOU,
   callTool,
+  createPlanCheck,
   createSeedClock,
   DAY,
   HOUR,
+  listSeedCheckResults,
   MINUTE,
   NO_TRIAGE_DECISIONS,
   NOW,
@@ -1375,12 +1379,6 @@ const LIVE_STAGES = new Set<TaskStage>([
   'operating',
 ]);
 
-const SEED_CHECKS = [
-  { name: 'bun run lint', outcome: 'pass' as const, detail: null },
-  { name: 'bun run check-types', outcome: 'pass' as const, detail: null },
-  { name: 'bun test', outcome: 'pass' as const, detail: null },
-];
-
 const BUILT_STAGES = new Set<TaskStage>([
   'checking',
   'awaiting_review',
@@ -1390,18 +1388,62 @@ const BUILT_STAGES = new Set<TaskStage>([
   'awaiting_operation',
 ]);
 
+function resolveDefaultVerification(task: SeedTask, phases: number) {
+  if (!(resolveSeedPipeline(task)?.includes('build') ?? true)) return [];
+  if (task.verification) return task.verification;
+  const area = task.branch.split('/').at(-1) ?? task.id;
+  return [
+    createPlanCheck(
+      'Tests for the change',
+      `bun test test/${area}`,
+      Array.from({ length: phases }, (_, index) => index + 1)
+    ),
+  ];
+}
+
 function resolveSeedPlan(task: SeedTask): PlanDocument {
   if (task.plan) return task.plan;
+  const phases = task.size === 'large' ? LARGE_PLAN : SMALL_PLAN;
   return {
     goal: task.request,
-    phases: task.size === 'large' ? LARGE_PLAN : SMALL_PLAN,
+    phases,
     behaviour: [],
     approach: 'Planned by the agent.',
     files: [],
     outOfScope: [],
-    verification: ['The tests that cover the change pass, and the change behaves as asked when run by hand.'],
+    verification: resolveDefaultVerification(task, phases.length),
     questions: [],
   };
+}
+
+function listTaskCheckResults(task: SeedTask) {
+  const checks = [...resolveSeedPlan(task).verification, ...(task.addedChecks ?? [])];
+  return listSeedCheckResults(checks, task.repo, task.checkResults);
+}
+
+function pushAddedChecks(task: SeedTask, phase: number, push: Push, clock: SeedClock) {
+  const planned = resolveSeedPlan(task).verification.length;
+  for (const [index, added] of (task.addedChecks ?? []).entries()) {
+    if (added.phase !== phase) continue;
+    push(clock.step(0.1), {
+      type: 'checks.changed',
+      taskId: task.id,
+      runId: `${task.id}-run-${added.run}`,
+      changes: [
+        {
+          action: 'add',
+          check: {
+            id: `c${planned + index + 1}`,
+            label: added.label,
+            command: added.command,
+            phases: [...added.phases],
+            source: 'agent',
+          },
+          reason: added.reason,
+        },
+      ],
+    });
+  }
 }
 
 function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
@@ -1536,6 +1578,7 @@ function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock
     },
   });
   push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
+  pushAddedChecks(task, index + 1, push, clock);
   progress.built += 1;
 }
 
@@ -1635,36 +1678,59 @@ function pushTaskPlan(task: SeedTask, progress: SeedProgress, push: Push, clock:
   }
 }
 
-function pushTaskPullRequest(task: SeedTask, push: Push, clock: SeedClock) {
-  if (!task.pullRequest) return;
+function resolveSeedPullRequest(task: SeedTask, at: number): PullRequest | null {
+  if (!task.pullRequest) return null;
   const repository = task.repo.remote?.split(':').at(-1)?.replace('.git', '');
-  push(clock.step(1), {
+  return {
+    number: task.pullRequest.number,
+    url: `https://github.com/${repository}/pull/${task.pullRequest.number}`,
+    state: task.merged ? 'merged' : 'open',
+    checks: task.pullRequest.checks,
+    unresolvedComments: task.pullRequest.comments ?? 0,
+    mergeable: task.pullRequest.checks === 'passing',
+    updatedAt: at,
+    ...(task.pullRequest.mergeCommit ? { mergeCommit: task.pullRequest.mergeCommit } : {}),
+  };
+}
+
+function pushTaskPullRequest(task: SeedTask, push: Push, clock: SeedClock) {
+  const opened = resolveSeedPullRequest(task, clock.step(1));
+  if (!opened) return;
+  const runs = task.pullRequest?.ciRuns;
+  if (!runs) {
+    push(clock.at, { type: 'pull_request.opened', taskId: task.id, pullRequest: opened });
+    return;
+  }
+  push(clock.at, {
     type: 'pull_request.opened',
     taskId: task.id,
     pullRequest: {
-      number: task.pullRequest.number,
-      url: `https://github.com/${repository}/pull/${task.pullRequest.number}`,
-      state: task.merged ? 'merged' : 'open',
-      checks: task.pullRequest.checks,
-      unresolvedComments: task.pullRequest.comments ?? 0,
-      mergeable: task.pullRequest.checks === 'passing',
-      updatedAt: clock.at,
-      ...(task.pullRequest.mergeCommit ? { mergeCommit: task.pullRequest.mergeCommit } : {}),
+      ...opened,
+      state: 'open',
+      checks: 'pending',
+      mergeable: false,
+      checkRuns: runs.map((run) => ({ ...run, status: 'pending' as const })),
     },
+  });
+  push(clock.step(6), {
+    type: 'pull_request.updated',
+    taskId: task.id,
+    pullRequest: { ...opened, updatedAt: clock.at, checkRuns: runs.map((run) => ({ ...run })) },
   });
 }
 
 function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
-  if (BUILT_STAGES.has(task.stage) && task.stage !== 'checking') {
-    push(clock.step(0.3), { type: 'checks.recorded', taskId: task.id, results: SEED_CHECKS });
-  }
   const builds = resolveSeedPipeline(task)?.includes('build') ?? true;
+  const results = listTaskCheckResults(task);
+  if (builds && BUILT_STAGES.has(task.stage) && task.stage !== 'checking') {
+    push(clock.step(0.3), { type: 'checks.recorded', taskId: task.id, results });
+  }
   if (builds && (task.report || task.summary)) {
     push(clock.step(0.2), {
       type: 'work.submitted',
       taskId: task.id,
       summary: task.summary ?? task.report?.headline ?? '',
-      report: task.report ?? null,
+      report: task.report ? { ...task.report, checks: results } : null,
     });
   }
   if (task.findings) {
@@ -1770,12 +1836,50 @@ function pushTask(task: SeedTask, push: Push) {
   pushTaskGate(task, push, clock);
 }
 
+function createSeedRule(
+  at: number,
+  id: string,
+  text: string,
+  overrides: Partial<MemoryEntry> = {}
+): MemoryEntry {
+  return {
+    id,
+    projectId: null,
+    text,
+    why: null,
+    status: 'kept',
+    taskId: null,
+    runId: null,
+    createdAt: at,
+    updatedAt: at,
+    ...overrides,
+  };
+}
+
+function pushSeedMemory(start: number, push: (at: number, event: ShinsaEventInput) => void) {
+  const kept = [
+    createSeedRule(start, 'memory-dashes', 'Never use em dashes in UI copy or messages.'),
+    createSeedRule(start + 1, 'memory-terse', 'Keep hand-overs short: lead with the result, no recap.'),
+    createSeedRule(start + 2, 'memory-swift', 'Keep the Swift SDK’s public API source compatible.', {
+      projectId: 'project-basket',
+    }),
+  ];
+  for (const entry of kept) push(entry.createdAt, { type: 'memory.written', entry });
+  const proposal = createSeedRule(NOW - 2 * HOUR, 'memory-plans', 'Keep plans to three phases or fewer.', {
+    status: 'proposed',
+    projectId: 'project-basket',
+    why: 'You asked for a shorter plan twice on the checkout redesign.',
+  });
+  push(proposal.createdAt, { type: 'memory.proposed', entry: proposal });
+}
+
 function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
   const timeline: Timeline = [];
   const push = (at: number, event: ShinsaEventInput) => timeline.push({ at, event });
   const start = NOW - 10 * DAY;
   for (const project of projects) push(start, { type: 'project.written', project });
   for (const repo of repos) push(start, { type: 'repo.registered', repo });
+  pushSeedMemory(start, push);
 
   push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
@@ -1850,7 +1954,9 @@ function listSeedDisagreements(task: SeedTask) {
   }));
 }
 
-function resolveHandover({ task, role, purpose }: SeedRunTimes): ChatTool {
+function resolveHandover({ task, role, purpose, index }: SeedRunTimes): ChatTool {
+  const seeded = task.runs?.[index]?.handover;
+  if (seeded) return seeded;
   const body = task.summary ?? task.title;
   if (purpose === 'plan') {
     return { kind: 'shinsa', name: 'propose_plan', args: { goal: task.request, phases: SMALL_PLAN } };
@@ -2009,7 +2115,10 @@ const PLAN_TIER_PLAN: PlanDocument = {
     { path: 'src/billing/webhook.ts', change: 'Writes the tier on subscription changes.' },
   ],
   outOfScope: ['Changing the prices or the tiers themselves.'],
-  verification: ['A test per tier for the shared-list limit.'],
+  verification: [
+    createPlanCheck('Webhook writes the tier', 'bun test test/billing/webhook.test.ts', [2, 3]),
+    createPlanCheck('Shared-list limit per tier', 'bun test test/lists/limit.test.ts', [3]),
+  ],
   questions: [],
   impact:
     'Writes `plan_tier` on the 18,402 lists that have none, from their owner’s subscription. The dry run lists every list and the tier it would get. Undo by setting `plan_tier` back to null; the limit check treats null as the free tier.',
@@ -2136,7 +2245,7 @@ function createSeedRepo(id: string, name: string, path: string, remote: string, 
     defaultBranch: 'main',
     remote,
     projectId,
-    checkCommands: ['bun lint', 'bun check-types', 'bun test'],
+    checkCommands: ['bun lint', 'bun check-types'],
   };
 }
 
@@ -2332,6 +2441,20 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
       branch: 'feat/embedded-chat-mcp',
       ageHours: 28,
       worktreePath: chatPath,
+      addedChecks: [
+        {
+          label: 'Tool result rows',
+          command: 'bun test src/chat/embedded-chat.test.ts',
+          phases: [3, 4],
+          phase: 3,
+          run: 1,
+          reason: 'Phase 3 renders tool results in embedded-chat.ts, which no check of the plan covered.',
+        },
+      ],
+      checkResults: {
+        c1: { detail: '6 tests, 3 new' },
+        c3: { detail: '4 tests, all new' },
+      },
       plan: {
         goal: 'The embedded chat sends every message through an MCP v2 session and shows tool results inline, so the chat can act on the paywall it is embedded in.',
         phases: [
@@ -2366,8 +2489,8 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         ],
         outOfScope: ['Calling paywall tools from the chat (a task that waits on this one).'],
         verification: [
-          'Unit tests for the session reconnect limit.',
-          'Recording of a chat with one tool call.',
+          createPlanCheck('Session reconnect limit', 'bun test src/chat/mcp-session.test.ts', [1, 4]),
+          createPlanCheck('Lint the chat module', 'bunx biome check src/chat', [1, 2, 3, 4]),
         ],
         questions: [],
       },
@@ -2484,11 +2607,6 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
               ),
             ],
           },
-        ],
-        checks: [
-          { name: 'bun lint', outcome: 'pass', detail: null },
-          { name: 'bun check-types', outcome: 'pass', detail: null },
-          { name: 'bun test', outcome: 'pass', detail: '48 tests, 3 new' },
         ],
         judgementCalls: [
           {
@@ -2956,10 +3074,6 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             ],
           },
         ],
-        checks: [
-          { name: 'bun test', outcome: 'pass', detail: '2 new' },
-          { name: 'CI', outcome: 'pass', detail: 'All 9 checks green' },
-        ],
         judgementCalls: [
           {
             title: 'Guard the server, not the button',
@@ -3121,7 +3235,42 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           summary: 'Fixed the review-bot comment on #4531.',
         },
       ],
-      pullRequest: { number: 4531, checks: 'passing' },
+      pullRequest: {
+        number: 4531,
+        checks: 'passing',
+        ciRuns: [
+          {
+            name: 'lint',
+            status: 'success',
+            required: true,
+            url: 'https://github.com/superwall/paywall-next/actions/runs/91822',
+          },
+          {
+            name: 'check-types',
+            status: 'success',
+            required: true,
+            url: 'https://github.com/superwall/paywall-next/actions/runs/91822',
+          },
+          {
+            name: 'test (ubuntu)',
+            status: 'success',
+            required: true,
+            url: 'https://github.com/superwall/paywall-next/actions/runs/91823',
+          },
+          {
+            name: 'test (macos)',
+            status: 'success',
+            required: false,
+            url: 'https://github.com/superwall/paywall-next/actions/runs/91823',
+          },
+          {
+            name: 'Vercel preview',
+            status: 'success',
+            required: false,
+            url: 'https://vercel.com/superwall/paywall-next',
+          },
+        ],
+      },
       ticked: ['Set `CODE_FIRST_DOCS_URL` on the API in production'],
       gate: {
         type: 'merge',
@@ -3140,6 +3289,12 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
       reason: 'built, checked and ready for review',
       branch: 'refactor/command-registry',
       ageHours: 5,
+      checkResults: {
+        c1: {
+          detail: 'src/cli/help.test.ts timed out under load and passed when re-run alone.',
+          note: 'passed_alone',
+        },
+      },
       worktreePath: worktrees.registry,
       plan: {
         goal: 'Every framework command declares its arguments and help text in one place, so the CLI, the docs and the agents read the same definition.',
@@ -3174,7 +3329,11 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           { path: 'src/mcp/commands.ts', change: 'New: commands listed as MCP tools.' },
         ],
         outOfScope: ['Changing any command’s behaviour.'],
-        verification: ['Snapshot of every command’s help output before and after.'],
+        verification: [
+          createPlanCheck('CLI help and flags', 'bun test src/cli', [1, 2, 3, 5]),
+          createPlanCheck('Commands as MCP tools', 'bun test src/mcp/commands.test.ts', [4, 5]),
+          createPlanCheck('Docs generator types', 'bunx tsc --noEmit -p scripts', [3]),
+        ],
         questions: [],
       },
       report: {
@@ -3417,11 +3576,6 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
               ),
             ],
           },
-        ],
-        checks: [
-          { name: 'bun lint', outcome: 'pass', detail: null },
-          { name: 'bun check-types', outcome: 'pass', detail: null },
-          { name: 'bun test', outcome: 'pass', detail: '214 tests, 34 new' },
         ],
         judgementCalls: [
           {
@@ -3671,6 +3825,8 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
       reason: 'built, checked and ready for review',
       branch: 'fix/tab-group-scroll',
       ageHours: 3,
+      verification: [createPlanCheck('Tab group scrolling', 'bun test src/ui/tab-group.test.tsx', [1, 2, 3])],
+      checkResults: { c1: { detail: '2 tests, both new' } },
       worktreePath: tabsPath,
       report: {
         headline: 'Tab groups scroll sideways and keep the active tab in view.',
@@ -3745,10 +3901,6 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
               ),
             ],
           },
-        ],
-        checks: [
-          { name: 'bun lint', outcome: 'pass', detail: null },
-          { name: 'bun test', outcome: 'pass', detail: '2 new' },
         ],
         judgementCalls: [
           {
@@ -4186,6 +4338,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       reason: 'built, checked and ready for review',
       branch: 'feat/usage-aware-defaults',
       ageHours: 70,
+      verification: [createPlanCheck('Model defaults', 'bun test src/shared/defaults.test.ts', [1, 2, 3])],
       worktreePath: defaultsPath,
       report: {
         headline: 'New chats default to a cheaper model once 85% of the usage window is spent.',
@@ -4265,7 +4418,6 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
             ],
           },
         ],
-        checks: [{ name: 'bun test', outcome: 'pass', detail: '3 new' }],
         judgementCalls: [
           {
             title: 'Fall back at 85%',
@@ -4421,7 +4573,6 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
             spots: [],
           },
         ],
-        checks: [],
         judgementCalls: [],
         walkthrough: {
           approach:
@@ -4524,6 +4675,14 @@ function listMergeStepTasks({ paywall, kanna }: Pick<SeedRepos, 'paywall' | 'kan
       reason: 'ready to merge',
       branch: 'feat/api-key-rotation',
       ageHours: 7,
+      verification: [createPlanCheck('Both keys during the overlap', 'bun test src/api/keys', [1, 2, 3, 4])],
+      checkResults: {
+        r1: {
+          outcome: 'fail',
+          detail: 'src/legacy/banner.ts: 2 errors. The same command fails on main.',
+          note: 'fails_on_base',
+        },
+      },
       summary: 'A rotated API key keeps working for 24 hours next to the new one.',
       report: {
         headline:
@@ -4541,10 +4700,6 @@ function listMergeStepTasks({ paywall, kanna }: Pick<SeedRepos, 'paywall' | 'kan
               'Settings → API keys has Rotate, which shows the new key once and when the old one stops working.',
             spots: [],
           },
-        ],
-        checks: [
-          { name: 'Unit tests', outcome: 'pass', detail: '214 passed' },
-          { name: 'CI', outcome: 'pass', detail: 'All 9 checks green' },
         ],
         judgementCalls: [],
         walkthrough: {
@@ -4640,7 +4795,6 @@ function listMergeStepTasks({ paywall, kanna }: Pick<SeedRepos, 'paywall' | 'kan
             spots: [],
           },
         ],
-        checks: [{ name: 'Unit tests', outcome: 'pass', detail: '88 passed' }],
         judgementCalls: [],
         walkthrough: {
           approach: 'The limit lives in the session store, so every route is covered by one check.',

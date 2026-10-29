@@ -310,15 +310,14 @@ describe('repositories', () => {
           'bun test',
           '--checks',
           'bun lint',
-          '--waive-checks',
           '--workspace',
-          'gitbutler',
+          'main_checkout',
           '--coverage',
           'off',
         ])
       ).text
     ).toBe('Saved the repository.');
-    await runSpec(fake, ['repos', 'update', 'repo-1', '--project', 'none', '--no-waive-checks']);
+    await runSpec(fake, ['repos', 'update', 'repo-1', '--project', 'none']);
     await runSpec(fake, ['repos', 'update', 'app']);
     await runSpec(fake, [
       'repos',
@@ -353,15 +352,14 @@ describe('repositories', () => {
           defaultBranch: 'trunk',
           projectId: 'project-1',
           checkCommands: ['bun test', 'bun lint'],
-          checksWaived: true,
-          workspace: 'gitbutler',
+          workspace: 'main_checkout',
           coverage: { mode: 'off' },
         },
       },
       {
         type: 'repo.update',
         repoId: 'repo-1',
-        patch: { projectId: null, checksWaived: false },
+        patch: { projectId: null },
       },
       { type: 'repo.update', repoId: 'repo-1', patch: {} },
       {

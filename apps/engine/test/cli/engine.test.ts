@@ -270,7 +270,10 @@ describe('shinsa version', () => {
       },
       '/Applications/Shinsa.app/Contents/Resources/engine/bin/shinsa'
     );
-    expect(resolveCommandVersion(bundle)).toEqual({ version: '0.5.0', commit: 'b'.repeat(40) });
+    expect(resolveCommandVersion(bundle)).toEqual({
+      version: '0.5.0',
+      commit: 'b'.repeat(40),
+    });
     expect(resolveCommandVersion()).toEqual({ version: '0.0.0', commit: null });
     const { base } = startFakeEngine({ version: '0.4.2' });
     const behind = createEngineIo(base, null);

@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { SDKAssistantMessage, SDKRateLimitInfo, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import {
+  cleanProcessError,
   createSetupFailure,
   createTransportFailure,
   createTurnEvidence,
   recordAssistantError,
   recordRateLimit,
   resolveClaudeVerdict,
+  resolveEndedFailure,
   resolveResetAt,
   type TurnEvidence,
 } from '../../../../src/agents/providers/claude/classify.ts';
@@ -260,7 +262,7 @@ describe('API failures', () => {
         result: 'API Error: 503 other',
       })
     );
-    expect(noReset.failure?.class).toBe('provider_error');
+    expect(noReset.failure).toMatchObject({ class: 'overloaded', code: 'api_error_503' });
     const zero = classify(
       success({
         is_error: true,
@@ -270,7 +272,7 @@ describe('API failures', () => {
           'API Error: 503 [g] [429]: {"type":"error","error":{"type":"rate_limit_error"}} (reset after 0s)',
       })
     );
-    expect(zero.failure?.class).toBe('provider_error');
+    expect(zero.failure?.class).toBe('overloaded');
   });
 
   test('a signed-out or blocked account is an auth failure, and it wins over limit evidence', () => {
@@ -366,5 +368,146 @@ describe('a login that needs signing in again (Paperclip detectClaudeLoginRequir
     recordAssistantError(evidence, assistant('billing_error'));
     const verdict = classify(success({ is_error: true, result: 'Not logged in' }), evidence);
     expect(verdict.failure).toMatchObject({ class: 'auth', code: 'billing_error' });
+  });
+});
+
+const EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+
+const HOOK_NOISE =
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code prints the hook command unexpanded
+  'Claude Code process exited with code 1. stderr: SessionEnd hook [node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.mjs"] failed: Hook cancelled';
+
+function synthetic(text: string, error?: string) {
+  return assistant(error, { message: { model: '<synthetic>', content: [{ type: 'text', text }] } });
+}
+
+describe('a login Claude could not refresh', () => {
+  test('the CLI’s own line is a token failure, in the result and as its synthetic assistant message', () => {
+    expect(classify(success({ is_error: true, result: EXPIRED })).failure).toMatchObject({
+      class: 'auth',
+      code: 'login_required',
+    });
+    const named = createTurnEvidence();
+    recordAssistantError(named, synthetic(EXPIRED, 'authentication_failed'));
+    expect(named.accountProblem?.code).toBe('authentication_failed');
+    const unnamed = createTurnEvidence();
+    recordAssistantError(unnamed, synthetic(`${EXPIRED}\n`));
+    expect(unnamed.accountProblem).toEqual({
+      code: 'authentication_failed',
+      message: 'Claude is signed out. Run `claude` in a terminal and sign in again.',
+    });
+    expect(classify(success({ is_error: true, result: 'Stopped.' }), unnamed).failure).toMatchObject({
+      class: 'auth',
+      code: 'authentication_failed',
+    });
+    expect(classify(success({ result: EXPIRED }), named)).toMatchObject({
+      status: 'failed',
+      failure: { class: 'auth', code: 'authentication_failed' },
+    });
+  });
+
+  test('only Claude Code’s synthetic message counts: the model writing those words is not a sign-out', () => {
+    for (const message of [
+      assistant(undefined, { message: { model: 'claude-opus', content: [{ type: 'text', text: EXPIRED }] } }),
+      assistant(undefined, { message: { model: '<synthetic>', content: 'not blocks' } }),
+      assistant(undefined, {
+        message: { model: '<synthetic>', content: [{ type: 'image' }, { type: 'text' }] },
+      }),
+      synthetic('API Error: 500 Internal server error'),
+    ]) {
+      const evidence = createTurnEvidence();
+      recordAssistantError(evidence, message);
+      expect(evidence.accountProblem).toBeNull();
+    }
+  });
+
+  test('a process that ends after it, with or without hook noise, is still the token failure', () => {
+    const named = createTurnEvidence();
+    recordAssistantError(named, synthetic(EXPIRED, 'authentication_failed'));
+    expect(resolveEndedFailure(cleanProcessError(HOOK_NOISE), named)).toMatchObject({
+      class: 'auth',
+      code: 'authentication_failed',
+    });
+    expect(
+      resolveEndedFailure(`Claude Code process exited with code 1. stderr: ${EXPIRED}`, createTurnEvidence())
+    ).toMatchObject({
+      class: 'auth',
+      code: 'login_required',
+    });
+    expect(resolveEndedFailure(cleanProcessError(HOOK_NOISE), createTurnEvidence())).toEqual({
+      class: 'transport_error',
+      message: 'Claude Code stopped unexpectedly (exit code 1).',
+      code: 'stream_ended',
+      retryable: true,
+      resetAt: null,
+    });
+  });
+});
+
+describe('a process error shown to you', () => {
+  test('drops the lines a Claude Code hook printed and keeps the rest', () => {
+    expect(cleanProcessError(HOOK_NOISE)).toBe('Claude Code stopped unexpectedly (exit code 1).');
+    expect(
+      cleanProcessError(
+        `Claude Code process exited with code 1. stderr: Stop hook [./stop.sh] failed: exit 2\n\nError: ENOSPC: no space left on device\nPreToolUse:Bash hook [x] failed: Hook cancelled`
+      )
+    ).toBe(
+      'Claude Code stopped unexpectedly (exit code 1). It printed: Error: ENOSPC: no space left on device'
+    );
+    expect(cleanProcessError('Claude Code process exited with code 1')).toBe(
+      'Claude Code stopped unexpectedly (exit code 1).'
+    );
+    expect(cleanProcessError('Claude Code process terminated by signal SIGKILL')).toBe(
+      'Claude Code was stopped by the system (SIGKILL).'
+    );
+    expect(cleanProcessError('Something else broke.')).toBe('Something else broke.');
+  });
+});
+
+describe('limits and server errors told only in words', () => {
+  test('a limit Claude Code only prints is a usage limit, with the reset it names', () => {
+    expect(
+      classify(success({ is_error: true, result: 'Claude AI usage limit reached|1720000000' })).failure
+    ).toMatchObject({
+      class: 'usage_limit',
+      code: 'rate_limit',
+      retryable: true,
+      resetAt: 1_720_000_000_000,
+    });
+    expect(classify(success({ is_error: true, result: 'You’ve hit your limit.' })).failure).toMatchObject({
+      class: 'usage_limit',
+      resetAt: null,
+    });
+  });
+
+  test('an account out of credits is a usage limit, so the run moves on or waits instead of failing', () => {
+    for (const text of ['Credit balance is too low', 'You are out of usage credits.']) {
+      expect(classify(success({ is_error: true, result: text })).failure).toMatchObject({
+        class: 'usage_limit',
+        code: 'out_of_credits',
+        message: 'The Claude account is out of usage credits.',
+        retryable: true,
+      });
+    }
+  });
+
+  test('a 5xx from the API is overloaded, retried shortly, not a failure of the task', () => {
+    expect(
+      classify(
+        success({ is_error: true, api_error_status: 500, result: 'API Error: 500 Internal server error' })
+      ).failure
+    ).toEqual({
+      class: 'overloaded',
+      message: 'Claude’s API had a server error (500).',
+      code: 'api_error_500',
+      retryable: true,
+      resetAt: null,
+    });
+    expect(
+      classify(success({ is_error: true, api_error_status: 529, result: 'Overloaded' })).failure
+    ).toMatchObject({
+      class: 'overloaded',
+      message: 'Claude’s API is overloaded (529).',
+    });
   });
 });

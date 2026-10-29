@@ -202,6 +202,10 @@ describe('parseUserCommand', () => {
         { type: 'round.remove', taskId: 't1', number: 2 },
       ],
       [
+        { type: 'round.send', taskId: 't1', number: 2 },
+        { type: 'round.send', taskId: 't1', number: 2 },
+      ],
+      [
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
       ],
@@ -328,7 +332,7 @@ describe('parseUserCommand', () => {
       ],
       [
         { type: 'gate.answer', gateId: 'g1', decision: 'maybe' },
-        'decision must be one of approve, revise, reject, reply, waive.',
+        'decision must be one of approve, revise, reject, reply.',
       ],
     ];
     for (const [input, message] of refused) {
@@ -411,11 +415,13 @@ describe('parseUserCommand for the process commands', () => {
       type: 'settings.change',
       patch: { taskBudgetUsd: null },
     });
-    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { checksWaived: true } })).toEqual({
-      type: 'repo.update',
-      repoId: 'r',
-      patch: { checksWaived: true },
-    });
+    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { workspace: 'worktrees' } })).toEqual(
+      {
+        type: 'repo.update',
+        repoId: 'r',
+        patch: { workspace: 'worktrees' },
+      }
+    );
     expect(
       parseUserCommand({
         type: 'repo.update',
@@ -883,6 +889,32 @@ describe('writing a schedule from Settings', () => {
     ['a name past the limit', { name: 'x'.repeat(201) }, 'name is longer than 200 characters.'],
   ])('refuses %s', (_name, fields, message) => {
     expect(() => parsed(fields)).toThrow(message);
+  });
+});
+
+describe('memory commands', () => {
+  test('reads a rule to write, with or without its id and project', () => {
+    expect(parseUserCommand({ type: 'memory.write', text: 'Keep plans short.' })).toEqual({
+      type: 'memory.write',
+      memoryId: null,
+      projectId: null,
+      text: 'Keep plans short.',
+    });
+    expect(
+      parseUserCommand({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' })
+    ).toEqual({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' });
+  });
+
+  test('reads keeping and removing a rule by its id', () => {
+    expect(parseUserCommand({ type: 'memory.accept', memoryId: 'm1' })).toEqual({
+      type: 'memory.accept',
+      memoryId: 'm1',
+    });
+    expect(parseUserCommand({ type: 'memory.remove', memoryId: 'm1' })).toEqual({
+      type: 'memory.remove',
+      memoryId: 'm1',
+    });
+    expect(() => parseUserCommand({ type: 'memory.write', text: 3 })).toThrow('text must be text.');
   });
 });
 

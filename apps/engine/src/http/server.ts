@@ -3,6 +3,7 @@ import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
 import { INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
+import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
   createTerminalSockets,
@@ -10,9 +11,11 @@ import {
   type TerminalSocketData,
   type Terminals,
 } from '../terminals/index.ts';
+import { MAX_BODY_BYTES } from './body.ts';
 import {
   resolveAllowedHosts,
   resolveBodyRefusal,
+  resolveBodySizeRefusal,
   resolveHostRefusal,
   resolveRefusal,
   resolveUpgradeRefusal,
@@ -21,7 +24,7 @@ import { type ApiContext, createApiRoutes, respondError, respondFailure } from '
 import { createSocketHub, type SocketData } from './socket.ts';
 import { serveStatic } from './static.ts';
 
-const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const ATTACHMENT_UPLOAD_PATH = '/api/attachments';
 
 export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
@@ -72,6 +75,21 @@ export function createSocketHandlers(
   };
 }
 
+function isPortTaken(error: unknown) {
+  return error instanceof Error && (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+}
+
+function listenOnPort<T>(config: Pick<HttpContext['config'], 'port' | 'configPath'>, listen: () => T) {
+  try {
+    return listen();
+  } catch (error) {
+    if (!isPortTaken(error)) throw error;
+    throw new Error(
+      `Failed to start server. Is port ${config.port} in use? Quit the program on it, or set another \`port\` in ${config.configPath}.`
+    );
+  }
+}
+
 export function startServer(context: HttpContext) {
   const { config } = context;
   const allowedHosts = resolveAllowedHosts(config.allowedHosts);
@@ -100,6 +118,9 @@ export function startServer(context: HttpContext) {
     if (config.inspect && request.method !== 'GET') return respondReadOnly();
     const refusal = resolveBodyRefusal(request);
     if (refusal) return respondError('content_type_invalid', refusal, 415);
+    const limit = url.pathname === ATTACHMENT_UPLOAD_PATH ? ATTACHMENT_REQUEST_LIMIT_BYTES : MAX_BODY_BYTES;
+    const sizeRefusal = resolveBodySizeRefusal(request, limit);
+    if (sizeRefusal) return respondError('body_too_large', sizeRefusal, 413);
     try {
       return await handleApi(request, url);
     } catch (error) {
@@ -121,28 +142,30 @@ export function startServer(context: HttpContext) {
     return respondSignInPage(extensions, request);
   }
 
-  const server = Bun.serve<ServerSocketData>({
-    port: config.port,
-    hostname: config.hostname,
-    maxRequestBodySize: MAX_BODY_BYTES,
-    fetch(request, bunServer) {
-      const url = new URL(request.url);
-      const outside = respondOutside(request, url);
-      if (outside) return outside;
-      const refusal = resolveRefusal(request, allowedHosts);
-      if (refusal) return respondError('forbidden', refusal, 403);
-      if (url.pathname === '/ws')
-        return upgrade(request, bunServer, { kind: 'hub', transcripts: new Map(), surface: null });
-      const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
-      if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
-      if (url.pathname.startsWith('/api/')) return respondApi(request, url);
-      return serveStatic(config.webDir, url.pathname);
-    },
-    websocket: {
-      ...createSocketHandlers(hub, terminalSockets),
-      maxPayloadLength: MAX_BODY_BYTES,
-    },
-  });
+  const server = listenOnPort(config, () =>
+    Bun.serve<ServerSocketData>({
+      port: config.port,
+      hostname: config.hostname,
+      maxRequestBodySize: ATTACHMENT_REQUEST_LIMIT_BYTES,
+      fetch(request, bunServer) {
+        const url = new URL(request.url);
+        const outside = respondOutside(request, url);
+        if (outside) return outside;
+        const refusal = resolveRefusal(request, allowedHosts);
+        if (refusal) return respondError('forbidden', refusal, 403);
+        if (url.pathname === '/ws')
+          return upgrade(request, bunServer, { kind: 'hub', transcripts: new Map(), surface: null });
+        const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
+        if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
+        if (url.pathname.startsWith('/api/')) return respondApi(request, url);
+        return serveStatic(config.webDir, url.pathname);
+      },
+      websocket: {
+        ...createSocketHandlers(hub, terminalSockets),
+        maxPayloadLength: MAX_BODY_BYTES,
+      },
+    })
+  );
   const address = resolveServerUrl(config.hostname, server.port ?? config.port);
   log.info('[Server] Listening', { url: address });
   return {

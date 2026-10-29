@@ -10,6 +10,7 @@ import {
   parseEngineJob,
   readAppBundleId,
   resolveEngineTarget,
+  resolveHomeLink,
   resolveLinkPage,
   resolvePathArgument,
   resolveRealPath,
@@ -64,6 +65,7 @@ describe('links into the app', () => {
     expect(resolveLinkPage('shinsa://task/SW-142')).toBe('/tasks/SW-142');
     expect(resolveLinkPage('shinsa://home')).toBe('/');
     expect(resolveEngineTarget(501)).toBe('gui/501/studio.overclock.shinsa.engine');
+    expect(resolveHomeLink()).toBe('shinsa://home');
   });
 
   test('tells a folder from a task, and resolves it against where shinsa ran', () => {

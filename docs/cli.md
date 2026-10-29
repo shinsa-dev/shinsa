@@ -81,8 +81,8 @@ The text an agent's management tool gets is the same as a pipe's: plain, unwrapp
 ## Where commands go
 
 Every command talks to the engine on the configured host (`SHINSA_HOST` or `hostname` in `config.json`; 127.0.0.1
-when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180). When the Mac
-app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
+when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, else 7446; a `bun dev` engine is on 5180, so a command from source reaches it with `SHINSA_PORT=5180`). When the
+Mac app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
 `version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
 (`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
 
@@ -561,6 +561,21 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
 
+#### shinsa rounds send
+
+Send a queued round to the current round now, as a message, instead of waiting.
+
+```
+shinsa rounds send <task> <round> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `round.send`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
+
 ### gates
 
 #### shinsa gates answer
@@ -568,7 +583,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 Answer any open decision by its gate id.
 
 ```
-shinsa gates answer <gate> --decision <approve|revise|reject|reply|waive> [--response <text>] [--plan-version <integer>] [--verdicts <json>] [--json]
+shinsa gates answer <gate> --decision <approve|revise|reject|reply> [--response <text>] [--plan-version <integer>] [--verdicts <json>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `gate.answer`.
@@ -576,7 +591,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<gate>` | text, required | The gate id, from `shinsa tasks show`. |
-| `--decision` | choice, required | approve, revise, reject, reply or waive. |
+| `--decision` | choice, required | approve, revise, reject or reply. |
 | `--response` | text, optional | Your reply or feedback. |
 | `--plan-version` | integer, optional | The plan version you read, for a plan. |
 | `--verdicts` | json, optional | Review verdicts: [{"index":0,"verdict":"fix","note":null}]. |
@@ -1051,6 +1066,62 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 | `<secret>` | text, required | The signing secret. |
 
+### memory
+
+#### shinsa memory list
+
+List the rules agents remember, and the ones agents proposed that wait for you.
+
+```
+shinsa memory list [--json]
+```
+
+Every task agent's tool: `memory_list` (reads).
+
+#### shinsa memory write
+
+Write a rule every agent follows, or change one with --id.
+
+```
+shinsa memory write [--id <text>] [--project <text>] <text...> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `memory.write`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--id` | text, optional | The rule to change. Leave out to write a new one. |
+| `--project` | text, optional | Only for this project (key, name or id). Leave out for every project, or with --id to keep the rule where it is. |
+| `<text>` | text, required | The rule. |
+
+#### shinsa memory keep
+
+Keep a rule an agent proposed, so every later agent follows it.
+
+```
+shinsa memory keep <memory> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `memory.accept`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<memory>` | text, required | The memory id, from `shinsa memory list`. |
+
+#### shinsa memory remove
+
+Forget a rule, or dismiss one an agent proposed.
+
+```
+shinsa memory remove <memory> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `memory.remove`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<memory>` | text, required | The memory id, from `shinsa memory list`. |
+
 ### settings
 
 #### shinsa settings get
@@ -1225,7 +1296,7 @@ Every task agent's tool: `repos_list` (reads).
 Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--waive-checks] [--workspace <worktrees|gitbutler|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -1236,10 +1307,9 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--name` | text, optional | Its name. |
 | `--default-branch` | text, optional | The branch pull requests target. |
 | `--project` | text, optional | Its project (key, name or id), or none. |
-| `--checks` | list, optional | The check commands, in order. Repeat the option for each. Only the human changes them. |
-| `--waive-checks` | boolean, optional | Work without checks. Only the human changes it. |
-| `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
-| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines after the checks: auto (a coverage command it detects), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
+| `--checks` | list, optional | The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them. |
+| `--workspace` | choice, optional | Where agents work: worktrees (a worktree each) or main_checkout (one task at a time in the checkout). Only the human changes it. |
+| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
 | `--coverage-command` | text, optional | With --coverage custom: the command that runs the tests with coverage. |
 | `--coverage-report` | text, optional | With --coverage custom: the report it writes, relative to the repository. |
 | `--coverage-format` | choice, optional | With --coverage custom: the report format, when its name does not tell (lcov, cobertura or go). |
@@ -1551,7 +1621,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 Start a service in its terminal, as Start does in Shinsa.
 
 ```
-shinsa services start <service> [--project <text>] [--json]
+shinsa services start <service> [--project <text>] [--task <text>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -1560,13 +1630,14 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
 #### shinsa services stop
 
 Stop a service: its programs get a hang-up, as closing a terminal does.
 
 ```
-shinsa services stop <service> [--project <text>] [--json]
+shinsa services stop <service> [--project <text>] [--task <text>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -1575,13 +1646,14 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
 #### shinsa services restart
 
 Stop a service and start it again.
 
 ```
-shinsa services restart <service> [--project <text>] [--json]
+shinsa services restart <service> [--project <text>] [--task <text>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -1590,6 +1662,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
 ### mcp
 

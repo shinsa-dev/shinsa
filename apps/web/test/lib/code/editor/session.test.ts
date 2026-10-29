@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { LanguageSupport } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
-import { runScopeHandlers } from '@codemirror/view';
+import { type EditorView, runScopeHandlers } from '@codemirror/view';
 import { NO_ANNOTATIONS } from '@/lib/code/editor/annotations.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
 import { EditorSession, fromDisk, isSameText, type ShowInput } from '@/lib/code/editor/session.ts';
@@ -49,6 +49,14 @@ function createSession(
   return { session, idles };
 }
 
+function contextTop(view: EditorView) {
+  return view.documentTop + view.lineBlockAt(view.state.doc.line(117).from).top;
+}
+
+function frame() {
+  return new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 function createHost() {
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -61,6 +69,8 @@ function input(key: string, content: string, extra: Partial<ShowInput> = {}): Sh
     path: `${key}.ts`,
     content,
     original: null,
+    baseline: null,
+    target: false,
     split: false,
     annotations: { a: NO_ANNOTATIONS, b: NO_ANNOTATIONS },
     ...extra,
@@ -364,6 +374,95 @@ describe('EditorSession', () => {
     if (idle) scope.requestIdleCallback = idle;
     else delete scope.requestIdleCallback;
     expect(paths).toEqual(['a.ts', 'b.ts']);
+  });
+
+  it('opens a changed file at its first change, a few lines below the top, in every form', async () => {
+    const { session } = createSession();
+    const host = createHost();
+    const lines = Array.from({ length: 200 }, (_, index) => `line ${index + 1}`);
+    const original = lines.join('\n');
+    const content = lines.map((line, index) => (index === 119 ? 'changed' : line)).join('\n');
+    session.show(host, input('unified', content, { original }));
+    const view = session.views?.b;
+    if (!view) throw new Error('no view');
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBeGreaterThan(0);
+    expect(view.scrollDOM.scrollTop).toBe(contextTop(view));
+    session.show(host, input('file', content, { baseline: original }));
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBe(contextTop(view));
+    session.show(host, input('unchanged', content, { baseline: content }));
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBe(0);
+    session.show(host, input('plain', content));
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBe(0);
+    session.show(host, input('split', content, { original, split: true }));
+    const merge = host.querySelector<HTMLElement>('.cm-mergeView');
+    const b = session.views?.b;
+    if (!merge || !b) throw new Error('no merge view');
+    await frame();
+    expect(merge.scrollTop).toBe(contextTop(b));
+  });
+
+  it('keeps an explicit target, a change already in view and a returning file’s own place', async () => {
+    const { session } = createSession();
+    const host = createHost();
+    const lines = Array.from({ length: 200 }, (_, index) => `line ${index + 1}`);
+    const original = lines.join('\n');
+    const far = lines.map((line, index) => (index === 119 ? 'changed' : line)).join('\n');
+    const near = lines.map((line, index) => (index === 4 ? 'changed' : line)).join('\n');
+    session.show(host, input('target', far, { original, target: true }));
+    const view = session.views?.b;
+    if (!view) throw new Error('no view');
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBe(0);
+    Object.defineProperty(view.scrollDOM, 'clientHeight', { configurable: true, value: 400 });
+    session.show(host, input('near', near, { original }));
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBe(0);
+    session.show(host, input('far', far, { baseline: original }));
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBeGreaterThan(0);
+    view.scrollDOM.scrollTop = 0;
+    session.show(host, input('near', near, { original }));
+    session.show(host, input('far', far, { baseline: original }));
+    await frame();
+    expect(view.scrollDOM.scrollTop).toBe(0);
+    session.show(host, input('split', far, { original, split: true, target: true }));
+    const merge = host.querySelector<HTMLElement>('.cm-mergeView');
+    await frame();
+    expect(merge?.scrollTop).toBe(0);
+    session.show(host, input('other', near, { original, split: true }));
+    await frame();
+    merge?.dispatchEvent(new Event('scroll'));
+    session.show(host, input('split', far, { original, split: true }));
+    await frame();
+    expect(merge?.scrollTop).toBe(0);
+  });
+
+  it('keeps where a file was left when it is shown, hidden and shown again before a frame', async () => {
+    const { session } = createSession();
+    const host = createHost();
+    session.show(host, input('a', 'one'));
+    const view = session.views?.b;
+    if (!view) throw new Error('no view');
+    const snapshots: number[] = [];
+    const take = view.scrollSnapshot.bind(view);
+    view.scrollSnapshot = () => {
+      snapshots.push(view.scrollDOM.scrollTop);
+      return take();
+    };
+    await frame();
+    view.scrollDOM.scrollTop = 500;
+    session.show(host, input('b', 'two'));
+    await frame();
+    session.show(host, input('a', 'one'));
+    session.hide(host);
+    session.show(host, input('a', 'one'));
+    await frame();
+    session.hide(host);
+    expect(snapshots).toEqual([500, 0, 0]);
   });
 
   it('drops a language that arrives after the file was left', async () => {

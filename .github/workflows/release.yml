@@ -1,35 +1,81 @@
 name: Release
 
 on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       channel:
-        description: Stable is a normal release marked latest; beta is a pre-release of the next version
+        description: Stable is a normal release marked latest; beta is a pre-release of the next version; canary is a pre-release of main for the Canary channel, as every tested merge makes
         type: choice
-        options: [beta, stable]
+        options: [beta, stable, canary]
         default: beta
       bump:
-        description: Which part of the last stable version goes up (docs/release.md)
+        description: Which part of the last stable version goes up (docs/release.md); a canary ignores it
         type: choice
         options: [patch, minor, major]
         default: patch
-
-concurrency:
-  group: release
-  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  mac:
-    runs-on: macos-15
-    timeout-minutes: 60
+  trigger:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      contents: read
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
+      build: ${{ steps.decide.outputs.build }}
+      channel: ${{ steps.decide.outputs.channel }}
+      sha: ${{ steps.decide.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "channel=$INPUT_CHANNEL" >> "$GITHUB_OUTPUT"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=canary" >> "$GITHUB_OUTPUT"
+            bun scripts/release-canary.ts
+          fi
+
+  mac:
+    needs: trigger
+    if: needs.trigger.outputs.build == 'true'
+    concurrency:
+      group: ${{ needs.trigger.outputs.channel == 'canary' && 'release-canary' || 'release' }}
+      cancel-in-progress: ${{ needs.trigger.outputs.channel == 'canary' }}
+    runs-on: blacksmith-6vcpu-macos-15
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      channel: ${{ steps.version.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.trigger.outputs.sha }}
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
@@ -38,8 +84,8 @@ jobs:
       - name: Next version
         id: version
         env:
-          RELEASE_CHANNEL: ${{ inputs.channel }}
-          RELEASE_BUMP: ${{ inputs.bump }}
+          RELEASE_CHANNEL: ${{ needs.trigger.outputs.channel }}
+          RELEASE_BUMP: ${{ inputs.bump || 'patch' }}
         run: bun scripts/release.ts
       - name: Signing preflight
         id: signing
@@ -79,6 +125,7 @@ jobs:
         working-directory: apps/desktop
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          CHANNEL: ${{ steps.version.outputs.channel }}
           MODE: ${{ steps.signing.outputs.mode }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -88,11 +135,13 @@ jobs:
         run: |
           signing=(-c.mac.identity=- -c.mac.notarize=false)
           if [ "$MODE" = signed ]; then signing=(-c.mac.notarize=true); fi
-          dmg=()
-          case "$VERSION" in *-*) dmg=(-c.dmg.background=dmg/background-beta.png) ;; esac
-          bunx electron-builder --mac dmg zip --arm64 --publish never \
+          config=(--config electron-builder.yml)
+          case "$CHANNEL" in
+            beta | canary) config+=(-c.dmg.background="dmg/background-$CHANNEL.png") ;;
+          esac
+          bunx electron-builder --mac dmg zip --arm64 --publish never "${config[@]}" \
             -c.extraMetadata.version="$VERSION" \
-            "${signing[@]}" "${dmg[@]}"
+            "${signing[@]}"
       - name: Check the versions and the signature
         working-directory: apps/desktop/release
         env:
@@ -100,11 +149,18 @@ jobs:
           MODE: ${{ steps.signing.outputs.mode }}
         run: |
           app=mac-arm64/Shinsa.app
-          bundled=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
-          engine=$("$app/Contents/Resources/engine/bin/shinsa" version --json | jq -r .command.version)
-          echo "Release $VERSION, app $bundled, engine $engine"
+          plist="$app/Contents/Info.plist"
+          bundled=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
+          report=$("$app/Contents/Resources/engine/bin/shinsa" version --json)
+          engine=$(jq -r .command.version <<<"$report")
+          echo "Release $VERSION, app $bundled ($bundle_id), engine $engine"
           if [ "$bundled" != "$VERSION" ] || [ "$engine" != "$VERSION" ]; then
             echo "::error title=Versions::The app ($bundled) and its engine ($engine) must both be $VERSION."
+            exit 1
+          fi
+          if [ "$bundle_id" != studio.overclock.shinsa ]; then
+            echo "::error title=Identity::Every channel builds studio.overclock.shinsa, not $bundle_id."
             exit 1
           fi
           codesign --verify --deep --strict "$app"
@@ -112,7 +168,7 @@ jobs:
             spctl --assess --type execute --verbose=2 "$app"
             xcrun stapler validate "$app"
           fi
-      - name: Update files for both channels
+      - name: Update files for the channels
         working-directory: apps/desktop/release
         env:
           CHANNEL: ${{ steps.version.outputs.channel }}
@@ -122,8 +178,8 @@ jobs:
             cp latest-mac.yml beta-mac.yml
             files=(latest-mac.yml beta-mac.yml)
           else
-            mv latest-mac.yml beta-mac.yml
-            files=(beta-mac.yml)
+            mv latest-mac.yml "$CHANNEL-mac.yml"
+            files=("$CHANNEL-mac.yml")
           fi
           for file in "${files[@]}"; do
             if ! grep -qx "version: $VERSION" "$file"; then
@@ -141,18 +197,22 @@ jobs:
           CHANNEL: ${{ steps.version.outputs.channel }}
           NOTES: ${{ steps.version.outputs.notes }}
           NOTES_START_TAG: ${{ steps.version.outputs.notes_start_tag }}
+          RELEASE_SHA: ${{ needs.trigger.outputs.sha }}
         run: |
           updates=()
           while IFS= read -r file; do updates+=("$file"); done < update-files.txt
-          if [ "$CHANNEL" = beta ]; then
-            kind=(--prerelease --latest=false)
-            title="Shinsa $VERSION (beta)"
-          else
+          if [ "$CHANNEL" = stable ]; then
             kind=(--latest)
             title="Shinsa $VERSION"
+          else
+            kind=(--prerelease --latest=false)
+            title="Shinsa $VERSION ($CHANNEL)"
+          fi
+          if [ "$CHANNEL" = canary ] && [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
+            gh release delete "$TAG" --yes
           fi
           if [ -n "$NOTES_START_TAG" ]; then kind+=(--notes-start-tag "$NOTES_START_TAG"); fi
-          gh release create "$TAG" --target "$GITHUB_SHA" --title "$title" \
+          gh release create "$TAG" --target "$RELEASE_SHA" --title "$title" \
             --generate-notes --notes "$NOTES" "${kind[@]}" \
             Shinsa-mac-arm64.dmg Shinsa-mac-arm64.dmg.blockmap \
             Shinsa-mac-arm64.zip Shinsa-mac-arm64.zip.blockmap \
@@ -160,11 +220,13 @@ jobs:
           printf '**Published** [%s](%s/%s/releases/tag/%s).\n' "$title" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$TAG" >> "$GITHUB_STEP_SUMMARY"
 
   downloads:
-    needs: mac
-    runs-on: ubuntu-24.04
+    needs: [trigger, mac]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.trigger.outputs.sha }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
@@ -173,6 +235,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          WRANGLER_SEND_METRICS: 'false'
           RELEASE_TAG: ${{ needs.mac.outputs.tag }}
         run: bun scripts/release-upload.ts
+      - name: Keep the last five canaries on GitHub
+        if: ${{ !cancelled() && needs.mac.outputs.channel == 'canary' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/release-prune.ts

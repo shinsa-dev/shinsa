@@ -1,4 +1,4 @@
-import type { Task } from '@shinsa/core';
+import { resolveCurrentRound, type ShinsaState, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { ScrollArea } from '@shinsa/ui/components/scroll-area';
@@ -6,12 +6,14 @@ import { Textarea } from '@shinsa/ui/components/textarea';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { isSubmitKey } from '@/lib/keys.ts';
 import {
   describeQueue,
   listQueuedMessages,
   type QueuedMessage,
   removeQueuedMessage,
+  sendQueuedMessage,
   updateQueuedMessage,
 } from '@/lib/tasks/message-queue.ts';
 
@@ -70,14 +72,22 @@ function QueuedEditor({
 
 function QueuedRow({
   message,
+  current,
   onEdit,
+  onSend,
   onRemove,
 }: {
   message: QueuedMessage;
+  current: number;
   onEdit: () => void;
+  onSend: () => Promise<boolean>;
   onRemove: () => Promise<boolean>;
 }) {
   const [busy, setBusy] = React.useState(false);
+  const act = (action: () => Promise<boolean>) => {
+    setBusy(true);
+    void action().then(() => setBusy(false));
+  };
   return (
     <li
       data-queued-message
@@ -87,6 +97,17 @@ function QueuedRow({
         {message.text}
       </p>
       <span className='flex shrink-0 gap-px'>
+        <Hint label='Send now' detail={`It goes to round ${current} now, as a message.`}>
+          <Button
+            size='icon-xs'
+            variant='secondary'
+            aria-label='Send now'
+            disabled={busy}
+            onClick={() => act(onSend)}
+          >
+            <Icon name='IconArrowUp' />
+          </Button>
+        </Hint>
         <Button size='icon-xs' variant='secondary' aria-label='Edit message' disabled={busy} onClick={onEdit}>
           <Icon name='IconPencil' />
         </Button>
@@ -95,10 +116,7 @@ function QueuedRow({
           variant='secondary'
           aria-label='Remove from the queue'
           disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            void onRemove().then(() => setBusy(false));
-          }}
+          onClick={() => act(onRemove)}
         >
           <Icon name='IconCrossSmall' />
         </Button>
@@ -108,12 +126,16 @@ function QueuedRow({
 }
 
 export function MessageQueue({
+  state,
   task,
   onUpdate = (message, text) => updateQueuedMessage(task, message, text),
+  onSend = (message) => sendQueuedMessage(task, message),
   onRemove = (message) => removeQueuedMessage(task, message),
 }: {
+  state: ShinsaState;
   task: Task;
   onUpdate?: (message: QueuedMessage, text: string) => Promise<boolean>;
+  onSend?: (message: QueuedMessage) => Promise<boolean>;
   onRemove?: (message: QueuedMessage) => Promise<boolean>;
 }) {
   const [editing, setEditing] = React.useState<number | null>(null);
@@ -126,7 +148,7 @@ export function MessageQueue({
           <Icon size='sm' name='IconHourglass' />
           Queued
         </span>
-        <span className='truncate text-fg-2'>· {describeQueue(task, messages.length)}</span>
+        <span className='truncate text-fg-2'>· {describeQueue(state, task)}</span>
       </header>
       <ScrollArea className='border-border border-t' viewportClassName='max-h-44'>
         <ul className='flex flex-col divide-y divide-border'>
@@ -142,7 +164,9 @@ export function MessageQueue({
               <QueuedRow
                 key={message.number}
                 message={message}
+                current={resolveCurrentRound(task).number}
                 onEdit={() => setEditing(message.number)}
+                onSend={() => onSend(message)}
                 onRemove={() => onRemove(message)}
               />
             )

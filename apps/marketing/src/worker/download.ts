@@ -1,6 +1,6 @@
-import { isPrereleaseVersion, resolveVersionOrder } from '@shinsa/core';
+import { type ReleaseChannel, resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
 
-export type Channel = 'stable' | 'beta';
+export type Channel = ReleaseChannel;
 
 export interface DownloadPointer {
   version: string;
@@ -72,10 +72,17 @@ const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
 
 const FEED_TAG_PATTERN = /\/releases\/tag\/([^"<>\s]+)"/g;
 
+const SERVED_CHANNELS: Record<Channel, readonly Channel[]> = {
+  stable: ['stable', 'beta'],
+  beta: ['stable', 'beta'],
+  canary: ['canary'],
+};
+
 export function resolveChannel(pathname: string): Channel | null {
   const path = pathname.replace(/\/+$/, '');
   if (path === '/download') return 'stable';
   if (path === '/download/beta') return 'beta';
+  if (path === '/download/canary') return 'canary';
   return null;
 }
 
@@ -131,7 +138,7 @@ function selectPointer(bucket: DownloadBucket, channel: Channel, world: Download
 
 async function resolveDownloadPointer(bucket: DownloadBucket, channel: Channel, world: DownloadWorld) {
   const pointer = await selectPointer(bucket, channel, world);
-  if (pointer || channel === 'beta') return pointer;
+  if (pointer || channel !== 'stable') return pointer;
   return selectPointer(bucket, 'beta', world);
 }
 
@@ -281,10 +288,12 @@ async function resolveFeedVersions(world: DownloadWorld) {
 }
 
 async function resolveFallbackUrl(channel: Channel, world: DownloadWorld) {
-  const tags = await resolveFeedVersions(world);
-  if (!tags) return channel === 'stable' ? LATEST_STABLE_URL : RELEASES_PAGE;
-  if (channel === 'stable' && tags.some((tag) => !isPrereleaseVersion(tag))) return LATEST_STABLE_URL;
-  return `${REPOSITORY_URL}/releases/download/${selectNewest(tags)}/${DMG_NAME}`;
+  const tags = (await resolveFeedVersions(world)) ?? [];
+  const released = tags.some((tag) => resolveReleaseChannel(tag) === 'stable');
+  if (channel === 'stable' && (released || tags.length === 0)) return LATEST_STABLE_URL;
+  const served = tags.filter((tag) => SERVED_CHANNELS[channel].includes(resolveReleaseChannel(tag)));
+  if (served.length === 0) return channel === 'stable' ? LATEST_STABLE_URL : RELEASES_PAGE;
+  return `${REPOSITORY_URL}/releases/download/${selectNewest(served)}/${DMG_NAME}`;
 }
 
 async function redirectToGitHub(channel: Channel, world: DownloadWorld) {

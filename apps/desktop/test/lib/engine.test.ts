@@ -10,6 +10,7 @@ import {
   ENGINE_PLIST,
   type EngineScreen,
   isCrashing,
+  isOnOtherPort,
   isSpawnRefused,
   listEngineVariables,
   parseEngineAction,
@@ -92,6 +93,28 @@ describe('the engine’s launchd job', () => {
   });
 });
 
+describe('an engine left on another port', () => {
+  const job = { pid: 812, runs: 1, lastExitCode: null, spawnFailed: false };
+  const lock = (holder: object) =>
+    JSON.stringify({ version: '0.4.0', url: 'http://127.0.0.1:5180', ...holder });
+
+  it('is the job’s own engine still on the port of the version before an update', () => {
+    expect(isOnOtherPort(job, lock({ pid: 812, port: 5180 }), 7446)).toBe(true);
+  });
+
+  it('is not an engine on this port, another program’s lock, or a job that is not running', () => {
+    expect(isOnOtherPort(job, lock({ pid: 812, port: 7446 }), 7446)).toBe(false);
+    expect(isOnOtherPort(job, lock({ pid: 9001, port: 5180 }), 7446)).toBe(false);
+    expect(isOnOtherPort({ ...job, pid: null }, lock({ pid: 812, port: 5180 }), 7446)).toBe(false);
+  });
+
+  it('reads no holder from a missing, broken or partial lock', () => {
+    for (const text of [null, '', '{ broken', 'null', '7', JSON.stringify({ pid: 812 })]) {
+      expect(isOnOtherPort(job, text, 7446)).toBe(false);
+    }
+  });
+});
+
 describe('the engine log', () => {
   it('keeps the warnings, errors and plain lines, once each, in plain words', () => {
     const log = [
@@ -136,7 +159,7 @@ describe('the status screen', () => {
       { kind: 'port', port: 5180, detail: 'log' },
       { kind: 'stopped', detail: 'log' },
     ];
-    const views = screens.map(describeEngineScreen);
+    const views = screens.map((screen) => describeEngineScreen(screen));
     expect(views.map((view) => view.title)).toEqual([
       'Starting Shinsa',
       'Waiting for Shinsa',

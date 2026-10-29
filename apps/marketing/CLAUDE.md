@@ -149,11 +149,15 @@ The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in
 releases/<version>/Shinsa-mac-arm64.dmg   every release's disk image, never overwritten
 channels/stable.json                      what /download serves
 channels/beta.json                        what /download/beta serves
+channels/canary.json                      what /download/canary serves
 ```
 
 A channel file is a pointer, `{version, key, size, sha256, publishedAt}` (`parseDownloadPointer`), written after the
 GitHub release is published and only when its version is not older than the one there by semver (so a stable release
-moves both pointers, and a stable hotfix below a running beta moves only `stable.json`).
+moves `stable.json` and `beta.json`, a beta only `beta.json`, a canary only `canary.json`, and a stable hotfix below a
+running beta moves only `stable.json`). `canary.json` only ever points at a canary and the other two never do, so
+`/download` and `/download/beta` never hand out a build of `main`. Only the newest five canaries keep their disk image in the bucket;
+the Release workflow deletes the older ones.
 
 - **Serving.** The Worker reads the channel's pointer (kept 60 seconds in the edge cache, `caches.default` under a
   made-up URL; the cache works on the custom domains, not on a workers.dev preview) and streams the object from the
@@ -166,15 +170,18 @@ moves both pointers, and a stable hotfix below a running beta moves only `stable
   sends the whole file when the validator does not match. `If-None-Match` and `If-Modified-Since` answer 304,
   `If-Match` and `If-Unmodified-Since` 412, all from the pointer without touching the file. A HEAD answers from the
   pointer and a `head` of the object, reading no bytes. With no stable release yet (`stable.json` missing),
-  `/download` serves the beta pointer directly rather than redirecting to `/download/beta`.
+  `/download` serves the beta pointer directly rather than redirecting to `/download/beta`. `/download/canary` never
+  serves another channel's pointer in place of a missing `canary.json`.
 - **When R2 cannot serve**: no binding (a Worker deployed before it), no pointer, an unreadable pointer, the object
   missing, or any R2 error. The answer is then always a `302` to GitHub with `Cache-Control: no-store`, never a page.
   The Worker reads the public Atom feed `github.com/shinsa-dev/shinsa/releases.atom` (not the REST API and its 60
   requests an hour; kept 60 seconds in the edge cache, nothing kept on a failure). `/download/beta` goes to the
-  newest version in it, by semver, as `releases/download/<tag>/Shinsa-mac-arm64.dmg`, or to the releases page when
-  the feed fails. `/download` goes to `releases/latest/download/Shinsa-mac-arm64.dmg` (GitHub's own redirect, no API),
-  except that a feed listing only betas sends it to the newest beta, since GitHub's `latest` has nothing before the
-  first stable release. The feed lists the last 10 releases, so ten betas after a stable release would send a
+  newest beta or stable version in it, by semver, as `releases/download/<tag>/Shinsa-mac-arm64.dmg`, and
+  `/download/canary` to the newest canary in it, or to the releases page when the feed fails or holds none.
+  `/download` goes to `releases/latest/download/Shinsa-mac-arm64.dmg` (GitHub's own redirect, no API), except that a
+  feed listing betas and no stable release sends it to the newest beta, since GitHub's `latest` has nothing before the
+  first stable release. A canary is never a fallback for `/download` or `/download/beta`, and nothing but a canary is
+  one for `/download/canary`. The feed lists the last 10 releases, so ten betas after a stable release would send a
   fallback `/download` to a beta: a working file, in a case that needs R2 down too.
 - **Workers limits that apply.** A streamed response has no size limit, an R2 body costs no CPU time per byte, and an
   HTTP request has no wall-clock limit while the client stays connected. A download is two R2 operations (the pointer,

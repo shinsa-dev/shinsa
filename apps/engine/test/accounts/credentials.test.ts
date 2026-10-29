@@ -1,21 +1,25 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   createKeychainReader,
+  createKeychainWriter,
   parseStoredLogin,
   readStoredLogin,
   type SecretReader,
   type SecretRunner,
+  type SecretWriter,
+  writeStoredLogin,
 } from '../../src/accounts/credentials.ts';
 import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 function createRunner(result: Partial<CommandResult>) {
-  const calls: { command: string[]; cwd: string; timeoutMs: number }[] = [];
+  const calls: { command: string[]; cwd: string; timeoutMs: number; input?: string }[] = [];
   const run: SecretRunner = (command, cwd, options) => {
-    calls.push({ command, cwd, timeoutMs: options.timeoutMs });
+    calls.push({ command, cwd, ...options });
     return Promise.resolve({ ok: false, code: 0, stdout: '', stderr: '', timedOut: false, ...result });
   };
   return { run, calls };
@@ -80,15 +84,18 @@ describe('stored login', () => {
   test('reads the access token and the plan', () => {
     expect(
       parseStoredLogin(serializeLogin({ accessToken: 'tok', expiresAt: 123, subscriptionType: 'max' }))
-    ).toEqual({ accessToken: 'tok', plan: 'max' });
+    ).toEqual({ accessToken: 'tok', refreshToken: null, expiresAt: 123, plan: 'max' });
     expect(
-      parseStoredLogin(serializeLogin({ accessToken: 'tok', expiresAt: '123', subscriptionType: 7 }))
-    ).toEqual({ accessToken: 'tok', plan: null });
+      parseStoredLogin(
+        serializeLogin({ accessToken: 'tok', refreshToken: 'ref', expiresAt: '123', subscriptionType: 7 })
+      )
+    ).toEqual({ accessToken: 'tok', refreshToken: 'ref', expiresAt: null, plan: null });
   });
 
   test('anything without a usable access token is no login', () => {
     expect(parseStoredLogin('not json')).toBeNull();
     expect(parseStoredLogin('{}')).toBeNull();
+    expect(parseStoredLogin('[1]')).toBeNull();
     expect(parseStoredLogin(serializeLogin({ accessToken: '' }))).toBeNull();
     expect(parseStoredLogin(serializeLogin({ accessToken: 42 }))).toBeNull();
   });
@@ -137,7 +144,7 @@ describe('stored login', () => {
       userHome: '/nowhere',
       readSecret: () => Promise.resolve('garbage'),
     });
-    expect(login).toEqual({ accessToken: 'from-file', plan: 'pro' });
+    expect(login).toEqual({ accessToken: 'from-file', refreshToken: null, expiresAt: null, plan: 'pro' });
   });
 
   test('without a config dir the file fallback is ~/.claude/.credentials.json', async () => {
@@ -160,5 +167,112 @@ describe('stored login', () => {
       readSecret: () => Promise.resolve(null),
     });
     expect(login).toBeNull();
+  });
+});
+
+function decodeLine(line: string) {
+  const hex = /-X "([0-9a-f]+)"/.exec(line)?.[1] ?? '';
+  return Buffer.from(hex, 'hex').toString('utf8');
+}
+
+describe('keychain writer', () => {
+  test('pipes the login to security as hex, so it never shows in the process list', async () => {
+    const { run, calls } = createRunner({ ok: true });
+    const write = createKeychainWriter(run, 'darwin');
+    expect(await write('Claude Code-credentials-1234abcd', 'chris "o"', '{"a":1}')).toBe(true);
+    expect(calls).toHaveLength(1);
+    const [call] = calls;
+    expect(call?.command).toEqual(['/usr/bin/security', '-i']);
+    expect(call?.input).toStartWith(
+      'add-generic-password -U -a "chris \\"o\\"" -s "Claude Code-credentials-1234abcd" -X "'
+    );
+    expect(decodeLine(call?.input ?? '')).toBe('{"a":1}');
+  });
+
+  test('a login too long for one line of security’s input goes as arguments instead', async () => {
+    const { run, calls } = createRunner({ ok: true });
+    const value = JSON.stringify({ mcpOAuth: 'x'.repeat(3_000) });
+    expect(await createKeychainWriter(run, 'darwin')('service', 'me', value)).toBe(true);
+    const command = calls[0]?.command ?? [];
+    expect(command.slice(0, 7)).toEqual([
+      '/usr/bin/security',
+      'add-generic-password',
+      '-U',
+      '-a',
+      'me',
+      '-s',
+      'service',
+    ]);
+    expect(Buffer.from(command[8] ?? '', 'hex').toString('utf8')).toBe(value);
+    expect(calls[0]?.input).toBeUndefined();
+  });
+
+  test('a keychain that refuses is logged, and off a Mac nothing is written there', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(
+        await createKeychainWriter(createRunner({ code: 51 }).run, 'darwin')('service', 'me', '{}')
+      ).toBe(false);
+      expect(warn).toHaveBeenCalledWith('[Accounts] The keychain did not take a login', {
+        service: 'service',
+        code: 51,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+    const { run, calls } = createRunner({ ok: true });
+    expect(await createKeychainWriter(run, 'linux')('service', 'me', '{}')).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(typeof createKeychainWriter()).toBe('function');
+  });
+});
+
+describe('writing a login into an account folder', () => {
+  test('replaces only the Claude login in the keychain entry, keeping the rest', async () => {
+    const written: [string, string, string][] = [];
+    const writeSecret: SecretWriter = (service, account, value) => {
+      written.push([service, account, value]);
+      return Promise.resolve(true);
+    };
+    await writeStoredLogin(
+      {
+        configDir: '/Users/christo/.claude',
+        env: { USER: 'christo' },
+        readSecret: () =>
+          Promise.resolve(JSON.stringify({ claudeAiOauth: { accessToken: 'old' }, mcpOAuth: { s: 1 } })),
+        writeSecret,
+      },
+      { accessToken: 'new', refreshToken: 'r' }
+    );
+    expect(written).toEqual([
+      [
+        'Claude Code-credentials-09ac30cc',
+        'christo',
+        JSON.stringify({ claudeAiOauth: { accessToken: 'new', refreshToken: 'r' }, mcpOAuth: { s: 1 } }),
+      ],
+    ]);
+  });
+
+  test('without a keychain the folder’s .credentials.json gets it, kept to its owner', async () => {
+    const dir = createTempDir();
+    writeFiles(dir, {
+      '.credentials.json': JSON.stringify({ claudeAiOauth: { accessToken: 'old' }, other: 2 }),
+    });
+    const query = {
+      configDir: dir,
+      env: { USER: 'me' },
+      readSecret: () => Promise.resolve('not json'),
+      writeSecret: () => Promise.resolve(false),
+    };
+    await writeStoredLogin(query, { accessToken: 'new' });
+    expect(JSON.parse(readFileSync(join(dir, '.credentials.json'), 'utf8'))).toEqual({
+      claudeAiOauth: { accessToken: 'new' },
+      other: 2,
+    });
+    const fresh = createTempDir();
+    await writeStoredLogin({ ...query, configDir: fresh }, { accessToken: 'first' });
+    expect(JSON.parse(readFileSync(join(fresh, '.credentials.json'), 'utf8'))).toEqual({
+      claudeAiOauth: { accessToken: 'first' },
+    });
   });
 });

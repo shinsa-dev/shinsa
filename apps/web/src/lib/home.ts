@@ -1,19 +1,16 @@
 import {
   type Activity,
-  type Briefing,
   capitalise,
   DAY_MS,
   isInFocus,
   isTaskComplete,
-  listReferenceSpans,
-  type Queue,
   type ShinsaState,
   type Task,
   type TaskStage,
 } from '@shinsa/core';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import type { QueueSection } from '@/lib/queue.ts';
-import { resolveCatalog, selectPullRequestTask } from '@/lib/tasks/references.ts';
+import { isResolvingConflicts } from '@/lib/tasks/status.ts';
 
 const RECENT_LIMIT = 5;
 
@@ -67,36 +64,8 @@ export function resolveHomeSectionId(key: QueueSection['key'] | 'finished' | 'co
   return createDisclosureId('home', 'section', key);
 }
 
-function listNamedTaskIds(state: ShinsaState, text: string) {
-  return listReferenceSpans(dropPullRequestNumbers(text), resolveCatalog(state), { numbers: false }).flatMap(
-    ({ reference }) => {
-      if (reference.kind === 'task') return [reference.id];
-      if (reference.kind !== 'pr') return [];
-      const owner = selectPullRequestTask(state, reference.repo, reference.number, null);
-      return owner ? [owner.id] : [];
-    }
-  );
-}
-
-export function listGuideTaskIds(state: ShinsaState, queue: Queue, briefing: Briefing) {
-  const items = briefing.now ? [briefing.now, ...briefing.next] : [];
-  return new Set([
-    ...items.flatMap((item) => [item.taskId, ...listNamedTaskIds(state, item.why)]),
-    ...queue.working.map((task) => task.id),
-    ...(briefing.note ? listNamedTaskIds(state, briefing.note) : []),
-  ]);
-}
-
-export function resolveHomeSections(
-  state: ShinsaState,
-  sections: QueueSection[],
-  guided: ReadonlySet<string>,
-  now: number
-) {
-  const shown = new Set([
-    ...guided,
-    ...sections.flatMap((section) => section.items.map((item) => item.task.id)),
-  ]);
+export function resolveHomeSections(state: ShinsaState, sections: QueueSection[], now: number) {
+  const shown = new Set(sections.flatMap((section) => section.items.map((item) => item.task.id)));
   const finished = listRecentlyFinished(state, now, shown);
   for (const task of finished) shown.add(task.id);
   return {
@@ -116,6 +85,7 @@ export function resolveGreeting(now: number) {
 export function resolveRunningVerb(task: Task) {
   if (task.usageWait?.status === 'armed') return 'waiting for the usage limit on';
   if (task.monitor?.status === 'armed') return 'waiting to check in again on';
+  if (isResolvingConflicts(task)) return 'resolving conflicts on';
   return RUNNING_VERB[task.stage] ?? 'working on';
 }
 

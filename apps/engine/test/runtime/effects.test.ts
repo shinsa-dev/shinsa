@@ -1,11 +1,10 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CI_GRACE_MS,
   createPullRequestWatch,
-  type Evidence,
   evaluatePullRequestWatch,
-  type PlanDocument,
   type PullRequest,
   type ShinsaCommand,
   type ShinsaState,
@@ -17,6 +16,7 @@ import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
+import { EffectError, ShippingError } from '../../src/runtime/failures.ts';
 import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
@@ -32,6 +32,10 @@ import {
 } from '../helpers/index.ts';
 import { createRepo, createRound, createStubEngine, createTask } from '../helpers/state.ts';
 
+setDefaultTimeout(30_000);
+
+const GH_WAIT_MS = 25_000;
+
 const restores: (() => void)[] = [];
 
 afterEach(() => {
@@ -43,6 +47,7 @@ interface FakeGitHub {
   calls: string[][];
   failReads?: number;
   mergeQueue?: boolean;
+  workflows?: Record<string, string>;
 }
 
 function useFakeGitHub(pulls: unknown[] = [], extra: Partial<FakeGitHub> = {}) {
@@ -128,7 +133,7 @@ let effectCount = 0;
 
 function createContext(signal: AbortSignal = new AbortController().signal) {
   effectCount += 1;
-  return { key: `effect-${effectCount}`, signal };
+  return { key: `effect-${effectCount}`, attempt: 1, signal };
 }
 
 function createRuns() {
@@ -408,7 +413,7 @@ describe('triage', () => {
 });
 
 describe('the setup check', () => {
-  test('asks only for what the task’s steps need: a default branch for a worktree, checks for a build', async () => {
+  test('asks only for what the task’s steps need: a default branch for a worktree', async () => {
     const { repo } = await createGitRepo({ remote: false });
     const broken = { ...repo, defaultBranch: 'trunk' };
     const cases: [Task['pipeline'], string[]][] = [
@@ -418,7 +423,7 @@ describe('the setup check', () => {
       [['plan', 'operate'], ['default_branch']],
       [
         ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge'],
-        ['default_branch', 'check_commands'],
+        ['default_branch'],
       ],
     ];
     for (const [pipeline, kinds] of cases) {
@@ -592,10 +597,15 @@ describe('worktrees', () => {
 
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo));
+    const closed: string[] = [];
+    const services = { closeTaskServices: (taskId: string) => closed.push(taskId) };
+    const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
+      services,
+    });
     const context = createContext();
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, context);
     expect(existsSync(worktree)).toBe(false);
+    expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
     const broken = setup(withTask({ worktreePath: createTempDir() }, { ...repo, path: createTempDir() }));
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
@@ -658,135 +668,92 @@ describe('scratch folders', () => {
   });
 });
 
+function checksOf(...commands: string[]) {
+  return commands.map((command, index) => ({ id: `c${index + 1}`, label: `Check ${index + 1}`, command }));
+}
+
+function checksEffect(commands: string[], coverage = false) {
+  return { kind: 'checks.run' as const, taskId: 'task-1', round: 1, checks: checksOf(...commands), coverage };
+}
+
 describe('checks', () => {
   test('checks run after the agents stop, only while the task is checking, and record once per effect', async () => {
     const { repo, worktree } = await createShippingRepo();
     const { runner, dispatched, calls, commandIds } = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['test -f a.txt'] })
+      withTask({ stage: 'checking', worktreePath: worktree }, repo)
     );
     const context = createContext();
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, context);
+    await runner.apply(checksEffect(['test -f a.txt']), context);
     expect(calls).toEqual(['quiesce:task-1']);
-    expect(dispatched[0]).toMatchObject({ type: 'checks.record', results: [{ outcome: 'pass' }] });
+    expect(dispatched[0]).toMatchObject({
+      type: 'checks.record',
+      results: [{ id: 'c1', label: 'Check 1', command: 'test -f a.txt', outcome: 'pass' }],
+    });
     expect(commandIds).toEqual([`${context.key}:checks.record`]);
     const idle = setup(withTask({ stage: 'building' }, repo));
-    await idle.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    await idle.runner.apply(checksEffect(['true']), createContext());
     expect(idle.dispatched).toEqual([]);
   });
 
-  test("attaches the checks' output as evidence, leaving out output an agent attached this round", async () => {
+  test('runs exactly the checks of the effect and keeps each output as its own evidence', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const piece = (id: string, overrides: Partial<Evidence>): Evidence => ({
-      id,
-      taskId: 'task-1',
-      runId: 'run-1',
-      kind: 'test',
-      title: id,
-      uri: `/api/evidence/task-1/round-1/${id}.txt`,
-      attachedAt: 1,
-      ...overrides,
-    });
-    const { runner, dispatched, config } = setup((state) => {
-      withTask(
-        { stage: 'checking', worktreePath: worktree },
-        { ...repo, checkCommands: ['echo 4 pass', 'echo clean'] }
-      )(state);
-      for (const item of [
-        piece('agent-tests', {}),
-        piece('shinsa-earlier', { runId: null, kind: 'check' }),
-        piece('shot', { kind: 'screenshot' }),
-        piece('preview', { kind: 'note', uri: 'https://example.com/out.txt' }),
-        piece('later-round', { round: 2 }),
-        piece('other-task', { taskId: 'task-2' }),
-      ])
-        state.evidence[item.id] = item;
-    });
-    const folder = join(config.evidenceDir, 'task-1', 'round-1');
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(join(folder, 'agent-tests.txt'), '$ bun test\n4 pass [12.00ms]');
-    for (const name of ['shinsa-earlier', 'shot', 'later-round', 'other-task'])
-      writeFileSync(join(folder, `${name}.txt`), 'clean');
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
-    const uri = (dispatched[0] as { evidence: { uri: string } }).evidence.uri;
-    expect(readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8')).toBe(
-      '$ echo clean\nPassed.\nclean'
+    const { runner, dispatched, config } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['touch repo-ran'] })
     );
-    expect(dispatched[0]).toMatchObject({
-      type: 'checks.record',
-      evidence: {
-        title: 'Checks run by Shinsa: 1 passed',
-        detail: expect.stringContaining('Left out echo 4 pass'),
-        uri: expect.stringMatching(
-          /^\/api\/evidence\/task-1\/round-1\/checks-run-by-shinsa-1-passed-\w+\.txt$/
-        ),
-      },
-    });
+    await runner.apply(checksEffect(['echo 4 pass', 'grep -q b a.txt']), createContext());
+    expect(existsSync(join(worktree, 'repo-ran'))).toBe(false);
+    const record = dispatched[0] as Extract<ShinsaCommand, { type: 'checks.record' }>;
+    expect(record.results.map((result) => [result.id, result.outcome])).toEqual([
+      ['c1', 'pass'],
+      ['c2', 'fail'],
+    ]);
+    expect(record.outputs?.map((output) => [output.checkId, output.title])).toEqual([
+      ['c1', 'Check 1'],
+      ['c2', 'Check 2'],
+    ]);
+    const read = (uri: string) =>
+      readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8');
+    expect(read(record.outputs?.[0]?.uri ?? '')).toBe('$ echo 4 pass\nPassed.\n4 pass');
+    expect(read(record.outputs?.[1]?.uri ?? '')).toBe('$ grep -q b a.txt\nFailed.\nexit 1');
   });
 
-  test('attaches nothing when an agent attached the output of every check', async () => {
+  test('a failure whose errors all fail on the base commit too is noted and does not block; others do', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const { runner, dispatched, config } = setup((state) => {
-      withTask(
-        { stage: 'checking', worktreePath: worktree },
-        { ...repo, checkCommands: ['echo clean'] }
-      )(state);
-      state.evidence.lint = {
-        id: 'lint',
-        taskId: 'task-1',
-        runId: 'run-1',
-        kind: 'check',
-        title: 'Lint',
-        uri: '/api/evidence/task-1/round-1/lint.txt',
-        attachedAt: 1,
-      };
-    });
-    mkdirSync(join(config.evidenceDir, 'task-1', 'round-1'), { recursive: true });
-    writeFileSync(join(config.evidenceDir, 'task-1', 'round-1', 'lint.txt'), 'clean');
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
-    expect(dispatched[0]).not.toHaveProperty('evidence');
-  });
-
-  test("the plan's checks run after the repository's own, the same way, each named by its command", async () => {
-    const { repo, worktree } = await createShippingRepo();
-    const document: PlanDocument = {
-      goal: 'Add the file.',
-      phases: [],
-      behaviour: [],
-      approach: 'Write it.',
-      files: [],
-      outOfScope: [],
-      verification: ['The checks pass.'],
-      questions: [],
-      checks: ['test -f missing.txt'],
-    };
     const { runner, dispatched } = setup(
-      withTask(
-        {
-          stage: 'checking',
-          worktreePath: worktree,
-          plan: { version: 1, body: '', document, proposedAt: 1 },
-        },
-        { ...repo, checkCommands: ['test -f a.txt'] }
-      )
+      withTask({ stage: 'checking', worktreePath: worktree, branch: 'fix/tab-scroll' }, repo)
     );
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
-    expect(dispatched[0]).toMatchObject({
-      type: 'checks.record',
-      results: [
-        { name: 'test -f a.txt', outcome: 'pass' },
-        { name: 'test -f missing.txt', outcome: 'fail' },
-      ],
-    });
+    const named = (script: string, error: string) => `${script} || { echo '${error}'; exit 1; }`;
+    const checks = [
+      named('test -f missing.txt', 'missing.txt:1: is missing'),
+      named('grep -q b a.txt', 'a.txt:1: has no b'),
+      'test -f missing.txt',
+    ];
+    await runner.apply(checksEffect(checks), createContext());
+    const record = dispatched[0] as Extract<ShinsaCommand, { type: 'checks.record' }>;
+    expect(record.results.map((result) => [result.id, result.outcome, result.note ?? null])).toEqual([
+      ['c1', 'fail', 'fails_on_base'],
+      ['c2', 'fail', null],
+      ['c3', 'fail', null],
+    ]);
+    expect(record.results[0]?.detail).toStartWith('1 error, all already on the base branch.');
   });
 
-  test('after passing checks the changed lines are measured and recorded with them; failing checks skip it', async () => {
+  test('a task whose base cannot be found keeps its failures blocking', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree, branch: null }, repo)
+    );
+    await runner.apply(checksEffect(['test -f missing.txt']), createContext());
+    expect(dispatched[0]).toMatchObject({ results: [{ outcome: 'fail' }] });
+    expect((dispatched[0] as { results: { note?: string }[] }).results[0]?.note).toBeUndefined();
+  });
+
+  test('the run before review measures the changed lines with the task’s checks; other runs and failures skip it', async () => {
     const { repo, worktree } = await createShippingRepo();
     const report = "mkdir -p coverage && printf 'SF:a.txt\\nDA:1,0\\nend_of_record\\n' > coverage/lcov.info";
     const coverage = { mode: 'custom', command: report, report: 'coverage/lcov.info', format: null } as const;
-    const passing = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['true'], coverage })
-    );
-    await passing.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const passing = setup(withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage }));
+    await passing.runner.apply(checksEffect(['true'], true), createContext());
     expect(passing.dispatched[0]).toMatchObject({
       type: 'checks.record',
       coverage: {
@@ -796,21 +763,47 @@ describe('checks', () => {
         files: [{ path: 'a.txt', covered: 0, executable: 1, uncovered: [[1, 1]] }],
       },
     });
-    const failing = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['false'], coverage })
-    );
-    await failing.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const early = setup(withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage }));
+    await early.runner.apply(checksEffect(['true'], false), createContext());
+    expect(early.dispatched[0]).not.toHaveProperty('coverage');
+    const failing = setup(withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage }));
+    await failing.runner.apply(checksEffect(['grep -q b a.txt'], true), createContext());
     expect(failing.dispatched[0]).not.toHaveProperty('coverage');
+  });
+
+  test('Auto coverage runs only the tests among the task’s checks and the repository’s', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    writeFiles(worktree, {
+      'package.json': '{}',
+      'math.js': 'export function add(a, b) {\n  return a + b;\n}\n',
+      'math.test.js':
+        "import { test } from 'bun:test';\nimport { add } from './math.js';\ntest('adds', () => { add(1, 2); });\n",
+    });
+    await git(worktree, 'add', '-A');
+    await git(worktree, 'commit', '-q', '-m', 'feat: add');
+    const checks = [
+      { id: 'c1', label: 'Math', command: 'bun test ./math.test.js', phases: [1], source: 'plan' as const },
+    ];
+    const { runner, dispatched } = setup(
+      withTask(
+        { stage: 'checking', worktreePath: worktree, checks },
+        { ...repo, checkCommands: ['bunx biome check'] }
+      )
+    );
+    await runner.apply(checksEffect(['true'], true), createContext());
+    expect(dispatched[0]).toMatchObject({
+      coverage: { status: 'measured', command: expect.stringContaining('./math.test.js') },
+    });
   });
 
   test('coverage that cannot be measured is recorded as unavailable and logged, and the checks go on', async () => {
     const { repo, worktree } = await createShippingRepo();
     const coverage = { mode: 'custom', command: 'true', report: 'coverage/lcov.info', format: null } as const;
     const { runner, dispatched } = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['true'], coverage })
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage })
     );
-    const warn = spyOn(log, 'warn');
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    await runner.apply(checksEffect(['true'], true), createContext());
     expect(warn).toHaveBeenCalledWith('[Coverage] Could not measure the changed lines', {
       taskId: 'task-1',
       reason: expect.stringContaining('wrote no report'),
@@ -823,26 +816,192 @@ describe('checks', () => {
     });
   });
 
-  test('cancelled checks stop the running command, skip the rest and record nothing', async () => {
+  test('cancelled checks stop the running commands and record nothing', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const { runner, dispatched } = setup(
-      withTask(
-        { stage: 'checking', worktreePath: worktree },
-        { ...repo, checkCommands: ['touch started && sleep 30', 'touch second'] }
-      )
-    );
+    const { runner, dispatched } = setup(withTask({ stage: 'checking', worktreePath: worktree }, repo));
     const controller = new AbortController();
     const running = runner.apply(
-      { kind: 'checks.run', taskId: 'task-1', round: 1 },
+      checksEffect(['touch started && sleep 30', 'sleep 30']),
       createContext(controller.signal)
     );
     await until('the first check to start', () => existsSync(join(worktree, 'started')));
     controller.abort();
     await running;
-    expect(existsSync(join(worktree, 'second'))).toBe(false);
     expect(dispatched).toEqual([]);
   });
 });
+
+async function moveBase(repo: TestRepo, files: Record<string, string>) {
+  const other = join(repo.root, 'other');
+  await git(repo.root, 'clone', '-q', repo.origin, other);
+  writeFiles(other, files);
+  await git(other, 'add', '-A');
+  await git(other, 'commit', '-q', '-m', 'feat: move main');
+  await git(other, 'push', '-q', 'origin', 'main');
+}
+
+function writeHook(repo: TestRepo, script: string) {
+  writeFiles(repo.path, { '.git/hooks/pre-push': `#!/bin/sh\n${script}\n` });
+  chmodSync(join(repo.path, '.git/hooks/pre-push'), 0o755);
+}
+
+async function captureFailure(work: Promise<unknown>) {
+  try {
+    await work;
+  } catch (error) {
+    return error;
+  }
+  throw new Error('expected the effect to fail');
+}
+
+describe('getting the branch to GitHub', () => {
+  test('a branch behind its base gets the base merged in before the push, and each step is shown', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await moveBase(shipping, { '.husky/pre-push': 'bun run check-types\n' });
+    const { runner, dispatched, commandIds } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    const context = createContext();
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, context);
+    expect(dispatched.slice(0, 2)).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'main' } },
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'pushing', hook: false } },
+    ]);
+    expect(commandIds[0]).toBe(`${context.key}:1:pull_request.record_step:updating`);
+    expect(await git(shipping.worktree, 'log', '-1', '--format=%s')).toBe(
+      "Merge branch 'main' into fix/tab-scroll"
+    );
+    const head = await git(shipping.worktree, 'rev-parse', 'HEAD');
+    expect(await git(shipping.origin, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(head);
+    expect(await git(shipping.origin, 'show', 'refs/heads/fix/tab-scroll:.husky/pre-push')).toBe(
+      'bun run check-types'
+    );
+    await runner.stop();
+  });
+
+  test('conflicts while updating go to the agent with the files, and nothing is pushed', async () => {
+    const readGitHub = useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await moveBase(shipping, { 'a.txt': 'theirs\n' });
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'main' } },
+      { type: 'pull_request.record_update_conflict', taskId: 'task-1', base: 'main', files: ['a.txt'] },
+    ]);
+    expect(await git(shipping.worktree, 'status', '--porcelain')).toBe('');
+    expect(await git(shipping.origin, 'branch', '--list', 'fix/tab-scroll')).toBe('');
+    expect(readGitHub().calls).toEqual([]);
+    await runner.stop();
+  });
+
+  test('a pre-push hook that fails goes to the agent with its output and failures, and is never retried', async () => {
+    const readGitHub = useFakeGitHub();
+    const shipping = await createShippingRepo();
+    writeHook(shipping, 'echo "src/a.ts(3,1): error TS2322: Type \'string\' is not assignable."\nexit 1');
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched[0]).toEqual({
+      type: 'pull_request.record_step',
+      taskId: 'task-1',
+      step: { kind: 'pushing', hook: true },
+    });
+    expect(dispatched[1]).toMatchObject({
+      type: 'pull_request.record_hook_failure',
+      taskId: 'task-1',
+      output: expect.stringContaining("error TS2322: Type 'string' is not assignable."),
+      failures: ["src/a.ts: TS2322 Type 'string' is not assignable."],
+    });
+    expect(dispatched).toHaveLength(2);
+    expect(await git(shipping.origin, 'branch', '--list', 'fix/tab-scroll')).toBe('');
+    expect(readGitHub().calls).toEqual([]);
+    await runner.stop();
+  });
+
+  test('a hook failure it cannot read is still the agent’s, with no failures named', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    writeHook(shipping, 'echo "something went wrong"\nexit 1');
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched[1]).toMatchObject({ type: 'pull_request.record_hook_failure', failures: null });
+    await runner.stop();
+  });
+
+  test('a remote it cannot reach fails the effect to be retried in 30s, and the retry names the step and why', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await git(shipping.path, 'remote', 'set-url', 'origin', 'https://127.0.0.1:1/acme/app.git');
+    const { runner, dispatched, commandIds } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo),
+      { config: { pushRetryMs: 30_000 } }
+    );
+    const error = await captureFailure(
+      runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext())
+    );
+    expect(error).toBeInstanceOf(ShippingError);
+    expect(error).toMatchObject({ step: 'updating', policy: { retryable: true, delayMs: 30_000 } });
+    await runner.reportRetry(
+      { kind: 'pull_request.open', taskId: 'task-1' },
+      { attempt: 1, attempts: 5, retryAt: 40_000, error },
+      'open-key'
+    );
+    expect(dispatched.at(-1)).toMatchObject({
+      type: 'pull_request.record_retry',
+      taskId: 'task-1',
+      step: 'updating',
+      attempt: 1,
+      attempts: 5,
+      retryAt: 40_000,
+      detail: expect.stringMatching(/^Failed to connect to 127\.0\.0\.1 port 1/),
+    });
+    expect(commandIds.at(-1)).toBe('open-key:1:pull_request.record_retry');
+    await runner.stop();
+  });
+
+  test('a branch someone else moved on the remote fails at once with what to do; other retries are reported as pushes', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await git(shipping.worktree, 'push', '-q', 'origin', 'HEAD:refs/heads/fix/tab-scroll');
+    await git(shipping.worktree, 'commit', '-q', '--amend', '-m', 'fix: a, again');
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree, pullRequest: PULL }, shipping.repo)
+    );
+    const error = await captureFailure(
+      runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext())
+    );
+    expect(error).toMatchObject({ step: 'pushing', policy: { retryable: false } });
+    expect((error as Error).message).toStartWith(
+      'The branch on the remote has commits this branch does not have'
+    );
+
+    const count = dispatched.length;
+    await runner.reportRetry(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+      retryOf(new Error('x')),
+      'k'
+    );
+    expect(dispatched).toHaveLength(count);
+    await runner.reportRetry(
+      { kind: 'pull_request.push', taskId: 'task-1' },
+      retryOf(new EffectError('boom', 'boom', { retryable: true, delayMs: null })),
+      'k'
+    );
+    expect(dispatched.at(-1)).toMatchObject({ step: 'pushing', detail: 'boom' });
+    await runner.stop();
+  });
+});
+
+function retryOf(error: unknown) {
+  return { attempt: 2, attempts: 5, retryAt: 1, error };
+}
 
 describe('pull requests', () => {
   test('opening pushes, records the pull request with its comments and syncs it again once CI starts', async () => {
@@ -857,12 +1016,18 @@ describe('pull requests', () => {
     const head = await git(worktree, 'rev-parse', 'HEAD');
     expect(await git(origin, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(head);
     expect(dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_step',
       'pull_request.record_push',
+      'pull_request.record_step',
       'pull_request.record',
     ]);
-    expect(commandIds[0]).toBe(`${context.key}:pull_request.record_push:${head}`);
-    expect(dispatched[1]).toMatchObject({ remarks: [], viewer: 'shinsa-user' });
-    await until('the follow-up sync', () => dispatched.length === 3);
+    expect(commandIds.slice(0, 3)).toEqual([
+      `${context.key}:1:pull_request.record_step:pushing`,
+      `${context.key}:pull_request.record_push:${head}`,
+      `${context.key}:1:pull_request.record_step:opening`,
+    ]);
+    expect(dispatched[3]).toMatchObject({ remarks: [], viewer: 'shinsa-user' });
+    await until('the follow-up sync', () => dispatched.length === 5, GH_WAIT_MS);
     expect(readGitHub().pulls).toHaveLength(1);
     await runner.stop();
   });
@@ -873,13 +1038,18 @@ describe('pull requests', () => {
     const first = setup(withTask({ stage: 'shipping', worktreePath: worktree }, repo));
     await first.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     expect(first.dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_step',
       'pull_request.record_push',
+      'pull_request.record_step',
       'pull_request.record',
     ]);
     await first.runner.stop();
     const second = setup(withTask({ stage: 'shipping', worktreePath: worktree, pullRequest: PULL }, repo));
     await second.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
-    expect(second.dispatched.map((command) => command.type)).toEqual(['pull_request.record_push']);
+    expect(second.dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_step',
+      'pull_request.record_push',
+    ]);
     await second.runner.stop();
   });
 
@@ -925,12 +1095,12 @@ describe('pull requests', () => {
     update((state) => {
       state.settings = { ...state.settings, mergeMethod: 'rebase' };
     });
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(readGitHub().pulls[0]).toMatchObject({ state: 'MERGED', mergedWith: '--rebase' });
     expect(dispatched[0]).toMatchObject({ type: 'pull_request.record', pullRequest: { state: 'merged' } });
     const none = setup(withTask({ pullRequest: null }, repo));
     await expect(
-      none.runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext())
+      none.runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext())
     ).rejects.toThrow('no pull request to merge');
   });
 
@@ -940,7 +1110,7 @@ describe('pull requests', () => {
     ]);
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(readGitHub().calls.some((call) => call[0] === 'pr' && call[1] === 'merge')).toBe(false);
     expect(dispatched[0]).toMatchObject({ type: 'pull_request.record', pullRequest: { state: 'merged' } });
   });
@@ -951,7 +1121,7 @@ describe('pull requests', () => {
     const { repo } = await createGitRepo();
     const { runner } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
     await expect(
-      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext())
+      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext())
     ).rejects.toThrow('GitHub still shows the pull request as open after merging it.');
   });
 
@@ -959,12 +1129,12 @@ describe('pull requests', () => {
     const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll')], { mergeQueue: true });
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(records(dispatched).at(-1)?.pullRequest).toMatchObject({
       state: 'open',
       mergeQueue: { state: 'queued', position: 1 },
     });
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(readGitHub().calls.filter((call) => call[0] === 'pr' && call[1] === 'merge')).toHaveLength(1);
   });
 
@@ -974,9 +1144,64 @@ describe('pull requests', () => {
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
     const controller = new AbortController();
     controller.abort();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext(controller.signal));
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+      createContext(controller.signal)
+    );
     expect(readGitHub().calls.some((call) => call[1] === 'merge')).toBe(false);
     expect(dispatched).toEqual([]);
+  });
+
+  test('merging names the head you approved, and a head that moved since is recorded, never merged', async () => {
+    const readGitHub = useFakeGitHub([fakePull('main')]);
+    const { repo, path } = await createGitRepo();
+    const head = (await git(path, 'rev-parse', 'main')).trim();
+    const moved = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    await moved.runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: 'c0ffee0' },
+      createContext()
+    );
+    expect(readGitHub().calls.some((call) => call[1] === 'merge')).toBe(false);
+    expect(records(moved.dispatched)).toMatchObject([{ pullRequest: { state: 'open', headSha: head } }]);
+    const approved = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    await approved.runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: head },
+      createContext()
+    );
+    expect(readGitHub().calls.find((call) => call[1] === 'merge')).toEqual([
+      'pr',
+      'merge',
+      '7',
+      '--squash',
+      '--match-head-commit',
+      head,
+    ]);
+    expect(readGitHub().pulls[0]).toMatchObject({ state: 'MERGED' });
+  });
+
+  test('a head that moves between the read and the merge is recorded; any other refusal fails the merge', async () => {
+    const readGitHub = useFakeGitHub([fakePull('main')]);
+    const { repo, path } = await createGitRepo();
+    const head = (await git(path, 'rev-parse', 'main')).trim();
+    const merge = github.mergePullRequest;
+    const spy = spyOn(github, 'mergePullRequest').mockImplementation(async (...args) => {
+      await git(path, 'commit', '-q', '--allow-empty', '-m', 'chore: someone else');
+      await merge(...args);
+    });
+    const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    try {
+      await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: head }, createContext());
+    } finally {
+      spy.mockRestore();
+    }
+    const moved = (await git(path, 'rev-parse', 'main')).trim();
+    expect(records(dispatched)).toMatchObject([{ pullRequest: { state: 'open', headSha: moved } }]);
+    expect(readGitHub().pulls[0]).toMatchObject({ state: 'OPEN' });
+    useFailingGh('pr merge');
+    const refused = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    await expect(
+      refused.runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: moved }, createContext())
+    ).rejects.toThrow('gh is down');
   });
 });
 
@@ -1018,7 +1243,7 @@ describe('merging a stack of pull requests', () => {
   test('merges the task’s pull request, then each one below it top down, skipping one already merged', async () => {
     const readGitHub = useFakeGitHub(stackedPulls({ 8: { state: 'MERGED' } }));
     const { runner } = await setupStack();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(listMerged(readGitHub().calls)).toEqual(['9', '7']);
     expect(readGitHub().pulls.map((pull) => pull.state)).toEqual(['MERGED', 'MERGED', 'MERGED']);
   });
@@ -1028,16 +1253,23 @@ describe('merging a stack of pull requests', () => {
     useFailingGh('pr merge 7', 0);
     const { runner } = await setupStack();
     await expect(
-      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext())
+      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext())
     ).rejects.toThrow('GitHub still shows pull request #7 below this one as open after merging it.');
   });
 
-  test('pull requests below that GitHub puts in its merge queue are waiting, and are never queued twice', async () => {
+  test('pull requests below that GitHub puts in its merge queue are waiting, not a failed merge', async () => {
     const readGitHub = useFakeGitHub(stackedPulls(), { mergeQueue: true });
     const { runner } = await setupStack();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(listMerged(readGitHub().calls)).toEqual(['9', '8', '7']);
+  });
+
+  test('a stack already in GitHub’s merge queue is never queued twice', async () => {
+    const queue = { queue: { state: 'QUEUED', position: 1 } };
+    const readGitHub = useFakeGitHub(stackedPulls({ 7: queue, 8: queue, 9: queue }), { mergeQueue: true });
+    const { runner } = await setupStack();
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
+    expect(listMerged(readGitHub().calls)).toEqual([]);
   });
 
   test('a cancel between two merges merges nothing more', async () => {
@@ -1051,7 +1283,10 @@ describe('merging a stack of pull requests', () => {
     });
     try {
       await expect(
-        runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext(controller.signal))
+        runner.apply(
+          { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+          createContext(controller.signal)
+        )
       ).rejects.toThrow();
     } finally {
       spy.mockRestore();
@@ -1102,6 +1337,59 @@ describe('syncing a pull request', () => {
     await runner.syncPullRequest('task-1');
     expect(records(dispatched)).toHaveLength(2);
     expect(records(dispatched)[1]?.remarks?.map((remark) => remark.id)).toEqual(['c1']);
+  });
+
+  test('a read without checks says whether the repository has CI, read once; a read with checks does not ask', async () => {
+    const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll', { checks: 'none' })], {
+      workflows: { 'test.yml': 'on: pull_request\n' },
+    });
+    const { repo } = await createGitRepo();
+    const { runner, dispatched } = setup(withTask({ stage: 'shipping', pullRequest: null }, repo));
+    await runner.syncPullRequest('task-1', true);
+    await runner.syncPullRequest('task-1', true);
+    expect(records(dispatched).map((command) => command.ci)).toEqual(['workflows', 'workflows']);
+    const ciReads = () =>
+      readGitHub().calls.filter((call) => call.some((arg) => arg.startsWith('workflows=')));
+    expect(ciReads()).toHaveLength(1);
+    readGitHub.change((state) => {
+      state.pulls[0] = { ...state.pulls[0], checks: 'passing' };
+    });
+    await runner.syncPullRequest('task-1', true);
+    expect(records(dispatched).at(-1)?.ci).toBe('unknown');
+    expect(ciReads()).toHaveLength(1);
+  });
+
+  test('a read that is otherwise the same is news once the grace window for CI to start has passed', async () => {
+    useFakeGitHub([fakePull('fix/tab-scroll', { checks: 'none' })], {
+      workflows: { 'test.yml': 'on: pull_request\n' },
+    });
+    const { repo } = await createGitRepo();
+    const { runner, dispatched, update } = setup(withTask({ stage: 'shipping', pullRequest: PULL }, repo));
+    await runner.syncPullRequest('task-1');
+    const [first] = records(dispatched);
+    const settle = (pushedAt: number) =>
+      update((state) => {
+        const task = state.tasks['task-1'];
+        if (!task || !first) return;
+        const watch = evaluatePullRequestWatch(
+          createPullRequestWatch(1),
+          first.pullRequest,
+          first.remarks ?? null,
+          first.viewer ?? null
+        ).next;
+        state.tasks['task-1'] = {
+          ...task,
+          pullRequest: first.pullRequest,
+          pullRequestWatch: watch,
+          pushedAt,
+        };
+      });
+    settle(Date.now());
+    await runner.syncPullRequest('task-1');
+    expect(records(dispatched)).toHaveLength(1);
+    settle(Date.now() - CI_GRACE_MS);
+    await runner.syncPullRequest('task-1');
+    expect(records(dispatched)).toHaveLength(2);
   });
 
   test('a branch with no pull request yet records nothing', async () => {
@@ -1197,7 +1485,7 @@ describe('watching pull requests', () => {
     expect(readGitHub().calls.filter((call) => call[1] === 'view')).toHaveLength(1);
     runner.startWatching();
     runner.startWatching();
-    await until('a watched sync', () => dispatched.length >= 2);
+    await until('a watched sync', () => dispatched.length >= 2, GH_WAIT_MS);
     await runner.stop();
     await runner.stop();
   });
@@ -1208,7 +1496,7 @@ describe('watching pull requests', () => {
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'shipping', pullRequest: PULL }, repo));
     const sync = runner.syncAll();
-    await until('the read to start', () => readPid() > 0);
+    await until('the read to start', () => readPid() > 0, GH_WAIT_MS);
     await runner.stop();
     await sync;
     expect(isRunning(readPid())).toBe(false);
@@ -1223,14 +1511,14 @@ describe('watching pull requests', () => {
     const spawn = spyOn(Bun, 'spawn');
     restores.push(() => spawn.mockRestore());
     const older = runner.syncPullRequest('task-1');
-    await until('the older read', () => readGitHub().calls.some((call) => call[1] === 'graphql'));
+    await until('the older read', () => readGitHub().calls.some((call) => call[1] === 'graphql'), GH_WAIT_MS);
     readGitHub.change((state) => {
       state.pulls[0] = { ...state.pulls[0], checks: 'passing' };
     });
     const spawned = spawn.mock.calls.length;
     const newer = runner.syncPullRequest('task-1');
     if (spawn.mock.calls.length > spawned) {
-      await until('the newer read to be recorded', () => records(dispatched).length === 1);
+      await until('the newer read to be recorded', () => records(dispatched).length === 1, GH_WAIT_MS);
     }
     release();
     await Promise.all([older, newer]);
@@ -1255,8 +1543,8 @@ describe('watching pull requests', () => {
           message === '[Watch] Pull request sync failed' &&
           (fields as { taskId?: string } | undefined)?.taskId === taskId
       );
-    await until('the follow-up sync to fail', () => failed('task-1'));
-    await until('the interval sync to fail', () => failed(undefined));
+    await until('the follow-up sync to fail', () => failed('task-1'), GH_WAIT_MS);
+    await until('the interval sync to fail', () => failed(undefined), GH_WAIT_MS);
     await runner.stop();
   });
 });

@@ -14,9 +14,10 @@ import {
   type SkillSummary,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
-import { listProjects } from '@/lib/projects.ts';
+import { listProjects, resolveProjectMark, selectProject } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 
 export const EXTENSION_SECTION = { servers: 'MCPs', plugins: 'Plugins', skills: 'Skills' } as const;
@@ -209,7 +210,7 @@ export function resolveServerMenu(server: McpServerSummary): ServerMenu {
 
 export interface ExtensionPlaces {
   projects: { id: string; name: string; color: string }[];
-  repos: { path: string; name: string }[];
+  repos: { path: string; name: string; color: string | null }[];
 }
 
 export function resolveExtensionPlaces(state: ShinsaState): ExtensionPlaces {
@@ -220,7 +221,11 @@ export function resolveExtensionPlaces(state: ShinsaState): ExtensionPlaces {
       color: project.color,
     })),
     repos: Object.values(state.repos)
-      .map((repo) => ({ path: repo.path, name: repo.name }))
+      .map((repo) => ({
+        path: repo.path,
+        name: repo.name,
+        color: selectProject(state, repo.projectId)?.color ?? null,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
@@ -263,7 +268,7 @@ export function parseScope(value: string): ExtensionScope {
 export interface ScopeItem {
   value: string;
   label: string;
-  icon?: IconName;
+  icon?: MenuItemIcon;
   dot?: string;
 }
 
@@ -278,7 +283,7 @@ export function listScopeItems(places: ExtensionPlaces, current: ExtensionScope)
     ...places.repos.map((repo) => ({
       value: serializeScope({ kind: 'repo', path: repo.path }),
       label: `Only in ${repo.name}`,
-      icon: 'IconFolder1' as const,
+      icon: resolveProjectMark('IconFolder1', repo.color),
     })),
   ];
   const value = serializeScope(current);

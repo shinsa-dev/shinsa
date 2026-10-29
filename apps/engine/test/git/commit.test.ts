@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { commitWorktree, pushBranch, resolveHead, stashEdits } from '../../src/git/index.ts';
 import { runCommand } from '../../src/shell/index.ts';
@@ -82,5 +82,16 @@ describe('commits and pushes', () => {
     await pushBranch(path, 'feat/a');
     expect(await git(origin, 'rev-parse', 'refs/heads/feat/a')).toBe(await resolveHead(path));
     await expect(pushBranch(path, '--force')).rejects.toThrow('is not a branch name');
+  });
+
+  test('pushing runs the repository’s pre-push hook, with no time limit of its own', async () => {
+    const { path, origin } = await createGitRepo();
+    writeFiles(path, { '.git/hooks/pre-push': '#!/bin/sh\ntouch hook-ran\n' });
+    await runCommand(['chmod', '+x', '.git/hooks/pre-push'], path);
+    writeFiles(path, { 'a.txt': 'a' });
+    await commitWorktree(path, 'feat: a');
+    await pushBranch(path, 'feat/a');
+    expect(await git(origin, 'rev-parse', 'refs/heads/feat/a')).toBe(await resolveHead(path));
+    expect(existsSync(join(path, 'hook-ran'))).toBe(true);
   });
 });

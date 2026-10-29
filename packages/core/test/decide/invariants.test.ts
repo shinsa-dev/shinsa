@@ -19,6 +19,7 @@ import {
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
+  listTaskChecks,
   type PlanDocument,
   type PullRequest,
   type ReportCheck,
@@ -31,6 +32,7 @@ import {
   resolveCurrentRound,
   resolveQueue,
   resolveStatePatch,
+  resolveTaskPipeline,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
@@ -41,8 +43,10 @@ import {
   type Task,
   type WireState,
 } from '../../src/index.ts';
+import type { CheckChangeHandOver } from '../../src/report/types.ts';
 import { IMPACT, PLAN } from '../harness.ts';
 import { assertAgentInvariants, assertOneSessionPerTask } from './agent-invariants.ts';
+import { assertCheckInvariants } from './check-invariants.ts';
 import {
   assertDelegationInvariants,
   assertDelegationProgress,
@@ -114,6 +118,14 @@ const SCHEDULE_ODDS = 0.06;
 
 const OUTAGE_ODDS = 0.05;
 
+const PUSH_ODDS = 0.9;
+
+const PUSH_MARKS = [
+  ['The pre-push hook rejected the push', 'hook failure'],
+  ['Pushing failed on attempt', 'retried push'],
+  ['Fix round 1: resolving conflicts with the base branch', 'update conflict'],
+] as const;
+
 const SHAPE_ODDS = 0.12;
 
 const ROUND_ODDS = 0.35;
@@ -121,26 +133,53 @@ const COMPOSITION_ODDS = 0.25;
 
 const STEPS = 400;
 
-const DECISIONS: GateDecision[] = [
-  'approve',
-  'approve',
-  'approve',
-  'approve',
-  'revise',
-  'reply',
-  'waive',
-  'reject',
-];
+const DECISIONS: GateDecision[] = ['approve', 'approve', 'approve', 'approve', 'revise', 'reply', 'reject'];
 
-function randomChecks(random: Random): ReportCheck[] {
-  return [
-    { name: 'lint', outcome: chance(random, 0.7) ? 'pass' : 'fail', detail: null },
-    {
-      name: pick(random, ['types', 'tests']) ?? 'types',
-      outcome: chance(random, 0.8) ? 'pass' : 'fail',
+const CHECK_NOTES = [undefined, undefined, undefined, 'passed_alone', 'fails_on_base'] as const;
+
+function randomChecks(state: ShinsaState, task: Task, random: Random): ReportCheck[] {
+  const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
+  return listTaskChecks(task, repo).flatMap((check) => {
+    if (chance(random, 0.2)) return [];
+    const note = pick(random, [...CHECK_NOTES]);
+    const outcome = note === 'passed_alone' || chance(random, 0.75) ? 'pass' : 'fail';
+    const result = {
+      id: check.id,
+      label: check.label,
+      command: check.command,
+      outcome,
       detail: 'x',
+    } as const;
+    if (note === 'passed_alone' && outcome === 'pass') return [{ ...result, note }];
+    if (note === 'fails_on_base' && outcome === 'fail') return [{ ...result, note }];
+    return [result];
+  });
+}
+
+function listCheckChanges(state: ShinsaState, taskId: string, random: Random): CheckChangeHandOver[] {
+  if (!chance(random, 0.15)) return [];
+  const existing = state.tasks[taskId]?.checks ?? [];
+  const target = pick(random, existing);
+  const action = target ? (pick(random, ['add', 'change', 'remove'] as const) ?? 'add') : 'add';
+  return [
+    {
+      action,
+      id: action === 'add' ? null : (target?.id ?? null),
+      label: action === 'remove' ? null : `Check ${state.seq}`,
+      command: action === 'remove' ? null : `bun test src/part-${state.seq}`,
+      phases: null,
+      reason: 'New files came in.',
     },
   ];
+}
+
+function listNamedChecks(state: ShinsaState, taskId: string, random: Random) {
+  const task = state.tasks[taskId];
+  if (!task || !chance(random, 0.5)) return [];
+  return sample(
+    random,
+    (task.checks ?? []).map((check) => check.id)
+  ).slice(0, 2);
 }
 
 function randomFindings(random: Random): ReviewFinding[] {
@@ -168,11 +207,25 @@ function randomPullRequest(random: Random): PullRequest {
   };
 }
 
-function resolvePlanDocument(state: ShinsaState): PlanDocument {
-  if (state.seq % 11 === 0) return { ...PLAN, verification: [] };
-  if (state.seq % 13 === 0) return { ...PLAN, evidence: ['screenshot'], approval: true };
-  if (state.seq % 4 === 0) return PLAN;
-  return { ...PLAN, impact: IMPACT, operation: ['Run the backfill and check every row has a plan.'] };
+const MORE_CHECKS: PlanDocument['verification'] = [
+  { label: 'Panel tests', command: 'bun test src/panel', phases: [1, 2] },
+  { label: 'Web types', command: 'bun run --cwd apps/web check-types', phases: [1] },
+];
+
+function resolvePlanDocument(state: ShinsaState, taskId: string): PlanDocument {
+  const task = state.tasks[taskId];
+  const builds = task ? resolveTaskPipeline(task).includes('build') : true;
+  const verification = builds ? (state.seq % 3 === 0 ? MORE_CHECKS : PLAN.verification) : [];
+  if (state.seq % 11 === 0) return { ...PLAN, verification: builds ? [] : MORE_CHECKS };
+  if (state.seq % 13 === 0)
+    return { ...PLAN, verification, evidence: ['screenshot', 'test'], approval: true };
+  if (state.seq % 4 === 0) return { ...PLAN, verification };
+  return {
+    ...PLAN,
+    verification,
+    impact: IMPACT,
+    operation: ['Run the backfill and check every row has a plan.'],
+  };
 }
 
 function needsEvidence(state: ShinsaState, taskId: string) {
@@ -191,7 +244,11 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
     }
     switch (run.purpose ?? run.role) {
       case 'plan':
-        commands.push({ type: 'agent.propose_plan', runId, document: resolvePlanDocument(state) });
+        commands.push({
+          type: 'agent.propose_plan',
+          runId,
+          document: resolvePlanDocument(state, run.taskId),
+        });
         break;
       case 'build':
         commands.push({
@@ -200,6 +257,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           summary: 'Done.',
           spots: [],
           judgementCalls: [],
+          checkChanges: listCheckChanges(state, run.taskId, random),
           ...resolvePhaseWalkthrough(runId),
         });
         if (needsEvidence(state, run.taskId) && chance(random, 0.5)) {
@@ -210,6 +268,8 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
             title: 'The panel',
             uri: 'shot.png',
           });
+          const check = pick(random, state.tasks[run.taskId]?.checks ?? []);
+          commands.push({ type: 'agent.attach_check', runId, kind: 'test', checkId: check?.id ?? 'c9' });
         }
         break;
       case 'reviewer':
@@ -381,12 +441,47 @@ function listWorkingCopyCommands(task: Task, random: Random): ShinsaCommand[] {
       path: 'src/a.ts',
       changed: chance(random, 0.7),
     });
-  if (chance(random, 0.02) && task.branch)
-    commands.push({ type: 'task.record_conflict', taskId: task.id, branch: task.branch });
+  const pullRequest = task.pullRequest?.state === 'open' ? task.pullRequest : null;
+  if (chance(random, 0.05) && pullRequest)
+    commands.push({
+      type: 'pull_request.record',
+      taskId: task.id,
+      pullRequest: { ...pullRequest, mergeable: false, updatedAt: pullRequest.updatedAt + 1 },
+    });
   if (task.stage === 'checking' && chance(random, 0.3))
     commands.push({ type: 'task.commit_edits', taskId: task.id, treeHash: null });
-  if (task.stage === 'shipping' && chance(random, 0.5))
-    commands.push({ type: 'task.record_workspace_update', taskId: task.id, guidance: null });
+  if (task.stage === 'shipping' && chance(random, 0.5) && pullRequest)
+    commands.push({ type: 'pull_request.record', taskId: task.id, pullRequest });
+  return commands;
+}
+
+function selectPushCommand(state: ShinsaState, push: Random): ShinsaCommand | null {
+  const pushing = Object.values(state.tasks).filter(
+    (candidate) => candidate.pushPending && !isTaskSettled(candidate)
+  );
+  if (pushing.length === 0 || !chance(push, PUSH_ODDS)) return null;
+  const task = pick(push, pushing);
+  return task ? (pick(push, listShippingCommands(task, push)) ?? null) : null;
+}
+
+function listShippingCommands(task: Task, random: Random): ShinsaCommand[] {
+  const taskId = task.id;
+  const commands: ShinsaCommand[] = [
+    { type: 'pull_request.record_step', taskId, step: { kind: 'updating', base: 'main' } },
+    { type: 'pull_request.record_step', taskId, step: { kind: 'pushing', hook: chance(random, 0.5) } },
+    { type: 'pull_request.record_step', taskId, step: { kind: 'opening' } },
+    {
+      type: 'pull_request.record_retry',
+      taskId,
+      step: 'pushing',
+      attempt: 1,
+      attempts: 5,
+      retryAt: 30_000,
+      detail: 'Could not resolve host: github.com',
+    },
+    { type: 'pull_request.record_update_conflict', taskId, base: 'main', files: ['src/a.ts'] },
+    { type: 'pull_request.record_hook_failure', taskId, output: 'FAIL adds', failures: ['a.test.ts › adds'] },
+  ];
   return commands;
 }
 
@@ -410,7 +505,7 @@ function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[]
       commands.push({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: task.branch });
     }
     if (task.stage === 'checking')
-      commands.push({ type: 'checks.record', taskId, results: randomChecks(random) });
+      commands.push({ type: 'checks.record', taskId, results: randomChecks(state, task, random) });
     if (task.pushPending)
       commands.push({ type: 'pull_request.record_push', taskId, sha: `sha-${state.seq}` });
     commands.push(...listPullRequestReads(state, task, random));
@@ -485,7 +580,7 @@ const VERIFIED_PROBLEMS: ConfigProblem[][] = [
   [],
   [],
   [],
-  [{ kind: 'check_commands', detail: 'No checks.' }],
+  [{ kind: 'default_branch', detail: 'No main.' }],
   [{ kind: 'default_branch', detail: 'No main.' }],
 ];
 
@@ -535,7 +630,12 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         choices: ['A', 'B'],
         recommendation: 'A',
       },
-      { type: 'run.meter', runId, usage: randomUsage(random), weeklyPercent: (state.seq % 4) * 2 },
+      {
+        type: 'run.meter',
+        runId,
+        usage: randomUsage(random),
+        readings: [{ percent: (state.seq % 4) * 2, at: state.seq, resetsAt: null }],
+      },
       { type: 'run.silence', runId, since: chance(random, 0.7) ? state.seq : null },
     ];
     if (run.role === 'answerer')
@@ -546,6 +646,8 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         runId,
         summary: 'Fixed.',
         treeHash: `t-${state.seq % 3}`,
+        checks: listNamedChecks(state, run.taskId, random),
+        checkChanges: listCheckChanges(state, run.taskId, random),
       };
       commands.push(fix, fix, fix);
     }
@@ -559,7 +661,12 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       commands.push(review, review, review);
     }
     if (run.purpose === 'plan') {
-      commands.push({ type: 'agent.propose_plan', runId, document: PLAN, changeSummary: 'Tightened it.' });
+      commands.push({
+        type: 'agent.propose_plan',
+        runId,
+        document: resolvePlanDocument(state, run.taskId),
+        changeSummary: 'Tightened it.',
+      });
     }
     return commands;
   });
@@ -845,6 +952,7 @@ function assertInvariants(state: ShinsaState, now: number) {
   for (const gate of Object.values(state.gates)) {
     if (gate.supersededBy !== undefined) expect(gate.status).toBe('withdrawn');
   }
+  assertCheckInvariants(state);
 }
 
 type SideStream =
@@ -858,6 +966,7 @@ type SideStream =
   | 'composed_rounds'
   | 'on_behalf'
   | 'workspaces'
+  | 'pushes'
   | null;
 
 function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -909,6 +1018,7 @@ interface SideRandoms {
   writer: Random;
   planner: Random;
   rounds: Random;
+  pushes: Random;
 }
 
 function selectSideCommand(
@@ -934,6 +1044,8 @@ function selectSideCommand(
       return selectOnBehalfCommand(state, randoms.rounds);
     case 'workspaces':
       return selectWorkspaceCommand(state, randoms.planner);
+    case 'pushes':
+      return selectPushCommand(state, randoms.pushes);
     default:
       return null;
   }
@@ -955,6 +1067,13 @@ function assertSameChanges(state: ShinsaState, copies: ShinsaState[], changes: S
   }
 }
 
+function freezeState<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freezeState(child);
+  return value;
+}
+
 function simulate(
   seed: number,
   steps: number,
@@ -971,6 +1090,7 @@ function simulate(
     writer: createRandom(seed * 67_867_967),
     planner: createRandom(seed * 86_028_121),
     rounds: createRandom(seed * 104_395_301),
+    pushes: createRandom(seed * 122_949_829),
   };
   let state = createState();
   state = applyEvent(state, {
@@ -987,6 +1107,7 @@ function simulate(
     seq: 1,
     at: 0,
   });
+  freezeState(state);
   const log: ShinsaEvent[] = [{ type: 'repo.registered', repo: state.repos.repo!, seq: 1, at: 0 }];
   let client = JSON.parse(JSON.stringify(serializeState(state))) as WireState;
   let replayed = JSON.parse(JSON.stringify(state)) as ShinsaState;
@@ -999,16 +1120,13 @@ function simulate(
     newId: () => string,
     onBehalf = false
   ) => {
-    const before = JSON.stringify(state);
     let decision: ReturnType<typeof decide>;
     try {
       decision = decide(state, command, { now, newId, onBehalf });
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
-      expect(JSON.stringify(state)).toBe(before);
       return;
     }
-    expect(JSON.stringify(state), `decide mutated its input on ${command.type}`).toBe(before);
     const prior = state;
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
@@ -1017,7 +1135,7 @@ function simulate(
       log.push(stamped);
       replayed = applyEvent(replayed, stamped);
     }
-    state = decision.state;
+    state = freezeState(decision.state);
     const patch = JSON.parse(JSON.stringify(resolveStatePatch(prior, state, decision.changes))) as StatePatch;
     client = applyStatePatch(client, patch) ?? createState();
     assertSameChanges(state, [replayed], decision.changes, command.type);
@@ -1150,6 +1268,24 @@ describe('decide under random command sequences', () => {
   );
 
   test(
+    'keeps every invariant while pushes update onto their base, a pre-push hook rejects them and the network fails',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const task of Object.values(state.tasks)) {
+          for (const entry of task.activity) {
+            const mark = PUSH_MARKS.find(([prefix]) => entry.text.startsWith(prefix))?.[1];
+            if (mark) reached.add(mark);
+          }
+        }
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'pushes', collect);
+      expect([...reached].sort()).toEqual(['hook failure', 'retried push', 'update conflict']);
+    },
+    SEEDS * 3_000
+  );
+
+  test(
     'keeps every invariant while tasks take every shape, propose changes and change shape',
     () => {
       const reached = new Set<string>();
@@ -1252,11 +1388,7 @@ describe('decide under random command sequences', () => {
         for (const mark of listWorkspaceMarks(state)) if (mark) reached.add(mark);
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'workspaces', collect);
-      expect([...reached].sort()).toEqual([
-        'waited for the checkout',
-        'worked in the checkout',
-        'worked on a GitButler branch',
-      ]);
+      expect([...reached].sort()).toEqual(['waited for the checkout', 'worked in the checkout']);
     },
     SEEDS * 2_000
   );
@@ -1320,7 +1452,7 @@ describe('decide under random command sequences', () => {
 
   test('is deterministic for the same state, command, clock and ids', () => {
     const random = createRandom(7);
-    let state = simulate(7, 120);
+    let state = structuredClone(simulate(7, 120));
     for (let step = 0; step < 50; step += 1) {
       const command = nextCommand(state, random);
       const attempt = () => {

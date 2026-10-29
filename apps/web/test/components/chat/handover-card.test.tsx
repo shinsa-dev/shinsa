@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import type { ChatTool } from '@shinsa/core';
+import type { ChatTool, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
-import { createRun } from '../../support/state.ts';
+import { createRun, createTask } from '../../support/state.ts';
 
 function call(
   name: Extract<ChatTool, { kind: 'shinsa' }>['name'],
@@ -25,10 +25,10 @@ function call(
   };
 }
 
-function renderCard(toolCall: ToolCall) {
+function renderCard(toolCall: ToolCall, task: Task | null = null) {
   return render(
     <TooltipProvider>
-      <HandoverCard call={toolCall} run={createRun({ id: 'r', taskId: 't' })} live={false} />
+      <HandoverCard call={toolCall} run={createRun({ id: 'r', taskId: 't' })} live={false} task={task} />
     </TooltipProvider>
   );
 }
@@ -43,25 +43,68 @@ describe('HandoverCard for the process tools', () => {
       })
     );
     expect(view.getByText('Revised the plan')).toBeTruthy();
-    expect(view.getByText('What changed')).toBeTruthy();
-    expect(view.getByText('Split the work in two.')).toBeTruthy();
+    const summary = view.getByText('What changed').parentElement;
+    expect(summary?.textContent).toBe('What changedSplit the work in two.');
+    expect(summary?.nextElementSibling?.textContent).toBe('Ship it.');
+    expect(view.queryByText('New')).toBeNull();
   });
 
-  it('shows the plan’s evidence, extra checks, impact and that it asked for your approval', () => {
+  it('marks the phases a revision added or reworked, from the task’s plan versions', () => {
+    const document = {
+      goal: 'Ship it.',
+      phases: [],
+      behaviour: [],
+      approach: '',
+      files: [],
+      outOfScope: [],
+      verification: [],
+      questions: [],
+    };
+    const task = createTask({
+      id: 't',
+      plan: {
+        version: 2,
+        body: '',
+        document,
+        proposedAt: 1,
+        changeSummary: 'Split the work in two.',
+        changes: [
+          { kind: 'phase_added', title: 'Two' },
+          { kind: 'phase_changed', title: 'One' },
+          { kind: 'phase_removed', title: 'Zero' },
+        ],
+      },
+    });
+    const view = renderCard(
+      call('propose_plan', {
+        goal: 'Ship it.',
+        phases: [{ title: 'One', detail: 'First.' }, { title: 'Two', detail: 'Second.' }, { title: 'Three' }],
+        change_summary: 'Split the work in two.',
+      }),
+      task
+    );
+    expect(view.getByText('One').parentElement?.textContent).toBe('OneChanged');
+    expect(view.getByText('Two').parentElement?.textContent).toBe('TwoNew');
+    expect(view.getByText('Three').parentElement?.textContent).toBe('Three');
+    expect(view.queryByText('Zero')).toBeNull();
+  });
+
+  it('shows the plan’s evidence, checks, impact and that it asked for your approval', () => {
     const view = renderCard(
       call('propose_plan', {
         goal: 'Backfill currencies.',
         phases: [{ title: 'Add the script', detail: 'With a dry run.' }],
         impact: 'About 400 rows.',
         evidence: ['test', 'preview'],
-        checks: ['bun test currency'],
+        verification: [{ label: 'Currency tests', command: 'bun test currency', phases: [1] }],
         approval: true,
       })
     );
     expect(view.getByText('Proposed the plan')).toBeTruthy();
     expect(view.getByText('About 400 rows.')).toBeTruthy();
-    expect(view.getByText('Test output · Preview link')).toBeTruthy();
-    expect(view.getByText('Extra checks')).toBeTruthy();
+    expect(view.getByText('Linked test · Preview link')).toBeTruthy();
+    expect(view.getByText('Checks')).toBeTruthy();
+    expect(view.getByText('Currency tests')).toBeTruthy();
     expect(view.getByText('bun test currency')).toBeTruthy();
     expect(view.getByText('The agent asked for your approval.')).toBeTruthy();
   });

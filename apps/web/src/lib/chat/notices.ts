@@ -1,9 +1,15 @@
-import { type LoadedExtension, type LoadedExtensions, sumLoadedTokens } from '@shinsa/core';
+import {
+  type LoadedExtension,
+  type LoadedExtensions,
+  resolveProviderLabel,
+  sumLoadedTokens,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { SWITCH_REASON } from '@/lib/accounts/account.ts';
 import type { QuietNoticeKind, TimelineItemOf } from '@/lib/chat/timeline.ts';
 import { formatTokenEstimate, resolveTokenText } from '@/lib/extensions.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { formatClock } from '@/lib/format/time.ts';
 
 interface NoticeGroupLine {
   name: string;
@@ -14,6 +20,11 @@ export interface NoticeGroup {
   title: string;
   lines: NoticeGroupLine[];
   more: string | null;
+}
+
+function resolveSwitchDetail(item: TimelineItemOf<'account'>) {
+  if (item.reason !== 'signed_out' || !item.previous || !item.email) return SWITCH_REASON[item.reason];
+  return `Claude account ${item.previous} needed signing in again; continued on ${item.email}.`;
 }
 
 interface NoticeLineView {
@@ -192,13 +203,23 @@ function resolveCompactionLine(item: TimelineItemOf<'compaction'>): NoticeLineVi
   };
 }
 
+function resolveRetryLine(item: TimelineItemOf<'retrying'>): NoticeLineView {
+  return {
+    icon: 'IconArrowRotateClockwise',
+    label: `${resolveProviderLabel(item.provider)} was busy, trying again`,
+    meta: `${item.attempt} of ${item.attempts}`,
+    detail: `${item.detail} Shinsa tries the same step again by itself at ${formatClock(item.retryAt)}.`,
+  };
+}
+
 export function resolveNoticeLine(item: TimelineItemOf<QuietNoticeKind>): NoticeLineView {
+  if (item.kind === 'retrying') return resolveRetryLine(item);
   if (item.kind === 'account') {
     return {
       icon: 'IconArrowsRepeatRightLeft',
       label: 'Account switched',
       meta: item.email,
-      detail: SWITCH_REASON[item.reason],
+      detail: resolveSwitchDetail(item),
     };
   }
   if (item.kind === 'handoff') return resolveHandoffLine(item);

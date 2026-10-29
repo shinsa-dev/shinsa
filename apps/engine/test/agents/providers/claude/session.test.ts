@@ -463,6 +463,80 @@ describe('how a turn ends', () => {
     });
   });
 
+  test('a login Claude could not refresh ends the run as an auth failure, even when the process then exits with an error', async () => {
+    const expired = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+    const exited =
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code prints the hook command unexpanded
+      'Claude Code process exited with code 1. stderr: SessionEnd hook [node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.mjs"] failed: Hook cancelled';
+    const signedOut = sdkMessage({
+      type: 'assistant',
+      parent_tool_use_id: null,
+      uuid: 'a',
+      error: 'authentication_failed',
+      message: { model: '<synthetic>', content: [{ type: 'text', text: expired }] },
+    });
+    const crashing = (messages: SDKMessage[]) =>
+      createFakeQuery(() =>
+        (async function* () {
+          yield* messages;
+          throw new Error(exited);
+        })()
+      );
+    const settled = createInput();
+    const afterResult = crashing([init, signedOut, success(expired, { is_error: true })]);
+    expect(
+      await startClaudeSession(settled.input, {
+        runtime: createFakeRuntime(afterResult.query),
+        contextTimeoutMs: 20,
+      }).done
+    ).toMatchObject({
+      outcome: 'failed',
+      summary: 'Claude is signed out. Run `claude` in a terminal and sign in again.',
+      failure: { class: 'auth', code: 'authentication_failed' },
+    });
+    expect(settled.entries.filter((entry) => entry.type === 'error')).toEqual([]);
+
+    const unsettled = createInput();
+    const beforeResult = crashing([init, signedOut]);
+    expect(
+      await startClaudeSession(unsettled.input, { runtime: createFakeRuntime(beforeResult.query) }).done
+    ).toMatchObject({ outcome: 'failed', failure: { class: 'auth', code: 'authentication_failed' } });
+    expect(unsettled.entries.at(-1)).toEqual({
+      type: 'error',
+      text: 'Claude Code stopped unexpectedly (exit code 1).',
+    });
+
+    const quiet = createInput();
+    const noResult = startScripted(quiet.input);
+    noResult.messages.push(signedOut);
+    noResult.messages.close();
+    expect(await noResult.session.done).toMatchObject({
+      outcome: 'failed',
+      failure: { class: 'auth', code: 'authentication_failed' },
+    });
+  });
+
+  test('a process that exits on its own error keeps only the meaningful line of its stderr', async () => {
+    const { input, entries } = createInput();
+    const noisy = createFakeQuery(() =>
+      (async function* () {
+        yield init;
+        throw new Error(
+          'Claude Code process exited with code 1. stderr: SessionEnd hook [node cleanup.mjs] failed: Hook cancelled'
+        );
+      })()
+    );
+    expect(await startClaudeSession(input, { runtime: createFakeRuntime(noisy.query) }).done).toMatchObject({
+      outcome: 'failed',
+      summary: 'Claude Code stopped unexpectedly (exit code 1).',
+      failure: { class: 'transport_error', message: 'Claude Code stopped unexpectedly (exit code 1).' },
+    });
+    expect(entries.at(-1)).toEqual({
+      type: 'error',
+      text: 'Claude Code stopped unexpectedly (exit code 1).',
+    });
+  });
+
   test('cancel interrupts the session, closes it when the interrupt fails, and ends as cancelled', async () => {
     let closed = false;
     const { session, messages } = startScripted(createInput().input, {

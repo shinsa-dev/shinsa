@@ -12,32 +12,49 @@ import {
 } from './accounts.ts';
 import {
   askQuestion,
+  attachCheck,
   attachComparison,
   attachEvidence,
   completeFix,
   completePhase,
   noteProgress,
   proposePlan,
+  removeEvidence,
   reportReview,
 } from './agents.ts';
+import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
-import { recordConflict, recordWorkspaceUpdate } from './conflicts.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting, stackTask } from './dependencies.ts';
+import { releaseWaiting } from './dependencies.ts';
 import { commitEdits, recordEdit } from './edits.ts';
-import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
+import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
-import { dropMessage, messageTask, receiveMessage, redeliverMessage, routeMessage } from './messages.ts';
+import {
+  dropMessage,
+  messageTask,
+  receiveMessage,
+  redeliverMessage,
+  routeMessage,
+  sendQueuedRound,
+} from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
-import { recordPullRequest, recordPullRequestReadFailure, recordPush } from './pull-requests.ts';
+import {
+  recordHookFailure,
+  recordPullRequest,
+  recordPullRequestReadFailure,
+  recordPush,
+  recordPushRetry,
+  recordShippingStep,
+  recordUpdateConflict,
+} from './pull-requests.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
@@ -96,11 +113,15 @@ import {
 
 export type { DecideContext, Decision } from './decider.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
+export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
+export { assertRunTool } from './runs.ts';
 export {
+  CI_GRACE_MS,
   createPullRequestWatch,
   evaluatePullRequestWatch,
   isSamePullRequest,
   isSamePullRequestWatch,
+  resolvePullRequestCi,
 } from './watch.ts';
 
 function apply(decider: Decider, command: ShinsaCommand) {
@@ -149,6 +170,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return updateRound(decider, command);
     case 'round.remove':
       return removeRound(decider, command);
+    case 'round.send':
+      return sendQueuedRound(decider, command);
     case 'gate.answer':
       assertHumanDecides(decider);
       return answerGate(decider, command.gateId, command.decision, command.response, {
@@ -182,6 +205,14 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return waitFor(decider, command);
     case 'agent.suggest_tasks':
       return suggestTasks(decider, command);
+    case 'agent.remember':
+      return rememberRule(decider, command);
+    case 'memory.write':
+      return writeMemory(decider, command);
+    case 'memory.accept':
+      return acceptMemory(decider, command);
+    case 'memory.remove':
+      return removeMemory(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -190,18 +221,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return readyWorktree(decider, command);
     case 'worktree.gone':
       return removeWorktree(decider, command);
-    case 'task.stack':
-      return stackTask(decider, command);
-    case 'task.record_conflict':
-      return recordConflict(decider, command);
     case 'task.record_edit':
       return recordEdit(decider, command);
     case 'task.commit_edits':
       return commitEdits(decider, command);
     case 'task.record_overlaps':
       return recordOverlaps(decider, command);
-    case 'task.record_workspace_update':
-      return recordWorkspaceUpdate(decider, command);
     case 'effect.fail':
       return failEffect(decider, command);
     case 'checks.record':
@@ -210,6 +235,14 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPullRequest(decider, command);
     case 'pull_request.record_push':
       return recordPush(decider, command);
+    case 'pull_request.record_step':
+      return recordShippingStep(decider, command);
+    case 'pull_request.record_retry':
+      return recordPushRetry(decider, command);
+    case 'pull_request.record_update_conflict':
+      return recordUpdateConflict(decider, command);
+    case 'pull_request.record_hook_failure':
+      return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
       return recordPullRequestReadFailure(decider, command);
     case 'run.link':
@@ -238,8 +271,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return routeQuestion(decider, command, askQuestion);
     case 'agent.attach_evidence':
       return attachEvidence(decider, command);
+    case 'agent.attach_check':
+      return attachCheck(decider, command);
     case 'agent.attach_comparison':
       return attachComparison(decider, command);
+    case 'agent.remove_evidence':
+      return removeEvidence(decider, command);
     case 'agent.note':
       return noteProgress(decider, command);
     case 'task.bind_account':

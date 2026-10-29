@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
+import { APP_IDENTITY } from '@shinsa/core';
 
-export const APP_NAME = 'Shinsa';
+export const APP_NAME = APP_IDENTITY.appName;
 
 export const DEV_BUNDLE_ID = 'studio.overclock.shinsa.dev';
 
@@ -9,6 +10,11 @@ const DEV_BUNDLE_KEYS = {
   CFBundleDisplayName: APP_NAME,
   CFBundleIdentifier: DEV_BUNDLE_ID,
 } as const;
+
+export function resolveUserDataDir(appData: string, packaged: boolean, appId = process.env.SHINSA_APP_ID) {
+  if (!packaged) return join(appData, `${APP_NAME} Dev`);
+  return join(appData, appId || APP_NAME);
+}
 
 export function resolveDevBundle({
   electronBinary,

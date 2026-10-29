@@ -1,6 +1,11 @@
 import {
+  type EarlierEvidenceItem,
   type Evidence,
+  type EvidenceItem,
   type EvidenceItemKind,
+  type EvidenceUpdate,
+  isCurrentEvidence,
+  listEarlierEvidenceItems,
   listEvidenceItems,
   type ShinsaState,
   type Task,
@@ -13,7 +18,15 @@ export interface EvidenceView {
   media: EvidenceMedia;
   facts: string;
   fromReview: boolean;
+  updated: string | null;
   image: number | null;
+}
+
+export interface EvidenceCheck {
+  id: string;
+  taskId: string;
+  links: Evidence[];
+  output: EvidenceView | null;
 }
 
 export interface EvidenceEntry {
@@ -23,7 +36,13 @@ export interface EvidenceEntry {
   facts: string;
   detail: string | null;
   fromReview: boolean;
+  updated: string | null;
   parts: EvidenceView[];
+  check?: EvidenceCheck;
+}
+
+export interface EarlierEvidenceEntry extends EvidenceEntry {
+  status: string;
 }
 
 export interface EvidenceGroup {
@@ -35,6 +54,7 @@ export interface EvidenceGroup {
 export interface EvidenceLayout {
   count: number;
   groups: EvidenceGroup[];
+  earlier: EarlierEvidenceEntry[];
   images: ViewerImage[];
   folder: string | null;
 }
@@ -57,13 +77,35 @@ const KIND_NAME: Record<EvidenceItemKind, readonly [string, string]> = {
   comparison: ['comparison', 'comparisons'],
   screenshot: ['screenshot', 'screenshots'],
   recording: ['recording', 'recordings'],
-  test: ['test run', 'test runs'],
-  check: ['check run', 'check runs'],
+  test: ['test', 'tests'],
+  check: ['check', 'checks'],
   note: ['note', 'notes'],
   preview: ['preview', 'previews'],
 };
 
 const STORED = '/api/evidence/';
+
+const EARLIER = 'earlier:';
+
+export function listShownEvidenceImages(layout: EvidenceLayout, earlierOpen: boolean) {
+  return earlierOpen ? layout.images : layout.images.filter((image) => !image.item?.startsWith(EARLIER));
+}
+
+const UPDATE_TEXT: Partial<Record<EvidenceUpdate, string>> = {
+  you: 'Updated after your review',
+  review: 'Updated after the agent review',
+  checks: 'Updated after the checks',
+  pull_request: 'Updated after the pull request feedback',
+};
+
+export function describeEvidenceUpdate(update: EvidenceUpdate | null) {
+  if (update === null) return null;
+  return UPDATE_TEXT[update] ?? 'Updated';
+}
+
+function describeEarlierStatus(item: EarlierEvidenceItem) {
+  return item.removed ? `Removed: ${item.removed.reason}` : 'Replaced by a later version';
+}
 
 function upperFirst(text: string) {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
@@ -97,9 +139,42 @@ function joinList(items: readonly string[]) {
   return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
+interface CheckPieces {
+  id: string;
+  taskId: string;
+  pieces: Evidence[];
+}
+
+function splitCheckEvidence(evidence: readonly Evidence[]) {
+  const checks = new Map<string, CheckPieces>();
+  const others: Evidence[] = [];
+  for (const piece of evidence) {
+    if (!piece.checkId) {
+      others.push(piece);
+      continue;
+    }
+    const group = checks.get(piece.checkId) ?? { id: piece.checkId, taskId: piece.taskId, pieces: [] };
+    group.pieces.push(piece);
+    checks.set(piece.checkId, group);
+  }
+  return { others, checks: [...checks.values()] };
+}
+
+function resolveCheckKind(pieces: readonly Evidence[]): EvidenceItemKind {
+  return pieces.some((piece) => piece.kind === 'test') ? 'test' : 'check';
+}
+
+function listItemKinds(evidence: readonly Evidence[]) {
+  const { others, checks } = splitCheckEvidence(evidence.filter(isCurrentEvidence));
+  return [
+    ...listEvidenceItems(others).map((item) => item.kind),
+    ...checks.map((check) => resolveCheckKind(check.pieces)),
+  ];
+}
+
 export function describeEvidenceSummary(evidence: readonly Evidence[]) {
   const counts = new Map<EvidenceItemKind, number>();
-  for (const item of listEvidenceItems(evidence)) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
+  for (const kind of listItemKinds(evidence)) counts.set(kind, (counts.get(kind) ?? 0) + 1);
   const phrases = KIND_ORDER.flatMap((kind) => {
     const count = counts.get(kind);
     return count ? [`${count} ${resolveKindName(kind, count)}`] : [];
@@ -129,9 +204,9 @@ export function isVisualEvidence(view: EvidenceView) {
   return view.media === 'image' || view.media === 'video';
 }
 
-function numberImages(groups: readonly EvidenceGroup[]) {
+function numberImages(entries: readonly EvidenceEntry[]) {
   const images: ViewerImage[] = [];
-  for (const entry of groups.flatMap((group) => group.entries)) {
+  for (const entry of entries) {
     const caption = describeEvidenceCaption(entry);
     const named = entry.kind === 'comparison';
     for (const part of entry.parts.filter(isVisualEvidence)) {
@@ -140,6 +215,7 @@ function numberImages(groups: readonly EvidenceGroup[]) {
         src: part.evidence.uri,
         caption,
         media: part.media === 'video' ? 'video' : 'image',
+        width: part.evidence.width ?? null,
         item: entry.key,
         ...(named ? { part: describeEvidencePart(part.evidence) } : {}),
       });
@@ -167,20 +243,45 @@ export function resolveEvidenceLayout(
   return resolveEvidenceListLayout(listRoundEvidence(state.evidence, task), state.runs, dataDir);
 }
 
+function resolveCheckEntry(check: CheckPieces, resolveView: (item: Evidence) => EvidenceView): EvidenceEntry {
+  const links = check.pieces
+    .filter((piece) => piece.runId !== null && isCurrentEvidence(piece))
+    .map(resolveView);
+  const outputs = check.pieces.filter((piece) => piece.runId === null);
+  const latest = outputs.reduce<Evidence | null>(
+    (found, piece) => (found && found.attachedAt > piece.attachedAt ? found : piece),
+    null
+  );
+  const output = latest ? resolveView(latest) : null;
+  const first = links[0] ?? output;
+  return {
+    key: `check:${check.id}`,
+    kind: resolveCheckKind(check.pieces),
+    title: first?.evidence.title ?? check.id,
+    facts: '',
+    detail: links.find((link) => link.evidence.detail)?.evidence.detail ?? null,
+    fromReview: links.some((link) => link.fromReview),
+    updated: null,
+    parts: output ? [output] : [],
+    check: { id: check.id, taskId: check.taskId, links: links.map((link) => link.evidence), output },
+  };
+}
+
 export function resolveEvidenceListLayout(
   evidence: readonly Evidence[],
   runs: ShinsaState['runs'],
   dataDir: string | null = null
 ): EvidenceLayout {
-  const resolveView = (item: Evidence): EvidenceView => ({
+  const resolveView = (item: Evidence, updated: string | null = null): EvidenceView => ({
     evidence: item,
     media: resolveEvidenceMedia(item.uri),
     facts: describeEvidenceFacts(item),
     fromReview: item.runId !== null && runs[item.runId]?.role === 'reviewer',
+    updated,
     image: null,
   });
-  const entries = listEvidenceItems(evidence).map((item): EvidenceEntry => {
-    const parts = item.parts.map(resolveView);
+  const resolveEntry = (item: EvidenceItem, updated: string | null): EvidenceEntry => {
+    const parts = item.parts.map((part) => resolveView(part, updated));
     return {
       key: item.id,
       kind: item.kind,
@@ -188,18 +289,32 @@ export function resolveEvidenceListLayout(
       facts: resolveSharedFacts(parts),
       detail: resolveSharedDetail(parts),
       fromReview: parts.some((part) => part.fromReview),
+      updated,
       parts,
     };
-  });
+  };
+  const { others, checks } = splitCheckEvidence(evidence);
+  const items = listEvidenceItems(others).map((item) =>
+    resolveEntry(item, describeEvidenceUpdate(item.updated))
+  );
+  const entries = [...items, ...checks.map((check) => resolveCheckEntry(check, resolveView))];
   const groups = KIND_ORDER.flatMap((kind) => {
     const members = entries.filter((entry) => entry.kind === kind);
     if (members.length === 0) return [];
     return [{ kind, label: describeEvidenceKind(kind, members.length), entries: members }];
   });
+  const earlier = listEarlierEvidenceItems(others).map(
+    (item): EarlierEvidenceEntry => ({
+      ...resolveEntry(item, null),
+      key: `${EARLIER}${item.id}`,
+      status: describeEarlierStatus(item),
+    })
+  );
   return {
     count: entries.length,
     groups,
-    images: numberImages(groups),
+    earlier,
+    images: numberImages([...groups.flatMap((group) => group.entries), ...earlier]),
     folder: resolveEvidenceFolder(dataDir, evidence),
   };
 }
@@ -207,7 +322,7 @@ export function resolveEvidenceListLayout(
 export function listEvidencePrefetch(layout: EvidenceLayout) {
   const parts = layout.groups.flatMap((group) => group.entries.flatMap((entry) => entry.parts));
   return {
-    images: layout.images.filter((image) => image.media !== 'video').map((image) => image.src),
+    images: parts.filter((view) => view.media === 'image').map((view) => view.evidence.uri),
     texts: parts.filter((view) => view.media === 'text').map((view) => view.evidence.uri),
   };
 }

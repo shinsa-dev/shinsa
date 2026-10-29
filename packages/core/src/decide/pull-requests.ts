@@ -7,16 +7,24 @@ import {
   type PullRequest,
   type PullRequestWatch,
   type PullRequestWatchChange,
+  type PushHookFailure,
   resolveCurrentRound,
   resolveTaskRounds,
+  type ShippingStep,
+  type ShippingStepKind,
   type Task,
 } from '../domain/index.ts';
-import { resolvePullRequestFixPrompt } from '../prompts/index.ts';
-import { listActiveRuns, listOpenBlockers, resolveTaskWorkspace } from '../state/queries.ts';
-import { askToUpdateWorkspace, isAwaitingWorkspaceUpdate, startHeldConflictFix } from './conflicts.ts';
+import {
+  resolveCodeFence,
+  resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
+  resolveUpdateConflictFixPrompt,
+} from '../prompts/index.ts';
+import { describeRetryDelay } from '../state/activity.ts';
+import { listActiveRuns, listOpenBlockers, listOpenGates } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { applyEditsApproval } from './edits.ts';
-import { startFix } from './fixes.ts';
+import { resetFixBudget, startFix } from './fixes.ts';
 import { settleTask } from './lifecycle.ts';
 import { recordEarlierRoundMerged } from './rounds.ts';
 import { finishMerge } from './shapes.ts';
@@ -27,6 +35,8 @@ import {
   isSamePullRequest,
   isSamePullRequestWatch,
   PULL_REQUEST_READ_FAILURE_LIMIT,
+  type PullRequestWatchReport,
+  resolvePullRequestCi,
   resolvePullRequestSignature,
   trimWatchChanges,
 } from './watch.ts';
@@ -42,10 +52,24 @@ const MERGE_QUEUE_REASON: Record<MergeQueueState, string> = {
 
 type MergingOutcome = 'merging' | 'queued' | 'removed';
 
-function isMergeReady(pullRequest: PullRequest) {
+const RETRYING_STEP: Record<ShippingStepKind, string> = {
+  updating: 'updating the branch',
+  pushing: 'pushing',
+  opening: 'opening the pull request',
+};
+
+const HOOK_RUNNING = ' (the repository’s pre-push hook is running)';
+
+const HOOK_FAILED_AGAIN = 'the pre-push hook failed again';
+
+const UNREADABLE_HOOK_FAILURE = 'unreadable';
+
+const GATE_OUTPUT_LINES = 40;
+
+function isMergeReady(pullRequest: PullRequest, watch: PullRequestWatch) {
   return (
     pullRequest.state === 'open' &&
-    (pullRequest.checks === 'passing' || pullRequest.checks === 'none') &&
+    (pullRequest.checks === 'passing' || (pullRequest.checks === 'none' && watch.ciAbsent)) &&
     pullRequest.unresolvedComments === 0 &&
     pullRequest.mergeable === true
   );
@@ -66,6 +90,21 @@ function isShipping(task: Task) {
 
 function hasMergeGate(decider: Decider, taskId: string) {
   return decider.hasOpenGate(taskId, (gate) => gate.type === 'merge');
+}
+
+function hasForeignHead(task: Task, pullRequest: PullRequest) {
+  return Boolean(task.pushedSha && pullRequest.headSha && pullRequest.headSha !== task.pushedSha);
+}
+
+function keepsMergeGate(
+  decider: Decider,
+  task: Task,
+  pullRequest: PullRequest,
+  report: PullRequestWatchReport
+) {
+  const gate = listOpenGates(decider.state, task.id).find((open) => open.type === 'merge');
+  if (!gate || (gate.commit ?? null) !== (pullRequest.headSha ?? null)) return false;
+  return !hasFixableChange(report.changes) && !needsPullRequestFix(pullRequest);
 }
 
 function isMerging(decider: Decider, task: Task) {
@@ -92,13 +131,13 @@ function describeQueueRemoval(previous: MergeQueueEntry, pullRequest: PullReques
   return `GitHub’s merge queue took the pull request out without merging it${reason}.`;
 }
 
-function openMergeGate(decider: Decider, task: Task, removal: string | null) {
+function openMergeGate(decider: Decider, task: Task, pullRequest: PullRequest, removal: string | null) {
   if (holdForBlockers(decider, task) || hasMergeGate(decider, task.id)) return;
-  if (startHeldConflictFix(decider, task.id)) return;
   decider.progressed(task.id);
   decider.withdrawGates(task.id, (gate) => gate.type === 'failure');
+  const headSha = pullRequest.headSha ?? null;
   if (applyEditsApproval(decider, task.id, 'merge')) {
-    startMerge(decider, task.id);
+    startMerge(decider, task.id, headSha);
     return;
   }
   decider.stage(
@@ -107,7 +146,7 @@ function openMergeGate(decider: Decider, task: Task, removal: string | null) {
     removal ? 'removed from the merge queue' : 'pull request is clean'
   );
   const body = [removal, task.summary].filter(Boolean).join('\n\n');
-  decider.openGate(task.id, 'merge', task.title, body);
+  decider.openGate(task.id, 'merge', task.title, body, { details: { commit: headSha } });
 }
 
 function recordWatch(
@@ -146,9 +185,9 @@ export function shipReviewedWork(decider: Decider, taskId: string) {
   requestPush(decider, taskId);
 }
 
-export function startMerge(decider: Decider, taskId: string) {
+export function startMerge(decider: Decider, taskId: string, headSha: string | null) {
   decider.stage(taskId, 'awaiting_merge', 'merging');
-  decider.run({ kind: 'pull_request.merge', taskId });
+  decider.run({ kind: 'pull_request.merge', taskId, headSha });
 }
 
 export function recheckPullRequest(decider: Decider, taskId: string) {
@@ -199,13 +238,15 @@ function reactToPullRequest(
   const task = decider.task(taskId);
   if (!isShipping(task) || task.pushPending) return;
   let removal: string | null = null;
-  if (isMerging(decider, task)) {
+  if (isMerging(decider, task) && hasForeignHead(task, pullRequest) && !pullRequest.mergeQueue) {
+    decider.stage(taskId, 'shipping', 'the branch changed before the merge');
+  } else if (isMerging(decider, task)) {
     const merging = reactWhileMerging(decider, task, pullRequest, previous);
     if (merging.outcome !== 'removed') return;
     removal = merging.removal;
   }
   if (listActiveRuns(decider.state, taskId).length > 0) return;
-  if (task.pushedSha && pullRequest.headSha && pullRequest.headSha !== task.pushedSha) {
+  if (hasForeignHead(task, pullRequest) && pullRequest.headSha) {
     decider.withdrawGates(taskId, (gate) => gate.type === 'merge');
     if (pullRequest.headSha === task.pushedFrom) {
       decider.stage(taskId, 'shipping', 'waiting for GitHub to see the push');
@@ -223,21 +264,31 @@ function reactToWatch(
   removal: string | null
 ) {
   const { pullRequest } = command;
-  const watch = task.pullRequestWatch ?? createPullRequestWatch(decider.context.now);
+  const { now } = decider.context;
+  const watch = task.pullRequestWatch ?? createPullRequestWatch(now);
   const report = evaluatePullRequestWatch(
     watch,
     pullRequest,
     command.remarks ?? null,
-    command.viewer ?? null
+    command.viewer ?? null,
+    resolvePullRequestCi(task, watch, command.ci ?? 'unknown', now)
   );
   const fresh = report.changes.some((change) => change.kind === 'remarks');
-  if (isMergeReady(pullRequest) && !fresh) {
+  if (isMergeReady(pullRequest, report.next) && !fresh) {
     const wakes = watch.stopped ? 0 : report.next.wakes;
     recordWatch(decider, task.id, { ...report.next, stopped: null, wakes }, report.changes);
-    openMergeGate(decider, decider.task(task.id), removal);
+    openMergeGate(decider, decider.task(task.id), pullRequest, removal);
     return;
   }
-  if (watch.stopped || isAwaitingWorkspaceUpdate(decider, task)) return;
+  if (!fresh && keepsMergeGate(decider, task, pullRequest, report)) {
+    recordWatch(decider, task.id, report.next, report.changes);
+    return;
+  }
+  if (watch.stopped) {
+    if (pullRequest.mergeable === false && task.stage === 'shipping')
+      decider.stage(task.id, 'shipping', `conflicts with ${pullRequest.base ?? 'the base branch'}`);
+    return;
+  }
   decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
   if (report.exhausted) {
     recordWatch(decider, task.id, { ...report.next, stopped: 'comment_limit' }, report.changes);
@@ -253,16 +304,13 @@ function reactToWatch(
     decider.stage(task.id, 'shipping', 'waiting for CI');
     return;
   }
-  if (pullRequest.mergeable === false && resolveTaskWorkspace(decider.state, task) === 'gitbutler') {
-    askToUpdateWorkspace(decider, task, pullRequest);
-    return;
-  }
   startFix(
     decider,
     task.id,
-    'pull_request',
+    pullRequest.mergeable === false ? 'conflict' : 'pull_request',
     resolvePullRequestFixPrompt(pullRequest, trimWatchChanges(report.changes), removal),
-    resolvePullRequestSignature(pullRequest, report.next)
+    resolvePullRequestSignature(pullRequest, report.next),
+    pullRequest.base ?? null
   );
 }
 
@@ -318,4 +366,124 @@ export function recordPush(decider: Decider, command: CommandOf<'pull_request.re
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || (task.pushedSha === command.sha && !task.pushPending)) return;
   decider.emit({ type: 'pull_request.pushed', taskId: command.taskId, sha: command.sha });
+}
+
+function isShippingNow(decider: Decider, task: Task) {
+  if (task.stage !== 'shipping' || decider.hasOpenGate(task.id, (gate) => gate.type === 'failure'))
+    return false;
+  return task.pushPending === true || task.pullRequest === null;
+}
+
+function describeShippingStep(task: Task, step: ShippingStep) {
+  switch (step.kind) {
+    case 'updating':
+      return `updating the branch onto ${step.base}`;
+    case 'pushing': {
+      const what = task.pullRequest ? 'pushing the changes' : 'pushing the branch';
+      return step.hook ? `${what}${HOOK_RUNNING}` : what;
+    }
+    case 'opening':
+      return 'opening the pull request';
+  }
+}
+
+export function recordShippingStep(decider: Decider, command: CommandOf<'pull_request.record_step'>) {
+  const task = decider.task(command.taskId);
+  if (!isShippingNow(decider, task)) return;
+  decider.stage(task.id, 'shipping', describeShippingStep(task, command.step));
+}
+
+export function recordPushRetry(decider: Decider, command: CommandOf<'pull_request.record_retry'>) {
+  const task = decider.task(command.taskId);
+  if (!isShippingNow(decider, task)) return;
+  const { step, attempt, attempts, retryAt, detail } = command;
+  decider.emit({
+    type: 'pull_request.push_retrying',
+    taskId: task.id,
+    step,
+    attempt,
+    attempts,
+    retryAt,
+    detail,
+  });
+  const delay = describeRetryDelay(retryAt, decider.context.now);
+  decider.stage(
+    task.id,
+    'shipping',
+    `${RETRYING_STEP[step]} again in ${delay}, attempt ${attempt + 1} of ${attempts}: ${detail}`
+  );
+}
+
+export function recordUpdateConflict(
+  decider: Decider,
+  command: CommandOf<'pull_request.record_update_conflict'>
+) {
+  const task = decider.task(command.taskId);
+  if (!isShippingNow(decider, task) || !task.pushPending) return;
+  const files = [...new Set(command.files)].sort();
+  startFix(
+    decider,
+    task.id,
+    'update',
+    resolveUpdateConflictFixPrompt(command.base, files),
+    `update:${command.base}:${files.join('\n')}`,
+    command.base
+  );
+}
+
+function resolveHookSignature(failures: readonly string[] | null) {
+  if (!failures || failures.length === 0) return UNREADABLE_HOOK_FAILURE;
+  return [...new Set(failures)].sort().join('\n');
+}
+
+function startHookFix(
+  decider: Decider,
+  taskId: string,
+  failure: PushHookFailure | null | undefined,
+  guidance: string | null
+) {
+  startFix(
+    decider,
+    taskId,
+    'hook',
+    resolvePushHookFixPrompt(failure?.output ?? '', failure?.failures ?? null, guidance),
+    `hook:${failure?.signature ?? UNREADABLE_HOOK_FAILURE}`
+  );
+}
+
+function describeHookGate(failure: PushHookFailure) {
+  const tail = failure.output.split('\n').slice(-GATE_OUTPUT_LINES).join('\n');
+  const fence = resolveCodeFence(tail);
+  const named = failure.failures ?? [];
+  return [
+    'The repository’s pre-push hook rejected the push again after a fix round, with the same failures, so Shinsa stopped.',
+    ...(named.length > 0 ? ['', ...named.map((name) => `- ${name}`)] : []),
+    '',
+    `${fence}\n${tail}\n${fence}`,
+    '',
+    'Send it to the agent again for another fix round, or cancel the task. Shinsa never pushes without the hook.',
+  ].join('\n');
+}
+
+export function recordHookFailure(decider: Decider, command: CommandOf<'pull_request.record_hook_failure'>) {
+  const task = decider.task(command.taskId);
+  if (!isShippingNow(decider, task) || !task.pushPending) return;
+  const failure: PushHookFailure = {
+    output: command.output,
+    failures: command.failures,
+    signature: resolveHookSignature(command.failures),
+  };
+  const repeated = task.pushHookFailure?.signature === failure.signature;
+  decider.emit({ type: 'pull_request.hook_failed', taskId: task.id, failure });
+  if (!repeated) {
+    startHookFix(decider, task.id, failure, null);
+    return;
+  }
+  decider.stage(task.id, 'shipping', HOOK_FAILED_AGAIN);
+  decider.fail(task.id, 'The pre-push hook failed again', describeHookGate(failure), null, 'push_hook');
+}
+
+export function retryHookFix(decider: Decider, taskId: string, guidance: string | null) {
+  resetFixBudget(decider, taskId);
+  startHookFix(decider, taskId, decider.task(taskId).pushHookFailure, guidance);
 }

@@ -174,7 +174,7 @@ describe('rewriting events an older Shinsa wrote', () => {
       { type: 'settings.changed', settings: null },
       { type: 'task.created', taskId: TASK, planFirst: true },
       { type: 'task.staged', taskId: 7, stage: 'planning' },
-      { type: 'worktree.created', taskId: TASK, workspace: 'gitbutler' },
+      { type: 'worktree.created', taskId: TASK, workspace: 'main_checkout' },
       { type: 'project.removed', projectId: 'p' },
     ];
     expect(rewrite(...current)).toEqual([]);
@@ -230,9 +230,26 @@ describe('a walkthrough’s testing as a plain list', () => {
   });
 
   test('is read from logs older than the walkthrough guide only', () => {
+    const gitbutler = [
+      'repo.registered',
+      'repo.updated',
+      'worktree.requested',
+      'worktree.created',
+      'gate.opened',
+    ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
-    expect(listLegacyEventTypes(2)).toEqual(['phase.completed', 'work.submitted', 'walkthrough.revised']);
-    expect(listLegacyEventTypes(3)).toEqual([]);
+    expect(listLegacyEventTypes(2)).toEqual([
+      'phase.completed',
+      'work.submitted',
+      'walkthrough.revised',
+      'run.metered',
+      'pull_request.watched',
+      ...gitbutler,
+    ]);
+    expect(listLegacyEventTypes(3)).toEqual(['run.metered', 'pull_request.watched', ...gitbutler]);
+    expect(listLegacyEventTypes(4)).toEqual(['pull_request.watched', ...gitbutler]);
+    expect(listLegacyEventTypes(5)).toEqual(gitbutler);
+    expect(listLegacyEventTypes(6)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -248,7 +265,136 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(3);
+    expect(readStoredLog(path).version).toBe(6);
+  });
+});
+
+describe('the weekly usage a metered run recorded as one number', () => {
+  const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.5 };
+
+  test('is dropped, since it was the account’s movement and not the run’s share', () => {
+    expect(
+      rewrite(
+        { type: 'run.metered', runId: 'r', usage, weeklyPercent: 77 },
+        { type: 'run.metered', runId: 'r', usage }
+      )
+    ).toEqual([{ seq: 1, type: 'run.metered', event: { type: 'run.metered', runId: 'r', usage } }]);
+  });
+
+  test('is rewritten on boot in a log of the walkthrough guide’s version', () => {
+    const path = writeLegacyLog([{ type: 'run.metered', runId: 'r', usage, weeklyPercent: 3 }]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 3');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    const stored = readStoredLog(path);
+    expect(stored.version).toBe(6);
+    expect(stored.rows).toEqual([
+      { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
+    ]);
+  });
+});
+
+describe('a pull request watch from before it knew whether a head has CI', () => {
+  const watch = { startedAt: 1, headSha: 'abc', wakes: 0, stopped: null };
+
+  test('gets ciAbsent false, so no head counts as without CI until Shinsa reads it again', () => {
+    expect(
+      rewrite(
+        { type: 'pull_request.watched', taskId: TASK, watch, changes: [] },
+        { type: 'pull_request.watched', taskId: TASK, watch: { ...watch, ciAbsent: true }, changes: [] },
+        { type: 'pull_request.watched', taskId: TASK, watch: null, changes: [] }
+      )
+    ).toEqual([
+      {
+        seq: 1,
+        type: 'pull_request.watched',
+        event: {
+          type: 'pull_request.watched',
+          taskId: TASK,
+          watch: { ...watch, ciAbsent: false },
+          changes: [],
+        },
+      },
+    ]);
+  });
+});
+
+describe('GitButler, which Shinsa no longer has', () => {
+  const repo = { id: 'repo-1', name: 'app', path: '/code/app', checkCommands: [], workspace: 'gitbutler' };
+  const gate = { id: 'gate-1', taskId: TASK, type: 'failure', status: 'open', cause: 'workspace_update' };
+
+  test('a repository that chose it works in worktrees; a task working in it keeps the checkout', () => {
+    expect(
+      rewrite(
+        { type: 'repo.registered', repo },
+        { type: 'repo.updated', repo },
+        { type: 'worktree.requested', taskId: TASK, workspace: 'gitbutler' },
+        {
+          type: 'worktree.created',
+          taskId: TASK,
+          path: '/code/app',
+          branch: 'fix/a',
+          workspace: 'gitbutler',
+        },
+        { type: 'gate.opened', gate }
+      ).map((row) => row.event)
+    ).toEqual([
+      { type: 'repo.registered', repo: { ...repo, workspace: 'worktrees' } },
+      { type: 'repo.updated', repo: { ...repo, workspace: 'worktrees' } },
+      { type: 'worktree.requested', taskId: TASK, workspace: 'worktrees' },
+      {
+        type: 'worktree.created',
+        taskId: TASK,
+        path: '/code/app',
+        branch: 'fix/a',
+        workspace: 'main_checkout',
+      },
+      { type: 'gate.opened', gate: { id: 'gate-1', taskId: TASK, type: 'failure', status: 'open' } },
+    ]);
+  });
+
+  test('other workspaces, gates and malformed events are left alone', () => {
+    expect(
+      rewrite(
+        { type: 'repo.updated', repo: { ...repo, workspace: 'main_checkout' } },
+        { type: 'repo.updated', repo: null },
+        { type: 'worktree.requested', taskId: TASK, workspace: 'main_checkout' },
+        { type: 'gate.opened', gate: { ...gate, cause: 'push_hook' } },
+        { type: 'gate.opened', gate: 'broken' }
+      )
+    ).toEqual([]);
+  });
+
+  test('an old log replays on boot with no problems, and its workspace update effect settles unrun', () => {
+    const path = writeLegacyLog([
+      { type: 'repo.registered', repo },
+      { type: 'worktree.requested', taskId: TASK, workspace: 'gitbutler' },
+      { type: 'task.stacked', taskId: TASK, onTaskId: 'task-2', branch: 'fix/b' },
+      { type: 'task.conflict_held', taskId: TASK, branch: 'fix/a' },
+      { type: 'task.unstacked', taskId: TASK, fromTaskId: 'task-2' },
+      { type: 'gate.opened', gate },
+    ]);
+    const db = new Database(path);
+    db.run(
+      `INSERT INTO effects (key, lane, kind, payload, status, available_at, created_at)
+       VALUES ('workspace.update:task-1:6', 'task:task-1', 'workspace.update', ?, 'pending', 1, 1)`,
+      [JSON.stringify({ kind: 'workspace.update', taskId: TASK, guidance: null })]
+    );
+    db.close();
+    const log = new EventLog(path);
+    const engine = new Engine(log);
+    expect(engine.problems).toEqual([]);
+    expect(engine.state.repos['repo-1']?.workspace).toBe('worktrees');
+    expect(engine.state.gates['gate-1']?.cause).toBeUndefined();
+    expect(log.reconcileAfterRestart(2)).toMatchObject({ failed: 1, requeued: 0 });
+    expect(log.listEffectStatuses()).toEqual([
+      { key: 'workspace.update:task-1:6', kind: 'workspace.update', status: 'failed', attempts: 0 },
+    ]);
+    expect(log.claimEffects(3)).toEqual([]);
+    log.close();
   });
 });
 

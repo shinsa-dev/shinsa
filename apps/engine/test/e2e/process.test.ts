@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { existsSync } from 'node:fs';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -23,16 +22,12 @@ async function createTask(w: World, request: string) {
 }
 
 describe('the process around the work', () => {
-  test('a repository with nothing to check stops at the setup gate until you skip the checks', async () => {
+  test('a repository with no check commands goes straight to work, running only the plan’s checks', async () => {
     const w = await open({ checks: [] });
     const taskId = await createTask(w, 'Add the greeting files');
-    const gate = await w.untilGate(taskId, 'configuration');
-    expect(gate.title).toBe('No checks to run');
-    expect(w.agents.sessions).toHaveLength(0);
-    expect(existsSync(`${w.config.worktreesDir}/${taskId}`)).toBe(false);
-    await w.answer(gate, 'waive');
     await w.untilStage(taskId, 'awaiting_review');
-    expect(w.state.repos[w.repoId]?.checksWaived).toBe(true);
+    expect(Object.values(w.state.gates).filter((gate) => gate.type === 'configuration')).toEqual([]);
+    expect(w.task(taskId).checkResults?.map((check) => check.id)).toEqual(['c1']);
   });
 
   test('a builder can wait for something outside the repository, and suggest tasks', async () => {

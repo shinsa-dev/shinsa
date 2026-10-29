@@ -57,6 +57,7 @@ describe('Jump to', () => {
       ['Setup', 'General'],
       ['Models', 'Agents'],
       ['Engine', 'Agents'],
+      ['Memory', 'Agents'],
       ['Versions', 'Agents'],
       ['Accounts', 'Agent usage'],
       ['Limits', 'Agent usage'],
@@ -123,10 +124,9 @@ describe('Change a setting', () => {
     ]);
   });
 
-  it('switches the app’s update channel, and only in the app', () => {
-    expect(() =>
-      find(listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES), 'settings.update-channel')
-    ).toThrow();
+  it('switches the app’s update channel between Stable, Beta and Canary, and only in the app', () => {
+    const browser = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES);
+    expect(() => find(browser, 'settings.update-channel')).toThrow();
     const fake = installDesktop();
     const sections = listSettingsSections(
       createSettings(),
@@ -140,10 +140,16 @@ describe('Change a setting', () => {
     expect(find(sections, 'settings.update-channel')).toMatchObject({
       label: 'Update channel',
       hint: 'Stable',
+      options: [
+        { value: 'stable', label: 'Stable' },
+        { value: 'beta', label: 'Beta' },
+        { value: 'canary', label: 'Canary' },
+      ],
     });
+    pick(sections, 'settings.update-channel', 'canary');
     pick(sections, 'settings.update-channel', 'beta');
     pick(sections, 'settings.update-channel', 'stable');
-    expect(fake.channels).toEqual(['beta', 'stable']);
+    expect(fake.channels).toEqual(['canary', 'beta', 'stable']);
     fake.restore();
   });
 
@@ -197,6 +203,51 @@ describe('Change a setting', () => {
     });
     const group = find(sections, 'settings.model.task');
     expect(group).not.toHaveProperty('searchOnly');
+  });
+
+  it('offers the cost limit while an account with a weekly limit is still learning its rate', () => {
+    const account = createAccount({ id: 'weekly' });
+    const weekly = createSnapshot({
+      accounts: [
+        {
+          ...account,
+          usage: {
+            ...account.usage,
+            windows: [
+              {
+                id: 'seven_day',
+                kind: 'weekly',
+                label: 'Weekly',
+                model: null,
+                usedPercent: 10,
+                resetsAt: null,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const list = (trusted: boolean) =>
+      listSettingsSections(
+        createSettings(),
+        MODELS,
+        DEFAULT_PREFERENCES,
+        weekly,
+        undefined,
+        'left',
+        null,
+        new Map([['account:weekly', { percentPerUsd: 0.2, tasks: 5, trusted }]])
+      );
+    expect(
+      list(false)
+        .flatMap((section) => section.commands)
+        .map((command) => command.id)
+    ).toContain('settings.budget');
+    expect(
+      list(true)
+        .flatMap((section) => section.commands)
+        .map((command) => command.id)
+    ).not.toContain('settings.budget');
   });
 
   it('asks when to ask you about a limit only while a limit waits for you', () => {
@@ -393,16 +444,9 @@ describe('Setup', () => {
 });
 
 describe('Where agents work', () => {
-  it('each repository is a choice found by search, GitButler held back with its reason until it is set up, and picking one saves it', () => {
-    const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'gitbutler' })];
-    const support = {
-      web: { butInstalled: false, gitButlerWorkspace: true },
-      app: { butInstalled: true, gitButlerWorkspace: true },
-    };
-    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, {
-      repos,
-      support,
-    });
+  it('each repository is a choice found by search, worktrees or the main checkout, and picking one saves it', () => {
+    const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'main_checkout' })];
+    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, repos);
     const web = find(sections, 'settings.workspace.web');
     expect(web).toMatchObject({
       kind: 'choice',
@@ -410,17 +454,17 @@ describe('Where agents work', () => {
       hint: 'Worktrees',
       searchOnly: true,
       value: 'worktrees',
-      keywords: expect.arrayContaining(['gitbutler', 'main checkout']),
+      keywords: expect.arrayContaining(['worktrees', 'main checkout']),
     });
     if (web.kind !== 'choice') throw new Error('not a choice');
     expect(web.options.map((option) => [option.value, option.disabled])).toEqual([
       ['worktrees', undefined],
-      ['gitbutler', 'Install GitButler’s command line (`but`) to use it.'],
       ['main_checkout', undefined],
     ]);
     const app = find(sections, 'settings.workspace.app');
     if (app.kind !== 'choice') throw new Error('not a choice');
-    expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'gitbutler', 'main_checkout']);
+    expect(app).toMatchObject({ hint: 'Main checkout', value: 'main_checkout' });
+    expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'main_checkout']);
     expect(sections.flatMap((section) => section.commands).map((command) => command.id)).toContain(
       'settings.workspace.app'
     );

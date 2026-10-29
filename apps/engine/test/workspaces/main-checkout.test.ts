@@ -1,7 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { Task } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
@@ -68,14 +67,6 @@ describe('the main checkout', () => {
     expect(await readBranch(path)).toBe('main');
     await expect(strategy.prepare(repo, createTask({ branch: null, worktreePath: null }))).rejects.toThrow(
       'The task has no branch yet.'
-    );
-  });
-
-  test('a GitButler workspace is refused: switching its checkout would take it out of GitButler', async () => {
-    const { repo, path } = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], path);
-    await expect(strategy.prepare(repo, createTask({ worktreePath: null }))).rejects.toThrow(
-      'app is a GitButler workspace. Choose GitButler or worktrees for it in Settings → Projects.'
     );
   });
 
@@ -164,10 +155,5 @@ describe('the main checkout', () => {
     });
     await strategy.remove(made.repo, task);
     expect(await readBranch(made.path)).toBe('main');
-  });
-
-  test('never makes an agent wait for a claim: the checkout belongs to one task at a time already', async () => {
-    const release = await strategy.claim();
-    expect(await release()).toBeUndefined();
   });
 });

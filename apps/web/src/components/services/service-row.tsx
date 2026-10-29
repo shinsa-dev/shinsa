@@ -10,7 +10,7 @@ import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
+import { describeServiceState, SERVICE_GLYPHS, type TaskServiceRun } from '@/lib/terminal/services.ts';
 
 export interface ServiceHandlers {
   start: (view: ServiceView) => void;
@@ -21,6 +21,8 @@ export interface ServiceHandlers {
 }
 
 const REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
+
+const TREE_LINE = 'pointer-events-none absolute start-3.75 w-px bg-bg-a4';
 
 export function ServiceActionButton({
   label,
@@ -76,18 +78,23 @@ export function ServiceRow({
   project,
   now,
   handlers,
+  hasRuns = false,
 }: {
   view: ServiceView;
   project: Project;
   now: number;
   handlers: ServiceHandlers;
+  hasRuns?: boolean;
 }) {
   const glyph = SERVICE_GLYPHS[view.state];
   const state = describeServiceState(view, now);
   const name = view.service.name;
-  const active = isServiceActive(view);
   return (
-    <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control pe-1'>
+    <div
+      data-highlight-item=''
+      className='group/service relative flex items-center gap-1 rounded-control pe-1'
+    >
+      {hasRuns && <span aria-hidden className={cn(TREE_LINE, 'top-7.5 bottom-0')} />}
       <button
         type='button'
         disabled={!view.terminal}
@@ -98,18 +105,67 @@ export function ServiceRow({
         <StatusTile icon={glyph.icon} tone={glyph.tone} label={state} />
         <ServiceLines view={view} now={now} />
       </button>
-      {active ? (
-        <span className={cn('flex shrink-0 items-center gap-px', REVEAL)}>
-          <ServiceActionButton
-            label={`Restart ${name}`}
-            icon='IconArrowRotateClockwise'
-            onClick={() => handlers.restart(view)}
-          />
-          <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
+      <RowRunButtons view={view} handlers={handlers} />
+    </div>
+  );
+}
+
+function RowRunButtons({ view, handlers }: { view: ServiceView; handlers: ServiceHandlers }) {
+  const name = view.service.name;
+  if (!isServiceActive(view))
+    return (
+      <ServiceActionButton label={`Start ${name}`} icon='IconPlay' onClick={() => handlers.start(view)} />
+    );
+  return (
+    <span className={cn('flex shrink-0 items-center gap-px', REVEAL)}>
+      <ServiceActionButton
+        label={`Restart ${name}`}
+        icon='IconArrowRotateClockwise'
+        onClick={() => handlers.restart(view)}
+      />
+      <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
+    </span>
+  );
+}
+
+export function TaskRunRow({
+  run,
+  last,
+  project,
+  now,
+  handlers,
+}: {
+  run: TaskServiceRun;
+  last: boolean;
+  project: Project;
+  now: number;
+  handlers: ServiceHandlers;
+}) {
+  const { view, label } = run;
+  const glyph = SERVICE_GLYPHS[view.state];
+  const state = describeServiceState(view, now);
+  return (
+    <div
+      data-highlight-item=''
+      className='group/service relative flex items-center gap-1 rounded-control ps-6 pe-1'
+    >
+      <span aria-hidden className={cn(TREE_LINE, 'top-0', last ? 'h-1/2' : 'bottom-0')} />
+      <span aria-hidden className='pointer-events-none absolute start-3.75 top-1/2 h-px w-2.5 bg-bg-a4' />
+      <button
+        type='button'
+        aria-label={`Open the terminal of ${view.service.name} for ${label}`}
+        onClick={() => handlers.open(view, project)}
+        className={cn(LIST_ROW, 'h-8 min-w-0 flex-1 items-center ps-1.5')}
+      >
+        <StatusTile icon={glyph.icon} tone={glyph.tone} size='sm' label={state} />
+        <Truncate className='min-w-0 flex-1 text-fg-3 text-xs'>{label}</Truncate>
+        <span
+          className={cn('shrink-0 text-2xs', glyph.tone === 'neutral' ? 'text-fg-2' : TONE_TEXT[glyph.tone])}
+        >
+          {state}
         </span>
-      ) : (
-        <ServiceActionButton label={`Start ${name}`} icon='IconPlay' onClick={() => handlers.start(view)} />
-      )}
+      </button>
+      <RowRunButtons view={view} handlers={handlers} />
     </div>
   );
 }

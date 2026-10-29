@@ -1,5 +1,10 @@
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
-import { describePullRequestChanges, describePullRequestRemarks } from './activity.ts';
+import {
+  describeHookFailure,
+  describePullRequestChanges,
+  describePullRequestRemarks,
+  describePushRetry,
+} from './activity.ts';
 import type { ShinsaState } from './project.ts';
 import { recordRoundPullRequest } from './rounds.ts';
 import { record, updateTask } from './write.ts';
@@ -15,7 +20,9 @@ type PullRequestEvent = Extract<
       | 'pull_request.head_moved'
       | 'pull_request.watched'
       | 'pull_request.read_failed'
-      | 'pull_request.read_failures_cleared';
+      | 'pull_request.read_failures_cleared'
+      | 'pull_request.push_retrying'
+      | 'pull_request.hook_failed';
   }
 >;
 
@@ -30,7 +37,7 @@ function applyPullRequestOpened(state: ShinsaState, event: EventOf<'pull_request
 }
 
 function applyPullRequestHeadMoved(state: ShinsaState, event: EventOf<'pull_request.head_moved'>) {
-  updateTask(state, event.taskId, event.at, { pushedSha: event.sha });
+  updateTask(state, event.taskId, event.at, { pushedSha: event.sha, pushedAt: event.at });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'pull_request',
@@ -64,8 +71,10 @@ export function applyPullRequestEvent(state: ShinsaState, event: PullRequestEven
     case 'pull_request.pushed':
       updateTask(state, event.taskId, event.at, {
         pushedSha: event.sha,
+        pushedAt: event.at,
         pushedFrom: state.tasks[event.taskId]?.pullRequest?.headSha ?? null,
         pushPending: false,
+        pushHookFailure: null,
       });
       return;
     case 'pull_request.head_moved':
@@ -79,6 +88,21 @@ export function applyPullRequestEvent(state: ShinsaState, event: PullRequestEven
       return;
     case 'pull_request.read_failures_cleared':
       updateTask(state, event.taskId, event.at, { pullRequestReadFailures: 0 });
+      return;
+    case 'pull_request.push_retrying':
+      record(state, event.taskId, event.at, {
+        actor: 'shinsa',
+        kind: 'pull_request',
+        ...describePushRetry(event),
+      });
+      return;
+    case 'pull_request.hook_failed':
+      updateTask(state, event.taskId, event.at, { pushHookFailure: event.failure });
+      record(state, event.taskId, event.at, {
+        actor: 'shinsa',
+        kind: 'pull_request',
+        ...describeHookFailure(event.failure),
+      });
       return;
   }
 }

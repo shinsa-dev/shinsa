@@ -176,6 +176,7 @@ describe('resolveRunHeadline', () => {
       ['changes', 'Making your changes', 'Made your changes'],
       ['pull_request', 'Fixing the pull request', 'Fixed the pull request'],
       ['conflicts', 'Resolving conflicts', 'Resolved conflicts'],
+      ['push_hook', 'Fixing what the pre-push hook found', 'Fixed what the pre-push hook found'],
     ];
     for (const [fixFocus, present, past] of cases) {
       expect(resolveRunHeadline(live({ role: 'agent', purpose: 'fix', fixFocus }), task, [])).toBe(present);

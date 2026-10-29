@@ -106,7 +106,6 @@ async function buildRepoPatch(client: SurfaceClient, values: Values): Promise<Re
     ...(values.defaultBranch ? { defaultBranch: readValue(values, 'defaultBranch') } : {}),
     ...(values.project === undefined ? {} : { projectId }),
     ...(values.checks === undefined ? {} : { checkCommands: values.checks as string[] }),
-    ...(typeof values.waiveChecks === 'boolean' ? { checksWaived: values.waiveChecks } : {}),
     ...(values.workspace ? { workspace: readValue(values, 'workspace') as WorkspaceMode } : {}),
     ...(coverage ? { coverage } : {}),
   };
@@ -370,26 +369,22 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
       {
         name: 'checks',
         kind: 'list',
-        description: 'The check commands, in order. Repeat the option for each. Only the human changes them.',
-      },
-      {
-        name: 'waiveChecks',
-        kind: 'boolean',
-        description: 'Work without checks. Only the human changes it.',
+        description:
+          'The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them.',
       },
       {
         name: 'workspace',
         kind: 'choice',
         choices: WORKSPACE_MODES,
         description:
-          'Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it.',
+          'Where agents work: worktrees (a worktree each) or main_checkout (one task at a time in the checkout). Only the human changes it.',
       },
       {
         name: 'coverage',
         kind: 'choice',
         choices: COVERAGE_MODES,
         description:
-          'How Shinsa measures test coverage of the changed lines after the checks: auto (a coverage command it detects), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it.',
+          'How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it.',
       },
       {
         name: 'coverageCommand',

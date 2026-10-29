@@ -1,5 +1,16 @@
 export type * from './accounts.ts';
 export {
+  describeWholeSuiteRefusal,
+  isBlockingCheck,
+  isWholeSuiteCommand,
+  listBlockingChecks,
+  listPhaseChecks,
+  listRepoChecks,
+  listTaskChecks,
+  listTouchedPhaseChecks,
+  resolveNextCheckId,
+} from './checks.ts';
+export {
   DELEGATE_ROLES,
   DELEGATION_LIMITS,
   type DelegateRole,
@@ -24,8 +35,29 @@ export {
   type TaskSplit,
 } from './delegations.ts';
 export { DomainError } from './errors.ts';
-export { type EvidenceItem, listEvidenceItems } from './evidence.ts';
+export {
+  type CurrentEvidenceItem,
+  type EarlierEvidenceItem,
+  type EvidenceItem,
+  type EvidenceRemoval,
+  type EvidenceUpdate,
+  isCurrentEvidence,
+  isEvidenceKey,
+  listEarlierEvidenceItems,
+  listEvidenceItems,
+  resolveEvidenceKey,
+  selectEvidenceItem,
+} from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export {
+  isMemoryOf,
+  MEMORY_LIMITS,
+  MEMORY_SCOPES,
+  type MemoryEntry,
+  type MemoryScope,
+  type MemoryStatus,
+  resolveMemoryText,
+} from './memory.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
 export {
   describeOverlaps,
@@ -225,7 +257,6 @@ export {
 } from './watchdogs.ts';
 export {
   type ApprovalPath,
-  canUseGitButler,
   DEFAULT_WORKSPACE_MODE,
   describeHumanEdits,
   isSettingUpWorkspace,
@@ -236,5 +267,4 @@ export {
   WORKSPACE_MODES,
   WORKSPACE_SETUP_REASON,
   type WorkspaceMode,
-  type WorkspaceSupport,
 } from './workspaces.ts';

@@ -283,6 +283,28 @@ describe('resolveTimeline', () => {
     expect(only(items, 'human').map((item) => item.at)).toEqual([15]);
   });
 
+  it('matches an echo by its text without the attachments block, and never doubles the files', () => {
+    const shot = {
+      kind: 'image' as const,
+      name: 'a.png',
+      url: '/api/attachments/1/a.png',
+      mimeType: null,
+      size: null,
+    };
+    const sent =
+      'Fix this\n\n<attachments>\n<attachment kind="image" path="/d/a.png" url="/api/attachments/1/a.png" />\n</attachments>';
+    const withBlock = only(
+      resolveTimeline([createUserEntry('Fix this', 20, [shot])], [{ at: 15, text: sent }]),
+      'human'
+    );
+    expect(withBlock.map((item) => [item.at, item.attachments])).toEqual([[15, []]]);
+    const plain = only(
+      resolveTimeline([createUserEntry('Fix this', 20, [shot])], [{ at: 15, text: 'Fix this' }]),
+      'human'
+    );
+    expect(plain.map((item) => [item.at, item.attachments])).toEqual([[15, [shot]]]);
+  });
+
   it('groups consecutive tool calls into one row and starts a new group after any other item', () => {
     const items = resolveTimeline(
       [
@@ -448,7 +470,14 @@ describe('resolveTurns', () => {
     );
     const [turn] = resolveTurns(items, finished, 500);
     expect(turn?.notices).toEqual([
-      { kind: 'account', key: 'switch', at: 2, email: 'b@example.com', reason: 'usage_limit' },
+      {
+        kind: 'account',
+        key: 'switch',
+        at: 2,
+        email: 'b@example.com',
+        previous: 'a@example.com',
+        reason: 'usage_limit',
+      },
     ]);
     expect(turn?.work.map((item) => item.kind)).toEqual(['tools']);
     expect(turn?.steps).toBe(2);
@@ -760,6 +789,47 @@ describe('resolveTurns', () => {
     expect(turn?.reply).toBeNull();
     expect(turn?.errors.map((item) => item.text)).toEqual(['Session failed']);
     expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
+  });
+
+  it('collapses the same error said again into one line with a count', () => {
+    const items = resolveTimeline(
+      [
+        createErrorEntry('Codex’s API had a server error.', 1),
+        createNoticeEntry(
+          {
+            kind: 'retrying',
+            provider: 'codex',
+            detail: 'Codex’s API had a server error.',
+            attempt: 1,
+            attempts: 3,
+            retryAt: 40,
+          },
+          2,
+          'retry'
+        ),
+        createErrorEntry(' Codex’s API had a server error. ', 3),
+        createErrorEntry('Something else.', 4),
+        createErrorEntry('Codex’s API had a server error.', 5),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.errors.map((item) => [item.text, item.count])).toEqual([
+      ['Codex’s API had a server error.', 3],
+      ['Something else.', 1],
+    ]);
+    expect(turn?.notices).toEqual([
+      {
+        kind: 'retrying',
+        key: 'retry',
+        at: 2,
+        provider: 'codex',
+        detail: 'Codex’s API had a server error.',
+        attempt: 1,
+        attempts: 3,
+        retryAt: 40,
+      },
+    ]);
   });
 
   it('keeps a final reply even when the run failed afterwards', () => {

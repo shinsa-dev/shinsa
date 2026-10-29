@@ -13,11 +13,12 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { AccountChoiceItems } from '@/components/accounts/account-items.tsx';
+import { CheckStateIcon, ChecksSections } from '@/components/checks/checks-list.tsx';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { BranchDetails } from '@/components/links/branch.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
-import { CheckList, PullRequestDetails } from '@/components/links/pull-request.tsx';
-import { RepoDetails } from '@/components/links/repo.tsx';
+import { PullRequestDetails } from '@/components/links/pull-request.tsx';
+import { RepoDetails, RepoIcon } from '@/components/links/repo.tsx';
 import { TaskPopoverRows } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import {
@@ -27,10 +28,12 @@ import {
   InfoRow,
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
+import { TaskServicesFact } from '@/components/services/task-menu.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
+import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
@@ -38,20 +41,15 @@ import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeChecksPassed, hasFailingCheck, isAgentWorking } from '@/lib/overview/now.ts';
+import { isAgentWorking } from '@/lib/overview/now.ts';
+import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { describePullRequestFact, describeStarted, listForkSources, listForks } from '@/lib/tasks/facts.ts';
-import { type Check, listTaskChecks, resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
+import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
-
-const FACT =
-  'inline-flex h-6 min-w-0 shrink-0 items-center gap-1.5 rounded-control-sm px-1.5 text-fg-2 text-xs';
-
-const FACT_INTERACTIVE =
-  'corner-superellipse/1.125 cursor-pointer outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4';
 
 function FactPopover({
   trigger,
@@ -180,7 +178,7 @@ function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
     <FactPopover
       trigger={
         <>
-          <Icon size='sm' name='IconFolder1' />
+          <RepoIcon state={state} repo={repo} icon='IconFolder1' />
           <span className='truncate'>{repo.name}</span>
         </>
       }
@@ -207,7 +205,7 @@ function BranchFact({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function PullRequestFact({ state, task, checks }: { state: ShinsaState; task: Task; checks: Check[] }) {
+function PullRequestFact({ state, task }: { state: ShinsaState; task: Task }) {
   const pullRequest = task.pullRequest;
   if (!pullRequest) return null;
   return (
@@ -224,27 +222,22 @@ function PullRequestFact({ state, task, checks }: { state: ShinsaState; task: Ta
         </>
       }
     >
-      <PullRequestDetails state={state} task={task} checks={checks} />
+      <PullRequestDetails state={state} task={task} />
     </FactPopover>
   );
 }
 
-function ChecksFact({ checks }: { checks: Check[] }) {
-  const failing = hasFailingCheck(checks);
+function ChecksFact({ view }: { view: ChecksView }) {
   return (
     <FactPopover
       trigger={
         <>
-          <Icon
-            size='sm'
-            name={failing ? 'IconCircleXFilled' : 'IconCheckCircle2Filled'}
-            className={cn(failing ? 'text-red-4' : 'text-primary-4')}
-          />
-          <span className='tabular-nums'>{describeChecksPassed(checks)}</span>
+          <CheckStateIcon state={resolveStatusState(view.status)} />
+          <span className='tabular-nums'>{view.summary}</span>
         </>
       }
     >
-      <CheckList checks={checks} />
+      <ChecksSections view={view} />
     </FactPopover>
   );
 }
@@ -272,7 +265,7 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
     <FactPopover
       trigger={
         <>
-          <Icon size='sm' name='IconCoins' className={cn(cost.budget?.over && 'text-orange-text')} />
+          <Icon size='sm' name={cost.icon} className={cn(cost.budget?.over && 'text-orange-text')} />
           <span className='tabular-nums'>{cost.total}</span>
         </>
       }
@@ -424,7 +417,7 @@ export function TaskFacts({
   task: Task;
   className?: string;
 }) {
-  const checks = listTaskChecks(task);
+  const checks = resolveChecksView(state, task);
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
@@ -432,9 +425,10 @@ export function TaskFacts({
       <StatusFact state={state} task={task} />
       <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
-      <PullRequestFact state={state} task={task} checks={checks} />
-      {!task.pullRequest && checks.length > 0 && <ChecksFact checks={checks} />}
+      <PullRequestFact state={state} task={task} />
+      {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
+      <TaskServicesFact state={state} task={task} />
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />
       <CostFact state={state} task={task} />

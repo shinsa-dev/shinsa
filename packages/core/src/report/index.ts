@@ -32,7 +32,7 @@ export {
   validateDelegationRequest,
   validateSplit,
 } from './orchestration.ts';
-export { describePlanChange, type PlanChange, resolvePlanChanges } from './plan-changes.ts';
+export { type PhaseChange, type PlanChange, resolvePhaseChange, resolvePlanChanges } from './plan-changes.ts';
 export {
   createTesting,
   hasTesting,
@@ -47,6 +47,7 @@ export type * from './types.ts';
 export {
   ATTACHED_EVIDENCE_KINDS,
   ATTENTION_LEVELS,
+  CHECK_CHANGE_ACTIONS,
   FINDING_SEVERITIES,
   MERGE_STEP_KINDS,
   MERGE_STEP_TIMINGS,
@@ -54,7 +55,9 @@ export {
   type Validation,
   validateDelivery,
   validateEvidence,
+  validateEvidenceRemoval,
   validateFixHandOver,
+  validateMemoryProposal,
   validatePhaseHandOver,
   validatePlanHandOver,
   validateQuestion,

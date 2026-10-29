@@ -51,6 +51,30 @@ describe('toast', () => {
     expect(kinds[0]?.dataset.xPosition).toBe('center');
   });
 
+  it('draws every kind’s glyph at the small icon size, the size beside the toast’s 13px text', async () => {
+    show(() => toast.success('Saved'));
+    show(() => toast.error('Broke'));
+    show(() => toast.warning('Careful'));
+    show(() => toast.info('Note'));
+    show(() => toast.loading('Working'));
+    show(() =>
+      toast.success('Undone', {
+        description: 'The task is back.',
+        action: { label: 'Redo', onClick: () => {} },
+      })
+    );
+
+    const kinds = await Promise.all(
+      ['Saved', 'Broke', 'Careful', 'Note', 'Working', 'Undone'].map(findToast)
+    );
+    for (const element of kinds) {
+      const glyphs = [...element.querySelectorAll('[data-icon] svg')].map((svg) => svg.getAttribute('class'));
+      expect(glyphs.length).toBeGreaterThan(0);
+      for (const glyph of glyphs) expect(glyph).toContain('size-(--icon-size-sm)');
+    }
+    expect(kinds[5]?.querySelector('[data-button]')?.textContent).toBe('Redo');
+  });
+
   it('updates a duplicate on top in place and bumps it instead of stacking a copy', async () => {
     const first = show(() => toast('Copied'));
     const element = await findToast('Copied');

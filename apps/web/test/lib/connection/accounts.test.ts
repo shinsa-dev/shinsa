@@ -15,6 +15,7 @@ import {
   updateUsageWait,
   useAccounts,
   useSignInDialog,
+  watchUsage,
 } from '@/lib/connection/accounts.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { createAccount, createLogin, createSnapshot } from '../../support/accounts.ts';
@@ -70,6 +71,16 @@ describe('the accounts snapshot', () => {
     expect(await removeAccount('a')).toBe(false);
     expect(connection.selectAccounts()).toEqual(ACCOUNTS);
     expect(toasts.error).toHaveBeenCalledWith('A sign-in is already running.');
+  });
+});
+
+describe('watching usage', () => {
+  it('hands back how to stop watching, which is safe to call twice', () => {
+    fake = startFakeOnboarding({ 'POST /api/accounts/refresh': { answer: ACCOUNTS } });
+    const stop = watchUsage();
+    stop();
+    stop();
+    expect(typeof stop).toBe('function');
   });
 });
 

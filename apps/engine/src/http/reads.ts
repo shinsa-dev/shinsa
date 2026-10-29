@@ -2,6 +2,7 @@ import {
   type ChatEntry,
   DomainError,
   isTaskSettled,
+  listMemory,
   listMergeSteps,
   listOpenGates,
   listProjectRepos,
@@ -307,6 +308,17 @@ export function createReadRoutes(engine: Engine, transcripts: Transcripts): Read
       method: 'GET',
       pattern: /^\/api\/schedules$/,
       respond: () => respond({ schedules: Object.values(engine.state.schedules) }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/memory$/,
+      respond: () =>
+        respond({
+          memory: listMemory(engine.state).map((entry) => ({
+            ...entry,
+            project: entry.projectId ? (engine.state.projects[entry.projectId]?.name ?? null) : null,
+          })),
+        }),
     },
     {
       method: 'GET',

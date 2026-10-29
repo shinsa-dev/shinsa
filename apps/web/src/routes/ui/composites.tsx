@@ -18,6 +18,7 @@ import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { CARD, COMPOSER_FOOTER, INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
+import { RepoChip, RepoIcon } from '@/components/links/repo.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { InfoHeader, InfoPopover, InfoRow, InfoSection } from '@/components/overlays/info-popover.tsx';
 import { CheckMark, CheckOutcomeIcon, SelectedMark } from '@/components/status/check-mark.tsx';
@@ -94,6 +95,43 @@ function ConfirmSpecimen() {
         onConfirm={() => void acknowledgeSample()}
       />
     </>
+  );
+}
+
+function RepoMarkSpecimen() {
+  const [state] = React.useState(() => ({
+    ...createSampleState({ tasks: [] }),
+    projects: {
+      sw: { id: 'sw', name: 'Superwall', color: 'purple', key: 'SW', description: '', folders: [] },
+    },
+    repos: Object.fromEntries(
+      [
+        {
+          id: 'web',
+          name: 'paywall-next',
+          projectId: 'sw',
+          remote: 'git@github.com:superwall/paywall-next.git',
+        },
+        { id: 'docs', name: 'superwall-docs', projectId: 'sw', remote: null },
+        { id: 'scratch', name: 'scratch', projectId: null, remote: null },
+      ].map((repo) => [
+        repo.id,
+        { ...repo, path: `~/Developer/${repo.name}`, defaultBranch: 'main', checkCommands: [] },
+      ])
+    ),
+  }));
+  return (
+    <span className='flex flex-col gap-1.5 text-fg-2 text-xs'>
+      {Object.values(state.repos).map((repo) => (
+        <span key={repo.id} className='flex items-center gap-3'>
+          <span className='flex items-center gap-1.5'>
+            <RepoIcon state={state} repo={repo} icon='IconFolder1' />
+            {repo.name}
+          </span>
+          <RepoChip state={state} repo={repo} />
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -212,6 +250,9 @@ export function CompositeSpecimens() {
         {PROJECT_COLORS.map((color) => (
           <ProjectDot key={color} color={color} label={color} />
         ))}
+      </Specimen>
+      <Specimen label='RepoIcon · RepoChip'>
+        <RepoMarkSpecimen />
       </Specimen>
       <Specimen label='TimeAgo · Duration · DiffStats · FilePath'>
         <span className='text-fg-3 text-xs'>

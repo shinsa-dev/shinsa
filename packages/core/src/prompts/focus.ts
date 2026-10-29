@@ -1,15 +1,16 @@
 import type { Run } from '../domain/index.ts';
 import { splitHouseRules } from './rules.ts';
 
-export type FixFocus = 'checks' | 'review' | 'changes' | 'pull_request' | 'conflicts';
+export type FixFocus = 'checks' | 'review' | 'changes' | 'pull_request' | 'conflicts' | 'push_hook';
 
 const FIX_OPENINGS: readonly (readonly [string, FixFocus])[] = [
   ['The checks failed', 'checks'],
   ['The agent review found', 'review'],
   ['The human looked at the work', 'changes'],
   ['Pull request #', 'pull_request'],
-  ['GitButler left', 'conflicts'],
-  ['Your pull request conflicted', 'conflicts'],
+  ['The pull request conflicts with', 'conflicts'],
+  ['The branch was being updated onto', 'conflicts'],
+  ["The repository's pre-push hook", 'push_hook'],
 ];
 
 export function resolveFixFocus(run: Pick<Run, 'purpose' | 'prompt' | 'rolePrompt'>): FixFocus | null {

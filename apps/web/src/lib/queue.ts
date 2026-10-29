@@ -3,6 +3,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { orderChains, ROADMAP_GROUP } from '@/lib/tasks/roadmap.ts';
+import type { Route } from '@/router.ts';
 
 export type QueueItem =
   | { kind: 'gate'; key: string; task: Task; gate: Gate; since: number; sinceLabel: string }
@@ -46,19 +47,15 @@ function createGroupSection(
   };
 }
 
-export function listQueueSections(
-  state: ShinsaState,
-  queue: Queue,
-  briefed: ReadonlySet<string> | null
-): QueueSection[] {
+export function listQueueSections(state: ShinsaState, queue: Queue): QueueSection[] {
   return [
     {
       key: 'needs',
-      title: briefed ? 'Also needs you' : 'Needs you',
+      title: 'Needs you',
       icon: 'IconInboxEmpty',
       tone: 'neutral',
-      items: listGateItems(queue.ready.filter((entry) => !briefed?.has(entry.task.id))),
-      empty: briefed ? null : 'Nothing is waiting on you.',
+      items: listGateItems(queue.ready),
+      empty: 'Nothing is waiting on you.',
       startsCollapsed: false,
     },
     createGroupSection(
@@ -97,4 +94,10 @@ export function resolveSectionDefault(section: QueueSection, activeTaskId: strin
 export function describeNeedsCount(count: number) {
   if (count === 0) return 'Nothing needs you';
   return count === 1 ? '1 needs you' : `${count} need you`;
+}
+
+const ROUTES_WITHOUT_QUEUE_BUTTON: Route['name'][] = ['home', 'tasks', 'onboarding'];
+
+export function isQueueButtonShown(route: Route) {
+  return !ROUTES_WITHOUT_QUEUE_BUTTON.includes(route.name);
 }

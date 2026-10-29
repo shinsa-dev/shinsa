@@ -9,10 +9,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@shinsa/ui/components/dropdown-menu';
-import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { PLACE_ICONS, type PlaceGroup } from '@/lib/terminal/tabs.ts';
+import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
 
 export function NewTerminalButton({
   groups,
@@ -56,8 +55,7 @@ export function NewTerminalButton({
             <DropdownMenuGroup>
               <DropdownMenuLabel>{group.heading}</DropdownMenuLabel>
               {group.places.map((place) => (
-                <DropdownMenuItem key={place.path} onClick={() => onOpen(place)}>
-                  <Icon name={PLACE_ICONS[place.kind]} />
+                <DropdownMenuItem key={place.path} icon={group.icon} onClick={() => onOpen(place)}>
                   <span className='truncate'>{place.label}</span>
                 </DropdownMenuItem>
               ))}

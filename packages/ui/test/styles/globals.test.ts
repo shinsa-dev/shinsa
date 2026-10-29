@@ -61,6 +61,29 @@ describe('globals.css', () => {
     );
   });
 
+  it('spaces a toast’s icon from its text as a menu row does, and keeps 8px to its action', () => {
+    const toast = readBlock('[data-sonner-toast][data-styled="true"].bk-toast');
+    const icon = readBlock('[data-sonner-toast][data-styled="true"].bk-toast [data-icon]');
+    expect(toast).toContain('gap: 8px;');
+    expect(toast).toContain('padding: 6px 10px;');
+    expect(icon).toContain('width: 14px;');
+    expect(icon).toContain('height: 14px;');
+    expect(icon).toContain('margin: 0 -2px 0 0;');
+    expect(
+      readBlock('[data-sonner-toast][data-styled="true"].bk-toast:has([data-description]) [data-icon]')
+    ).toContain('margin-top: -2.5px;');
+    expect(readBlock('[data-sonner-toast][data-styled="true"].bk-toast [data-icon] svg')).toContain(
+      'margin: 0;'
+    );
+    expect(readBlock('[data-sonner-toast][data-styled="true"].bk-toast [data-content]')).toContain('gap: 0;');
+  });
+
+  it('centres the loader on the icon box at the box’s own size, so the spinner and the result share a spot', () => {
+    const loader = readBlock('[data-sonner-toast].bk-toast .sonner-loader');
+    expect(loader).toContain('width: 100%;');
+    expect(loader).toContain('height: 100%;');
+  });
+
   it('drives the scroll fades from scroll timelines, so style alone sets them on the first frame', () => {
     const fade = css.slice(css.indexOf('@utility scroll-fade {'), css.indexOf('@keyframes scroll-fade-t'));
     expect(fade).toContain('@supports (animation-timeline: scroll())');

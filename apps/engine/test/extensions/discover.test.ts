@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expandDefinition, parseMcpEntry, readMcpServers } from '../../src/extensions/definitions.ts';
+import {
+  expandDefinition,
+  parseMcpEntry,
+  readMcpServers,
+  resolveBrowserEnv,
+} from '../../src/extensions/definitions.ts';
 import { type DiscoveryPaths, discoverServers, listClaudePlugins } from '../../src/extensions/discover.ts';
 import { discoverSkills, parseFrontmatter } from '../../src/extensions/skills.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
@@ -68,6 +73,33 @@ describe('reading an MCP server entry', () => {
     });
     expect(expandDefinition({ ...definition!, bearerTokenEnv: 'NOPE' }, env).headers).toEqual({
       'X-Team': 'core',
+    });
+  });
+});
+
+describe('the browser an agent starts', () => {
+  test('is headless and at twice the scale, unless the server already picks a device or a browser', () => {
+    expect(resolveBrowserEnv({ PLAYWRIGHT_MCP_HEADLESS: 'false', ROOT: '/r' })).toEqual({
+      PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI',
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+      ROOT: '/r',
+    });
+    expect(resolveBrowserEnv({ PLAYWRIGHT_MCP_DEVICE: 'iPhone 15' })).toEqual({
+      PLAYWRIGHT_MCP_DEVICE: 'iPhone 15',
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    for (const key of ['PLAYWRIGHT_MCP_MOBILE', 'PLAYWRIGHT_MCP_CDP_ENDPOINT', 'PLAYWRIGHT_MCP_EXTENSION']) {
+      expect(resolveBrowserEnv({ [key]: 'x' })).toEqual({ [key]: 'x', PLAYWRIGHT_MCP_HEADLESS: 'true' });
+    }
+    expect(resolveBrowserEnv({}, ['@playwright/mcp', '--mobile'])).toEqual({
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    expect(resolveBrowserEnv({}, ['--cdp-endpoint=http://127.0.0.1:9222'])).toEqual({
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    expect(resolveBrowserEnv({}, ['--devices'])).toEqual({
+      PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI',
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
   });
 });

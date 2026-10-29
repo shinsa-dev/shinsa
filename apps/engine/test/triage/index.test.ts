@@ -67,6 +67,11 @@ describe('resolveTriage without the model', () => {
     expect((await resolveTriage(stateWith(), newTask({ request: '\n' }), LOCAL, silent))?.title).toBe(
       'Untitled task'
     );
+    const attached = newTask({
+      request:
+        '<attachments>\n<attachment kind="file" display_name="crash.log" path="/d/crash.log" />\n</attachments>',
+    });
+    expect((await resolveTriage(stateWith(), attached, LOCAL, silent))?.title).toBe('crash.log');
   });
 
   test('a pinned repository or the directory shinsa do ran in wins', async () => {

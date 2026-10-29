@@ -38,10 +38,14 @@ function findSection(id: string) {
   return within(section);
 }
 
-async function expectNothingSent() {
-  await waitFor(() => expect(screen.getAllByText(NOTHING_SENT).length).toBeGreaterThan(0));
+function expectNothingRequested() {
   expect(listSentCommands()).toEqual([]);
   expect(requests).not.toHaveBeenCalled();
+}
+
+async function expectNothingSent() {
+  await waitFor(() => expect(screen.getAllByText(NOTHING_SENT).length).toBeGreaterThan(0));
+  expectNothingRequested();
 }
 
 describe('the /ui gallery', () => {
@@ -49,9 +53,9 @@ describe('the /ui gallery', () => {
     await renderGallery();
     const overview = findSection('shinsa-overview');
     for (const text of [
-      'No checks to run',
-      'Resumes when the usage limit resets',
-      'Paused until the usage limit resets',
+      'The default branch is missing',
+      /^Waiting for usage: continues at /,
+      /^Waiting for usage: pauses for you at /,
       'The agent is waiting on something outside the repository',
       'The checkout test needs a Stripe test key to create a payment intent.',
       'Out of automatic fix rounds',
@@ -69,14 +73,16 @@ describe('the /ui gallery', () => {
       'Diagnosis',
       'Working out the steps',
       'The change merged. Run the operation now?',
-      'Extra checks',
+      'Checks',
       'The agent asked for your approval.',
+      'Resolving conflicts with main',
+      'Resolving conflicts',
     ]) {
       expect(overview.getAllByText(text).length).toBeGreaterThan(0);
     }
     expect(overview.getByRole('button', { name: 'Run the operation' })).toBeTruthy();
     expect(document.getElementById('shinsa-overview')?.textContent).toContain(
-      'Sign in to Claude as christo@example.com'
+      'Paused: christo@example.com needs signing in'
     );
     expect(overview.getByRole('button', { name: 'Allow another 10%' })).toBeTruthy();
     expect(overview.getAllByText(/^No output for/)).toHaveLength(2);
@@ -91,6 +97,7 @@ describe('the /ui gallery', () => {
       'Waiting for the agent that delegated it to answer',
       'Account switched',
       '· christo@example.com',
+      'Claude was busy, trying again',
       'Conversation compacted',
       'Session restored from the transcript',
       'Conversation handed over',
@@ -191,7 +198,7 @@ describe('the /ui gallery', () => {
     const examples = specimen(/^CodeBlock · an example/);
     expect(examples.queryByRole('button', { name: 'Run in terminal' })).toBeNull();
     expect(examples.getAllByRole('button', { name: 'Copy' })).toHaveLength(3);
-    await expectNothingSent();
+    expectNothingRequested();
   });
 
   it('shows How to test with what the tests cover and a step to try for each kind of target, running nothing', async () => {
@@ -236,6 +243,29 @@ describe('the /ui gallery', () => {
     await expectNothingSent();
   });
 
+  it('shows the Checks list in each state, a linked test, the plan’s checks and the repository setting', async () => {
+    await renderGallery();
+    const checks = findSection('shinsa-checks');
+    for (const text of [
+      'Running 2 checks',
+      'All 5 passed',
+      '1 of 4 failed',
+      'Passed when re-run alone',
+      'Already failing on main, so it does not block',
+      'Added by the agent · phase 3',
+      'Repository · before review',
+      'test (ubuntu-latest)',
+      'Covers a product with no currency in the editor and in the API.',
+      'Phases 2 to 3',
+      'Added the check “Webhook retry test”',
+    ]) {
+      expect(checks.getAllByText(text).length).toBeGreaterThan(0);
+    }
+    fireEvent.click(checks.getAllByRole('button', { name: 'Show the output' })[0] as HTMLElement);
+    expect(await checks.findByText(/Ran 2 tests across 1 file/)).toBeTruthy();
+    expect(requests).not.toHaveBeenCalled();
+  });
+
   it('shows the evidence panel on sample files, a note as markdown, without reading anything from Shinsa', async () => {
     await renderGallery();
     const evidence = findSection('shinsa-evidence');
@@ -243,8 +273,12 @@ describe('the /ui gallery', () => {
     expect(evidence.getAllByText('After')).toHaveLength(2);
     expect(evidence.getByRole('cell', { name: '6.9:1' })).toBeTruthy();
     expect(evidence.getByLabelText(/Scrolling the tab group/)).toBeTruthy();
-    expect(evidence.getByText('2 pass, 0 fail')).toBeTruthy();
-    expect(evidence.getByText('Checks run by Shinsa: all 2 passed')).toBeTruthy();
+    expect(evidence.getByText('Tab group tests')).toBeTruthy();
+    expect(evidence.getByText('bun test src/ui/tab-group.test.tsx')).toBeTruthy();
+    expect(
+      evidence.getByText('Covers centring the active tab and keeping every tab at its width.')
+    ).toBeTruthy();
+    expect(evidence.getByText('Repository · before review')).toBeTruthy();
     expect(evidence.getByText('~/.config/shinsa/data/evidence/sample/round-1')).toBeTruthy();
     expect(requests).not.toHaveBeenCalled();
   });

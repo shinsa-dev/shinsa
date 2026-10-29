@@ -16,6 +16,8 @@ const MARK = { size: 488, viewBox: 365 };
 
 const ICONSET_SIZES = [16, 32, 128, 256, 512];
 
+const BODY_INK = { top: '#fbfbfa', bottom: '#e7e7e5' };
+
 const desktopDir = resolve(import.meta.dirname, '..');
 
 const resourcesDir = join(desktopDir, 'resources');
@@ -70,8 +72,8 @@ function serializeIcon() {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   <defs>
     <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fbfbfa"/>
-      <stop offset="1" stop-color="#e7e7e5"/>
+      <stop offset="0" stop-color="${BODY_INK.top}"/>
+      <stop offset="1" stop-color="${BODY_INK.bottom}"/>
     </linearGradient>
     <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3a3a3c"/>
@@ -104,10 +106,10 @@ function renderPng(svgPath: string, size: number, outPath: string) {
   run(['rsvg-convert', '--width', String(size), '--height', String(size), svgPath, '--output', outPath]);
 }
 
-function writeIcon() {
-  const svgPath = join(resourcesDir, 'icon.svg');
+function writeIcon(name: string) {
+  const svgPath = join(resourcesDir, `${name}.svg`);
   writeFileSync(svgPath, serializeIcon());
-  renderPng(svgPath, CANVAS, join(resourcesDir, 'icon.png'));
+  renderPng(svgPath, CANVAS, join(resourcesDir, `${name}.png`));
   const scratch = mkdtempSync(join(tmpdir(), 'shinsa-icon-'));
   const iconset = join(scratch, 'icon.iconset');
   try {
@@ -116,10 +118,10 @@ function writeIcon() {
       renderPng(svgPath, size, join(iconset, `icon_${size}x${size}.png`));
       renderPng(svgPath, size * 2, join(iconset, `icon_${size}x${size}@2x.png`));
     }
-    run(['iconutil', '--convert', 'icns', iconset, '--output', join(resourcesDir, 'icon.icns')]);
+    run(['iconutil', '--convert', 'icns', iconset, '--output', join(resourcesDir, `${name}.icns`)]);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
 }
 
-writeIcon();
+writeIcon('icon');

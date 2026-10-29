@@ -1,6 +1,4 @@
-import { afterEach } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Repo, ShinsaEffect, ShinsaEventInput } from '@shinsa/core';
 import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
@@ -19,18 +17,9 @@ import {
   type Terminal,
 } from '../../src/terminal/index.ts';
 import { createConfigAt } from './config.ts';
+import { createTempDir } from './temp.ts';
 
-const created: string[] = [];
-
-afterEach(() => {
-  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
-export function createTempDir(prefix = 'shinsa-test-') {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
-  created.push(dir);
-  return dir;
-}
+export { createTempDir };
 
 export function commitEvents(
   log: EventLog,

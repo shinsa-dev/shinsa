@@ -1,3 +1,5 @@
+import { APP_IDENTITY } from '@shinsa/core';
+
 export interface ServerHealth {
   version: string | null;
 }
@@ -18,5 +20,6 @@ export function parseHealthText(text: string) {
 }
 
 export function describeServer(url: string, health: ServerHealth | null) {
-  return health?.version ? `Shinsa ${health.version} at ${url}` : `Shinsa at ${url}`;
+  const name = APP_IDENTITY.appName;
+  return health?.version ? `${name} ${health.version} at ${url}` : `${name} at ${url}`;
 }

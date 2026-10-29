@@ -101,9 +101,25 @@ describe('what a prompt says about the work it builds on', () => {
     expect(prompt).toContain('The agent listed no watchdogs for after the merge.');
   });
 
-  test('without a repository the agent is told to find the checks itself', () => {
+  test('a phase is told the checks Shinsa runs after it, the repository’s only on the last, and how to change them', () => {
+    const { harness, task } = tasks();
+    const repo = harness.state.repos[task.repoId ?? ''] ?? null;
+    if (!repo) throw new Error('The sample task has a repository.');
+    expect(resolvePhaseInstruction(task, { ...repo, checkCommands: [] }, 0)).toContain(
+      'The plan lists no check for this phase, so Shinsa runs none when you hand it over.'
+    );
+    const last = resolvePhaseInstruction(task, { ...repo, checkCommands: ['bun lint'] }, 1);
+    expect(last).toContain('- c1, Panel tests: `bun test src/panel`');
+    expect(last).toContain(
+      'and, once before review, the repository’s own commands:\n- r1, bun lint: `bun lint`'
+    );
+    expect(last).toContain('never the whole suite');
+    expect(last).toContain('send `check_changes` with `complete_phase`');
+  });
+
+  test('without a repository the phase instruction still reads in full', () => {
     const { task } = tasks();
-    expect(resolvePhaseInstruction(task, null, 0)).toContain('Run whatever lint, type check and tests');
+    expect(resolvePhaseInstruction(task, null, 0)).toContain('The plan lists no check for this phase');
     expect(resolvePhaseInstruction(task, null, 1)).toContain('This is the last phase');
     expect(resolvePhaseInstruction(task, null, 1)).toContain(
       '`testing` has two parts. `automated`: one or two lines on what the tests cover'
@@ -277,23 +293,6 @@ describe('the answerer prompt', () => {
     expect(prompt).toContain('Your role: answerer.');
     expect(prompt).not.toContain('checked out at');
     expect(prompt).not.toContain('followed up');
-  });
-});
-
-describe('reading another task', () => {
-  test('every step agent is told to read another task with read_task, which never changes it', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    const planner = harness.activeRun(taskId).prompt ?? '';
-    proposePlan(harness, taskId);
-    const builder = harness.activeRun(taskId).prompt ?? '';
-    const answerer = resolveAnswererPrompt(harness.task(taskId), null, null);
-    for (const prompt of [planner, builder, answerer]) {
-      expect(prompt).toContain(
-        'call `read_task` with an id from `find_tasks`. It reads; it never changes the task.'
-      );
-      expect(prompt).toContain('whether an agent works on them now, call `list_repository_work`.');
-    }
   });
 });
 

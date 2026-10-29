@@ -99,7 +99,7 @@ describe('resolveTaskNow', () => {
     );
   });
 
-  it('names the active phase while building', () => {
+  it('names the active phase and where it falls in the plan while building', () => {
     const task = {
       plan: plan('Set up', 'Wire the form'),
       phases: [
@@ -107,7 +107,10 @@ describe('resolveTaskNow', () => {
         { status: 'active' as const, at: NOW },
       ],
     };
-    expect(nowFor({ ...task, stage: 'building' })).toBe('Wire the form');
+    expect(nowFor({ ...task, stage: 'building' })).toBe('Phase 2 of 2: Wire the form');
+    expect(
+      nowFor({ stage: 'building', plan: plan('Only'), phases: [{ status: 'active' as const, at: NOW }] })
+    ).toBe('Only');
     expect(nowFor({ ...task, stage: 'checking', stageReason: 'running the checks' })).toBe(
       'Running the checks'
     );
@@ -118,6 +121,50 @@ describe('resolveTaskNow', () => {
     expect(nowFor({ stage: 'building', plan: plan('Only'), phases: [{ status: 'done', at: NOW }] })).toBe(
       'Building the change'
     );
+  });
+
+  it('says what the push is doing at each step, and what a retry waits for and why', () => {
+    const cases = [
+      ['updating the branch onto main', 'Updating the branch onto main'],
+      [
+        'pushing the branch (the repository’s pre-push hook is running)',
+        'Pushing the branch (the repository’s pre-push hook is running)',
+      ],
+      ['opening the pull request', 'Opening the pull request'],
+      [
+        'pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com',
+        'Pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com',
+      ],
+      ['fixing what the pre-push hook found', 'Fixing what the pre-push hook found'],
+    ] as const;
+    for (const [stageReason, shown] of cases) {
+      expect(nowFor({ stage: stageReason.startsWith('fixing') ? 'fixing' : 'shipping', stageReason })).toBe(
+        shown
+      );
+    }
+  });
+
+  it('says a pull request that conflicts with its base conflicts, not that it waits for CI', () => {
+    const conflicting = { ...PULL_REQUEST, mergeable: false, base: 'main' };
+    expect(nowFor({ stage: 'shipping', stageReason: 'waiting for CI', pullRequest: conflicting })).toBe(
+      'PR #42 conflicts with main'
+    );
+    const unknownBase = { ...PULL_REQUEST, mergeable: false };
+    expect(nowFor({ stage: 'shipping', stageReason: 'waiting for CI', pullRequest: unknownBase })).toBe(
+      'PR #42 conflicts with the base branch'
+    );
+    expect(
+      nowFor({ stage: 'shipping', stageReason: 'pushing', pullRequest: conflicting, pushPending: true })
+    ).toBe('Pushing');
+    expect(nowFor({ stage: 'shipping', stageReason: 'waiting for CI', pullRequest: PULL_REQUEST })).toBe(
+      'Waiting for CI'
+    );
+  });
+
+  it('says what resolving conflicts works against', () => {
+    expect(
+      nowFor({ stage: 'fixing', fixFor: 'conflict', stageReason: 'resolving conflicts with main' })
+    ).toBe('Resolving conflicts with main');
   });
 
   it('names the merged pull request', () => {

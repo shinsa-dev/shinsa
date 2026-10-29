@@ -20,6 +20,7 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
   describeAppDetail,
   describeChannelDetail,
+  describeStayLabel,
   describeUpdateStatus,
   UPDATE_CHANNEL_ITEMS,
   UPDATES_LABEL,
@@ -86,7 +87,7 @@ export function UpdatesGroup({
         {app.update.status === 'downgrade' && (
           <div className='flex shrink-0 items-center gap-1'>
             <Button variant='secondary' size='sm' onClick={() => actions.answerDowngrade(false)}>
-              {UPDATES_LABEL.keepBeta}
+              {describeStayLabel(app.version)}
             </Button>
             <Button
               variant='secondary'

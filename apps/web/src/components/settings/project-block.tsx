@@ -11,7 +11,6 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import type { CoverageDetectionMap } from '@/lib/connection/coverage.ts';
-import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import {
   describeProjectKey,
   describeProjectRemoval,
@@ -23,6 +22,7 @@ import {
   validateFolderPath,
 } from '@/lib/projects.ts';
 import { describeWatchSource, removeWatchSource, WATCH_SOURCE_HINT } from '@/lib/tasks/watchdogs.ts';
+import { BaselineSelect } from './baseline-select.tsx';
 import { CoverageSelect } from './coverage-select.tsx';
 import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx';
 import { ProjectDialog } from './project-dialog.tsx';
@@ -118,18 +118,17 @@ interface ProjectProps {
 function RepoSettings({
   repo,
   actions,
-  support,
   detected,
 }: {
   repo: Repo;
   actions: ProjectActions;
-  support: WorkspaceSupportMap | null;
   detected: CoverageDetectionMap | null;
 }) {
   return (
     <>
+      <BaselineSelect repo={repo} onChange={actions.changeBaseline} />
       <CoverageSelect repo={repo} detected={detected} onChange={actions.changeCoverage} />
-      <WorkspaceSelect repo={repo} support={support} onChange={actions.changeWorkspace} />
+      <WorkspaceSelect repo={repo} onChange={actions.changeWorkspace} />
     </>
   );
 }
@@ -137,20 +136,13 @@ function RepoSettings({
 export function LooseRepoRow({
   repo,
   actions,
-  support,
   detected,
 }: {
   repo: Repo;
   actions: ProjectActions;
-  support: WorkspaceSupportMap | null;
   detected: CoverageDetectionMap | null;
 }) {
-  return (
-    <RepoRow
-      repo={repo}
-      action={<RepoSettings repo={repo} actions={actions} support={support} detected={detected} />}
-    />
-  );
+  return <RepoRow repo={repo} action={<RepoSettings repo={repo} actions={actions} detected={detected} />} />;
 }
 
 function ProjectDialogs({
@@ -240,9 +232,8 @@ export function ProjectBlock({
   state,
   project,
   actions,
-  support,
   detected,
-}: ProjectProps & { support: WorkspaceSupportMap | null; detected: CoverageDetectionMap | null }) {
+}: ProjectProps & { detected: CoverageDetectionMap | null }) {
   const repos = listProjectRepoRows(state, project.id);
   const [adding, setAdding] = React.useState(false);
   const empty = repos.length === 0 && project.folders.length === 0 && !adding;
@@ -265,7 +256,7 @@ export function ProjectBlock({
           repo={repo}
           action={
             <>
-              <RepoSettings repo={repo} actions={actions} support={support} detected={detected} />
+              <RepoSettings repo={repo} actions={actions} detected={detected} />
               <RemoveButton
                 label={`Remove ${repo.name} from the project`}
                 onClick={() => void actions.removeRepo(repo)}

@@ -4,7 +4,6 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { type CoverageDetectionMap, resetCoverageDetection } from '@/lib/connection/coverage.ts';
-import { resetWorkspaceSupport, type WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
@@ -32,23 +31,18 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
     removeFolder: mock(async () => true),
     changeWorkspace: mock(async (_repo: Repo, _mode: string) => true),
     changeCoverage: mock(async (_repo: Repo, _setting: CoverageSetting) => true),
+    changeBaseline: mock(async (_repo: Repo, _commands: string[]) => true),
   };
   return Object.assign(actions, overrides) as typeof actions;
 }
 
-let support: WorkspaceSupportMap = {};
-
 let detected: CoverageDetectionMap = {};
 
 beforeEach(() => {
-  resetWorkspaceSupport();
   resetCoverageDetection();
-  support = {};
   detected = {};
-  spyOn(globalThis, 'fetch').mockImplementation((async (url: string) =>
-    String(url).endsWith('/coverage')
-      ? Response.json({ detected })
-      : Response.json({ support })) as unknown as typeof fetch);
+  spyOn(globalThis, 'fetch').mockImplementation((async () =>
+    Response.json({ detected })) as unknown as typeof fetch);
 });
 
 afterEach(() => {
@@ -274,25 +268,21 @@ describe('Settings → Projects', () => {
     );
   });
 
-  it('each repository says where agents work, and offers GitButler only once it is set up there', async () => {
-    support = {
-      web: { butInstalled: true, gitButlerWorkspace: true },
-      notes: { butInstalled: true, gitButlerWorkspace: false },
-    };
+  it('each repository says where agents work, and offers worktrees or the main checkout', async () => {
     const actions = renderProjects(superwallState());
     await settle();
     const web = screen.getByRole('combobox', { name: 'Where agents work in web' });
     expect(web.textContent).toContain('Worktrees');
-    await chooseWorkspace('web', 'GitButler');
-    expect(actions.changeWorkspace.mock.calls[0]?.[1]).toBe('gitbutler');
-    await chooseWorkspace('notes', 'Main checkout');
-    expect(actions.changeWorkspace.mock.calls[1]?.[1]).toBe('main_checkout');
-    fireEvent.click(screen.getByRole('combobox', { name: 'Where agents work in notes' }));
+    fireEvent.click(web);
     await settle();
     const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
-    const gitbutler = within(list).getByRole('option', { name: /^GitButler/ });
-    expect(gitbutler.getAttribute('aria-disabled')).toBe('true');
-    expect(gitbutler.textContent).toContain('Run `but setup` in this repository to use it.');
+    expect(within(list).getAllByRole('option')).toHaveLength(2);
+    expect(within(list).getByRole('option', { name: /^Worktrees/ })).toBeTruthy();
+    expect(within(list).getByRole('option', { name: /^Main checkout/ })).toBeTruthy();
+    fireEvent.keyDown(list, { key: 'Escape' });
+    await settle();
+    await chooseWorkspace('notes', 'Main checkout');
+    expect(actions.changeWorkspace.mock.calls[0]?.[1]).toBe('main_checkout');
   });
 
   it('sets each repository’s test coverage: Auto says what it found, Custom asks for the command and report', async () => {
@@ -375,5 +365,66 @@ describe('Settings → Projects', () => {
     await settle();
     expect(actions.changeCoverage.mock.calls[0]?.[1]).toMatchObject({ format: 'lcov' });
     expect(screen.getByText('Custom test coverage')).toBeDefined();
+  });
+
+  it('sets what always runs before review: nothing, or your commands one per line', async () => {
+    const actions = createActions();
+    renderProjects(
+      createShinsaState({
+        repos: [createRepo({ id: 'web', checkCommands: ['bun run lint'] }), createRepo({ id: 'notes' })],
+      }),
+      actions
+    );
+    await settle();
+    const web = screen.getByRole('combobox', { name: 'Always run before review in web' });
+    expect(web.textContent).toContain('1 command before review');
+    expect(screen.getByRole('combobox', { name: 'Always run before review in notes' }).textContent).toContain(
+      'Nothing before review'
+    );
+    fireEvent.click(web);
+    await settle();
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    const none = within(list).getByRole('option', { name: /^Nothing before review/ });
+    fireEvent.pointerDown(none, { pointerType: 'mouse' });
+    fireEvent.click(none);
+    await settle();
+    expect(actions.changeBaseline.mock.calls[0]?.[1]).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the commands that run before review in web' }));
+    await settle();
+    const field = screen.getByLabelText('Commands') as HTMLTextAreaElement;
+    expect(field.value).toBe('bun run lint');
+    fireEvent.change(field, { target: { value: `bun run lint\n${'x'.repeat(201)}` } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await settle();
+    expect(screen.getByText(/is longer than 200 characters/)).toBeDefined();
+    fireEvent.change(field, { target: { value: ' bun run lint \n\nbun run --cwd apps/web check-types\n' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await settle();
+    expect(actions.changeBaseline.mock.calls[1]?.[1]).toEqual([
+      'bun run lint',
+      'bun run --cwd apps/web check-types',
+    ]);
+    await waitForGone(() =>
+      screen.queryByText('One per line. Keep them quick: CI runs the whole suite on the pull request.')
+    );
+  });
+
+  it('opens the commands dialog from Nothing before review, and keeps it open when saving fails', async () => {
+    const actions = createActions({ changeBaseline: mock(async () => false) });
+    renderProjects(createShinsaState({ repos: [createRepo({ id: 'notes' })] }), actions);
+    await settle();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Always run before review in notes' }));
+    await settle();
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    const commands = within(list).getByRole('option', { name: /^Commands before review/ });
+    fireEvent.pointerDown(commands, { pointerType: 'mouse' });
+    fireEvent.click(commands);
+    await settle();
+    const field = screen.getByLabelText('Commands');
+    fireEvent.change(field, { target: { value: 'bun run lint' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await settle();
+    expect(actions.changeBaseline.mock.calls[0]?.[1]).toEqual(['bun run lint']);
+    expect(screen.getByText('Always run before review', { selector: 'h2' })).toBeDefined();
   });
 });

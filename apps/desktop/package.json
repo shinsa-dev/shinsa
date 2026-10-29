@@ -8,13 +8,13 @@
   "description": "Shinsa for Mac: the app around the Shinsa engine",
   "main": "dist/main.cjs",
   "scripts": {
-    "build": "bun build src/main/index.ts --outfile dist/main.cjs --target node --format cjs --external electron && bun build src/preload/index.ts --outfile dist/preload.cjs --target browser --format cjs --external electron",
+    "build": "bun scripts/build.ts",
     "check-types": "tsc --noEmit",
     "dev": "bun run build && bun scripts/dev.ts",
     "dmg-background": "bun scripts/dmg-background.ts",
     "icon": "bun scripts/icon.ts",
     "package": "bun run --cwd ../web build && bun ../engine/scripts/build-engine.ts && bun run build && electron-builder --mac --arm64 --publish never -c.mac.identity=null && codesign --force --deep --sign - release/mac-arm64/Shinsa.app",
-    "test": "bun test"
+    "test": "bun test --randomize"
   },
   "devDependencies": {
     "@shinsa/core": "workspace:*",

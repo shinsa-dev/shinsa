@@ -3,6 +3,7 @@ import {
   ENGINE_PROTOCOL,
   isPrereleaseVersion,
   resolveEngineFit,
+  resolveReleaseChannel,
   resolveVersionOrder,
 } from '../../src/protocol/engine.ts';
 
@@ -46,6 +47,25 @@ describe('isPrereleaseVersion', () => {
     expect(isPrereleaseVersion('v1.3.0')).toBe(false);
     expect(isPrereleaseVersion('1.3.0+build')).toBe(false);
     expect(isPrereleaseVersion('dev')).toBe(false);
+  });
+});
+
+describe('resolveReleaseChannel', () => {
+  test('reads the channel a version was released on from its prerelease part', () => {
+    expect(resolveReleaseChannel('1.3.0')).toBe('stable');
+    expect(resolveReleaseChannel('v1.3.0+build')).toBe('stable');
+    expect(resolveReleaseChannel('1.3.0-beta.2')).toBe('beta');
+    expect(resolveReleaseChannel('1.3.1-canary.4')).toBe('canary');
+    expect(resolveReleaseChannel('0.0.1-test.1')).toBe('beta');
+    expect(resolveReleaseChannel('dev')).toBe('stable');
+  });
+
+  test('orders a canary above the beta and below the release of the same version', () => {
+    expect(resolveVersionOrder('1.3.1-canary.4', '1.3.1-beta.1')).toBe(1);
+    expect(resolveVersionOrder('1.3.1-canary.4', '1.3.1')).toBe(-1);
+    expect(resolveVersionOrder('1.3.1-canary.10', '1.3.1-canary.9')).toBe(1);
+    expect(resolveVersionOrder('1.3.1-canary.1', '1.3.0-beta.2')).toBe(1);
+    expect(resolveVersionOrder('1.3.1-canary.1', '1.3.0')).toBe(1);
   });
 });
 

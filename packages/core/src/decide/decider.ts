@@ -25,6 +25,7 @@ import {
 import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effects/index.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
 import { describeForkSource, resolveForkNote } from '../prompts/forks.ts';
+import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
 import { listTaskBases, needsRoundBrief, resolveRoundBrief } from '../prompts/root.ts';
@@ -32,7 +33,6 @@ import { listChildRuns, listLiveChildRuns } from '../state/delegations.ts';
 import { createDraft, type StateChanges } from '../state/draft.ts';
 import { applyEvent, type ShinsaState } from '../state/project.ts';
 import { findTask, listActiveRuns, listOpenGates, resolveTaskProject } from '../state/queries.ts';
-import { tellHeldConflict } from './conflicts.ts';
 import { resolveRecoveryFingerprint } from './fingerprints.ts';
 import { tellOverlaps } from './overlaps.ts';
 
@@ -295,7 +295,7 @@ export class Decider {
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
     const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
-    const appended = `${fresh}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}${tellHeldConflict(this, task.id, role, purpose)}`;
+    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,

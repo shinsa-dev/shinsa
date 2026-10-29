@@ -51,7 +51,7 @@ const MAX_LIST = 500;
 
 const PRIORITIES: ReadonlySet<TaskPriority> = new Set(TASK_PRIORITIES);
 
-const DECISIONS = new Set<GateDecision>(['approve', 'revise', 'reject', 'reply', 'waive']);
+const DECISIONS = new Set<GateDecision>(['approve', 'revise', 'reject', 'reply']);
 
 const ROLES: ReadonlySet<AgentRole> = new Set(AGENT_ROLES);
 
@@ -274,7 +274,6 @@ const REPO_PATCH_KEYS = [
   'remote',
   'projectId',
   'checkCommands',
-  'checksWaived',
   'workspace',
   'coverage',
 ] as const;
@@ -288,7 +287,6 @@ function readRepoPatch(value: unknown): RepoPatch {
   if ('remote' in fields) patch.remote = readNullableText(fields, 'remote', MAX_ID);
   if ('projectId' in fields) patch.projectId = readNullableId(fields, 'projectId');
   if ('checkCommands' in fields) patch.checkCommands = readList(fields, 'checkCommands', readText);
-  if ('checksWaived' in fields) patch.checksWaived = readBoolean(fields, 'checksWaived');
   if ('workspace' in fields) patch.workspace = readChoice(fields, 'workspace', WORKSPACES);
   if ('coverage' in fields) patch.coverage = readCoverage(fields.coverage);
   return patch;
@@ -603,6 +601,15 @@ function readWatchdogConnect(fields: Fields): UserCommand {
   };
 }
 
+function readMemoryWrite(fields: Fields): UserCommand {
+  return {
+    type: 'memory.write',
+    memoryId: readNullableId(fields, 'memoryId'),
+    projectId: readNullableId(fields, 'projectId'),
+    text: readText(fields, 'text'),
+  };
+}
+
 const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'repo.update': (fields) => ({
     type: 'repo.update',
@@ -625,6 +632,11 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'round.update': readRoundUpdate,
   'round.remove': (fields) => ({
     type: 'round.remove',
+    taskId: readId(fields, 'taskId'),
+    number: readCount(fields, 'number'),
+  }),
+  'round.send': (fields) => ({
+    type: 'round.send',
     taskId: readId(fields, 'taskId'),
     number: readCount(fields, 'number'),
   }),
@@ -655,6 +667,9 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     projectId: readId(fields, 'projectId'),
     server: readText(fields, 'server', MAX_ID),
   }),
+  'memory.write': readMemoryWrite,
+  'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
+  'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

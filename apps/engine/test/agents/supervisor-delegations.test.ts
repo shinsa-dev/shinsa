@@ -18,8 +18,8 @@ type Broker = NonNullable<SupervisorOptions['accounts']>;
 function createBroker(lease: Broker['lease']): Broker {
   return {
     lease,
-    readWeeklyPercent: () => Promise.resolve(null),
-    readProviderWeeklyPercent: () => Promise.resolve(null),
+    readWeeklyReading: () => Promise.resolve(null),
+    readProviderWeeklyReading: () => Promise.resolve(null),
     readFastMode: () => Promise.resolve('available'),
   };
 }

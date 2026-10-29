@@ -369,6 +369,28 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Removed the queued round.',
   }),
   defineCommand({
+    path: ['rounds', 'send'],
+    summary: 'Send a queued round to the current round now, as a message, instead of waiting.',
+    command: 'round.send',
+    humanOnly: true,
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'round',
+        kind: 'integer',
+        positional: 'one',
+        required: true,
+        description: 'The number of a round that waits to start, from `shinsa tasks show`.',
+      },
+    ],
+    build: async (values, client) => ({
+      type: 'round.send',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      number: values.round as number,
+    }),
+    done: () => 'Sent the queued round to the current round.',
+  }),
+  defineCommand({
     path: ['tasks', 'retry'],
     summary: "Restart a paused task's current step with a fresh fix budget.",
     command: 'task.retry',

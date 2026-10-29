@@ -25,6 +25,7 @@ const FIX_HEADLINE: Record<FixFocus, { live: string; done: string }> = {
   changes: { live: 'Making your changes', done: 'Made your changes' },
   pull_request: { live: 'Fixing the pull request', done: 'Fixed the pull request' },
   conflicts: { live: 'Resolving conflicts', done: 'Resolved conflicts' },
+  push_hook: { live: 'Fixing what the pre-push hook found', done: 'Fixed what the pre-push hook found' },
 };
 
 function resolvePlanHeadline(done: boolean, task: Task, entries: ChatEntry[]) {

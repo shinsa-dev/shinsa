@@ -4,27 +4,25 @@ import {
   commitWorktree,
   createWorktree,
   discardEdits,
+  listChangedFiles,
   pushBranch,
   refreshWorktree,
   removeWorktree,
   resolveHead,
   resolveTree,
+  updateOntoBase,
   writeMergeHead,
 } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
-import {
-  NO_CLAIM,
-  refuseUpdate,
-  requireCheckout,
-  type WorkspaceCommit,
-  type WorkspaceStrategy,
-} from './types.ts';
+import type { UpdateOptions } from '../git/update.ts';
+import { requireCheckout, type WorkspaceCommit, type WorkspaceStrategy } from './types.ts';
 
 export async function commitCheckout(path: string, message: string): Promise<WorkspaceCommit> {
   const before = await resolveHead(path);
   const committed = await commitWorktree(path, message);
   return {
     treeHash: await resolveTree(path),
+    files: await listChangedFiles(path, before, 'HEAD'),
     undo: async () => {
       if (!committed) return;
       await runGitOrThrow(['reset', '--soft', before], path);
@@ -67,20 +65,13 @@ export class WorktreeStrategy implements WorkspaceStrategy {
     if (task.worktreePath) await removeWorktree(repo, task.worktreePath);
   }
 
-  claim() {
-    return Promise.resolve(NO_CLAIM);
-  }
-
   writeEdit(_repo: Repo, _task: Task, _path: string, write: () => boolean) {
     write();
     return Promise.resolve();
   }
 
-  listConflicted() {
-    return Promise.resolve([]);
-  }
-
-  update() {
-    return refuseUpdate();
+  syncBase(_repo: Repo, task: Task, base: string, options: UpdateOptions) {
+    const { path, branch } = requireCheckout(task);
+    return updateOntoBase(path, base, branch, options);
   }
 }

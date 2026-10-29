@@ -18,6 +18,10 @@ describe('parseHealth', () => {
     expect(parseHealth('ok')).toBeNull();
     expect(parseHealth({ status: 'ok' })).toBeNull();
   });
+
+  it('takes an engine on any update channel, since a canary is Shinsa too', () => {
+    expect(parseHealth({ ok: true, version: '1.0.1-canary.2' })).toEqual({ version: '1.0.1-canary.2' });
+  });
 });
 
 describe('parseHealthText', () => {

@@ -39,6 +39,12 @@ describe('isHandover', () => {
     }
   });
 
+  it('shows suggested tasks and a proposed rule as cards of their own', () => {
+    for (const name of ['suggest_tasks', 'remember'] as const) {
+      expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(true);
+    }
+  });
+
   it('keeps evidence, task lookups, notes and other tools in the work', () => {
     for (const name of ['attach_evidence', 'find_tasks', 'note'] as const) {
       expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(false);
@@ -229,14 +235,26 @@ describe('describeTool', () => {
     expect(shinsa('report_review')).toBe('Reported the review');
     expect(shinsa('ask', { question: 'Which one?' })).toBe('Asked you: Which one?');
     expect(shinsa('attach_evidence', { title: 'Login page' })).toBe('Attached evidence: Login page');
+    expect(shinsa('attach_evidence', { kind: 'test', check: 'c2' })).toBe('Linked the check as evidence: c2');
+    expect(shinsa('remove_evidence', { items: ['login'], reason: 'The page changed' })).toBe(
+      'Removed evidence: The page changed'
+    );
     expect(shinsa('find_tasks', { query: 'login' })).toBe('Looked up tasks: login');
     expect(shinsa('find_tasks')).toBe('Looked up tasks');
     expect(shinsa('read_task', { task_id: 't1' })).toBe('Read a task');
     expect(shinsa('list_repository_work')).toBe('Listed the other work in the repository');
+    expect(shinsa('list_services')).toBe('Listed the task’s services');
+    expect(shinsa('run_service', { service: 'api', action: 'start' })).toBe('Started a service: api');
+    expect(shinsa('run_service', { service: 'api', action: 'stop' })).toBe('Stopped a service: api');
+    expect(shinsa('run_service', { service: 'api', action: 'restart' })).toBe('Restarted a service: api');
+    expect(shinsa('run_service', { service: 'api' })).toBe('Ran a service: api');
     expect(shinsa('note', { note: 'Remember' })).toBe('Left a note: Remember');
     expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check-in: The deploy');
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe('Suggested 2 tasks');
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }] })).toBe('Suggested 1 task');
+    expect(shinsa('remember', { text: 'Keep plans short.' })).toBe(
+      'Proposed a rule to remember: Keep plans short.'
+    );
     expect(shinsa('answer', { answer: 'Here.' })).toBe('Handed over the answer');
     expect(shinsa('report_diagnosis', { diagnosis: 'It leaks.' })).toBe('Reported the diagnosis');
     expect(shinsa('submit_report', { report: 'Report.' })).toBe('Wrote the report');
@@ -441,11 +459,24 @@ describe('resolveGroupPhrase', () => {
       'Looked up tasks once',
       'Looked up tasks 3 times',
     ]);
+    expect([phrase('remove_evidence', 1), phrase('remove_evidence', 2)]).toEqual([
+      'Removed evidence',
+      'Removed evidence 2 times',
+    ]);
     expect(phrase('note', 2)).toBe('Left 2 notes');
+    expect([phrase('remember', 1), phrase('remember', 2)]).toEqual([
+      'Proposed a rule to remember',
+      'Proposed 2 rules to remember',
+    ]);
     expect(phrase('read_task', 2)).toBe('Read 2 tasks');
     expect([phrase('list_repository_work', 1), phrase('list_repository_work', 2)]).toEqual([
       'Listed the other work in the repository',
       'Listed the other work in the repository 2 times',
+    ]);
+    expect([phrase('list_services', 1), phrase('list_services', 2), phrase('run_service', 2)]).toEqual([
+      'Listed the task’s services',
+      'Listed the task’s services 2 times',
+      'Ran 2 services',
     ]);
     expect([phrase('wait_for', 1), phrase('suggest_tasks', 1), phrase('answer', 1)]).toEqual([
       'Scheduled a check-in',

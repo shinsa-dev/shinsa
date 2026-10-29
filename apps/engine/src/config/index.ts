@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { APP_IDENTITY } from '@shinsa/core';
 import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
 import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
@@ -14,6 +15,7 @@ export interface ServerConfig {
   databasePath: string;
   worktreesDir: string;
   evidenceDir: string;
+  attachmentsDir: string;
   transcriptsDir: string;
   pluginDir: string;
   webDir: string;
@@ -27,6 +29,8 @@ export interface ServerConfig {
   editor: string | null;
   terminal: string;
   settleDelayMs: number;
+  pushRetryMs: number;
+  overloadRetryMs: number;
   eunoe: EunoeConfig;
 }
 
@@ -34,8 +38,6 @@ interface EunoeConfig {
   command: string | null;
   port: number | null;
 }
-
-export const DEFAULT_PORT = 5180;
 
 const DATABASE_FILE = 'shinsa.sqlite';
 
@@ -67,7 +69,7 @@ function resolveEunoe(env: Env): EunoeConfig {
 }
 
 function resolvePortFrom(env: Env, machine: MachineConfig) {
-  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? DEFAULT_PORT);
+  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? APP_IDENTITY.port);
   if (port > 65_535) throw new Error(`SHINSA_PORT must be a port number, not "${port}".`);
   return port;
 }
@@ -91,6 +93,7 @@ function resolveDataPaths(dataDir: string, env: Env) {
     databasePath: join(dataDir, DATABASE_FILE),
     worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
     evidenceDir: join(dataDir, 'evidence'),
+    attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
   };
 }
@@ -123,6 +126,8 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
     editor: env.SHINSA_EDITOR || machine.editor,
     terminal: env.SHINSA_TERMINAL || machine.terminal || 'Terminal',
     settleDelayMs: readNumber(env, 'SHINSA_SETTLE_DELAY_MS', 15_000),
+    pushRetryMs: readNumber(env, 'SHINSA_PUSH_RETRY_MS', 30_000),
+    overloadRetryMs: readNumber(env, 'SHINSA_OVERLOAD_RETRY_MS', 15_000),
     eunoe: resolveEunoe(env),
   };
 }

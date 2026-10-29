@@ -85,8 +85,10 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
   (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
   that runs an operation or a plan that asks for your approval, whatever the setting says (`docs/engine.md` → A
   task's path).
-- **Self-check** is everything an agent can verify alone: types, lint, tests, the repo's rules,
-  a review pass against the rules skills, and for UI work the evidence capture (§5).
+- **Self-check** is everything that can be verified before you look: the checks the agent chose for the
+  task, which Shinsa runs after each phase (a test file or folder, one package's type check, the linter on
+  the changed paths; never the whole suite, which CI runs on the pull request), a review pass against the
+  rules skills, and for UI work the evidence capture (§5).
 - **After review**, the PR loop is automated: review-bot comments and CI failures go back to
   the round's agent, in the session that planned and built the work, and Shinsa pushes each fix until the PR is
   clean. You are not asked again
@@ -102,7 +104,7 @@ operate, build, checks, agent review, your review, pull request, merge) under gu
 change: anything that changes code goes through your review before a pull request, and merges
 only after one; an operation's plan always waits for you; an answer, research or investigation
 goes on to a change or an operation only with your OK, which you can refuse; every change runs
-Shinsa's checks and an independent agent review. Everything else is the agent's to compose while it plans: a
+the checks its agent chose and an independent agent review. Everything else is the agent's to compose while it plans: a
 task can run an operation before its change or after its merge (ship a column, then backfill
 it). The six shapes below are presets:
 
@@ -120,8 +122,8 @@ or composes the task's own steps from the building blocks, before it plans: inve
 OK, then an operation; research, your OK, then a change; a change, then an operation once it
 merged; or something smaller when the request needs no change at all. Every step and gate is
 an instance of one typed schema, and a rule set over it applies David's workflow to any work that
-changes code or runs an operation: a verification plan up front, the evidence the plan asks for,
-Shinsa's checks, an independent agent review, your review, the pull request, CI and your merge;
+changes code or runs an operation: a verification plan up front (the checks that prove the change),
+the evidence the plan asks for, those checks run by Shinsa, an independent agent review, your review, the pull request, CI and your merge;
 an operation needs a plan you approved and states its impact, and one that runs after a merge
 asks you again on the merged commit before it runs. A question, research or an investigation
 gets none of it. Core checks every composition and every plan against the schema and the rules
@@ -147,7 +149,7 @@ answered, when. Gates survive restarts. The decisions, as you see them (the sche
 | Operation | After a merge: the merged commit, the operation's steps and its impact, and the notes for the agent in a box you can edit | Run the operation with the notes in the box (a message in the chat replaces them and runs nothing) · Finish without it |
 
 A paused task (out of recovery, an agent's wait that ran out of time or check-ins, its usage or cost limit reached), an
-incomplete setup (missing repository, default branch or checks, found before any agent starts) and a provider that
+incomplete setup (a missing repository or default branch, found before any agent starts) and a provider that
 needs signing in again (a Claude account, or Codex's own login) are gates too: Retry, Verify again or Sign in, and
 Cancel. Every gate is yours: an agent can never close one, and a message it sends for you waits for the task's next
 agent.
@@ -172,9 +174,14 @@ not chat text.
   → Scheduling).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
-  request watch, Merge queues). A conflict is resolved by merging the base in, never by rebasing, and one GitButler
-  leaves when a task below a stack is cancelled is resolved in place in your workspace (`docs/engine.md` → The pull
-  request watch → Conflicts, Where agents work → GitButler).
+  request watch, Merge queues). A conflict is resolved by the agent merging the base in, never by rebasing, in every workspace
+  (`docs/engine.md` → The pull request watch → Conflicts).
+- **Every push is current and passes the hooks.** Before each push Shinsa merges the latest base into the branch
+  (never a rebase, so no force push), so it carries the base's fixes and its current pre-push hook; a conflict goes
+  to the agent, which resolves it before Shinsa checks and pushes again. The repository's pre-push hook always runs:
+  a rejection goes to the agent with the hook's output and the failing tests, never to a blind retry, and the same
+  failure twice stops at a gate (Send to the agent again, or Cancel). A network failure is retried, and the task shows
+  each attempt and why, as in "Pushing again in 30s, attempt 2 of 5: …" (`docs/engine.md` → Pushing the branch).
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
   are doing, and gives a heads-up when something is stuck (`docs/engine.md` → The briefing).
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
@@ -220,6 +227,10 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   does not navigate. The project defaults to the focus project; When to start and Priority default
   to Auto, and picking one overrides what Shinsa would decide. The kind of task is not asked: the
   classifier and the agent decide it.
+- **Attachments.** Home's composer and every task composer take files and images: the paperclip, a
+  paste or a drop. Each shows as a chip above the text while it uploads and can be removed; a
+  message can be attachments alone. The chat shows them as thumbnails and file chips, and the agent
+  gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
   say in the chat what to change), Review (§5), Merge, Question, a proposed change.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
@@ -237,7 +248,10 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   offers the ones it finds (each workspace's `dev` script, a `Procfile`, Docker Compose) and you add any, all inside
   the popover with no dialog; its Manage edits one or removes several at once, and one press starts all of a
   project's that are not running. Each runs in a terminal tab of its own, owned by the engine like every terminal, and starts again by itself
-  when the engine restarts. Also `shinsa services list|start|stop|restart` and ⌘K.
+  when the engine restarts. Also `shinsa services list|start|stop|restart` and ⌘K. A service is defined once per
+  project and also runs for any open task, in that task's worktree beside your own run: from the Services item
+  among the task's facts, `--task`, or by the task's agent, which can start, stop and read only its own task's runs. The popover
+  lists the tasks running each service under it, and a task's run closes when its worktree goes.
 - **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
   that handle several parents), then done and cancelled, collapsed. Priority then age
@@ -497,9 +511,16 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
   run ends and the same session checks in again later; a task waiting on other tasks names the one
   holding the chain up.
 - **Cost is counted** per run, task, step and phase, and so is the share of the account's weekly
-  usage window each step used. Two optional per-task limits pause the task: a share of the weekly
-  window (for subscriptions) and a dollar amount (for API keys and Codex). Both are off by default.
-  Unknown prices stay unknown.
+  usage window each step used: its cost at a rate Shinsa learns per account from how far the window moved while
+  runs worked, the way tokens become dollars at the model's prices. Each run is charged its own cost, so runs in
+  parallel never count the same usage twice. Every run is charged at the account's current rate, so a task's share
+  can move a little as the rate improves. A task shows its share of the weekly window on a subscription whose rate
+  is learned (from 5 tasks and 10 points of movement), with how many tasks it was learned from, and dollars until
+  then and on an API key. Two optional per-task limits pause the task: a share of the weekly window (for
+  subscriptions; an early estimate while the account is learning) and a dollar amount (for API keys and Codex, and
+  the limit that always holds while an account is learning). Both are off by default.
+  Unknown prices stay unknown. A task's cost shows in one place, the popover of the cost icon among its facts;
+  nothing else on screen repeats it, and a paused task names the limit it reached, not what it spent.
 - **Quiet agents are flagged**, informationally, after 5 and 15 minutes without output.
 - **Recovery budgets follow durable state** (failing checks, finding files, the tree), so prose
   never resets them.
@@ -574,7 +595,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Some decisions are only yours.** The decisions at your gates (`docs/engine.md` → Who can
   change Shinsa) happen there, by you: agents have no tool and no command for them, core refuses one sent on
   your behalf, and an agent asked in chat to merge points you to the gate. The settings that spend money, merge or
-  decide for you, and a repository's checks, are yours too. An agent's shell
+  decide for you, and a repository's own check commands, are yours too. An agent's shell
   can still do whatever your account can (`gh pr merge`, `git push`), so turn on GitHub branch
   protection for the default branch; it is what really guards a merge. Shinsa itself answers only
   on this machine and refuses requests from other websites.
@@ -656,7 +677,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   next round on the same branch, worktree and sessions. Old tasks replay as one round.
 - **Feedback or new work.** The classifier reads each message as feedback (it steers, revises or
   fixes as before), a new round (waiting until the current round is at its merge gate or done), or
-  another task's work (a split-off you can keep here). One round works at a time. Your message shows
+  another task's work (a split-off you can keep here). One round works at a time. New work never
+  waits behind your own review or merge: while a round waits for you, what you ask for (a change, starting
+  the dev server so you can try it, a question) goes to that round, and the gate comes back after it;
+  a round already queued says what releases it ("Sends after you merge round 1.") and Send now gives
+  it to the current round instead. Your message shows
   as sent the moment you send it; the classifier reads it afterwards and Shinsa delivers it when it
   has.
 - **How each round ships.** Onto the open pull request by default, or as its own stacked pull
@@ -704,14 +729,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### Where agents work (2026-10-24)
 
-- **A repository chooses where its agents work**: Worktrees (the default: a worktree and a fresh branch per task),
-  GitButler (a branch per task in your GitButler workspace, all applied together in your checkout so you can
-  test them at once, each still its own pull request) or Main checkout (agents work in your checkout on a branch
-  Shinsa makes, one task at a time; the next waits). Settings → Projects on each repository, or ⌘K. GitButler is
-  offered only once `but` is installed and the repository is a GitButler workspace, and the setup check stops a task
-  whose repository is not ready for its mode. Your own uncommitted work is never committed: in GitButler one agent
-  that changes files works at a time and only what it changed goes on its branch (`docs/engine.md` → Where agents
-  work; what is left is `docs/plans/gitbutler-plan.md`).
+- **A repository chooses where its agents work**: Worktrees (the default: a worktree and a fresh branch per task)
+  or Main checkout (agents work in your checkout on a branch Shinsa makes, one task at a time; the next waits).
+  Settings → Projects on each repository, or ⌘K. The setup check stops a task whose repository is not ready for its
+  mode: the main checkout needs no uncommitted changes before a task takes it (`docs/engine.md` → Where agents
+  work).
 
 ### One agent per task (2026-10-24)
 
@@ -747,9 +769,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   stacks, changed files and whether an agent works on them now, and the Agent is told once when another task changes
   the same files (`docs/engine.md` → Other work in the repository).
 - **Conflicts resolve themselves.** A pull request that conflicts with its base (main moved, or a stacked base merged
-  or moved) and a GitButler branch left conflicted when the task below it was cancelled go to the task's Agent as a
-  fix in its own session; a GitButler commit refused for another task's lines stacks on that task. The agent asks you
-  only what it cannot resolve itself (`docs/engine.md` → The pull request watch → Conflicts).
+  or moved) goes to the task's Agent as a fix in its own session, whatever the workspace: it merges the base in and
+  resolves the conflicts, and the task shows "resolving conflicts with ‹base›". The agent asks you only what it cannot
+  resolve itself (`docs/engine.md` → The pull request watch → Conflicts).
 - **Disabled commands say why.** A ⌘K command or option that cannot run now is shown greyed with the reason as its
   hint (`docs/design.md`, 14).
 
@@ -757,22 +779,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 - **You edit the code where you read it.** At Head of the branch or the Working copy of an open task the editor is
   simply editable: typing edits, ⌘Z undoes, and each pause saves the file to the task's working copy (the worktree,
-  or your checkout in GitButler and main-checkout mode). There is no Suggest a change and no suggestions; line
+  or your checkout in main-checkout mode). There is no Suggest a change and no suggestions; line
   comments are words only. Shinsa still makes every commit: your edits go into the round's next commit; approving
   the review with edits no commit took yet commits them and runs the checks again before the push, and approving the
   merge with them pushes them and merges once CI passes. The agent is told which files you edited, at once if it is
-  working and in its next turn either way. In GitButler the working copy shows the files the task owns from disk and
-  the rest from its branch, so a reload shows your edit. A merged or finished task, an earlier commit and the base are read-only, with a
+  working and in its next turn either way. A merged or finished task, an earlier commit and the base are read-only, with a
   one-line reason. A file that changed on disk under you keeps your unsaved edit when it touched other lines, and
   otherwise shows the disk version with a notice (`docs/engine.md` → Your edits).
 - **Side by side first.** A diff opens side by side with its new side editable; unified is the toggle and is
   remembered, and on a phone or a window below `md` every diff is unified. Each side scrolls sideways under its own pinned line numbers, folded "N unchanged lines" are no place
   for the cursor, and a comment box for a long selection fits the visible pane. Open in editor left the toolbar:
   Shinsa is the editor (the task's ⌘K and menu still open the checkout elsewhere).
-- **GitButler stacks, decided.** Shinsa stacks a task only onto a branch it created. Cancelling a task another is
-  stacked on first takes its branch out of the stack, so the task above stays applied with its own commits and its
-  pull request goes back to the default branch; while the task below is open, the task above keeps waiting on it and
-  that dependency cannot be removed (the Waits on menu shows it as "Stacked on “‹title›”").
 
 ### Review is a report (2026-10-25)
 
@@ -840,6 +857,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   Ghostty config was removed on 2026-10-26, so the terminal looks like the rest of Shinsa.
 - **Services and Mac keys (2026-10-26).** Services, closing without a question unless a program runs, ⌘T and ⌘W,
   and the line-editing keys of Terminal.app and Ghostty (`docs/design.md`, 37).
+- **Services per task (2026-10-27).** A project's services run for a task in its worktree, started by you or by the
+  task's agent (`list_services`, `run_service`), shown under each service and among the task's facts
+  (`docs/engine.md` → Services → Runs for a task).
 - **Why xterm.js and not ghostty-web.** ghostty-web runs Ghostty's own parser in WebAssembly and handles complex
   scripts better, but it is at 0.4, has no WebGL renderer, no search, serialize or headless counterpart, and its
   xterm.js compatibility is partial. xterm.js 6 is what VS Code ships: the WebGL renderer, the add-ons this needs, and
@@ -860,13 +880,63 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   without the change; the reviewer gets the list of what was attached and adds its own where a claim has none or it
   doubts one, shown as from the agent review. `attach_evidence` gains `detail`, `width`, `theme` and `stage`; the
   `evidence` skill is the recipe (Playwright's command line or a script in a scratch folder, 1280px and 390px, light
-  and dark). Prompts stay cache-stable: the list and the planned kinds ride in the user turn.
+  and dark, at a device scale factor of 2 so shots stay sharp on a Retina screen). Prompts stay cache-stable: the list and the planned kinds ride in the user turn.
 - **Kept per task and round, served properly.** `<data>/evidence/<task id>/round-<n>/`, files named after their
   title, cached as immutable, recordings served in byte ranges so they seek (`docs/engine.md` → Evidence).
 - **Seen in the Review tab, first.** An Evidence section right under the summary: before and after pairs side by side,
   shots and recordings in a grid, test output as code, links, and where it is stored; images open in the image viewer
   and step through the section; a missing proof says so. The Overview keeps one line pointing there
   (`docs/design.md` 34). The seed carries real screenshots, a recording and test runs on six review tasks.
+
+### Checks the agent chooses (2026-10-27)
+
+- **Why.** Shinsa ran the repository's whole check suite (its configured commands, else every `lint`,
+  `check-types`, `typecheck` and `test` script it found) after the last phase and after every fix of every task.
+  With several tasks at once on a loaded machine, a whole suite is slow, can time out in tests the change never
+  touched, and sends the agent into fix rounds for failures that are not its own. A repository with no commands got
+  a setup gate that could only be waived.
+- **The agent chooses, Shinsa runs.** The plan's verification is now a list of checks, each a label, a scoped
+  command and the phases it covers (`bun test apps/engine/test/agents/transcripts`,
+  `bun run --cwd apps/web check-types`, `bunx biome check <changed paths>`). A command that runs the whole suite is
+  refused at the plan: CI runs that on the pull request. While it builds and fixes, the agent adds, changes and
+  removes checks with a reason each (a new file in a later phase gets its own check), and the task's activity says
+  so. The repository's own commands stay as an optional baseline that runs once before review, and only you change
+  them. Checks are like evidence: chosen for the task, a bonus, not a burden.
+- **When they run.** After each phase, that phase's checks and the ones just added or changed; before review also
+  the repository's commands; after any fix (failed checks, the agent review's findings, the changes you asked for),
+  the checks that failed, the ones the fix names and the checks of every phase whose files the fix changed, never
+  the whole set; after you approve with your edits, all of them. In parallel, at low priority, headless, with no
+  limit across tasks.
+- **Only the change's failures block.** A failing test file runs again alone once, and a check that then passes is
+  marked "passed when re-run alone". One that still fails runs on the base commit (cached per commit and command),
+  and Shinsa compares the failures themselves, not just the exit code: each failing test by its file and name, each
+  type or lint error by its file, code and message, never its line number, so errors that only moved still match.
+  When every failure is already on the base, the check is marked "already failing on the base branch" and does not
+  block. New ones on top block, named first: "2 new type errors, 14 already on the base branch". Output Shinsa
+  cannot read into failures always blocks. Changed-line coverage comes only from the tests among the task's checks,
+  once before review.
+- **Two stages, one list.** Before the pull request, the task's checks; after it, CI's check runs from the pull
+  request, in the same Checks list. The pull request's fix loop is unchanged.
+- **Evidence links a check.** An agent proving its change with a test links the check by its id instead of pasting
+  its output, and Shinsa keeps the output of each check run beside its result (`docs/engine.md` → Checks,
+  Evidence).
+- **Setup asks less.** "No checks to run" and Start without checks are gone: a repository with no commands of its
+  own runs only its tasks' checks, so nothing is missing.
+
+### Memory, and less guidance (2026-10-27)
+
+- **Why.** Research on context files and skills (ETH Zurich's "Evaluating AGENTS.md", SkillsBench, both February
+  2026) found that context an agent can find itself, or writes for itself, makes it no better and costs every turn,
+  while short rules written by people help. Shinsa had the opposite: long house rules repeating its tools, and no place
+  for what you teach agents at a gate, so the next task forgot it.
+- **Memory.** Rules you keep for every later agent, for every project or one: at most 240 characters each, 20 per
+  scope. Agents propose with `remember` when you correct them; only you keep, edit or remove one, in Settings → Agents
+  → Memory or with `shinsa memory`. A fresh session (the task's agent or the reviewer) hears every rule in its brief,
+  a resumed one only the new ones; never the system prompt, so the prompt cache holds (`docs/engine.md` → Memory).
+- **Less guidance.** The house rules lost what a tool's own description already says (a third shorter, about 5,700
+  characters per role), the writing rules are one block (`WRITING_RULES`), and the `handover` skill keeps only what the
+  schemas cannot say (13.7k to 3.9k characters). No skill editor and no style setting: your skills come from
+  `~/.claude/skills` and each repository, and taste is a memory rule.
 
 ### Watchdogs, forks and the pattern check (2026-10-28)
 

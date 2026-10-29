@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   changeWorkspace,
-  describeGitButlerSupport,
   describeWorkspaceChange,
   listWorkspaceItems,
   resolveRepoKey,
@@ -23,57 +22,42 @@ afterEach(() => {
 describe('where agents work', () => {
   it('names the mode a repository works in, worktrees until you choose otherwise', () => {
     expect(resolveWorkspaceLabel(createRepo({ id: 'web' }))).toBe('Worktrees');
-    expect(resolveWorkspaceLabel(createRepo({ id: 'web', workspace: 'gitbutler' }))).toBe('GitButler');
     expect(resolveWorkspaceLabel(createRepo({ id: 'web', workspace: 'main_checkout' }))).toBe(
       'Main checkout'
     );
   });
 
-  it('says why GitButler cannot be chosen yet, or nothing once it can', () => {
-    expect(describeGitButlerSupport(undefined)).toBe('Checking whether GitButler is set up here.');
-    expect(describeGitButlerSupport({ butInstalled: false, gitButlerWorkspace: true })).toBe(
-      'Install GitButler’s command line (`but`) to use it.'
-    );
-    expect(describeGitButlerSupport({ butInstalled: true, gitButlerWorkspace: false })).toBe(
-      'Run `but setup` in this repository to use it.'
-    );
-    expect(describeGitButlerSupport({ butInstalled: true, gitButlerWorkspace: true })).toBeNull();
-  });
-
-  it('offers the three modes, GitButler held back with its reason until it is set up, unless it is already chosen', () => {
-    const web = createRepo({ id: 'web' });
-    const [worktrees, gitbutler, checkout] = listWorkspaceItems(web, null);
-    expect(worktrees).toMatchObject({ value: 'worktrees', label: 'Worktrees' });
-    expect(worktrees?.disabled).toBeUndefined();
-    expect(gitbutler).toMatchObject({
-      value: 'gitbutler',
-      disabled: 'Checking whether GitButler is set up here.',
-      hint: expect.stringContaining('test them together'),
+  it('offers worktrees and the main checkout, each with what it means', () => {
+    const [worktrees, checkout, ...rest] = listWorkspaceItems();
+    expect(worktrees).toMatchObject({
+      value: 'worktrees',
+      label: 'Worktrees',
+      hint: expect.stringContaining('worktree'),
     });
-    expect(checkout).toMatchObject({ value: 'main_checkout', label: 'Main checkout' });
-    expect(checkout?.disabled).toBeUndefined();
-    const ready = listWorkspaceItems(web, { web: { butInstalled: true, gitButlerWorkspace: true } });
-    expect(ready[1]?.disabled).toBeUndefined();
-    const chosen = listWorkspaceItems(createRepo({ id: 'web', workspace: 'gitbutler' }), {});
-    expect(chosen[1]?.disabled).toBeUndefined();
+    expect(checkout).toMatchObject({
+      value: 'main_checkout',
+      label: 'Main checkout',
+      hint: expect.stringContaining('one task at a time'),
+    });
+    expect(rest).toEqual([]);
   });
 
   it('saves a new mode with a toast that says what changes, and does nothing for the current one', async () => {
     const web = createRepo({ id: 'web' });
-    expect(describeWorkspaceChange(web, 'gitbutler')).toBe(
-      'New tasks in web get a branch each in the GitButler workspace. Tasks already working keep where they are.'
+    expect(describeWorkspaceChange(web, 'main_checkout')).toBe(
+      'New tasks in web work in its checkout, one at a time. Tasks already working keep where they are.'
     );
     expect(await changeWorkspace(web, 'worktrees')).toBe(true);
     expect(spies.sent).not.toHaveBeenCalled();
-    await changeWorkspace(web, 'gitbutler');
+    await changeWorkspace(web, 'main_checkout');
     expect(spies.sent).toHaveBeenCalledWith(
-      { type: 'repo.update', repoId: 'web', patch: { workspace: 'gitbutler' } },
-      describeWorkspaceChange(web, 'gitbutler')
+      { type: 'repo.update', repoId: 'web', patch: { workspace: 'main_checkout' } },
+      describeWorkspaceChange(web, 'main_checkout')
     );
     expect(describeWorkspaceChange(web, 'worktrees')).toContain('get a worktree each');
   });
 
-  it('keys the repositories so support is read again only when they change', () => {
+  it('keys the repositories so what they report is read again only when they change', () => {
     expect(resolveRepoKey([createRepo({ id: 'b' }), createRepo({ id: 'a' })])).toBe('a,b');
   });
 });

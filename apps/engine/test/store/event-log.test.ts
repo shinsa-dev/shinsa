@@ -108,9 +108,9 @@ describe('EventLog', () => {
       log,
       [{ type: 'project.removed', projectId: 'a' }],
       [
-        { kind: 'checks.run', taskId: 't1', round: 1 },
+        { kind: 'checks.run', taskId: 't1', round: 1, checks: [], coverage: false },
         { kind: 'pull_request.open', taskId: 't1' },
-        { kind: 'checks.run', taskId: 't2', round: 1 },
+        { kind: 'checks.run', taskId: 't2', round: 1, checks: [], coverage: false },
       ],
       0,
       1
@@ -132,7 +132,7 @@ describe('EventLog', () => {
       log,
       [{ type: 'project.removed', projectId: 'a' }],
       [
-        { kind: 'pull_request.merge', taskId: 't1' },
+        { kind: 'pull_request.merge', taskId: 't1', headSha: null },
         { kind: 'pull_request.watch', taskId: 't1' },
         { kind: 'pull_request.watch', taskId: 't1' },
       ],
@@ -173,7 +173,7 @@ describe('EventLog', () => {
       log,
       [{ type: 'project.removed', projectId: 'a' }],
       [
-        { kind: 'checks.run', taskId: 't1', round: 1 },
+        { kind: 'checks.run', taskId: 't1', round: 1, checks: [], coverage: false },
         { kind: 'pull_request.open', taskId: 't1' },
         { kind: 'pull_request.push', taskId: 't1' },
       ],
@@ -200,7 +200,7 @@ describe('EventLog', () => {
       [{ type: 'project.removed', projectId: 'a' }],
       [
         { kind: 'run.execute', runId: 'r1' },
-        { kind: 'checks.run', taskId: 't1', round: 1 },
+        { kind: 'checks.run', taskId: 't1', round: 1, checks: [], coverage: false },
         { kind: 'worktree.remove', taskId: 't2' },
         { kind: 'question.resolve', gateId: 'g1' },
         { kind: 'task.triage', taskId: 't3' },
@@ -268,9 +268,9 @@ describe('cancelling effects', () => {
       log,
       [{ type: 'project.removed', projectId: 'a' }],
       [
-        { kind: 'checks.run', taskId: 't1', round: 1 },
+        { kind: 'checks.run', taskId: 't1', round: 1, checks: [], coverage: false },
         { kind: 'pull_request.watch', taskId: 't1' },
-        { kind: 'checks.run', taskId: 't2', round: 1 },
+        { kind: 'checks.run', taskId: 't2', round: 1, checks: [], coverage: false },
       ],
       0,
       1
@@ -278,7 +278,7 @@ describe('cancelling effects', () => {
     log.claimEffects(1);
     const { cancelled } = log.commitCommand({
       events: [{ type: 'project.removed', projectId: 'b' }],
-      effects: [{ kind: 'checks.run', taskId: 't1', round: 2 }],
+      effects: [{ kind: 'checks.run', taskId: 't1', round: 2, checks: [], coverage: false }],
       cancellations: [{ taskId: 't1', kinds: ['checks.run', 'pull_request.watch'], reason: 'Replaced.' }],
       fromSeq: 1,
       at: 2,
@@ -297,7 +297,7 @@ describe('cancelling effects', () => {
     commitEvents(
       log,
       [{ type: 'project.removed', projectId: 'a' }],
-      [{ kind: 'checks.run', taskId: 't1', round: 1 }],
+      [{ kind: 'checks.run', taskId: 't1', round: 1, checks: [], coverage: false }],
       0,
       1
     );

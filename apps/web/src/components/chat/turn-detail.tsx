@@ -7,15 +7,19 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import type { WorkItem } from '@/lib/chat/timeline.ts';
 import { formatBrief } from '@/lib/chat/turns.ts';
+import { formatCount } from '@/lib/format/count.ts';
 import { useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
-export function ErrorLine({ text }: { text: string }) {
+export function ErrorLine({ text, count = 1 }: { text: string; count?: number }) {
   return (
     <div data-message className='flex min-w-0 items-start gap-1.25 text-red-text text-xs leading-relaxed'>
       <IconSlot>
         <Icon size='sm' name='IconExclamationCircle' />
       </IconSlot>
       <span className='selectable min-w-0 whitespace-pre-wrap break-words'>{text}</span>
+      {count > 1 && (
+        <span className='shrink-0 text-fg-2 tabular-nums'>{formatCount(count, 'time', 'times')}</span>
+      )}
     </div>
   );
 }

@@ -12,7 +12,11 @@ import {
   type Task,
   type WorkspaceMode,
 } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
+import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { toast } from '@shinsa/ui/components/sonner';
+import type { CSSProperties } from 'react';
+import { changeBaseline } from '@/lib/baseline.ts';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import {
   type LocalRepo,
@@ -126,6 +130,19 @@ export function selectProject(state: ShinsaState, projectId: string | null) {
 
 export function selectTaskProject(state: ShinsaState, task: Task) {
   return selectProject(state, resolveTaskProject(state, task));
+}
+
+export function resolveProjectInk(color: string) {
+  return color === 'gray' ? 'var(--fg-2)' : `var(--${color}-4, var(--fg-2))`;
+}
+
+export function resolveProjectMark(icon: IconName, color: string | null | undefined): MenuItemIcon {
+  if (!color) return icon;
+  return { name: icon, style: { '--icon-color': resolveProjectInk(color) } as CSSProperties };
+}
+
+export function resolveRepoIcon(repo: Repo): IconName {
+  return repo.remote ? 'IconGithub' : 'IconFolder1';
 }
 
 export function listProjectRepoRows(state: ShinsaState, projectId: string) {
@@ -263,6 +280,7 @@ export interface ProjectActions {
   removeFolder: (project: Project, folder: string) => Promise<boolean>;
   changeWorkspace: (repo: Repo, mode: WorkspaceMode) => Promise<boolean>;
   changeCoverage: (repo: Repo, setting: CoverageSetting) => Promise<boolean>;
+  changeBaseline: (repo: Repo, commands: string[]) => Promise<boolean>;
 }
 
 async function saveProject(input: ProjectInput, done: string) {
@@ -310,4 +328,5 @@ export const PROJECT_ACTIONS: ProjectActions = {
     ),
   changeWorkspace,
   changeCoverage,
+  changeBaseline,
 };

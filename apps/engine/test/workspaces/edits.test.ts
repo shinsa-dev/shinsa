@@ -1,13 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Repo, Task } from '@shinsa/core';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { GitButlerStrategy } from '../../src/workspaces/gitbutler.ts';
-import { adoptPath, createLedger, LedgerStore, selectOtherOwner } from '../../src/workspaces/ledger.ts';
+import type { Task } from '@shinsa/core';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 function writer(path: string, text: string) {
@@ -15,12 +12,6 @@ function writer(path: string, text: string) {
     writeFileSync(path, text);
     return true;
   };
-}
-
-async function startButTask(strategy: GitButlerStrategy, repo: Repo, id: string, branch: string) {
-  const draft = createTask({ id, branch, worktreePath: null, workspace: 'gitbutler' });
-  const checkout = await strategy.prepare(repo, draft);
-  return createTask({ id, branch: checkout.branch, worktreePath: checkout.path, workspace: 'gitbutler' });
 }
 
 describe('your edits from the Code tab, in each place agents work', () => {
@@ -51,35 +42,5 @@ describe('your edits from the Code tab, in each place agents work', () => {
       'The checkout is on main, not on the task’s branch fix/a.'
     );
     expect(readFileSync(join(path, 'a.txt'), 'utf8')).toBe('a\n');
-  });
-
-  test('in GitButler the edit becomes the task’s, goes into its next commit, and never mixes with another task’s', async () => {
-    const made = await createGitRepo({ files: { 'a.txt': 'a\n', 'b.txt': 'b\n' } });
-    await runCommandOrThrow(['but', 'setup', '--json'], made.path);
-    const strategy = new GitButlerStrategy(createTempDir());
-    const first = await startButTask(strategy, made.repo, 'task-1', 'fix/a');
-    const second = await startButTask(strategy, made.repo, 'task-2', 'fix/b');
-    await strategy.writeEdit(made.repo, first, 'a.txt', writer(join(made.path, 'a.txt'), 'a, by you\n'));
-    await strategy.writeEdit(made.repo, first, 'b.txt', () => false);
-    const release = await strategy.claim(made.repo, second);
-    writeFiles(made.path, { 'b.txt': 'b, by the agent\n' });
-    await release();
-    await expect(
-      strategy.writeEdit(made.repo, first, 'b.txt', writer(join(made.path, 'b.txt'), 'b, by you\n'))
-    ).rejects.toThrow('Another task has uncommitted changes in b.txt');
-    expect(readFileSync(join(made.path, 'b.txt'), 'utf8')).toBe('b, by the agent\n');
-    await strategy.commit(made.repo, first, 'fix: your edit');
-    expect(await git(made.path, 'show', 'fix/a:a.txt')).toBe('a, by you');
-    expect(await git(made.path, 'show', '--name-only', '--format=', 'fix/a')).toBe('a.txt');
-  });
-
-  test('the ledger gives a path to the task, or lets it go once it is clean again', () => {
-    const owned = adoptPath(createLedger(), 'task-1', 'a.txt', { 'a.txt': 'hash' });
-    expect(owned.owners).toEqual({ 'a.txt': { taskId: 'task-1', hash: 'hash' } });
-    expect(selectOtherOwner(owned, 'task-2', 'a.txt')).toBe('task-1');
-    expect(selectOtherOwner(owned, 'task-1', 'a.txt')).toBeNull();
-    expect(selectOtherOwner(owned, 'task-2', 'b.txt')).toBeNull();
-    expect(adoptPath(owned, 'task-1', 'a.txt', {}).owners).toEqual({});
-    expect(new LedgerStore(createTempDir()).read('repo')).toEqual(createLedger());
   });
 });

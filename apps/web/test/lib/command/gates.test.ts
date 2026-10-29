@@ -279,26 +279,18 @@ describe('gate commands', () => {
     ]);
   });
 
-  it('verifies the setup again, and waives the checks only when checks are all that is missing', () => {
+  it('verifies the setup again, and never offers to start without checks', () => {
     const gate = createGate({ id: 'g', taskId: 't', type: 'configuration' });
-    const checks = createTask({ id: 't', configProblems: [{ kind: 'check_commands', detail: 'None.' }] });
     const branch = createTask({ id: 't', configProblems: [{ kind: 'default_branch', detail: 'Gone.' }] });
-    expect(commandsFor(branch, gate).map((command) => command.label)).toEqual(['Verify the setup again']);
-    const commands = commandsFor(checks, gate);
+    const commands = commandsFor(branch, gate);
     expect(commands.map((command) => [command.label, command.icon])).toEqual([
       ['Verify the setup again', 'IconToolbox'],
-      ['Start without checks', 'IconShieldCheck'],
     ]);
     run(commands[0]);
-    run(commands[1]);
     expect(spies.sent.mock.calls).toEqual([
       [
         { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null },
         'Verifying the setup again.',
-      ],
-      [
-        { type: 'gate.answer', gateId: 'g', decision: 'waive', response: null },
-        'Starting without checks for this repository.',
       ],
     ]);
   });
@@ -310,14 +302,14 @@ describe('gate commands', () => {
       id: 'g',
       taskId: 't',
       type: 'sign_in',
-      title: 'Sign in to Claude as a@example.com',
+      title: 'Paused: a@example.com needs signing in',
       provider: 'claude',
       account: { id: 'a', email: 'a@example.com' },
     });
     const [signInCommand, retry] = commandsFor(task, gate);
     expect(signInCommand).toMatchObject({
       label: 'Sign in',
-      hint: 'Sign in to Claude as a@example.com',
+      hint: 'Paused: a@example.com needs signing in',
       icon: 'IconUserKey',
     });
     run(signInCommand);
@@ -337,7 +329,7 @@ describe('gate commands', () => {
       id: 'g',
       taskId: 't',
       type: 'sign_in',
-      title: 'Sign in to Codex as codex@example.com',
+      title: 'Paused: codex@example.com needs signing in',
       provider: 'codex',
       account: null,
     });
