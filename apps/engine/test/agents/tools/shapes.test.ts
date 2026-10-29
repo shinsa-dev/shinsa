@@ -83,9 +83,15 @@ describe('the shape tools', () => {
         runId: 'run-1',
         attemptId: 'a-1',
         summary: 'Read 12 messages; filed 2.',
+        reached: true,
       },
     ] as ShinsaCommand[]);
     expect(SHAPE_TOOL_SPECS.report_intake.description).toContain('then stop');
+    await handleShapeTool('report_intake', { summary: 'slack timed out.', reached: false }, call);
+    expect(sent.at(-1)).toMatchObject({ type: 'agent.report_intake', reached: false });
+    await expect(
+      handleShapeTool('report_intake', { summary: 'Read it.', reached: 'no' }, call)
+    ).rejects.toThrow('reached');
     await expect(
       handleShapeTool('report_intake', { summary: 'x'.repeat(SCHEDULE_LIMITS.intakeSummary + 1) }, call)
     ).rejects.toThrow('summary');

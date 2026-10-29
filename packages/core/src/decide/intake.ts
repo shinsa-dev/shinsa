@@ -212,6 +212,7 @@ export function isIntakeBusy(decider: Decider, task: Task) {
 export function startIntake(decider: Decider, schedule: Schedule, task: Task, note: string) {
   const source = schedule.source ? selectProjectSource(decider, schedule.source) : null;
   if (!source) return null;
+  if (task.recoveries > 0) decider.emit({ type: 'task.recovered', taskId: task.id, recoveries: 0 });
   decider.stage(task.id, 'watching', `reading ${source.server} for the automation “${schedule.name}”`);
   const filed = listFiledTasks(decider, schedule.id).slice(0, SCHEDULE_LIMITS.filedListed);
   const prompt = resolveAgentPrompt(resolveIntakePrompt(schedule, source, note, filed));
@@ -237,6 +238,11 @@ export function reportIntake(decider: Decider, command: CommandOf<'agent.report_
       'summary_too_long',
       `The summary is ${summary.length} characters; the limit is ${SCHEDULE_LIMITS.intakeSummary}.`
     );
+  }
+  if (!command.reached) {
+    decider.endRun(run, 'failed', summary);
+    settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'could not reach a data source');
+    return;
   }
   const schedule = selectIntakeSchedule(decider, task);
   const readFrom = schedule ? resolveLastSentAt(schedule) : -1;

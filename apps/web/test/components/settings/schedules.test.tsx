@@ -39,7 +39,7 @@ describe('Settings → Schedules', () => {
     renderSchedules([]);
     expect(
       screen.getByText(
-        'Create a schedule, a trigger or a watch, or ask an agent for one, and it shows up here.'
+        'Ask an agent for a schedule, a trigger or a watch, in the home chat or any task, and it shows up here.'
       )
     ).toBeDefined();
   });
@@ -99,16 +99,6 @@ describe('Settings → Schedules', () => {
     await openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open the watch' }));
     expect(location.pathname).toBe('/automations/w');
-  });
-
-  it('creates an automation from its form', async () => {
-    renderSchedules([]);
-    fireEvent.click(screen.getByRole('button', { name: 'New automation' }));
-    expect(screen.getByText('Reads an integration and files a task per new report')).toBeDefined();
-    expect(screen.getByText(/No project uses an integration yet/)).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create automation' }));
-    expect(screen.getByText('Say what it should do.')).toBeDefined();
   });
 
   it('copies a webhook’s URL', async () => {

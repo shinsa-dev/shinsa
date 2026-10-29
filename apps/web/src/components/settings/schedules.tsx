@@ -1,5 +1,4 @@
 import { listSchedules, type Schedule, type ShinsaState } from '@shinsa/core';
-import { Button } from '@shinsa/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +29,6 @@ import {
   updateScheduleEnabled,
 } from '@/lib/schedules.ts';
 import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
-import { AutomationDialog } from './automation-dialog.tsx';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 export interface ScheduleActions {
@@ -145,26 +143,15 @@ export function createScheduleActions(state: ShinsaState): ScheduleActions {
   };
 }
 
-function NewAutomationButton({ state }: { state: ShinsaState }) {
-  const dialog = useDialogState<'create'>();
-  return (
-    <>
-      <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={() => dialog.show('create')}>
-        New automation
-      </Button>
-      {dialog.value && <AutomationDialog control={dialog.control} state={state} />}
-    </>
-  );
-}
-
 export function ScheduleSettings({ state }: { state: ShinsaState }) {
   const schedules = listSchedules(state);
   const actions = createScheduleActions(state);
   return (
-    <SettingsGroup title='Automations' action={<NewAutomationButton state={state} />}>
+    <SettingsGroup title='Automations'>
       {schedules.length === 0 && (
         <SettingsEmpty>
-          Create a schedule, a trigger or a watch, or ask an agent for one, and it shows up here.
+          Ask an agent for a schedule, a trigger or a watch, in the home chat or any task, and it shows up
+          here.
         </SettingsEmpty>
       )}
       {schedules.map((schedule) => (

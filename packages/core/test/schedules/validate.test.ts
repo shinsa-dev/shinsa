@@ -189,8 +189,13 @@ describe('a read of a data source to report', () => {
   test('needs a summary within its limit', () => {
     expect(validateIntakeReport({ summary: 'Filed 2.' })).toEqual({
       ok: true,
-      value: { summary: 'Filed 2.' },
+      value: { summary: 'Filed 2.', reached: true },
     });
+    expect(validateIntakeReport({ summary: 'It timed out.', reached: false })).toEqual({
+      ok: true,
+      value: { summary: 'It timed out.', reached: false },
+    });
+    expect(validateIntakeReport({ summary: 'Filed 2.', reached: 'no' }).ok).toBe(false);
     expect(validateIntakeReport({ summary: 'x'.repeat(SCHEDULE_LIMITS.intakeSummary + 1) }).ok).toBe(false);
   });
 });

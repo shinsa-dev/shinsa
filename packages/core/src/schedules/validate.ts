@@ -161,9 +161,15 @@ export function validateScheduleRequest(
   });
 }
 
-export function validateIntakeReport(input: Record<string, unknown>): Validation<{ summary: string }> {
+export function validateIntakeReport(
+  input: Record<string, unknown>
+): Validation<{ summary: string; reached: boolean }> {
   const reader = new Reader();
-  return reader.result({ summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.intakeSummary) });
+  return reader.result({
+    summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.intakeSummary),
+    reached:
+      input.reached === undefined || input.reached === null ? true : reader.flag(input.reached, 'reached'),
+  });
 }
 
 export interface ReportFilingRequest {

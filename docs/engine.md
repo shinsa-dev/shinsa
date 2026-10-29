@@ -1727,9 +1727,13 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   already has a task for, from the same server with the same id or link, is refused (`report_filed`, naming that
   task), whether that task is open, done or cancelled: dedupe reads the filed tasks themselves, so it holds when
   the schedule is deleted and written again. The read ends with `report_intake {summary}` (at most 1,000
-  characters) and the task rests again. A read that fails or ends without `report_intake` is recovered like any
-  run; where another run would open a failure gate, the read gives up instead (`missIntakeRead`): the task rests and
-  the next fire reads again. The filed task's activity says which automation filed it from whose report, and the
+  characters) and the task rests again. A source that errors or times out is tried again by the agent, 3 tries in
+  all (`SCHEDULE_LIMITS.readAttempts`, in the prompt); still failing, it reports `reached: false`, which ends the read
+  as not finished (the run fails with its summary, "could not reach a data source") without moving
+  `lastReadAt`, so the next read covers the same time. A read that fails or ends without `report_intake` is
+  recovered like any run, once per read (each read starts with the home's recoveries at 0, so a crash in an earlier
+  read never makes a later one give up at once); where another run would open a failure gate, the read gives up
+  instead (`missIntakeRead`): the task rests and the next fire reads again. The filed task's activity says which automation filed it from whose report, and the
   home's activity lists each task it filed. Settings → Automations starts each row with its type's tile, in the
   type's colour (`AUTOMATION_TYPE_LOOK`: a schedule blue, a trigger orange, a watch purple), and shows a watch as
   "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
@@ -1742,10 +1746,9 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
   so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
   automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
-- **New automation** (Settings → Automations): a form that writes a Schedule (every N minutes, a new task in a
-  repository or the one triage picks), a Trigger (a webhook that starts a new task, its URL in the row's menu) or a
-  Watch (an integration a project uses, every N minutes, and what counts as a report) as one `schedule.write`
-  (`lib/automations.ts`).
+- **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
+  in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
+  pauses, resumes and deletes them.
 - **Secrets are one-use refs** (`request_secret {label, reason}`, `agent.request_secret`): the agent's run waits on a
   question gate with `secret: {label}`; you paste the value into a password field that posts to
   `/api/secrets/<gate>` (never a command), and the server keeps it in `secrets.json` (mode 600) and answers the gate

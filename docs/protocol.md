@@ -819,7 +819,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.report_watch` | `report_watch` | records a watchdog check (`live` for one waiting for production); an issue trips the watchdog and files a task forked from this one |
 | `agent.file_report` | `file_report` | in a watch's read only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`) |
-| `agent.report_intake` | `report_intake` | ends a watch's read with its `summary`; the home rests again |
+| `agent.report_intake` | `report_intake` | ends a watch's read with its `summary`, as not finished with `reached: false` (the next read covers the same time); the home rests again |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch, from a home of its own |
@@ -1062,7 +1062,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `submit_report` | **`report`**; `propose_change` | 40,000 |
 | `report_outcome` | **`outcome`** | 8,000 |
 | `report_watch` | **`summary`**; `live` (required for a watchdog waiting for production: false while it is not live, with no verdict or issue); **`healthy`** otherwise; `issue` (**`title`**, **`request`**), required when not healthy and refused when healthy | summary 600; issue title 80, request 2,000 |
-| `report_intake` | **`summary`**: what it read, filed and skipped | 1,000 |
+| `report_intake` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out) | 1,000 |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle), `repository` (a name) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |

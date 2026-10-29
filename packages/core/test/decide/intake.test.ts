@@ -77,8 +77,13 @@ function fire(harness: Harness) {
   return only(harness);
 }
 
-function reportIntake(harness: Harness, taskId: string, summary = 'Read 12 messages; nothing new.') {
-  return harness.send({ type: 'agent.report_intake', runId: harness.activeRun(taskId).id, summary });
+function reportIntake(
+  harness: Harness,
+  taskId: string,
+  summary = 'Read 12 messages; nothing new.',
+  reached = true
+) {
+  return harness.send({ type: 'agent.report_intake', runId: harness.activeRun(taskId).id, summary, reached });
 }
 
 describe('a schedule that reads a data source', () => {
@@ -316,6 +321,56 @@ describe('an intake turn', () => {
     expect(readRunInstruction(harness.activeRun(taskId))).toContain(
       `Its last finished read started at ${new Date(last).toISOString()}`
     );
+  });
+
+  test('a source still unreachable after its tries ends the read as not finished, and the next read covers it again', () => {
+    const { harness, taskId } = createIntake();
+    fire(harness);
+    const finished = only(harness).runs.at(-1)?.at ?? 0;
+    reportIntake(harness, taskId);
+    fire(harness);
+    const runId = harness.activeRun(taskId).id;
+    expect(readRunInstruction(harness.activeRun(taskId))).toContain(
+      `${SCHEDULE_LIMITS.readAttempts} tries in all`
+    );
+    reportIntake(harness, taskId, 'slack timed out three times.', false);
+    expect(harness.state.runs[runId]).toMatchObject({
+      outcome: 'failed',
+      summary: 'slack timed out three times.',
+    });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'done',
+      stageReason: 'could not reach a data source',
+    });
+    expect(only(harness).lastReadAt).toBe(finished);
+  });
+
+  test('every read gets its own recovery, so an earlier crash never makes a later read give up at once', () => {
+    const { harness, taskId } = createIntake();
+    const crash = () =>
+      harness.send({
+        type: 'run.end',
+        runId: harness.activeRun(taskId).id,
+        outcome: 'failed',
+        summary: 'The connection dropped.',
+        failure: {
+          class: 'transport_error',
+          message: 'The connection dropped.',
+          code: null,
+          retryable: true,
+          resetAt: null,
+        },
+      });
+    fire(harness);
+    crash();
+    expect(harness.task(taskId).recoveries).toBe(1);
+    reportIntake(harness, taskId);
+    fire(harness);
+    expect(harness.task(taskId).recoveries).toBe(0);
+    const first = harness.activeRun(taskId).id;
+    crash();
+    expect(harness.activeRun(taskId).id).not.toBe(first);
+    expect(harness.activeRun(taskId).purpose).toBe('intake');
   });
 
   test('a read that failed never moves the start of the next one past the last read that finished', () => {

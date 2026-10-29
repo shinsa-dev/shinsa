@@ -98,6 +98,7 @@ export const SCHEDULE_LIMITS = {
   secretReason: 300,
   detail: 300,
   intakeSummary: 1_000,
+  readAttempts: 3,
   reportTitle: 100,
   reportRequest: 2_000,
   reportId: 200,

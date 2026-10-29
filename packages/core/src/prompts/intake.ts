@@ -1,5 +1,5 @@
 import type { ReportFiling } from '../commands/index.ts';
-import type { Schedule, Task, WatchSource } from '../domain/index.ts';
+import { SCHEDULE_LIMITS, type Schedule, type Task, type WatchSource } from '../domain/index.ts';
 
 function describeLastRead(schedule: Schedule) {
   if (schedule.lastReadAt === null) {
@@ -36,6 +36,7 @@ export function resolveIntakePrompt(
     'When a report is about a feature an earlier task shipped, find that task with `find_tasks` and `read_task` and set `fork_from` to it, so the new task starts from what its agent learned.',
     'Set `repository` when you know which repository the report is about; otherwise Shinsa picks one in the project.',
     'A message that is not a report (a thank-you, a question already answered, chatter) is not filed.',
+    `When the source errors or times out, wait a little and try again, ${SCHEDULE_LIMITS.readAttempts} tries in all. If it still fails, call \`report_intake\` with \`reached\` false and a \`summary\` of what failed: the next read starts from where this one should have, so nothing is missed.`,
     'When you are done, call `report_intake` with a `summary`: what you read, what you filed and what you skipped. Then stop.',
   ].join('\n');
 }

@@ -141,6 +141,10 @@ export const SHAPE_TOOL_SPECS = {
           'What you read, what you filed and what you skipped, with the counts.',
           SCHEDULE_LIMITS.intakeSummary
         ),
+        reached: {
+          type: 'boolean',
+          description: `False when the source still failed after ${SCHEDULE_LIMITS.readAttempts} tries, so the next read covers this one's time again. True when left out.`,
+        },
       },
       required: ['summary'],
     },

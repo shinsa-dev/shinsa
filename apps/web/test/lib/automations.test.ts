@@ -1,34 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import type { Schedule } from '@shinsa/core';
 import {
-  ANY_REPOSITORY,
-  type AutomationDraft,
-  createAutomationDraft,
-  describeAutomationSaved,
   describeAutomationTasks,
   describeReadsEmpty,
   listAutomationFacts,
   listAutomationGates,
   listAutomationReads,
   listAutomationTasks,
-  listRepoItems,
-  listSourceItems,
-  resolveAutomationCommand,
   selectWatchOfHome,
   selectWatchSource,
-  validateAutomationDraft,
-  writeAutomation,
 } from '@/lib/automations.ts';
 import { resolveProjectInk } from '@/lib/projects.ts';
 import { resolveAutomationPath } from '@/router.ts';
 import { createSchedule } from '../support/schedules.ts';
-import {
-  holdAcks,
-  listSentCommands,
-  releaseAcks,
-  startFakeServer,
-  stopFakeServer,
-} from '../support/server.ts';
 import {
   createGate,
   createProject,
@@ -48,99 +32,6 @@ const SLACK = {
 };
 
 const PROJECT = createProject({ id: 'p1', name: 'Superwall', watchSources: [SLACK] });
-
-function draft(overrides: Partial<AutomationDraft> = {}): AutomationDraft {
-  return { ...createAutomationDraft(), text: 'Bug reports.', ...overrides };
-}
-
-describe('the new automation form', () => {
-  it('starts as a watch every hour, and lists the integrations projects use and the repositories', () => {
-    expect(createAutomationDraft()).toMatchObject({
-      kind: 'watch',
-      everyMinutes: '60',
-      repoId: ANY_REPOSITORY,
-    });
-    const state = createShinsaState({
-      projects: [PROJECT, createProject({ id: 'p2' })],
-      repos: [createRepo({ id: 'r2', name: 'web' }), createRepo({ id: 'r1', name: 'app' })],
-    });
-    expect(listSourceItems(state)).toEqual([
-      { value: 'p1\u0000slack', label: 'slack', hint: 'Superwall · The #feedback channel' },
-    ]);
-    expect(listRepoItems(state).map((item) => item.label)).toEqual([
-      'Shinsa picks the repository',
-      'app',
-      'web',
-    ]);
-  });
-
-  it('asks for what it does, a sane interval and, for a watch, its integration', () => {
-    expect(validateAutomationDraft(draft())).toEqual({ source: 'Pick the integration it reads.' });
-    expect(validateAutomationDraft(draft({ kind: 'schedule', text: ' ', everyMinutes: '0' }))).toEqual({
-      text: 'Say what it should do.',
-      everyMinutes: 'Run it every 1 to 10080 minutes.',
-    });
-    expect(validateAutomationDraft(draft({ kind: 'trigger', everyMinutes: 'x' }))).toEqual({});
-  });
-
-  it('writes a watch as a schedule that reads its integration, and the others as new tasks', () => {
-    expect(
-      resolveAutomationCommand(draft({ name: ' Feedback ', source: 'p1\u0000slack' }), 'Europe/Berlin')
-    ).toEqual({
-      type: 'schedule.write',
-      scheduleId: null,
-      name: 'Feedback',
-      text: 'Bug reports.',
-      trigger: { kind: 'interval', everyMinutes: 60 },
-      target: null,
-      source: { projectId: 'p1', server: 'slack' },
-      enabled: null,
-      maxRuns: null,
-      timeZone: 'Europe/Berlin',
-    });
-    expect(
-      resolveAutomationCommand(draft({ kind: 'schedule', everyMinutes: '30', repoId: 'r1' }), 'UTC')
-    ).toMatchObject({
-      name: null,
-      trigger: { kind: 'interval', everyMinutes: 30 },
-      target: { kind: 'new_task', repoId: 'r1', priority: 'normal', mode: 'build' },
-      source: null,
-    });
-    expect(resolveAutomationCommand(draft({ kind: 'trigger', everyMinutes: 'x' }), 'UTC')).toMatchObject({
-      trigger: { kind: 'webhook', signature: null, replayKey: null },
-      target: { kind: 'new_task', repoId: null },
-    });
-    expect(
-      resolveAutomationCommand(draft({ kind: 'watch', everyMinutes: 'x', source: '' }), 'UTC')
-    ).toMatchObject({
-      trigger: { kind: 'interval', everyMinutes: 60 },
-      source: { projectId: '', server: '' },
-    });
-    expect(describeAutomationSaved({ kind: 'trigger' })).toBe(
-      'Created the trigger. Copy its webhook URL from its menu.'
-    );
-  });
-});
-
-describe('sending a new automation', () => {
-  beforeEach(() => {
-    startFakeServer();
-  });
-
-  afterEach(() => {
-    stopFakeServer();
-  });
-
-  it('sends the command, and hands back the server’s refusal', async () => {
-    expect(await writeAutomation(draft({ source: 'p1\u0000slack' }))).toBeNull();
-    expect(listSentCommands()).toMatchObject([{ type: 'schedule.write', source: { server: 'slack' } }]);
-    holdAcks();
-    const refused = writeAutomation(draft({ source: 'p1\u0000gone' }));
-    await Promise.resolve();
-    releaseAcks({ code: 'source_not_found', message: 'The project does not use gone.' });
-    expect(await refused).toBe('The project does not use gone.');
-  });
-});
 
 describe('a watch’s page', () => {
   const watch = createSchedule({
