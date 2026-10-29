@@ -3675,20 +3675,29 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 - **Importing.** `GET /api/accounts` offers your Claude Code login while it is signed in and no account is your
   login yet (`origin: 'claude'`; the email is not compared), and every claude-swap account (`cswap list --json`, or
   `claude-swap` when `cswap` is missing, cached 10 minutes) whose email is not an account. Importing your login only
-  records it. Importing from claude-swap reads `cswap export - --account <email>`, writes `{ claudeAiOauth }` to the
-  new folder's `.credentials.json` (mode 600) and `oauthAccount` into its `.claude.json` (Claude Code moves it into
-  its keychain entry on first use), and keeps the account only if `claude auth status` then reports that email; a
-  login that is already an account, your Claude Code login included, is refused (`account_exists`). The
-  web tells you to take it out of claude-swap (or turn off its auto-switch): refresh tokens are single-use, so two
-  tools refreshing one login break it. The first start with no account list adds your signed-in Claude Code login as
-  the default account.
+  records it. Importing from claude-swap never takes claude-swap's login: refresh tokens are single-use, and
+  claude-swap refreshes every account it holds to read its usage, so a copy in Shinsa and the one in claude-swap would
+  sign each other out at every refresh. It starts a sign-in instead (Signing in, above) for a new `login` account that
+  carries the email you picked; a sign-in as anyone else fails ("You signed in as a@example.com, not
+  b@example.com. Sign in as b@example.com to add it.") and the account is removed again, and the import is offered
+  once more. A fresh sign-in is a login of its own, with its own refresh token, so Shinsa and claude-swap each refresh
+  theirs, as two machines do. claude-swap is only ever asked for its list. A login that is already an account, your
+  Claude Code login included, is refused (`account_exists`). The first start with no account list adds your
+  signed-in Claude Code login as the default account.
+- **A copied login** (`isCopiedLogin`, origin `cswap`). An account an earlier Shinsa imported by copying
+  claude-swap's login holds a token claude-swap refreshes too. It reads as signed out with why ("Shinsa holds a copy
+  of claude-swap's login for this account, so each one signs the other out. Sign in again to give Shinsa a login of
+  its own."), without asking `claude auth status`, which still says signed in for a dead copy; it is never a
+  candidate for a lease, so a task bound to it runs on the default login, as for a removed account; and a changed
+  stored login never counts as working again. Signing in to it again in Shinsa makes it a `login` account, which
+  works as any other.
 - **One login, one account** (`isSameIdentity`, `AccountStore.resolveDuplicates` in `accounts/store.ts`). A login is
   its email and organization, compared without case; an organization that is not known yet matches any, and the same
   email in another organization is another login. Your Claude Code login follows whatever `~/.claude` is signed in
   as, so switching it (with claude-swap, or `claude auth login`) can make it the same login as an account Shinsa
   already has, or the other way round. Two accounts with one login are never two rows and never two candidates:
-  their refresh token is single-use, so two copies refreshing sign each other out, and their usage is one quota
-  counted twice. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
+  their usage is one quota counted twice, and when one is a copied login (above) the two copies refreshing sign each
+  other out. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
   removed): your Claude Code login first, since its token never forks, then the default account, then the one listed
   first. The other is a duplicate. It is left out of the snapshot's `accounts` and listed in its `duplicates`
   (`{ id, email, keptId }`, a line under the accounts in Settings → Agent usage and an info log the first time), its
@@ -3716,7 +3725,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   a task bound to one (`task.account`, `task.bind_account`); the run's binding wins: neither moves. A run is bound
   when you run its step again on an account you choose (`task.retry` with `account`, only on a step an agent works
   on: planning, building, review, a fix or an answer; `run.account`), and the step's own recovery, usage-limit
-  resume and monitor wakes keep it, while the next step goes back to the task's binding or the pool. Otherwise the candidates are the accounts that are not left
+  resume and monitor wakes keep it, while the next step goes back to the task's binding or the pool. A copied login
+  (above) is never a candidate, bound or not. Otherwise the candidates are the accounts that are not left
   out of new work, not known to be signed out and not spent (a rejection's reset, or a window at 100% that has not
   reset), minus the ones this execution already tried (`exclude` on the lease request). Among those below their
   switch threshold (the account's own `switchAt`, else `settings.accountSwitchAt`, default 90%, any whole
@@ -3749,32 +3759,28 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   no accounts to rotate, is marked too: a sign-out sets its `providers` entry to `signed_out` with the reason until the
   next sign-in check reads it again, and a usage limit with a known reset reads Codex's usage again at once (one with
   an unknown reset already does, to find the reset).
-- **A login Claude could not refresh** (`accounts/renewal.ts`). Refresh tokens are single-use: when another
-  program refreshes a login Shinsa also holds a copy of (claude-swap's usage polling or its switch of `~/.claude` to
-  that account, a Claude Code session on it, an import of the same login), Shinsa's copy is dead the next time its
-  access token expires, and the run's `claude` stops with "Failed to authenticate: OAuth session expired and could
-  not be refreshed". A rejection whose failure is a dead token (`auth` with `authentication_failed`, `login_required`
-  or `api_error_401`; not billing, a hold or a verification) is first read again, once per account and execution
-  (`RunRejection.renewed`): an account imported from claude-swap takes claude-swap's current copy (`cswap export`)
-  when its refresh token differs from Shinsa's, written into the account's keychain entry (`security -i` with the
-  value hex-encoded on stdin, so it never shows in the process list, or as arguments when it is too long for one line;
-  only `claudeAiOauth` is replaced, the rest of the entry such as MCP sign-ins is kept; `.credentials.json` off a
-  Mac); any account counts as renewed when its stored access token has not expired (another process refreshed it
-  meanwhile). A renewed account is tried again for the same turn (the verdict's `renewed`; the supervisor leases that
-  account for the next attempt and takes it out of the tried list, logged "Read a login again after Claude could not
-  refresh it"). Otherwise the account is marked signed out and the turn moves to the next usable account as for any
-  sign-out, and its chat row reads "Account switched · b@example.com" with "Claude account a@example.com needed
-  signing in again; continued on b@example.com." When no account can take over (or the run or task is bound to the
-  account) the Sign in gate's body names the account, the other accounts of this execution that need signing in, and
-  what to run: "Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too."
-  then "Sign in to it here, or sign in to Claude Code as a@example.com and run `cswap add`: Shinsa takes the new login
-  from claude-swap." (claude-swap's account), "Sign in to it here, or run `claude auth login` in a terminal." (your
-  Claude Code login) or "Sign in to it here." (`failure.code` `login_expired`). Shinsa remembers the fingerprint of the
-  login that failed, in memory, and every usage refresh (5 minutes) and every refresh you ask for reads it again (a
-  claude-swap account taking claude-swap's copy when it changed): once it is another login, the account is signed
-  in again and `account.signed_in` answers its Sign in gates and retries those tasks, so a sign-in in claude-swap or
-  `claude auth login` carries the task on by itself. A sign-in through Shinsa clears the mark. The task is never
-  failed for a dead token: it moves, or waits at the Sign in gate.
+- **A login Claude could not refresh** (`accounts/renewal.ts`). Refresh tokens are single-use: when another program
+  refreshes a login Shinsa also holds a copy of (a copied login, above, or your Claude Code login refreshed by a
+  Claude Code session while a run had read it), Shinsa's copy is dead the next time its access token expires, or the
+  login was signed out or revoked, and the run's `claude` stops with "Failed to authenticate: OAuth session expired
+  and could not be refreshed". A rejection whose failure is a dead token (`auth` with `authentication_failed`,
+  `login_required` or `api_error_401`; not billing, a hold or a verification) is first read again, once per account
+  and execution (`RunRejection.renewed`): an account counts as renewed when its stored access token has not expired
+  (Claude refreshed it meanwhile). Shinsa never takes claude-swap's copy and never writes a login itself. A renewed
+  account is tried again for the same turn (the verdict's `renewed`; the supervisor leases that account for the next
+  attempt and takes it out of the tried list, logged "Read a login again after Claude could not refresh it").
+  Otherwise the account is marked signed out and the turn moves to the next usable account as for any sign-out, and
+  its chat row reads "Account switched · b@example.com" with "Claude account a@example.com needed signing in again;
+  continued on b@example.com." When no account can take over (or the run or task is bound to the account) the Sign
+  in gate's body names the account, the other accounts of this execution that need signing in, and what to run:
+  "Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too." then "Sign in
+  to it here, so Shinsa has a login of its own instead of a copy of claude-swap's." (a copied login), "Sign in to it
+  here, or run `claude auth login` in a terminal." (your Claude Code login) or "Sign in to it here." (`failure.code`
+  `login_expired`). Shinsa remembers the fingerprint of the login that failed, in memory, and every usage refresh (5
+  minutes) and every refresh you ask for reads it again (never a copied login's): once it is another login, the
+  account is signed in again and `account.signed_in` answers its Sign in gates and retries those tasks, so `claude
+  auth login` in a terminal carries the task on by itself. A sign-in through Shinsa clears the mark. The task is
+  never failed for a dead token: it moves, or waits at the Sign in gate.
 - **Usage waits** (core `waitForUsageReset`). A usage-limit failure with a reset later than now arms `task.usageWait`
   (`usage_wait.armed`: the run, role, phase, account, `resetAt` and `autoResume` frozen from `settings.autoResume`,
   default on) instead of a gate; the stage reason is "waiting for the usage limit to reset" ("paused until the usage
@@ -4146,9 +4152,10 @@ have reached.
   repositories of a suggestion keeps its id, key and folder, a new one gets a fresh key, and one named like an
   existing project adds to it. A repository filed since drops out. No model answering is the step's `problem`, and
   the suggestions stay as they were.
-- **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports every login
-  `AccountActions.listImports` offers (your Claude Code login and each claude-swap account, Accounts and usage
-  limits above) whose email is not already one of your accounts, through the same import Settings uses. An email
+- **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports your Claude Code
+  login when `AccountActions.listImports` offers it (Accounts and usage limits above) and its email is not already
+  one of your accounts, through the same import Settings uses. A claude-swap account needs a sign-in of its own, so
+  setup never imports one: the step's Add account menu offers each as "Sign in to ‹email›". An email
   counts as the same account whatever its organization says, as `AccountStore`'s identity rule does when one side
   has none, so setup never adds a second copy. Each login is tried once per run of setup (`tried`, by origin and
   email): one you remove afterwards is not imported again when you come back to the step. The step lists what it

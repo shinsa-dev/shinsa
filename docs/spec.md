@@ -287,7 +287,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   health check, each with `--help` and `--json`. Shaped like Tailscale's and Docker's
   (`docs/cli.md`). Agents in your own terminal can use it too.
 - **Claude accounts.** Shinsa runs agents on several Claude logins of its own (Settings → Agent usage:
-  sign in, import your Claude Code login or claude-swap's accounts, default, order, per-account
+  sign in, add your Claude Code login or sign in to claude-swap's accounts, default, order, per-account
   switch threshold). Each run uses the account with room (a task can be pinned to one, and a step
   rerun on the account you choose); a turn the limit rejects moves to another account, and when
   none has room the task waits for the reset and carries on by itself. A signed-out account asks

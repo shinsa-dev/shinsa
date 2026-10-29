@@ -1435,7 +1435,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa accounts import
 
-Import a Claude login from Claude Code or claude-swap.
+Add your Claude Code login, or sign in to an account claude-swap has.
 
 ```
 shinsa accounts import <origin> <email> [--json]
