@@ -597,10 +597,15 @@ describe('worktrees', () => {
 
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo));
+    const closed: string[] = [];
+    const services = { closeTaskServices: (taskId: string) => closed.push(taskId) };
+    const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
+      services,
+    });
     const context = createContext();
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, context);
     expect(existsSync(worktree)).toBe(false);
+    expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
     const broken = setup(withTask({ worktreePath: createTempDir() }, { ...repo, path: createTempDir() }));
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());

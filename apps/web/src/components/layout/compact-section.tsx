@@ -39,7 +39,10 @@ export function CompactSection({
 }) {
   const disclosure = useDisclosure(persistId, defaultOpen);
   return (
-    <section className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'>
+    <section
+      data-folded={disclosure.open ? undefined : ''}
+      className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'
+    >
       <DisclosureHeader
         disclosure={disclosure}
         label={label}

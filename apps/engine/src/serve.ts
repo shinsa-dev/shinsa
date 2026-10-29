@@ -135,8 +135,16 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     baseUrl: () => address.url,
     ...(options.timeZone ? { timeZone: options.timeZone } : {}),
   });
+  const terminals = new Terminals({
+    dataDir: config.dataDir,
+    home: config.userHome,
+    version: instance.version,
+    readOnly: config.inspect,
+    ...options.terminals,
+  });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
+    services: terminals,
     extensions,
     ...(options.idle ? { idle: options.idle } : {}),
     ...(options.compaction ? { compaction: options.compaction } : {}),
@@ -152,13 +160,6 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     },
   });
   const briefings = new Briefings(engine, { ask: quick.write });
-  const terminals = new Terminals({
-    dataDir: config.dataDir,
-    home: config.userHome,
-    version: instance.version,
-    readOnly: config.inspect,
-    ...options.terminals,
-  });
   terminals.resumeServices(engine.state);
   const inbox = new MessageInbox(engine, classify.message);
   const roots = new Roots(
@@ -198,6 +199,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       resolveLogin,
       roots,
+      services: terminals,
     }),
   };
 }

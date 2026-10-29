@@ -6,9 +6,9 @@ import { describeStartAll, listServiceGroups, resolveServicesProjects } from '@/
 import { requestServicesPanel } from '@/lib/terminal/services-panel.ts';
 
 const ACTIONS = {
-  startService: (view: ServiceView) => void startService(view.service.id),
-  stopService: (view: ServiceView) => void stopService(view.service.id),
-  restartService: (view: ServiceView) => void restartService(view.service.id),
+  startService: (view: ServiceView) => void startService(view.service.id, view.taskId),
+  stopService: (view: ServiceView) => void stopService(view.service.id, view.taskId),
+  restartService: (view: ServiceView) => void restartService(view.service.id, view.taskId),
 };
 
 export function listServiceSections(

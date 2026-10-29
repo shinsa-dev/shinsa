@@ -128,6 +128,11 @@ export async function resolveOptionalRepoId(client: SurfaceClient, ref: string) 
   return await findRepoId(client, ref);
 }
 
+export async function resolveOptionalTaskId(client: SurfaceClient, ref: string) {
+  if (!ref) return null;
+  return await findTaskId(client, ref);
+}
+
 export async function resolveOptionalProjectId(client: SurfaceClient, ref: string) {
   if (!ref) return null;
   return await findProjectId(client, ref);

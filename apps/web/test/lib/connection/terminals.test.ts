@@ -202,6 +202,20 @@ describe('services', () => {
     expect(readCall(fetch, 2).body).toEqual({ ids: ['api', 'web'] });
   });
 
+  it('starts, restarts and stops a service’s run for a task, naming the task', async () => {
+    const terminal = createTerminal({ id: 'svc', serviceId: 'api', taskId: 'fix' });
+    const fetch = serve({ terminal, ...createTerminalsSnapshot([terminal], [API]) });
+    await startService('api', 'fix');
+    await restartService('api', 'fix');
+    await stopService('api', 'fix');
+    expect([0, 1, 2].map((index) => readCall(fetch, index).body)).toEqual([
+      { taskId: 'fix' },
+      { taskId: 'fix' },
+      { taskId: 'fix' },
+    ]);
+    expect(readCall(fetch, 2).url).toEndWith('/api/stop');
+  });
+
   it('opens a service’s terminal on its tab', () => {
     openServiceTerminal('SH', 'svc');
     expect(location.search).toBe('?project=SH&terminal=svc');

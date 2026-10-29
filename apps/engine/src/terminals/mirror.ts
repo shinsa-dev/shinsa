@@ -90,6 +90,15 @@ export class TerminalMirror {
     return this.#serializer.serialize({ scrollback: SAVED_LINES });
   }
 
+  readLines(count: number) {
+    const buffer = this.#terminal.buffer.active;
+    const lines: string[] = [];
+    for (let index = 0; index < buffer.length; index++)
+      lines.push(buffer.getLine(index)?.translateToString(true) ?? '');
+    while (lines.length > 0 && lines.at(-1) === '') lines.pop();
+    return lines.slice(-count);
+  }
+
   flush() {
     return new Promise<void>((resolve) => this.#terminal.write('', resolve));
   }

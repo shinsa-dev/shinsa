@@ -239,7 +239,8 @@ src/
                      onboarding API types (onboarding.ts), terminals (terminals.ts: TerminalInfo, listTerminalPlaces
                      and resolveTaskTerminalPlace, resolveTerminalLabel, the terminal socket's frames and
                      TERMINAL_LIMITS), services (services.ts: ServiceDefinition, a service's state from its
-                     terminal, resolveServiceView, listProjectServices, resolveServicesSummary, SERVICE_LIMITS)
+                     terminal, resolveServiceView, listProjectServices, a task's runs: resolveTaskServiceCwd,
+                     listTaskServices, listServiceTaskRuns, resolveServicesSummary, SERVICE_LIMITS)
 ```
 
 Rounds keep the task's flat fields as the current round's work: a new round archives them into its `Round`

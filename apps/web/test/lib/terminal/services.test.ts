@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveServiceView, SERVICE_LIMITS } from '@shinsa/core';
+import { resolveServiceView, SERVICE_LIMITS, type Task } from '@shinsa/core';
 import {
   canStartAll,
   createServiceDraft,
@@ -15,8 +15,12 @@ import {
   describeServicesRemove,
   describeServicesTrigger,
   describeStartAll,
+  describeTaskRunLabel,
+  describeTaskServices,
+  describeTaskServicesFact,
   listAllPicks,
   listPickedInputs,
+  listProjectServiceRuns,
   listRecommendedPicks,
   listServiceFolders,
   listServiceGroups,
@@ -84,6 +88,24 @@ describe('describeServicesTrigger', () => {
     expect(describeServicesTrigger([running, starting])).toEqual({ label: '1 starting', tone: 'blue' });
     expect(describeServicesTrigger([running, running])).toEqual({ label: '2 running', tone: 'neutral' });
     expect(describeServicesTrigger([view(null)])).toEqual({ label: 'Services', tone: 'neutral' });
+  });
+});
+
+describe('describeTaskServicesFact', () => {
+  it('names the services among the task’s facts, failed first, then starting, then running', () => {
+    const running = view({ id: 'r', startedAt: NOW });
+    const starting = view({ id: 's', startedAt: LATER });
+    const failed = view({ id: 'f', status: 'exited', exitCode: 1, endedAt: NOW });
+    expect(describeTaskServicesFact([running, failed, starting])).toEqual({
+      label: '1 service failed',
+      tone: 'red',
+    });
+    expect(describeTaskServicesFact([starting, starting])).toEqual({
+      label: '2 services starting',
+      tone: 'blue',
+    });
+    expect(describeTaskServicesFact([running])).toEqual({ label: '1 service running', tone: 'neutral' });
+    expect(describeTaskServicesFact([view(null)])).toEqual({ label: 'Services', tone: 'neutral' });
   });
 });
 
@@ -177,8 +199,57 @@ describe('which services the menu shows', () => {
     expect(listServiceGroups(snapshot, projects, NOW).map((group) => group.project.id)).toEqual(['shop']);
     const docs = resolveServicesProjects(state, 'docs', NOW);
     expect(listServiceGroups(snapshot, docs, NOW)).toEqual([
-      { project: expect.objectContaining({ id: 'docs' }), views: [] },
+      { project: expect.objectContaining({ id: 'docs' }), views: [], runs: {} },
     ]);
+  });
+
+  it('lists under each service the tasks running it or whose run failed, by handle and title', () => {
+    const snapshot = createTerminalsSnapshot(
+      [
+        createTerminal({ id: 'main', serviceId: 'api', startedAt: NOW - 60_000 }),
+        createTerminal({ id: 'a', serviceId: 'api', taskId: 'fix', startedAt: NOW - 60_000 }),
+        createTerminal({
+          id: 'b',
+          serviceId: 'api',
+          taskId: 'gone',
+          status: 'exited',
+          exitCode: 1,
+          endedAt: NOW,
+        }),
+        createTerminal({
+          id: 'c',
+          serviceId: 'api',
+          taskId: 'idle',
+          status: 'exited',
+          exitCode: 143,
+          endedAt: NOW,
+        }),
+      ],
+      [API]
+    );
+    const tasks = { fix: { handle: 'SH-4', title: 'Fix the cart' } } as unknown as Record<string, Task>;
+    const [group] = listServiceGroups(snapshot, resolveServicesProjects(state, 'shop', NOW), LATER, tasks);
+    expect(group?.runs?.api?.map((run) => [run.label, run.view.state])).toEqual([
+      ['SH-4 Fix the cart', 'running'],
+      ['A finished task', 'failed'],
+    ]);
+    expect(listProjectServiceRuns(snapshot, 'shop', LATER).map((each) => each.terminal?.id)).toEqual([
+      'main',
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(describeTaskRunLabel({ handle: null, title: 'Untriaged' })).toBe('Untriaged');
+  });
+});
+
+describe('a task’s services', () => {
+  it('names the task in the popover’s header', () => {
+    expect(describeTaskServices({ handle: 'SH-4' }).title).toBe('Services for SH-4');
+    expect(describeTaskServices({ handle: null })).toEqual({
+      title: 'Services for this task',
+      description: 'Each runs in this task’s worktree, beside your own run.',
+    });
   });
 });
 

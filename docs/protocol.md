@@ -809,7 +809,8 @@ role without the tool (`hasTool`).
 
 The delegation tools name a delegation by `delegation_id`. Reads with no command: `find_tasks`, `read_task`,
 `list_repository_work`,
-`list_schedules`, and `delegation_status` for a delegation still working.
+`list_schedules`, `list_services`, and `run_service` (which acts on the task's own service runs, in the terminals
+beside the log, not through a command; `docs/engine.md` → Services → Runs for a task), and `delegation_status` for a delegation still working.
 
 ### System commands
 
@@ -989,6 +990,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `remove_evidence` | ✓ | ✓ | | ✓ | | | |
 | `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| `list_services`, `run_service` | ✓ | ✓ | | ✓ | | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
@@ -1143,7 +1145,7 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
 | Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
-| Services, their states and suggestions | `packages/core/src/protocol/services.ts`; `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/web/src/lib/terminal/services.ts` |
+| Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |

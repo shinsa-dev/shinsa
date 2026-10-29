@@ -79,6 +79,7 @@ src/
 │                        fields with Environment under Advanced and when a field shows its problem; service-row.tsx: a
 │                        service's row, tile and run buttons (Restart and Stop 1px apart, as on the Terminal page),
 │                        and Manage's row, which a press ticks (an outline Checkbox), with its bare edit button;
+│                        task-menu.tsx: a task's Services fact (beside its other facts) and popover, its runs in the task's worktree;
 │                        use-service-actions.ts: the row handlers and the panel's server calls), errors (boundary.tsx: ErrorBoundary, which catches a
 │                        render error, logs it and resets on its resetKey; fallback.tsx: ErrorFallback, the page, inline
 │                        and icon looks with Try again, Reload and Copy details), focus (menu.tsx: the Focus menu and
