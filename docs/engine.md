@@ -72,11 +72,12 @@ builds never reviews its own work.
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), see the
 other open work in its repository (`list_repository_work`, Other work in the repository, below), suggest
-tasks, delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
+tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
 and the Agent and the investigator can wait (`wait_for`). So every task agent can read across the roadmap, file a
 task, schedule work and suggest tasks, while its hand-over stays its own. Which role may call which tool is one
 table, `listCallableToolNames` in `packages/core/src/domain/tools.ts`: `decide` refuses a call the run's role does not
-have, and each prompt's house rules name only the tools the agent has. What a session is served is `listToolNames`:
+have, and each prompt's house rules name only the tools the agent has, and never repeat what a tool's own description
+already says. What a session is served is `listToolNames`:
 the four task-session roles share one session, and its tools are the first thing in the prompt-cache prefix, so they
 are all served one list, the union of theirs in `SHINSA_TOOL_NAMES` order (the reviewer and delegated agents get
 exactly their own). A tool served but not the run's is refused with `wrong_step` and the hand-over it should use:
@@ -1461,6 +1462,36 @@ checks it ran.
   “‹title›”", "Dismiss the suggested task"). A follow-up is something else: a message to a finished answer,
   investigation or report.
 
+### Memory
+
+Rules you want every later agent to follow, kept by you and proposed by agents: Shinsa's only memory across tasks
+(`domain/memory.ts`, `decide/memory.ts`, `state/memory.ts`, `prompts/memory.ts`). It holds only what the code cannot
+show an agent: your taste, your limits, how you want things written. Repository facts and overviews stay out:
+context an agent can find on its own makes it no better and costs every turn ("Evaluating AGENTS.md", ETH Zurich,
+February 2026, arXiv 2602.11988; SkillsBench, arXiv 2602.12670: rules written by people help, ones a model writes for
+itself do not).
+
+- **A rule** is a `MemoryEntry` in `state.memories`: one sentence of at most 240 characters (`MEMORY_LIMITS`), for
+  every project (`projectId: null`) or one project, `proposed` or `kept`. A scope keeps at most 20 rules; keeping one
+  more is refused (`memory_full`). Removing a project forgets its rules.
+- **Agents only propose.** `remember` (the Agent, answerer, investigator and researcher; never the reviewer or a
+  delegated agent) takes `scope` (`global`, or `project`: the task's project, refused for a task in none), `text` and
+  `why`. Its description says when: you corrected how it works, or said "always" or "never", and it would hold for
+  later tasks. A rule already known in that scope, whatever its case, is dropped; at most ten proposals wait at once
+  across Shinsa (`memory_proposals_full`). A proposal is recorded in its task's activity and shows as a card in the
+  chat; it changes nothing until you keep it.
+- **Only you keep, write or remove** (`memory.write`, `memory.accept`, `memory.remove`; Who can change Shinsa, below):
+  Settings → Agents → Memory, or `shinsa memory`. Writing over a proposal keeps it with your words and scope;
+  removing a proposal dismisses it. `shinsa memory write --id` without `--project` keeps the rule in its scope.
+- **What agents are told** (`resolveMemoryTold`, from `Decider.startRun`, in the user turn beside the project context,
+  never in the system prompt or a tool; Caching, below). A fresh session of the task's agent or of the reviewer gets
+  every kept rule for its project plus every global one, under one heading. A resumed session gets only the rules
+  kept or edited since its last turn started (`updatedAt` at or after the latest start of a run on that session),
+  under "kept new rules since your last turn"; nothing when there are none. A removal is not retold: a session that
+  heard a rule keeps it until its next fresh session. A resumed turn that must be briefed again (its session was
+  compacted, handed off or never had these house rules; `resolveRunBrief`) carries every rule again, for any briefed
+  role: the agent's round brief, a planning turn, the reviewer and the inquiry roles. Proposals are never told, and delegated agents and the quick calls get no memory.
+
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
@@ -1793,8 +1824,8 @@ running when the window closes or the app quits, and a page that comes back find
   and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
   can change Shinsa, this keeps an agent from doing it by accident, not one set on it.
 - **An agent that needs you to run something** asks (`ask`) with the command in a ```` ```bash run ```` block in
-  its context, as the tool's description says; the house rules (`prompts/rules.ts`) and the `handover` and `review`
-  skills teach every role the `run` mark, and a plain ```` ```bash ```` block is an example with Copy alone. The
+  its context, as the tool's description says; the house rules' writing rules (`WRITING_RULES` in `prompts/rules.ts`)
+  teach every role the `run` mark, and a plain ```` ```bash ```` block is an example with Copy alone. The
   question card shows Run in terminal in that block's corner (as every block marked `run` on a task's pages does), which opens a terminal in the task's worktree, or its repository, and runs it. Nothing runs until you press it.
   Running types like a person (`TerminalSession.type`): it waits until the shell has printed and then been quiet for
   150 ms (its prompt; at most 5 s, so a busy program cannot hold it), types the command, and presses Enter 30 ms later
@@ -1928,6 +1959,8 @@ plainly what protects what.
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
+  - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
+    `memory.remove` on your behalf): an agent proposes with `remember` instead (Memory, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
@@ -2961,7 +2994,10 @@ each follow-up turn's first request reads the whole earlier conversation from th
 written on turn 2; 109,402 read and 2,983 written on turn 3); what is written is that turn's new brief.
 
 **The house rules go to a session once.** Every role's brief opens with its house rules (`resolveHouseRules`, about
-7,000 characters: the voice, the worktree rule, the tools, references, delegation and the command surface). A session
+5,700 characters: the voice, the worktree rule, `ask` and waiting, the writing rules (`WRITING_RULES`: ten seconds per
+item, backticks, `run` blocks, references), when to delegate, and the command surface). They carry only what no tool
+says: how to brief a delegate, read another task or suggest one is in that tool's own description, and the
+`handover` skill keeps only what the hand-over schemas cannot say. `test/prompts/rules.test.ts` holds both. A session
 that already has them does not need them again, so a resumed turn sends only the instruction after them
 (`resolveTurnPrompt` in `agents/turns.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
 might not have these exact rules: a fresh session, a handoff (a provider switch, a lost session restored on a new one,
@@ -3289,6 +3325,7 @@ whole conversation again. These rules are hard rules (CLAUDE.md), each held by a
 - **Nothing variable goes into the system prompt or a tool spec.** No time, stage, round number, account, setting,
   task list, id, port or token. Everything that changes between turns goes into the user turn, at its tail, or, during
   a turn, into a steer, which is a user message appended to the conversation: the brief or the short instruction,
+  the rules you keep for agents (Memory, above: all of them for a fresh session, only the new ones for a resumed one),
   your edits (`describeHumanEdits`), the overlap note (Other work in the repository, steered into a running Agent),
   the adoption note of delegations, and the note that the session now works in another directory (`resolveMovedNote`,
   when a round after a merge runs in a new worktree or an answer runs in the repository itself: the directory the

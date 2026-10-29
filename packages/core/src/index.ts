@@ -98,6 +98,7 @@ export {
   validateEvidence,
   validateEvidenceRemoval,
   validateFixHandOver,
+  validateMemoryProposal,
   validatePhaseHandOver,
   validatePlanHandOver,
   validateQuestion,

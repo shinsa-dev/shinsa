@@ -131,6 +131,11 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
   },
   { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'delegations', 'merge'] },
   {
+    title: 'Memory',
+    icon: 'IconLightbulbGlow',
+    keywords: ['rules', 'remember', 'preferences', 'instructions'],
+  },
+  {
     title: VERSIONS_SECTION,
     icon: 'IconArrowDown',
     keywords: ['update', 'upgrade', 'claude code', 'codex', 'cli', 'sdk', 'latest'],

@@ -5,6 +5,7 @@ import {
   type Focus,
   formatTaskHandle,
   type Gate,
+  type MemoryEntry,
   NO_PROJECT_KEY,
   needsWorktree,
   type OnBehalfAction,
@@ -42,6 +43,7 @@ import { applyDelegationEvent, recordCourierTask, resolveLineage } from './deleg
 import { removeEntry, writeEntry } from './draft.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
@@ -66,6 +68,7 @@ export interface ShinsaState {
   evidence: Record<string, Evidence>;
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
+  memories: Record<string, MemoryEntry>;
   sessionUsage: Record<string, RunUsage>;
   onBehalfActions: OnBehalfAction[];
 }
@@ -88,6 +91,7 @@ export function createState(): ShinsaState {
     evidence: {},
     briefings: {},
     schedules: {},
+    memories: {},
     sessionUsage: {},
     onBehalfActions: [],
   };
@@ -895,6 +899,11 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'schedule.removed':
     case 'schedule.fired':
       applyScheduleEvent(state, event);
+      break;
+    case 'memory.written':
+    case 'memory.proposed':
+    case 'memory.removed':
+      applyMemoryEvent(state, event);
       break;
   }
   return state;

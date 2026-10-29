@@ -49,6 +49,15 @@ export {
   selectEvidenceItem,
 } from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export {
+  isMemoryOf,
+  MEMORY_LIMITS,
+  MEMORY_SCOPES,
+  type MemoryEntry,
+  type MemoryScope,
+  type MemoryStatus,
+  resolveMemoryText,
+} from './memory.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
 export {
   describeOverlaps,

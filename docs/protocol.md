@@ -64,6 +64,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
 | courier | A new task an agent files for work that belongs elsewhere (`create_task`), optionally making its own task wait on it | `TaskCreator.kind: 'courier'` | a task |
+| memory | The rules you keep for every later agent, for every project or one; an agent proposes one with `remember` and only you keep it (`docs/engine.md` → Memory) | `MemoryEntry`, `state.memories`, `MEMORY_LIMITS` | Memory, "rule" |
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
@@ -725,6 +726,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
 | `suggestion.keep` | keeps a split-off in this task as its next round (`shape` optional; the server asks the classifier when it is left out) | `suggestions keep` | agent |
+| `memory.write` | writes a rule (`text`, `projectId` or null for every project) or, with `memoryId`, changes one; writing over a proposal keeps it; at most 240 characters and 20 kept rules per scope (`memory_invalid`, `memory_full`) | `memory write` | **human** |
+| `memory.accept` | keeps a rule an agent proposed | `memory keep` | **human** |
+| `memory.remove` | forgets a rule, or dismisses a proposal | `memory remove` | **human** |
 | `monitor.check_in_now` | fires a monitor's next check-in now | `tasks check-in-now` | agent |
 | `usage_wait.change` | turns a usage wait's auto-resume on or off | `tasks auto-resume` | agent |
 | `usage_wait.resume_now` | resumes a usage wait now | `tasks resume-now` | agent |
@@ -792,6 +796,7 @@ role without the tool (`hasTool`).
 | `agent.note` | `note` | keeps a note on the task |
 | `agent.wait_for` | `wait_for` | ends the run and arms a monitor |
 | `agent.suggest_tasks` | `suggest_tasks` | suggests up to five tasks |
+| `agent.remember` | `remember` | proposes a rule for every later agent (`scope`, `text`, `why`); a known one is dropped, at most ten wait at once |
 | `agent.request_secret` | `request_secret` | opens a secret gate |
 | `agent.delegate` | `delegate_task` | starts a delegation from its `brief` |
 | `agent.cancel_delegation` | `delegation_cancel` | stops one |
@@ -926,6 +931,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.wake_changed`, `delegation.adopted` | a wake policy changed; a restarted step adopted its children |
 | `delegation.claimed`, `delegation.delivered`, `delegation.released` | a delivery cohort was claimed, delivered, released |
 | `delegation.message_queued` | your message was queued for a waiting step |
+| `memory.written`, `memory.proposed`, `memory.removed` | you wrote, kept or changed a rule (the whole `entry`); an agent proposed one (recorded in its task's activity); a rule was forgotten or a proposal dismissed, or its project removed |
 | `schedule.written`, `schedule.removed`, `schedule.fired` | a schedule was written, removed, fired (with its run) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 
@@ -985,6 +991,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| `remember` | ✓ | | ✓ | ✓ | ✓ | | |
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `split_task` | ✓ | | | | | | |
@@ -1125,6 +1132,7 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Tools per role | `packages/core/src/domain/tools.ts` |
 | Projects, keys, handles | `packages/core/src/domain/projects.ts` |
 | Delegations, accounts, schedules, pull request watch, settings | `packages/core/src/domain/{delegations,accounts,schedules,pull-requests,settings}.ts` |
+| Memory: the rules, their limits, what agents are told | `packages/core/src/domain/memory.ts`, `decide/memory.ts`, `state/memory.ts`, `prompts/memory.ts`; `apps/web/src/lib/memory.ts`, `components/settings/memory.tsx` |
 | On your behalf record | `packages/core/src/domain/on-behalf.ts`, `decide/on-behalf.ts`, `state/on-behalf.ts` |
 | Plan document, reports, findings, `PROTOCOL_LIMITS` | `packages/core/src/report/` |
 | Commands and the parser | `packages/core/src/commands/` |

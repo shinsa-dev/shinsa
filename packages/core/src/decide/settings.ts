@@ -16,6 +16,7 @@ import {
 import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
+import { removeProjectMemory } from './memory.ts';
 
 function assertProject(decider: Decider, projectId: string | null | undefined) {
   if (projectId && !decider.state.projects[projectId]) {
@@ -231,6 +232,7 @@ export function removeProject(decider: Decider, command: CommandOf<'project.remo
     decider.emit({ type: 'focus.changed', focus: { projectId: null, until: null } });
     decider.run({ kind: 'briefing.request', projectId: null });
   }
+  removeProjectMemory(decider, command.projectId);
   decider.emit({ type: 'project.removed', projectId: command.projectId });
 }
 

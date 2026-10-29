@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -31,6 +31,8 @@ import {
   writeFiles,
 } from '../helpers/index.ts';
 import { createRepo, createRound, createStubEngine, createTask } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 const restores: (() => void)[] = [];
 

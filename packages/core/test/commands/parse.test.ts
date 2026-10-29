@@ -882,6 +882,32 @@ describe('writing a schedule from Settings', () => {
   });
 });
 
+describe('memory commands', () => {
+  test('reads a rule to write, with or without its id and project', () => {
+    expect(parseUserCommand({ type: 'memory.write', text: 'Keep plans short.' })).toEqual({
+      type: 'memory.write',
+      memoryId: null,
+      projectId: null,
+      text: 'Keep plans short.',
+    });
+    expect(
+      parseUserCommand({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' })
+    ).toEqual({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' });
+  });
+
+  test('reads keeping and removing a rule by its id', () => {
+    expect(parseUserCommand({ type: 'memory.accept', memoryId: 'm1' })).toEqual({
+      type: 'memory.accept',
+      memoryId: 'm1',
+    });
+    expect(parseUserCommand({ type: 'memory.remove', memoryId: 'm1' })).toEqual({
+      type: 'memory.remove',
+      memoryId: 'm1',
+    });
+    expect(() => parseUserCommand({ type: 'memory.write', text: 3 })).toThrow('text must be text.');
+  });
+});
+
 describe('the command and settings catalog', () => {
   test('names every user command the parser reads', () => {
     expect(USER_COMMAND_TYPES).toContain('schedule.write');
