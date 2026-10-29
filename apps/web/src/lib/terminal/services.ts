@@ -93,6 +93,19 @@ export function describeServiceState(view: ServiceView, now: number) {
   return label;
 }
 
+export function selectServicePreview(view: ServiceView) {
+  return isServiceActive(view) ? view.url : null;
+}
+
+export function describeServicePreview(view: ServiceView, label: string | null = null) {
+  return label ? `Open ${view.service.name} for ${label}` : `Open ${view.service.name}`;
+}
+
+export function openServicePreview(view: ServiceView) {
+  const url = selectServicePreview(view);
+  if (url) window.open(url, '_blank', 'noopener');
+}
+
 export function describeServicesTrigger(views: ServiceView[]): { label: string; tone: Tone } {
   const { running, starting, failed } = resolveServicesSummary(views);
   if (failed > 0) return { label: `${failed} failed`, tone: 'red' };
@@ -371,7 +384,7 @@ export const SERVICE_FIELDS: Record<
     note: 'One NAME=value a line, added to your shell’s environment.',
   },
   previewUrl: {
-    label: 'Preview',
+    label: 'Preview URL',
     placeholder: 'http://localhost:{port}',
     note: 'Where Open takes you. Shinsa puts the run’s port where {port} is.',
   },

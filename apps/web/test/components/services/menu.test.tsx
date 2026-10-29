@@ -57,6 +57,7 @@ function createHandlers() {
     restart: record('restart'),
     startAll: (project) => calls.push(`start all ${project.name}`),
     open: record('open'),
+    preview: record('preview'),
   };
   return { calls, handlers };
 }
@@ -385,6 +386,55 @@ describe('the Services popover', () => {
       ],
     ]);
     expect(await screen.findByRole('button', { name: 'Manage' })).toBeTruthy();
+  });
+
+  it('adds a preview URL among the main fields and a port variable under Advanced, opening Advanced for its problem', async () => {
+    const { sent } = renderPanel([{ project: SHOP, views: [] }], { mode: 'add' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Custom service…' }));
+    expect(screen.queryByRole('textbox', { name: 'Port variable' })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'web' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Command' }), { target: { value: 'next dev' } });
+    const preview = screen.getByRole('textbox', { name: 'Preview URL' });
+    fireEvent.change(preview, { target: { value: 'localhost:{port}' } });
+    fireEvent.blur(preview);
+    expect(
+      screen.getByText('Give an http or https address, with {port} where the run’s port goes.')
+    ).toBeTruthy();
+    fireEvent.change(preview, { target: { value: 'http://localhost:{port}/shop' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Advanced' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Port variable' }), { target: { value: '1PORT' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Advanced' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
+    expect(await screen.findByText('Use letters, digits and _, not starting with a digit.')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Port variable' }), {
+      target: { value: 'WEB_PORT' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual([
+      'addOne',
+      'shop',
+      {
+        name: 'web',
+        cwd: ROOT,
+        command: 'next dev',
+        env: {},
+        previewUrl: 'http://localhost:{port}/shop',
+        portVariable: 'WEB_PORT',
+      },
+    ]);
+  });
+
+  it('opens a running service’s preview from its row, and offers none without a URL', () => {
+    const web = resolveServiceView(
+      createService({ id: 'web', previewUrl: 'http://localhost:{port}' }),
+      createTerminal({ id: 't-web', serviceId: 'web', port: 4321, startedAt: NOW }),
+      LATER
+    );
+    const { calls } = renderPanel([{ project: SHOP, views: [web, running('api')] }]);
+    expect(screen.queryByRole('button', { name: 'Open api' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open web' }));
+    expect(calls).toEqual(['preview web']);
   });
 
   it('goes back from the custom form to what was found', async () => {

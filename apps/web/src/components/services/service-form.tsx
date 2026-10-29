@@ -15,7 +15,9 @@ import {
   validateServiceDraft,
 } from '@/lib/terminal/services.ts';
 
-const MAIN_FIELDS: ServiceField[] = ['name', 'path', 'command'];
+const MAIN_FIELDS: ServiceField[] = ['name', 'path', 'command', 'previewUrl'];
+
+const ADVANCED_FIELDS: ServiceField[] = ['portVariable', 'env'];
 
 function DraftField({
   field,
@@ -66,7 +68,7 @@ function DraftField({
           onChange={(event) => onChange(event.target.value)}
         />
       )}
-      {(field === 'name' || field === 'command') && (
+      {field !== 'path' && field !== 'env' && (
         <Input
           {...common}
           className={field === 'name' ? undefined : 'font-mono'}
@@ -111,8 +113,11 @@ export function ServiceFields({
   onChange: (field: ServiceField, value: string) => void;
   onLeave: (field: ServiceField) => void;
 }) {
-  const advanced = useDisclosure(createDisclosureId('services', 'form', 'advanced'), draft.env.trim() !== '');
-  const forced = Boolean(errors.env) && !advanced.open;
+  const advanced = useDisclosure(
+    createDisclosureId('services', 'form', 'advanced'),
+    ADVANCED_FIELDS.some((name) => draft[name].trim() !== '')
+  );
+  const forced = ADVANCED_FIELDS.some((name) => errors[name]) && !advanced.open;
   const field = (name: ServiceField, focus: boolean) => (
     <DraftField
       key={name}
@@ -129,7 +134,7 @@ export function ServiceFields({
     <FieldGroup>
       {MAIN_FIELDS.map((name, index) => field(name, autoFocus && index === 0))}
       <AdvancedFields disclosure={forced ? { ...advanced, open: true } : advanced}>
-        {field('env', false)}
+        {ADVANCED_FIELDS.map((name) => field(name, false))}
       </AdvancedFields>
     </FieldGroup>
   );

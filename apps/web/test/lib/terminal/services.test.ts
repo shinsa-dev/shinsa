@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { resolveServiceView, SERVICE_LIMITS, type Task } from '@shinsa/core';
 import {
   canStartAll,
@@ -9,6 +9,7 @@ import {
   describeServiceClose,
   describeServiceFolder,
   describeServiceGroup,
+  describeServicePreview,
   describeServiceState,
   describeServicesAdded,
   describeServicesEmpty,
@@ -26,6 +27,7 @@ import {
   listServiceGroups,
   listServicePlaces,
   listStoppedServices,
+  openServicePreview,
   parseServiceEnv,
   resolveActiveService,
   resolveServiceForm,
@@ -35,6 +37,7 @@ import {
   resolveShownErrors,
   resolveSuggestionKey,
   SERVICE_GLYPHS,
+  selectServicePreview,
   serializeServiceEnv,
   togglePick,
   validateServiceDraft,
@@ -76,6 +79,40 @@ describe('describeServiceState', () => {
     ).toBe('Failed');
     expect(describeServiceState(view(null), LATER)).toBe('Stopped');
     expect(describeServiceState(view({ id: 't', startedAt: NOW }, NOW), NOW)).toBe('Starting');
+  });
+});
+
+describe('a service’s preview', () => {
+  const service = createService({ id: 'web', previewUrl: 'http://localhost:{port}/tasks/SH-4' });
+  const running = resolveServiceView(
+    service,
+    createTerminal({ id: 't-web', serviceId: 'web', port: 4123, startedAt: NOW - 60_000 }),
+    NOW
+  );
+  const stopped = resolveServiceView(
+    service,
+    createTerminal({ id: 't-web', serviceId: 'web', port: 4123, status: 'stopped', endedAt: NOW }),
+    NOW
+  );
+
+  it('has a URL only while the service runs', () => {
+    expect(selectServicePreview(running)).toBe('http://localhost:4123/tasks/SH-4');
+    expect(selectServicePreview(stopped)).toBeNull();
+    expect(selectServicePreview(resolveServiceView(API, null, NOW))).toBeNull();
+  });
+
+  it('names the service, and the task when the run is a task’s', () => {
+    expect(describeServicePreview(running)).toBe('Open web');
+    expect(describeServicePreview(running, 'SH-4 Fix the cart')).toBe('Open web for SH-4 Fix the cart');
+  });
+
+  it('opens a running preview in a new window, and nothing for a stopped one', () => {
+    const open = spyOn(window, 'open').mockImplementation(() => null);
+    openServicePreview(stopped);
+    expect(open).not.toHaveBeenCalled();
+    openServicePreview(running);
+    expect(open).toHaveBeenCalledWith('http://localhost:4123/tasks/SH-4', '_blank', 'noopener');
+    open.mockRestore();
   });
 });
 

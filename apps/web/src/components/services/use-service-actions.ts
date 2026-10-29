@@ -19,6 +19,7 @@ import {
   describeServicesAdded,
   describeServicesRemove,
   listServicePlaces,
+  openServicePreview,
   resolveServiceForm,
 } from '@/lib/terminal/services.ts';
 
@@ -35,6 +36,7 @@ export function useServiceActions({ state, onNavigate }: { state: ShinsaState; o
       openServiceTerminal(project.key, view.terminal.id);
       onNavigate?.();
     },
+    preview: openServicePreview,
   };
 
   const actions: ServicesPanelActions = {
