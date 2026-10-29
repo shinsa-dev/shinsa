@@ -140,7 +140,7 @@ describe('checks and agent review', () => {
       summary: 'Checked the change; one naming nit.',
       findings: [
         {
-          severity: 'suggestion',
+          severity: 'optional',
           file: null,
           line: null,
           title: 'Vague name',

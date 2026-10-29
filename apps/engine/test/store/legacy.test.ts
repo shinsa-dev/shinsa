@@ -236,6 +236,7 @@ describe('a walkthrough’s testing as a plain list', () => {
       'worktree.requested',
       'worktree.created',
       'gate.opened',
+      'review.reported',
     ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
     expect(listLegacyEventTypes(2)).toEqual([
@@ -249,7 +250,8 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(listLegacyEventTypes(3)).toEqual(['run.metered', 'pull_request.watched', ...gitbutler]);
     expect(listLegacyEventTypes(4)).toEqual(['pull_request.watched', ...gitbutler]);
     expect(listLegacyEventTypes(5)).toEqual(gitbutler);
-    expect(listLegacyEventTypes(6)).toEqual([]);
+    expect(listLegacyEventTypes(6)).toEqual(['review.reported']);
+    expect(listLegacyEventTypes(7)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -265,7 +267,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(6);
+    expect(readStoredLog(path).version).toBe(7);
   });
 });
 
@@ -290,7 +292,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(6);
+    expect(stored.version).toBe(7);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);
@@ -316,6 +318,36 @@ describe('a pull request watch from before it knew whether a head has CI', () =>
           taskId: TASK,
           watch: { ...watch, ciAbsent: false },
           changes: [],
+        },
+      },
+    ]);
+  });
+});
+
+describe('review findings from before the three levels', () => {
+  const finding = (severity: unknown) => ({ severity, file: 'a.ts', line: 1, message: 'Look.' });
+
+  test('a suggestion becomes optional; blocking findings and other events stay as they are', () => {
+    expect(
+      rewrite(
+        {
+          type: 'review.reported',
+          taskId: TASK,
+          summary: null,
+          findings: [finding('blocking'), finding('suggestion'), 'broken'],
+        },
+        { type: 'review.reported', taskId: TASK, summary: null, findings: [finding('should_fix')] },
+        { type: 'review.reported', taskId: TASK, summary: null }
+      )
+    ).toEqual([
+      {
+        seq: 1,
+        type: 'review.reported',
+        event: {
+          type: 'review.reported',
+          taskId: TASK,
+          summary: null,
+          findings: [finding('blocking'), finding('optional'), 'broken'],
         },
       },
     ]);

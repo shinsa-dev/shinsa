@@ -208,10 +208,10 @@ describe('notes in the code', () => {
     await waitFor(() => expect(params().get('file')).toBe('docs/alpha.txt'));
     expect(params().get('diff')).toBe('1');
     await findLine('two');
-    expect(await screen.findByText('Wrong word')).toBeDefined();
-    expect(screen.getByText('Agent review')).toBeDefined();
-    expect(screen.getByText('Blocking')).toBeDefined();
-    expect(screen.getByText('Suggested fix')).toBeDefined();
+    expect(await screen.findByText('Blocking')).toBeDefined();
+    expect(document.body.textContent).toContain('The new line says two.');
+    expect(screen.queryByText('Agent review')).toBeNull();
+    expect(screen.getByText('Proposed fix')).toBeDefined();
   });
 
   it('names a spot in the app’s tooltip when its gutter mark is hovered', async () => {

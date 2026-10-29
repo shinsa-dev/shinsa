@@ -97,8 +97,20 @@ describe('what a prompt says about the work it builds on', () => {
     const { task } = tasks();
     const prompt = resolveReviewerPrompt(task, null, []);
     expect(prompt).toContain('Check the new code follows the patterns of the code around it');
-    expect(prompt).toContain('It is blocking when the repository’s rules name the pattern.');
+    expect(prompt).toContain(
+      'It is blocking when the repository’s rules name the pattern, and should fix otherwise.'
+    );
     expect(prompt).toContain('The agent listed no watchdogs for after the merge.');
+    expect(prompt).toContain('names no number or signal is `should_fix`');
+  });
+
+  test('the reviewer ranks each finding as blocking, should fix or optional by what should happen to it', () => {
+    const { task } = tasks();
+    const prompt = resolveReviewerPrompt(task, null, []);
+    expect(prompt).toContain('Rank every finding by what should happen to it.');
+    expect(prompt).toContain('`should_fix`: not proven broken');
+    expect(prompt).toContain('`optional`: taste, polish');
+    expect(prompt).toContain('would hold the merge for it');
   });
 
   test('a phase is told the checks Shinsa runs after it, the repository’s only on the last, and how to change them', () => {

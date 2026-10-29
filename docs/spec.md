@@ -809,7 +809,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   files. The walkthrough split inside Code, with its order switch and its spot stepper, is gone.
 - **It reads top to bottom, like the Overview.** What the change does in a sentence, with the decision (Approve
   changes, Fix N findings, Merge #N) where it is on the Overview; then what needs your attention, most critical first:
-  blocking findings, critical spots, spots to read carefully, suggestions, judgement calls; then the walkthrough by
+  blocking findings, critical spots, spots to read carefully, should fix and optional findings, judgement calls; then the walkthrough by
   section with its snippets; then the agent review's summary and the checks; then everything else, collapsed.
 - **Every review comment is one rich card**: author (Agent review, Agent, You), severity in its tone, a short title,
   the reason as markdown with smart links, the exact lines as a snippet whose header opens Code there, and the

@@ -121,9 +121,14 @@ export function describeCheckChange(change: CheckChange) {
 
 export function describeFindings(findings: ReviewFinding[]) {
   if (findings.length === 0) return 'Agent review found nothing';
-  const blocking = findings.filter((finding) => finding.severity === 'blocking').length;
+  const count = (severity: ReviewFinding['severity']) =>
+    findings.filter((finding) => finding.severity === severity).length;
   const found = `Agent review found ${findings.length} ${findings.length === 1 ? 'issue' : 'issues'}`;
-  return blocking > 0 ? `${found}, ${blocking} blocking` : found;
+  const ranked = [
+    count('blocking') > 0 ? `${count('blocking')} blocking` : null,
+    count('should_fix') > 0 ? `${count('should_fix')} should fix` : null,
+  ].filter((part) => part !== null);
+  return [found, ...ranked].join(', ');
 }
 
 const ESCALATION_TEXT: Record<ReviewEscalationReason, (rounds: string) => string> = {

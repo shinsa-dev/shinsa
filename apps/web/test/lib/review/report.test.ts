@@ -25,7 +25,7 @@ function createSpot(file: string, attention: CodeSpot['attention'], start = 1, e
 }
 
 function finding(overrides: Partial<ReviewFinding>): ReviewFinding {
-  return { severity: 'suggestion', file: 'a.ts', line: 4, message: 'Consider a guard.', ...overrides };
+  return { severity: 'optional', file: 'a.ts', line: 4, message: 'Consider a guard.', ...overrides };
 }
 
 function changedFile(path: string): DiffFile {
@@ -111,7 +111,7 @@ describe('listReviewChapters', () => {
       'Risk',
       'Risk',
       'Blocking',
-      'Suggestion',
+      'Optional',
     ]);
     expect(points[2]).toMatchObject({
       title: 'Retry three times',
@@ -345,9 +345,15 @@ describe('describing the review', () => {
   it('counts what the agent review found', () => {
     expect(describeAgentReview([])).toBe('Found nothing to fix.');
     expect(describeAgentReview([finding({ severity: 'blocking' })])).toBe('Found 1 blocking finding.');
-    expect(describeAgentReview([finding({}), finding({}), finding({ severity: 'blocking' })])).toBe(
-      'Found 1 blocking finding and 2 suggestions.'
-    );
+    expect(describeAgentReview([finding({}), finding({})])).toBe('Found 2 optional findings.');
+    expect(
+      describeAgentReview([
+        finding({}),
+        finding({ severity: 'should_fix' }),
+        finding({}),
+        finding({ severity: 'blocking' }),
+      ])
+    ).toBe('Found 4 findings: 1 blocking, 1 should fix, 2 optional.');
   });
 
   it('counts the points and names the ones that matter most', () => {

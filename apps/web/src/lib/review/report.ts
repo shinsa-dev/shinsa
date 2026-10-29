@@ -2,6 +2,7 @@ import {
   type CodeSpot,
   type Coverage,
   type DiffFile,
+  FINDING_SEVERITIES,
   hasTesting,
   type JudgementAlternative,
   type JudgementCall,
@@ -17,6 +18,7 @@ import { resolveShortPath } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
+import { listSeverityCounts, SEVERITY_LABEL, SEVERITY_TONE } from '@/lib/review/findings.ts';
 import { MERGE_STEP_ICON, MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
 import { ATTENTION } from '@/lib/tasks/status.ts';
 
@@ -92,11 +94,6 @@ export function isFindingItem(item: ReviewItem) {
   return item.author === 'review';
 }
 
-const FINDING_LABEL: Record<ReviewFinding['severity'], { label: string; tone: Tone }> = {
-  blocking: { label: 'Blocking', tone: 'red' },
-  suggestion: { label: 'Suggestion', tone: 'amber' },
-};
-
 const CALL_LABEL = { label: 'Judgement call', tone: 'purple' } as const;
 
 const DISPUTED_LABEL = { label: 'Disputed', tone: 'orange' } as const;
@@ -147,7 +144,8 @@ export function toFindingItem(finding: ReviewFinding, index: number): ReviewItem
   return {
     ...BLANK,
     key: `finding:${index}`,
-    ...FINDING_LABEL[finding.severity],
+    label: SEVERITY_LABEL[finding.severity],
+    tone: SEVERITY_TONE[finding.severity],
     author: 'review',
     title: finding.title ?? null,
     body: finding.message,
@@ -219,11 +217,11 @@ function listCallItems(report: WorkReport, disagreements: readonly ReviewDisagre
 }
 
 function listFindingItems(findings: readonly ReviewFinding[]) {
-  const bySeverity = (severity: ReviewFinding['severity']) =>
+  return FINDING_SEVERITIES.flatMap((severity) =>
     findings.flatMap((finding, index) =>
       finding.severity === severity ? [toFindingItem(finding, index)] : []
-    );
-  return [...bySeverity('blocking'), ...bySeverity('suggestion')];
+    )
+  );
 }
 
 function toProse(...keys: ReviewProseId[]): ReviewProse[] {
@@ -365,13 +363,9 @@ export function listOtherFiles(
 
 export function describeAgentReview(findings: readonly ReviewFinding[]) {
   if (findings.length === 0) return 'Found nothing to fix.';
-  const blocking = findings.filter((finding) => finding.severity === 'blocking').length;
-  const suggestions = findings.length - blocking;
-  const parts = [
-    blocking > 0 ? formatCount(blocking, 'blocking finding', 'blocking findings') : null,
-    suggestions > 0 ? formatCount(suggestions, 'suggestion', 'suggestions') : null,
-  ].filter((part) => part !== null);
-  return `Found ${parts.join(' and ')}.`;
+  const counts = listSeverityCounts(findings);
+  if (counts.length === 1) return `Found ${counts[0]} ${findings.length === 1 ? 'finding' : 'findings'}.`;
+  return `Found ${formatCount(findings.length, 'finding', 'findings')}: ${counts.join(', ')}.`;
 }
 
 function countLabel(items: readonly ReviewItem[], ...labels: string[]) {

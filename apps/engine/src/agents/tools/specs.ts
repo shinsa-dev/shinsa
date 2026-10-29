@@ -497,7 +497,12 @@ export const TOOL_SPECS = {
           items: {
             type: 'object',
             properties: {
-              severity: { type: 'string', enum: [...FINDING_SEVERITIES] },
+              severity: {
+                type: 'string',
+                enum: [...FINDING_SEVERITIES],
+                description:
+                  'What should happen to it. blocking: a bug, a missed requirement, a broken rule or a failing check; the agent fixes it before the human reviews. should_fix: not proven broken, but you would hold the merge for it; the human sees it with Fix chosen. optional: taste or polish; the human sees it with Dismiss chosen.',
+              },
               file: limitedPath('Path relative to the repository root.'),
               line: { ...LINE, description: 'First line, numbered as in the new file.' },
               end: { ...LINE, description: 'Last line.' },

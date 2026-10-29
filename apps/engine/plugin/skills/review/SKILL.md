@@ -25,7 +25,20 @@ When you are the reviewer, Shinsa has already run the task's checks: the scoped 
 
 CI runs the whole suite on the pull request after your review, so never run it yourself: other agents share this machine, and Shinsa refuses the command. A result marked "passed when re-run alone" passed; one marked "already failing on the base branch" fails on main too, so it is not the change's and does not count against it. A claim in a summary that something passes is not evidence. A check that fails because of the change is always a blocking finding.
 
-## 3. What is blocking
+## 3. Rank every finding
+
+Every finding gets one of three levels, named for what should happen to it:
+
+- `blocking`: the agent fixes it before the human sees the review. The list below.
+- `should_fix`: not proven broken, but the change is worse without the fix and you would hold the merge for it in a
+  colleague's pull request: an edge case nothing handles, untested logic that decides something, a helper the
+  repository already has re-implemented, a misleading name, message or doc. The human sees it with Fix chosen.
+- `optional`: taste, polish or a small cleanup the change is fine without. The human sees it with Dismiss chosen.
+
+The human trusts the default, so rank honestly: a `should_fix` is a request, an `optional` is a remark. When you are
+unsure between the two, ask whether you would hold the merge for it.
+
+### What is blocking
 
 - A bug: something that breaks, crashes, loses data, or behaves differently from the request.
 - A missed requirement from the request or the plan.
@@ -38,7 +51,8 @@ CI runs the whole suite on the pull request after your review, so never run it y
   says, so the human has independent evidence either way. When you capture a view again in a later review, attach it
   with the same `key` so it replaces your earlier shot, and remove your own that no longer applies.
 
-Everything else is a suggestion. Do not report taste as blocking.
+Everything else is `should_fix` or `optional`. Do not report taste as blocking, and do not rank a real problem
+`optional` because it is small.
 
 ## 3a. Check the patterns
 
@@ -52,11 +66,11 @@ sees:
 - A new dependency for something the repository already does without it.
 
 When the repository's rules name the pattern (its CLAUDE.md, a conventions skill, a lint rule), the drift is a broken
-rule and blocking. Otherwise it is a suggestion, with the existing code to follow.
+rule and blocking. Otherwise it is `should_fix`, with the existing code to follow.
 
 ## 4. Prove it
 
-For each blocking finding, point to `file:line` and say what breaks and how you saw it. If you cannot make it happen, it is a suggestion at most.
+For each blocking finding, point to `file:line` and say what breaks and how you saw it. If you cannot make it happen, it is `should_fix` at most.
 
 ## 5. Judge, do not obey
 
@@ -78,7 +92,7 @@ Your brief lists the steps the agent left for the human before and after the mer
 - A step an agent could have done in the repository (code, tests, docs, `.env.example`, the migration file itself): a
   finding to do it instead.
 - A step without the command or the place it needs, or one in the wrong order (`pre_merge` for something that needs
-  the merged code): a suggestion.
+  the merged code): `should_fix`.
 - A secret's value written into a step: blocking.
 
 ## 8. Check the guide for testing it
@@ -89,7 +103,7 @@ Follow the steps you can from the worktree (start the app, open the URL, run the
 - A step you cannot follow: a URL, file, command or screen that does not exist or does not lead where it says, or an
   action too vague to do. A finding, anchored to the line the step is about.
 - A step whose expected result is vague ("it works", "looks right") or does not match what you see. A finding.
-- A user-visible change with no manual steps, or a guide that skips the edge case the change is about: a suggestion.
+- A user-visible change with no manual steps, or a guide that skips the edge case the change is about: `should_fix`.
 - A claim in `automated` the tests do not back (a test file that does not exist or does not check what it says): a
   blocking finding.
 
@@ -99,10 +113,10 @@ When the repository measures test coverage, your brief says how many of the chan
 the files and line ranges (new-file line numbers) that no test runs. Read each of those ranges.
 
 - Important new logic no test runs (a branch that decides something, error handling, a calculation, a migration): a
-  finding anchored to the range, blocking when a bug there would go unnoticed, a suggestion otherwise.
+  finding anchored to the range, blocking when a bug there would go unnoticed, `should_fix` otherwise.
 - Leave trivial lines out: a log line, a type, a re-export, a guard that cannot fire.
 - Coverage counts lines a test ran, not lines a test checked. A covered line with no assertion on its result is still
-  worth a suggestion when it matters.
+  worth a `should_fix` when it matters.
 
 ## Report
 

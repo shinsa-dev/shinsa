@@ -279,7 +279,7 @@ export function CodeSpecimens() {
       <Specimen label='CodeEditor · a diff side by side, the default: the old file on the left, the new side editable (type to try it; in a task each edit saves to the working copy)'>
         <DiffEditor split />
       </Specimen>
-      <Specimen label='CodeEditor · the same diff unified: removed lines above where they were, changed words washed, unchanged lines folded (the cursor skips them), a spot’s bar, a blocking finding and a non-blocking one inline, your comment'>
+      <Specimen label='CodeEditor · the same diff unified: removed lines above where they were, changed words washed, unchanged lines folded (the cursor skips them), a spot’s bar, a blocking, a should fix and an optional finding inline, your comment'>
         <DiffEditor split={false} />
       </Specimen>
       <Specimen label='QuickOpenDialog · Go to file (⌘P): every path at the ref, the open tabs first, the matched letters in the accent'>

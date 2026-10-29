@@ -197,7 +197,7 @@ a UI change.
   first; the console read on every page; never claim what was not seen working.
 - **A review proves every blocking finding** (`file:line`, what breaks, how it was seen), runs what CI runs, judges
   earlier comments as valid, stale or a nitpick, leads with the verdict, and says nothing about what is fine. Taste
-  is a suggestion; UI work without evidence is blocking.
+  is optional; UI work without evidence is blocking.
 
 ### The checklist
 
@@ -5040,19 +5040,19 @@ A labelled note nested in a card (a disagreement, a warning, a suggested fix).
   with an icon, `gap-px` without. Label row `flex items-center gap-1.5 text-2xs` in `TONE_TEXT[tone]` with a 14px
   icon; body `Markdown` in `text-fg-4 text-xs`.
 - A toned note takes its tone's edge, never the grey hairline.
-- `SuggestedFix({ text })` = `InsetNote label='Suggested fix' icon='IconBandage'`, neutral.
+- `SuggestedFix({ text })` = `InsetNote label='Proposed fix'`, neutral, no icon.
 
 ```tsx
 <InsetNote tone='orange' icon='IconEyeSparkle' label='The agent review disagrees' text={reason} />
 ```
 
-#### NoteHead
+#### FindingNote
 
-The head every finding and review card opens on: `flex min-w-0 flex-col gap-px text-xs`; a top row
-`flex min-w-0 items-start justify-between gap-3` with label (`flex min-w-0 items-center gap-1.5 text-2xs`) over title
-(`InlineMarkdown`, `font-medium text-fg-4 leading-5`) left and the action (`flex shrink-0 items-center gap-1.5`,
-Fix / Dismiss) right; then the body `Markdown`, `text-fg-3` under a title, `text-fg-4` without one. Props: `label`,
-`title`, `body`, `action?`.
+The one finding layout, the issue and the proposed fix only: `flex min-w-0 flex-1 flex-col gap-2 text-xs`; a top row
+`flex min-w-0 items-start justify-between gap-3` with the severity (`text-2xs font-medium` in `TONE_TEXT[tone]`, no
+dot, then an optional place chip) over the issue (`Markdown`, `text-fg-4`) left and the action
+(`flex shrink-0 items-center gap-1.5`, Fix / Dismiss) right; then the children (the snippet) and `SuggestedFix`.
+Props: `label`, `tone`, `place?`, `body`, `fix`, `action?`, `children?`. No title and no author.
 
 #### FilePath, DiffStats, TaskHandle
 
@@ -8382,7 +8382,7 @@ Row class:
 - The place is a link into the workbench at those lines (with the spot key so it washes there; "Open in Code" on hover) when the task has a repository.
 - Body (under `border-border border-t`): the task diff narrowed to hunks around the lines with 2 lines of context, the lines themselves washed `primary-a1`. If the change does not reach them, the file at head around them as unchanged lines. A long removal before replaced lines shows only as many removed lines as the point marks new ones, plus two; a pure removal shows whole.
 - An optional "why" under it: markdown, `border-border border-t px-2 py-1.5 text-fg-3 text-xs`.
-- Starts open only for a blocking finding; suggestions and spots start folded. The fold is remembered.
+- Starts open for a Blocking or Should fix finding; Optional findings and spots start folded. The fold is remembered.
 - A finding with a snippet drops its separate place chip: the snippet header is the place.
 
 #### Code block and its action corner
@@ -8486,8 +8486,8 @@ Row class:
 
 - One card for every point and every comment anywhere, picked by what it is:
 - A point or comment: opens on a header bar: 36px `bg-bg-a1` band, disclosure header `strip='band'`, box chevron right. Icon slot holds the author's icon (Agent `IconAgent`, You `IconBubbleText`). Then what the card is (`text-xs` medium `fg-4`): the point's short title (never an "Agent" label, since every point is the agent's); "You" on your comment. Then the tag (dot and label), the section (`text-2xs` `fg-2`, truncated), and an action before the chevron (Remove on a comment). The whole bar folds the card ("Collapse judgement call"); clicking the action does not. Starts open, remembers its fold, and reopens when jumped to. Body 12px in: a judgement call's call (`text-xs` medium `fg-4`), then markdown (`fg-3` under a call, `fg-4` without).
-- A finding: no bar, never folds, so its verdict is always in view. A full-width `justify-between` head row: label line (`text-2xs`: "Agent review" `fg-2`, the tag) over the title (`text-xs` medium `fg-4`) on the left, Fix / Dismiss on the right aligned to the row's top; body full width below.
-- Both then show full width: Why it matters, Also considered, the disagreement, the snippet (open, header linking into code with the point's key), the suggested fix on an inset note headed "Suggested fix" (`IconBandage`).
+- A finding: no bar, never folds, so its verdict is always in view. Only the issue and the proposed fix (`FindingNote`): a full-width `justify-between` head row with the severity in its tone's text (no dot, no author) over the message (`text-xs` `fg-4`) on the left, Fix / Dismiss on the right aligned to the row's top; then the snippet and the proposed fix. The reviewer's title is left out.
+- A point or comment then shows full width: Why it matters, Also considered, the disagreement, the snippet (open, header linking into code with the point's key), the proposed fix on an inset note headed "Proposed fix".
 - There is one finding layout with Fix / Dismiss; never a variant with the toggle in a header band.
 - In the code editor the same card is compact: no snippet, no place.
 
@@ -9287,8 +9287,9 @@ change works, it sends `walkthrough` with only the parts that changed, each whol
 
 At most 12 findings, one per problem, most severe first, each anchored to a `file` and `line`/`end`. `blocking` is a
 bug, a missed requirement, a broken rule, a check the change makes fail, a test that encodes the old behaviour or
-passes either way, or UI work without evidence of the changed flow; everything else is a `suggestion`, and taste is
-never blocking. A check that fails because of the change is always a blocking finding; one already failing on the
+passes either way, or UI work without evidence of the changed flow. `should_fix` is not proven broken but worth holding
+the merge for (an unhandled edge case, untested logic that decides something, a duplicated helper); it reaches the human
+with Fix chosen. `optional` is taste or polish, shown with Dismiss chosen. Taste is never blocking. A check that fails because of the change is always a blocking finding; one already failing on the
 base branch is not the change's and does not count against it. Each finding has a `title` (what is wrong, a few words), a `message` (what is wrong and why it matters) and,
 when known, a `fix` (a sentence or a short code block). A `summary` of one or two sentences says what was checked and
 the overall view. `disagreements` names a judgement call by its number with the `reason` and what the reviewer would
@@ -10749,7 +10750,7 @@ the report. A reviewer is a signal for the person who decides, never the approva
    value in a step is blocking, a step the agent could have done itself is a finding.
 6. **Read what the tests miss.** Uncovered changed lines that decide something (a branch, error handling, a
    calculation) are a finding; a log line or a type is not. A covered line with no assertion on its result is still
-   worth a suggestion.
+   worth a `should_fix`.
 7. **Prove it.** Each blocking finding names `file:line`, what breaks and how you saw it. For a fix, revert it and
    watch the test fail, then restore it; a test that passes either way covers nothing. For a clean baseline copy the
    files aside or use `git worktree add`; never let `git stash` guess which stash.
@@ -10768,7 +10769,7 @@ the report. A reviewer is a signal for the person who decides, never the approva
 | Wrong | Right |
 | --- | --- |
 | "Looks good to me." | "Blocking: the empty state uses a green checkmark (`queue.tsx:88`); `bun lint:conventions` fails on it." |
-| A blocking finding on a spacing taste | A suggestion, with the scale step it should use |
+| A blocking finding on a spacing taste | An optional finding, with the scale step it should use |
 
 ## Appendix A. The kit stylesheet
 
