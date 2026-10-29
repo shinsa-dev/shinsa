@@ -32,6 +32,8 @@ export interface ServiceSuggestion {
   command: string;
   source: ServiceSource;
   recommended: boolean;
+  previewUrl: string | null;
+  portVariable: string;
 }
 
 export type ServiceState = 'stopped' | 'starting' | 'running' | 'exited' | 'failed';

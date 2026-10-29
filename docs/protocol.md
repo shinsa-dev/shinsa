@@ -821,8 +821,10 @@ role without the tool (`hasTool`).
 
 The delegation tools name a delegation by `delegation_id`. Reads with no command: `find_tasks`, `read_task`,
 `list_repository_work`,
-`list_schedules`, `list_services`, and `run_service` (which acts on the task's own service runs, in the terminals
-beside the log, not through a command; `docs/engine.md` → Services → Runs for a task), and `delegation_status` for a delegation still working.
+`list_schedules`, `list_services`, `run_service` (which acts on the task's own service runs, in the terminals
+beside the log, not through a command; `docs/engine.md` → Services → Runs for a task) and `add_service` (which adds a
+service definition beside the log, no command either; `docs/engine.md` → Services → Agents add the services they
+need), and `delegation_status` for a delegation still working.
 
 ### System commands
 
@@ -1015,6 +1017,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `list_services`, `run_service` | ✓ | ✓ | | ✓ | | | |
+| `add_service` | ✓ | | | ✓ | | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |

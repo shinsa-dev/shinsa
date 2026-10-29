@@ -145,6 +145,13 @@ describe('what the house rules leave to the tools', () => {
     expect(resolveHouseRules('answerer')).not.toContain('preview URL');
   });
 
+  test('the roles that add services are told when to add one, and the reviewer is not', () => {
+    const rule = 'When the project has no service you need';
+    for (const role of ['agent', 'investigator'] as const) expect(resolveHouseRules(role)).toContain(rule);
+    for (const role of ['reviewer', 'answerer', 'researcher'] as const)
+      expect(resolveHouseRules(role)).not.toContain(rule);
+  });
+
   test('the writing rules are one block every role gets once', () => {
     for (const role of ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const) {
       const rules = resolveHouseRules(role);

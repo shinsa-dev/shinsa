@@ -703,6 +703,38 @@ export const TOOL_SPECS = {
       required: ['service', 'action'],
     },
   },
+  add_service: {
+    name: 'add_service',
+    description:
+      'Add a service to the project: a command someone keeps running, such as a dev server, that runs from a folder of this task’s repository. The human sees it under Services and can run it too; start it for this task with `run_service`. Add one only when no service in `list_services` does the job, and never for a one-off command such as a test or a build.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'A short name, unique in the project, such as web or api.' },
+        path: {
+          type: 'string',
+          description:
+            'The folder it runs in, relative to the repository’s root, such as apps/web. Leave it out for the root.',
+        },
+        command: { type: 'string', description: 'The command, such as bun run dev.' },
+        preview_url: {
+          type: 'string',
+          description:
+            'For a server: the URL to open, with {port} where the run’s port goes, such as http://localhost:{port}. Each run gets its own port in the port variable, so the command must listen on it (Vite needs `--port $PORT`).',
+        },
+        port_variable: {
+          type: 'string',
+          description: 'The variable the command reads its port from. PORT when left out.',
+        },
+        env: {
+          type: 'object',
+          description: 'Variables to set for it, names to values. Never a secret.',
+          additionalProperties: { type: 'string' },
+        },
+      },
+      required: ['name', 'command'],
+    },
+  },
   note: {
     name: 'note',
     description:

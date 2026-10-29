@@ -241,6 +241,8 @@ function describeShinsaMessage(
         SERVICE_VERBS[readString(args, 'action') ?? ''] ?? 'Ran a service:',
         readString(args, 'service')
       );
+    case 'add_service':
+      return plain('IconServer', 'Added a service:', readString(args, 'name'));
   }
 }
 
@@ -401,6 +403,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   list_services: (count) =>
     count === 1 ? 'listed the task’s services' : `listed the task’s services ${count} times`,
   run_service: (count) => `ran ${formatCount(count, 'service', 'services')}`,
+  add_service: (count) => `added ${formatCount(count, 'service', 'services')}`,
   note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',

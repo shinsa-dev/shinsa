@@ -34,8 +34,12 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
 2. Signing preflight: states in the summary and as a notice whether this build is **signed and notarized** (all
    five secrets set) or **not signed** (none set). Some but not all set fails the run, naming the missing ones.
 3. Builds the web app, the engine with `SHINSA_VERSION=<version>` (`apps/engine/scripts/build-engine.ts`) and the app
-   with `extraMetadata.version=<version>`, then `electron-builder --mac dmg zip --arm64`, signing and notarizing when
-   the secrets are there. Every channel builds the same app from `electron-builder.yml`. The disk image's volume is
+   with `extraMetadata.version=<version>`, then the release in three steps: `electron-builder --mac dir --arm64`
+   builds and signs `release/mac-arm64/Shinsa.app` (ad hoc when unsigned) without notarizing; when signed,
+   `scripts/release-notarize.ts` notarizes and staples that app, retrying (Signing and notarization, below); and
+   `electron-builder --mac dmg zip --arm64 --prepackaged release/mac-arm64/Shinsa.app` packages the disk image and the
+   zip from it, without signing it again, so both carry the stapled ticket. Every channel builds the same app from
+   `electron-builder.yml`. The disk image's volume is
    `Shinsa <version>` and opens on the install window, the app beside an Applications link on the site's
    background; a beta or a canary passes `-c.dmg.background=dmg/background-<channel>.png` for the one with its Beta
    or Canary pill (`apps/desktop/CLAUDE.md` → The disk image).
@@ -233,7 +237,14 @@ Exporting the certificate:
    `.p12` afterwards.
 
 electron-builder signs with the hardened runtime and `resources/entitlements.mac.plist` (JIT and unsigned executable
-memory for the engine's Bun runtime), then notarizes with `notarytool` and staples the ticket.
+memory for the engine's Bun runtime). Notarizing is its own step, `bun scripts/release-notarize.ts <app>`, because
+Apple's services drop connections now and then and electron-builder's notarize never retries, so one lost connection
+used to fail the whole release. The script zips the app with `ditto`, submits it with
+`xcrun notarytool submit --wait --output-format json` (three attempts, 30 s and 60 s apart) and staples the ticket
+with `xcrun stapler staple` (five attempts, 15 s, 30 s, 60 s and 120 s apart), writing a warning annotation for each
+retry. Apple rejecting the app is not retried: the step fails at once with Apple's log. The retry and the parsing are
+`scripts/release-retry.ts`, tested at 100%. If a release still fails there, Re-run failed jobs on the run builds it
+again from the start.
 
 ## The first releases
 

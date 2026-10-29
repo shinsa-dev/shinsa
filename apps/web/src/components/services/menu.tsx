@@ -320,7 +320,7 @@ export function ServicesPanel(props: ServicesPanelProps) {
   const views = groups.flatMap((group) => group.views);
   const addProject = panel.projectId ?? resolveServicesAddTarget(scope, groups)?.id ?? null;
   const edited = selectEditedService(views, panel.editing);
-  const shown = resolveShownServicesView(panel, addProject !== null, edited !== null);
+  const shown = resolveShownServicesView(panel, addProject !== null, edited !== null, views.length === 0);
   return (
     <div className={cn('flex min-h-0 flex-col', VIEW_HEIGHT[resolveServicesPanelHeight(shown)])}>
       <ServicesPanelContent {...props} shown={shown} addProject={addProject} edited={edited} />
@@ -362,6 +362,33 @@ function ServicesPanelContent({
         onCustom={() => onPanel({ type: 'custom' })}
         onBack={() => onPanel({ type: 'back' })}
         onDone={() => onPanel({ type: 'done' })}
+      />
+    );
+  const emptyList = (
+    <>
+      <div className='flex flex-1 flex-col justify-center px-3 py-6'>
+        <ServicesEmpty
+          project={groups.length === 1 ? (groups[0]?.project ?? null) : null}
+          onCreateProject={onAdd ? null : onCreateProject}
+        />
+      </div>
+      <ListFooter onAdd={onAdd} onManage={null} onTerminal={onTerminal} />
+    </>
+  );
+  if (shown === 'found' && addProject)
+    return (
+      <AddServicesView
+        projects={scope}
+        projectId={addProject}
+        actions={actions}
+        onProject={(projectId) => onPanel({ type: 'open', mode: 'add', projectId })}
+        onCustom={() => {
+          onPanel({ type: 'open', mode: 'add', projectId: addProject });
+          onPanel({ type: 'custom' });
+        }}
+        onBack={null}
+        onDone={() => onPanel({ type: 'done' })}
+        empty={emptyList}
       />
     );
   if (shown === 'custom' && addProject)

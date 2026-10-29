@@ -9,7 +9,7 @@ import { describeAttachment, resolveFileGlyph } from '@/lib/chat/attachments.ts'
 const FILE_CARD = cn(
   CARD,
   ATTACHMENT_CORNER,
-  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 ps-1 pe-3'
+  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 p-1 pe-3'
 );
 
 function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | null; busy: boolean }) {
@@ -19,7 +19,7 @@ function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | n
       className={cn(
         INSET,
         ATTACHMENT_TILE_CORNER,
-        'file-icons-muted grid size-12 shrink-0 place-items-center bg-bg-a1 text-fg-3'
+        'file-icons-muted grid size-11.5 shrink-0 place-items-center bg-bg-a1 text-fg-3'
       )}
     >
       {busy ? <Spinner size='md' /> : <Icon size='lg' name={resolveFileGlyph({ name, mimeType })} />}

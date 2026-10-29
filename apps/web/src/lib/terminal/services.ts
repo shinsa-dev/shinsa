@@ -327,6 +327,25 @@ export function listRecommendedPicks(suggestions: ServiceSuggestion[]) {
   return suggestions.filter((each) => each.recommended).map(resolveSuggestionKey);
 }
 
+function isSamePicks(one: string[], other: string[]) {
+  return one.length === other.length && one.every((key) => other.includes(key));
+}
+
+export function resolveSuggestionPicks(
+  before: ServiceSuggestion[] | null,
+  picked: string[],
+  after: ServiceSuggestion[]
+) {
+  if (!before || before.length !== after.length || isSamePicks(picked, listRecommendedPicks(before)))
+    return listRecommendedPicks(after);
+  return after
+    .filter((_, index) => {
+      const was = before[index];
+      return was !== undefined && picked.includes(resolveSuggestionKey(was));
+    })
+    .map(resolveSuggestionKey);
+}
+
 export function togglePick(picked: string[], key: string) {
   return picked.includes(key) ? picked.filter((each) => each !== key) : [...picked, key];
 }
@@ -339,8 +358,8 @@ export function listPickedInputs(suggestions: ServiceSuggestion[], picked: strin
       cwd: each.cwd,
       command: each.command,
       env: {},
-      previewUrl: null,
-      portVariable: SERVICE_PORT_VARIABLE,
+      previewUrl: each.previewUrl,
+      portVariable: each.portVariable,
     }));
 }
 
@@ -362,6 +381,13 @@ export function describeServicesAdded(names: string[]) {
 
 export function describeNoSuggestions(projectName: string) {
   return `No services found in ${projectName}. Name the command that starts one and the folder it runs in.`;
+}
+
+export function describeFoundServices(projectName: string) {
+  return {
+    title: `No services in ${projectName} yet`,
+    description: 'These were found in its folders. Each runs in a terminal of its own.',
+  };
 }
 
 export type ServiceFormMode = 'add' | 'custom' | 'edit';

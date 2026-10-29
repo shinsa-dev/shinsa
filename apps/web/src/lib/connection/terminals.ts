@@ -95,6 +95,13 @@ export async function requestServiceSuggestions(projectId: string) {
   return answer.suggestions;
 }
 
+export async function requestRefinedServiceSuggestions(projectId: string) {
+  const answer = await requestJson<{ suggestions: ServiceSuggestion[]; refined: boolean }>(
+    `/api/services/suggestions?projectId=${encodeURIComponent(projectId)}&refine=1`
+  );
+  return answer.refined ? answer.suggestions : null;
+}
+
 function servicePath(id: string, action: string) {
   return `/api/services/${encodeURIComponent(id)}/${action}`;
 }

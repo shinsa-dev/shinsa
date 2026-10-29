@@ -159,7 +159,8 @@ task gets a port of its own, and the start reports the run's preview URL. Add th
 attach it: `{ "kind": "preview", "url": "http://localhost:4123/tasks/SW-17", "title": "Task page, Services fact" }`.
 Name that link as the first step of How to test. The preview stays up while the task waits for review and stops when
 the task is finished, so never stop it yourself. No preview URL in the start's reply means the service has none set:
-say so and attach the screenshots alone.
+say so and attach the screenshots alone. When no service shows the change, add the one that would with
+`add_service` (with its `preview_url`) and then start it.
 
 ## As the reviewer
 

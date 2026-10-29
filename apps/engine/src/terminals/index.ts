@@ -454,6 +454,7 @@ export class Terminals {
   }
 }
 
+export { ServiceRefiner } from './refine.ts';
 export {
   createTerminalRoutes,
   createTerminalSockets,
