@@ -468,14 +468,35 @@ export class FakeGitHub {
     return this.#read().calls;
   }
 
+  #change(apply: (state: GitHubState) => GitHubState) {
+    const lock = `${this.path}.lock`;
+    const deadline = performance.now() + 20_000;
+    for (;;) {
+      try {
+        mkdirSync(lock);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      if (performance.now() > deadline) throw new Error(`${lock} stayed locked.`);
+      Bun.sleepSync(2);
+    }
+    try {
+      this.#write(apply(this.#read()));
+    } finally {
+      rmSync(lock, { recursive: true, force: true });
+    }
+  }
+
   configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows'>>) {
-    this.#write({ ...this.#read(), ...patch });
+    this.#change((state) => ({ ...state, ...patch }));
   }
 
   update(number: number, patch: Partial<FakePullRequest>) {
-    const state = this.#read();
-    state.pulls = state.pulls.map((pull) => (pull.number === number ? { ...pull, ...patch } : pull));
-    this.#write(state);
+    this.#change((state) => ({
+      ...state,
+      pulls: state.pulls.map((pull) => (pull.number === number ? { ...pull, ...patch } : pull)),
+    }));
   }
 }
 

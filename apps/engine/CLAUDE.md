@@ -447,6 +447,10 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   scenario after another through the fake `codex` passes a runtime or runner that answers in process where the
   scenario is about Shinsa's reading (`readCodexLogin`'s runner, a `resolveExecutable` that says what it found), and
   gives each scenario that needs the fake its own test (`test.each`).
+- **The fake `gh` and the test share one lock.** Each fake `gh` holds `<state>.lock` from the moment it reads its state
+  file until it writes it back, and `FakeGitHub` (`test/e2e/harness.ts`) takes the same lock for `update` and
+  `configure`, so a test's change made while a `gh` runs is never written over. `FAKE_GH_HOLD_MS` keeps a `gh`
+  holding it for that long, for a test that needs the overlap (`test/helpers/gh.test.ts`).
 - The fake `gh` answers `pr view` with a `mergeCommit`: the one a test puts on the pull request, or the head's sha
   once it merges one, so a test can follow a task past the merge (the operation gate shows that commit).
 - **Tests wait on conditions, never on time.** Use `awaitEffect(log, key)` from `test/helpers` (keys come from

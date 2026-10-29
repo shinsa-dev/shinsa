@@ -11,8 +11,8 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -24,14 +24,4 @@ jobs:
       - run: bun lint:spelling
       - run: bunx sherif -i @types/node
       - run: bunx knip
-
-  check-types:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-      - run: bun install --frozen-lockfile
       - run: bun check-types

@@ -685,11 +685,14 @@ and each of its tabs, the Code tab's trees, ⌘P, the ref picker and search, All
   and for how long. `[data-loading-pending]` (a wait inside its first 300 ms, drawn empty) is listed as "blank".
   The walk fails (exit 1) when anything but a blank or a step marked cold (the ⌘P pick, the first search) showed.
   `LOADING_WALK_WARM_UP=1` walks without failing (it prints what showed and exits 0).
-- **In CI.** The `loading` job of `.github/workflows/test.yml` builds the web app in production mode
+- **In CI.** The Loading workflow (`.github/workflows/loading.yml`) runs only when a change can alter what the walk
+  sees: the web app, the engine, `packages/`, `scripts/perf/`, the seed scripts, `package.json` or `bun.lock`
+  (Markdown files under them never count). It builds the web app in production mode
   (`NODE_ENV=production`, `vite build --mode production`), serves a fresh seed under `SHINSA_INSPECT` and fails
   with the server's log when it is not healthy within 120 s, walks once at 1440 px as a warm-up (the server's git
   readers and caches, the OS's file cache and Bun's JIT are cold on a fresh runner, which is not normal use), then
-  walks at 1440 and 900 px for the verdict, once more if that walk fails. The rule is the same on both checked
+  walks for the verdict, once more if that walk fails: at 1440 px on a pull request, and at 1440 and 900 px on a
+  push to `main`, so a loading state only the narrow window shows is caught at the latest when it merges. The rule is the same on both checked
   walks; the retry absorbs a runner stalling, not a loading state that shows each time. Run it locally the same
   way: `NODE_ENV=production bun run --cwd apps/web build --mode production`, seed to a scratch directory, serve it
   on a free port, then the warm-up and the checked walk.
