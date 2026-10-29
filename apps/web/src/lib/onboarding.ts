@@ -1,5 +1,4 @@
 import {
-  type AccountImport,
   type AccountSummary,
   describeList,
   type OnboardingCheck,
