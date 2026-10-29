@@ -16,6 +16,7 @@ import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
+import { StatsSettings } from '@/components/settings/stats/index.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { VersionSettings } from '@/components/settings/versions.tsx';
@@ -71,6 +72,8 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <SetupSettings />
         </>
       );
+    case 'stats':
+      return <StatsSettings state={state} />;
     case 'agents':
       return (
         <>

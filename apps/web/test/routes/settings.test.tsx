@@ -6,8 +6,9 @@ import { SettingsPage } from '@/routes/settings.tsx';
 import { createAccount, createSnapshot } from '../support/accounts.ts';
 import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
+import { createRound } from '../support/rounds.ts';
 import { clearAccounts, pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
-import { createShinsaState } from '../support/state.ts';
+import { createShinsaState, createTask } from '../support/state.ts';
 
 let requests: Mock<(input: RequestInfo | URL) => Promise<Response>>;
 
@@ -36,11 +37,11 @@ function visit(path: string) {
   dispatchEvent(new PopStateEvent('popstate'));
 }
 
-async function renderSettings(path = '/settings') {
+async function renderSettings(path = '/settings', state = createShinsaState({ tasks: [] })) {
   visit(path);
   const view = render(
     <TooltipProvider>
-      <SettingsPage state={createShinsaState({ tasks: [] })} />
+      <SettingsPage state={state} />
     </TooltipProvider>
   );
   await settle();
@@ -55,7 +56,7 @@ describe('Settings tabs', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent)
-    ).toEqual(['General', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
+    ).toEqual(['General', 'Stats', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
     for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
       expect(screen.getByText(section)).toBeTruthy();
@@ -109,5 +110,48 @@ describe('Settings tabs', () => {
     folders.resolve(Response.json(createOnboardingStatus({ configured: ['/Users/me/code'] })));
     await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: 'start' }));
     expect(screen.getByText('Repository folders')).toBeTruthy();
+  });
+});
+
+describe('Settings stats', () => {
+  it('shows what shipped in the range, the year graph and the chart, and keeps the range in the URL', async () => {
+    const mergedAt = Date.now();
+    const pullRequest = {
+      number: 12,
+      url: 'u',
+      state: 'merged' as const,
+      base: 'main',
+      changes: { additions: 40, deletions: 2, changedFiles: 3 },
+    };
+    const task = createTask({
+      id: 't1',
+      stage: 'merged',
+      closedAt: mergedAt,
+      rounds: [createRound({ number: 1, endedAt: mergedAt, pullRequest })],
+    });
+    await renderSettings('/settings?tab=stats', createShinsaState({ tasks: [task] }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Stats');
+    expect(screen.getByText('Pull requests merged')).toBeTruthy();
+    expect(screen.getByText('+40 −2 in 3 files')).toBeTruthy();
+    expect(screen.getByText('1 day')).toBeTruthy();
+    const graph = screen.getByRole('img', { name: '1 pull request merged in the last year' });
+    const cells = graph.querySelectorAll('span:not(.invisible)');
+    fireEvent.pointerOver(cells[cells.length - 1] as Element);
+    expect(screen.getByText(/^1 pull request merged on /)).toBeTruthy();
+    fireEvent.pointerOut(graph, { relatedTarget: document.body });
+    expect(screen.getAllByText('1 pull request merged in the last year').length).toBeGreaterThan(0);
+    const chart = screen.getByRole('img', { name: 'Pull requests merged over time' });
+    chart.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect;
+    fireEvent.pointerMove(chart, { clientX: 100 });
+    expect(screen.getByText(/: 1 pull request$/)).toBeTruthy();
+    fireEvent.pointerOut(chart, { relatedTarget: document.body });
+    expect(screen.queryByText(/: 1 pull request$/)).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: '90 days' }));
+    await settle();
+    expect(location.search).toBe('?tab=stats&range=90');
+    expect(screen.getAllByText(/^Week of /)).toHaveLength(2);
+    fireEvent.click(screen.getByRole('tab', { name: '30 days' }));
+    await settle();
+    expect(location.search).toBe('?tab=stats');
   });
 });

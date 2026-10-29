@@ -13,6 +13,7 @@ describe('settings tabs', () => {
   it('lists the tabs in order', () => {
     expect(listSettingsTabs().map((tab) => tab.label)).toEqual([
       'General',
+      'Stats',
       'Agents',
       'Agent usage',
       'Projects',
@@ -30,6 +31,7 @@ describe('settings tabs', () => {
       'Setup',
       'Updates',
     ]);
+    expect(findSettingsTab('stats').sections).toEqual(['Shipping']);
     expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
     expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Memory', 'Versions']);
     expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Projects']);
@@ -42,6 +44,8 @@ describe('settings tabs', () => {
 
   it('opens the tab the URL names, else the tab of the linked section, else General', () => {
     expect(resolveSettingsTab('agents')).toBe('agents');
+    expect(resolveSettingsTab('stats')).toBe('stats');
+    expect(resolveSettingsTab(null, '#shipping')).toBe('stats');
     expect(resolveSettingsTab(null, '#limits')).toBe('accounts');
     expect(resolveSettingsTab(null, '#accounts')).toBe('accounts');
     expect(resolveSettingsTab(null, '#models')).toBe('agents');

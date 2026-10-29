@@ -1,9 +1,17 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
+import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
 import { UPDATES_SECTION } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 
-export type SettingsTabId = 'general' | 'agents' | 'accounts' | 'projects' | 'integrations' | 'automations';
+export type SettingsTabId =
+  | 'general'
+  | 'stats'
+  | 'agents'
+  | 'accounts'
+  | 'projects'
+  | 'integrations'
+  | 'automations';
 
 interface SettingsTab {
   id: SettingsTabId;
@@ -16,6 +24,11 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
     id: 'general',
     label: 'General',
     sections: ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', UPDATES_SECTION],
+  },
+  stats: {
+    id: 'stats',
+    label: 'Stats',
+    sections: [SHIPPING_SECTION],
   },
   agents: {
     id: 'agents',
