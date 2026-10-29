@@ -2496,9 +2496,11 @@ pull request; each phase's summary with its critical and high spots),
 the judgement calls with the options turned down, the risks, How to test (the tests and the steps to try), the steps
 around the merge, the plan folded away, and a one-line footer linking shinsa.dev.
 
-- **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to `https://shinsa.dev/open?task=<id>`
-  (`resolveShinsaTaskUrl`), a static page of the site (`apps/marketing/src/pages/open.astro`) whose button opens
-  `shinsa://task/<id>` in the Mac app and which offers the download to anyone without it. The page never opens the
+- **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to
+  `https://shinsa.dev/open?task=<id>&handle=<handle>&title=<title>` (`resolveShinsaTaskUrl`, the title cut to 120
+  characters), a static page of the site (`apps/marketing/src/pages/open.astro`) that shows the task's handle and title,
+  a button that opens `shinsa://task/<id>` in the Mac app, the download for anyone without it, and the Review tab on
+  sample work, so a teammate sees what waits in the task. The page never opens the
   app by itself: browsers refuse an external scheme without a click.
 - **Evidence.** The evidence of the current round and of every earlier round on the same pull request, as items (`listPullRequestEvidence`), without linked tests
   and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part

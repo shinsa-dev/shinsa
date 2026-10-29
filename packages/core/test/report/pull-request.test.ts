@@ -77,7 +77,7 @@ describe('serializePullRequestMarkdown', () => {
     const markdown = serializePullRequestMarkdown({ task, evidence: [], notes: {} });
     const headings = [
       PULL_REQUEST_BLOCK_START,
-      `> Shinsa task **LOC-28, ${task.title}**. [Open it in Shinsa](${resolveShinsaTaskUrl(task.id)})`,
+      `> Shinsa task **LOC-28, ${task.title}**. [Open it in Shinsa](${resolveShinsaTaskUrl(task)})`,
       'Tabs stay put.',
       '### How it works\nClamp the tab width in one place.',
       '<details><summary>How it flows</summary>\n\ntabs → clamp → render',
@@ -202,7 +202,7 @@ describe('serializePullRequestMarkdown', () => {
 
   test('notes fold open, previews link, and what GitHub cannot show links to Shinsa', () => {
     const task = builtTask();
-    const link = resolveShinsaTaskUrl(task.id);
+    const link = resolveShinsaTaskUrl(task);
     const evidence = [
       piece(task, { id: 'note', kind: 'note', title: 'Timings', uri: '/n.md' }),
       piece(task, { id: 'empty', kind: 'note', title: 'Blank', uri: '/e.md' }),
@@ -366,6 +366,17 @@ describe('listPullRequestEvidence', () => {
       { ...piece(task, { id: 'other', kind: 'screenshot', title: 'Other', uri: '/x.png' }), taskId: 'x' },
     ];
     expect(listPullRequestEvidence(task, evidence).map((item) => item.title)).toEqual(['Keep']);
+  });
+});
+
+describe('resolveShinsaTaskUrl', () => {
+  test('names the task, its handle and its title for the open page, the title cut to 120 characters', () => {
+    expect(resolveShinsaTaskUrl({ id: 'id-1', handle: 'LOC-28', title: 'Fix the tabs & menus' })).toBe(
+      'https://shinsa.dev/open?task=id-1&handle=LOC-28&title=Fix+the+tabs+%26+menus'
+    );
+    const long = resolveShinsaTaskUrl({ id: 'id-1', handle: null, title: 't'.repeat(200) });
+    expect(new URL(long).searchParams.get('title')).toHaveLength(120);
+    expect(new URL(long).searchParams.has('handle')).toBe(false);
   });
 });
 

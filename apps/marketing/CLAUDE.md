@@ -50,7 +50,7 @@ window is a chip, two traces per side run from one chip to the next, and a signa
 src/
   pages/index.astro         The page: hero, then one Section per feature, then Closing
   layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer)
-  components/layout/        Header (solid, with a fade under it once you scroll), Section (centred title, text, then the
+  components/layout/        Header (solid, with a fade under it once you scroll; its links point at `/#section`, so they work from every page), Section (centred title, text, then the
                             demo), Backdrop (the circuit board and its scroll signal)
   components/sections/      Hero, Closing (principles and the last call)
   components/ui/Button.astro  An anchor with the kit's buttonVariants
@@ -80,9 +80,11 @@ src/
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
-  pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: its button opens
-                            `shinsa://task/<id>` from `?task=`, lib/open.ts, and it offers the download; left out of
-                            the sitemap), og.png, llms.txt and design.md; public/ holds the
+  pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the task's handle
+                            and title from `?handle=` and `?title=` as its headline, a button that opens
+                            `shinsa://task/<id>` from `?task=` (resolveTaskInvite, lib/open.ts, which refuses
+                            anything else), the download, the Review demo in its window and Closing; copy in
+                            content.ts `openTask`; left out of the sitemap), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket

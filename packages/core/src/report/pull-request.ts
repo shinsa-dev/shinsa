@@ -21,6 +21,8 @@ const PULL_REQUEST_BODY_LIMIT = 65_536;
 
 const SHINSA_SITE_URL = 'https://shinsa.dev';
 
+const OPEN_TITLE_LIMIT = 120;
+
 const LOCAL_HOST = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?:[:/]|$)/i;
 
 const SHOWN_ATTENTION = new Set(['critical', 'high']);
@@ -40,8 +42,11 @@ export interface PullRequestSource {
   notes: Readonly<Record<string, string>>;
 }
 
-export function resolveShinsaTaskUrl(taskId: string) {
-  return `${SHINSA_SITE_URL}/open?task=${encodeURIComponent(taskId)}`;
+export function resolveShinsaTaskUrl(task: Pick<Task, 'id' | 'handle' | 'title'>) {
+  const query = new URLSearchParams({ task: task.id });
+  if (task.handle) query.set('handle', task.handle);
+  query.set('title', task.title.slice(0, OPEN_TITLE_LIMIT));
+  return `${SHINSA_SITE_URL}/open?${query}`;
 }
 
 function isPublicAddress(uri: string) {
@@ -214,7 +219,7 @@ function serializeHeader(task: Task, taskUrl: string) {
 function serializeSections(source: PullRequestSource): Section[] {
   const { task } = source;
   const report = assembleReport(task);
-  const taskUrl = resolveShinsaTaskUrl(task.id);
+  const taskUrl = resolveShinsaTaskUrl(task);
   const flow = report.walkthrough?.flow?.trim();
   const earlier = listEarlierRounds(task);
   const changes =

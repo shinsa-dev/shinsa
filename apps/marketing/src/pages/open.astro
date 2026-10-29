@@ -1,34 +1,82 @@
 ---
+import { Icon } from '@shinsa/ui/components/icon';
+import { ReviewDemo } from '../components/demos/review';
+import DemoWindow from '../components/layout/DemoWindow.astro';
+import Closing from '../components/sections/Closing.astro';
 import Button from '../components/ui/Button.astro';
 import Site from '../layouts/Site.astro';
+import { openTask } from '../lib/content';
 import { site } from '../lib/site';
 ---
 
 <Site title='Open a task · Shinsa' description={site.description} noindex>
-  <section class='flex min-h-[60svh] flex-col items-center justify-center gap-4 px-6 py-24 text-center'>
-    <h1 class='font-medium text-3xl text-fg-4 tracking-tight'>Open this task in Shinsa</h1>
-    <p class='max-w-xl text-fg-2'>
-      This pull request was planned, built and checked in Shinsa. The task lives in the Shinsa of the person who
-      opened it, with the full review, the evidence and the agents' work.
-    </p>
-    <p class='max-w-xl text-fg-2' data-open-missing hidden>This link does not name a task.</p>
-    <div class='flex flex-wrap items-center justify-center gap-2'>
-      <Button href='shinsa://' icon='IconArrowUpRight' class='data-[missing]:hidden'>Open in Shinsa</Button>
-      <Button href={site.downloadUrl} variant='outline'>Download Shinsa</Button>
+  <section id='top' class='flex flex-col px-6 pt-16 pb-6 md:pt-24 md:pb-10'>
+    <div class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
+      <p class='flex items-center gap-2 rounded-full border border-bg-3 bg-bg-1 px-3 py-1 text-fg-2 text-sm'>
+        <span
+          data-open-handle
+          hidden
+          class='-ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-medium font-mono text-primary text-xs'
+        ></span>
+        <span>{openTask.eyebrow}</span>
+      </p>
+      <h1
+        data-open-title
+        class='font-medium text-4xl text-fg-4 leading-[1.08] tracking-tight text-balance md:text-5xl'
+      >
+        {openTask.title}
+      </h1>
+      <p class='max-w-[38rem] text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{openTask.text}</p>
+      <p data-open-missing hidden class='max-w-[38rem] text-fg-2 text-sm'>{openTask.missing}</p>
+      <div class='mt-2 flex flex-wrap items-center justify-center gap-2'>
+        <Button href='shinsa://' icon='IconArrowUpRight' class='data-[missing]:hidden'>{openTask.primary}</Button>
+        <Button href={site.downloadUrl} variant='secondary'>{openTask.secondary}</Button>
+      </div>
     </div>
-    <p class='text-fg-2 text-sm'>
-      New to Shinsa? <a class='text-primary hover:underline' href='/'>See how it works</a>.
-    </p>
+    <div class='@container mx-auto mt-12 w-full max-w-5xl md:mt-16' data-chip>
+      <DemoWindow width={1040} height={744} narrow={684} reserve={303}>
+        <ReviewDemo client:load />
+      </DemoWindow>
+    </div>
+    <p class='mx-auto mt-5 max-w-xl text-center text-fg-2 text-sm text-pretty'>{openTask.caption}</p>
   </section>
+  <section class='px-6 py-12 md:py-16'>
+    <div class='mx-auto grid w-full max-w-5xl gap-x-10 gap-y-8 sm:grid-cols-3'>
+      {
+        openTask.points.map((point) => (
+          <div class='flex flex-col gap-1.5'>
+            <h2 class='flex items-center gap-2 font-medium text-base text-fg-4 [--icon-size:var(--icon-size-md)]'>
+              <span class='text-fg-2'>
+                <Icon name={point.icon} />
+              </span>
+              {point.title}
+            </h2>
+            <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{point.text}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+  <Closing />
 </Site>
 
 <script>
-  import { resolveTaskLink } from '../lib/open';
+  import { resolveTaskInvite } from '../lib/open';
 
-  const link = resolveTaskLink(window.location.search);
+  const invite = resolveTaskInvite(window.location.search);
   const button = document.querySelector<HTMLAnchorElement>('a[href="shinsa://"]');
-  if (link && button) {
-    button.href = link;
+  if (invite && button) {
+    button.href = invite.link;
+    const handle = document.querySelector<HTMLElement>('[data-open-handle]');
+    if (invite.handle && handle) {
+      handle.textContent = invite.handle;
+      handle.hidden = false;
+    }
+    const title = document.querySelector<HTMLElement>('[data-open-title]');
+    if (invite.title && title) {
+      title.textContent = invite.title;
+      document.title = `${invite.handle ?? 'Task'}: ${invite.title} · Shinsa`;
+    }
   } else {
     button?.setAttribute('data-missing', '');
     document.querySelector('[data-open-missing]')?.removeAttribute('hidden');

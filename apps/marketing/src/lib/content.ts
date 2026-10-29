@@ -139,3 +139,39 @@ export const closing = {
   title: 'Hand over your first task.',
   text: 'Shinsa takes it from there.',
 };
+
+export const openTask: {
+  eyebrow: string;
+  title: string;
+  text: string;
+  missing: string;
+  primary: string;
+  secondary: string;
+  caption: string;
+  points: { icon: IconName; title: string; text: string }[];
+} = {
+  eyebrow: 'A pull request built with Shinsa',
+  title: 'Open this task in Shinsa',
+  text: 'The agent that built this pull request left its whole review in Shinsa: how it works, the before and after evidence, every check Shinsa ran itself and the calls it made along the way. Open the task to read it, ask for a change or approve the merge.',
+  missing: 'This link does not name a task. Ask whoever shared it for the pull request’s own link.',
+  primary: 'Open in Shinsa',
+  secondary: 'Download Shinsa',
+  caption: 'A sample review. Every task in Shinsa ends here: the agent’s walkthrough with the proof first.',
+  points: [
+    {
+      icon: 'IconImages1',
+      title: 'Proof before prose',
+      text: 'Before and after shots in both themes, a recording and the test run, attached by the agent and shown first.',
+    },
+    {
+      icon: 'IconShieldCheck',
+      title: 'Checks Shinsa ran itself',
+      text: 'Your repository’s own checks, run by Shinsa, not reported by an agent. A separate agent reviews every change.',
+    },
+    {
+      icon: 'IconBubbleText',
+      title: 'Every call explained',
+      text: 'The key code walked through, what to read carefully, the options the agent turned down and why.',
+    },
+  ],
+};

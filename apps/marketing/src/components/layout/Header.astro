@@ -5,11 +5,11 @@ import { site } from '../../lib/site';
 import Button from '../ui/Button.astro';
 
 const links = [
-  { label: 'Gates', href: `#${sections.gates.id}` },
-  { label: 'Review', href: `#${sections.review.id}` },
-  { label: 'Code', href: `#${sections.code.id}` },
-  { label: 'Agents', href: `#${sections.roadmap.id}` },
-  { label: 'Safety', href: `#${sections.guard.id}` },
+  { label: 'Gates', href: `/#${sections.gates.id}` },
+  { label: 'Review', href: `/#${sections.review.id}` },
+  { label: 'Code', href: `/#${sections.code.id}` },
+  { label: 'Agents', href: `/#${sections.roadmap.id}` },
+  { label: 'Safety', href: `/#${sections.guard.id}` },
 ];
 ---
 
@@ -17,7 +17,7 @@ const links = [
   class='sticky top-0 z-40 bg-background px-6 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-8 after:bg-linear-to-b after:from-background after:to-transparent after:opacity-0 after:transition-opacity after:duration-300 in-data-scrolled:after:opacity-100'
 >
   <div class='mx-auto flex h-14 max-w-5xl items-center gap-6'>
-    <a href='#top' class='flex items-center gap-1.5 font-medium text-fg-4 text-sm' aria-label='Shinsa'>
+    <a href='/#top' class='flex items-center gap-1.5 font-medium text-fg-4 text-sm' aria-label='Shinsa'>
       <span class='grid size-5 shrink-0 place-items-center'>
         <Logo className='size-3.25' />
       </span>
