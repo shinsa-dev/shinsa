@@ -33,13 +33,14 @@ function schedule(id: string, createdAt: number): Schedule {
     createdBy: { kind: 'you' },
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
   };
 }
 
 describe('schedule events', () => {
-  test('a fire or compaction for something that is gone changes nothing', () => {
+  test('a fire, a finished read or a compaction for something that is gone changes nothing', () => {
     const state = apply([
       {
         type: 'schedule.fired',
@@ -52,9 +53,10 @@ describe('schedule events', () => {
         stopped: null,
         replayKey: null,
       },
+      { type: 'schedule.read', scheduleId: 'nope', readFrom: 0 },
       { type: 'run.compacted', runId: 'nope', sessionId: 's' },
     ]);
-    expect(state).toEqual({ ...createState(), seq: 2 });
+    expect(state).toEqual({ ...createState(), seq: 3 });
   });
 
   test('a task or message from a schedule that was removed since still says where it came from', () => {

@@ -332,18 +332,24 @@ describe('a pull request watch from before it knew whether a head has CI', () =>
 describe('a schedule from before it could read a data source', () => {
   const schedule = { id: 's1', name: 'Nightly', target: { kind: 'task', taskId: TASK } };
 
-  test('reads none, and one that names its source keeps it', () => {
+  test('reads none and has never finished a read; one that names its source and its last read keeps them', () => {
     const source = { projectId: 'p1', server: 'slack' };
     expect(
       rewrite(
         { type: 'schedule.written', schedule },
-        { type: 'schedule.written', schedule: { ...schedule, source } }
+        { type: 'schedule.written', schedule: { ...schedule, source } },
+        { type: 'schedule.written', schedule: { ...schedule, source, lastReadAt: 5 } }
       )
     ).toEqual([
       {
         seq: 1,
         type: 'schedule.written',
-        event: { type: 'schedule.written', schedule: { ...schedule, source: null } },
+        event: { type: 'schedule.written', schedule: { ...schedule, source: null, lastReadAt: null } },
+      },
+      {
+        seq: 2,
+        type: 'schedule.written',
+        event: { type: 'schedule.written', schedule: { ...schedule, source, lastReadAt: null } },
       },
     ]);
   });

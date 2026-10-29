@@ -206,12 +206,16 @@ function resolveFiledFork(state: ShinsaState, reference: string | null) {
   return task.id;
 }
 
-function resolveFiledRepo(state: ShinsaState, name: string | null) {
+function resolveFiledRepo(state: ShinsaState, runId: string, name: string | null) {
   if (name === null) return null;
-  const repo = Object.values(state.repos).find((candidate) => candidate.name === name);
+  const projectId = findTaskOf(state, runId).projectId ?? null;
+  const repos = Object.values(state.repos).filter((candidate) => candidate.projectId === projectId);
+  const repo = repos.find((candidate) => candidate.name === name);
   if (repo) return repo.id;
-  const known = Object.values(state.repos).map((candidate) => candidate.name);
-  throw new Error(`There is no repository "${name}". Known: ${known.join(', ') || 'none'}.`);
+  const known = repos.map((candidate) => candidate.name);
+  throw new Error(
+    `The project has no repository "${name}". Its repositories: ${known.join(', ') || 'none'}.`
+  );
 }
 
 async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall) {
@@ -223,7 +227,7 @@ async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall
     attemptId: call.attemptId,
     ...filing,
     forkOf: resolveFiledFork(state, forkFrom),
-    repoId: resolveFiledRepo(state, repository),
+    repoId: resolveFiledRepo(state, call.runId, repository),
   });
   const created = events.find((event) => event.type === 'task.created');
   const task = created?.type === 'task.created' ? call.state().tasks[created.taskId] : undefined;

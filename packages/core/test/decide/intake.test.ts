@@ -201,7 +201,7 @@ describe('an intake turn', () => {
     expect(prompt).toContain('the automation “Feedback intake”');
     expect(prompt).toContain('The source: the MCP server `slack` (The #feedback channel');
     expect(prompt).toContain('What to look for: Bug reports and feature requests about the paywall editor.');
-    expect(prompt).toContain('This is its first read');
+    expect(prompt).toContain('No read has finished yet');
   });
 
   test('report_intake ends the turn and the task rests again; the next read starts from the last one', () => {
@@ -215,9 +215,37 @@ describe('an intake turn', () => {
     });
     expect(harness.task(taskId).stage).toBe('done');
     const last = only(harness).runs.at(-1)?.at ?? 0;
+    expect(only(harness).lastReadAt).toBe(last);
     fire(harness);
     expect(readRunInstruction(harness.activeRun(taskId))).toContain(
-      `Its last read was at ${new Date(last).toISOString()}`
+      `Its last finished read started at ${new Date(last).toISOString()}`
+    );
+  });
+
+  test('a read that failed never moves the start of the next one past the last read that finished', () => {
+    const { harness, taskId } = createIntake();
+    fire(harness);
+    const finished = only(harness).runs.at(-1)?.at ?? 0;
+    reportIntake(harness, taskId);
+    fire(harness);
+    harness.send({
+      type: 'run.end',
+      runId: harness.activeRun(taskId).id,
+      outcome: 'failed',
+      summary: 'The agent could not start.',
+      failure: {
+        class: 'setup_failed',
+        message: 'The agent could not start.',
+        code: 'spawn_failed',
+        retryable: null,
+        resetAt: null,
+      },
+    });
+    expect(harness.task(taskId).stageReason).toBe('could not read a data source');
+    expect(only(harness).lastReadAt).toBe(finished);
+    fire(harness);
+    expect(readRunInstruction(harness.activeRun(taskId))).toContain(
+      `Its last finished read started at ${new Date(finished).toISOString()}`
     );
   });
 
@@ -407,6 +435,16 @@ describe('filing reports from an intake turn', () => {
     });
     fileReport(harness, taskId);
     expect(listFiled(harness)[0]?.scheduleId).toBe(second?.id);
+  });
+
+  test('a report lands only in a repository of the reading task’s project', () => {
+    const { harness, repoId, taskId } = createIntake();
+    const elsewhere = registerRepo(harness, 'web', 'Kanna');
+    fire(harness);
+    expect(refusal(() => fileReport(harness, taskId, { repoId: elsewhere })).code).toBe('repo_project');
+    expect(listFiled(harness)).toHaveLength(0);
+    fileReport(harness, taskId, { repoId });
+    expect(listFiled(harness)[0]?.repoId).toBe(repoId);
   });
 
   test('a report needs its id or link and its own words', () => {

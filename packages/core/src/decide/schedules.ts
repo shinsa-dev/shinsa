@@ -322,6 +322,7 @@ function createDraft(
     createdBy,
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
   };

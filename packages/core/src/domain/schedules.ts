@@ -68,6 +68,7 @@ export interface Schedule {
   createdBy: ScheduleCreator;
   lastTaskId: string | null;
   lastRunId: string | null;
+  lastReadAt: number | null;
   stopped: ScheduleStop | null;
   replayKeys: Record<string, number>;
 }

@@ -1701,14 +1701,16 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   task, or `task_id`. A fire never messages that task, which would start a round: it starts a read, a turn of the
   task's session like a watchdog check (purpose `intake`, read-only, stage `watching` with "reading <server> for the
   automation “…”", in the repository itself or the task's scratch folder). Its prompt (`resolveIntakePrompt`) names
-  the source and what it holds, the schedule's message as what to look for, the last read's time (or the schedule's
-  creation for the first) and the last 10 tasks it filed with their links. A task that is at work or has a live run
+  the source and what it holds, the schedule's message as what to look for, where to read from (`Schedule.lastReadAt`: the start of the
+  last read that finished with `report_intake`, so a read that failed never moves it; the schedule's creation until
+  one has, `schedule.read`) and the last 10 tasks it filed with their links. A task that is at work or has a live run
   skips the fire ("The task was at work, so this read was skipped."), and a source removed from the project, or the
   task closed, stops the schedule (`target_gone`).
 - **Each new report becomes a task.** In a read the agent calls `file_report` (`agent.file_report`, refused in any
   other run, `wrong_step`): a `title`, the `request`, the report's `report_id` or `link` (one is required,
   `report_unnamed`), `author`, `posted_at`, its `text`, and optionally `repository` and `fork_from`. Shinsa creates a
-  task in the project (triage picks the repository unless one is named) whose request is the title, the request and
+  task in the project (triage picks the repository unless one is named, which must be one of the project's,
+  `repo_project`) whose request is the title, the request and
   the report quoted with who wrote it and when; it keeps the report as `Task.sourceReport` (`SourceReport`:
   `scheduleId`, `server`, `reportId`, `link`, `author`, `postedAt`, `text`), with `scheduleId` and `createdBy
   {kind: 'intake'}`. With `fork_from` it is a fork of the task that shipped the feature (Forking a task), so its

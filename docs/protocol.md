@@ -816,7 +816,7 @@ role without the tool (`hasTool`).
 | `agent.answer_delegation` | `delegation_answer` | answers a delegation's question |
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.report_watch` | `report_watch` | records a watchdog check (`live` for one waiting for production); an issue trips the watchdog and files a task forked from this one |
-| `agent.file_report` | `file_report` | in a read of a data source only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) |
+| `agent.file_report` | `file_report` | in a read of a data source only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`) |
 | `agent.report_intake` | `report_intake` | ends a read of a data source with its `summary`; the task rests again |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
@@ -959,6 +959,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.message_queued` | your message was queued for a waiting step |
 | `memory.written`, `memory.proposed`, `memory.removed` | you wrote, kept or changed a rule (the whole `entry`); an agent proposed one (recorded in its task's activity); a rule was forgotten or a proposal dismissed, or its project removed |
 | `schedule.written`, `schedule.removed`, `schedule.fired` | a schedule was written, removed, fired (with its run) |
+| `schedule.read` | a read of a data source finished with `report_intake`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 
 ## Effects

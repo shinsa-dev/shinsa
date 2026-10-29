@@ -374,8 +374,8 @@ describe('file_report', () => {
     await expect(tool('file_report', { ...report, fork_from: 'LOC-999' })).rejects.toThrow(
       'There is no task "LOC-999" to fork.'
     );
-    await expect(tool('file_report', { ...report, repository: 'nope' })).rejects.toThrow(
-      'There is no repository "nope". Known: app, web.'
+    await expect(tool('file_report', { ...report, repository: 'app' })).rejects.toThrow(
+      'The project has no repository "app". Its repositories: web.'
     );
     const silent = new Schedules(world.engine, world.secrets, {
       baseUrl: () => '',

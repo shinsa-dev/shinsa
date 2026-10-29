@@ -149,6 +149,7 @@ export function createSampleSchedule(
     createdBy: { kind: 'you' },
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
     ...overrides,

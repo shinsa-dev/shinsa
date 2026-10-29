@@ -3,6 +3,7 @@ import type { Schedule, ScheduleRun } from '../domain/index.ts';
 export type ScheduleEventBody =
   | { type: 'schedule.written'; schedule: Schedule }
   | { type: 'schedule.removed'; scheduleId: string }
+  | { type: 'schedule.read'; scheduleId: string; readFrom: number }
   | {
       type: 'schedule.fired';
       scheduleId: string;

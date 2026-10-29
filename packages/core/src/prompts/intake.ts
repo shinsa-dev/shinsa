@@ -2,11 +2,10 @@ import type { ReportFiling } from '../commands/index.ts';
 import type { Schedule, Task, WatchSource } from '../domain/index.ts';
 
 function describeLastRead(schedule: Schedule) {
-  const last = schedule.runs.filter((run) => run.outcome === 'sent').at(-1);
-  if (!last) {
-    return `This is its first read: look at what arrived since the automation was set up, ${new Date(schedule.createdAt).toISOString()}, or the last week when the source keeps less.`;
+  if (schedule.lastReadAt === null) {
+    return `No read has finished yet: look at what arrived since the automation was set up, ${new Date(schedule.createdAt).toISOString()}, or the last week when the source keeps less.`;
   }
-  return `Its last read was at ${new Date(last.at).toISOString()}: look at what arrived since then.`;
+  return `Its last finished read started at ${new Date(schedule.lastReadAt).toISOString()}: look at what arrived since then.`;
 }
 
 function describeFiled(filed: readonly Task[]) {

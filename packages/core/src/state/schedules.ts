@@ -6,7 +6,7 @@ import { record } from './write.ts';
 
 type ScheduleEvent = Extract<
   ShinsaEvent,
-  { type: 'schedule.written' | 'schedule.removed' | 'schedule.fired' }
+  { type: 'schedule.written' | 'schedule.removed' | 'schedule.fired' | 'schedule.read' }
 >;
 
 function rememberReplayKey(keys: Record<string, number>, key: string | null, at: number) {
@@ -30,6 +30,12 @@ function applyFired(state: ShinsaState, event: EventOf<'schedule.fired'>) {
     replayKeys: rememberReplayKey(schedule.replayKeys, event.replayKey, event.at),
     updatedAt: event.at,
   });
+}
+
+function applyRead(state: ShinsaState, event: EventOf<'schedule.read'>) {
+  const schedule = state.schedules[event.scheduleId];
+  if (!schedule) return;
+  writeEntry(state, 'schedules', event.scheduleId, { ...schedule, lastReadAt: event.readFrom });
 }
 
 export function describeSchedule(state: ShinsaState, scheduleId: string) {
@@ -82,6 +88,9 @@ export function applyScheduleEvent(state: ShinsaState, event: ScheduleEvent) {
       return;
     case 'schedule.fired':
       applyFired(state, event);
+      return;
+    case 'schedule.read':
+      applyRead(state, event);
       return;
   }
 }

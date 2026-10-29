@@ -19,6 +19,7 @@ export function createSchedule(overrides: Partial<Schedule> & { id: string }): S
     createdBy: { kind: 'you' },
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
     ...overrides,

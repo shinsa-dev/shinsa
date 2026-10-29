@@ -91,6 +91,7 @@ function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'te
     createdBy: { kind: 'agent', taskId: 'task-usage-wait', runId: 'task-usage-wait-run-0' },
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
     ...fields,

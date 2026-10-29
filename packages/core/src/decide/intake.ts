@@ -54,14 +54,18 @@ function resolveLastSentAt(schedule: Schedule) {
   return schedule.runs.filter((run) => run.outcome === 'sent').at(-1)?.at ?? -1;
 }
 
-function findIntakeSchedule(decider: Decider, task: Task) {
+function selectIntakeSchedule(decider: Decider, task: Task) {
   const reading = Object.values(decider.state.schedules)
     .filter(
       (candidate) =>
         candidate.source !== null && candidate.target.kind === 'task' && candidate.target.taskId === task.id
     )
     .sort((a, b) => resolveLastSentAt(b) - resolveLastSentAt(a));
-  const schedule = reading[0];
+  return reading[0] ?? null;
+}
+
+function findIntakeSchedule(decider: Decider, task: Task) {
+  const schedule = selectIntakeSchedule(decider, task);
   if (schedule?.source) return { schedule, source: schedule.source };
   throw new DomainError(
     'schedule_not_found',
@@ -109,6 +113,14 @@ function resolveSourceReport(command: CommandOf<'agent.file_report'>, scheduleId
   };
 }
 
+function assertRepoOfProject(decider: Decider, task: Task, repoId: string | null) {
+  if (repoId === null || decider.state.repos[repoId]?.projectId === task.projectId) return;
+  throw new DomainError(
+    'repo_project',
+    'That repository is not in this task’s project. Name one of the project’s repositories, or leave `repository` out.'
+  );
+}
+
 function assertForkOfOther(task: Task, forkOf: string | null) {
   if (forkOf !== task.id) return;
   throw new DomainError(
@@ -135,6 +147,7 @@ export function fileReport(decider: Decider, command: CommandOf<'agent.file_repo
     );
   }
   assertForkOfOther(task, command.forkOf);
+  assertRepoOfProject(decider, task, command.repoId);
   createTask(
     decider,
     {
@@ -197,6 +210,9 @@ export function reportIntake(decider: Decider, command: CommandOf<'agent.report_
       `The summary is ${summary.length} characters; the limit is ${SCHEDULE_LIMITS.intakeSummary}.`
     );
   }
+  const schedule = selectIntakeSchedule(decider, task);
+  const readFrom = schedule ? resolveLastSentAt(schedule) : -1;
+  if (schedule && readFrom >= 0) decider.emit({ type: 'schedule.read', scheduleId: schedule.id, readFrom });
   decider.endRun(run, 'completed', summary);
   decider.progressed(task.id);
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'read a data source');

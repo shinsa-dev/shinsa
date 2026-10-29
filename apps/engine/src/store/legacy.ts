@@ -135,8 +135,9 @@ function resolveRepo(event: Payload) {
 }
 
 function resolveSchedule(event: Payload) {
-  if (!isRecord(event.schedule) || 'source' in event.schedule) return event;
-  return { ...event, schedule: { ...event.schedule, source: null } };
+  if (!isRecord(event.schedule) || ('source' in event.schedule && 'lastReadAt' in event.schedule))
+    return event;
+  return { ...event, schedule: { source: null, lastReadAt: null, ...event.schedule } };
 }
 
 function resolveGate(event: Payload) {
