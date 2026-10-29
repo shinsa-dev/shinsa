@@ -32,11 +32,6 @@ const SECTION_EDGES =
 const SKIPPED_OFFSCREEN =
   'supports-[overflow-anchor:auto]:[content-visibility:auto] supports-[overflow-anchor:auto]:[contain-intrinsic-block-size:auto_600px]';
 
-function resolveSectionTop(first: boolean, opening: boolean) {
-  if (first) return 'mt-2';
-  return opening ? 'mt-6' : 'mt-5';
-}
-
 const NO_MESSAGES: HumanMessage[] = [];
 
 const NO_EVIDENCE: never[] = [];
@@ -146,19 +141,17 @@ function RunLabel({
   run,
   task,
   headline,
-  first,
   rerun,
 }: {
   run: Run;
   task: Task;
   headline: string;
-  first: boolean;
   rerun: boolean;
 }) {
   const role = RUN_ROLE[run.role];
   return (
     <ChatLine
-      className={cn('mb-2 w-full', CHAT_INSET, first ? 'mt-2' : 'mt-5')}
+      className={cn('mt-2 mb-3 w-full', CHAT_INSET)}
       icon={role.icon}
       label={role.name}
       meta={
@@ -196,14 +189,12 @@ export const RunSection = React.memo(function RunSectionView({
   run,
   task,
   messages,
-  first,
   waiting,
   rerun = false,
 }: {
   run: Run;
   task: Task;
   messages: HumanMessage[];
-  first: boolean;
   waiting: boolean;
   rerun?: boolean;
 }) {
@@ -224,7 +215,7 @@ export const RunSection = React.memo(function RunSectionView({
           'corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl',
           SECTION_EDGES,
           SKIPPED_OFFSCREEN,
-          resolveSectionTop(first, opening !== null),
+          'mt-2',
           SELECTED_WASH
         )}
       >
@@ -239,7 +230,7 @@ export const RunSection = React.memo(function RunSectionView({
             />
           </div>
         )}
-        <RunLabel run={run} task={task} headline={headline} first={first || opening !== null} rerun={rerun} />
+        <RunLabel run={run} task={task} headline={headline} rerun={rerun} />
         {turns.map((turn, index) => (
           <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} lead={index > 0} />
         ))}

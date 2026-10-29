@@ -48,7 +48,7 @@ function renderLive(waiting = false) {
   pushState(createShinsaState({ tasks: [task], runs: [run] }));
   return render(
     <TooltipProvider>
-      <RunSection run={run} task={task} messages={[]} first waiting={waiting} />
+      <RunSection run={run} task={task} messages={[]} waiting={waiting} />
     </TooltipProvider>
   );
 }

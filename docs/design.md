@@ -85,7 +85,10 @@ Only these, and they win over anything below:
    without scroll timelines, and that clipping element, fall back to the `data-overflow-*` attributes `ScrollArea`
    and `ScrollFade` set on the masked box.
 7. **The task chat follows Kanna's transcript.** One centred column the composer's width; every
-   item is a row box (`py-2 mb-1`, 20px from item to item) on the column's left edge. Agent text is full-width
+   item is a row box (`py-2 mb-1`, 20px from item to item) on the column's left edge. The same 20px is the only gap
+   in a chat: a run's header sits 20px above its first row (`mt-2 mb-3` in `run-section.tsx`) and one run 20px
+   after the last row of the one before (the section's `mb-3` against the next one's `mt-2`); only a round divider
+   takes more. Agent text is full-width
    `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph margins, highlighted code fences in the Code tab's
    `--code-*` colours, 32).
    - **One line anatomy.** Every one-line row in a run is the same chat line (`components/chat/chat-line.tsx`):

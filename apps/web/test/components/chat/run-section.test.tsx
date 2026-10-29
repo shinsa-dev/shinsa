@@ -53,7 +53,7 @@ describe('RunSection', () => {
     ]);
     const view = render(
       <TooltipProvider>
-        <RunSection run={run} task={task} messages={[]} first waiting={false} />
+        <RunSection run={run} task={task} messages={[]} waiting={false} />
       </TooltipProvider>
     );
     const worked = await view.findByText(/Worked for/);
