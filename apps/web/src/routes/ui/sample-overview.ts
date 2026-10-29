@@ -248,7 +248,13 @@ export function createOverviewScene(now: number) {
           message: 'The session is never closed when the chat unmounts, so sockets pile up.',
         },
         {
-          severity: 'suggestion',
+          severity: 'should_fix',
+          file: 'src/chat/tool-call.tsx',
+          line: 40,
+          message: 'A failed tool call shows the same row as a successful one, so an error is easy to miss.',
+        },
+        {
+          severity: 'optional',
           file: 'src/chat/tool-result.tsx',
           line: 12,
           message: 'The empty state repeats the heading; drop the second line.',

@@ -18,12 +18,12 @@ const FINDING = {
   fix: 'Use `<=`.',
 };
 
-function readHeadRow(title: string) {
-  return screen.getByText(title).parentElement?.parentElement as HTMLElement;
+function readHeadRow(body: string) {
+  return screen.getAllByText(body)[0]?.closest('.justify-between') as HTMLElement;
 }
 
 describe('a finding card', () => {
-  it('puts its action on the row of its label and title, above the body, on every card', () => {
+  it('shows only its level, the issue and the proposed fix, with the action beside them on every card', () => {
     render(
       <TooltipProvider>
         <div data-testid='review'>
@@ -35,22 +35,25 @@ describe('a finding card', () => {
         </div>
         <div data-testid='overview'>
           <FindingText
-            finding={{ ...FINDING, title: 'The Overview card' }}
+            finding={{ ...FINDING, message: 'The Overview card.' }}
             action={<button type='button'>Fix there</button>}
           />
         </div>
       </TooltipProvider>
     );
-    for (const [title, action, label] of [
-      ['The loop skips the last item', 'Fix here', 'Blocking'],
-      ['The Overview card', 'Fix there', 'Blocking'],
+    for (const [body, action] of [
+      ['Off by one.', 'Fix here'],
+      ['The Overview card.', 'Fix there'],
     ] as const) {
-      const row = readHeadRow(title);
+      const row = readHeadRow(body);
       expect(row.className).toContain('justify-between');
       expect(row.contains(screen.getByRole('button', { name: action }))).toBe(true);
-      expect(row.textContent).toContain(label);
-      expect(row.contains(screen.getAllByText('Off by one.')[0] as HTMLElement)).toBe(false);
+      expect(row.textContent).toContain('Blocking');
+      expect(row.textContent).not.toContain('Agent review');
+      expect(row.querySelector('.rounded-full')).toBeNull();
     }
+    expect(screen.queryByText('The loop skips the last item')).toBeNull();
+    expect(screen.getAllByText('Proposed fix')).toHaveLength(2);
     expect(screen.queryByRole('banner')).toBeNull();
     expect(screen.getByTestId('review').querySelector('header')).toBeNull();
   });
@@ -106,7 +109,7 @@ describe('a review point that is not a finding', () => {
     expect(screen.getByText('Kept the old spot keys')).toBeTruthy();
   });
 
-  it('names you on your comment and the agent review on its finding, and no author on the agent’s points', () => {
+  it('names you on your comment, and no author on the agent’s points or the agent review’s findings', () => {
     render(
       <TooltipProvider>
         <ReviewNote
@@ -130,7 +133,7 @@ describe('a review point that is not a finding', () => {
     );
     expect(readBar('Uncapped wait').textContent).not.toContain('Agent');
     expect(readBar('You').textContent).toContain('Line 3');
-    expect(readHeadRow('The loop skips the last item').textContent).toContain('Agent review');
+    expect(readHeadRow('Off by one.').textContent).not.toContain('Agent review');
   });
 
   it('opens again when a jump selects it', () => {

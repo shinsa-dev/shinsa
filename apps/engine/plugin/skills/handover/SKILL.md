@@ -105,7 +105,8 @@ send replaces that part whole, so send the full new list, not just the new item.
 ## Review findings (`report_review`)
 
 `blocking` is a bug, a missed requirement, a broken rule or a check the change makes fail (not one already failing
-on main); everything else is a `suggestion`. One
+on main); the agent fixes it before the human reviews. `should_fix` is not proven broken but worth holding the merge
+for; the human sees it with Fix chosen. `optional` is taste or polish; the human sees it with Dismiss chosen. One
 finding per problem, each one you reproduced (the `review` skill).
 
 ## Inquiries

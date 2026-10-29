@@ -1,6 +1,7 @@
 import type { FindingVerdict, FindingVerdictKind, Gate, ReviewEscalation, ReviewFinding } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
+import { SEVERITY_VERDICT } from '@/lib/review/findings.ts';
 import type { AnswerExtras, GateReply } from '@/lib/tasks/gates.ts';
 
 export type VerdictDraft = Record<number, FindingVerdictKind>;
@@ -16,9 +17,7 @@ export interface VerdictAction {
 }
 
 export function createVerdictDraft(findings: ReviewFinding[]): VerdictDraft {
-  return Object.fromEntries(
-    findings.map((finding, index) => [index, finding.severity === 'blocking' ? 'fix' : 'dismiss'])
-  );
+  return Object.fromEntries(findings.map((finding, index) => [index, SEVERITY_VERDICT[finding.severity]]));
 }
 
 export function resolveVerdictDraft(

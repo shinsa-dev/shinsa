@@ -107,7 +107,17 @@ export const SAMPLE_CODE_FINDINGS: ReviewFinding[] = [
     fix: 'Skip spots without a file:\n\n```ts\nif (!spot.file) continue;\n```',
   },
   {
-    severity: 'suggestion',
+    severity: 'should_fix',
+    file: SAMPLE_CODE_PATH,
+    line: 33,
+    end: 35,
+    title: 'Equal attention keeps no fixed order',
+    message:
+      'Two targets of the same attention can swap places between renders, so J and K jump in a different order.',
+    fix: 'Break the tie on the file and the start line.',
+  },
+  {
+    severity: 'optional',
     file: SAMPLE_CODE_PATH,
     line: 42,
     end: 43,

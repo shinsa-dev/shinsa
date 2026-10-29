@@ -17,7 +17,7 @@ const REPORT: WorkReport = {
 };
 
 function finding(overrides: Partial<ReviewFinding>): ReviewFinding {
-  return { severity: 'suggestion', file: 'a.ts', line: 4, message: 'Consider a guard.', ...overrides };
+  return { severity: 'optional', file: 'a.ts', line: 4, message: 'Consider a guard.', ...overrides };
 }
 
 describe('listReviewTargets', () => {
@@ -77,12 +77,13 @@ describe('listReviewTargets', () => {
 });
 
 describe('listFindingTargets', () => {
-  it('turns located agent findings into targets, blocking ones as critical', () => {
+  it('turns located agent findings into targets, critical, high or normal by level', () => {
     const targets = listFindingTargets([
       finding({ severity: 'blocking', message: 'This drops errors.', end: 8 }),
       finding({ file: null, line: null, message: 'General note.' }),
       finding({ file: 'b.ts', line: null }),
       finding({ file: 'c.ts', line: 2 }),
+      finding({ severity: 'should_fix', file: 'd.ts', line: 6 }),
     ]);
     expect(targets).toEqual([
       {
@@ -99,6 +100,15 @@ describe('listFindingTargets', () => {
         file: 'c.ts',
         start: 2,
         end: 2,
+        attention: 'normal',
+        why: 'Consider a guard.',
+        section: 'Agent review',
+      },
+      {
+        key: 'finding:4',
+        file: 'd.ts',
+        start: 6,
+        end: 6,
         attention: 'high',
         why: 'Consider a guard.',
         section: 'Agent review',

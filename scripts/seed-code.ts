@@ -1607,7 +1607,7 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       fix: 'Parse `finding:N` and `decision:N` as keys of their own, or leave those keys out of the link, and change the test that pins the null.',
     },
     {
-      severity: 'suggestion',
+      severity: 'should_fix',
       file: SAMPLE_PATHS.spots,
       line: listFinding,
       end: resolveLine(review.spots.after, "section: 'Agent review'", listFinding),
@@ -1617,7 +1617,7 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       fix: 'Extract `resolveFindingTone(finding)` and call it from both functions.',
     },
     {
-      severity: 'suggestion',
+      severity: 'optional',
       file: SAMPLE_PATHS.codeView,
       line: resolveLine(review.codeView.after, "from '@/lib/review/spots.ts'"),
       message:
@@ -1626,7 +1626,7 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       fix: 'Move `CodeMarker` into the code view folder and import it from there.',
     },
     {
-      severity: 'suggestion',
+      severity: 'optional',
       file: SAMPLE_PATHS.webGuide,
       line: resolveLine(review.webGuide.before, 'Review targets and markers'),
       title: 'The web guide still says targets',
@@ -1635,7 +1635,7 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       fix: 'Change the line to “Review spots and markers”.',
     },
     {
-      severity: 'suggestion',
+      severity: 'optional',
       file: null,
       line: null,
       message:

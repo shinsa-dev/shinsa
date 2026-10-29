@@ -65,6 +65,8 @@ const WATCH_CI_LOG_VERSION = 5;
 
 const NO_GITBUTLER_LOG_VERSION = 6;
 
+const FINDING_LEVELS_LOG_VERSION = 7;
+
 const GITBUTLER_EVENT_TYPES = [
   'repo.registered',
   'repo.updated',
@@ -80,6 +82,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < WEEKLY_READINGS_LOG_VERSION ? ['run.metered'] : []),
     ...(version < WATCH_CI_LOG_VERSION ? ['pull_request.watched'] : []),
     ...(version < NO_GITBUTLER_LOG_VERSION ? GITBUTLER_EVENT_TYPES : []),
+    ...(version < FINDING_LEVELS_LOG_VERSION ? ['review.reported'] : []),
   ];
 }
 
@@ -136,6 +139,16 @@ function resolveGate(event: Payload) {
   return { ...event, gate: withoutKeys(event.gate, ['cause']) };
 }
 
+function resolveFinding(finding: unknown) {
+  if (!isRecord(finding) || finding.severity !== 'suggestion') return finding;
+  return { ...finding, severity: 'optional' };
+}
+
+function resolveFindings(event: Payload) {
+  if (!Array.isArray(event.findings)) return event;
+  return { ...event, findings: event.findings.map(resolveFinding) };
+}
+
 function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
   switch (event.type) {
     case 'task.answered': {
@@ -183,6 +196,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
     case 'pull_request.watched':
       if (!isRecord(event.watch) || 'ciAbsent' in event.watch) return event;
       return { ...event, watch: { ...event.watch, ciAbsent: false } };
+    case 'review.reported':
+      return resolveFindings(event);
     default:
       return event;
   }

@@ -35,7 +35,7 @@ const REPO: Repo = {
 
 const FINDINGS: ReviewFinding[] = [
   {
-    severity: 'suggestion',
+    severity: 'should_fix',
     file: TONE_PATH,
     line: lineOf(TONE, 'export const TONE_SURFACE_HOVER'),
     title: 'The hover map has no test of its own',
