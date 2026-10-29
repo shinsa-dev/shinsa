@@ -177,7 +177,9 @@ Only these, and they win over anything below:
      long output capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
-     the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
+     the chat and in evidence: attachments (sent ones, and the image chips in the composer and the new task form, so
+     you can look at a draft before sending it), tool results, evidence, and an evidence or attached recording (a sent
+     video file chip opens it there instead of a new tab), which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
      and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
      CSS pixels) is laid out at that width, never at its file's: a 2560px shot taken at 1280px shows 1280px wide, two
@@ -220,7 +222,8 @@ Only these, and they win over anything below:
      title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
      parts (Before, After, or each state's label) that switches the image in place.
    - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
-     attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
+     attachments sit above it as thumbnails, or as file chips when the browser can't load the path; a video's chip
+     opens the image viewer (`cursor-zoom-in`, `IconExpandSimple` on hover), every other chip a new tab.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
      outside its box so the wash wraps the full-width content instead of sitting flush with it; a delegation card
      opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash. The run's

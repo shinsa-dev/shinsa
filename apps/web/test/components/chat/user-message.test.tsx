@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 
@@ -21,6 +21,25 @@ describe('UserMessage', () => {
       '/api/attachments/1/shot.png'
     );
     expect(view.getByText('log.txt')).toBeTruthy();
+  });
+
+  it('plays a sent video in the viewer instead of opening a new tab', async () => {
+    const view = render(
+      <UserMessage
+        persistId={ID}
+        text={
+          'Look\n\n<attachments>\n<attachment kind="file" display_name="spec.pdf" mime_type="application/pdf" url="/api/attachments/4/spec.pdf" />\n<attachment kind="file" display_name="flow.mp4" mime_type="video/mp4" url="/api/attachments/3/flow.mp4" />\n</attachments>'
+        }
+      />
+    );
+    const open = view.getByRole('button', { name: 'Open flow.mp4' });
+    const pdf = view.getByRole('link', { name: 'Open spec.pdf' });
+    expect(pdf.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.container.querySelector('a[href="/api/attachments/3/flow.mp4"]')).toBeNull();
+    fireEvent.click(open);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.querySelector('video')?.getAttribute('src')).toBe('/api/attachments/3/flow.mp4');
+    expect(within(dialog).getByText('flow.mp4')).toBeTruthy();
   });
 
   it('clamps a long message behind Show more', () => {
