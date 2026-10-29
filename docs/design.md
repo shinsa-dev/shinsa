@@ -2429,8 +2429,8 @@ Only these, and they win over anything below:
         no dot, no author: every finding is the agent review's) over the message (`text-xs` `fg-4`) on the left and
         Fix / Dismiss on the right at a review gate, aligned to the row's top. The reviewer's title is left out, since
         the message opens the same way. It does not fold, so the verdict is always in view. Then, full width, the change
-        snippet of its exact lines (open for a finding that starts on Fix) and the proposed fix on an inset note headed
-        "Proposed fix". A point or a comment shows, full width: Why it matters, Also considered, the disagreement, the
+        snippet of its exact lines (open on the Review tab for every finding; the Overview folds an Optional one) and
+        the proposed fix on an inset note headed "Proposed fix". A point or a comment shows, full width: Why it matters, Also considered, the disagreement, the
         change snippet of its exact lines open (the header a link into Code at those lines, with the point's key), and
         the proposed fix; the body's markdown has inline code and smart links to tasks, pull
       requests, files and branches through the shared reference components. The card you jump to has a 2px
