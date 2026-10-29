@@ -306,7 +306,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Claude's subagents. Agent usage shows every connected provider in Settings and at a glance in the
   top bar.
 - **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
-  7, 30 or 90 days, picked beside the page title (the range stays in the URL). Shipping: pull requests merged, tasks finished, lines merged and the
+  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). Shipping: pull requests merged, tasks finished, lines merged and the
   shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
   past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that

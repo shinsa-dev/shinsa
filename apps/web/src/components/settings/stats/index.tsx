@@ -7,7 +7,8 @@ import {
   parseDayKey,
   parseStatsRange,
   resolveDayKey,
-  resolveRangeWindow,
+  resolveFirstActivity,
+  resolveStatsWindow,
   resolveYearWindow,
   STATS_RANGES,
   type StatsRange,
@@ -51,7 +52,8 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
     [state.tasks, state.runs, day]
   );
   const stats = React.useMemo(
-    () => resolveStats(state, resolveRangeWindow(parseDayKey(day).getTime(), range)),
+    () =>
+      resolveStats(state, resolveStatsWindow(parseDayKey(day).getTime(), range, resolveFirstActivity(state))),
     [state.tasks, state.runs, day, range]
   );
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';

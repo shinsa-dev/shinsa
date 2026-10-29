@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  countCalendarDays,
   DEFAULT_STATS_RANGE,
   formatDayLabel,
   formatShortDay,
@@ -7,7 +8,9 @@ import {
   parseDayKey,
   parseStatsRange,
   resolveDayKey,
+  resolveFirstActivity,
   resolveRangeWindow,
+  resolveStatsWindow,
   resolveYearWindow,
   YEAR_WEEKS,
 } from '@/lib/stats/days.ts';
@@ -42,6 +45,7 @@ describe('stats days', () => {
   it('reads a range from the URL, else the default', () => {
     expect(parseStatsRange('7')).toBe(7);
     expect(parseStatsRange('90')).toBe(90);
+    expect(parseStatsRange('all')).toBe('all');
     expect(parseStatsRange('30')).toBe(DEFAULT_STATS_RANGE);
     expect(parseStatsRange('nonsense')).toBe(DEFAULT_STATS_RANGE);
   });
@@ -49,5 +53,24 @@ describe('stats days', () => {
   it('labels a day for a readout and an axis', () => {
     expect(formatDayLabel('2026-10-29')).toContain('29');
     expect(formatShortDay('2026-10-29')).toContain('29');
+  });
+
+  it('all time reaches back to the first task or run, never shorter than the default range', () => {
+    const now = new Date(2026, 9, 29, 9).getTime();
+    const since = new Date(2025, 9, 29, 22).getTime();
+    expect(countCalendarDays(since, now)).toBe(366);
+    expect(resolveStatsWindow(now, 'all', since).days).toHaveLength(366);
+    expect(resolveStatsWindow(now, 'all', since).days[0]).toBe('2025-10-29');
+    expect(resolveStatsWindow(now, 'all', now).days).toHaveLength(DEFAULT_STATS_RANGE);
+    expect(resolveStatsWindow(now, 'all', null).days).toHaveLength(DEFAULT_STATS_RANGE);
+    expect(resolveStatsWindow(now, 'all', now + 1).days).toHaveLength(DEFAULT_STATS_RANGE);
+    expect(resolveStatsWindow(now, 7, since).days).toHaveLength(7);
+  });
+
+  it('finds the first task or run in the log, or none', () => {
+    expect(resolveFirstActivity({ tasks: {}, runs: {} })).toBeNull();
+    const tasks = { a: { createdAt: 50 } } as unknown as Parameters<typeof resolveFirstActivity>[0]['tasks'];
+    const runs = { r: { startedAt: 20 } } as unknown as Parameters<typeof resolveFirstActivity>[0]['runs'];
+    expect(resolveFirstActivity({ tasks, runs })).toBe(20);
   });
 });
