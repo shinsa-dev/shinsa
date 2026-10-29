@@ -138,25 +138,29 @@ export function requestServicesRemove(ids: string[]) {
   return requestTerminals('/api/services/remove', { ids });
 }
 
-async function requestServiceRun(id: string, action: 'start' | 'restart') {
+function resolveRunBody(taskId: string | null) {
+  return taskId ? { taskId } : {};
+}
+
+async function requestServiceRun(id: string, action: 'start' | 'restart', taskId: string | null) {
   const { terminal, ...snapshot } = await requestJson<TerminalsSnapshot & { terminal: TerminalInfo }>(
     servicePath(id, action),
-    {}
+    resolveRunBody(taskId)
   );
   connection.replaceTerminals(snapshot);
   return terminal;
 }
 
-export function startService(id: string) {
-  return requestWithToast(() => requestServiceRun(id, 'start'));
+export function startService(id: string, taskId: string | null = null) {
+  return requestWithToast(() => requestServiceRun(id, 'start', taskId));
 }
 
-export function restartService(id: string) {
-  return requestWithToast(() => requestServiceRun(id, 'restart'));
+export function restartService(id: string, taskId: string | null = null) {
+  return requestWithToast(() => requestServiceRun(id, 'restart', taskId));
 }
 
-export function stopService(id: string) {
-  return requestWithToast(() => requestTerminals(servicePath(id, 'stop'), {}));
+export function stopService(id: string, taskId: string | null = null) {
+  return requestWithToast(() => requestTerminals(servicePath(id, 'stop'), resolveRunBody(taskId)));
 }
 
 export function startAllServices(projectId: string) {

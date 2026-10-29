@@ -3,11 +3,18 @@ import {
   isServiceActive,
   isServiceEnvKey,
   listProjectServices,
+  listServiceTaskRuns,
+  listTaskServices,
   resolveServiceState,
   resolveServicesSummary,
+  resolveServiceView,
+  resolveTaskServiceCwd,
   SERVICE_LIMITS,
   type ServiceDefinition,
+  type ShinsaState,
   selectService,
+  selectServiceTerminal,
+  type Task,
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '../../src/index.ts';
@@ -101,5 +108,116 @@ describe('isServiceEnvKey', () => {
   it('takes the names a shell can export', () => {
     expect(['PORT', '_X', 'a1'].map(isServiceEnvKey)).toEqual([true, true, true]);
     expect(['1A', 'A-B', ''].map(isServiceEnvKey)).toEqual([false, false, false]);
+  });
+});
+
+function task(id: string, extra: Partial<Task>) {
+  return {
+    id,
+    title: id,
+    stage: 'building',
+    handle: null,
+    repoId: 'web',
+    worktreePath: `/wt/${id}`,
+    ...extra,
+  } as Task;
+}
+
+const STATE = {
+  repos: {
+    web: { id: 'web', name: 'web', path: '/code/web/', projectId: 'p1' },
+    other: { id: 'other', name: 'other', path: '/code/other', projectId: 'p2' },
+  },
+  projects: {
+    p1: { id: 'p1', name: 'Shop', folders: ['/notes'] },
+    p2: { id: 'p2', name: 'Other', folders: [] },
+  },
+  tasks: {},
+} as unknown as ShinsaState;
+
+const WEB = service('web', { cwd: '/code/web' });
+const ADMIN = service('admin', { cwd: '/code/web/apps/admin/' });
+const NOTES = service('notes', { cwd: '/notes' });
+const SIBLING = service('sibling', { cwd: '/code/website' });
+
+describe('resolveTaskServiceCwd', () => {
+  it('runs a service in the same folder of the task’s worktree', () => {
+    expect(resolveTaskServiceCwd(STATE, WEB, task('a', {}))).toBe('/wt/a');
+    expect(resolveTaskServiceCwd(STATE, ADMIN, task('a', { worktreePath: '/wt/a/' }))).toBe(
+      '/wt/a/apps/admin'
+    );
+  });
+
+  it('has no folder outside the task’s repository, in another project, or for a task with no worktree of its own', () => {
+    expect(resolveTaskServiceCwd(STATE, NOTES, task('a', {}))).toBeNull();
+    expect(resolveTaskServiceCwd(STATE, SIBLING, task('a', {}))).toBeNull();
+    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { repoId: 'other' }))).toBeNull();
+    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { repoId: null }))).toBeNull();
+    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { worktreePath: null }))).toBeNull();
+    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { worktreePath: '/code/web' }))).toBeNull();
+    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { stage: 'merged' }))).toBeNull();
+  });
+});
+
+describe('task runs', () => {
+  const snapshot: TerminalsSnapshot = {
+    services: [WEB, ADMIN, NOTES],
+    terminals: [
+      terminal({ id: 'main', serviceId: 'web', startedAt: 0 }),
+      terminal({ id: 'a-web', serviceId: 'web', taskId: 'a', startedAt: 0 }),
+      terminal({ id: 'b-web', serviceId: 'web', taskId: 'b', status: 'exited', exitCode: 1, endedAt: 4 }),
+      terminal({ id: 'shell', taskId: 'a' }),
+    ],
+    home: '/home',
+  };
+
+  it('keeps the main run apart from each task’s run', () => {
+    expect(selectServiceTerminal(snapshot, 'web', null)?.id).toBe('main');
+    expect(selectServiceTerminal(snapshot, 'web', 'a')?.id).toBe('a-web');
+    expect(selectServiceTerminal(snapshot, 'admin', 'a')).toBeNull();
+    expect(
+      listProjectServices(snapshot, 'p1', LATER).map((view) => [
+        view.service.id,
+        view.taskId,
+        view.terminal?.id ?? null,
+      ])
+    ).toEqual([
+      ['web', null, 'main'],
+      ['admin', null, null],
+      ['notes', null, null],
+    ]);
+  });
+
+  it('lists the services a task can run, each with its folder in the worktree and its run', () => {
+    const views = listTaskServices(STATE, snapshot, task('a', {}), LATER);
+    expect(
+      views.map((view) => [view.service.id, view.taskId, view.cwd, view.terminal?.id ?? null, view.state])
+    ).toEqual([
+      ['web', 'a', '/wt/a', 'a-web', 'running'],
+      ['admin', 'a', '/wt/a/apps/admin', null, 'stopped'],
+    ]);
+    expect(listTaskServices(STATE, null, task('a', {}), LATER)).toEqual([]);
+    expect(
+      listTaskServices(
+        STATE,
+        { terminals: [], home: '/home' } as unknown as TerminalsSnapshot,
+        task('a', {}),
+        LATER
+      )
+    ).toEqual([]);
+  });
+
+  it('lists every task’s run of a service', () => {
+    expect(listServiceTaskRuns(snapshot, 'web', LATER).map((view) => [view.taskId, view.state])).toEqual([
+      ['a', 'running'],
+      ['b', 'failed'],
+    ]);
+    expect(listServiceTaskRuns(snapshot, 'gone', LATER)).toEqual([]);
+    expect(listServiceTaskRuns(null, 'web', LATER)).toEqual([]);
+  });
+
+  it('takes the task from the run, or the one it is asked for', () => {
+    expect(resolveServiceView(WEB, null, 0).taskId).toBeNull();
+    expect(resolveServiceView(WEB, null, 0, 'a').taskId).toBe('a');
   });
 });

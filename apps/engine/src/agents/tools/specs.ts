@@ -600,6 +600,30 @@ export const TOOL_SPECS = {
       'List the other open tasks in the repository this task works in, as ready shinsa:// markdown links: each with its stage, its branch, what that branch is stacked on, the files it changed (committed or not) and whether an agent works on it now. Use it before you change files another task may be changing. It only reads.',
     inputSchema: { type: 'object', properties: {} },
   },
+  list_services: {
+    name: 'list_services',
+    description:
+      'List the project’s services this task can run (its dev servers and the like), each with its command, the folder in this task’s worktree and whether it runs for this task. Name one in `service` to read the last lines of its output. It only reads.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'A service’s name, to read its output.' },
+      },
+    },
+  },
+  run_service: {
+    name: 'run_service',
+    description:
+      'Start, stop or restart one of the project’s services for this task only, in its own terminal in this task’s worktree; never the human’s own run or another task’s. Two runs of one service may want the same port: when it fails, read its output with `list_services`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'The service’s name, from list_services.' },
+        action: { type: 'string', enum: ['start', 'stop', 'restart'] },
+      },
+      required: ['service', 'action'],
+    },
+  },
   note: {
     name: 'note',
     description:

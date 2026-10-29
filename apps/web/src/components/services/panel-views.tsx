@@ -47,7 +47,7 @@ export interface ServicesPanelActions {
 
 export const PANEL_FOOTER = 'flex h-10.25 shrink-0 items-center gap-1 border-border border-t px-2';
 
-function PanelHeader({
+export function PanelHeader({
   title,
   description,
   children,

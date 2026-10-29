@@ -868,7 +868,7 @@ describe('questions', () => {
 });
 
 describe('hand-overs', () => {
-  async function handOverSetup(patch?: (state: ShinsaState) => void) {
+  async function handOverSetup(patch?: (state: ShinsaState) => void, options: SupervisorOptions = {}) {
     const { path } = await createGitRepo({ remote: false });
     const sessions = createSessions();
     const context = setup(
@@ -876,7 +876,7 @@ describe('hand-overs', () => {
         withTask(path)(state);
         patch?.(state);
       },
-      { startSession: sessions.startSession }
+      { startSession: sessions.startSession, ...options }
     );
     const running = context.supervisor.execute('run-1');
     await until('the session', () => sessions.started.length === 1);
@@ -1001,6 +1001,40 @@ describe('hand-overs', () => {
     expect(call('launch_rockets')).rejects.toThrow('Unknown tool launch_rockets.');
     done();
     await running;
+  });
+
+  test('the service tools reach the task’s own runs, and only for the roles that have them', async () => {
+    const services = {
+      home: '/home',
+      snapshot: () => ({ terminals: [], services: [], home: '/home' }),
+      startService: () => undefined,
+      stopService: () => Promise.resolve(),
+      restartService: () => Promise.resolve(),
+      readServiceOutput: () => Promise.resolve([]),
+    };
+    const agent = await handOverSetup(undefined, { services });
+    expect(await agent.call('list_services')).toBe(
+      'The project has no services. The human adds them in Shinsa under Services.'
+    );
+    agent.done();
+    await agent.running;
+    const answerer = await handOverSetup(
+      (state) => {
+        state.runs['run-1'] = createRun({ role: 'answerer', purpose: undefined });
+      },
+      { services }
+    );
+    expect(answerer.call('run_service', { service: 'api', action: 'start' })).rejects.toThrow(
+      'You are answering: hand the answer over with `answer`.'
+    );
+    answerer.done();
+    await answerer.running;
+    const without = await handOverSetup();
+    expect(without.call('list_services')).rejects.toThrow(
+      'not available while Shinsa runs without terminals'
+    );
+    without.done();
+    await without.running;
   });
 
   test('a hand-over core refuses leaves no commit behind, and the edits stay in the worktree', async () => {

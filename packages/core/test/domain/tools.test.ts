@@ -105,6 +105,17 @@ describe('the tools each agent gets', () => {
     expect(listCallableToolNames('builder', 1)).not.toContain('list_repository_work');
   });
 
+  test('the agent, the reviewer and the investigator run the task’s services; others do not', () => {
+    for (const role of ['agent', 'reviewer', 'investigator'] as const) {
+      expect(listCallableToolNames(role)).toContain('list_services');
+      expect(listCallableToolNames(role)).toContain('run_service');
+    }
+    for (const role of ['answerer', 'researcher'] as const)
+      expect(listCallableToolNames(role)).not.toContain('run_service');
+    expect(listCallableToolNames('builder', 1)).not.toContain('list_services');
+    expect(listToolNames('answerer')).toContain('run_service');
+  });
+
   test('names every tool the agents can be given, schedules and secrets included', () => {
     const offered = new Set(
       (['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const).flatMap((role) =>

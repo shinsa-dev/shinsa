@@ -4,6 +4,7 @@ import {
   resolveFocusProject,
   resolveTerminalLabel,
   type ShinsaState,
+  type Task,
   type TerminalInfo,
   type TerminalPlace,
   type TerminalPlaceKind,
@@ -133,6 +134,12 @@ export function describeTerminalEnd(terminal: TerminalInfo) {
     return 'Shinsa’s engine restarted, so this shell ended. Its last output is above.';
   if (terminal.exitCode === 0 || terminal.exitCode === null) return 'The shell exited.';
   return `The shell exited with code ${terminal.exitCode}.`;
+}
+
+export function resolveTerminalTabLabel(terminal: TerminalInfo, tasks: Record<string, Pick<Task, 'handle'>>) {
+  const label = resolveTerminalLabel(terminal);
+  const handle = terminal.serviceId && terminal.taskId ? tasks[terminal.taskId]?.handle : null;
+  return handle ? `${label} · ${handle}` : label;
 }
 
 export function describeTerminalTab(terminal: TerminalInfo) {

@@ -2476,11 +2476,19 @@ Only these, and they win over anything below:
       as a queue section folds, and each project remembers its fold (`services:project:<projectId>`, `resolveServiceGroupId`, 40). When two or more of
       the project's services are not running, the header ends with a play button (`icon-sm`, `IconPlay`, no text,
       the tooltip "Start all services in ‹project›", `describeStartAll`; the section's action, so a press on it never
-      folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as a row does, so the play
-      button stands in the column of each row's last button, while the chevron stays after the counts. The rows follow one
+      folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as every row does, so the play
+      button stands in the column of each row's last button, while the chevron stays after the counts. A row's last
+      button sits 4px from the row's end, as far as a task run's 24px buttons sit from the top and bottom of its 32px
+      row (measured: 4px right, 4px top), so every Start, Restart and Stop and the header's play button share one x and
+      no row's button sits tighter to its edge than another's (a 2px inset, tried on 2026-10-28, matched the task runs
+      and crowded the two-line service rows). The rows follow one
       another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
       (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
-      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). A row
+      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). Its bottom is inset by as much
+      only while the last project is folded (`has-[>section:last-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
+      a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
+      popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
+      sits from the popover's sides. A row
       (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
       mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
@@ -2549,6 +2557,29 @@ Only these, and they win over anything below:
       disabled, at none) and Done. Remove asks in the footer itself, with no dialog: "Remove 2 services?" over "They
       stop and their terminals close.", Cancel and Remove; Remove removes them all in one call (`POST
       /api/services/remove`) and clears the ticks, and a refusal keeps them.
+    - **A task's runs under its service** (since 2026-10-27; `docs/engine.md` → Services → Runs for a task). Under
+      a service's row the popover lists each task that runs it, or whose run failed (`listTaskServiceRuns`; a stopped
+      one is left out, so the list stays what is running): `TaskRunRow`, indented 24px (`ps-6`) under the row and
+      joined to it by a tree line, as the Code tab's file tree draws its guides (`bg-bg-a4`, 1px): a vertical line that
+      starts 4px under the service's tile (drawn in the service's row, `top-7.5`, centred under the tile), runs through
+      each run and ends at the last one's middle, and a short arm into each run that stops 5px before its tile; each run
+      is 32px tall (`h-8`); then one
+      line of the state's small tile, the task's handle and title ("LOC-10 Add task-scoped services", `fg-3`,
+      `text-xs`, truncated; "A finished task" once it is gone) and the state at its end in its tone, then the same
+      run buttons as a service's row. Pressing it opens that run's terminal. The trigger and a project's header still
+      count your own runs only, so a task starting its dev server never turns the top bar's label. On the Terminal
+      page a task run's tab is a service tab like yours: the toolbar's Restart and Stop act on that run
+      (`listProjectServiceRuns` finds the service in front among every run).
+    - **A task's Services** (`components/services/task-menu.tsx`, `TaskServicesFact`). A task's facts (its status,
+      repository, branch, checks, priority…) have a Services item whenever its project has a service the task can run
+      (`listTaskServices`, core); none, and it is not there. It is a fact like the others (`FACT` and
+      `FACT_INTERACTIVE`, `components/task/fact.ts`): the server glyph and "Services", or "1 service running", "2
+      services starting", "1 service failed" in its tone (`describeTaskServicesFact`), and a press opens its popover,
+      washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
+      ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
+      `ServiceRow` per service for this task, the list inset 6px on every side (`p-1.5`) so the first tile sits 12px
+      from the popover's side and 12px from the header's hairline: its state is the task's run's, Start starts it in
+      the worktree, and the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
@@ -2564,8 +2595,9 @@ Only these, and they win over anything below:
       stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
     - **Tabs** (`tab-bar.tsx`). A tab is the kit's segmented tab, 22px inside the 26px list: its mark, the label (the
-      name you gave it, else the shell's title, else the folder's name; a service's tab is its name;
-      `resolveTerminalLabel` in core), and a close button (`icon-2xs`, 18px) revealed on hover and always on the
+      name you gave it, else the shell's title, else the folder's name; a service's tab is its name, and a task's
+      run of one adds the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core, `resolveTerminalTabLabel`),
+      and a close button (`icon-2xs`, 18px) revealed on hover and always on the
       active tab. The button sits in an even 2px inset: 2px from the tab's top and bottom, and the tab's end padding
       is 2px too (`pe-0.5` over the kit's `px-2`; measured), so the × is centred in its corner. A shell's mark is
       `IconConsole`, `IconConsoleFilled` on the tab in front (19, the filled rule); a service's is its state's glyph

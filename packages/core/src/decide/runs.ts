@@ -80,7 +80,7 @@ function assertPurpose(run: Run, tool: ShinsaToolName) {
   throw new DomainError('wrong_step', PURPOSE_REFUSAL[run.purpose]);
 }
 
-function assertTool(run: Run, tool: ShinsaToolName) {
+export function assertRunTool(run: Run, tool: ShinsaToolName) {
   if (hasTool(run, tool)) {
     assertPurpose(run, tool);
     return;
@@ -102,7 +102,7 @@ export function findCurrentRun(decider: Decider, runId: string, tool: ShinsaTool
   if (run.endedAt !== null) throw new DomainError('run_over', 'This step is already over. End your turn.');
   const task = decider.task(run.taskId);
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished. End your turn.');
-  assertTool(run, tool);
+  assertRunTool(run, tool);
   return { run, task };
 }
 
