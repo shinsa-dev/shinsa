@@ -108,7 +108,7 @@ export function ShippingGraph({ year }: { year: Stats }) {
                 className={cn(
                   'aspect-square rounded-xs',
                   cell ? LEVEL_FILL[cell.level] : 'invisible',
-                  cell?.day === today && 'ring-1 ring-fg-2',
+                  cell?.day === today && 'ring-1 ring-fg-4',
                   cell && hovered?.cell.day === cell.day && 'ring-1 ring-fg-4'
                 )}
                 onPointerEnter={cell ? (event) => show(cell, event.currentTarget) : undefined}

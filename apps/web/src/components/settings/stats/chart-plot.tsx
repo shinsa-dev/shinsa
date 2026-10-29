@@ -121,14 +121,17 @@ export function ChartPlot({
           onPointerLeave={() => setHover(null)}
         >
           <div aria-hidden className={cn('absolute inset-0', GRID_FADE)}>
-            {listChartTicks(max).map((tick) => (
-              <span
-                key={tick}
-                className='absolute inset-x-0 border-bg-4 border-t border-dashed'
-                style={{ top: `${(1 - tick / max) * 100}%` }}
-              />
-            ))}
+            {listChartTicks(max)
+              .filter((tick) => tick > 0)
+              .map((tick) => (
+                <span
+                  key={tick}
+                  className='absolute inset-x-0 border-bg-4 border-t border-dashed'
+                  style={{ top: `${(1 - tick / max) * 100}%` }}
+                />
+              ))}
           </div>
+          <span aria-hidden className='absolute inset-x-0 bottom-0 border-border border-t' />
           {children(hovered?.index ?? null)}
           {hovered && layout === 'points' && (
             <>
