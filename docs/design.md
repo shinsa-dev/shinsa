@@ -3652,8 +3652,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm`/`default` buttons, `xs`/`sm` selects, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `lg`, `icon` and `icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -3854,8 +3854,8 @@ it sits with (Where Shinsa differs, 19). No icon has an opacity.
 ### Sizes — one table, keyed by control height
 
 An icon's spacing comes from **the height of the control it sits in**, and its
-size from the three-size scale (Icon sizes): `sm` in 22/24px controls, `md` in
-26/30px ones. Primitives set the size for their glyphs; never override it.
+size from the three-size scale (Icon sizes): `sm` in 22/24px controls and `default` buttons, `md` in
+the other 26/30px ones. Primitives set the size for their glyphs; never override it.
 The pixel columns below are paywall-next's; Shinsa's control heights are
 Where Shinsa differs, 20.
 

@@ -142,8 +142,8 @@ description (always) and adjacent icon buttons; `gap-1` popup list padding and i
 controls; `gap-2` icon to label in rows and controls in one set; `p-2.5` popover padding; `p-3` card inset;
 `p-4` dialog padding; `gap-6` section to section. The parent owns spacing, never a child's margin.
 
-**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, the default), `'md'` 16px (14px+ text, 26/30
-controls), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
+**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, `default` buttons, the default), `'md'` 16px (14px+ text,
+`lg` and `icon` buttons, 26/30 inputs and selects), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
 
 **Motion and timing.** State 0ms. Movement 200ms on `cubic-bezier(0.22, 1, 0.36, 1)`. Menus and popovers 200ms,
 tooltips 150ms, dialogs 150ms in and 100ms out (`DIALOG_MOTION`), ⌘K 75ms (`COMMAND_MOTION`). Every tooltip opens
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm`/`default` buttons, `xs`/`sm` selects, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: `lg`, `icon` and `icon-lg` buttons, default selects and inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -1841,7 +1841,7 @@ There is no open-popup style: a trigger whose menu is open looks like the button
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
 | `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 16px |
+| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 14px |
 | `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 16px |
 | `icon-2xs` | `size-4.5 rounded-sm px-0 [--icon-size:var(--icon-size-sm)]` | 18×18 | 0 | | | | 5px | 14px |
 | `icon-xs` | `size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 22×22 | 0 | | | | 6px | 14px |
