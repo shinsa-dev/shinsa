@@ -54,7 +54,7 @@ describe('accounts', () => {
       'acc-3  other@example.com  max  80% used',
       'acc-4  new@example.com  max  0% used',
       'Signing in: waiting at https://claude.ai/oauth',
-      'Can import swap@example.com from cswap.',
+      'Can sign in to swap@example.com from claude-swap.',
     ]);
   });
 
@@ -105,6 +105,17 @@ describe('accounts', () => {
     );
   });
 
+  test('an import from claude-swap starts a sign-in and says how to finish', async () => {
+    const fake = createFakeClient({
+      '/api/accounts/import': createAccountsSnapshot({
+        login: { id: 'login-3', phase: 'waiting', url: 'https://claude.ai/oauth' },
+      }),
+    });
+    expect((await runSpec(fake, ['accounts', 'import', 'swap@example.com'])).text).toBe(
+      'Sign-in login-3: https://claude.ai/oauth. Then run `shinsa accounts sign-in-code login-3 <code>`.'
+    );
+  });
+
   test('import, update and remove post to the account routes', async () => {
     const fake = createFakeClient({
       '/api/accounts': SNAPSHOT,
@@ -112,7 +123,7 @@ describe('accounts', () => {
       '/api/accounts/update': SNAPSHOT,
       '/api/accounts/remove': createAccountsSnapshot({ accounts: [] }),
     });
-    await runSpec(fake, ['accounts', 'import', 'cswap', 'swap@example.com']);
+    await runSpec(fake, ['accounts', 'import', 'swap@example.com']);
     await runSpec(fake, [
       'accounts',
       'update',

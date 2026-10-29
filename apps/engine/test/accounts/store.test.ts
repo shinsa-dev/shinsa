@@ -64,47 +64,64 @@ describe('account store', () => {
     expect(store.select('acc1')).toBeNull();
   });
 
-  test('the Claude Code login is kept without a folder of its own, and only once', () => {
+  test('a signed-in account gets its own folder, and the first account becomes the default', () => {
     const { store, home } = createStore();
-    const account = store.create('claude', { email: 'me@x.dev', plan: 'max' });
-    expect(account).toEqual({
+    const first = store.create();
+    const second = store.create({ email: 'b@x.dev', organization: 'Acme' });
+    expect(first).toEqual({
       id: 'acc1',
-      configDir: null,
-      email: 'me@x.dev',
+      configDir: join(home, 'accounts', 'acc1'),
+      email: null,
       organization: null,
-      plan: 'max',
-      origin: 'claude',
+      plan: null,
+      origin: 'login',
       addedAt: 500,
       paused: false,
       switchAt: null,
     });
-    expect(existsSync(join(home, 'accounts'))).toBe(false);
-    expect(store.exists).toBe(true);
-    expect(store.defaultAccountId).toBe('acc1');
-    expectDomainError(
-      () => store.create('claude'),
-      'account_exists',
-      'Your Claude Code login is already in your accounts.'
-    );
-  });
-
-  test('a signed-in or imported account gets its own folder, and the first account becomes the default', () => {
-    const { store, home } = createStore();
-    const login = store.create('login');
-    const imported = store.create('cswap', { email: 'b@x.dev', organization: 'Acme' });
-    expect(login.configDir).toBe(join(home, 'accounts', 'acc1'));
-    expect(imported).toMatchObject({
-      configDir: join(home, 'accounts', 'acc2'),
-      origin: 'cswap',
-      organization: 'Acme',
-    });
+    expect(second).toMatchObject({ configDir: join(home, 'accounts', 'acc2'), organization: 'Acme' });
     expect(lstatSync(join(home, 'accounts', 'acc2')).mode & 0o777).toBe(0o700);
+    expect(store.exists).toBe(true);
     expect(store.defaultAccountId).toBe('acc1');
     expect(readJson(join(home, 'accounts.json'))).toEqual({
       version: 1,
       defaultAccountId: 'acc1',
       accounts: [store.find('acc1'), store.find('acc2')],
     });
+  });
+
+  test('an account that ran on your Claude Code login gets a folder of its own when it signs in again', () => {
+    const { reopen, home } = createStore();
+    mkdirSync(home, { recursive: true });
+    writeFileSync(
+      join(home, 'accounts.json'),
+      JSON.stringify({
+        version: 1,
+        defaultAccountId: 'mine',
+        accounts: [
+          {
+            id: 'mine',
+            configDir: null,
+            email: 'me@x.dev',
+            organization: null,
+            plan: 'max',
+            origin: 'claude',
+            addedAt: 1,
+            paused: false,
+            switchAt: null,
+          },
+        ],
+      })
+    );
+    const store = reopen();
+    expect(store.createFolder('mine')).toMatchObject({
+      configDir: join(home, 'accounts', 'mine'),
+      origin: 'claude',
+    });
+    expect(existsSync(join(home, 'accounts', 'mine'))).toBe(true);
+    expect(reopen().find('mine').configDir).toBe(join(home, 'accounts', 'mine'));
+    expect(store.createFolder('mine')?.configDir).toBe(join(home, 'accounts', 'mine'));
+    expect(store.createFolder('gone')).toBeNull();
   });
 
   test('an account links the shared Claude settings but owns its login, .claude.json and backups', () => {
@@ -119,7 +136,7 @@ describe('account store', () => {
         '.oauth_refresh.lock/pid': '1',
       },
     });
-    const { configDir } = store.create('login');
+    const { configDir } = store.create();
     const dir = configDir as string;
     expect(readdirSync(dir).sort()).toEqual(['.claude.json', 'CLAUDE.md', 'projects', 'settings.json']);
     for (const entry of ['CLAUDE.md', 'projects', 'settings.json']) {
@@ -130,7 +147,7 @@ describe('account store', () => {
 
   test('linking again adds entries the shared folder gained and keeps what the account already has', () => {
     const { store, sharedDir } = createStore({ shared: { 'settings.json': '{}' } });
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     writeFiles(sharedDir, { 'skills/a.md': 'a', 'CLAUDE.md': 'shared' });
     writeFileSync(join(dir, 'CLAUDE.md'), 'own');
     store.linkSharedEntries(dir);
@@ -140,11 +157,11 @@ describe('account store', () => {
 
   test('a missing shared folder links nothing, and a link that cannot be made is logged', () => {
     const { store } = createStore();
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     expect(readdirSync(dir)).toEqual(['.claude.json']);
 
     const shared = createStore({ shared: { 'settings.json': '{}' } });
-    const locked = shared.store.create('login').configDir as string;
+    const locked = shared.store.create().configDir as string;
     writeFiles(shared.sharedDir, { 'CLAUDE.md': 'shared' });
     chmodSync(locked, 0o500);
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
@@ -161,7 +178,7 @@ describe('account store', () => {
 
   test('linking recreates an account folder that went missing, private and with its settings seeded', () => {
     const { store, sharedDir } = createStore({ shared: { 'settings.json': '{}' } });
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     rmSync(dir, { recursive: true });
     store.linkSharedEntries(dir);
     expect(statSync(dir).mode & 0o777).toBe(0o700);
@@ -180,7 +197,7 @@ describe('account store', () => {
         hasCompletedOnboarding: false,
       },
     });
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     expect(readJson(join(dir, '.claude.json'))).toEqual({
       hasCompletedOnboarding: false,
       theme: 'dark',
@@ -193,7 +210,7 @@ describe('account store', () => {
     const info = spyOn(log, 'info').mockImplementation(() => undefined);
     try {
       const { store } = createStore({ globalConfig: null });
-      const dir = store.create('login').configDir as string;
+      const dir = store.create().configDir as string;
       expect(readJson(join(dir, '.claude.json'))).toEqual({ hasCompletedOnboarding: true });
       expect(info.mock.calls[0]?.[0]).toBe('[Accounts] No shared Claude settings to copy into a new account');
     } finally {
@@ -206,13 +223,13 @@ describe('account store', () => {
     writeFiles(join(home, 'accounts', 'acc1'), {
       '.claude.json': '{"oauthAccount":{"emailAddress":"kept@x.dev"}}',
     });
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     expect(readJson(join(dir, '.claude.json'))).toEqual({ oauthAccount: { emailAddress: 'kept@x.dev' } });
   });
 
   test('writing account config merges into the account’s .claude.json, or starts it', () => {
     const { store } = createStore({ globalConfig: { theme: 'dark' } });
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     store.writeAccountConfig(dir, { oauthAccount: { emailAddress: 'me@x.dev' } });
     expect(readJson(join(dir, '.claude.json'))).toEqual({
       hasCompletedOnboarding: true,
@@ -227,8 +244,8 @@ describe('account store', () => {
 
   test('accounts are found by id or by their email and organization in any case', () => {
     const { store } = createStore();
-    store.create('login', { email: 'Me@X.dev', organization: 'Acme' });
-    store.create('login');
+    store.create({ email: 'Me@X.dev', organization: 'Acme' });
+    store.create();
     expect(store.selectByIdentity({ email: 'me@x.DEV', organization: 'ACME' })?.id).toBe('acc1');
     expect(store.selectByIdentity({ email: 'me@x.dev', organization: null })?.id).toBe('acc1');
     expect(store.selectByIdentity({ email: 'me@x.dev', organization: 'Other' })).toBeNull();
@@ -245,7 +262,7 @@ describe('account store', () => {
 
   test('the list is a copy, so changing it changes nothing', () => {
     const { store } = createStore();
-    store.create('login');
+    store.create();
     const [copy] = store.list();
     if (copy) copy.email = 'changed@x.dev';
     expect(store.find('acc1').email).toBeNull();
@@ -253,7 +270,7 @@ describe('account store', () => {
 
   test('an update writes and announces only a real change', () => {
     const { store, reopen } = createStore();
-    store.create('login');
+    store.create();
     let changes = 0;
     const unsubscribe = store.subscribe(() => changes++);
     store.update('acc1', { email: null, paused: false });
@@ -270,8 +287,8 @@ describe('account store', () => {
 
   test('the default account can be changed to another known account', () => {
     const { store, reopen } = createStore();
-    store.create('login');
-    store.create('login');
+    store.create();
+    store.create();
     let changes = 0;
     store.subscribe(() => changes++);
     store.updateDefault('acc1');
@@ -288,7 +305,7 @@ describe('account store', () => {
 
   test('moving an account clamps the position to the list', () => {
     const { store } = createStore();
-    for (let index = 0; index < 3; index++) store.create('login');
+    for (let index = 0; index < 3; index++) store.create();
     const order = () => store.list().map((account) => account.id);
     let changes = 0;
     store.subscribe(() => changes++);
@@ -309,9 +326,9 @@ describe('account store', () => {
 
   test('removing the default account hands the default to the next one, and the last leaves none', () => {
     const { store } = createStore();
-    store.create('claude');
-    store.create('login');
-    store.create('login');
+    store.create();
+    store.create();
+    store.create();
     store.remove('acc2');
     expect(store.defaultAccountId).toBe('acc1');
     store.remove('acc1');
@@ -329,7 +346,7 @@ describe('account store', () => {
     const { store, sharedDir } = createStore({
       shared: { 'settings.json': '{"keep":true}', 'projects/a.jsonl': 'x' },
     });
-    const dir = store.create('login').configDir as string;
+    const dir = store.create().configDir as string;
     writeFiles(dir, { 'backups/b.json': '{}' });
     store.remove('acc1');
     expect(existsSync(dir)).toBe(false);
@@ -469,17 +486,19 @@ describe('account store', () => {
       sharedDir: join(root, 'claude'),
       sharedGlobalConfig: join(root, '.claude.json'),
     });
-    const account = store.create('login');
+    const account = store.create();
     expect(account.id).toMatch(/^[0-9a-f]{8}$/);
     expect(account.addedAt).toBeGreaterThan(0);
   });
 
-  test('an account with the login of another is a duplicate of it, and your Claude Code login is the one kept', () => {
+  test('an account with the login of another is a duplicate of it, and a login of its own is kept over a shared one', () => {
     const { store } = createStore({ ids: ['copy', 'other', 'mine', 'org'] });
-    store.create('cswap', { email: 'me@x.dev', organization: 'Acme' });
-    store.create('cswap', { email: 'you@x.dev', organization: 'Acme' });
-    store.create('claude', { email: 'ME@x.dev', organization: 'acme' });
-    store.create('login', { email: 'me@x.dev', organization: 'Elsewhere' });
+    store.create({ email: 'me@x.dev', organization: 'Acme' });
+    store.create({ email: 'you@x.dev', organization: 'Acme' });
+    store.create({ email: 'ME@x.dev', organization: 'acme' });
+    store.create({ email: 'me@x.dev', organization: 'Elsewhere' });
+    store.update('copy', { origin: 'cswap' });
+    store.update('other', { origin: 'claude' });
     expect(store.defaultAccountId).toBe('copy');
     expect([...store.resolveDuplicates()]).toEqual([['copy', 'mine']]);
     expect(store.listDistinct().map((account) => account.id)).toEqual(['other', 'mine', 'org']);
@@ -493,9 +512,9 @@ describe('account store', () => {
 
   test('of two copies Shinsa keeps the default, then the one listed first', () => {
     const { store } = createStore({ ids: ['first', 'second', 'third'] });
-    store.create('login', { email: 'me@x.dev' });
-    store.create('cswap', { email: 'me@x.dev', organization: 'Acme' });
-    store.create('cswap', { email: 'me@x.dev', organization: 'Acme' });
+    store.create({ email: 'me@x.dev' });
+    store.create({ email: 'me@x.dev', organization: 'Acme' });
+    store.create({ email: 'me@x.dev', organization: 'Acme' });
     expect([...store.resolveDuplicates()]).toEqual([
       ['second', 'first'],
       ['third', 'first'],

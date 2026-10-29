@@ -14,7 +14,7 @@ import { createProjectChanges } from '../projects/routes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
-import type { AccountActions, AccountSource } from './accounts.ts';
+import type { AccountSource } from './accounts.ts';
 import { OnboardingSetup } from './flow.ts';
 import { type CommandRunner, resolvePrerequisites } from './prerequisites.ts';
 import {
@@ -27,7 +27,7 @@ import { requestRevision } from './revise.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 
-export type { AccountActions, AccountSource, ClaudeAccount } from './accounts.ts';
+export type { AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
 export type { CommandRunner } from './prerequisites.ts';
 
@@ -41,7 +41,6 @@ export interface OnboardingContext {
   run?: CommandRunner;
   models: ModelSource;
   accounts: AccountSource;
-  accountActions: AccountActions;
 }
 
 const MODEL_ID = /^[\w.[\]-]{1,100}$/;
@@ -86,7 +85,6 @@ export class Onboarding {
     this.setup = new OnboardingSetup({
       path: join(context.config.dataDir, 'onboarding.json'),
       steps: ONBOARDING_STEPS,
-      accountActions: context.accountActions,
       isCompleted: () => context.store.config.onboardedAt !== null,
       readOnly: context.config.inspect,
       complete: async () => {

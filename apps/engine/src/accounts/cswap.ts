@@ -6,11 +6,6 @@ export interface CswapAccount {
   email: string;
 }
 
-export interface CswapLogin {
-  credentials: { claudeAiOauth: Record<string, unknown> };
-  oauthAccount: Record<string, unknown> | null;
-}
-
 export type CswapRunner = (command: string[], cwd: string, options: CommandOptions) => Promise<CommandResult>;
 
 export interface CswapOptions {
@@ -44,27 +39,6 @@ export function parseCswapList(stdout: string): CswapAccount[] {
   }
 }
 
-export function parseCswapExport(stdout: string, email: string): CswapLogin | null {
-  try {
-    const parsed = JSON.parse(stdout) as { accounts?: unknown };
-    const accounts = Array.isArray(parsed.accounts) ? parsed.accounts : [];
-    const wanted = email.toLowerCase();
-    const account = accounts.find(
-      (candidate) => isFields(candidate) && String(candidate.email).toLowerCase() === wanted
-    ) as Fields | undefined;
-    const credentials = isFields(account?.credentials) ? account.credentials : null;
-    const oauth = isFields(credentials?.claudeAiOauth) ? credentials.claudeAiOauth : null;
-    if (!oauth || typeof oauth.refreshToken !== 'string') return null;
-    const config = isFields(account?.config) ? account.config : null;
-    return {
-      credentials: { claudeAiOauth: oauth },
-      oauthAccount: isFields(config?.oauthAccount) ? config.oauthAccount : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export class Cswap {
   readonly #options: CswapOptions;
   #listed: { at: number; accounts: CswapAccount[] } | null = null;
@@ -94,15 +68,5 @@ export class Cswap {
     if (!result.ok) log.warn('[Accounts] claude-swap did not list its accounts', { code: result.code });
     this.#listed = { at: now, accounts };
     return accounts;
-  }
-
-  async export(email: string): Promise<CswapLogin | null> {
-    const binary = this.#binary();
-    if (!binary) return null;
-    const result = await this.#options.run([binary, 'export', '-', '--account', email], homedir(), {
-      timeoutMs: CSWAP_TIMEOUT_MS,
-    });
-    if (!result.ok) log.warn('[Accounts] claude-swap could not export a login', { code: result.code });
-    return result.ok ? parseCswapExport(result.stdout, email) : null;
   }
 }

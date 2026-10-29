@@ -1,4 +1,5 @@
 import type {
+  AccountImport,
   AccountSummary,
   OnboardingFlow,
   OnboardingStep,
@@ -38,8 +39,6 @@ function createSampleStep(
     access: [],
     checks: [],
     ready: true,
-    imported: [],
-    notes: [],
     problem: null,
     submitLabel: 'Continue',
     ...step,
@@ -215,8 +214,6 @@ const ACCOUNTS = createSampleStep({
   title: 'Which accounts can agents use?',
   description:
     'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
-  imported: [{ origin: 'cswap', email: 'agents@superwall.com', plan: null }],
-  notes: ['claude-swap did not hand over side@superwall.com. Sign in to it instead.'],
 });
 
 const TOOLS = createSampleStep({
@@ -248,8 +245,8 @@ const TOOLS = createSampleStep({
 });
 
 const SAMPLE_ORIGINS: Record<string, AccountSummary['origin']> = {
-  work: 'claude',
-  team: 'cswap',
+  work: 'login',
+  team: 'login',
   lapsed: 'login',
 };
 
@@ -280,8 +277,11 @@ const SAMPLE_PROVIDERS: ProviderLogin[] = [
   },
 ];
 
+const SAMPLE_IMPORTS: AccountImport[] = [{ origin: 'cswap', email: 'swap@superwall.com', plan: null }];
+
 const ACCOUNT_ACTIONS = {
   signIn: () => void acknowledgeSample(),
+  importLogin: () => void acknowledgeSample(),
   remove: () => void acknowledgeSample(),
   copy: () => void acknowledgeSample(),
 };
@@ -299,6 +299,7 @@ function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit
         userHome={USER_HOME}
         accounts={{
           list: accounts,
+          imports: SAMPLE_IMPORTS,
           providers: SAMPLE_PROVIDERS,
           actions: ACCOUNT_ACTIONS,
           refresh: () => void acknowledgeSample(),
@@ -326,7 +327,7 @@ export function OnboardingSpecimens() {
       <Specimen label='Defaults · the recommended choice picked in each group, Continue keeps them all; run again from Settings'>
         <StepSpecimen step={DEFAULTS} revisit />
       </Specimen>
-      <Specimen label='Accounts · imported for you, one added now, one that could not be, each removable'>
+      <Specimen label='Accounts · each one signed in here, one signed out, each removable'>
         <StepSpecimen step={ACCOUNTS} />
       </Specimen>
       <Specimen label='Tools · passed, failed with its fix and the command to copy, optional and missing'>

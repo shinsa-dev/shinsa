@@ -146,11 +146,11 @@ src/
 ├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
 │                        account, shared entries linked), paths.ts (folders, the Claude config dir and
 │                        resolveAccountEnv, the environment every command for an account runs with), login.ts
-│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read and written),
+│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read only),
 │                        usage.ts and limits.ts (reading and caching usage), rotation.ts (leases, the spent marks in
 │                        account-marks.json and the one retry budget; the picker itself is core's `pickAccount`),
-│                        renewal.ts (a login Claude could not refresh: read again, claude-swap's copy taken, the
-│                        Sign in gate's text, noticing it works again),
+│                        renewal.ts (a login Claude could not refresh: read again, the Sign in gate's text,
+│                        noticing it works again),
 │                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
 │                        resume.ts (the usage-wait clock), routes.ts (/api/accounts), index.ts (the Accounts
 │                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
@@ -229,8 +229,7 @@ src/
 │                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
 │                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
-│                        back, its saved state and the Claude logins it imports (flow.ts), the accounts it reads and
-│                        the imports it runs (accounts.ts)
+│                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts

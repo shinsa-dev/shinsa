@@ -1165,17 +1165,16 @@ Only these, and they win over anything below:
       private" in `text-xs` `fg-4` over why in `text-2xs` `fg-3`) offers Open System Settings (Full Disk Access),
       Check again and Leave it out, `sm` secondary buttons; your picks stay checked, and coming back to the window
       checks again by itself (`useWindowReturn`).
-    - **Accounts** are already imported when the step opens (the server does it, never a question): one Settings
-      card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where it came from
-      and its plan in `text-2xs` `fg-2`: "Your Claude Code login · Max plan", "From claude-swap"), "Added" on the ones
-      this setup imported, Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
+    - **Accounts** are the ones you signed in to, never imported for you: one Settings card of your Claude accounts
+      from the socket, each a `PathRow` (the Claude mark, the email, where it came from and its plan in `text-2xs`
+      `fg-2`: "Signed in through Shinsa · Max plan", "From claude-swap"), Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
       words), then Codex's login as a row of its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus
       plan" or "Not signed in", and the `CopyButton` of `codex login` while it is not). Until the socket has the
       accounts the card holds one row with a delayed `LoadingLine`, never "no login found". Add account in the footer
-      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, a Codex
+      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, and so does
+      each claude-swap account ("Sign in to ‹email›", "From claude-swap"), which signs in to that email; a Codex
       account copies `codex login` to run in a terminal (off once Codex is signed in, with how it is). Coming back to
-      the window reads the accounts again, so a Codex login you finished in a terminal shows. An import that failed is
-      an amber line under the card.
+      the window reads the accounts again, so a Codex login you finished in a terminal shows.
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
       the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
       command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in
@@ -1373,7 +1372,8 @@ Only these, and they win over anything below:
       so the card does not repeat the page's name, `ACCOUNT_LABEL.section`) is one section for every login agents
       run on, whatever the provider (`components/settings/accounts.tsx`; the old `#agent-usage`, `#usage` and
       `#codex` links land on it). Its header has a secondary icon button "Refresh usage" (it
-      refreshes every account) and Add account, a menu when Claude Code or claude-swap logins can be imported,
+      refreshes every account) and Add account, a menu when claude-swap accounts are offered ("Sign in to ‹email›"
+      with "From claude-swap", which opens the sign-in dialog for that email, since Shinsa never copies a login),
       otherwise it signs in straight away; with no account the card holds one sentence and that button. Each
       Claude account is a `UsageAccountBlock` (`usage-account.tsx`, a `SettingsBlock`: 15, Cards), in order, 6px
       apart: a 32px header row with the account
@@ -1387,10 +1387,11 @@ Only these, and they win over anything below:
       is never signed out). Under it, on the block's shelf, one 40px row per usage window: label over "Resets in 3h" (`ResetTime`, the
       exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
       `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
-      muted line, "No usage reported yet." before the first read. Importing from claude-swap confirms with a
-      toast that says to take the login out of claude-swap, since refresh tokens are single-use. A login in your
-      accounts twice shows once; after the accounts, a muted `SettingsEmpty` row says which copy Shinsa runs it from
-      (`describeDuplicate`: "Your Claude Code login is now ‹email›, which is also one of your accounts. …").
+      muted line, "No usage reported yet." before the first read. An account that still runs on your Claude Code
+      login or a copy of claude-swap's (`docs/engine.md` → A shared login) reads "Needs sign-in" and a muted
+      `SettingsEmpty` row after the accounts says why and to sign in to it again from its menu
+      (`describeSharedLogin`). A login in your accounts twice shows once; after the accounts, a muted
+      `SettingsEmpty` row says Shinsa runs it from one copy (`describeDuplicate`).
       Every provider with a sign-in of its own (Codex today) follows in the same `UsageAccountBlock`
       (`ProviderLoginBlock` in `providers.tsx`; the header from `resolveProviderHeader`, Claude's from
       `resolveAccountHeader`), so its row reads like an account's: the provider and its account (`AccountName`,
@@ -1539,8 +1540,7 @@ Only these, and they win over anything below:
       cause) and body, Sign in (primary) opens the dialog for
       that account, and Retry anyway / Cancel task are the footer's quiet links. For a login Claude could not
       refresh the body names the account, the others that need signing in too, and what to run, from where the login
-      comes from ("…or sign in to Claude Code as a@b.com and run `cswap add`: Shinsa takes the new login from
-      claude-swap.", "…or run `claude auth login` in a terminal."), and the gate closes by itself once that login
+      comes from ("…so Shinsa has a login of its own." for a shared login), and the gate closes by itself once that login
       works again (`docs/engine.md` → A login Claude could not refresh). The card reads the gate's provider
       (`resolveSignInProvider(gate)` over `gate.provider`: `claude` is a Claude account, anything else a provider with a
       sign-in of its own). A gate for such a provider (Codex) has no Sign in: Shinsa never signs Codex in. Its

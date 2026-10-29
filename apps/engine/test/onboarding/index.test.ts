@@ -29,10 +29,6 @@ function setup(run?: CommandRunner) {
     run: run ?? (() => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false })),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),
-    accountActions: {
-      listImports: () => Promise.resolve([]),
-      importAccount: () => Promise.resolve(),
-    },
   });
   return { root, config, engine, store, developer, onboarding };
 }

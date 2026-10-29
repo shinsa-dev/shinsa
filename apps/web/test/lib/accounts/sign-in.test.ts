@@ -12,7 +12,7 @@ import {
 import { createLogin, createProviderLogin, createSnapshot } from '../../support/accounts.ts';
 
 function dialog(overrides: Partial<SignInDialogState> = {}): SignInDialogState {
-  return { open: true, accountId: null, loginId: 'login-1', failure: null, ...overrides };
+  return { open: true, accountId: null, importing: null, loginId: 'login-1', failure: null, ...overrides };
 }
 
 describe('the sign-in dialog', () => {

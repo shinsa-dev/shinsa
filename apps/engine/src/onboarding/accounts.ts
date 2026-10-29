@@ -1,4 +1,4 @@
-import type { AccountImport, AccountSummary } from '@shinsa/core';
+import type { AccountSummary } from '@shinsa/core';
 
 export interface ClaudeAccount {
   id: string;
@@ -7,11 +7,6 @@ export interface ClaudeAccount {
 }
 
 export type AccountSource = () => Promise<ClaudeAccount[]>;
-
-export interface AccountActions {
-  listImports: () => Promise<AccountImport[]>;
-  importAccount: (origin: AccountImport['origin'], email: string) => Promise<void>;
-}
 
 export function createSummaryAccountSource(list: () => AccountSummary[]): AccountSource {
   return () =>

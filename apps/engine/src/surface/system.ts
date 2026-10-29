@@ -34,8 +34,6 @@ const ACCOUNT_FIELD: FieldSpec = {
   description: 'The account (id or email).',
 };
 
-const ORIGINS = ['claude', 'cswap'] as const;
-
 const PROGRAMS = ['claude', 'codex'] as const;
 
 const UPTIME_UNITS = [
@@ -73,8 +71,14 @@ function formatAccounts(snapshot: AccountsSnapshot) {
   const lines = snapshot.accounts.map(describeAccount);
   if (snapshot.login)
     lines.push(`Signing in: ${snapshot.login.phase}${snapshot.login.url ? ` at ${snapshot.login.url}` : ''}`);
-  for (const found of snapshot.imports) lines.push(`Can import ${found.email} from ${found.origin}.`);
+  for (const found of snapshot.imports) lines.push(`Can sign in to ${found.email} from claude-swap.`);
   return lines.length === 0 ? 'No Claude accounts.' : lines.join('\n');
+}
+
+function describeSignInStart(snapshot: AccountsSnapshot) {
+  const login = snapshot.login;
+  if (!login) return formatAccounts(snapshot);
+  return `Sign-in ${login.id}: ${login.url ?? 'starting'}. Then run \`shinsa accounts sign-in-code ${login.id} <code>\`.`;
 }
 
 function formatUsage(snapshot: AccountsSnapshot) {
@@ -200,13 +204,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       const data = await client.post<AccountsSnapshot>('/api/accounts/login', {
         accountId: account?.id ?? null,
       });
-      const login = data.login;
-      return {
-        data,
-        text: login
-          ? `Sign-in ${login.id}: ${login.url ?? 'starting'}. Then run \`shinsa accounts sign-in-code ${login.id} <code>\`.`
-          : formatAccounts(data),
-      };
+      return { data, text: describeSignInStart(data) };
     },
   }),
   defineAction({
@@ -227,25 +225,23 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['accounts', 'import'],
-    summary: 'Import a Claude login from Claude Code or claude-swap.',
+    summary: 'Sign in to an account claude-swap has, as a login of its own.',
     humanOnly: true,
     fields: [
       {
-        name: 'origin',
-        kind: 'choice',
-        choices: ORIGINS,
+        name: 'email',
+        kind: 'text',
         positional: 'one',
         required: true,
-        description: 'claude or cswap.',
+        description: 'The account’s email in claude-swap.',
       },
-      { name: 'email', kind: 'text', positional: 'one', required: true, description: 'The login’s email.' },
     ],
     act: async (client, values) => {
       const data = await client.post<AccountsSnapshot>('/api/accounts/import', {
-        origin: values.origin,
+        origin: 'cswap',
         email: readValue(values, 'email'),
       });
-      return { data, text: formatAccounts(data) };
+      return { data, text: describeSignInStart(data) };
     },
   }),
   defineAction({
