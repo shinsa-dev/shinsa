@@ -8,6 +8,8 @@ const buttonVariants = cva(
   [
     'group/button relative isolate flex shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap font-medium',
     'corner-superellipse/1.125',
+    // Every size draws its icons and spinner at 14px.
+    '[--icon-size:var(--icon-size-sm)]',
     // Fill + shadow live on ::before so pressing deflates only the background —
     // the label, icons and layout stay fixed. The press is a fixed inset
     // (tokens in globals.css), so a full-width button presses exactly like a
@@ -57,16 +59,16 @@ const buttonVariants = cva(
       // An icon on either side trims that side's padding by 2px so the glyph
       // sits optically level with the text edge.
       size: {
-        xs: 'h-5.5 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5',
-        sm: 'h-6 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5',
+        xs: 'h-5.5 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5',
+        sm: 'h-6 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5',
         default:
-          'h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2',
-        lg: 'h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5',
-        'icon-2xs': 'size-4.5 rounded-sm px-0 [--icon-size:var(--icon-size-sm)]',
-        'icon-xs': 'size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]',
-        'icon-sm': 'size-6 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]',
-        icon: 'size-6.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]',
-        'icon-lg': 'size-7.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]',
+          'h-6.5 gap-1.5 rounded-control px-2.5 text-xs data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2',
+        lg: 'h-7.5 gap-1.5 rounded-control px-3 text-sm data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5',
+        'icon-2xs': 'size-4.5 rounded-sm px-0',
+        'icon-xs': 'size-5.5 rounded-control-sm px-0',
+        'icon-sm': 'size-6 rounded-control-sm px-0',
+        icon: 'size-6.5 rounded-control px-0',
+        'icon-lg': 'size-7.5 rounded-control px-0',
       },
     },
     defaultVariants: {

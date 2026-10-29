@@ -210,7 +210,7 @@ Only these, and they win over anything below:
      out under `.dark`, so its chrome reads the same on the black in both themes (a `.dark` region reads dark aliases too:
      `globals.css` declares every alias, `foreground`, `popover-foreground`, `muted-foreground`, `primary-*`, `code-*`,
      on `:root, .dark`, so it resolves against the region's tokens): Close, Previous and Next are the
-     kit's `Button` (`outline`, `icon`, 26px with a 16px glyph), and the bar at the bottom is a `rounded-popup`
+     kit's `Button` (`outline`, `icon`, 26px with a 14px glyph), and the bar at the bottom is a `rounded-popup`
      `bg-popover` `shadow-3` strip (`h-8`, `text-xs`, `popover-foreground`; never a pill) with the caption (attachment name, evidence
      title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
      parts (Before, After, or each state's label) that switches the image in place.
@@ -3652,8 +3652,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm`/`default` buttons, `xs`/`sm` selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `lg`, `icon` and `icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, every button (icon-only ones too), `xs`/`sm` selects, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -3869,9 +3869,8 @@ Where Shinsa differs, 20.
 
 - **Edge → icon is 1px less than edge → text**: a glyph's box carries empty
   space, so an icon at the text's inset reads indented.
-- **Icon-only buttons** (`icon-sm`, `icon`, `icon-lg`) keep a 16px glyph,
-  centred in the box — with no label, the glyph is the whole control;
-  `icon-xs` takes 14/16px and `icon-xl` 18/20px (see Buttons).
+- **Icon-only buttons** draw a 14px glyph like every button, centred in the
+  box (see Buttons).
 - **Icons centre 0.5px above the label's cap-height middle** (see Buttons).
 - Field affixes (`InputGroupAddon` inline icons) follow the row for the field's
   size for icon and edge → icon, but the **icon → text gap is 2px larger**
@@ -4337,10 +4336,10 @@ trailing alike (Iconography → Icon colour): a trailing chevron or a
 "view all" arrow is the label's ink. On a secondary button the icon rests at
 `icon-2` beside the `fg-2` label and turns `icon-4` with it on hover; on a filled
 button it is the label's white. Icons in a Button never take a size, colour,
-opacity or stroke override: the button's size sets them (`sm` in `xs`/`sm`,
-`md` from `default` up), chevrons and the loading spinner included.
+opacity or stroke override: every size draws them at 14px (`sm`), chevrons
+and the loading spinner included.
 Icon sizes are square: `icon-xs` 24px (14/16px glyph), `icon-sm` 28px,
-`icon` 32px at every width, `icon-lg` 36px (16px glyph), `icon-xl` 40px
+`icon` 32px at every width, `icon-lg` 36px (14px glyph), `icon-xl` 40px
 (18px glyph), each at every width. `list-row` is a
 full-width, left-aligned, `font-normal`, **single 32px line** — its label goes in `Truncate`
 so a long one ends in an ellipsis with the full text in a tooltip. A row that

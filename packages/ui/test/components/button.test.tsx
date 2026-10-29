@@ -25,7 +25,7 @@ describe('Button', () => {
     expect(view.getByRole('button', { name: 'Alone' }).dataset.icon).toBeUndefined();
   });
 
-  it('draws a default button’s icons and spinner at 14px, and only lg and icon buttons at 16px', () => {
+  it('draws every size’s icons and spinner at 14px, large and icon buttons too', () => {
     const view = render(
       <>
         <Button icon='IconBell'>Default</Button>
@@ -35,9 +35,12 @@ describe('Button', () => {
         <Button size='icon' icon='IconBell' aria-label='Icon' />
       </>
     );
-    const sizeOf = (name: string) =>
-      view.getByRole('button', { name }).className.includes('[--icon-size:var(--icon-size-sm)]') ? 14 : 16;
-    expect([sizeOf('Default'), sizeOf('Large'), sizeOf('Icon')]).toEqual([14, 16, 16]);
+    const sizeOf = (name: string) => {
+      const classes = view.getByRole('button', { name }).className;
+      if (classes.includes('[--icon-size:var(--icon-size-md)]')) return 16;
+      return classes.includes('[--icon-size:var(--icon-size-sm)]') ? 14 : 0;
+    };
+    expect([sizeOf('Default'), sizeOf('Large'), sizeOf('Icon')]).toEqual([14, 14, 14]);
   });
 
   it('has a bare look with no wash at all, only its glyph brightening under the pointer and the press', () => {

@@ -142,7 +142,7 @@ description (always) and adjacent icon buttons; `gap-1` popup list padding and i
 controls; `gap-2` icon to label in rows and controls in one set; `p-2.5` popover padding; `p-3` card inset;
 `p-4` dialog padding; `gap-6` section to section. The parent owns spacing, never a child's margin.
 
-**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, `default` buttons, the default), `'md'` 16px (14px+ text,
+**Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, every button, the default), `'md'` 16px (14px+ text,
 `lg` and `icon` buttons, 26/30 inputs and selects), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
 
 **Motion and timing.** State 0ms. Movement 200ms on `cubic-bezier(0.22, 1, 0.36, 1)`. Menus and popovers 200ms,
@@ -1263,7 +1263,7 @@ Three sizes, and only three, tied to the text an icon sits with:
 | Size | px | Where |
 | --- | --- | --- |
 | `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm`/`default` buttons, `xs`/`sm` selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `lg`, `icon` and `icon-lg` buttons, default selects and inputs |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: default selects and inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -1720,8 +1720,8 @@ group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflo
 
 | `size` | Classes | Height | Side padding | Padding on the icon's side | Type | Icon |
 | --- | --- | --- | --- | --- | --- | --- |
-| `sm` | `h-4.5 rounded-full px-1.5 text-2xs [--icon-size:var(--icon-size-sm)]` | 18px | 6px | `pl-1` / `pr-1`: 4px | 12px medium | 14px |
-| `default` | `h-5 rounded-full px-2 text-2xs [--icon-size:var(--icon-size-sm)]` | 20px | 8px | `pl-1.5` / `pr-1.5`: 6px | 12px medium | 14px |
+| `sm` | `h-4.5 rounded-full px-1.5 text-2xs` | 18px | 6px | `pl-1` / `pr-1`: 4px | 12px medium | 14px |
+| `default` | `h-5 rounded-full px-2 text-2xs` | 20px | 8px | `pl-1.5` / `pr-1.5`: 6px | 12px medium | 14px |
 
 Icon-to-text gap is 4px (`gap-1`). The icon side trims 2px because a glyph's box carries empty space; trimmed, it sits optically level with the text edge. The corner is fully round.
 
@@ -1839,15 +1839,15 @@ There is no open-popup style: a trigger whose menu is open looks like the button
 
 | `size` | Classes | Height | Side padding | Icon side | Gap | Type | Corner | Icon |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
-| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 14px |
-| `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 16px |
-| `icon-2xs` | `size-4.5 rounded-sm px-0 [--icon-size:var(--icon-size-sm)]` | 18×18 | 0 | | | | 5px | 14px |
-| `icon-xs` | `size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 22×22 | 0 | | | | 6px | 14px |
-| `icon-sm` | `size-6 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]` | 24×24 | 0 | | | | 6px | 14px |
-| `icon` | `size-6.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]` | 26×26 | 0 | | | | 7px | 16px |
-| `icon-lg` | `size-7.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]` | 30×30 | 0 | | | | 7px | 16px |
+| `xs` | `h-5.5 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 22px | 8px | 6px | 4px | 13px | 6px | 14px |
+| `sm` | `h-6 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5` | 24px | 8px | 6px | 4px | 13px | 6px | 14px |
+| `default` | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2` | 26px | 10px | 8px | 6px | 13px | 7px | 14px |
+| `lg` | `h-7.5 gap-1.5 rounded-control px-3 text-sm data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5` | 30px | 12px | 10px | 6px | 14px | 7px | 14px |
+| `icon-2xs` | `size-4.5 rounded-sm px-0` | 18×18 | 0 | | | | 5px | 14px |
+| `icon-xs` | `size-5.5 rounded-control-sm px-0` | 22×22 | 0 | | | | 6px | 14px |
+| `icon-sm` | `size-6 rounded-control-sm px-0` | 24×24 | 0 | | | | 6px | 14px |
+| `icon` | `size-6.5 rounded-control px-0` | 26×26 | 0 | | | | 7px | 14px |
+| `icon-lg` | `size-7.5 rounded-control px-0` | 30×30 | 0 | | | | 7px | 14px |
 
 With a chevron icon beside a label, the chevron side is 5px and the gap 2px at every size. `icon-2xs` exists only for a close mark inside a 24px row (a terminal tab). Every size is the same at every viewport width.
 
@@ -6829,7 +6829,7 @@ Example: "(icon) Round 2 · Handle logout too · In progress", followed by a hai
 - Open and close are one run in reverse: backdrop and chrome fade over 240ms on `cubic-bezier(0.22, 1, 0.36, 1)` while the image, opaque the whole way, flies between its thumbnail and the window on the same curve and duration. The flight is one transform keeping the aspect (translate plus a single scale, never a stretch) onto the thumbnail's drawn box (its `object-fit` box) with a `clip-path` inset to what the thumbnail shows, each corner rounded like the thumbnail's (or its clipping card's) corner. Closing starts from where the image is (zoom and pan included) and lands on the thumbnail of the image open now, measured at that moment; the thumbnail stays hidden until the image lands and shows in that frame. With no thumbnail in view, the image fades while shrinking to 96% in place, and opens the same way. The open waits for the portal to mount. A recording, and anything under reduced motion, only fades. A recording never morphs: it mounts at its fitted size (from the thumbnail's `videoWidth` or a hidden probe), with width and height set, so its controls lay out once at the right width.
 - Zoom: click or double-click toggles between fit and the larger of 100% and twice the fitted size, around the pointer; wheel and pinch zoom toward the pointer; drag pans while zoomed; `+` (or `=`) and `-` step by 1.5x and `0` returns to fit.
 - Stepping (on-screen arrows and arrow keys) moves through the images of one message or tool group, or item by item in evidence. Stepping is a cross-fade, never the open run again: the incoming image appears at its own fitted size from the first frame (size from its thumbnail, or held until loaded while the outgoing stays), fades in over the outgoing, which fades out as it was; both move 10px in the direction of travel over 200ms on `cubic-bezier(0.23, 1, 0.32, 1)`; zoom and pan reset to fit at once. Switching parts of one comparison does not slide: the incoming part fades in over 150ms on top of the outgoing, which stays opaque under it when they share a rect, so the stage never dims. Under reduced motion every swap is the 150ms fade with no slide. A press during a swap takes over from where the images are, with no queued or stacked animation.
-- Chrome: Close, Previous, Next are `Button` `outline` `icon` (26px, 16px glyph), with shortcut hints (Esc, ←, →). The bar at the bottom: `rounded-popup bg-popover shadow-3`, `h-8`, `text-xs`, `popover-foreground`, never a pill, with the caption (truncating), "2 of 5" (items, not files), the zoom level, and on a comparison a segmented choice of its parts. While there is more than one image it keeps one width (`w-xl`), so text swaps without moving it. Close button, Esc or a click on the backdrop closes.
+- Chrome: Close, Previous, Next are `Button` `outline` `icon` (26px, 14px glyph), with shortcut hints (Esc, ←, →). The bar at the bottom: `rounded-popup bg-popover shadow-3`, `h-8`, `text-xs`, `popover-foreground`, never a pill, with the caption (truncating), "2 of 5" (items, not files), the zoom level, and on a comparison a segmented choice of its parts. While there is more than one image it keeps one width (`w-xl`), so text swaps without moving it. Close button, Esc or a click on the backdrop closes.
 
 Example: clicking a screenshot thumbnail in a tool row flies it to fill the window; the right arrow cross-fades to the next screenshot sliding 10px.
 
