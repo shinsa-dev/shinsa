@@ -9,7 +9,6 @@ export {
 export {
   BRANCH_PATTERN,
   COMMIT_TYPES,
-  type CommitType,
   resolveCommitType,
   serializeConventionalSubject,
 } from './conventional.ts';
