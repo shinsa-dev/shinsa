@@ -213,7 +213,7 @@ describe('the pull request description', () => {
     const opened = w.github.pulls[0]?.body ?? '';
     expect(opened.startsWith('<!-- shinsa:start -->')).toBe(true);
     expect(opened).toContain(`![The greeting](${uploaded})`);
-    expect(opened).toContain('### Evidence');
+    expect(opened).toContain('<summary><h3>Evidence</h3></summary>');
     const shot = Object.values(w.state.evidence).find((piece) => piece.taskId === taskId);
     expect(shot?.uploadUrl).toBe(uploaded);
 
