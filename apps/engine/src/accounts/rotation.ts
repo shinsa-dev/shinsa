@@ -13,7 +13,7 @@ import { writeJsonFile } from '../config/file.ts';
 import { describeError, log } from '../log/index.ts';
 import type { UsageLimits } from './limits.ts';
 import { describeExpiredLogin, isTokenFailure, type LoginRenewal } from './renewal.ts';
-import type { AccountStore, StoredAccount } from './store.ts';
+import { type AccountStore, isCopiedLogin, type StoredAccount } from './store.ts';
 
 export interface SignInState {
   signIn: AccountSignIn;
@@ -108,15 +108,18 @@ export class AccountRotation {
     const { store, limits, signIns, state } = this.#options;
     const threshold = resolveAccountSwitchAt(state().settings);
     const duplicates = store.resolveDuplicates();
-    return store.listDistinct().map((account) => ({
-      id: account.id,
-      isDefault: store.isDefault(account.id, duplicates),
-      paused: account.paused,
-      signIn: signIns.get(account.id)?.signIn ?? 'unknown',
-      usage: limits.snapshot(account.id),
-      spentUntil: this.resolveSpentUntil(account.id, knownResets),
-      switchAt: account.switchAt ?? threshold,
-    }));
+    return store
+      .listDistinct()
+      .filter((account) => !isCopiedLogin(account))
+      .map((account) => ({
+        id: account.id,
+        isDefault: store.isDefault(account.id, duplicates),
+        paused: account.paused,
+        signIn: signIns.get(account.id)?.signIn ?? 'unknown',
+        usage: limits.snapshot(account.id),
+        spentUntil: this.resolveSpentUntil(account.id, knownResets),
+        switchAt: account.switchAt ?? threshold,
+      }));
   }
 
   #resolveKept(id: string | null) {

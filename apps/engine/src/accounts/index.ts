@@ -40,7 +40,7 @@ import { type Env, resolveAccountEnv, resolveSharedConfigDir, resolveSharedGloba
 import { LoginRenewal, type RenewedLogin } from './renewal.ts';
 import { AccountRotation, type SignInState } from './rotation.ts';
 import { type AuthStatus, type ClaudeRunner, readAuthStatus, STATUS_TIMEOUT_MS } from './status.ts';
-import { AccountStore, type StoredAccount } from './store.ts';
+import { AccountStore, isCopiedLogin, type StoredAccount } from './store.ts';
 import { PROVIDER_WINDOWS, requestUsage, type UsageRequester } from './usage.ts';
 
 export { UsageResumeClock } from './resume.ts';
@@ -69,6 +69,9 @@ interface ProviderIdentity {
 }
 
 const REFRESH_INTERVAL_MS = 5 * 60_000;
+
+const COPIED_LOGIN_DETAIL =
+  'Shinsa holds a copy of claude-swap’s login for this account, so each one signs the other out. Sign in again to give Shinsa a login of its own.';
 
 async function resolveClaudePath() {
   const executable = await resolveClaudeExecutable();
@@ -287,6 +290,11 @@ export class Accounts {
   }
 
   async #syncSignIn(account: StoredAccount) {
+    if (isCopiedLogin(account)) {
+      this.#signIns.set(account.id, { signIn: 'signed_out', detail: COPIED_LOGIN_DETAIL });
+      this.#changed();
+      return;
+    }
     let status: AuthStatus;
     try {
       status = await this.#status(resolveAccountEnv(account.configDir));
@@ -505,7 +513,9 @@ export class Accounts {
   async #resumeRenewed() {
     let renewed: RenewedLogin[];
     try {
-      renewed = await this.#renewal.listRenewed(this.store.list());
+      renewed = await this.#renewal.listRenewed(
+        this.store.list().filter((account) => !isCopiedLogin(account))
+      );
     } catch (error) {
       log.warn('[Accounts] Could not check the logins that needed signing in', {
         error: describeError(error),
@@ -592,6 +602,7 @@ export class Accounts {
       email: status.email ?? account.email,
       organization: status.organization ?? account.organization,
       plan: status.plan ?? account.plan,
+      origin: isCopiedLogin(account) ? 'login' : account.origin,
     });
     this.#signIns.set(accountId, { signIn: 'signed_in', detail: null });
     this.#rotation.clear(accountId);

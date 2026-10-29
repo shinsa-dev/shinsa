@@ -122,6 +122,10 @@ function exists(path: string) {
   }
 }
 
+export function isCopiedLogin(account: StoredAccount) {
+  return account.origin === 'cswap';
+}
+
 export class AccountStore {
   readonly #options: AccountStoreOptions;
   readonly #path: string;
@@ -299,7 +303,7 @@ export class AccountStore {
     }
   }
 
-  update(id: string, patch: Partial<Omit<StoredAccount, 'id' | 'configDir' | 'origin' | 'addedAt'>>) {
+  update(id: string, patch: Partial<Omit<StoredAccount, 'id' | 'configDir' | 'addedAt'>>) {
     const account = this.#registry.accounts.find((candidate) => candidate.id === id);
     if (!account) return;
     const next = { ...account, ...patch };

@@ -971,6 +971,61 @@ describe('moving a rejected attempt to another account', () => {
     expect(world.accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
   });
 
+  test('a copied claude-swap login needs signing in, is never leased, and works again only once signed in here', async () => {
+    const world = createWorld({ registry: true });
+    const swapped = world.accounts.store.create('cswap', { email: 'a@example.com' });
+    const dir = swapped.configDir as string;
+    world.statuses.set(dir, { loggedIn: true, email: 'a@example.com' });
+    storeLogin(world, dir, 'copied', world.now + HOUR);
+    await rejectToken(world, swapped.id, [swapped.id], [swapped.id]);
+    storeLogin(world, dir, 'refreshed-by-claude', world.now + HOUR);
+    const snapshot = await world.accounts.refresh();
+    expect(snapshot.accounts[0]).toMatchObject({
+      id: swapped.id,
+      signIn: 'signed_out',
+      signInDetail:
+        'Shinsa holds a copy of claude-swap’s login for this account, so each one signs the other out. Sign in again to give Shinsa a login of its own.',
+    });
+    expect(dispatched(world).some((command) => command.type === 'account.signed_in')).toBe(false);
+    expect(
+      world.calls.some((call) => call.command[2] === 'status' && call.env.CLAUDE_CONFIG_DIR === dir)
+    ).toBe(false);
+
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(await lease(world)).toBeNull();
+      expect(await lease(world, { bound: { id: swapped.id, email: swapped.email } })).toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+
+    await world.accounts.startLogin(swapped.id);
+    world.processes.at(-1)?.exit(0);
+    await until('the sign-in to finish', () => world.accounts.logins.current()?.phase === 'done');
+    expect(world.accounts.store.find(swapped.id).origin).toBe('login');
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ signIn: 'signed_in', origin: 'login' });
+    expect(await lease(world)).toMatchObject({ id: swapped.id, configDir: dir });
+    await world.accounts.refresh();
+    expect(world.accounts.snapshot().accounts[0]?.signIn).toBe('signed_in');
+  });
+
+  test('a login another process refreshed meanwhile is tried once more on the same account', async () => {
+    const world = createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    storeLogin(world, a.configDir, 'refreshed', world.now + HOUR);
+    const info = spyOn(log, 'info');
+    try {
+      expect(await rejectToken(world, a.id, [a.id])).toEqual({ retry: true, renewed: a.id });
+      expect(info).toHaveBeenCalledWith(
+        '[Accounts] Read a login again after Claude could not refresh it; trying the same account once more',
+        { runId: 'run-1', accountId: a.id }
+      );
+    } finally {
+      info.mockRestore();
+    }
+    expect((await rejectToken(world, a.id, [a.id], [a.id])).failure).toMatchObject({ code: 'login_expired' });
+  });
+
   test('a login that stays dead moves the run to the next account; when none is left the Sign in gate names them all', async () => {
     const world = createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
