@@ -114,9 +114,9 @@ describe('usage', () => {
     );
     const total = { ...stats.total, usage: line({ tokens: 1_000 }) };
     const [work, role, model] = listBreakdowns({ ...stats, total });
-    expect(work?.rows.map((row) => [row.label, row.share, row.tokens, row.cost])).toEqual([
-      ['Building', 0.75, '750', '$0.50'],
-      ['Review', 0.25, '250', '$0.50'],
+    expect(work?.rows.map((row) => [row.label, row.share, row.tokens])).toEqual([
+      ['Building', 0.75, '750'],
+      ['Review', 0.25, '250'],
     ]);
     expect(role?.rows.map((row) => row.label)).toEqual(['Agent']);
     expect(model?.rows.map((row) => row.label)).toEqual(['Opus 5.5', 'Unknown model']);
@@ -131,7 +131,6 @@ describe('usage', () => {
     expect(rows[0]).toEqual({
       taskId: 't0',
       title: 'Task t0',
-      handle: null,
       tokens: '10k',
       cacheHit: '75%',
       cost: '$0.50',

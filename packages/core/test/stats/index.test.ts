@@ -271,6 +271,31 @@ describe('resolveStats', () => {
     expect(stats.tasks.find((entry) => entry.taskId === 'fresh')?.freshSessions).toBe(1);
   });
 
+  test('a fresh session counts against the task’s first one, even when that one fell before the range', () => {
+    const attempt = (attemptId: string, startedAt: number) => ({
+      attemptId,
+      provider: 'claude',
+      model: null,
+      resumed: false,
+      handoff: null,
+      startedAt,
+    });
+    const before = run('old', 'a', {
+      startedAt: 5 * DAY,
+      endedAt: 5 * DAY,
+      attempts: [attempt('first', 5 * DAY), attempt('early-restart', 5 * DAY + 1)],
+    });
+    const inside = run('new', 'a', {
+      startedAt: 10 * DAY,
+      endedAt: 10 * DAY,
+      attempts: [attempt('restart', 10 * DAY)],
+    });
+    const window = { days: ['d10', 'd11'], dayOf: (at: number) => `d${Math.floor(at / DAY)}` };
+    const stats = resolveStats(stateOf([task('a')], [before, inside]), window);
+    expect(stats.tasks[0]?.freshSessions).toBe(1);
+    expect(stats.savings.map((saving) => saving.kind)).toEqual(['fresh_sessions']);
+  });
+
   test('a real merge through the harness shows up as shipped', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

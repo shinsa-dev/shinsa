@@ -78,6 +78,8 @@ export const UNKNOWN_MODEL = 'unknown';
 
 const SHIPPED_STAGES: readonly Task['stage'][] = ['merged', 'done'];
 
+type DayLookup = (at: number) => StatsDay | null;
+
 interface UsageSlice {
   at: number;
   usage: RunUsage;
@@ -120,7 +122,7 @@ function addTokens(line: TokenLine, usage: RunUsage, runs: number): TokenLine {
   };
 }
 
-function sumLines(lines: TokenLine[]) {
+export function sumTokenLines(lines: TokenLine[]) {
   return lines.reduce(
     (total, line) => ({
       runs: total.runs + line.runs,
@@ -164,12 +166,13 @@ function resolveWorkKey(run: Run): StatsWork {
   return run.purpose ?? run.role;
 }
 
-function countFreshSessions(runs: Run[]) {
+function countFreshSessions(runs: Run[], dayAt: DayLookup) {
   const fresh = runs
     .filter((run) => run.role === 'agent' && !isDelegatedRun(run))
     .flatMap((run) => run.attempts ?? [])
-    .filter((attempt) => !attempt.resumed).length;
-  return Math.max(0, fresh - 1);
+    .filter((attempt) => !attempt.resumed)
+    .sort((a, b) => a.startedAt - b.startedAt);
+  return fresh.slice(1).filter((attempt) => dayAt(attempt.startedAt) !== null).length;
 }
 
 function countCompactions(runs: Run[]) {
@@ -226,14 +229,13 @@ function listSavingKinds(task: TaskTokens): SavingKind[] {
   return kinds;
 }
 
-type DayLookup = (at: number) => StatsDay | null;
-
 interface UsageFold {
   byRole: Map<RunRole, TokenLine>;
   byWork: Map<StatsWork, TokenLine>;
   byModel: Map<string, TokenLine>;
   byTask: Map<string, TokenLine>;
   runsByTask: Map<string, Run[]>;
+  allRunsByTask: Map<string, Run[]>;
 }
 
 function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
@@ -249,6 +251,7 @@ function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
     addToMap(fold.byModel, run.model ?? UNKNOWN_MODEL, slice.usage, runs);
     addToMap(fold.byTask, run.taskId, slice.usage, runs);
   }
+  fold.allRunsByTask.set(run.taskId, [...(fold.allRunsByTask.get(run.taskId) ?? []), run]);
   if (counted) fold.runsByTask.set(run.taskId, [...(fold.runsByTask.get(run.taskId) ?? []), run]);
 }
 
@@ -267,7 +270,7 @@ function foldShipping(task: Task, dayAt: DayLookup) {
   }
 }
 
-function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold): TaskTokens[] {
+function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold, dayAt: DayLookup): TaskTokens[] {
   return [...fold.byTask.entries()]
     .map(([taskId, usage]): TaskTokens => {
       const task = state.tasks[taskId];
@@ -278,7 +281,7 @@ function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold): Tas
         handle: task?.handle ?? null,
         usage,
         cacheHitRate: resolveCacheHitRate(usage),
-        freshSessions: countFreshSessions(runs),
+        freshSessions: countFreshSessions(fold.allRunsByTask.get(taskId) ?? [], dayAt),
         compactions: countCompactions(runs),
       };
     })
@@ -294,7 +297,7 @@ function resolveTotal(series: StatsDay[]): StatsDay {
     total.deletions += day.deletions;
     total.changedFiles += day.changedFiles;
   }
-  total.usage = sumLines(series.map((day) => day.usage));
+  total.usage = sumTokenLines(series.map((day) => day.usage));
   return total;
 }
 
@@ -307,12 +310,13 @@ export function resolveStats(state: Pick<ShinsaState, 'tasks' | 'runs'>, window:
     byModel: new Map(),
     byTask: new Map(),
     runsByTask: new Map(),
+    allRunsByTask: new Map(),
   };
   for (const run of Object.values(state.runs)) foldRunUsage(fold, run, dayAt);
   for (const task of Object.values(state.tasks)) foldShipping(task, dayAt);
   const series = [...days.values()];
   const total = resolveTotal(series);
-  const tasks = listTaskTokens(state, fold);
+  const tasks = listTaskTokens(state, fold, dayAt);
   return {
     days: series,
     total,

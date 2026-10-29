@@ -7,6 +7,7 @@ import {
   type StatsDay,
   type StatsSaving,
   type StatsWork,
+  sumTokenLines,
   type TaskTokens,
   type TokenLine,
   UNKNOWN_MODEL,
@@ -38,13 +39,11 @@ export interface BreakdownRow {
   label: string;
   tokens: string;
   share: number;
-  cost: string;
 }
 
 export interface TaskRow {
   taskId: string;
   title: string;
-  handle: string | null;
   tokens: string;
   cacheHit: string;
   cost: string;
@@ -92,28 +91,6 @@ function formatNumber(value: number) {
 
 export function formatPercent(rate: number | null) {
   return rate === null ? 'None' : `${Math.round(rate * 100)}%`;
-}
-
-function sumTokenLines(lines: TokenLine[]): TokenLine {
-  const total: TokenLine = {
-    runs: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    tokens: 0,
-    knownUsd: 0,
-  };
-  for (const line of lines) {
-    total.runs += line.runs;
-    total.inputTokens += line.inputTokens;
-    total.outputTokens += line.outputTokens;
-    total.cacheReadTokens += line.cacheReadTokens;
-    total.cacheWriteTokens += line.cacheWriteTokens;
-    total.tokens += line.tokens;
-    total.knownUsd += line.knownUsd;
-  }
-  return total;
 }
 
 export function listUsageTiles(stats: Stats): ShippingTile[] {
@@ -188,7 +165,6 @@ function listRows<Key extends string>(
     label: label(line.key),
     tokens: formatTokenCount(line.usage.tokens),
     share: total.tokens === 0 ? 0 : line.usage.tokens / total.tokens,
-    cost: describeUsd(line.usage.knownUsd),
   }));
 }
 
@@ -219,7 +195,6 @@ export function listTaskRows(tasks: TaskTokens[]): TaskRow[] {
   return tasks.slice(0, TOP_TASKS).map((task) => ({
     taskId: task.taskId,
     title: task.title,
-    handle: task.handle,
     tokens: formatTokenCount(task.usage.tokens),
     cacheHit: formatPercent(task.cacheHitRate),
     cost: describeUsd(task.usage.knownUsd),
