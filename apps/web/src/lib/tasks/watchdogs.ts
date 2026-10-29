@@ -51,7 +51,7 @@ export function describeWatchdogProgress(state: ShinsaState, watchdog: Watchdog,
       return `Passed after ${checks}, nothing wrong.`;
     case 'tripped': {
       const fork = watchdog.forkTaskId ? state.tasks[watchdog.forkTaskId] : undefined;
-      return fork ? `Filed ${fork.handle ?? fork.title} to fix it.` : 'Found an issue.';
+      return fork ? `Filed [${fork.handle ?? fork.title}](shinsa://task/${fork.id}) to fix it.` : 'Found an issue.';
     }
     case 'stopped':
       return `Stopped after ${checks}.`;

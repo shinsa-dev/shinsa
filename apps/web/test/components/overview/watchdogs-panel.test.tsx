@@ -3,7 +3,7 @@ import { HOUR_MS, type Watchdog } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
-import { listSentCommands, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 function watchdog(overrides: Partial<Watchdog>): Watchdog {
@@ -59,9 +59,12 @@ afterEach(() => {
 
 function renderPanel(watchdogs: Watchdog[]) {
   const task = createTask({ id: 't', stage: 'merged', watchdogs });
+  const fork = createTask({ id: 'fork', handle: 'SW-46', title: 'Fix the docs in Safari' });
+  const state = createShinsaState({ tasks: [task, fork] });
+  pushState(state);
   render(
     <TooltipProvider>
-      <WatchdogsPanel state={createShinsaState({ tasks: [task] })} task={task} now={NOW} />
+      <WatchdogsPanel state={state} task={task} now={NOW} />
     </TooltipProvider>
   );
 }
@@ -91,6 +94,15 @@ describe('the watchdogs panel', () => {
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'watchdog.stop', taskId: 't', watchdogId: 'w1' }])
     );
+  });
+
+  it('links the task a watchdog filed when it found an issue', async () => {
+    renderPanel([watchdog({ status: 'tripped', forkTaskId: 'fork' })]);
+    const row = rowOf('Checkout latency');
+    await waitFor(() =>
+      expect(row.querySelector('a[data-task="fork"]')?.getAttribute('href')).toBe('/tasks/SW-46')
+    );
+    expect(row.textContent).toContain('Filed');
   });
 
   it('asks for a data source with the evidence and suggestions, and connects one you name', async () => {

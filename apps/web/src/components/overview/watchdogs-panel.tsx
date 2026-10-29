@@ -5,7 +5,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
-import { InlineMarkdown } from '@/components/text/markdown.tsx';
+import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
@@ -97,13 +97,12 @@ function WatchdogRow({
             <span className='font-medium text-fg-4 leading-5'>{watchdog.title}</span>
             <span className={cn('shrink-0', TONE_TEXT[status.tone])}>{status.label}</span>
           </div>
-          <InlineMarkdown text={watchdog.check} className='text-fg-3' />
-          <span className='text-2xs text-fg-2'>
-            {describeWatchdogSchedule(watchdog)}
-            {watchdog.source ? ` · ${watchdog.source.server}` : ''} ·{' '}
-            {describeWatchdogProgress(state, watchdog, now)}
-          </span>
-          {last && <InlineMarkdown text={`Last check: ${last.summary}`} className='text-2xs text-fg-3' />}
+          <Markdown text={watchdog.check} className='text-fg-3 text-xs' />
+          <Markdown
+            text={`${describeWatchdogSchedule(watchdog)}${watchdog.source ? ` · \`${watchdog.source.server}\`` : ''} · ${describeWatchdogProgress(state, watchdog, now)}`}
+            className='text-2xs text-fg-2'
+          />
+          {last && <Markdown text={`Last check: ${last.summary}`} className='text-2xs text-fg-3' />}
         </div>
         {active && (
           <Button

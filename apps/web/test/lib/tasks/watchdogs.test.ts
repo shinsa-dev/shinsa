@@ -86,7 +86,7 @@ describe('describing a watchdog', () => {
       'Passed after 0 checks, nothing wrong.'
     );
     expect(describeWatchdogProgress(state, createWatchdog({ status: 'tripped', forkTaskId: 'f' }), NOW)).toBe(
-      'Filed SW-9 to fix it.'
+      'Filed [SW-9](shinsa://task/f) to fix it.'
     );
     expect(describeWatchdogProgress(state, createWatchdog({ status: 'tripped' }), NOW)).toBe(
       'Found an issue.'
