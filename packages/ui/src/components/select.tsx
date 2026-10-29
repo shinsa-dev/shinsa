@@ -106,7 +106,7 @@ function SelectTrigger({
         // Heights match the button's: default 26, sm 24.
         size === 'sm'
           ? 'corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs [--icon-size:var(--icon-size-sm)]'
-          : 'corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)]',
+          : 'corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)]',
         "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:content-['']",
         'enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)',
         variant === 'ghost'

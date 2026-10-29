@@ -900,8 +900,8 @@ An icon on either side of a button or badge trims that side's padding by 2px, so
 | --- | --- | --- | --- | --- | --- |
 | Button `xs` | 22 | 8 (`px-2`) | 6 | 4 | `sm` 14 |
 | Button `sm` | 24 | 8 | 6 | 4 | `sm` 14 |
-| Button `default` | 26 | 10 (`px-2.5`) | 8 | 6 | `md` 16 |
-| Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `md` 16 |
+| Button `default` | 26 | 10 (`px-2.5`) | 8 | 6 | `sm` 14 |
+| Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `sm` 14 |
 | Button with a chevron as its icon | as size | 5 on the chevron's side (`pr-[5px]` / `pl-[5px]`) | | 2 (`gap-0.5`) | `sm` 14 |
 | `Input` `sm` / default | 24 / 26 | 8 / 10 | | | |
 | `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` / `md` |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm`/`default` buttons, `xs`/`sm` selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: default selects and inputs |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, every button (icon-only ones too), every select, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: default inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -3292,7 +3292,7 @@ Select                          (Root; provides open state and items)
 **Trigger classes:**
 
 - Base: `group/select-trigger relative isolate flex w-fit cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap font-medium text-fg-4`
-- `size='default'`: `corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)]`
+- `size='default'`: `corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-sm)]`
 - `size='sm'`: `corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs [--icon-size:var(--icon-size-sm)]`
 - Fill layer (the fill lives on `::before` so it can deflate on press): `before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:content-[''] enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)`
 - `variant='default'`: `before:bg-input enabled:active:before:bg-input-hover/80 enabled:hover:before:bg-input-hover/80 aria-expanded:before:bg-input-hover/80`
@@ -5813,16 +5813,16 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 | --- | --- | --- | --- | --- |
 | `xs` | 22 | `h-5.5 gap-1 rounded-control-sm px-2 text-xs` | `sm` 14 | dense inline: hover-revealed row actions, actions in a nested card, a shelf's Add |
 | `sm` | 24 | `h-6 gap-1 rounded-control-sm px-2 text-xs` | `sm` 14 | header strips, toolbars, section-label actions, popovers, composer footers, the top bar |
-| `default` | 26 | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs` | `md` 16 | card bodies, dialog footers, a form's submit |
-| `lg` | 30 | `h-7.5 gap-1.5 rounded-control px-3 text-sm` | `md` 16 | the rare primary call to action on an empty page |
+| `default` | 26 | `h-6.5 gap-1.5 rounded-control px-2.5 text-xs` | `sm` 14 | card bodies, dialog footers, a form's submit |
+| `lg` | 30 | `h-7.5 gap-1.5 rounded-control px-3 text-sm` | `sm` 14 | the rare primary call to action on an empty page |
 | `icon-2xs` | 18 | `size-4.5 rounded-sm` | `sm` | a close mark inside a 24px row (a terminal tab) |
 | `icon-xs` | 22 | `size-5.5 rounded-control-sm` | `sm` | a chevron box on a card band, a code block's copy |
 | `icon-sm` | 24 | `size-6 rounded-control-sm` | `sm` | `•••` triggers, the dialog close X, strip icon actions |
-| `icon` | 26 | `size-6.5 rounded-control` | `md` | icon actions beside `default` buttons |
-| `icon-lg` | 30 | `size-7.5 rounded-control` | `md` | beside `lg` |
+| `icon` | 26 | `size-6.5 rounded-control` | `sm` | icon actions beside `default` buttons |
+| `icon-lg` | 30 | `size-7.5 rounded-control` | `sm` | beside `lg` |
 
 - An icon on either side of a label trims that side's padding by 2px (`data-[icon=inline-start]:pl-1.5` at `xs`/`sm`, `pl-2` at `default`, `pl-2.5` at `lg`) so the glyph sits optically level with the text edge. A chevron trims to 5px and pulls 2px closer (`gap-0.5`).
-- Pass icons through the `icon` prop (`icon='IconPlusMedium'`, or `{ name, position: 'inline-end' }`). The size sets the glyph; a call site never sizes, colours or fades a button's icon.
+- Pass icons through the `icon` prop (`icon='IconPlusMedium'`, or `{ name, position: 'inline-end' }`). Every size draws its icons and its spinner at 14px (`sm`), and a default select's chevron matches; a call site never sizes, colours or fades a button's icon.
 - Every control in one row shares one height.
 - **Actions that don't fit lose their labels, not their buttons.** A row or card's actions with no room for labels go icon-only at the matching icon size, each with an `aria-label` and a delayed tooltip, never into a `…` overflow menu. An overflow menu is for secondary actions, not for narrow ones.
 - **Pending is `loading`.** The button keeps its colours and width, swaps its leading icon for a `Spinner` (or adds one when it has no icon), sets `aria-busy` and ignores presses and keys, so it can't fire twice. It is never `disabled`, and never fades.
@@ -7124,10 +7124,10 @@ Shinsa's controls run one step denser than the Application register's. Read ever
 | Tab lists | `default` and `ghost` 26; `underline` 32, with no size prop |
 | Menu, select and command rows | 24 |
 | `Badge` | 18 (`sm`), 20 (default) |
-| Glyphs | `sm` (14px) in `xs` and `sm` controls, rows and badges; `md` (16px) from `default` up |
+| Glyphs | `sm` (14px) in every button and select, rows and badges; `md` (16px) in `default` inputs |
 
 - Example: a Settings row action is a `secondary` `sm` button (24px, 14px glyph); a step's footer buttons are
-  `default` (26px, 16px glyph).
+  `default` (26px, 14px glyph).
 
 #### Fields are filled, never bordered
 
@@ -10663,7 +10663,7 @@ Apply every line to any component you build or touch. When a line and a section 
 
 - Heights: 18 (`icon-2xs`, `Badge sm`), 20 (`Badge`, `Kbd`, switch track), 22 (`xs`, `icon-xs`), 24 (`sm`, `icon-sm`, menu, select and command rows, section labels, the `line` header), 26 (`default`, `icon`, `Input`, `SelectTrigger`, `default` and `ghost` tab lists), 28 (one-line list rows, the `strip` header, info popover rows), 30 (`lg`, `icon-lg`), 32 (`underline` tab list, the `block` header), 36 (card header bands, toolbars), 40 (settings rows, the command input row).
 - Never hand-set a height on a control, strip or row; the primitive owns it. Every control in one row shares one height.
-- Icons: `sm` 14 in `xs`/`sm` controls, rows and badges; `md` 16 from `default` up; `lg` 20 for empty-state figures and full-page waits. No other size.
+- Icons: `sm` 14 in every button and select, rows and badges; `md` 16 in `default` inputs; `lg` 20 for empty-state figures and full-page waits. No other size.
 
 **Spacing**
 
