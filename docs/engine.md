@@ -2418,6 +2418,24 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
      (someone pushed to it, or GitHub updated it), and a retry would only fail again.
 4. **Open the pull request** ("opening the pull request") for `pull_request.open`, or reuse the open one.
 
+**Conventional names.** Branches, commits, pull requests and the merge commit follow
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), from one list of types in
+`git/conventional.ts` (`COMMIT_TYPES`: feat, fix, chore, refactor, docs, perf, test):
+
+- **Branches** are `<type>/<kebab-slug>`. Triage asks the classifier for one and accepts only that form
+  (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one; a later round's branch
+  is the first one plus `-round-<n>`, and core's last resort is `chore/shinsa-task`.
+- **Commits.** A phase commits as `<type>: <phase title>`, its type the branch's prefix (`resolveCommitType`, `feat`
+  when the prefix is not a type), its subject lower-cased, never repeating the type and at most 72 characters
+  (`serializeConventionalSubject`); a fix commits as `fix: <what it fixed>`. One subject line, no body.
+- **The pull request** is titled the same way from the current round's title (`serializePullRequestTitle`, so a later
+  round's pull request carries its own), and its description opens with the task it came from,
+  ``Shinsa task: LOC-22, `shinsa://task/<id>` `` (the handle, then the link as code: GitHub drops links of other
+  schemes, so it is there to copy), then the summary, how to test it, the steps around the merge and the plan.
+- **The merge commit.** A squash or merge passes `--subject "<the pull request's title on GitHub> (#N)"` and an empty
+  `--body`, so the default branch gets one conventional line and a title you edit on GitHub before merging is kept; a
+  rebase keeps the branch's own commits, which are already conventional.
+
 ## The pull request watch
 
 From T3 Code (harness plan WS4 names the sources). The evaluation is pure
@@ -2530,7 +2548,8 @@ A pull request GitHub puts in its merge queue, or on auto-merge, is waiting, not
 - The merge effect merges only the head you approved: `pull_request.merge` carries `headSha`
   (`gate.commit`, or the head the read showed when approving edits merged without a gate) and
   `gh pr merge` gets `--match-head-commit <sha>`, so a push after the gate opened can never ride in on
-  your approval. A read before the merge that shows another head, or a merge GitHub refuses because
+  your approval; a squash or merge also gets the subject and empty body of Pushing the branch →
+  Conventional names. A read before the merge that shows another head, or a merge GitHub refuses because
   the head moved, is recorded instead of merged (no failure gate); core sends the task back to
   shipping ("the branch changed before the merge") and judges the new head like any other, so the
   merge gate comes back only for it.

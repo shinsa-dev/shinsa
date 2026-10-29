@@ -36,6 +36,7 @@ interface FakePull {
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
   unresolved: number;
   mergedWith: string | null;
+  title?: string;
   mergeCommit?: string | null;
   reviewDecision?: string | null;
   comments?: { id: string; author: string | null; createdAt: string; body: string }[];
@@ -462,6 +463,26 @@ describe('the gh calls', () => {
     const calls = github.read().calls.filter((call) => call[1] === 'merge');
     expect(calls.at(-1)).toEqual(['pr', 'merge', '8', '--squash', '--match-head-commit', head]);
     expect(github.read().pulls.map((entry) => entry.state)).toEqual(['OPEN', 'MERGED']);
+  });
+
+  test('a squash or merge commit takes the pull request title and number as its subject, with no body', async () => {
+    const { repo } = await createGitRepo({ remote: false });
+    const github = useFakeGitHub([
+      { ...pull, title: 'fix: the tab scroll' },
+      { ...pull, number: 8, title: 'feat: add search' },
+      { ...pull, number: 9, title: 'docs: explain setup' },
+      { ...pull, number: 10 },
+    ]);
+    await mergePullRequest(repo, 7, 'squash', null);
+    await mergePullRequest(repo, 8, 'merge', null);
+    await mergePullRequest(repo, 9, 'rebase', null);
+    await mergePullRequest(repo, 10, 'squash', null);
+    expect(github.read().calls.filter((call) => call[1] === 'merge')).toEqual([
+      ['pr', 'merge', '7', '--squash', '--subject', 'fix: the tab scroll (#7)', '--body', ''],
+      ['pr', 'merge', '8', '--merge', '--subject', 'feat: add search (#8)', '--body', ''],
+      ['pr', 'merge', '9', '--rebase'],
+      ['pr', 'merge', '10', '--squash'],
+    ]);
   });
 
   test('opening reuses an open pull request, otherwise creates one against the right base', async () => {

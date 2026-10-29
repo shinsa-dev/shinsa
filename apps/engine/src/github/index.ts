@@ -422,6 +422,18 @@ export async function retargetPullRequest(repo: Repo, number: number, base: stri
   await runGhOrThrow(['pr', 'edit', String(number), '--base', assertRefName(base)], repo.path, { signal });
 }
 
+async function resolveMergeMessage(
+  repo: Repo,
+  number: number,
+  method: Settings['mergeMethod'],
+  signal?: AbortSignal
+) {
+  if (method === 'rebase') return [];
+  const output = await runGhOrThrow(['pr', 'view', String(number), '--json', 'title'], repo.path, { signal });
+  const title = (JSON.parse(output) as { title?: string }).title?.trim();
+  return title ? ['--subject', `${title} (#${number})`, '--body', ''] : [];
+}
+
 export async function mergePullRequest(
   repo: Repo,
   number: number,
@@ -431,5 +443,8 @@ export async function mergePullRequest(
 ) {
   if (!MERGE_METHODS.has(method)) throw new Error(`"${method}" is not a merge method.`);
   const guard = headSha ? ['--match-head-commit', assertCommitSha(headSha)] : [];
-  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`, ...guard], repo.path, { signal });
+  const message = await resolveMergeMessage(repo, number, method, signal);
+  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`, ...guard, ...message], repo.path, {
+    signal,
+  });
 }
