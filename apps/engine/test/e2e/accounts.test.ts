@@ -238,7 +238,7 @@ describe('accounts end to end', () => {
     expect(world.agents.of('plan')).toHaveLength(1);
     expect(accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
     await accounts.startLogin(only.id);
-    await world.untilStage(taskId, 'building');
+    await world.until('the plan to run again', () => world.agents.of('plan').length === 2);
     expect(world.agents.of('plan').map((session) => session.account)).toEqual([only.id, only.id]);
   });
 
@@ -251,8 +251,8 @@ describe('accounts end to end', () => {
       },
       plan()
     );
-    const taskId = await world.createTask();
-    await world.untilStage(taskId, 'building');
+    await world.createTask();
+    await world.until('the plan to run on the second account', () => world.agents.of('plan').length === 2);
     expect(world.agents.of('plan').map((session) => session.account)).toEqual(
       added.map((account) => account.id)
     );
