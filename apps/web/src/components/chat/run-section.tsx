@@ -123,16 +123,16 @@ function TurnView({
           <WorkedRow run={run} turn={turn} />
         </div>
       )}
-      {turn.outcomes.map((item) => (
-        <div key={item.key} className={ROW}>
-          <HandoverCard call={item.call} run={run} live={turn.live} task={task} />
-        </div>
-      ))}
       {turn.reply && (
         <div className={PROSE_ROW}>
           <AgentText text={turn.reply.text} />
         </div>
       )}
+      {turn.outcomes.map((item) => (
+        <div key={item.key} className={ROW}>
+          <HandoverCard call={item.call} run={run} live={turn.live} task={task} />
+        </div>
+      ))}
       {turn.errors.map((item) => (
         <div key={item.key} className={LINE_ROW}>
           <ErrorLine text={item.text} count={item.count} />
