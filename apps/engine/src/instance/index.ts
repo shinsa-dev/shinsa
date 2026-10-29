@@ -25,7 +25,6 @@ export {
   EngineRestarter,
   EXIT_RESTART,
   isEngineBusy,
-  RESTART_DRAIN_MS,
   type RestartDrain,
   resolveEngineActivity,
   STOP_DEADLINE_MS,

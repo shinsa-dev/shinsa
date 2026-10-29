@@ -1,6 +1,6 @@
 import type { ServerHealth } from './health.ts';
 
-export interface TrayTask {
+interface TrayTask {
   path: string;
   title: string;
   detail: string;

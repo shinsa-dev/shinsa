@@ -24,7 +24,7 @@ export interface EngineRestartOptions {
 
 export type EngineRestartPending = 'idle' | null;
 
-export const RESTART_DRAIN_MS = 15 * 60_000;
+const RESTART_DRAIN_MS = 15 * 60_000;
 
 function countWorkingRuns(state: ShinsaState, isHeld: (runId: string) => boolean) {
   return listLiveRuns(state).filter((run) => run.status === 'running' && !isHeld(run.id)).length;
