@@ -1434,8 +1434,8 @@ Keyframes used by the app stylesheet:
 @keyframes onboarding-in { from { transform: translateX(var(--onboarding-from)); } }
 @keyframes onboarding-out { to { transform: translateX(var(--onboarding-to)); } }
 .onboarding-track { mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent); }
-.onboarding-in, .onboarding-in-back { animation: onboarding-in 420ms cubic-bezier(0.32, 0.72, 0, 1) both; }
-.onboarding-out, .onboarding-out-back { animation: onboarding-out 420ms cubic-bezier(0.32, 0.72, 0, 1) both; pointer-events: none; }
+.onboarding-in, .onboarding-in-back { animation: onboarding-in 360ms cubic-bezier(0.4, 0, 0.2, 1) both; will-change: transform; }
+.onboarding-out, .onboarding-out-back { animation: onboarding-out 360ms cubic-bezier(0.4, 0, 0.2, 1) both; will-change: transform; pointer-events: none; }
 .onboarding-in { --onboarding-from: calc(100% + 1.5rem); }
 .onboarding-in-back { --onboarding-from: calc(-100% - 1.5rem); }
 .onboarding-out { --onboarding-to: calc(-100% - 1.5rem); }

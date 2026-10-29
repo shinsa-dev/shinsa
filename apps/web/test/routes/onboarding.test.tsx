@@ -122,19 +122,15 @@ describe('the setup page', () => {
     renderPage();
     const heading = await screen.findByRole('heading', { name: 'How should agents work?' });
     expect(heading.closest('.onboarding-in')).toBeNull();
-    const track = heading.closest('.onboarding-track') as HTMLElement;
-    expect(track.hasAttribute('data-moving')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     const next = await screen.findByRole('heading', { name: 'Accounts' });
     expect(next.closest('.onboarding-in')).not.toBeNull();
-    expect(track.hasAttribute('data-moving')).toBe(true);
     const leaving = screen.getByText('How should agents work?').closest('.onboarding-out') as HTMLElement;
     expect(leaving.hasAttribute('inert')).toBe(true);
     fireEvent.animationEnd(leaving.firstElementChild as HTMLElement);
     expect(screen.getByText('How should agents work?')).toBeTruthy();
     fireEvent.animationEnd(leaving);
     await waitFor(() => expect(screen.queryByText('How should agents work?')).toBeNull());
-    expect(track.hasAttribute('data-moving')).toBe(false);
   });
 
   it('a click changes only its own group’s pick, and nothing is sent until Continue', async () => {

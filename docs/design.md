@@ -1119,10 +1119,10 @@ Only these, and they win over anything below:
       "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
       The first step you open, and the finished page when you load it, are simply there. Moving to another step
       slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
-      (the other way when you go back), both the full width of the column and 320ms at one speed (`linear`, so the
-      slide never slows at its end), and neither fades on its own: only while a step moves (`data-moving`) does the
-      track mask its 24px edges, the column's padding, so a step fades only as it crosses the edge and nothing at
-      rest is ever masked. The track's one column is `minmax(0, 1fr)`, so a long line truncates inside the column
+      (the other way when you go back), both the full width of the column and 360ms on the standard curve
+      (`cubic-bezier(0.4, 0, 0.2, 1)`: it eases in and out without the long settle of a strong ease-out), and
+      neither fades on its own: the track masks only its 24px edges, the column's padding, so a step fades only as
+      it crosses the edge and nothing at rest is ever masked. The mask stays on, so starting a slide adds no layer. The track's one column is `minmax(0, 1fr)`, so a long line truncates inside the column
       instead of widening the step past the track's clip. The step leaving is `inert` and goes when its slide ends.
       Under reduced motion the steps swap at once.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
@@ -1142,9 +1142,9 @@ Only these, and they win over anything below:
       ios, pwn and 26 more"). A quiet Repositories button opens the project's repositories as checkbox rows, to leave
       one out ("2 of 3 repositories"). The primary button counts what you keep ("Create 6 projects", "Create the
       project", "Continue without projects"), is off while a kept project has no name, and shows its spinner while the
-      projects are made; the rows are locked meanwhile. Under the list a second card takes a change in words
-      (`OnboardingProjectsChat`): each request in `text-xs` `fg-3` over the reply in `fg-4`, then a `sm` field ("Ask
-      for a change, like …") with a secondary Ask button (the sparkle), which sends the request with your edits and
+      projects are made; the rows are locked meanwhile. Under the list, outside any card, sits a plain chat box for a change in words
+      (`OnboardingProjectsChat`): each request in `text-xs` `fg-4` over the reply in `fg-3`, then a `default` field
+      ("Ask for a change, like …") with a secondary Ask button, no icon, which sends the request with your edits and
       shows its spinner; the box clears once the change is made and keeps your words when it is not. The projects you
       already made are a read-only card (`OnboardingFiledProjects`: the dot, the name, and the count, folder and first
       repositories), under an "Already set up" `SectionLabel` when new suggestions are shown above it, and alone when

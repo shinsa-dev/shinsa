@@ -38,10 +38,7 @@ export function OnboardingTrack({
   });
 
   return (
-    <div
-      className='onboarding-track -mx-6 grid grid-cols-[minmax(0,1fr)] overflow-x-clip px-6'
-      data-moving={leaving && leaving.key !== stepKey ? '' : undefined}
-    >
+    <div className='onboarding-track -mx-6 grid grid-cols-[minmax(0,1fr)] overflow-x-clip px-6'>
       {leaving && leaving.key !== stepKey && (
         <div
           key={leaving.key}

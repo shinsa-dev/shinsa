@@ -5,15 +5,15 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
-import { ROW_INSET, SETTING_ROW, SettingsCard } from '@/components/settings/group.tsx';
+import { ROW_INSET, SettingsCard } from '@/components/settings/group.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { describeFiledSummary } from '@/lib/onboarding-projects.ts';
 
 function Turn({ turn }: { turn: OnboardingProjectTurn }) {
   return (
-    <li className={cn(ROW_INSET, 'flex flex-col gap-px py-2')}>
-      <span className='selectable text-fg-3 text-xs'>{turn.request}</span>
-      <span className='selectable text-fg-4 text-xs'>{turn.reply}</span>
+    <li className='flex flex-col gap-px'>
+      <span className='selectable text-fg-4 text-xs'>{turn.request}</span>
+      <span className='selectable text-fg-3 text-xs'>{turn.reply}</span>
     </li>
   );
 }
@@ -32,9 +32,9 @@ export function OnboardingProjectsChat({
   const [text, setText] = React.useState('');
   const trimmed = text.trim();
   return (
-    <SettingsCard>
+    <div className='flex flex-col gap-3'>
       {conversation.length > 0 && (
-        <ul className='flex flex-col divide-y divide-border border-border border-b'>
+        <ul className='flex flex-col gap-2.5 px-1'>
           {conversation.map((turn, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: turns are only ever appended, so each keeps its place
             <Turn key={index} turn={turn} />
@@ -42,7 +42,7 @@ export function OnboardingProjectsChat({
         </ul>
       )}
       <form
-        className={cn(SETTING_ROW, 'mx-1 my-1 gap-1.5 px-1.5')}
+        className='flex items-center gap-1.5'
         onSubmit={(event) => {
           event.preventDefault();
           if (!trimmed || disabled) return;
@@ -52,7 +52,6 @@ export function OnboardingProjectsChat({
         }}
       >
         <Input
-          size='sm'
           value={text}
           maxLength={ONBOARDING_REQUEST_LIMIT}
           disabled={disabled}
@@ -61,18 +60,11 @@ export function OnboardingProjectsChat({
           aria-label='Change the projects'
           autoComplete='off'
         />
-        <Button
-          type='submit'
-          variant='secondary'
-          size='sm'
-          icon='IconSparkle'
-          loading={busy}
-          disabled={!trimmed || disabled}
-        >
+        <Button type='submit' variant='secondary' loading={busy} disabled={!trimmed || disabled}>
           Ask
         </Button>
       </form>
-    </SettingsCard>
+    </div>
   );
 }
 
