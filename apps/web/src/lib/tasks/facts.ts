@@ -1,6 +1,6 @@
 import type { ShinsaState, Task } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
-import { formatSince } from '@/lib/format/time.ts';
+import { formatMoment, formatSince } from '@/lib/format/time.ts';
 
 export function describeStarted(task: Task, now = Date.now()) {
   const verb = task.stage === 'waiting_on_tasks' ? 'Added' : 'Started';
@@ -26,4 +26,29 @@ export function listForks(state: ShinsaState, task: Task) {
   return Object.values(state.tasks)
     .filter((candidate) => candidate.forkOf === task.id)
     .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+function describePostedAt(postedAt: string | null, now: number) {
+  if (postedAt === null) return null;
+  const at = Date.parse(postedAt);
+  return Number.isNaN(at) ? postedAt : formatMoment(at, now);
+}
+
+function isWebLink(link: string | null): link is string {
+  return link !== null && /^https?:\/\//i.test(link);
+}
+
+export function resolveReportFact(state: ShinsaState, task: Task, now = Date.now()) {
+  const report = task.sourceReport;
+  if (!report) return null;
+  const byline = [report.author, describePostedAt(report.postedAt, now)].filter(Boolean).join(' · ');
+  const watch = state.schedules[report.scheduleId] ?? null;
+  return {
+    label: `Reported in ${report.server}`,
+    byline: byline || null,
+    text: report.text,
+    link: isWebLink(report.link) ? report.link : null,
+    automation: watch?.name ?? null,
+    watchId: watch?.id ?? null,
+  };
 }

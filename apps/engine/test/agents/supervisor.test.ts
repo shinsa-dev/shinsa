@@ -533,6 +533,24 @@ describe('starting and ending runs', () => {
     expect(await git(worktree, 'status', '--porcelain')).toBe('');
   });
 
+  test('a read of a data source runs read-only in the repository of a task that has no worktree', async () => {
+    const { path: repoPath } = await createGitRepo({ remote: false });
+    const sessions = createSessions();
+    const { supervisor } = setup(
+      (state) => {
+        state.repos['repo-1'] = createRepo({ path: repoPath });
+        state.tasks['task-1'] = createTask({ worktreePath: null, branch: null });
+        state.runs['run-1'] = createRun({ role: 'agent', purpose: 'intake' });
+      },
+      { startSession: sessions.startSession }
+    );
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    expect(sessions.started[0]?.input).toMatchObject({ role: 'agent', cwd: repoPath, readOnly: true });
+    sessions.started[0]?.finish();
+    await running;
+  });
+
   test('an investigator and the agent running an operation work in the task’s worktree and keep their edits there', async () => {
     for (const role of ['investigator', 'agent'] as const) {
       const { path: worktree } = await createGitRepo({ remote: false });

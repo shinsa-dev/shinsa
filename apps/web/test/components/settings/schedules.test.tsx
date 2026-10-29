@@ -30,7 +30,7 @@ function renderSchedules(schedules: ReturnType<typeof createSchedule>[]) {
 }
 
 async function openMenu(index = 0) {
-  fireEvent.click(screen.getAllByRole('button', { name: 'Schedule options' })[index] as HTMLElement);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Automation options' })[index] as HTMLElement);
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
@@ -39,7 +39,7 @@ describe('Settings → Schedules', () => {
     renderSchedules([]);
     expect(
       screen.getByText(
-        'Ask an agent to do something on a schedule or when a webhook is called, and it shows up here.'
+        'Ask an agent for a schedule, a trigger or a watch, in the home chat or any task, and it shows up here.'
       )
     ).toBeDefined();
   });
@@ -56,10 +56,10 @@ describe('Settings → Schedules', () => {
       }),
     ]);
     expect(screen.getByText('Audit')).toBeDefined();
-    expect(screen.getAllByText('Starts a new task · every hour')).toHaveLength(2);
+    expect(screen.getAllByText('Schedule · Starts a new task · every hour')).toHaveLength(2);
     expect(screen.getByText(/^Next at /).tagName).toBe('TIME');
     expect(screen.getByText('Paused')).toBeDefined();
-    expect(screen.getByText('Starts a new task · when its webhook is called')).toBeDefined();
+    expect(screen.getByText('Trigger · Starts a new task · when its webhook is called')).toBeDefined();
   });
 
   it('pauses a schedule from its menu', async () => {
@@ -87,6 +87,20 @@ describe('Settings → Schedules', () => {
     expect(location.pathname).toBe('/tasks/t-1');
   });
 
+  it('opens a watch on its own page, never its home task', async () => {
+    renderSchedules([
+      createSchedule({
+        id: 'w',
+        name: 'Feedback',
+        source: { projectId: 'p1', server: 'slack' },
+        target: { kind: 'task', taskId: 't-1' },
+      }),
+    ]);
+    await openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open the watch' }));
+    expect(location.pathname).toBe('/automations/w');
+  });
+
   it('copies a webhook’s URL', async () => {
     const fake = startFakeOnboarding({
       'GET /api/schedules/c/webhook': { answer: { url: 'http://localhost/api/hooks/c/x', hasSecret: false } },
@@ -107,13 +121,13 @@ describe('Settings → Schedules', () => {
   it('deletes a schedule only after the confirm dialog', async () => {
     renderSchedules([createSchedule({ id: 'a', name: 'Audit' })]);
     await openMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete schedule' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete automation' }));
     expect(screen.getByText('Delete “Audit”?')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(spies.sent).not.toHaveBeenCalled();
     await openMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete schedule' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete schedule' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete automation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete automation' }));
     expect(spies.sent).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(spies.sent).toHaveBeenCalledWith(

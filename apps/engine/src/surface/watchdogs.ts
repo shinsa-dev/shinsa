@@ -82,7 +82,7 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
   }),
   defineRead<ProjectsRead>({
     path: ['sources', 'list'],
-    summary: 'List a project’s data sources: the MCP servers watchdogs read, and what each holds.',
+    summary: 'List a project’s data sources: the MCP servers its agents read, and what each holds.',
     fields: [PROJECT_FIELD],
     request: () => '/api/projects',
     format: (data, values) => {
@@ -102,8 +102,7 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['sources', 'write'],
-    summary:
-      'Add a data source to a project, or change one: an MCP server watchdogs read, and what it holds.',
+    summary: 'Add a data source to a project, or change one: an MCP server agents read, and what it holds.',
     command: 'watch_source.write',
     fields: [
       PROJECT_FIELD,

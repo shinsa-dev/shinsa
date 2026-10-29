@@ -1,5 +1,6 @@
 import type { Activity, ReviewComment, ShinsaState } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
+import type * as React from 'react';
 import { InAppLink } from '@/components/links/link.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -11,6 +12,7 @@ import {
   resolveActivityGlyph,
 } from '@/lib/overview/activity.ts';
 import { describeCommentPlace } from '@/lib/review/draft.ts';
+import type { Glyph } from '@/lib/tasks/status.ts';
 import { resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
 function ActorLabel({ state, actor }: { state: ShinsaState; actor: ActivityActor }) {
@@ -38,6 +40,43 @@ function SentComments({ comments }: { comments: ReviewComment[] }) {
   );
 }
 
+export function ActivityEntry({
+  glyph,
+  text,
+  actor,
+  at,
+  detail,
+  children,
+}: {
+  glyph: Glyph;
+  text: string;
+  actor: React.ReactNode;
+  at: number;
+  detail: readonly string[];
+  children?: React.ReactNode;
+}) {
+  return (
+    <li className='group relative flex gap-3 pb-4 last:pb-0'>
+      <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
+      <StatusTile {...glyph} className='relative' />
+      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+        <div className='flex items-baseline gap-2 text-xs leading-5'>
+          <InlineMarkdown text={text} className='font-medium text-fg-3' />
+          <span className='ms-auto shrink-0 text-2xs text-fg-2'>
+            {actor} · <TimeAgo at={at} compact />
+          </span>
+        </div>
+        {detail.map((line) => (
+          <div key={line} className='line-clamp-2'>
+            <Markdown text={line} className='text-fg-4 text-xs' />
+          </div>
+        ))}
+        {children}
+      </div>
+    </li>
+  );
+}
+
 export function ActivityRow({
   entry,
   state,
@@ -48,36 +87,25 @@ export function ActivityRow({
   onOpenRun: (runId: string) => void;
 }) {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
-  const detail = listActivityDetail(entry);
   return (
-    <li className='group relative flex gap-3 pb-4 last:pb-0'>
-      <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
-      <StatusTile {...resolveActivityGlyph(entry)} className='relative' />
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
-        <div className='flex items-baseline gap-2 text-xs leading-5'>
-          <InlineMarkdown text={entry.text} className='font-medium text-fg-3' />
-          <span className='ms-auto shrink-0 text-2xs text-fg-2'>
-            <ActorLabel state={state} actor={resolveActivityActor(state, entry)} /> ·{' '}
-            <TimeAgo at={entry.at} compact />
-          </span>
-        </div>
-        {detail.map((line) => (
-          <div key={line} className='line-clamp-2'>
-            <Markdown text={line} className='text-fg-4 text-xs' />
-          </div>
-        ))}
-        {entry.comments && entry.comments.length > 0 && <SentComments comments={entry.comments} />}
-        {run && (
-          <button
-            type='button'
-            onClick={() => onOpenRun(run.id)}
-            className='flex w-fit cursor-pointer items-center gap-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
-          >
-            Open in chat
-            <Icon size='sm' name='IconChevronRightSmall' />
-          </button>
-        )}
-      </div>
-    </li>
+    <ActivityEntry
+      glyph={resolveActivityGlyph(entry)}
+      text={entry.text}
+      actor={<ActorLabel state={state} actor={resolveActivityActor(state, entry)} />}
+      at={entry.at}
+      detail={listActivityDetail(entry)}
+    >
+      {entry.comments && entry.comments.length > 0 && <SentComments comments={entry.comments} />}
+      {run && (
+        <button
+          type='button'
+          onClick={() => onOpenRun(run.id)}
+          className='flex w-fit cursor-pointer items-center gap-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
+        >
+          Open in chat
+          <Icon size='sm' name='IconChevronRightSmall' />
+        </button>
+      )}
+    </ActivityEntry>
   );
 }

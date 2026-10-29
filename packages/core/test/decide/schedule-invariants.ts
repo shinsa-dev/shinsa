@@ -37,7 +37,12 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
     const own = Object.values(state.schedules).find(
       (schedule) => schedule.createdBy.kind === 'agent' && schedule.createdBy.taskId === run.taskId
     );
+    const intake: ShinsaCommand[] =
+      run.purpose === 'intake'
+        ? [{ type: 'agent.report_intake', runId: run.id, summary: 'Read it; nothing new.', reached: true }]
+        : [];
     return [
+      ...intake,
       {
         type: 'agent.set_schedule',
         runId: run.id,
@@ -46,6 +51,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         text: 'Check on it again.',
         trigger: pick(random, TRIGGERS) ?? null,
         target: chance(random, 0.5) ? { kind: 'new_task', priority: 'low', mode: 'build' } : null,
+        source: null,
         enabled: null,
         maxRuns: pick(random, [null, 2]) ?? null,
         timeZone: 'UTC',
@@ -169,6 +175,7 @@ function listReviewerSchedules(state: ShinsaState): ShinsaCommand[] {
       text: 'Review it again when the hook fires.',
       trigger: { kind: 'webhook', signature: null, replayKey: null },
       target: null,
+      source: null,
       enabled: null,
       maxRuns: null,
       timeZone: 'UTC',
@@ -183,11 +190,29 @@ function listUserWrites(state: ShinsaState, random: Random): ShinsaCommand[] {
     type: 'schedule.write' as const,
     name: null,
     text: 'Look at it again.',
+    source: null,
     enabled: null,
     maxRuns: pick(random, [null, 3]) ?? null,
     timeZone: 'UTC',
   };
+  const project = pick(random, Object.values(state.projects));
+  const sourced: ShinsaCommand[] = project
+    ? [
+        { type: 'watch_source.write', projectId: project.id, server: 'slack', data: 'Feedback', repoIds: [] },
+        ...(chance(random, 0.1)
+          ? [{ type: 'watch_source.remove' as const, projectId: project.id, server: 'slack' }]
+          : []),
+        {
+          ...write,
+          scheduleId: null,
+          trigger: pick(random, TRIGGERS) ?? null,
+          target: null,
+          source: { projectId: project.id, server: 'slack' },
+        },
+      ]
+    : [{ type: 'project.write', project: { name: 'Feedback', color: 'blue' } }];
   return [
+    ...sourced,
     {
       ...write,
       scheduleId: null,
@@ -229,8 +254,11 @@ export function selectScheduleWrite(state: ShinsaState, random: Random): ShinsaC
 
 export function listScheduleWriteMarks(state: ShinsaState) {
   const schedules = Object.values(state.schedules);
+  const runs = Object.values(state.runs);
   return [
     schedules.some((schedule) => schedule.createdBy.kind === 'you') ? 'schedule you wrote' : null,
+    runs.some((run) => run.purpose === 'intake') ? 'intake turn' : null,
+    runs.some((run) => run.purpose === 'intake' && run.outcome === 'completed') ? 'reported intake' : null,
     schedules.some((schedule) => schedule.createdBy.kind === 'you' && schedule.updatedAt > schedule.createdAt)
       ? 'schedule you changed'
       : null,

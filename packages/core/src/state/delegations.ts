@@ -253,6 +253,7 @@ export function resolveLineage(event: EventOf<'task.created'>): Partial<Task> {
   return {
     ...(event.parentTaskId ? { parentTaskId: event.parentTaskId } : {}),
     ...(event.createdBy ? { createdBy: event.createdBy } : {}),
+    ...(event.watchHome ? { watchHome: true } : {}),
   };
 }
 

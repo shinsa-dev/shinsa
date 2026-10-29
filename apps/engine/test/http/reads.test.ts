@@ -119,6 +119,41 @@ describe('GET /api/tasks', () => {
     expect(titles((await read('/api/tasks?q=t-1')).body)).toEqual(['Fix the tab scroll']);
   });
 
+  test('never lists the home a watch reads in, even with every task shown', async () => {
+    const { read, engine } = await start();
+    await engine.dispatch({
+      type: 'repo.register',
+      repo: { name: 'web', path: '/code/web', defaultBranch: 'main', remote: null, checkCommands: [] },
+      projectName: 'Paywalls',
+    });
+    const projectId = Object.values(engine.state.repos).find((repo) => repo.name === 'web')?.projectId ?? '';
+    await engine.dispatch({
+      type: 'watch_source.write',
+      projectId,
+      server: 'slack',
+      data: '#feedback',
+      repoIds: [],
+    });
+    await engine.dispatch({
+      type: 'schedule.write',
+      scheduleId: null,
+      name: 'Feedback',
+      text: 'Bug reports.',
+      trigger: { kind: 'interval', everyMinutes: 60 },
+      target: null,
+      source: { projectId, server: 'slack' },
+      enabled: null,
+      maxRuns: null,
+      timeZone: 'UTC',
+    });
+    expect(Object.values(engine.state.tasks).some((task) => task.watchHome)).toBe(true);
+    expect(titles((await read('/api/tasks?status=all')).body).sort()).toEqual([
+      'Add search',
+      'Fix the tab scroll',
+      'Old idea',
+    ]);
+  });
+
   test('filters by what needs you, what is settled, or shows all', async () => {
     const { read } = await start();
     expect(titles((await read('/api/tasks?status=needs_you')).body)).toEqual(['Fix the tab scroll']);

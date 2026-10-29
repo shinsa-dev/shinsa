@@ -1457,6 +1457,11 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     planFirst: task.planFirst ?? false,
     origin: null,
     ...(task.forkOf ? { forkOf: task.forkOf } : {}),
+    ...(task.createdBy ? { createdBy: task.createdBy } : {}),
+    ...(task.watchHome ? { watchHome: true } : {}),
+    ...(task.sourceReport
+      ? { sourceReport: task.sourceReport, scheduleId: task.sourceReport.scheduleId }
+      : {}),
     ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
     auto: task.auto ?? CHOSEN_BY_YOU,
   });
@@ -1607,6 +1612,7 @@ function pushTaskRun(task: SeedTask, index: number, progress: SeedProgress, push
   if (!run) return;
   const runId = `${task.id}-run-${index}`;
   const agent = run.role === 'agent';
+  clock.step(run.afterMinutes ?? 0);
   pushFixStart(task, index, progress, push, clock);
   push(clock.step(0.5), {
     type: 'run.started',
@@ -1907,7 +1913,10 @@ function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]
     counts.set(counted, number);
     return { projectId: projectId && key ? projectId : null, handle: formatTaskHandle(counted, number) };
   };
+  const homes = new Set<string>();
   return timeline.map(({ at, event }) => {
+    if (event.type === 'task.created' && event.watchHome) homes.add(event.taskId);
+    if (homes.has('taskId' in event ? String(event.taskId) : '')) return { at, event };
     if (event.type === 'task.created') {
       const projectId = repos.find((repo) => repo.id === event.repoId)?.projectId ?? null;
       if (!projectId || !projects.some((project) => project.id === projectId)) return { at, event };
@@ -4140,6 +4149,147 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       branch: 'fix/docs-safari-blank',
       ageHours: 0.3,
       forkOf: 'task-docs-gate',
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
+    },
+    {
+      id: 'task-support-intake',
+      request: 'Watches composio-slack for the automation “Support reports”: The #support channel in Slack',
+      title: 'Watches composio-slack for the automation “Support reports”',
+      watchHome: true,
+      repo: docs,
+      size: 'small',
+      shape: 'answer',
+      stage: 'done',
+      reason: 'read #support',
+      branch: 'ask/support-reports',
+      ageHours: 7,
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'intake',
+          minutes: 2,
+          summary:
+            'Read 6 new messages in #support. None were reports: release notes and two people saying hello.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 57,
+          minutes: 2,
+          summary:
+            'Read 3 new messages in #support: two thank-yous and a question already answered in its thread. Nothing to file.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 57,
+          minutes: 1,
+          failed: true,
+          summary: 'composio-slack did not answer: the request timed out after 60 seconds.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 58,
+          minutes: 4,
+          summary:
+            'Read 9 new messages in #support, from the two hours the last read missed. Filed 1 task: paywall prices show in dollars for visitors in Germany.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 56,
+          minutes: 2,
+          summary:
+            'Read 4 new messages in #support. One repeats the euro price report, which is already filed; nothing new to file.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 116,
+          minutes: 3,
+          summary: 'Read 14 new messages in #support; filed 1 task and skipped 2 already filed.',
+        },
+      ],
+    },
+    {
+      id: 'task-paywall-euro-prices',
+      request: [
+        'Show paywall prices in the visitor’s currency',
+        '',
+        'Visitors in Germany see the paywall prices in dollars, though the App Store charges them in euros. Show the price in the store’s currency for the visitor’s region.',
+        '',
+        'Reported in composio-slack by Jonas Weber (https://superwall.slack.com/archives/C04SUPPORT/p1761711000):',
+        '',
+        '> Our German users keep asking why the paywall says $9.99 when the App Store then charges them 9,99 €. Can it show euros?',
+      ].join('\n'),
+      title: 'Show paywall prices in the visitor’s currency',
+      repo: paywall,
+      size: 'small',
+      priority: 'high',
+      stage: 'building',
+      reason: 'building phase 1 of 2',
+      branch: 'fix/paywall-local-currency',
+      ageHours: 3.8,
+      createdBy: {
+        kind: 'intake',
+        taskId: 'task-support-intake',
+        runId: 'task-support-intake-run-3',
+        requestKey: 'https://superwall.slack.com/archives/C04SUPPORT/p1761711000',
+      },
+      sourceReport: {
+        scheduleId: 'schedule-support',
+        server: 'composio-slack',
+        reportId: '1761711000.002300',
+        link: 'https://superwall.slack.com/archives/C04SUPPORT/p1761711000',
+        author: 'Jonas Weber',
+        postedAt: new Date(NOW - 4 * HOUR).toISOString(),
+        text: 'Our German users keep asking why the paywall says $9.99 when the App Store then charges them 9,99 €. Can it show euros?',
+      },
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 6,
+          summary: 'Planned two phases: read the store currency, then format it.',
+        },
+        { role: 'agent', purpose: 'build', minutes: 0, summary: '' },
+      ],
+    },
+    {
+      id: 'task-docs-mobile-sign-in',
+      request: [
+        'Stop the framework docs asking for sign-in on mobile',
+        '',
+        'Since the access gate came off the framework docs, Safari on iOS still shows the sign-in sheet on `/docs/framework` after a refresh. Find why the gate still runs there and remove it.',
+        '',
+        'Reported in composio-slack by Ana Ruiz on 2026-10-29T08:12:00Z (https://superwall.slack.com/archives/C04SUPPORT/p1761725520):',
+        '',
+        '> The framework docs keep asking me to sign in on my phone. Desktop is fine since this week, but on my iPhone it shows the sign-in sheet every time I refresh.',
+      ].join('\n'),
+      title: 'Stop the framework docs asking for sign-in on mobile',
+      repo: docs,
+      size: 'small',
+      stage: 'planning',
+      reason: 'planning the phases',
+      branch: 'fix/docs-mobile-sign-in',
+      ageHours: 0.6,
+      forkOf: 'task-docs-gate',
+      createdBy: {
+        kind: 'intake',
+        taskId: 'task-support-intake',
+        runId: 'task-support-intake-run-5',
+        requestKey: 'https://superwall.slack.com/archives/C04SUPPORT/p1761725520',
+      },
+      sourceReport: {
+        scheduleId: 'schedule-support',
+        server: 'composio-slack',
+        reportId: '1761725520.004100',
+        link: 'https://superwall.slack.com/archives/C04SUPPORT/p1761725520',
+        author: 'Ana Ruiz',
+        postedAt: new Date(NOW - 50 * MINUTE).toISOString(),
+        text: 'The framework docs keep asking me to sign in on my phone. Desktop is fine since this week, but on my iPhone it shows the sign-in sheet every time I refresh.',
+      },
       runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
     },
   ];

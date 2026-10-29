@@ -6,6 +6,7 @@ import {
   isTaskClosed,
   isTaskResting,
   isTaskSettled,
+  isWatchHome,
   listQueuedRounds,
   type MessageKind,
   MINUTE_MS,
@@ -246,8 +247,17 @@ function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: st
   });
 }
 
+export function assertNotWatchHome(task: Task) {
+  if (!isWatchHome(task)) return;
+  throw new DomainError(
+    'watch_home',
+    'This is where a watch reads its integration, so it takes no messages. Change the watch in Settings → Automations.'
+  );
+}
+
 function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {
   if (text.length === 0) throw new DomainError('message_required', 'Write a message first.');
+  assertNotWatchHome(task);
   const delivery = resolveMessageDelivery(state, task);
   if (delivery.effect === 'closed') {
     throw new DomainError('task_settled', 'This task is finished. Start a new one.');
@@ -313,7 +323,7 @@ export function sendQueuedRound(decider: Decider, command: CommandOf<'round.send
 
 export function redeliverMessage(decider: Decider, command: CommandOf<'message.deliver'>) {
   const task = decider.state.tasks[command.taskId];
-  if (!task || isTaskSettled(task)) return;
+  if (!task || isTaskSettled(task) || isWatchHome(task)) return;
   deliverMessage(decider, task, resolveDelivery(decider.state, task), command.text);
 }
 

@@ -22,6 +22,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/')).toEqual({ name: 'home' });
     expect(parseRoute('/tasks')).toEqual({ name: 'tasks' });
     expect(parseRoute('/tasks/t1')).toEqual({ name: 'task', reference: 't1' });
+    expect(parseRoute('/automations/s%201')).toEqual({ name: 'automation', scheduleId: 's 1' });
     expect(parseRoute('/settings')).toEqual({ name: 'settings' });
     expect(parseRoute('/terminal')).toEqual({ name: 'terminal' });
     expect(parseRoute('/onboarding')).toEqual({ name: 'onboarding' });

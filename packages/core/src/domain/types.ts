@@ -16,7 +16,7 @@ import type { RunAccount, UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
-import type { GateSecret } from './schedules.ts';
+import type { GateSecret, SourceReport } from './schedules.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
@@ -60,7 +60,7 @@ export type RunRole =
   | 'investigator'
   | 'researcher';
 
-export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch';
+export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch' | 'intake';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 
@@ -454,6 +454,8 @@ export interface Task {
   forkOf?: string | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
+  sourceReport?: SourceReport | null;
+  watchHome?: boolean;
   pipeline?: PipelineStep[];
   auto: TaskAuto;
   triageDecisions?: TriageDecisions | null;

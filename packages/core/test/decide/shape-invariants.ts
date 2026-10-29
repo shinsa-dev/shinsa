@@ -343,7 +343,8 @@ function assertRepositoryInvariants(task: Task, state: ShinsaState, context: str
       run.taskId === task.id &&
       run.endedAt === null &&
       !run.delegation &&
-      !REPOSITORY_FREE_ROLES.has(run.role)
+      !REPOSITORY_FREE_ROLES.has(run.role) &&
+      run.purpose !== 'intake'
   );
   expect(
     runs.map((run) => run.role),

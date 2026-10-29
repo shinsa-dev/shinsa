@@ -2,15 +2,18 @@ import {
   DomainError,
   describeScheduleTarget,
   describeScheduleTrigger,
+  listProjectRepos,
   listSchedules,
   type Schedule,
   type ScheduleRequest,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  validateReportFiling,
   validateScheduleRequest,
 } from '@shinsa/core';
 import { assertProtocol, readString } from '../agents/handover.ts';
+import { findForkSource } from '../agents/tools/forks.ts';
 import { describeError } from '../log/index.ts';
 import type { SecretStore } from '../secrets/index.ts';
 import { WEBHOOK_ROUTE_PREFIX } from './webhook.ts';
@@ -125,6 +128,7 @@ async function writeSchedule(
     text: request.text,
     trigger: request.trigger,
     target: request.target,
+    source: request.source,
     enabled: request.enabled,
     maxRuns: request.maxRuns,
     timeZone: request.timeZone ?? existing?.timeZone ?? context.timeZone,
@@ -189,6 +193,35 @@ async function removeSchedule(input: Record<string, unknown>, call: ScheduleTool
   return `Deleted “${name ?? scheduleId}”.`;
 }
 
+function resolveFiledRepo(state: ShinsaState, runId: string, name: string | null) {
+  if (name === null) return null;
+  const projectId = findTaskOf(state, runId).projectId;
+  const repos = projectId ? listProjectRepos(state, projectId) : [];
+  const repo = repos.find((candidate) => candidate.name === name);
+  if (repo) return repo.id;
+  const known = repos.map((candidate) => candidate.name);
+  throw new Error(
+    `The project has no repository "${name}". Its repositories: ${known.join(', ') || 'none'}.`
+  );
+}
+
+async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall) {
+  const { forkFrom, repository, ...filing } = assertProtocol(validateReportFiling(input));
+  const state = call.state();
+  const events = await call.dispatch({
+    type: 'agent.file_report',
+    runId: call.runId,
+    attemptId: call.attemptId,
+    ...filing,
+    forkOf: forkFrom === null ? null : findForkSource(state, forkFrom),
+    repoId: resolveFiledRepo(state, call.runId, repository),
+  });
+  const created = events.find((event) => event.type === 'task.created');
+  const task = created?.type === 'task.created' ? call.state().tasks[created.taskId] : undefined;
+  if (!task) throw new Error('Nothing was filed. Call file_report again.');
+  return `Filed ${task.handle ?? task.id} “${task.title}”. Go on with the next report.`;
+}
+
 export function handleScheduleTool(
   name: string,
   input: Record<string, unknown>,
@@ -202,6 +235,8 @@ export function handleScheduleTool(
       return Promise.resolve(serializeSchedules(call, context));
     case 'delete_schedule':
       return removeSchedule(input, call);
+    case 'file_report':
+      return fileReport(input, call);
     default:
       return null;
   }

@@ -1,4 +1,4 @@
-import type { Task, TaskStage } from '../domain/index.ts';
+import { isWatchHome, type Task, type TaskStage } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 
 export type Reference =
@@ -287,7 +287,7 @@ export const STAGE_WORDS: Record<TaskStage, string> = {
 };
 
 export function resolveReferenceCatalog(state: ShinsaState): ReferenceCatalog {
-  const tasks = Object.values(state.tasks).filter((task) => task.stage !== 'cancelled');
+  const tasks = Object.values(state.tasks).filter((task) => task.stage !== 'cancelled' && !isWatchHome(task));
   return {
     tasks: tasks.map((task) => ({ id: task.id, title: task.title })),
     pullRequests: tasks.flatMap((task) =>
@@ -323,7 +323,7 @@ function matchesQuery(state: ShinsaState, task: Task, words: string[]) {
 export function serializeTaskReferences(state: ShinsaState, query: string, limit = 20) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const tasks = Object.values(state.tasks)
-    .filter((task) => task.stage !== 'cancelled' && matchesQuery(state, task, words))
+    .filter((task) => task.stage !== 'cancelled' && !isWatchHome(task) && matchesQuery(state, task, words))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, limit);
   if (tasks.length === 0) return 'No task matches. Try fewer words.';

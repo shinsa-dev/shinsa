@@ -963,10 +963,10 @@ Every task agent's tool: `schedules_list` (reads).
 
 #### shinsa schedules write
 
-Create a schedule, or change one with --id: it starts a new task or messages a task once, on an interval, daily or when its webhook is called.
+Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily or when its webhook is called.
 
 ```
-shinsa schedules write [--id <text>] [--name <text>] [--message <text>] [--in-minutes <integer>] [--run-at <text>] [--every-minutes <integer>] [--daily-at <text>] [--weekdays <list>] [--webhook] [--signature-header <text>] [--signature-encoding <hex|base64>] [--signature-prefix <text>] [--replay-key <text>] [--new-task] [--repo <text>] [--priority <urgent|high|normal|low>] [--just-answer] [--task <text>] [--enabled] [--max-runs <integer>] [--time-zone <text>] [--json]
+shinsa schedules write [--id <text>] [--name <text>] [--message <text>] [--in-minutes <integer>] [--run-at <text>] [--every-minutes <integer>] [--daily-at <text>] [--weekdays <list>] [--webhook] [--signature-header <text>] [--signature-encoding <hex|base64>] [--signature-prefix <text>] [--replay-key <text>] [--new-task] [--repo <text>] [--priority <urgent|high|normal|low>] [--just-answer] [--task <text>] [--source <text>] [--project <text>] [--enabled] [--max-runs <integer>] [--time-zone <text>] [--json]
 ```
 
 Every task agent's tool: `schedules_write`. Sends `schedule.write`.
@@ -991,6 +991,8 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | `--priority` | choice, optional | With --new-task: its priority. |
 | `--just-answer` | boolean, optional | With --new-task: only answer a question. |
 | `--task` | text, optional | Message this task on each run instead. |
+| `--source` | text, optional | Read this data source of the project (its server) on each run and file a task for each new report. Without --task, a task to read it in is created. |
+| `--project` | text, optional | With --source: the project the data source belongs to. |
 | `--enabled` | boolean, optional | false saves it paused. |
 | `--max-runs` | integer, optional | Stop after this many runs. |
 | `--time-zone` | text, optional | IANA time zone for --daily-at. The machine’s by default. |
@@ -1894,7 +1896,7 @@ Every task agent's tool: `watchdogs_connect`. Sends `watchdog.connect`.
 
 #### shinsa sources list
 
-List a project’s data sources: the MCP servers watchdogs read, and what each holds.
+List a project’s data sources: the MCP servers its agents read, and what each holds.
 
 ```
 shinsa sources list <project> [--json]
@@ -1908,7 +1910,7 @@ Every task agent's tool: `sources_list` (reads).
 
 #### shinsa sources write
 
-Add a data source to a project, or change one: an MCP server watchdogs read, and what it holds.
+Add a data source to a project, or change one: an MCP server agents read, and what it holds.
 
 ```
 shinsa sources write <project> --server <text> --data <text> [--repos <list>] [--json]

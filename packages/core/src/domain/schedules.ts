@@ -1,5 +1,5 @@
 import { DAY_MS, MINUTE_MS } from './time.ts';
-import type { TaskMode, TaskPriority } from './types.ts';
+import type { Task, TaskMode, TaskPriority } from './types.ts';
 
 export type WebhookEncoding = 'hex' | 'base64';
 
@@ -21,6 +21,21 @@ export type ScheduleTarget =
   | { kind: 'new_task'; repoId: string | null; priority: TaskPriority; mode: TaskMode }
   | { kind: 'task'; taskId: string };
 
+export interface ScheduleSource {
+  projectId: string;
+  server: string;
+}
+
+export interface SourceReport {
+  scheduleId: string;
+  server: string;
+  reportId: string | null;
+  link: string | null;
+  author: string | null;
+  postedAt: string | null;
+  text: string;
+}
+
 export type ScheduleRunOutcome = 'sent' | 'skipped' | 'failed';
 
 export interface ScheduleRun {
@@ -41,6 +56,7 @@ export interface Schedule {
   text: string;
   trigger: ScheduleTrigger;
   target: ScheduleTarget;
+  source: ScheduleSource | null;
   timeZone: string;
   enabled: boolean;
   nextRunAt: number | null;
@@ -52,6 +68,7 @@ export interface Schedule {
   createdBy: ScheduleCreator;
   lastTaskId: string | null;
   lastRunId: string | null;
+  lastReadAt: number | null;
   stopped: ScheduleStop | null;
   replayKeys: Record<string, number>;
 }
@@ -80,6 +97,16 @@ export const SCHEDULE_LIMITS = {
   secretLabel: 80,
   secretReason: 300,
   detail: 300,
+  intakeSummary: 1_000,
+  readAttempts: 3,
+  reportTitle: 100,
+  reportRequest: 2_000,
+  reportId: 200,
+  reportLink: 2_000,
+  reportAuthor: 120,
+  reportPostedAt: 60,
+  reportText: 4_000,
+  filedListed: 10,
   reference: 200,
   timeZone: 60,
   runAt: 60,
@@ -92,4 +119,8 @@ export const SECRET_REF_PATTERN = /^secret-ref:[0-9a-f]{32}$/;
 
 export function isScheduleLive(schedule: Schedule) {
   return schedule.stopped === null;
+}
+
+export function isWatchHome(task: Pick<Task, 'watchHome'>) {
+  return task.watchHome === true;
 }

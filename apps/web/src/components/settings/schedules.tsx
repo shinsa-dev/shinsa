@@ -11,37 +11,49 @@ import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
+  AUTOMATION_TYPE_LOOK,
   canResume,
   copyWebhookUrl,
   describeNextRun,
+  describeOpenTask,
   describeRemoval,
   describeScheduleSummary,
   removeSchedule,
+  resolveAutomationType,
   resolveScheduleStatus,
   resolveScheduleTaskId,
   updateScheduleEnabled,
 } from '@/lib/schedules.ts';
-import { navigate, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
+import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 export interface ScheduleActions {
   enable: (schedule: Schedule, enabled: boolean) => Promise<unknown>;
   copyWebhook: (schedule: Schedule) => Promise<unknown>;
-  open: (taskId: string) => void;
+  open: (schedule: Schedule) => void;
   remove: (schedule: Schedule) => Promise<unknown>;
 }
 
-function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: ScheduleActions }) {
+export function ScheduleMenu({
+  schedule,
+  actions,
+  showOpen = true,
+}: {
+  schedule: Schedule;
+  actions: ScheduleActions;
+  showOpen?: boolean;
+}) {
   const removing = useDialogState<'remove'>();
-  const taskId = resolveScheduleTaskId(schedule);
+  const canOpen = showOpen && (schedule.source !== null || resolveScheduleTaskId(schedule) !== null);
   const removal = describeRemoval(schedule);
   return (
     <>
       <DropdownMenu>
-        <OptionsTrigger label='Schedule options' />
+        <OptionsTrigger label='Automation options' />
         <DropdownMenuContent align='end' className='min-w-52'>
           <DropdownMenuGroup>
             {schedule.enabled && (
@@ -59,15 +71,15 @@ function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: Sche
                 Copy webhook URL
               </DropdownMenuItem>
             )}
-            {taskId && (
-              <DropdownMenuItem icon='IconArrowUpRight' onClick={() => actions.open(taskId)}>
-                Open the task
+            {canOpen && (
+              <DropdownMenuItem icon='IconArrowUpRight' onClick={() => actions.open(schedule)}>
+                {describeOpenTask(schedule)}
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem icon='IconTrashCan' variant='destructive' onClick={() => removing.show('remove')}>
-            Delete schedule
+            Delete automation
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -76,7 +88,7 @@ function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: Sche
           control={removing.control}
           title={removal.title}
           body={removal.body}
-          action='Delete schedule'
+          action='Delete automation'
           onConfirm={() => void actions.remove(schedule)}
         />
       )}
@@ -95,11 +107,16 @@ export function ScheduleRow({
 }) {
   const status = resolveScheduleStatus(schedule);
   const at = status?.at ?? null;
+  const type = resolveAutomationType(schedule);
+  const look = AUTOMATION_TYPE_LOOK[type];
   return (
     <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className='text-fg-4 text-xs'>{schedule.name}</Truncate>
-        <Truncate className='text-2xs text-fg-2'>{describeScheduleSummary(state, schedule)}</Truncate>
+      <div className='flex min-w-0 flex-1 items-center gap-2.5'>
+        <StatusTile {...look} label={type} detail={look.hint} />
+        <div className='flex min-w-0 flex-1 flex-col gap-px'>
+          <Truncate className='text-fg-4 text-xs'>{schedule.name}</Truncate>
+          <Truncate className='text-2xs text-fg-2'>{describeScheduleSummary(state, schedule)}</Truncate>
+        </div>
       </div>
       <div className='flex shrink-0 items-center gap-1.5 text-xs'>
         {status && (
@@ -113,19 +130,28 @@ export function ScheduleRow({
   );
 }
 
-export function ScheduleSettings({ state }: { state: ShinsaState }) {
-  const schedules = listSchedules(state);
-  const actions: ScheduleActions = {
+export function createScheduleActions(state: ShinsaState): ScheduleActions {
+  return {
     enable: updateScheduleEnabled,
     copyWebhook: copyWebhookUrl,
-    open: (taskId) => navigate(resolveTaskPath(resolveTaskTarget(state, taskId))),
+    open: (schedule) => {
+      const taskId = resolveScheduleTaskId(schedule);
+      if (schedule.source) navigate(resolveAutomationPath(schedule.id));
+      else if (taskId) navigate(resolveTaskPath(resolveTaskTarget(state, taskId)));
+    },
     remove: removeSchedule,
   };
+}
+
+export function ScheduleSettings({ state }: { state: ShinsaState }) {
+  const schedules = listSchedules(state);
+  const actions = createScheduleActions(state);
   return (
-    <SettingsGroup title='Schedules'>
+    <SettingsGroup title='Automations'>
       {schedules.length === 0 && (
         <SettingsEmpty>
-          Ask an agent to do something on a schedule or when a webhook is called, and it shows up here.
+          Ask an agent for a schedule, a trigger or a watch, in the home chat or any task, and it shows up
+          here.
         </SettingsEmpty>
       )}
       {schedules.map((schedule) => (

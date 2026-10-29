@@ -27,6 +27,12 @@ describe('resolvePageKey', () => {
     expect(resolvePageKey(HOME, null)).toBe('home');
     expect(resolvePageKey(SETTINGS, null)).toBe('settings');
   });
+
+  it('keys an automation’s page by its schedule', () => {
+    expect(resolvePageKey({ route: { name: 'automation', scheduleId: 's1' }, search: '' }, null)).toBe(
+      'automation:s1'
+    );
+  });
 });
 
 describe('updateKeptViews', () => {

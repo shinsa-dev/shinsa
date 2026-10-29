@@ -132,6 +132,9 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   watch: async (agent) => {
     await agent.call('report_watch', { healthy: true, summary: 'The greeting still renders.' });
   },
+  intake: async (agent) => {
+    await agent.call('report_intake', { summary: 'Read the channel; nothing new to file.' });
+  },
   planner: async (agent) => {
     agent.say('Read the code; nothing to add.');
   },

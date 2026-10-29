@@ -730,6 +730,7 @@ describe('writing a schedule from Settings', () => {
       text: null,
       trigger: null,
       target: null,
+      source: null,
       enabled: null,
       maxRuns: null,
       timeZone: 'Europe/Berlin',
@@ -741,6 +742,7 @@ describe('writing a schedule from Settings', () => {
         text: 'Check the build.',
         trigger: null,
         target: null,
+        source: null,
         enabled: false,
         maxRuns: 3,
       })
@@ -752,6 +754,16 @@ describe('writing a schedule from Settings', () => {
       maxRuns: 3,
     });
     expect(parsed({ enabled: null, maxRuns: null })).toMatchObject({ enabled: null, maxRuns: null });
+  });
+
+  test('reads the data source it reads, and refuses a malformed one', () => {
+    expect(parsed({ source: { projectId: 'p1', server: 'slack' } }).source).toEqual({
+      projectId: 'p1',
+      server: 'slack',
+    });
+    expect(() => parsed({ source: 'slack' })).toThrow(DomainError);
+    expect(() => parsed({ source: { projectId: 'p1', server: 'slack', token: 'x' } })).toThrow(DomainError);
+    expect(() => parsed({ source: { server: 'slack' } })).toThrow(DomainError);
   });
 
   test('reads each kind of trigger', () => {

@@ -6,10 +6,11 @@ import {
   type Schedule,
   type ShinsaState,
 } from '@shinsa/core';
-import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import type { IconName } from '@shinsa/ui/components/icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { copyText, describeFailure, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
+import { formatCount } from '@/lib/format/count.ts';
 import { formatClock, formatMoment } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -24,14 +25,14 @@ interface WebhookDetails {
   hasSecret: boolean;
 }
 
-const TRIGGER_ICON: Record<Schedule['trigger']['kind'], MenuItemIcon> = {
+const TRIGGER_ICON: Record<Schedule['trigger']['kind'], IconName> = {
   once: 'IconHourglass',
   interval: 'IconArrowsRepeat',
   daily: 'IconClock',
   webhook: 'IconGlobe',
 };
 
-export function resolveScheduleIcon(schedule: Schedule): MenuItemIcon {
+export function resolveScheduleIcon(schedule: Schedule): IconName {
   return TRIGGER_ICON[schedule.trigger.kind];
 }
 
@@ -50,8 +51,38 @@ export function describeScheduleWhat(state: ShinsaState, schedule: Schedule) {
   return describeScheduleTarget(schedule, (taskId) => state.tasks[taskId]?.title ?? null);
 }
 
+function countFiledTasks(state: ShinsaState, schedule: Schedule) {
+  return Object.values(state.tasks).filter((task) => task.sourceReport?.scheduleId === schedule.id).length;
+}
+
+function describeFiled(count: number) {
+  return count === 0 ? 'nothing filed yet' : `${formatCount(count, 'task', 'tasks')} filed`;
+}
+
+export type AutomationType = 'Watch' | 'Trigger' | 'Schedule';
+
+export const AUTOMATION_TYPE_LOOK: Record<AutomationType, { icon: IconName; tone: Tone; hint: string }> = {
+  Watch: { icon: 'IconRadar', tone: 'purple', hint: 'Reads an integration and files a task per new report' },
+  Schedule: { icon: 'IconCalendarClock', tone: 'blue', hint: 'Starts or messages a task at a time' },
+  Trigger: { icon: 'IconGlobe', tone: 'orange', hint: 'Starts a task when its webhook is called' },
+};
+
+export function resolveAutomationType(schedule: Schedule): AutomationType {
+  if (schedule.source) return 'Watch';
+  return schedule.trigger.kind === 'webhook' ? 'Trigger' : 'Schedule';
+}
+
 export function describeScheduleSummary(state: ShinsaState, schedule: Schedule) {
-  return `${describeScheduleWhat(state, schedule)} · ${lowerFirst(describeScheduleWhen(schedule))}`;
+  const type = resolveAutomationType(schedule);
+  const when = lowerFirst(describeScheduleWhen(schedule));
+  if (schedule.source) {
+    return `${type} · ${schedule.source.server} · ${when} · ${describeFiled(countFiledTasks(state, schedule))}`;
+  }
+  return `${type} · ${describeScheduleWhat(state, schedule)} · ${when}`;
+}
+
+export function describeOpenTask(schedule: Schedule) {
+  return schedule.source ? 'Open the watch' : 'Open the task';
 }
 
 export function resolveScheduleStatus(schedule: Schedule): ScheduleStatus | null {

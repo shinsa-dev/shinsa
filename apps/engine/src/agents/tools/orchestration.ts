@@ -24,6 +24,7 @@ import {
   validateSplit,
 } from '@shinsa/core';
 import { assertProtocol } from '../handover.ts';
+import { findForkSource } from './forks.ts';
 import type { ToolSpec } from './schema.ts';
 
 const L = DELEGATION_LIMITS;
@@ -358,12 +359,7 @@ function resolveRepoId(state: ShinsaState, task: Task, name: string | null) {
 
 function resolveForkOf(state: ShinsaState, reference: string | null) {
   if (reference === null) return {};
-  const handle = reference.toUpperCase();
-  const task =
-    state.tasks[reference] ?? Object.values(state.tasks).find((candidate) => candidate.handle === handle);
-  if (!task)
-    throw new Error(`There is no task "${reference}" to fork. Find it with find_tasks and pass its id.`);
-  return { forkOf: task.id };
+  return { forkOf: findForkSource(state, reference) };
 }
 
 function listLinks(tasks: Task[]) {

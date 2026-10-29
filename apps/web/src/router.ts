@@ -6,6 +6,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'tasks' }
   | { name: 'task'; reference: string }
+  | { name: 'automation'; scheduleId: string }
   | { name: 'settings' }
   | { name: 'terminal' }
   | { name: 'onboarding' }
@@ -31,6 +32,8 @@ function parseSegment(pattern: RegExp, pathname: string) {
 export function parseRoute(pathname: string): Route {
   const reference = parseSegment(/^\/tasks\/([^/]+)$/, pathname);
   if (reference) return { name: 'task', reference };
+  const scheduleId = parseSegment(/^\/automations\/([^/]+)$/, pathname);
+  if (scheduleId) return { name: 'automation', scheduleId };
   if (pathname === '/tasks') return { name: 'tasks' };
   if (pathname === '/settings') return { name: 'settings' };
   if (pathname === '/terminal') return { name: 'terminal' };
@@ -125,6 +128,10 @@ export function resolveCanonicalTaskPath(task: TaskPathTarget, segment: string, 
 
 export function resolveTaskTarget(state: ShinsaState, taskId: string): TaskPathTarget {
   return state.tasks[taskId] ?? { id: taskId };
+}
+
+export function resolveAutomationPath(scheduleId: string) {
+  return `/automations/${encodeURIComponent(scheduleId)}`;
 }
 
 export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions = {}) {

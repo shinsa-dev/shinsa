@@ -175,6 +175,9 @@ src/
 │   ├── couriers.ts  create_task and split_task
 │   ├── orchestration.ts  Routing the delegation commands
 │   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook deliveries
+│   ├── intake.ts    A watch (a schedule that reads an integration): its hidden home (createWatchHome, closeWatchHome),
+│   │                a read as a read-only `intake` turn, file_report (dedupe by the filed tasks' reports, forks),
+│   │                report_intake, a read that gives up
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
 │   ├── on-behalf.ts What a user command sent on your behalf records (`on_behalf.acted`, its sentence, task and
 │   │                acting task, kept as `OnBehalfAction`); a system command records nothing here
@@ -346,7 +349,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   - the task's agent (`agent-invariants.ts`, `assertOneSessionPerTask`): a top-level run is the task's Agent, a
     reviewer or an inquiry agent (planner and builder exist only as delegated runs; there is no fixer or operator),
     every agent run has a purpose and no other run has one, an active agent run's purpose matches the stage (`plan`
-    planning, `build` building, `fix` fixing, `operate` operating, `watch` watching), and every new run of a
+    planning, `build` building, `fix` fixing, `operate` operating, `watch` and `intake` watching), and every new run of a
     task-session role resumes the session of the task's latest such run with a session (one session per task, across
     phases, fixes, rounds, kinds of work and models) unless that session ended in a context overflow or an image
     error, the previous run of the role failed with a fresh-class failure, or it belongs to another kind of work on

@@ -34,6 +34,9 @@ export const ROADMAP_COLUMNS =
 
 export const ROADMAP_ROW_HEIGHT = 36;
 
+export const FILED_COLUMNS =
+  'grid-cols-[minmax(0,1fr)_10rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
+
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
@@ -100,11 +103,13 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
   task,
   group,
   depth,
+  columns = ROADMAP_COLUMNS,
 }: {
   state: ShinsaState;
   task: Task;
   group: RoadmapGroupKey;
   depth: number;
+  columns?: string;
 }) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
   const level = Math.min(depth, 3);
@@ -125,7 +130,7 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
                 navigate(resolveTaskPath(task));
               }
             }}
-            className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1 ${ROADMAP_COLUMNS}`}
+            className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1 ${columns}`}
           />
         }
       >
@@ -139,10 +144,12 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
           <TaskHandle task={task} />
           <Truncate className='text-fg-4'>{task.title}</Truncate>
         </span>
-        <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
-          {repo && <RepoMark state={state} repo={repo} />}
-          <Truncate>{repo?.name ?? 'No repository'}</Truncate>
-        </span>
+        {columns === ROADMAP_COLUMNS && (
+          <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
+            {repo && <RepoMark state={state} repo={repo} />}
+            <Truncate>{repo?.name ?? 'No repository'}</Truncate>
+          </span>
+        )}
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
           <KindMark state={state} task={task} />
           <RowStatus state={state} task={task} group={group} />

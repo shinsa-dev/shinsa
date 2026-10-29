@@ -29,6 +29,7 @@ import {
 import { resolveOnboardingRedirect } from '@/lib/onboarding.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { type Route, replaceRoute, resolveRouteTaskId, useRoute, useSearchString } from '@/router.ts';
+import { AutomationPage } from '@/routes/automation.tsx';
 import { HomePage } from '@/routes/home.tsx';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { SettingsPage } from '@/routes/settings.tsx';
@@ -56,6 +57,8 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
       return <TasksPage state={state} />;
     case 'task':
       return <TaskPage state={state} taskId={route.reference} />;
+    case 'automation':
+      return <AutomationPage state={state} scheduleId={route.scheduleId} />;
     case 'settings':
       return <SettingsPage state={state} />;
     case 'terminal':
@@ -77,7 +80,11 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
   if (visit.current.key !== key) visit.current = { key, count: visit.current.count + 1 };
   if (isHubRoute(route)) hubs.current.set(route.name, view);
   if (route.name === 'task') tasks.current = updateKeptViews(tasks.current, key, view, KEPT_TASK_PAGES);
-  const pages = [...listHubViews(hubs.current, warm), ...tasks.current];
+  const pages = [
+    ...listHubViews(hubs.current, warm),
+    ...tasks.current,
+    ...(route.name === 'automation' ? [{ key, view, shownAt: 0 }] : []),
+  ];
   return (
     <>
       {pages.map((page) => {

@@ -286,6 +286,7 @@ describe('describeTool', () => {
       'Created a task: Bump the SDK'
     );
     expect(shinsa('create_task')).toBe('Created a task:');
+    expect(shinsa('file_report', { title: 'Editor loses edits' })).toBe('Filed a report: Editor loses edits');
     expect(shinsa('split_task', { tasks: [{}, {}] })).toBe('Split the plan into 2 tasks');
   });
 
@@ -378,6 +379,7 @@ describe('resolveRunningLabel', () => {
           'delegation_cancel',
           'delegation_answer',
           'create_task',
+          'file_report',
           'split_task',
           'set_schedule',
           'list_schedules',
@@ -410,6 +412,10 @@ describe('resolveRunningLabel', () => {
 describe('resolveGroupPhrase', () => {
   it('names a watchdog check the agent reported', () => {
     expect(resolveGroupPhrase(['report_watch'])).toBe('Reported the watchdog check');
+  });
+
+  it('names a read of a data source the agent reported', () => {
+    expect(resolveGroupPhrase(['report_intake'])).toBe('Reported what the watch found');
   });
 
   it('counts each kind of step in the order it first appeared', () => {
@@ -504,6 +510,7 @@ describe('resolveGroupPhrase', () => {
       phrase('delegation_answer', 1),
       phrase('delegation_answer', 2),
       phrase('create_task', 1),
+      phrase('file_report', 2),
       phrase('split_task', 1),
       phrase('set_schedule', 2),
       phrase('list_schedules', 1),
@@ -517,6 +524,7 @@ describe('resolveGroupPhrase', () => {
       'Answered a delegated agent',
       'Answered delegated agents 2 times',
       'Created 1 task',
+      'Filed 2 reports',
       'Split the plan',
       'Set 2 schedules',
       'Listed the schedules',

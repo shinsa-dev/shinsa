@@ -18,6 +18,7 @@ export interface ScheduleRequest {
   text: string | null;
   trigger: ScheduleTrigger | null;
   target: ScheduleTargetInput | null;
+  source: string | null;
   enabled: boolean | null;
   maxRuns: number | null;
   timeZone: string | null;
@@ -152,10 +153,55 @@ export function validateScheduleRequest(
     text: reader.optionalText(input.message, 'message', SCHEDULE_LIMITS.text),
     trigger,
     target: readTarget(reader, input),
+    source: reader.optionalText(input.source, 'source', SCHEDULE_LIMITS.reference),
     enabled: readEnabled(reader, input.enabled),
     maxRuns: reader.optionalCount(input.max_runs, 'max_runs', SCHEDULE_LIMITS.maxRuns),
     timeZone: reader.optionalText(input.time_zone, 'time_zone', SCHEDULE_LIMITS.timeZone),
     secretRef,
+  });
+}
+
+export function validateIntakeReport(
+  input: Record<string, unknown>
+): Validation<{ summary: string; reached: boolean }> {
+  const reader = new Reader();
+  return reader.result({
+    summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.intakeSummary),
+    reached:
+      input.reached === undefined || input.reached === null ? true : reader.flag(input.reached, 'reached'),
+  });
+}
+
+export interface ReportFilingRequest {
+  title: string;
+  request: string;
+  reportId: string | null;
+  link: string | null;
+  author: string | null;
+  postedAt: string | null;
+  text: string;
+  forkFrom: string | null;
+  repository: string | null;
+}
+
+export function validateReportFiling(input: Record<string, unknown>): Validation<ReportFilingRequest> {
+  const reader = new Reader();
+  const L = SCHEDULE_LIMITS;
+  const reportId = reader.optionalText(input.report_id, 'report_id', L.reportId);
+  const link = reader.optionalText(input.link, 'link', L.reportLink);
+  if (reportId === null && link === null) {
+    reader.errors.push('Give the report’s report_id or link in the source, so Shinsa never files it twice.');
+  }
+  return reader.result({
+    title: reader.text(input.title, 'title', L.reportTitle),
+    request: reader.text(input.request, 'request', L.reportRequest),
+    reportId,
+    link,
+    author: reader.optionalText(input.author, 'author', L.reportAuthor),
+    postedAt: reader.optionalText(input.posted_at, 'posted_at', L.reportPostedAt),
+    text: reader.text(input.text, 'text', L.reportText),
+    forkFrom: reader.optionalText(input.fork_from, 'fork_from', L.reference),
+    repository: reader.optionalText(input.repository, 'repository', L.reference),
   });
 }
 

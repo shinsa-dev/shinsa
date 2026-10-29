@@ -23,7 +23,8 @@ src/
 ├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (in the Mac app
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
-├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, onboarding.tsx
+├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, automation.tsx (a
+│   │                    automation's own page at /automations/<id>, laid out like a task page: facts row, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed in roadmap rows, an Activity log of its runs), onboarding.tsx
 │   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
@@ -253,7 +254,8 @@ src/
         checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
         changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
-        Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, secrets.ts,
+        Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, automations.ts (a watch's page: its facts,
+        reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start and priority),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
