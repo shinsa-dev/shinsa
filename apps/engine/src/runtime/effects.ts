@@ -56,6 +56,7 @@ import {
   type LoginResolver,
   listCandidateRepos,
   type RootSource,
+  syncRepoRemote,
   upsertRepo,
   verifySetup,
 } from '../repos/index.ts';
@@ -299,8 +300,9 @@ export class EffectRunner {
 
   async #syncTask(taskId: string, force: boolean, signal: AbortSignal) {
     const task = this.#engine.state.tasks[taskId];
-    const repo = task?.repoId ? this.#engine.state.repos[task.repoId] : undefined;
-    if (!task || !repo || signal.aborted) return null;
+    const known = task?.repoId ? this.#engine.state.repos[task.repoId] : undefined;
+    if (!task || !known || signal.aborted) return null;
+    const repo = await syncRepoRemote(this.#engine, known);
     let read: PullRequestRead | null;
     try {
       const wanted = resolveRoundBase(task) ?? repo.defaultBranch;

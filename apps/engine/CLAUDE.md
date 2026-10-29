@@ -217,7 +217,8 @@ src/
 │                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
-│                        names a new project after its GitHub owner (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
+│                        names a new project after its GitHub owner, and fills in a missing remote from origin
+│                        (syncRepoRemote, upsertRepo) (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
 │                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
 │                        (setup verification before a task's first agent)
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts), the prerequisite checks

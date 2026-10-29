@@ -25,9 +25,14 @@ export async function resolveRepoRoot(path: string) {
   return result.ok ? result.stdout : null;
 }
 
+export async function resolveRepoRemote(root: string) {
+  const remoteUrl = await runCommand(['git', 'remote', 'get-url', 'origin'], root);
+  return remoteUrl.ok ? normalizeRemote(remoteUrl.stdout) : null;
+}
+
 export async function inspectRepo(path: string): Promise<RepoCandidate> {
   const root = await runCommandOrThrow(['git', 'rev-parse', '--show-toplevel'], path);
-  const remoteUrl = await runCommand(['git', 'remote', 'get-url', 'origin'], root);
+  const remote = await resolveRepoRemote(root);
   const remoteHead = await runCommand(['git', 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], root);
   let defaultBranch = remoteHead.stdout.replace(/^origin\//, '');
   if (!remoteHead.ok) defaultBranch = await resolveLocalDefault(root);
@@ -35,6 +40,6 @@ export async function inspectRepo(path: string): Promise<RepoCandidate> {
     path: root,
     name: basename(root),
     defaultBranch,
-    remote: remoteUrl.ok ? normalizeRemote(remoteUrl.stdout) : null,
+    remote,
   };
 }
