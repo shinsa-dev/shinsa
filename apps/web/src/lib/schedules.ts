@@ -61,6 +61,12 @@ function describeFiled(count: number) {
 
 export type AutomationType = 'Watch' | 'Trigger' | 'Schedule';
 
+export const AUTOMATION_TYPE_LOOK: Record<AutomationType, { icon: IconName; tone: Tone; hint: string }> = {
+  Watch: { icon: 'IconRadar', tone: 'purple', hint: 'Reads an integration and files a task per new report' },
+  Schedule: { icon: 'IconCalendarClock', tone: 'blue', hint: 'Starts or messages a task at a time' },
+  Trigger: { icon: 'IconGlobe', tone: 'orange', hint: 'Starts a task when its webhook is called' },
+};
+
 export function resolveAutomationType(schedule: Schedule): AutomationType {
   if (schedule.source) return 'Watch';
   return schedule.trigger.kind === 'webhook' ? 'Trigger' : 'Schedule';

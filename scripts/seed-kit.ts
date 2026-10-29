@@ -66,6 +66,7 @@ export interface SeedRun {
   purpose?: RunPurpose;
   fix?: FixReason;
   minutes: number;
+  afterMinutes?: number;
   summary: string;
   reply?: string;
   failed?: boolean;

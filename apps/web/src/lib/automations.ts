@@ -12,8 +12,9 @@ import { describeFailure } from '@/lib/connection/commands.ts';
 import { sendCommand } from '@/lib/connection/socket.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
+import { resolveProjectInk } from '@/lib/projects.ts';
 import {
-  type AutomationType,
+  AUTOMATION_TYPE_LOOK,
   describeScheduleWhen,
   resolveAutomationType,
   resolveScheduleIcon,
@@ -173,26 +174,28 @@ export interface AutomationRead {
   key: string;
   at: number;
   icon: IconName;
-  label: string;
   tone: Tone;
-  summary: string | null;
+  title: string;
+  actor: 'Agent' | 'Shinsa';
+  detail: string[];
   filed: Task[];
-  runId: string | null;
 }
 
-type ReadLook = Pick<AutomationRead, 'icon' | 'label' | 'tone'>;
+type ReadLook = Pick<AutomationRead, 'icon' | 'tone' | 'title'>;
 
 function describeRead(run: Run, server: string, filed: number): ReadLook {
-  if (run.endedAt === null) return { icon: 'IconEyeOpen', label: `Reading ${server}`, tone: 'blue' };
+  if (run.endedAt === null) return { icon: 'IconRadar', tone: 'purple', title: `Reading ${server}` };
   if (run.outcome !== 'completed' || !run.summary) {
-    return { icon: 'IconExclamationTriangle', label: 'Did not finish', tone: 'amber' };
+    return { icon: 'IconExclamationTriangle', tone: 'amber', title: 'The read did not finish' };
   }
-  if (filed === 0) return { icon: 'IconEyeOpen', label: `Read ${server}, filed nothing`, tone: 'neutral' };
-  return {
-    icon: 'IconListBullets',
-    label: `Read ${server}, filed ${formatCount(filed, 'task', 'tasks')}`,
-    tone: 'green',
-  };
+  if (filed === 0) return { icon: 'IconCheckCircle2', tone: 'neutral', title: 'No new reports' };
+  return { icon: 'IconListBullets', tone: 'green', title: `Filed ${formatCount(filed, 'task', 'tasks')}` };
+}
+
+function describeReadDetail(run: Run, server: string) {
+  if (run.summary) return [run.summary];
+  if (run.endedAt === null) return [];
+  return [`It ended before it said what it read in ${server}. The next read looks again.`];
 }
 
 export function listAutomationTasks(state: ShinsaState, schedule: Schedule) {
@@ -222,22 +225,24 @@ function listIntakeReads(state: ShinsaState, schedule: Schedule, filed: Task[]):
         key: run.id,
         at: run.startedAt,
         ...describeRead(run, server, made.length),
-        summary: run.summary,
+        actor: 'Agent',
+        detail: describeReadDetail(run, server),
         filed: made,
-        runId: run.id,
       };
     });
 }
 
-const MISSED_LOOK: Record<'skipped' | 'failed', ReadLook> = {
-  skipped: { icon: 'IconClockSnooze', label: 'Skipped', tone: 'neutral' },
-  failed: { icon: 'IconExclamationCircle', label: 'Failed', tone: 'red' },
-};
+function describeMissed(schedule: Schedule, outcome: 'skipped' | 'failed'): ReadLook {
+  const what = schedule.source ? 'read' : 'run';
+  return outcome === 'skipped'
+    ? { icon: 'IconClockSnooze', tone: 'neutral', title: `Skipped a ${what}` }
+    : { icon: 'IconExclamationCircle', tone: 'red', title: `The ${what} failed` };
+}
 
 function describeSent(schedule: Schedule): ReadLook {
   return schedule.target.kind === 'new_task'
-    ? { icon: 'IconPlayCircle', label: 'Started a task', tone: 'blue' }
-    : { icon: 'IconBubbleText', label: 'Messaged its task', tone: 'blue' };
+    ? { icon: 'IconPlayCircle', tone: 'blue', title: 'Started a task' }
+    : { icon: 'IconBubbleText', tone: 'blue', title: 'Messaged its task' };
 }
 
 function listScheduleRuns(state: ShinsaState, schedule: Schedule): AutomationRead[] {
@@ -247,10 +252,10 @@ function listScheduleRuns(state: ShinsaState, schedule: Schedule): AutomationRea
         {
           key: `${run.outcome}:${run.at}`,
           at: run.at,
-          ...MISSED_LOOK[run.outcome],
-          summary: run.detail,
+          ...describeMissed(schedule, run.outcome),
+          actor: 'Shinsa',
+          detail: run.detail ? [run.detail] : [],
           filed: [],
-          runId: null,
         },
       ];
     }
@@ -261,9 +266,9 @@ function listScheduleRuns(state: ShinsaState, schedule: Schedule): AutomationRea
         key: `sent:${run.at}`,
         at: run.at,
         ...describeSent(schedule),
-        summary: null,
+        actor: 'Shinsa',
+        detail: [],
         filed: task ? [task] : [],
-        runId: null,
       },
     ];
   });
@@ -283,19 +288,8 @@ export interface AutomationFact {
   tone: Tone;
   hint: string | null;
   at: number | null;
+  ink?: string;
 }
-
-const TYPE_ICON: Record<AutomationType, IconName> = {
-  Watch: 'IconEyeOpen',
-  Schedule: 'IconClock',
-  Trigger: 'IconGlobe',
-};
-
-const TYPE_HINT: Record<AutomationType, string> = {
-  Watch: 'Reads an integration and files a task per new report',
-  Schedule: 'Starts or messages a task at a time',
-  Trigger: 'Starts a task when its webhook is called',
-};
 
 function resolveAutomationState(schedule: Schedule): Omit<AutomationFact, 'key' | 'at'> {
   if (schedule.stopped === 'target_gone') {
@@ -334,7 +328,7 @@ export function listAutomationFacts(state: ShinsaState, schedule: Schedule): Aut
   const project = selectAutomationProject(state, schedule);
   const last = schedule.runs.filter((run) => run.outcome === 'sent').at(-1);
   const facts: (AutomationFact | null)[] = [
-    { key: 'type', icon: TYPE_ICON[type], label: type, tone: 'neutral', hint: TYPE_HINT[type], at: null },
+    { key: 'type', ...AUTOMATION_TYPE_LOOK[type], label: type, at: null },
     { key: 'state', ...resolveAutomationState(schedule), at: null },
     source && {
       key: 'source',
@@ -351,6 +345,7 @@ export function listAutomationFacts(state: ShinsaState, schedule: Schedule): Aut
       tone: 'neutral',
       hint: 'Project',
       at: null,
+      ink: resolveProjectInk(project.color),
     },
     {
       key: 'when',

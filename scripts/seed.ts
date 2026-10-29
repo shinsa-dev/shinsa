@@ -1611,6 +1611,7 @@ function pushTaskRun(task: SeedTask, index: number, progress: SeedProgress, push
   if (!run) return;
   const runId = `${task.id}-run-${index}`;
   const agent = run.role === 'agent';
+  clock.step(run.afterMinutes ?? 0);
   pushFixStart(task, index, progress, push, clock);
   push(clock.step(0.5), {
     type: 'run.started',
@@ -4159,14 +4160,98 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       stage: 'done',
       reason: 'read #support',
       branch: 'ask/support-reports',
-      ageHours: 50,
+      ageHours: 7,
       runs: [
         {
           role: 'agent',
           purpose: 'intake',
+          minutes: 2,
+          summary:
+            'Read 6 new messages in #support. None were reports: release notes and two people saying hello.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 57,
+          minutes: 2,
+          summary:
+            'Read 3 new messages in #support: two thank-yous and a question already answered in its thread. Nothing to file.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 57,
+          minutes: 1,
+          failed: true,
+          summary: 'composio-slack did not answer: the request timed out after 60 seconds.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 58,
+          minutes: 4,
+          summary:
+            'Read 9 new messages in #support, from the two hours the last read missed. Filed 1 task: paywall prices show in dollars for visitors in Germany.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 56,
+          minutes: 2,
+          summary:
+            'Read 4 new messages in #support. One repeats the euro price report, which is already filed; nothing new to file.',
+        },
+        {
+          role: 'agent',
+          purpose: 'intake',
+          afterMinutes: 116,
           minutes: 3,
           summary: 'Read 14 new messages in #support; filed 1 task and skipped 2 already filed.',
         },
+      ],
+    },
+    {
+      id: 'task-paywall-euro-prices',
+      request: [
+        'Show paywall prices in the visitor’s currency',
+        '',
+        'Visitors in Germany see the paywall prices in dollars, though the App Store charges them in euros. Show the price in the store’s currency for the visitor’s region.',
+        '',
+        'Reported in composio-slack by Jonas Weber (https://superwall.slack.com/archives/C04SUPPORT/p1761711000):',
+        '',
+        '> Our German users keep asking why the paywall says $9.99 when the App Store then charges them 9,99 €. Can it show euros?',
+      ].join('\n'),
+      title: 'Show paywall prices in the visitor’s currency',
+      repo: paywall,
+      size: 'small',
+      priority: 'high',
+      stage: 'building',
+      reason: 'building phase 1 of 2',
+      branch: 'fix/paywall-local-currency',
+      ageHours: 3.8,
+      createdBy: {
+        kind: 'intake',
+        taskId: 'task-support-intake',
+        runId: 'task-support-intake-run-3',
+        requestKey: 'https://superwall.slack.com/archives/C04SUPPORT/p1761711000',
+      },
+      sourceReport: {
+        scheduleId: 'schedule-support',
+        server: 'composio-slack',
+        reportId: '1761711000.002300',
+        link: 'https://superwall.slack.com/archives/C04SUPPORT/p1761711000',
+        author: 'Jonas Weber',
+        postedAt: new Date(NOW - 4 * HOUR).toISOString(),
+        text: 'Our German users keep asking why the paywall says $9.99 when the App Store then charges them 9,99 €. Can it show euros?',
+      },
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 6,
+          summary: 'Planned two phases: read the store currency, then format it.',
+        },
+        { role: 'agent', purpose: 'build', minutes: 0, summary: '' },
       ],
     },
     {
@@ -4191,7 +4276,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       createdBy: {
         kind: 'intake',
         taskId: 'task-support-intake',
-        runId: 'task-support-intake-run-0',
+        runId: 'task-support-intake-run-5',
         requestKey: 'https://superwall.slack.com/archives/C04SUPPORT/p1761725520',
       },
       sourceReport: {

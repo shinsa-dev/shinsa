@@ -2,17 +2,18 @@ import type { Gate, Schedule, ShinsaState, Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import type * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { ActivityEntry } from '@/components/overview/activity-row.tsx';
 import { PausedCard, QuestionCard } from '@/components/overview/now-card.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { FILED_COLUMNS, RoadmapRow } from '@/components/roadmap/row.tsx';
 import { createScheduleActions, ScheduleMenu } from '@/components/settings/schedules.tsx';
-import { StatusTile } from '@/components/status/tile.tsx';
 import { FACT } from '@/components/task/fact.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -44,7 +45,11 @@ function FactLabel({ fact }: { fact: AutomationFact }) {
 function FactItem({ fact }: { fact: AutomationFact }) {
   const item = (
     <span className={cn(FACT, 'max-w-72', fact.tone !== 'neutral' && TONE_TEXT[fact.tone])}>
-      <Icon size='sm' name={fact.icon} />
+      <Icon
+        size='sm'
+        name={fact.icon}
+        style={fact.ink ? ({ '--icon-color': fact.ink } as React.CSSProperties) : undefined}
+      />
       <span className='truncate'>
         <FactLabel fact={fact} />
       </span>
@@ -112,26 +117,21 @@ function TasksPanel({ state, schedule }: { state: ShinsaState; schedule: Schedul
 
 function ReadRow({ state, read }: { state: ShinsaState; read: AutomationRead }) {
   return (
-    <li className='group relative flex gap-3 pb-4 last:pb-0'>
-      <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
-      <StatusTile icon={read.icon} tone={read.tone} className='relative' />
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
-        <div className='flex items-baseline gap-2 text-xs leading-5'>
-          <span className='font-medium text-fg-3'>{read.label}</span>
-          <span className='ms-auto shrink-0 text-2xs text-fg-2'>
-            <TimeAgo at={read.at} compact />
-          </span>
+    <ActivityEntry
+      glyph={{ icon: read.icon, tone: read.tone }}
+      text={read.title}
+      actor={read.actor}
+      at={read.at}
+      detail={read.detail}
+    >
+      {read.filed.length > 0 && (
+        <div className='flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs'>
+          {read.filed.map((task) => (
+            <TaskLink key={task.id} state={state} task={task} />
+          ))}
         </div>
-        {read.summary && <p className='selectable text-pretty text-fg-4 text-xs'>{read.summary}</p>}
-        {read.filed.length > 0 && (
-          <div className='flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs'>
-            {read.filed.map((task) => (
-              <TaskLink key={task.id} state={state} task={task} />
-            ))}
-          </div>
-        )}
-      </div>
-    </li>
+      )}
+    </ActivityEntry>
   );
 }
 

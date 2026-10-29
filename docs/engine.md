@@ -1730,12 +1730,14 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   characters) and the task rests again. A read that fails or ends without `report_intake` is recovered like any
   run; where another run would open a failure gate, the read gives up instead (`missIntakeRead`): the task rests and
   the next fire reads again. The filed task's activity says which automation filed it from whose report, and the
-  home's activity lists each task it filed. Settings → Automations shows a watch as "Watch · <server> · <when> ·
-  N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
+  home's activity lists each task it filed. Settings → Automations starts each row with its type's tile, in the
+  type's colour (`AUTOMATION_TYPE_LOOK`: a schedule blue, a trigger orange, a watch purple), and shows a watch as
+  "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
   `routes/automation.tsx`), laid out like a task page: its text as the description, a facts row (its type, on or
-  paused, the integration, the project, when it runs, the next and last run and how many tasks it filed,
-  `listAutomationFacts`), the tasks it filed in the roadmap's own rows, and an Activity log of every run, newest first:
-  each read with what it filed (or that it filed nothing) and its summary, and the runs it skipped or failed; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
+  paused, the integration, the project in its own colour, when it runs, the next and last run and how many tasks it
+  filed, `listAutomationFacts`), the tasks it filed in the roadmap's own rows, and an Activity log of every run, newest
+  first, drawn by the task page's own entry (`ActivityEntry`): a title for the outcome ("Filed 1 task", "No new
+  reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
   check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
   so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the

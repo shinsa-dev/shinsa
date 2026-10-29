@@ -12,9 +12,11 @@ import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
+  AUTOMATION_TYPE_LOOK,
   canResume,
   copyWebhookUrl,
   describeNextRun,
@@ -22,6 +24,7 @@ import {
   describeRemoval,
   describeScheduleSummary,
   removeSchedule,
+  resolveAutomationType,
   resolveScheduleStatus,
   resolveScheduleTaskId,
   updateScheduleEnabled,
@@ -106,11 +109,16 @@ export function ScheduleRow({
 }) {
   const status = resolveScheduleStatus(schedule);
   const at = status?.at ?? null;
+  const type = resolveAutomationType(schedule);
+  const look = AUTOMATION_TYPE_LOOK[type];
   return (
     <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className='text-fg-4 text-xs'>{schedule.name}</Truncate>
-        <Truncate className='text-2xs text-fg-2'>{describeScheduleSummary(state, schedule)}</Truncate>
+      <div className='flex min-w-0 flex-1 items-center gap-2.5'>
+        <StatusTile {...look} label={type} detail={look.hint} />
+        <div className='flex min-w-0 flex-1 flex-col gap-px'>
+          <Truncate className='text-fg-4 text-xs'>{schedule.name}</Truncate>
+          <Truncate className='text-2xs text-fg-2'>{describeScheduleSummary(state, schedule)}</Truncate>
+        </div>
       </div>
       <div className='flex shrink-0 items-center gap-1.5 text-xs'>
         {status && (

@@ -143,7 +143,15 @@ function listSchedules(): Schedule[] {
       target: { kind: 'task', taskId: 'task-support-intake' },
       source: { projectId: 'project-superwall', server: 'composio-slack' },
       runCount: 48,
-      runs: [scheduleRun('sent', 50 * MINUTE), scheduleRun('sent', 110 * MINUTE)],
+      runs: [
+        scheduleRun('sent', 7 * HOUR),
+        scheduleRun('sent', 6 * HOUR),
+        scheduleRun('sent', 5 * HOUR),
+        scheduleRun('sent', 4 * HOUR),
+        scheduleRun('sent', 3 * HOUR),
+        scheduleRun('skipped', 2 * HOUR, 'The task was at work, so this read was skipped.'),
+        scheduleRun('sent', 55 * MINUTE),
+      ],
       createdBy: { kind: 'you' },
     }),
   ];

@@ -19,6 +19,7 @@ import {
   validateAutomationDraft,
   writeAutomation,
 } from '@/lib/automations.ts';
+import { resolveProjectInk } from '@/lib/projects.ts';
 import { resolveAutomationPath } from '@/router.ts';
 import { createSchedule } from '../support/schedules.ts';
 import {
@@ -215,7 +216,7 @@ describe('a watch’s page', () => {
     expect(
       listAutomationFacts(state, watch).map((fact) => [fact.key, fact.label, fact.tone, fact.at])
     ).toEqual([
-      ['type', 'Watch', 'neutral', null],
+      ['type', 'Watch', 'purple', null],
       ['state', 'On', 'green', null],
       ['source', 'slack', 'neutral', null],
       ['project', 'Superwall', 'neutral', null],
@@ -226,6 +227,9 @@ describe('a watch’s page', () => {
     ]);
     expect(listAutomationFacts(state, watch).find((fact) => fact.key === 'source')?.hint).toBe(
       'The #feedback channel'
+    );
+    expect(listAutomationFacts(state, watch).find((fact) => fact.key === 'project')?.ink).toBe(
+      resolveProjectInk(PROJECT.color)
     );
   });
 
@@ -263,18 +267,26 @@ describe('a watch’s page', () => {
     expect(describeAutomationTasks(watch)).toEqual({ title: 'Tasks it filed', empty: 'Nothing filed yet.' });
     expect(
       listAutomationReads(state, watch).map((read) => [
-        read.label,
+        read.title,
         read.icon,
         read.tone,
-        read.summary,
+        read.actor,
+        read.detail,
         read.filed.length,
       ])
     ).toEqual([
-      ['Failed', 'IconExclamationCircle', 'red', 'It broke.', 0],
-      ['Skipped', 'IconClockSnooze', 'neutral', 'The task was at work.', 0],
-      ['Did not finish', 'IconExclamationTriangle', 'amber', null, 0],
-      ['Reading slack', 'IconEyeOpen', 'blue', null, 0],
-      ['Read slack, filed 1 task', 'IconListBullets', 'green', 'Read 4 messages; filed 1.', 1],
+      ['The read failed', 'IconExclamationCircle', 'red', 'Shinsa', ['It broke.'], 0],
+      ['Skipped a read', 'IconClockSnooze', 'neutral', 'Shinsa', ['The task was at work.'], 0],
+      [
+        'The read did not finish',
+        'IconExclamationTriangle',
+        'amber',
+        'Agent',
+        ['It ended before it said what it read in slack. The next read looks again.'],
+        0,
+      ],
+      ['Reading slack', 'IconRadar', 'purple', 'Agent', [], 0],
+      ['Filed 1 task', 'IconListBullets', 'green', 'Agent', ['Read 4 messages; filed 1.'], 1],
     ]);
     const quiet = {
       ...state,
@@ -290,9 +302,9 @@ describe('a watch’s page', () => {
         }),
       },
     };
-    expect(listAutomationReads(quiet, { ...watch, runs: [] }).map((read) => read.label)).toEqual([
-      'Read slack, filed nothing',
-    ]);
+    expect(
+      listAutomationReads(quiet, { ...watch, runs: [] }).map((read) => [read.title, read.detail])
+    ).toEqual([['No new reports', ['Nothing new.']]]);
   });
 
   it('shows what a plain schedule started or messaged, and the tasks it started', () => {
@@ -304,12 +316,19 @@ describe('a watch’s page', () => {
     const starter = createSchedule({ id: 'n', runs: [sent, { ...sent, at: NOW - 1, taskId: 'gone' }] });
     expect(listAutomationTasks(plain, starter).map((task) => task.id)).toEqual(['t1']);
     expect(describeAutomationTasks(starter)).toEqual({ title: 'Tasks it started', empty: 'No task yet.' });
-    expect(listAutomationReads(plain, starter).map((read) => [read.label, read.filed.length])).toEqual([
+    expect(listAutomationReads(plain, starter).map((read) => [read.title, read.filed.length])).toEqual([
       ['Started a task', 1],
       ['Started a task', 0],
     ]);
+    const missed = createSchedule({
+      id: 'k',
+      runs: [{ at: NOW, outcome: 'skipped', taskId: null, deliveryId: null, detail: null }],
+    });
+    expect(listAutomationReads(plain, missed).map((read) => [read.title, read.detail])).toEqual([
+      ['Skipped a run', []],
+    ]);
     const messenger = createSchedule({ id: 'm', target: { kind: 'task', taskId: 't1' }, runs: [sent] });
-    expect(listAutomationReads(plain, messenger).map((read) => read.label)).toEqual(['Messaged its task']);
+    expect(listAutomationReads(plain, messenger).map((read) => read.title)).toEqual(['Messaged its task']);
   });
 
   it('says why there is nothing yet', () => {
