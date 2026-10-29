@@ -203,7 +203,7 @@ function readServiceIds(body: JsonObject) {
   return [...new Set(ids as string[])];
 }
 
-function listUnaddedSuggestions(suggestions: ServiceSuggestion[], services: ServiceDefinition[]) {
+function listNewServiceSuggestions(suggestions: ServiceSuggestion[], services: ServiceDefinition[]) {
   return suggestions.filter(
     (suggestion) =>
       !services.some(
@@ -216,7 +216,7 @@ function listUnaddedSuggestions(suggestions: ServiceSuggestion[], services: Serv
 
 function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition[]): ServiceSuggestion[] {
   const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
-  return listUnaddedSuggestions(listServiceSuggestions(roots), services);
+  return listNewServiceSuggestions(listServiceSuggestions(roots), services);
 }
 
 function resolveBrowserRefusal(request: Request) {
@@ -307,7 +307,7 @@ export function createTerminalRoutes(
         if (!(refiner && params.get('refine') === '1')) return respond({ suggestions, refined: false });
         const answer = await refiner.refine(projectId, suggestions);
         return respond({
-          suggestions: listUnaddedSuggestions(answer.suggestions, others(projectId, null)),
+          suggestions: listNewServiceSuggestions(answer.suggestions, others(projectId, null)),
           refined: answer.refined,
         });
       },
