@@ -152,7 +152,7 @@ export const openTask: {
 } = {
   eyebrow: 'A pull request built with Shinsa',
   title: 'Open this task in Shinsa',
-  text: 'The agent that built this pull request left its whole review in Shinsa: how it works, the before and after evidence, every check Shinsa ran itself and the calls it made along the way. Open the task to read it, ask for a change or approve the merge.',
+  text: 'The agent that built this pull request left its whole review in Shinsa: how it works, the before and after evidence, every check Shinsa ran itself and the calls it made along the way. The task lives in the Shinsa of whoever opened the pull request and opens only on their Mac. Everyone else finds the same proof in the pull request itself.',
   missing: 'This link does not name a task. Ask whoever shared it for the pull request’s own link.',
   primary: 'Open in Shinsa',
   secondary: 'Download Shinsa',
