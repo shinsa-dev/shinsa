@@ -96,11 +96,18 @@ function RowFacts({ row }: { row: CheckRow }) {
   return (
     <>
       {row.command && (
-        <Truncate className='selectable min-w-0 font-mono text-2xs text-fg-3'>{row.command}</Truncate>
+        <Truncate data-facts='' className='selectable min-w-0 font-mono text-2xs text-fg-3'>
+          {row.command}
+        </Truncate>
       )}
-      {row.note && <span className='text-2xs text-fg-3'>{row.note}</span>}
+      {row.note && (
+        <span data-facts='' className='text-2xs text-fg-3'>
+          {row.note}
+        </span>
+      )}
       {row.detail && (
         <span
+          data-facts=''
           className={cn(
             'selectable wrap-anywhere text-2xs',
             row.state === 'failed' ? 'text-red-text' : 'text-fg-3'
@@ -125,8 +132,8 @@ export function CheckRowItem({
   const { open, toggle } = useDisclosure(resolveTaskDisclosureId(taskId, 'checks', row.key, 'output'), false);
   return (
     <li className='flex min-w-0 flex-col gap-1.5 px-3 py-2'>
-      <div className='flex min-w-0 items-start gap-2'>
-        <CheckGlyph state={row.state} className='mt-px' />
+      <div className='group/check flex min-w-0 items-center gap-2 has-[[data-facts]]:items-start'>
+        <CheckGlyph state={row.state} className='group-has-[[data-facts]]/check:mt-px' />
         <div className='flex min-w-0 flex-1 flex-col gap-px'>
           <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
             <RowLabel row={row} />

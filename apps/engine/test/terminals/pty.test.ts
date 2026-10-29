@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  listenOnce,
+  PORT_PROBE_SOCKET,
+  pickFreePort,
   resolveLoginShell,
   resolveShellCommand,
   resolveTerminalEnv,
@@ -92,5 +95,39 @@ describe('resolveTerminalEnv', () => {
       LANG: 'en_US.UTF-8',
     });
     expect(resolveTerminalEnv({ LC_ALL: 'de_DE.UTF-8' }, '1').LANG).toBeUndefined();
+  });
+});
+
+describe('pickFreePort', () => {
+  it('keeps the port it is given while it is free and no other run holds it', () => {
+    const listen = (port: number) => (port === 0 ? 6001 : port);
+    expect(pickFreePort(4100, new Set(), listen)).toBe(4100);
+    expect(pickFreePort(4100, new Set([4100]), listen)).toBe(6001);
+    expect(pickFreePort(null, new Set(), listen)).toBe(6001);
+  });
+
+  it('asks again when the system hands back a port another run holds', () => {
+    const ports = [6001, 6002];
+    expect(pickFreePort(4100, new Set([6001]), (port) => (port === 0 ? (ports.shift() ?? null) : null))).toBe(
+      6002
+    );
+  });
+
+  it('gives up when no port is free', () => {
+    expect(() => pickFreePort(null, new Set(), () => null)).toThrow('could not find a free port');
+  });
+
+  it('binds a free port on this machine, and no port another program listens on', () => {
+    const port = listenOnce(0);
+    expect(port).toBeGreaterThan(0);
+    const holder = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: { data() {} } });
+    expect(listenOnce(holder.port)).toBeNull();
+    holder.stop(true);
+  });
+
+  it('hangs up on anything that connects to the port while it checks it', () => {
+    let ended = false;
+    PORT_PROBE_SOCKET.data({ end: () => (ended = true) });
+    expect(ended).toBe(true);
   });
 });

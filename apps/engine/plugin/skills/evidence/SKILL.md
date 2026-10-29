@@ -24,6 +24,7 @@ into its own store (`<data>/evidence/<task id>/round-<n>/`), so a file you leave
 | Logic, an API, a script | The focused test that fails without your change and passes with it, as a check you link | `test` |
 | What a run cannot show (a failing run before the fix, a manual check, a measurement) | A short note in markdown | `note` |
 | A preview deployment exists | Its URL | `preview` |
+| The project has a service that shows the change (its dev server) | Its local preview: the URL `run_service` reports, with the path to the screen | `preview` |
 
 Skip a width or a theme only when it cannot differ (a command's output has no theme), and say so in `detail`. A
 comparison counts as the screenshots (or recordings) a plan asks for.
@@ -149,6 +150,16 @@ Write the test that fails without your change and passes with it, and make it a 
 phase and keeps its output, so link it with `kind: "test"` and `check` (its id) instead of pasting the run. Run it once
 before the fix yourself and attach that failing run as a `note` when it shows something the passing run does not.
 Scope the check to the test that proves your change, never the whole suite: CI runs that on the pull request.
+
+## A local preview
+
+When the project has services (`list_services`), the human can look at the change themselves on this machine. Before
+the last hand-over, start each service that shows the change with `run_service` and leave it running: each run of a
+task gets a port of its own, and the start reports the run's preview URL. Add the path to the screen to check and
+attach it: `{ "kind": "preview", "url": "http://localhost:4123/tasks/SW-17", "title": "Task page, Services fact" }`.
+Name that link as the first step of How to test. The preview stays up while the task waits for review and stops when
+the task is finished, so never stop it yourself. No preview URL in the start's reply means the service has none set:
+say so and attach the screenshots alone.
 
 ## As the reviewer
 

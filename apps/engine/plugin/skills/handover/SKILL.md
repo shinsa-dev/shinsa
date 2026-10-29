@@ -64,7 +64,7 @@ disagrees. You built it and know why it is the way it is, so you write the expla
   Review tab ──► Code tab         a spot opens its lines
   ```
 
-- **testing.manual** starts from where to go (the preview URL, or the command that starts the app and its local URL),
+- **testing.manual** starts from where to go (the preview URL, the local preview you attached, or the command that starts the app and its local URL),
   then one concrete step each, then the edge cases worth trying (an empty field, a narrow window, a second tab). An
   `expect` is concrete enough to tell pass from fail; "it works" is not a result. Link a file in an action as
   `[duplicate.ts](shinsa://file/src/paywalls/duplicate.ts#L12-L20)`. Leave `manual` empty only when

@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ServiceHandlers } from '@/components/services/service-row.tsx';
 import { TaskServicesPanel } from '@/components/services/task-menu.tsx';
 import { createProject, NOW } from '../../support/state.ts';
-import { createService } from '../../support/terminals.ts';
+import { createService, createTerminal } from '../../support/terminals.ts';
 
 describe('TaskServicesPanel', () => {
   it('names the task and starts a service for it', () => {
@@ -17,6 +17,7 @@ describe('TaskServicesPanel', () => {
       restart: record('restart'),
       startAll: record('start all'),
       open: record('open'),
+      preview: (view) => calls.push(`preview ${view.url}`),
     };
     render(
       <TooltipProvider>
@@ -32,5 +33,40 @@ describe('TaskServicesPanel', () => {
     expect(screen.getByText('Services for SH-4')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Start api' }));
     expect(calls).toEqual(['start api fix']);
+    expect(screen.queryByRole('button', { name: 'Open api' })).toBeNull();
+  });
+
+  it('opens the preview of a task’s running service, never one that has stopped', () => {
+    const calls: string[] = [];
+    const noop = () => undefined;
+    const handlers: ServiceHandlers = {
+      start: noop,
+      stop: noop,
+      restart: noop,
+      startAll: noop,
+      open: (view) => calls.push(`open ${view.service.name}`),
+      preview: (view) => calls.push(`preview ${view.url}`),
+    };
+    const service = createService({ id: 'web', previewUrl: 'http://localhost:{port}/tasks/SH-4' });
+    const running = createTerminal({
+      id: 't-web',
+      serviceId: 'web',
+      taskId: 'fix',
+      port: 4123,
+      startedAt: 0,
+    });
+    render(
+      <TooltipProvider>
+        <TaskServicesPanel
+          task={{ handle: 'SH-4' }}
+          views={[resolveServiceView(service, running, NOW)]}
+          project={createProject({ id: 'shop', name: 'Shop' })}
+          now={NOW}
+          handlers={handlers}
+        />
+      </TooltipProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open web' }));
+    expect(calls).toEqual(['preview http://localhost:4123/tasks/SH-4']);
   });
 });

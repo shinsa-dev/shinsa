@@ -70,6 +70,21 @@ describe('the Checks list', () => {
     );
   });
 
+  it('centres a row with no second line on its glyph, and tops a row with one', () => {
+    render(
+      <TooltipProvider>
+        <ChecksBlock taskId='t' view={createView({})} />
+      </TooltipProvider>
+    );
+    const rowOf = (text: string) => screen.getByText(text).closest('li')?.firstElementChild;
+    const lint = rowOf('bun run lint');
+    expect(lint?.querySelector('[data-facts]')).toBeNull();
+    expect(lint?.className.split(' ')).toContain('items-center');
+    const unit = rowOf('Unit tests');
+    expect(unit?.querySelector('[data-facts]')?.textContent).toBe('bun test a.test.ts');
+    expect(unit?.className.split(' ')).toContain('has-[[data-facts]]:items-start');
+  });
+
   it('spins a running check, so a run of the checks never looks stuck', () => {
     const view = createView({
       stage: 'checking',

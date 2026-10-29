@@ -1604,7 +1604,7 @@ Every task agent's tool: `setup_check` (reads).
 
 #### shinsa services list
 
-List your services in Shinsa: what each runs, in which project, and whether it is running.
+List your services in Shinsa: what each runs, in which project, whether it is running and its preview URL.
 
 ```
 shinsa services list [--project <text>] [--json]

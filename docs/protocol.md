@@ -1107,7 +1107,9 @@ Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/
 → Terminals): binary frames carry the shell's output and what you type, text frames carry `reset { cols, rows }` and
 `live` (server → page, around the screen sent on attach) and `resize { cols, rows }` and `colors { colors }` (page →
 server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project, at a place (`TerminalPlace`:
-`repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`.
+`repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`; a service's
+terminal keeps the port its run was given (`port`), which `resolveServiceUrl` puts in the service's `previewUrl`
+for `ServiceView.url`.
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
 sound, shows no notification and puts no count in its title or Floaty's tags.
@@ -1168,7 +1170,7 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
 | Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
-| Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
+| Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |

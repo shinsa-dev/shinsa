@@ -53,6 +53,7 @@ import {
   describeStartAll,
   listProjectServiceRuns,
   listStoppedServices,
+  openServicePreview,
   resolveActiveService,
 } from '@/lib/terminal/services.ts';
 import {
@@ -347,6 +348,7 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
         onStart={() => void startService(view.service.id, view.taskId)}
         onStop={() => void stopService(view.service.id, view.taskId)}
         onRestart={() => void restartService(view.service.id, view.taskId)}
+        onPreview={() => openServicePreview(view)}
       />
     </span>
   );

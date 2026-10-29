@@ -1,12 +1,15 @@
 import {
   isServiceActive,
   isServiceEnvKey,
+  isServicePreviewUrl,
   listProjectServices,
   listServiceTaskRuns,
+  listTaskServices,
   type Project,
   resolveFocusProject,
   resolveServicesSummary,
   SERVICE_LIMITS,
+  SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceState,
   type ServiceSuggestion,
@@ -89,6 +92,41 @@ export function describeServiceState(view: ServiceView, now: number) {
   if (view.state === 'running' && view.since !== null)
     return `Running for ${formatDuration(now - view.since)}`;
   return label;
+}
+
+export function selectServicePreview(view: ServiceView) {
+  return isServiceActive(view) ? view.url : null;
+}
+
+export function listTaskPreviews(
+  state: ShinsaState,
+  snapshot: TerminalsSnapshot | null,
+  task: Task,
+  now: number
+) {
+  return listTaskServices(state, snapshot, task, now).filter((view) => selectServicePreview(view) !== null);
+}
+
+function resolveOrigin(url: string) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function listUnattachedPreviews(views: ServiceView[], attached: readonly string[]) {
+  const origins = new Set(attached.map(resolveOrigin));
+  return views.filter((view) => !origins.has(resolveOrigin(selectServicePreview(view) ?? '')));
+}
+
+export function describeServicePreview(view: ServiceView, label: string | null = null) {
+  return label ? `Open ${view.service.name} for ${label}` : `Open ${view.service.name}`;
+}
+
+export function openServicePreview(view: ServiceView) {
+  const url = selectServicePreview(view);
+  if (url) window.open(url, '_blank', 'noopener');
 }
 
 export function describeServicesTrigger(views: ServiceView[]): { label: string; tone: Tone } {
@@ -181,6 +219,8 @@ export interface ServiceDraft {
   path: string;
   command: string;
   env: string;
+  previewUrl: string;
+  portVariable: string;
 }
 
 export type ServiceField = keyof ServiceDraft;
@@ -194,8 +234,15 @@ export function serializeServiceEnv(env: Record<string, string>) {
 }
 
 export function createServiceDraft(from: ServiceDefinition | null): ServiceDraft {
-  if (!from) return { name: '', path: '', command: '', env: '' };
-  return { name: from.name, path: from.cwd, command: from.command, env: serializeServiceEnv(from.env) };
+  if (!from) return { name: '', path: '', command: '', env: '', previewUrl: '', portVariable: '' };
+  return {
+    name: from.name,
+    path: from.cwd,
+    command: from.command,
+    env: serializeServiceEnv(from.env),
+    previewUrl: from.previewUrl ?? '',
+    portVariable: from.portVariable === SERVICE_PORT_VARIABLE ? '' : from.portVariable,
+  };
 }
 
 export function parseServiceEnv(text: string): { env: Record<string, string> } | { error: string } {
@@ -231,8 +278,14 @@ export function validateServiceDraft(
   if (!command) errors.command = 'Give the command that starts it.';
   const parsed = parseServiceEnv(draft.env);
   if ('error' in parsed) errors.env = parsed.error;
+  const previewUrl = draft.previewUrl.trim() || null;
+  if (previewUrl && (previewUrl.length > SERVICE_LIMITS.previewUrl || !isServicePreviewUrl(previewUrl)))
+    errors.previewUrl = 'Give an http or https address, with {port} where the run’s port goes.';
+  const portVariable = draft.portVariable.trim() || SERVICE_PORT_VARIABLE;
+  if (!isServiceEnvKey(portVariable))
+    errors.portVariable = 'Use letters, digits and _, not starting with a digit.';
   if (Object.keys(errors).length > 0 || 'error' in parsed) return { ok: false, errors };
-  return { ok: true, input: { name, cwd: path, command, env: parsed.env } };
+  return { ok: true, input: { name, cwd: path, command, env: parsed.env, previewUrl, portVariable } };
 }
 
 export interface ServiceFolder {
@@ -281,7 +334,14 @@ export function togglePick(picked: string[], key: string) {
 export function listPickedInputs(suggestions: ServiceSuggestion[], picked: string[]): ServiceInput[] {
   return suggestions
     .filter((each) => picked.includes(resolveSuggestionKey(each)))
-    .map((each) => ({ name: each.name, cwd: each.cwd, command: each.command, env: {} }));
+    .map((each) => ({
+      name: each.name,
+      cwd: each.cwd,
+      command: each.command,
+      env: {},
+      previewUrl: null,
+      portVariable: SERVICE_PORT_VARIABLE,
+    }));
 }
 
 export function listAllPicks(suggestions: ServiceSuggestion[], picked: string[]) {
@@ -345,6 +405,16 @@ export const SERVICE_FIELDS: Record<
     label: 'Environment',
     placeholder: 'PORT=4000',
     note: 'One NAME=value a line, added to your shell’s environment.',
+  },
+  previewUrl: {
+    label: 'Preview URL',
+    placeholder: 'http://localhost:{port}',
+    note: 'Where Open takes you. Shinsa puts the run’s port where {port} is.',
+  },
+  portVariable: {
+    label: 'Port variable',
+    placeholder: SERVICE_PORT_VARIABLE,
+    note: 'Each task’s run gets a free port in it, so the command must listen on it.',
   },
 };
 

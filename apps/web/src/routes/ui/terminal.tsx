@@ -19,7 +19,7 @@ import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { SERVICES_PANEL, ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
 import type { ServicesPanelActions } from '@/components/services/panel-views.tsx';
-import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
+import { type ServiceHandlers, ServiceRow, ServiceRunButtons } from '@/components/services/service-row.tsx';
 import { TaskServicesPanel } from '@/components/services/task-menu.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
@@ -57,21 +57,33 @@ const BASE: TerminalInfo = {
   place: 'repository',
   taskId: null,
   serviceId: null,
+  port: null,
   status: 'running',
   exitCode: null,
   startedAt: 0,
   endedAt: null,
 };
 
-function service(name: string, command = 'bun run dev'): ServiceDefinition {
-  return { id: name, projectId: 'shop', name, cwd: `~/Developer/shop/apps/${name}`, command, env: {} };
+function service(name: string, command = 'bun run dev', previewUrl: string | null = null): ServiceDefinition {
+  return {
+    id: name,
+    projectId: 'shop',
+    name,
+    cwd: `~/Developer/shop/apps/${name}`,
+    command,
+    env: {},
+    previewUrl,
+    portVariable: 'PORT',
+  };
 }
 
 function serviceTerminal(name: string, extra: Partial<TerminalInfo>): TerminalInfo {
   return { ...BASE, id: `t-${name}`, name, title: null, serviceId: name, ...extra };
 }
 
-const RUNNING = serviceTerminal('api', { startedAt: NOW - 3_720_000 });
+const API = service('api', 'bun run dev', 'http://localhost:{port}/cart');
+
+const RUNNING = serviceTerminal('api', { startedAt: NOW - 3_720_000, port: 4000 });
 
 const FAILED = serviceTerminal('worker', { status: 'exited', exitCode: 1, endedAt: NOW - 60_000 });
 
@@ -80,6 +92,7 @@ const TASK_RUN = serviceTerminal('api', {
   taskId: 'sh-4',
   place: 'worktree',
   cwd: '~/.config/shinsa/data/worktrees/sh-4/apps/api',
+  port: 51342,
   startedAt: NOW - 540_000,
 });
 
@@ -95,7 +108,7 @@ const TASK_FAILED = serviceTerminal('api', {
 const TASK_HANDLES = { 'sh-4': { handle: 'SH-4' }, 'sh-7': { handle: 'SH-7' } };
 
 const VIEWS: ServiceView[] = [
-  resolveServiceView(service('api'), RUNNING, NOW),
+  resolveServiceView(API, RUNNING, NOW),
   resolveServiceView(service('web'), serviceTerminal('web', { startedAt: NOW - 1000 }), NOW),
   resolveServiceView(service('worker', 'bun run worker'), FAILED, NOW),
   resolveServiceView(
@@ -107,13 +120,13 @@ const VIEWS: ServiceView[] = [
 ];
 
 const TASK_VIEWS: ServiceView[] = [
-  resolveServiceView(service('api'), TASK_RUN, NOW),
+  resolveServiceView(API, TASK_RUN, NOW),
   resolveServiceView(service('web'), null, NOW, 'sh-4'),
 ];
 
 const TASK_RUNS: TaskServiceRun[] = [
-  { view: resolveServiceView(service('api'), TASK_RUN, NOW), label: 'SH-4 Fix the cart' },
-  { view: resolveServiceView(service('api'), TASK_FAILED, NOW), label: 'SH-7 Show the order total' },
+  { view: resolveServiceView(API, TASK_RUN, NOW), label: 'SH-4 Fix the cart' },
+  { view: resolveServiceView(API, TASK_FAILED, NOW), label: 'SH-7 Show the order total' },
 ];
 
 const TERMINALS: TerminalInfo[] = [
@@ -213,6 +226,7 @@ const HANDLERS: ServiceHandlers = {
   restart: acknowledgeSample,
   startAll: acknowledgeSample,
   open: acknowledgeSample,
+  preview: acknowledgeSample,
 };
 
 const GROUPS: PlaceGroup[] = [
@@ -377,7 +391,7 @@ export function TerminalSpecimens() {
           <ProjectMenuTrigger color='green' value='Shop' compact />
         </DropdownMenu>
       </Specimen>
-      <Specimen label='TerminalTabs · two services, a named tab, the shell’s title, an exited shell, one the engine restart ended'>
+      <Specimen label='TerminalTabs · two services, a named tab, the shell’s title, an exited shell, one the engine restart ended, and the buttons of the service in front with its Open'>
         <Toolbar className='w-full gap-1.5 ps-2'>
           <TerminalTabs
             terminals={TERMINALS}
@@ -393,6 +407,15 @@ export function TerminalSpecimens() {
             onReorder={acknowledgeSample}
           />
           <NewTerminalButton groups={GROUPS} fallback={null} onOpen={acknowledgeSample} />
+          <span className='flex shrink-0 items-center gap-px border-border border-s ps-1.5'>
+            <ServiceRunButtons
+              view={VIEWS[0] as ServiceView}
+              onStart={acknowledgeSample}
+              onStop={acknowledgeSample}
+              onRestart={acknowledgeSample}
+              onPreview={acknowledgeSample}
+            />
+          </span>
         </Toolbar>
       </Specimen>
       <Specimen label='TerminalTabs · renaming a tab'>
