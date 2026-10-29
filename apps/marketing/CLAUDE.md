@@ -83,8 +83,7 @@ src/
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
                             own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:
                             handle, status, repository, branch, pull request, checks, coverage, started; under the title
-                            the pull request (describePullRequestEyebrow, in blue), the summary and where the review comes
-                            from), the web's Review tab under it without its summary card, Download Shinsa as an outline button and then Open in Shinsa, `shinsa://task/<id>` from `?task=` (resolveTaskInvite,
+                            the summary, cut to two lines, and where the review comes from), the web's Review tab under it without its summary card, Download Shinsa as an outline button and then Open in Shinsa, `shinsa://task/<id>` from `?task=` (resolveTaskInvite,
                             lib/open.ts, which refuses anything else), and Download Shinsa; the review read from the
                             link's `#review=` fragment (readReviewFragment in lib/open.ts; the task built in
                             lib/open-scene.ts on OPEN_TASK_ID, which the demo server gives no repository;

@@ -8,7 +8,7 @@ import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import { describePullRequestEyebrow, readReviewFragment, resolveTaskInvite } from '../../lib/open.ts';
+import { readReviewFragment, resolveTaskInvite } from '../../lib/open.ts';
 import { createOpenState } from '../../lib/open-scene.ts';
 import { site } from '../../lib/site.ts';
 import { DemoRoot } from './frame.tsx';
@@ -56,11 +56,7 @@ function OpenDescription({ scene }: { scene: OpenScene }) {
   const { payload } = scene;
   return (
     <div className='flex flex-col gap-1'>
-      <p className={PAGE_DESCRIPTION}>
-        <span className='font-medium text-primary'>
-          {describePullRequestEyebrow(payload.task.pullRequest)}
-        </span>
-        {' · '}
+      <p className={cn(PAGE_DESCRIPTION, 'line-clamp-2')}>
         {payload.task.summary ?? payload.report.headline}
       </p>
       <p className='text-2xs text-fg-2'>{openTask.source}</p>

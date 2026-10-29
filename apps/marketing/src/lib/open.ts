@@ -37,7 +37,3 @@ export async function readReviewFragment(hash: string): Promise<ReviewPayload | 
     return null;
   }
 }
-
-export function describePullRequestEyebrow(pullRequest: number | null) {
-  return pullRequest ? `Pull request #${pullRequest}` : 'Pull request';
-}

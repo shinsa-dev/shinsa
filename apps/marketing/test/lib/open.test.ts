@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
-import { describePullRequestEyebrow, readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
+import { readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
 
 function encode(value: unknown) {
   return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
@@ -69,12 +69,5 @@ describe('readReviewFragment', () => {
     for (const cut of [1, 10, Math.floor(whole.length / 2), whole.length - 1]) {
       expect(await readReviewFragment(`#review=${whole.slice(0, cut)}`)).toBeNull();
     }
-  });
-});
-
-describe('describePullRequestEyebrow', () => {
-  test('names the pull request by its number when it has one', () => {
-    expect(describePullRequestEyebrow(23)).toBe('Pull request #23');
-    expect(describePullRequestEyebrow(null)).toBe('Pull request');
   });
 });
