@@ -19,6 +19,7 @@ export interface RevisedProject {
 
 export interface ProjectRevision {
   projects: RevisedProject[];
+  seen: string[];
   turns: OnboardingProjectTurn[];
 }
 
@@ -83,7 +84,12 @@ export function applyRevision(
     ...projects.map((project) => project.key),
     ...kept.flatMap((suggestion) => (suggestion ? [suggestion.key] : [])),
   ];
-  return revision.projects.flatMap((revised, index) => {
+  const seen = new Set(revision.seen);
+  const unseen = suggestions.flatMap((suggestion) => {
+    const repos = suggestion.repos.filter((repo) => !seen.has(repo.path));
+    return repos.length === 0 ? [] : [{ ...suggestion, repos, folders: [] }];
+  });
+  const changed = revision.projects.flatMap((revised, index) => {
     const repos = revised.repos.flatMap((path) => known.get(path) ?? []);
     if (repos.length === 0) return [];
     const same = kept[index];
@@ -103,6 +109,7 @@ export function applyRevision(
       },
     ];
   });
+  return [...changed, ...unseen];
 }
 
 function resolveBase(suggestions: ProjectSuggestion[], choices: OnboardingProjectChoice[] | undefined) {
@@ -177,5 +184,6 @@ export async function requestRevision(
     );
   }
   const turns = [...(revision?.turns ?? []), { request, reply: answer.reply }].slice(-MAX_TURNS);
-  return { projects: answer.projects, turns };
+  const seen = new Set([...(revision?.seen ?? []), ...listAllRepos(suggestions).map((repo) => repo.path)]);
+  return { projects: answer.projects, seen: [...seen], turns };
 }

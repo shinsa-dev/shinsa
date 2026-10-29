@@ -399,6 +399,23 @@ describe('changing the suggested projects in words', () => {
     ).rejects.toMatchObject({ code: 'revise_invalid' });
   });
 
+  test('a folder added after a request brings its repositories in beside the changed projects', async () => {
+    const world = await setup([
+      { reply: 'Renamed Acme.', projects: [{ name: 'Acme Corp', repos: ['r1', 'r2'] }] },
+    ]);
+    await world.onboarding.setup.reply({ type: 'answer', stepId: 'roots', values: [world.acme] });
+    await revise(world.onboarding, 'rename acme');
+    await world.onboarding.setup.reply({ type: 'open', stepId: 'roots' });
+    const flow = await answerFolders(world);
+    expect(
+      flow.step?.projects.map((project) => [project.name, project.repos.map((repo) => repo.name)])
+    ).toEqual([
+      ['Acme Corp', ['api', 'web']],
+      ['Personal', ['notes', 'scratch']],
+    ]);
+    expect(flow.step?.conversation.map((turn) => turn.reply)).toEqual(['Renamed Acme.']);
+  });
+
   test('a repository filed since the request is dropped from the revised projects', async () => {
     const world = await setup([
       {

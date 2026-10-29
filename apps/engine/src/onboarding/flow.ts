@@ -71,7 +71,9 @@ function isDraft(value: unknown): value is Draft {
     Array.isArray(draft.access) &&
     Array.isArray(draft.picked) &&
     (draft.revision === null ||
-      (typeof draft.revision === 'object' && Array.isArray(draft.revision.projects)))
+      (typeof draft.revision === 'object' &&
+        Array.isArray(draft.revision.projects) &&
+        Array.isArray(draft.revision.seen)))
   );
 }
 

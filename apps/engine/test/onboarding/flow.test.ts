@@ -445,6 +445,21 @@ describe('the saved setup', () => {
     expect((await world.open().onboarding.setup.resolve()).step?.id).toBe('roots');
   });
 
+  test('a saved change to the projects comes back, and one without the repositories it saw starts again', async () => {
+    const world = setup();
+    await reachAccounts(world);
+    const path = join(world.config.dataDir, 'onboarding.json');
+    const saved = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    const revision = { projects: [], turns: [{ request: 'a', reply: 'b' }] };
+    writeFileSync(path, JSON.stringify({ ...saved, revision: { ...revision, seen: [] } }));
+    expect((await world.open().onboarding.setup.resolve()).step?.id).toBe('accounts');
+    const warn = spyOn(log, 'warn');
+    writeFileSync(path, JSON.stringify({ ...saved, revision }));
+    expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   test('a file it cannot read, or one it did not write, starts again', async () => {
     const world = setup();
     const path = join(world.config.dataDir, 'onboarding.json');
