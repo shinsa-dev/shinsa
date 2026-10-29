@@ -270,7 +270,9 @@ describe('isServicePreviewUrl', () => {
 
   it('refuses anything else', () => {
     expect(
-      ['localhost:{port}', 'file:///etc/hosts', 'javascript:alert(1)', ''].map(isServicePreviewUrl)
-    ).toEqual([false, false, false, false]);
+      ['localhost:{port}', 'file:///etc/hosts', 'javascript:alert(1)', '', 'not a url at {port}'].map(
+        isServicePreviewUrl
+      )
+    ).toEqual([false, false, false, false, false]);
   });
 });
