@@ -350,8 +350,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `danger-full-access` and `untrusted` to build. A resumed turn in another directory than the session's last one
   (a round after a merge, an answer in the repository) is told where it works now (`resolveMovedNote`, from
   `run.attempt`'s `cwd`).
-- **Where a run works follows its role** (`#resolveCwd` in `agents/supervisor.ts`): the answerer in the repository
-  itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
+- **Where a run works follows its role** (`#resolveCwd` in `agents/supervisor.ts`): the answerer, a watchdog check
+  and a read of a data source (purposes `watch` and `intake`) in the repository itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
   pipeline needs a worktree, and never for check commands (`runtime/effects.ts`); a worktree reused

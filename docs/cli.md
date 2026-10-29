@@ -1897,7 +1897,7 @@ Every task agent's tool: `watchdogs_connect`. Sends `watchdog.connect`.
 
 #### shinsa sources list
 
-List a project’s data sources: the MCP servers watchdogs read, and what each holds.
+List a project’s data sources: the MCP servers watchdogs and automations read, and what each holds.
 
 ```
 shinsa sources list <project> [--json]
@@ -1911,7 +1911,7 @@ Every task agent's tool: `sources_list` (reads).
 
 #### shinsa sources write
 
-Add a data source to a project, or change one: an MCP server watchdogs read, and what it holds.
+Add a data source to a project, or change one: an MCP server watchdogs and automations read, and what it holds.
 
 ```
 shinsa sources write <project> --server <text> --data <text> [--repos <list>] [--json]

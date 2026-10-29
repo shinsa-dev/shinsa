@@ -29,7 +29,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
 | role | Which agent a run is (the round's agent, a reviewer, an answerer…); picks its prompt, tools, model and where it works | `RunRole` (runs), `AgentRole` (settings), `RUN_AGENT_ROLE` (which settings a run role uses) | Agent, Reviewer… |
-| purpose | What one run of the round's agent does: plan, build a phase, fix, run the operation or check a watchdog; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
+| purpose | What one run of the round's agent does: plan, build a phase, fix, run the operation, check a watchdog or read a data source; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
 | step | One fixed building block of a task's path (`answer` … `merge`); a task's pipeline is a list of steps | `PipelineStep` | step |
 | pipeline | The ordered steps one task takes | `Task.pipeline` | "the steps a task takes" |
 | phase | One part of an approved plan's build, built by its own run of the round's agent, on the session that planned it, and committed on its own | `PlanDocument.phases[i]` (`PlanPhase`), `PhaseProgress` | phase |
@@ -57,7 +57,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
 | watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; an issue it finds files a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `report_watch` | Watchdogs, Watching |
-| data source | An MCP server a project's watchdogs read, with what it holds and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write` | data source |
+| data source | An MCP server a project's watchdogs and automations read, with what it holds and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | data source |
+| report | One message in a data source an automation read (a Slack message, a support email) that it filed as a task, kept on that task with its id or link, author, time and text; the filed tasks are what dedupes the next read | `SourceReport` (`Task.sourceReport`), purpose `intake`, `file_report`, `report_intake`, `TaskCreator.kind: 'intake'` | Reported in, N tasks filed |
 | fork | A task whose Agent starts from a copy of another task's conversation | `Task.forkOf`, `Run.fork` | Fork into a new task, Forked from, Forked into |
 | point | Anything the Review tab marks for you to read: a spot, a judgement call, a risk or a finding | `ReviewItem` (web, `lib/review/report.ts`) | point, "Every point" |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
@@ -71,7 +72,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
-| schedule | A trigger (once, interval, daily, webhook) that starts a task or messages one | `Schedule` | Schedules |
+| schedule | A trigger (once, interval, daily, webhook) that starts a task, messages one, or reads a data source in one standing task and files a task per new report | `Schedule`, `ScheduleSource` | Settings → Automations, Schedules |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
@@ -278,11 +279,12 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | --- | --- | --- |
 | `suggestions?` | `TaskSuggestion[]` | tasks agents suggested |
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
-| `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`) or `split` (`split_task`), with the run and request key |
+| `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (a tripped watchdog) or `intake` (`file_report` in a read of a data source), with the task, the run and request key |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskId` it filed, `endedAt` (`docs/engine.md` → Watchdogs) |
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
-| `scheduleId?` | string \| null | the schedule that started it |
+| `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
+| `sourceReport?` | `SourceReport` \| null | the report it was filed from: `scheduleId`, `server`, `reportId`, `link` (one of the two is set), `author`, `postedAt`, `text` (`docs/engine.md` → Schedules and webhooks) |
 
 **Rounds**
 
@@ -365,7 +367,7 @@ holds an active run; Shinsa's own stages hold an effect.
 | `planning` | plan | the agent, read-only (`purpose: plan`) | `awaiting_plan`, `building`, `operating` |
 | `awaiting_plan` | plan | you | `building`, `operating`, `planning` (revise), `cancelled` |
 | `operating` | operate | the agent (`purpose: operate`) | `done`, `building` (operation before the build) |
-| `watching` | merge | the agent, read-only (`purpose: watch`), checking a watchdog of the merged change | `merged`, `done` |
+| `watching` | merge | the agent, read-only (`purpose: watch`), checking a watchdog of the merged change; or (`purpose: intake`) reading an automation's data source | `merged`, `done` |
 | `building` | build | the agent, one run per phase on one session (`purpose: build`) | `checking` |
 | `checking` | checks | Shinsa | `reviewing`, `fixing`, a failure gate |
 | `reviewing` | agent review | reviewer | `awaiting_review`, `fixing` |
@@ -438,7 +440,7 @@ executable changed line (`selectMeasuredCoverage`).
 | --- | --- | --- |
 | `id`, `taskId`, `role` | | |
 | `status?` | `queued` \| `running` \| `waiting` | `waiting`: its turn ended while its delegations work |
-| `purpose?` | `plan` \| `build` \| `fix` \| `operate` | set on every run of the round's agent (`agent`) and no other: what this run does, which hand-over it may call (`PURPOSE_HAND_OVERS`) and whether it may edit (`plan` is read-only, `isReadOnlyRun`) |
+| `purpose?` | `plan` \| `build` \| `fix` \| `operate` \| `watch` \| `intake` | set on every run of the round's agent (`agent`) and no other: what this run does, which hand-over it may call (`PURPOSE_HAND_OVERS`) and whether it may edit (`plan`, `watch` and `intake` are read-only, `isReadOnlyRun`) |
 | `phaseIndex?` | number \| null | the plan phase a build run builds |
 | `prompt?`, `rolePrompt?`, `resume?` | | the brief; the brief before Shinsa appended the project and any adoption note, or before it put the round brief in front of an agent run that has no session to resume (its short instruction), which a recovery or a usage resume starts from; whether it resumes an earlier session. `resolveRunBrief(state, run)` gives the full brief of a resumed agent run for a session that cannot hold the round. Neither prompt goes to the page (The socket) |
 | `provider`, `model` | string, string \| null | where it started |
@@ -466,7 +468,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_watch` (watch, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_watch` (watch, read-only, in the repository), `report_intake` after any `file_report` (intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -746,7 +748,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `run.snooze_silence` | snoozes a quiet-run warning | `runs snooze` | agent |
 | `run.dismiss_silence` | dismisses it for the run | `runs dismiss` | agent |
 | `delegation.cancel` | stops a delegation and what it delegated | `delegations stop` | agent |
-| `schedule.write` | creates or changes a schedule | `schedules write` | agent |
+| `schedule.write` | creates or changes a schedule; with `source` (`projectId`, `server`) it reads that data source, in its target task or, with none, in a new Ask task it creates | `schedules write` | agent |
 | `schedule.enable` | pauses or resumes one | `schedules enable`, `schedules disable` | agent |
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
@@ -814,9 +816,11 @@ role without the tool (`hasTool`).
 | `agent.answer_delegation` | `delegation_answer` | answers a delegation's question |
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.report_watch` | `report_watch` | records a watchdog check (`live` for one waiting for production); an issue trips the watchdog and files a task forked from this one |
+| `agent.file_report` | `file_report` | in a read of a data source only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) |
+| `agent.report_intake` | `report_intake` | ends a read of a data source with its `summary`; the task rests again |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
-| `agent.set_schedule` | `set_schedule` | writes one of its task's schedules |
+| `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names a data source of the task's project to read in this task or `task_id` |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
 The delegation tools name a delegation by `delegation_id`. Reads with no command: `find_tasks`, `read_task`,
@@ -877,7 +881,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `project.written`, `project.removed` | a project is written, removed |
 | `focus.changed` | the focus changes |
 | `settings.changed` | settings change (the whole settings object) |
-| `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project) |
+| `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one an automation's read filed) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
@@ -1007,6 +1011,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `submit_report` | | | | | ✓ | | |
 | `report_outcome` | ✓ operate | | | | | | |
 | `report_watch` | ✓ watch | | | | | | |
+| `report_intake` | ✓ intake | | | | | | |
 | `ask` | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `attach_evidence` | ✓ | ✓ | | ✓ | | ✓ | ✓ |
 | `remove_evidence` | ✓ | ✓ | | ✓ | | | |
@@ -1019,13 +1024,14 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `split_task` | ✓ | | | | | | |
+| `file_report` | ✓ intake | | | | | | |
 | `set_schedule`, `list_schedules`, `delete_schedule` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `request_secret` | ✓ | | ✓ | ✓ | ✓ | | |
 
-Hand-over tools (the first ten rows, `isHandOverTool`) end the step. Every task-session role is served every tool of
+Hand-over tools (the first eleven rows, `isHandOverTool`) end the step. Every task-session role is served every tool of
 the union in every run, since the session's tool list must not change between turns (the prompt cache); the agent
 may call only the hand-over its purpose names (`PURPOSE_HAND_OVERS`, the word after ✓), and another is refused with
-`wrong_step`. A delegated
+`wrong_step`; `file_report` is refused outside an `intake` run the same way. A delegated
 `planner` or `builder` has only the delegated tools. The reviewer cannot ask you anything.
 
 Three more tools come from the server, not from `listToolNames`, and only in a run the context optimizer left
@@ -1053,6 +1059,8 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `submit_report` | **`report`**; `propose_change` | 40,000 |
 | `report_outcome` | **`outcome`** | 8,000 |
 | `report_watch` | **`summary`**; `live` (required for a watchdog waiting for production: false while it is not live, with no verdict or issue); **`healthy`** otherwise; `issue` (**`title`**, **`request`**), required when not healthy and refused when healthy | summary 600; issue title 80, request 2,000 |
+| `report_intake` | **`summary`**: what it read, filed and skipped | 1,000 |
+| `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle), `repository` (a name) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |
 | `remove_evidence` | **`items`** (by key or id), **`reason`**: why it no longer applies | 1 to 24 items of 60; reason 200 |
