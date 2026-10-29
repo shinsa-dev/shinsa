@@ -174,7 +174,10 @@ Only these, and they win over anything below:
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
      the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
-     and morphing out of its thumbnail. A recording never morphs: it mounts at its fitted size, from the thumbnail's
+     and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
+     CSS pixels) is laid out at that width, never at its file's: a 2560px shot taken at 1280px shows 1280px wide, two
+     file pixels to a CSS pixel, so it stays sharp on a Retina screen (`resolveShownSize`, `lib/image-view.ts`), and
+     its 100% is that size. A recording never morphs: it mounts at its fitted size, from the thumbnail's
      own `videoWidth` or a hidden probe's metadata, with that width and height set on the element, so Chromium lays out
      its controls once at the right width; scaling a video while it opens leaves its controls at the size they started.
      Click toggles fit and 100% (2× for small images) around the pointer, and so does a double-click; the wheel, a
@@ -228,7 +231,23 @@ Only these, and they win over anything below:
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from the All tasks roadmap (`lib/tasks/roadmap.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
-   20px gate or stage tile, title, status line and age. The guide above is a short summary of
+   20px gate or stage tile, title, status line and age. **A row is a small overview card on two lines**, so you can tell
+   where a task is without opening it: the title, then one summary line (`RowSummary`,
+   `components/queue/row-summary.tsx`) laid out across the row: the handle and status (`resolveRowStatus`: the task's status, but its stage
+   while the agent waits to check in again, which the row's snooze tile already says), then `MiniTrack`
+   (`components/overview/mini-track.tsx`), the Overview track's steps (`resolveSteps`) as 6px dots
+   joined by 8px hairlines, green done, a blue pulse current, amber waiting on you, a dashed ring skipped
+   and a hollow ring not started, one `role="img"` labelled "Step 4 of 7: Build 1/2"
+   (`describeTrackPosition`), no tooltip per dot since the row is already a button. After the dots,
+   while the task's agent runs and no decision is open, that run's latest action in the present tense,
+   shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
+   over the run's transcript, which the row follows only while it is mounted); otherwise the current
+   step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
+   ("Pre-merge · 1 step left"), and nothing more. The
+   queue rows carry no now line or stage reason: the status and the dots already say it, and a static
+   description only repeats them. While the steps can still change (triage, or the agent planning
+   before its plan) a spinner stands in for the dots, followed by the planning agent's latest action or
+   "Working out the steps". The guide above is a short summary of
    these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Needs you, In progress, Recently finished
@@ -338,12 +357,18 @@ Only these, and they win over anything below:
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
      `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
      bubble in the chat: the queue docks above the composer on the Chat and Overview tabs (`Composer`'s `dock`), a
-     `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then "· Sends once round 2 is
-     finished." or "· Sends once round 2 is finished, one round at a time." in `fg-2`, `describeQueue`) over one
-     row per waiting round: its text `text-xs fg-3`, three lines at most, then Edit message (`IconPencil`) and Remove
-     from the queue (`IconCrossSmall`), `secondary` `icon-xs` buttons 1px apart. The list scrolls past 176px
-     (`ScrollArea`). Edit turns the row into the kit's `Textarea` with Cancel and Save (Enter saves, Escape cancels,
-     `round.update`); Remove sends `round.remove` and dims the row while it goes. Both are optimistic. When the round
+     `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then when it sends in `fg-2`,
+     `describeQueue` over core's `resolveRoundRelease`: "· Sends once round 2 is finished." while the round works
+     and finishes by itself, and what you have to do first while it waits for you: "· Sends after you merge round
+     2.", "· Sends after you approve round 2." or "· Sends after you approve and merge round 2."; ", one round at a
+     time" before the full stop when several wait; the Rounds panel says the same of the first waiting round, "It
+     starts after you merge round 2.") over one row per waiting round: its text `text-xs fg-3`, three lines at most,
+     then Send now (`IconArrowUp`, its `Hint` "It goes to round 2 now, as a message."), Edit message (`IconPencil`)
+     and Remove from the queue (`IconCrossSmall`), `secondary` `icon-xs` buttons 1px apart. The list scrolls past
+     176px (`ScrollArea`). Edit turns the row into the kit's `Textarea` with Cancel and Save (Enter saves, Escape
+     cancels, `round.update`); Send now sends `round.send`, which gives the text to the current round as your
+     message (at the merge gate a change before the merge, with the agent working a steer), and Remove sends
+     `round.remove`; both dim the row while they go. Edit and Remove are optimistic. When the round
      starts, its message joins the chat under its round's divider as your bubble, delivering, then settles. Several
      messages routed together are one round, so one row, delivered together.
    Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
@@ -687,8 +712,7 @@ Only these, and they win over anything below:
       group by a disabled match, the first highlighted row is the first enabled one, and a choice page opens on
       the current value only when it is enabled (`isDisabled`, `resolveFirstValue` in `lib/command/menu.ts`).
       The reasons are plain sentences: "Send or clear your comments first" on Approve the changes, "Updating…"
-      on an update that runs, "Unavailable: needs usage credits" on Fast, why GitButler is not set up yet on
-      Where agents work, and "Kept until it merges or is cancelled" on the task a task is stacked on.
+      on an update that runs, and "Unavailable: needs usage credits" on Fast.
     - **On a task page** (`TaskHeader` calls `useTaskPageCommands`, so Sidebar and Cards share
       it) the task leads: its decision first, each named for what it does (Approve the plan /
       Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
@@ -759,7 +783,7 @@ Only these, and they win over anything below:
     - **Label and value pairs** in popovers and tooltips sit apart: label left, value right
       (`justify-between`, `gap-4`), via `InfoRow` or `InfoLine` for tooltips. Never a value run on
       after its label with a space. A status the icon already says is not printed: no "Done",
-      "Complete", "Passed" or "Passing" next to a check (the progress track's step tooltips are the exception: every step says its status, "Done" included); "In progress", "Failed", "Running",
+      "Complete", "Passed" or "Passing" next to a check (the progress track's step tooltips are the exception: every step says its status, "Done" included, and the current step names a conflict the agent is resolving, "Resolving conflicts with main", in place of "In progress"); "In progress", "Failed", "Running",
       "Waiting on you" stay.
     - **Checkmarks are the accent**, everywhere: check and to-do glyphs, the current value in a
       menu, a select or ⌘K, copy confirmations, done tiles, settled tasks in ⌘K, the "decision"
@@ -818,9 +842,8 @@ Only these, and they win over anything below:
       found, "Measures with Vitest." or "Found no coverage tool here, so nothing is measured.", from GET
       /api/repos/coverage; choosing Custom opens the Custom test coverage dialog with the command, the report's path
       inside the repository and its format, Infer from the path until the path says nothing, and a pencil button
-      beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees,
-      GitButler, Main checkout, each with its one-line hint; GitButler is disabled with the reason until `but` is
-      installed and the repository is a GitButler workspace, `components/settings/workspace-select.tsx`), a remove ×;
+      beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees or
+      Main checkout, each with its one-line hint, `components/settings/workspace-select.tsx`), a remove ×;
       repositories without a project have the three selects alone), and "No repositories or folders yet." when
       empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
       by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
@@ -909,9 +932,8 @@ Only these, and they win over anything below:
       choice, `value` a list, every current one checked, "Stop waiting"). Several at once is the
       normal case: every list adds or removes one task and never replaces the others. Before building
       starts the label is Wait for another task; once building has started it is Merge after
-      another task, because that is all a new dependency can still do. The task a GitButler task is stacked on
-      shows ticked and disabled as "Stacked on “‹title›”"; Stop waiting keeps it, and is not offered when it is the
-      only one (core refuses removing it while the stack stands, `docs/engine.md` → Where agents work).
+      another task, because that is all a new dependency can still do. Stop waiting clears every one at once
+      ("No longer waiting.").
     - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
       Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
@@ -919,6 +941,15 @@ Only these, and they win over anything below:
       delegations are blue like working. The All tasks section icons,
       the queue's section icons, the gate tiles, ⌘K's task icons and the status labels all read
       them (`resolveTaskGlyph`, `resolveTaskStatus`).
+    - **Resolving conflicts** is the status of a task fixing a conflict with its base (`fixFor` `conflict`, a pull
+      request that cannot merge, or `update`, a conflict while updating onto the base before a push;
+      `isResolvingConflicts`, `resolveStageLabel` in `lib/tasks/status.ts`), never Fixing: on the status labels
+      (the rail, Home, All tasks, the task's facts, ⌘K, the working tile's tooltip), and the now line and the now
+      card's title show the stage reason, "Resolving conflicts with main". Home's guide says "resolving conflicts
+      on ‹task›", the chat heads the run "Resolving conflicts", and the progress track has it on Pull request. A
+      shipping task whose pull request conflicts with no fix running (the watch stopped, a fix that is paused)
+      never says Waiting for CI: its now line and the now card's title read "PR #42 conflicts with main"
+      (`describeConflict` in `lib/tasks/now.ts`).
     - **Hover is never the only feedback**: every `hover:` class has the same `active:` value on
       the same line (`group-hover:` pairs with `group-active:`, unless it only reveals something
       from `opacity-0`). The lint checks that an `active:` is there, not that its value matches.
@@ -1043,7 +1074,9 @@ Only these, and they win over anything below:
     the page, a card and a dialog. A dark popover is itself `bg-2`, so inside one (`.dark
     [data-slot="popover-content"]` in `globals.css`) a field fills `bg-3` and hovers `bg-4`; without that it drew as
     bare text (the Services popover's form, measured: popover and field both `oklch(0.228 …)`, now the field
-    `oklch(0.257 …)`). Never a border or a call-site fill to make a field show.
+    `oklch(0.257 …)`). A Settings shelf (`SETTINGS_SHELF`, a card's rows on `bg-a1`) lands on the field's own fill too, so
+    it sets the same `--input` step in both themes for every form inside it (Memory's rule editor, a folder you add). Never a
+    border or a call-site fill to make a field show.
     `Checkbox` is `filled` (the default: the page's fill at rest, an accent fill and a white check once ticked) or
     `outline` (no fill at rest, only its edge; ticked it fills like `filled`), the second for a list of boxes inside a popover (the Services
     popover's Manage and Add services). `Button` `bare` is an icon-only action with no wash at all, only its glyph
@@ -1140,6 +1173,13 @@ Only these, and they win over anything below:
       "Pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com". Each retry is also one activity
       entry ("Pushing failed on attempt 1 of 5, trying again in 30s", the error as its detail), and a hook fix run is
       headed "Fixing what the pre-push hook found".
+    - **Waiting for CI** is the stage reason while the pull request's checks run, and also while a new head has no
+      checks yet and Shinsa does not know the repository has no CI (`docs/engine.md` → The pull request watch). The
+      task never shows Ready to merge and then Waiting for CI again on one commit: once the merge gate is open,
+      checks that start on the same commit leave it open, and only a new commit, a failing check or a new comment
+      takes it back. The activity gets one stage entry per real change of stage: "Opening the pull request" only
+      while the task has no pull request; going back to shipping with one open says why, from the stage reason
+      ("Pushing the changes", "Waiting for CI", "The branch changed before the merge").
     - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
       `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Verify
       again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without
@@ -1396,6 +1436,13 @@ Only these, and they win over anything below:
       (No limit, the default, or 2, 4, 8 or 16 at once, a stored number not in the list added in order, and
       Custom…, which opens a dialog for any whole number of 1 or more; `delegationLimit`, `docs/engine.md` →
       Delegation) and Merge with. ⌘K's Change a setting has the same rows, without Custom….
+    - **Settings → Agents → Memory** (`components/settings/memory.tsx`, `lib/memory.ts`; `docs/engine.md` → Memory)
+      sits between Engine and Versions: the rules agents proposed first (each with its project and why, Keep, Edit and
+      Dismiss), then Every project, then a block per project that has rules, each headed by its count of 20 ("3 of
+      20"), each rule with Edit and Remove. New rule and Edit open the rule in place: a field on a line of its own that
+      grows with the text (Enter saves, Shift Enter breaks, Escape cancels), and under it the scope, the length out of
+      240, Cancel and the primary Add rule, Save or, for a proposal, Keep, which keeps it with your words. Errors stay in the row ("Keep it to 240 characters. It
+      has 251."). A `remember` call in the chat is a card with the rule, the agent's why and "In Settings → Memory".
     - **The sign-in dialog** (`sign-in-dialog.tsx`, one `Dialog` mounted by `Root`, opened by
       `startSignIn`): Starting sign-in… with a spinner; "Sign in to Claude" with the browser note,
       the sign-in page as a link and a code field, Submit code the form's primary button; Finishing
@@ -2039,8 +2086,7 @@ Only these, and they win over anything below:
       other lines, and otherwise the disk version shows with "This file changed on disk where you were typing, so it
       shows the new version." in a one-line strip under the toolbar (`IconCircleInfo`, `text-2xs` `fg-2`). Once you
       edited a file, the Code tab reads it from the working copy, so a reload shows your edit and not the commit
-      (`isEditedPath`; in GitButler the working copy is the files the task owns read from disk and the rest from its
-      branch, `docs/engine.md` → Your edits). Elsewhere the
+      (`isEditedPath`, `docs/engine.md` → Your edits). Elsewhere the
       editor is read-only and the same strip (`IconLock`) says why: an earlier commit or the base ("This is an earlier
       commit, so it is read-only. Pick Head of the branch to edit."), a merged task, a finished one, one with no checkout
       (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go

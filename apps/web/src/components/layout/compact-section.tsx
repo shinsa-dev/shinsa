@@ -5,8 +5,7 @@ import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 
-export const COMPACT_POPOVER =
-  'max-h-(--available-height) w-80 gap-0 p-0 [--glyph-ring:var(--color-popover)]';
+export const COMPACT_POPOVER = 'max-h-(--available-height) w-80 gap-0 p-0';
 
 export const COMPACT_POPOVER_INSET = 'pt-1.5';
 

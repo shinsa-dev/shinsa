@@ -210,6 +210,15 @@ function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string
           'Run the review tests',
           'apps/web/test/lib/review/spots.test.ts:\n(pass) listReviewSpots > lists every spot of a recorded review in both orders\n(pass) listReviewSpots > puts critical spots first when ordered by attention\n(pass) stepSpot > wraps around at both ends\n(pass) spot keys > round-trips a section and a spot\n(pass) spot keys > ignores any other key\n(pass) spot keys > shows one line without a range\n\n 6 pass\n 0 fail\n 8 expect() calls\nRan 6 tests across 4 files. [212.00ms]'
         ),
+        handOver(
+          'remember',
+          {
+            scope: 'project',
+            text: 'Give a module its own file once two places build the same thing.',
+            why: 'You asked for the spot keys to move into their own module on the last task too.',
+          },
+          'Proposed. The human decides whether agents remember it. Carry on with your step.'
+        ),
         handOver('complete_phase', handOverPhase(0), 'Phase 1 committed.'),
       ],
       finish(

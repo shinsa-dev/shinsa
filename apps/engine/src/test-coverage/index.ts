@@ -2,12 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync 
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import {
-  type ChangedLines,
   COVERAGE_LIMITS,
   type Coverage,
   type CoverageDetection,
   type CoverageHits,
-  mapChangedLines,
   measureCoverage,
   parseChangedLines,
   parseCoverageReport,
@@ -17,17 +15,15 @@ import {
   type Task,
 } from '@shinsa/core';
 import { CHECK_TIMEOUT_MS, runCheckCommand } from '../checks/index.ts';
-import { readChangedLinesPatch, readCommitLinesPatch } from '../git/diff.ts';
+import { readChangedLinesPatch } from '../git/diff.ts';
 import { resolveTaskRefs } from '../git/task-refs.ts';
 import { describeError } from '../log/index.ts';
-import type { LedgerStore } from '../workspaces/ledger.ts';
 import { type CoverageRun, resolveCoverageDetection, resolveCoverageRun, resolveGoModule } from './detect.ts';
 
 export interface CoverageRequest {
   repo: Repo;
   task: Task;
   commands: readonly string[];
-  ledgers: LedgerStore;
   baseBranch: string | null;
   signal: AbortSignal;
   timeoutMs?: number;
@@ -75,37 +71,8 @@ function listRoots(worktree: string) {
   return real === worktree ? [worktree] : [worktree, real];
 }
 
-function mergeChangedLines(into: ChangedLines, from: ChangedLines) {
-  for (const [path, lines] of from) into.set(path, [...(into.get(path) ?? []), ...lines]);
-  return into;
-}
-
-interface ChangeRange {
-  base: string;
-  head: string;
-}
-
-async function readBranchChangedLines(request: CoverageRequest, worktree: string, range: ChangeRange) {
-  const { signal } = request;
-  const committed = parseChangedLines(
-    await readCommitLinesPatch(request.repo.path, range.base, range.head, signal)
-  );
-  if (committed.size === 0) return committed;
-  const drift = await readChangedLinesPatch(worktree, range.head, signal, [...committed.keys()]);
-  return mapChangedLines(committed, drift);
-}
-
-async function readOwnedChangedLines(request: CoverageRequest, worktree: string, range: ChangeRange) {
-  const changed = await readBranchChangedLines(request, worktree, range);
-  const owned = [...request.ledgers.listOwned(request.repo.id, request.task.id)];
-  if (owned.length === 0) return changed;
-  const uncommitted = await readChangedLinesPatch(worktree, 'HEAD', request.signal, owned);
-  return mergeChangedLines(changed, parseChangedLines(uncommitted));
-}
-
-async function readTaskChangedLines(request: CoverageRequest, worktree: string, range: ChangeRange) {
-  if (request.task.workspace === 'gitbutler') return readOwnedChangedLines(request, worktree, range);
-  return parseChangedLines(await readChangedLinesPatch(worktree, range.base, request.signal));
+async function readTaskChangedLines(request: CoverageRequest, worktree: string, base: string) {
+  return parseChangedLines(await readChangedLinesPatch(worktree, base, request.signal));
 }
 
 function resolveReportKey(path: string, run: CoverageRun) {
@@ -158,7 +125,7 @@ async function measureRuns(request: CoverageRequest, worktree: string, runs: rea
   if (!refs.base) {
     return resolveUnavailable(command, 'Shinsa could not find the commit the task’s branch started from.');
   }
-  const changed = await readTaskChangedLines(request, worktree, { base: refs.base, head: refs.head });
+  const changed = await readTaskChangedLines(request, worktree, refs.base);
   return measureCoverage({
     command: command.slice(0, COVERAGE_LIMITS.command),
     changed,

@@ -1,3 +1,4 @@
+import { capitalise } from '../chat/text.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
 import type {
   FixReason,
@@ -33,7 +34,7 @@ const FIX_REASON_TEXT: Record<Exclude<FixReason, 'you'>, string> = {
   checks: 'fixing failing checks',
   review: 'fixing what the agent review found',
   pull_request: 'fixing the pull request',
-  conflict: 'resolving the conflicts GitButler left',
+  conflict: 'resolving conflicts with the base branch',
   update: 'resolving conflicts with the base branch',
   hook: 'fixing what the pre-push hook found',
 };
@@ -69,7 +70,8 @@ const DECISION_TEXT: Record<GateDecision, string> = {
   reply: 'Answered',
 };
 
-export function describeStage(stage: TaskStage) {
+export function describeStage(stage: TaskStage, reason: string, hasPullRequest: boolean) {
+  if (stage === 'shipping' && hasPullRequest) return capitalise(reason);
   return STAGE_ACTIVITY[stage] ?? null;
 }
 

@@ -57,6 +57,7 @@ describe('Jump to', () => {
       ['Setup', 'General'],
       ['Models', 'Agents'],
       ['Engine', 'Agents'],
+      ['Memory', 'Agents'],
       ['Versions', 'Agents'],
       ['Accounts', 'Agent usage'],
       ['Limits', 'Agent usage'],
@@ -443,16 +444,9 @@ describe('Setup', () => {
 });
 
 describe('Where agents work', () => {
-  it('each repository is a choice found by search, GitButler held back with its reason until it is set up, and picking one saves it', () => {
-    const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'gitbutler' })];
-    const support = {
-      web: { butInstalled: false, gitButlerWorkspace: true },
-      app: { butInstalled: true, gitButlerWorkspace: true },
-    };
-    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, {
-      repos,
-      support,
-    });
+  it('each repository is a choice found by search, worktrees or the main checkout, and picking one saves it', () => {
+    const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'main_checkout' })];
+    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, repos);
     const web = find(sections, 'settings.workspace.web');
     expect(web).toMatchObject({
       kind: 'choice',
@@ -460,17 +454,17 @@ describe('Where agents work', () => {
       hint: 'Worktrees',
       searchOnly: true,
       value: 'worktrees',
-      keywords: expect.arrayContaining(['gitbutler', 'main checkout']),
+      keywords: expect.arrayContaining(['worktrees', 'main checkout']),
     });
     if (web.kind !== 'choice') throw new Error('not a choice');
     expect(web.options.map((option) => [option.value, option.disabled])).toEqual([
       ['worktrees', undefined],
-      ['gitbutler', 'Install GitButler’s command line (`but`) to use it.'],
       ['main_checkout', undefined],
     ]);
     const app = find(sections, 'settings.workspace.app');
     if (app.kind !== 'choice') throw new Error('not a choice');
-    expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'gitbutler', 'main_checkout']);
+    expect(app).toMatchObject({ hint: 'Main checkout', value: 'main_checkout' });
+    expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'main_checkout']);
     expect(sections.flatMap((section) => section.commands).map((command) => command.id)).toContain(
       'settings.workspace.app'
     );

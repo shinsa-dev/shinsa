@@ -26,6 +26,7 @@ describe('resolveClaudeProcess', () => {
       expect(process.options.env.CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE).toBeUndefined();
       expect(process.options.env.EUNOE_DIR).toBeUndefined();
       expect(process.options.env.PLAYWRIGHT_MCP_HEADLESS).toBe('true');
+      expect(process.options.env.PLAYWRIGHT_MCP_DEVICE).toBe('Desktop Chrome HiDPI');
     } finally {
       restore();
     }

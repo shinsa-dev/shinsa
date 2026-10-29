@@ -4,7 +4,6 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { type CoverageDetectionMap, resetCoverageDetection } from '@/lib/connection/coverage.ts';
-import { resetWorkspaceSupport, type WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
@@ -37,19 +36,13 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
   return Object.assign(actions, overrides) as typeof actions;
 }
 
-let support: WorkspaceSupportMap = {};
-
 let detected: CoverageDetectionMap = {};
 
 beforeEach(() => {
-  resetWorkspaceSupport();
   resetCoverageDetection();
-  support = {};
   detected = {};
-  spyOn(globalThis, 'fetch').mockImplementation((async (url: string) =>
-    String(url).endsWith('/coverage')
-      ? Response.json({ detected })
-      : Response.json({ support })) as unknown as typeof fetch);
+  spyOn(globalThis, 'fetch').mockImplementation((async () =>
+    Response.json({ detected })) as unknown as typeof fetch);
 });
 
 afterEach(() => {
@@ -275,27 +268,21 @@ describe('Settings → Projects', () => {
     );
   });
 
-  it('each repository says where agents work, and offers GitButler only once it is set up there', async () => {
-    support = {
-      web: { butInstalled: true, gitButlerWorkspace: true },
-      notes: { butInstalled: true, gitButlerWorkspace: false },
-    };
+  it('each repository says where agents work, and offers worktrees or the main checkout', async () => {
     const actions = renderProjects(superwallState());
     await settle();
     const web = screen.getByRole('combobox', { name: 'Where agents work in web' });
     expect(web.textContent).toContain('Worktrees');
-    await chooseWorkspace('web', 'GitButler');
-    expect(actions.changeWorkspace.mock.calls[0]?.[1]).toBe('gitbutler');
-    await chooseWorkspace('notes', 'Main checkout');
-    expect(actions.changeWorkspace.mock.calls[1]?.[1]).toBe('main_checkout');
-    fireEvent.click(screen.getByRole('combobox', { name: 'Where agents work in notes' }));
+    fireEvent.click(web);
     await settle();
     const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
-    const gitbutler = within(list).getByRole('option', { name: /^GitButler/ });
-    expect(gitbutler.getAttribute('aria-disabled')).toBe('true');
-    expect(gitbutler.textContent).toContain(
-      'Run `but setup` in this repository, or update `but` to 0.23 or newer, to use it.'
-    );
+    expect(within(list).getAllByRole('option')).toHaveLength(2);
+    expect(within(list).getByRole('option', { name: /^Worktrees/ })).toBeTruthy();
+    expect(within(list).getByRole('option', { name: /^Main checkout/ })).toBeTruthy();
+    fireEvent.keyDown(list, { key: 'Escape' });
+    await settle();
+    await chooseWorkspace('notes', 'Main checkout');
+    expect(actions.changeWorkspace.mock.calls[0]?.[1]).toBe('main_checkout');
   });
 
   it('sets each repository’s test coverage: Auto says what it found, Custom asks for the command and report', async () => {

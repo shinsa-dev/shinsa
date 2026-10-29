@@ -340,6 +340,16 @@ export function OverlaySpecimens() {
         </Button>
         <Button
           variant='outline'
+          onClick={() =>
+            toast.error('Couldn’t merge #4512', {
+              action: { label: 'Try again', onClick: () => toast.success('Merged #4512') },
+            })
+          }
+        >
+          Error with action
+        </Button>
+        <Button
+          variant='outline'
           onClick={() => {
             const id = toast.loading('Merging…');
             setTimeout(() => toast.success('Merged #4512', { id }), 1600);

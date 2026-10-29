@@ -4,11 +4,12 @@ import {
   isRoundDelivering,
   listQueuedMessages,
   removeQueuedMessage,
+  sendQueuedMessage,
   updateQueuedMessage,
 } from '@/lib/tasks/message-queue.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createRound } from '../../support/rounds.ts';
-import { createRun, createTask } from '../../support/state.ts';
+import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const queued = createTask({
   id: 't',
@@ -30,8 +31,32 @@ describe('the message queue', () => {
   });
 
   it('says when the queue goes: after the round in progress, one at a time', () => {
-    expect(describeQueue(queued, 1)).toBe('Sends once round 2 is finished.');
-    expect(describeQueue(queued, 2)).toBe('Sends once round 2 is finished, one round at a time.');
+    const one = createTask({ ...queued, rounds: queued.rounds?.slice(0, 3) ?? [] });
+    expect(describeQueue(createShinsaState({ tasks: [one] }), one)).toBe('Sends once round 2 is finished.');
+    expect(describeQueue(createShinsaState({ tasks: [queued] }), queued)).toBe(
+      'Sends once round 2 is finished, one round at a time.'
+    );
+    const plain = createTask({ id: 'plain' });
+    expect(describeQueue(createShinsaState({ tasks: [plain] }), plain)).toBe('');
+  });
+
+  it('names what you have to do first when the round in progress waits at your merge or your review', () => {
+    const rounds = [
+      createRound({ number: 1, status: 'active' }),
+      createRound({ number: 2, status: 'waiting', pipeline: ['operate'] }),
+    ];
+    const change = [rounds[0], createRound({ number: 2, status: 'waiting' })].flatMap((round) =>
+      round ? [round] : []
+    );
+    const at = (stage: 'awaiting_merge' | 'awaiting_review', type: 'merge' | 'review', of = rounds) => {
+      const task = createTask({ id: 'g', stage, rounds: of });
+      const state = createShinsaState({ tasks: [task], gates: [createGate({ id: 'x', taskId: 'g', type })] });
+      return describeQueue(state, task);
+    };
+    expect(at('awaiting_merge', 'merge')).toBe('Sends after you merge round 1.');
+    expect(at('awaiting_review', 'review')).toBe('Sends after you approve and merge round 1.');
+    expect(at('awaiting_review', 'review', change)).toBe('Sends after you approve round 1.');
+    expect(at('awaiting_merge', 'merge', change)).toBe('Sends once round 1 is finished.');
   });
 
   it('marks a later round delivering until one of its runs has started', () => {
@@ -58,17 +83,19 @@ describe('changing a queued message', () => {
     commands.restore();
   });
 
-  it('sends the new text for the queued round, or removes it, and says so', async () => {
+  it('sends the new text for the queued round, removes it or sends it to the current round now, and says so', async () => {
     const [message] = listQueuedMessages(queued);
     if (!message) throw new Error('missing message');
     expect(await updateQueuedMessage(queued, message, 'Add a light theme.')).toBe(true);
     expect(await removeQueuedMessage(queued, message)).toBe(true);
+    expect(await sendQueuedMessage(queued, message)).toBe(true);
     expect(commands.sent.mock.calls).toEqual([
       [
         { type: 'round.update', taskId: 't', number: 3, request: 'Add a light theme.' },
         'Changed the queued message.',
       ],
       [{ type: 'round.remove', taskId: 't', number: 3 }, 'Removed the queued message.'],
+      [{ type: 'round.send', taskId: 't', number: 3 }, 'Sent to round 2.'],
     ]);
   });
 });

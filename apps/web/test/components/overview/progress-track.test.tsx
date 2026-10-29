@@ -2,7 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import type { DisplayPhase, TaskProgress } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { render, within } from '@testing-library/react';
-import { ProgressTrack } from '@/components/overview/progress-track.tsx';
+import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
+import { findTooltipText } from '../../support/hover.ts';
+import { createTask } from '../../support/state.ts';
 
 function phase(key: string, title: string, status: DisplayPhase['status']): DisplayPhase {
   return { key, title, detail: null, status, planned: false };
@@ -30,5 +32,24 @@ describe('ProgressTrack', () => {
     expect(plan.getByLabelText('Done')).toBeTruthy();
     expect(checks.getByLabelText('Skipped')).toBeTruthy();
     expect(checks.queryByLabelText('Done')).toBeNull();
+  });
+
+  it('says the conflict the agent resolves in the pull request step, not In progress', async () => {
+    const task = createTask({
+      id: 't',
+      repoId: 'repo-1',
+      stage: 'fixing',
+      fixFor: 'conflict',
+      stageReason: 'resolving conflicts with main',
+    });
+    const view = render(
+      <TooltipProvider>
+        <TaskTrack task={task} />
+      </TooltipProvider>
+    );
+    const step = within(view.getByRole('list', { name: 'Progress' })).getByText('Pull request');
+    const tooltip = await findTooltipText(step.closest('li') as HTMLElement);
+    expect(tooltip).toContain('Resolving conflicts with main');
+    expect(tooltip).not.toContain('In progress');
   });
 });

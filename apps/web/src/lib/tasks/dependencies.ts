@@ -41,20 +41,6 @@ export function toggleDependency(task: Task, dependency: Task) {
   );
 }
 
-export function resolveDependencyChoiceLabel(stackedOn: Task | null, choice: Task) {
-  return stackedOn?.id === choice.id ? `Stacked on “${choice.title}”` : choice.title;
-}
-
-export function hasRemovableDependencies(task: Task, stackedOn: Task | null) {
-  return task.waitsOn.some((id) => id !== stackedOn?.id);
-}
-
-export function clearDependencies(task: Task, stackedOn: Task | null) {
-  if (!stackedOn) {
-    return sendCommandWithToast({ type: 'task.wait_on', taskId: task.id, waitsOn: [] }, 'No longer waiting.');
-  }
-  return sendCommandWithToast(
-    { type: 'task.wait_on', taskId: task.id, waitsOn: [stackedOn.id] },
-    `Now waits only on “${stackedOn.title}”, which this task is stacked on.`
-  );
+export function clearDependencies(task: Task) {
+  return sendCommandWithToast({ type: 'task.wait_on', taskId: task.id, waitsOn: [] }, 'No longer waiting.');
 }

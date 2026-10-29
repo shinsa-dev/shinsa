@@ -72,11 +72,12 @@ builds never reviews its own work.
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), see the
 other open work in its repository (`list_repository_work`, Other work in the repository, below), suggest
-tasks, delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
+tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
 and the Agent and the investigator can wait (`wait_for`). So every task agent can read across the roadmap, file a
 task, schedule work and suggest tasks, while its hand-over stays its own. Which role may call which tool is one
 table, `listCallableToolNames` in `packages/core/src/domain/tools.ts`: `decide` refuses a call the run's role does not
-have, and each prompt's house rules name only the tools the agent has. What a session is served is `listToolNames`:
+have, and each prompt's house rules name only the tools the agent has, and never repeat what a tool's own description
+already says. What a session is served is `listToolNames`:
 the four task-session roles share one session, and its tools are the first thing in the prompt-cache prefix, so they
 are all served one list, the union of theirs in `SHINSA_TOOL_NAMES` order (the reviewer and delegated agents get
 exactly their own). A tool served but not the run's is refused with `wrong_step` and the hand-over it should use:
@@ -222,7 +223,9 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   proves its change with a test or a check links that check by its id instead of pasting its output (Evidence,
   below).
 - **Headless.** Checks run with `CI=1`, which test runners and Playwright read as headless, and every browser Shinsa
-  or its agents start is headless (`HEADLESS_BROWSER_ENV`), so nothing a check runs opens a window on your screen.
+  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen. The
+  same environment gives the Playwright MCP a device scale factor of 2 (`Desktop Chrome HiDPI`), so evidence an agent
+  captures stays sharp on a Retina screen (Evidence, below).
 
 ### Test coverage of the change
 
@@ -263,13 +266,6 @@ or modifies, the ones the report marks executable, and of those the ones a test 
   report); one that times out, leaves no report or a report with no files, or any error while reading it or the diff,
   gives `{ status: 'unavailable', reason }`, which is logged and shown nowhere. A run before review whose checks
   block measures nothing: a fix comes first, and the run after it measures.
-- **In a GitButler workspace** one checkout holds every applied branch, so the report covers other tasks' code too,
-  and only the task's own lines count, read the way the Code tab assembles its working copy (What the Code tab reads
-  in GitButler, below): the lines its branch changes since the base (`git diff -U0 <base> <branch>`), moved to where
-  they sit in the checkout through the diff from the branch to the working directory (`mapChangedLines`: a line
-  another change rewrote drops out, one below an insertion moves down), plus the uncommitted lines (against the
-  workspace commit, `HEAD`) of the files the ledger says the task owns (`LedgerStore.listOwned`, the Code tab's
-  `owned` paths). Another task's commits, its owned files and paths nobody owns are never counted.
 - **The computation** is pure: the report parsers take text (`parseLcov`: `SF`/`DA` records; `parseCobertura`: each
   class's `filename` joined to each `<source>`, line hits; `parseGoProfile`: `file:start.col,end.col statements
   count` blocks, every line in a block with statements), `parseChangedLines` reads `git diff -U0 <base>` of the
@@ -372,7 +368,9 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    `pull_request.pushed`, which `pull_request.record_push` records), and until GitHub reports the pushed commit, a
    sync is stored but not judged, so a stale result never starts a second fix.
 8. **Your merge.** The merge gate opens only on a clean PR with no comment left unread, and only
-   after every task it waits on has finished. A task that starts waiting on another while its
+   after every task it waits on has finished. A head with no checks yet is clean only once Shinsa knows the
+   repository has no CI for it (The pull request watch, No checks yet is not clean), and approving merges
+   exactly the head the gate opened for. A task that starts waiting on another while its
    merge gate is open loses the gate until that task merges. Approving starts the merge; syncs
    that arrive while it runs never reopen the gate. Approving with edits from the Code tab that no commit has yet
    pushes them first and merges once CI passes (Your edits, below). A PR GitHub puts in its merge queue (or on
@@ -437,20 +435,19 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
 
 A repository says where its agents work (`Repo.workspace`, Settings → Projects on each repository's row, ⌘K "Where
 agents work in ‹repository›", `shinsa repos update --workspace`). It is a human-only repository field
-(`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are three
+(`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are two
 modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behind one interface
-(`WorkspaceStrategy`: prepare, claim, commit, syncBase, push, remove), picked per task by `Workspaces.resolve`:
+(`WorkspaceStrategy`: prepare, commit, syncBase, push, writeEdit, remove), picked per task by `Workspaces.resolve`:
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
 | **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
-| **GitButler** (`gitbutler`) | its own virtual branch in the repository's GitButler workspace (`but branch new`), applied next to every other task's and your own branches, in the main checkout | `but commit -b <branch>` with exactly the files the task changed | `but push <branch>` | cancelled or done without a merge: the branch is taken out of its stack, if any, and unapplied (`but unapply`) and its untouched uncommitted edits discarded; merged: left for GitButler, which marks it merged upstream and drops it on your next `but pull` |
 | **Main checkout** (`main_checkout`) | the repository's own checkout, switched to a branch Shinsa makes from the freshly fetched default branch | `git commit` on that branch, only while the checkout is on it | `git push origin refs/heads/<branch>` | the checkout goes back to the branch it was on when the task took it (`returnBranch`), or to the default branch when that branch is gone or the checkout was detached; with uncommitted changes it stays where it is |
 
 - **Core holds the mode and the invariants.** A task takes the repository's mode when it asks for its workspace
   (`worktree.requested`, then `worktree.created` carries it) and keeps it for its whole life, rounds included, so
   changing the setting only affects tasks that have not set up yet (`resolveTaskWorkspace`). The setup step says what
-  it sets up (`WORKSPACE_SETUP_REASON`: "setting up the worktree", "setting up the branch", "setting up the checkout").
+  it sets up (`WORKSPACE_SETUP_REASON`: "setting up the worktree", "setting up the checkout").
 - **One task at a time in a main checkout.** A task holds the checkout from the moment it asks for it until its
   checkout is given back (`worktree.gone`), which is after it settles (`selectCheckoutHolder`). Another task that
   needs the checkout waits on the holder (`waiting_on_tasks`, "waiting for “Title” to finish with the checkout",
@@ -460,117 +457,14 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
   ignored. The property test checks that no two tasks of one repository ever hold its checkout
   (`workspace-invariants.ts`).
 - **The setup check covers the mode** (`describeWorkspaceProblem`, a `workspace` configuration problem, "Agents
-  cannot work in this repository yet"): GitButler needs `but` on the PATH, and the engine reads its version
-  (`readButVersion`). `but` 0.23 and newer works in any git repository with no setup: it stays on your branch while
-  one branch is applied and moves to `gitbutler/workspace` when a second is. `but` 0.22 needs the repository set
-  up first (`but setup`: `.git/HEAD` on `gitbutler/workspace` and `.git/gitbutler`, `needsButSetup`,
-  `isGitButlerReady`). The main checkout needs a checkout with no uncommitted changes (only for a task that does not
-  hold it yet) and refuses a repository on `gitbutler/workspace` (`isGitButlerWorkspace`), since switching its branch
-  would take every applied branch out of it. Settings only offers GitButler where `GET /api/repos/workspaces` says
-  both hold (`canUseGitButler`; `gitButlerWorkspace` there means `but` can work in the repository), and says why
-  otherwise.
-- **The `but` CI tests against** is pinned in `.github/workflows/test.yml` (`BUT_VERSION`, passed to GitButler's
-  install script), so a new GitButler release cannot change CI on its own. Bump it on purpose, after running the
-  engine's GitButler tests on the new version (`test/helpers/bin/but` runs whichever `but` comes first on the PATH;
-  `FAKE_BUT_VERSION` makes it report another version, which is how both setup rules are tested on either).
-- **Agents work where the strategy puts them.** For GitButler and the main checkout a task's `worktreePath` is the
-  repository itself, so every role works in your checkout; a read-only agent's edits are never set aside there,
-  as in any shared checkout. Checks run in the same checkout, so in GitButler they test every applied branch
-  together, your own uncommitted work included, not the task's branch alone.
-
-### GitButler: whose change is whose
-
-GitButler applies several branches in one working directory and decides at commit time which branch a change goes
-to; its CLI (0.22 and 0.23) has no lasting per-branch assignment of uncommitted changes (`but rub` and `but stage` are
-gone), so Shinsa keeps the assignment itself:
-
-- **One agent that changes files at a time per GitButler workspace.** A run whose role can write claims the
-  repository (`GitButlerStrategy.claim`, a lock keyed by repository and owned by the task, so a task's own runs and
-  shared delegations never wait on each other) before its session starts, and gives it back when it ends; read-only
-  runs (the Agent while it plans, the reviewer, researcher and answerer, a delegated planner) never wait. Checks claim it too. Two agents editing the same
-  working directory at once would leave no way to tell whose edit is whose, and GitButler refuses to put a change to
-  a file another applied branch changed on a second branch anyway, so Shinsa serialises the writers rather than
-  refuse after the fact; planning, review, CI and pull requests still run in parallel. A waiting run is active but
-  has no session; cancelling it or a shutdown ends the wait (`RunSupervisor.cancel`, `interruptForShutdown`).
-- **The ledger** (`data/workspaces/<repository>.json`, `workspaces/ledger.ts`). When a claim starts, Shinsa records
-  every uncommitted path with a hash of its content (`git status --porcelain=v2 --untracked-files=all
-  --no-renames`). Whatever changed since belongs to the task (`claimChanges`); a path that was already dirty and is
-  not the task's (your work, or another task's pending edit) is a conflict. A hand-over commits only the task's own
-  paths, by their GitButler change ids (`but status --json`), to the task's branch; a conflict refuses the commit
-  with the paths named, so the agent undoes its edit or asks. Paths a task changed but has not committed stay its
-  own across runs and are never taken by another task. Your uncommitted work is never committed and, when a task is
-  cancelled, only the task's edits that nobody changed since are discarded (`forgetTask`). Setting a task up again
-  before any phase report drops its own such edits too, as a reset worktree drops an investigation's scratch edits
-  before the fix is planned; the main checkout never discards anything.
-- **Stacking on conflict.** A change to lines another applied branch already changed is refused by `but commit`,
-  whose hint names the branch to stack on (`but move <branch> --above <other>`). When that branch is another open task's
-  in the same repository that does not wait on this one (`selectStackTarget`), Shinsa runs the move, commits again and
-  sends `task.stack` before the hand-over: core records `stackedOn` (`task.stacked`) and adds the other task to the
-  ones this task waits on (`task.waits_on_changed` by Shinsa, the existing dependency), so its merge gate waits for the
-  other task to merge. Its pull request targets the other task's branch while that task's pull request is open, and the
-  default branch otherwise (`resolvePullRequestBase`; the watch retargets it when that changes, as for a stacked round),
-  and the Code tab diffs it against the same base. Any other refusal (your own branch, a settled task, a task that
-  waits on this one, or a commit that still fails after the move) reaches the agent as before ("GitButler did not
-  commit the changes to ‹branch›"), and it is told to leave the file or ask. While the task below is open the
-  dependency is locked: `task.wait_on` (from you, or on your behalf) that drops it is refused (`dependency_stacked`,
-  `assertStackKept` on `selectStackedOnTask`), so the task above cannot merge first and take the commits below with
-  it; the Waits on menus show that task's item ticked and disabled as "Stacked on “‹title›”", and Stop waiting keeps
-  it. Once the task below merges the lock is gone and the stack is left to GitButler.
-- **Leaving a stack.** A task whose branch settles without a merge (cancelled, or done without a merged pull
-  request) is taken out of its stack before its branch is unapplied (`but move <branch> --unstack`, then
-  `but unapply`), because GitButler unapplies a whole stack when any branch of it is unapplied. The branches above it
-  stay applied on the one below it, or on the workspace target when it was the bottom, with their own commits. Core
-  agrees in the same command (`settleTask` → `unstackTasksOn`): each open task stacked on it gets `task.unstacked`
-  (its `stackedOn` cleared) and loses that dependency (`task.waits_on_changed` by Shinsa), so its pull request's base
-  resolves to the default branch and the watch retargets it.
-- **Conflicts an unstack leaves.** A commit above the settled task that changed its lines (the reason the stack
-  exists) is left conflicted by the unstack: GitButler keeps it on the branch marked conflicted. After the removal
-  the server reads which applied branches have conflicted commits (`listConflicted`, from `but status --json`) and
-  sends `task.record_conflict` for each open task on one; Shinsa never pushes a conflicted branch either
-  (`GitButlerStrategy.push` refuses with `ConflictedBranchError`, and the push effect sends the same command
-  instead of failing). Core (`recordConflict`, `decide/conflicts.ts`) steers the Agent when it is building, fixing
-  or operating ("Resolve them before you hand over"); at the review gate, the merge gate or while shipping, with
-  no run active, it withdraws the gate and starts a fix (`fixFor: 'conflict'`, "resolving conflicts") in the
-  Agent's own session. The Agent resolves in place, never moving your checkout: `but resolve conflicts <branch>`
-  lists them, `but resolve apply <path>:<N> --commit <branch>` with the content it wants (or `--ours` /
-  `--theirs`) rewrites the commit, and it asks you (`ask`) when it cannot tell which side is right; it is told
-  never to run `but resolve <commit>`, which enters resolution mode and checks the commit out, and the shell
-  policy refuses it. After the fix a task past your review pushes (`but push` force-pushes the rewritten branch)
-  and one before it runs the checks and review again. Elsewhere (planning, reviewing, checking, a merge that is
-  running) core keeps the conflict (`task.conflict_held`, `Task.heldConflict`) and tells the Agent at its next turn
-  that writes: the first build turn after planning, a fix or the operation gets the same note at the end of its
-  prompt (`tellHeldConflict` in `Decider.startRun`, next to your edits and the overlap note, so the session's prefix
-  stays the same), and the conflict is no longer held. A conflict still held when no such turn came first is acted
-  on at the task's next gate: where the review gate or the merge gate would open, the fix starts instead
-  (`startHeldConflictFix`), so the work never reaches you conflicted. A held conflict an Agent at work is then
-  steered about is no longer held either, and starting the conflict fix clears it (a conflict fix is never told it
-  twice).
-- **A pull request that conflicts with its base.** In a worktree or the main checkout the Agent merges the fetched
-  base in (The pull request watch). In GitButler it cannot: `git merge` takes the checkout out of GitButler, and only
-  `but pull` brings the new default branch in, rebasing every applied branch, yours too. So when the watch reads a
-  GitButler task's pull request as conflicting (`mergeable: false`), core opens a failure gate with
-  `cause: 'workspace_update'` ("Pull request #12 conflicts with main") instead of starting a fix, and its one action
-  is Update the workspace (Retry with guidance passes your words on). Approving sends the `workspace.update` effect
-  ("updating the workspace"), which waits for any writing agent in the workspace, then runs `but pull`
-  (`GitButlerStrategy.update`; GitButler keeps everyone's uncommitted work and marks a commit that no longer applies
-  as conflicted) and sends `task.record_workspace_update`. Core then starts a conflict fix in the Agent's session
-  (`resolveWorkspaceUpdatedFixPrompt`): it checks `but status`, resolves what is left in place as above, and
-  `complete_fix` pushes. While the gate is open or the update runs, syncs of the pull request start nothing, and a
-  pull request that turns clean meanwhile opens the merge gate as usual. A failed `but pull` is a failure gate
-  ("Could not update the workspace"), and Retry runs it again.
-- **The shell policy in a GitButler workspace.** An agent may read it (`but status`, `but diff`, `but show`) and
-  resolve a conflicted commit in place (`but resolve conflicts|apply|status`); every other `but` command (commit,
-  push, pull, move, apply, unapply, discard, undo…) is refused, since Shinsa commits, pushes and moves branches
-  and the workspace is updated only when you choose Update the workspace.
-- **Limits.** An edit you make outside Shinsa while an agent holds the claim, to a file that was clean, is counted as
-  the agent's; an edit you make in the Code tab is recorded as the task's at once (Your edits, below).
-  An isolated delegation checks out the workspace commit (every applied branch), not the task's
-  branch alone. Pull requests open with `gh`, like every mode, not `but pr new`, which needs GitButler's own forge
-  sign-in; the branch was pushed with `but push`, so GitButler sees it as pushed.
-- **Recovery.** Branch creation, applying, committing and the ledger are safe to repeat: `prepare` reuses an applied
-  branch and applies one that was unapplied, a commit with nothing new makes none, and the ledger is on disk, so a
-  restart keeps which uncommitted paths are whose (a claim open at the crash is closed by the next run's claim of
-  the same task). `but` commands for one repository run one at a time in the server.
+  cannot work in this repository yet"): the main checkout needs a checkout with no uncommitted changes, only for a
+  task that does not hold it yet. Worktrees need nothing beyond the repository.
+- **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
+  itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
+  checkout. Checks run in the same checkout.
+- **Conflicts go to the agent in every mode.** A pull request that conflicts with its base is merged with the fetched
+  base by the Agent in its own session (The pull request watch → Conflicts), and an update onto the base that
+  conflicts before a push is resolved the same way (Pushing the branch).
 
 ### Your edits
 
@@ -579,8 +473,8 @@ every commit.
 
 - **Where they go.** `POST /api/tasks/<id>/file` (`apps/engine/src/http/edits.ts`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
-  task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for GitButler and
-  the main checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
+  task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
+  checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
   folder's real path (`resolveWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
@@ -590,9 +484,7 @@ every commit.
   works, and whoever writes second sees the other's text first.
 - **Through the strategy** (`WorkspaceStrategy.writeEdit`). A worktree takes the write as it is. The main checkout
   takes it only while it is on the task's branch (`assertOnBranch`), so an edit never lands on a branch you switched
-  to. GitButler writes under its serial lock and records the path in the ledger as the task's (`adoptPath`), so the
-  next hand-over commits it to the task's branch and never to another's; a path another task has uncommitted changes
-  in is refused (`file_taken`), and a path that ends up clean again leaves the ledger.
+  to.
 - **What core knows** (`task.record_edit`, sent by the route after each write with whether the file now differs from
   the checkout's `HEAD`; `task.edited`). `Task.editedPaths` lists the files you changed that no commit has taken yet,
   and `untoldEdits` the ones no agent has heard of. The first edit of a file shows as "Edited ‹path›" in the activity;
@@ -600,7 +492,7 @@ every commit.
 - **The agent is told.** A running agent of the task is steered at once with `describeHumanEdits` ("The human edited
   this file in the working copy: ‹path›. Their edits are part of the work and go into your next commit: keep them, and
   read a file again before you change it."), as a note of Shinsa's (`run.steer` with `from: 'shinsa'`, like the
-  overlap and conflict notes), not as a message from you, and the next run of the task gets the same line for every
+  overlap note), not as a message from you, and the next run of the task gets the same line for every
   untold file appended to its prompt (`Decider.startRun`, `task.edits_told`), on the session it resumes or a new one.
 - **Committed with the round.** A phase or fix hand-over commits everything in the checkout as before, your edits
   included (`work.committed` clears `editedPaths`). Edits no hand-over took yet are committed by Shinsa
@@ -623,13 +515,6 @@ every commit.
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
     tab`: `commitWorktree` builds every commit that concludes a merge that way (The pull request watch → Conflicts).
   - A real fix turn (any `fix.started` past round 0, or yours) drops the approval; a retry keeps it.
-- **What the Code tab reads in GitButler.** One working directory holds every applied branch, so the working copy of a
-  GitButler task is assembled (`http/code.ts`, the `owned` ref): the files the task owns in the ledger, which include
-  every edit you made in the Code tab (`adoptPath`), are read from disk, and every other file from the task's branch.
-  A reload shows your edit, and another task's or your own uncommitted work never shows as this task's. The refs say
-  `working: true` and `dirty` when it owns any uncommitted file; paths, folders, files, images, search and the diff
-  (the branch's commits against its base, with each owned file's working-copy diff in its place) all follow it. An
-  agent's edits join it once its run's claim ends and the ledger records them.
 
 ### Other work in the repository
 
@@ -640,12 +525,10 @@ same files:
   researcher; not a delegated agent). The reviewer keeps it on purpose: it judges whether the change collides with
   another task's work in the same files, and reading that is not acting on it. It lists the other open tasks (not settled) of the task's repository, most
   recently active first: each as a `shinsa://` link with its handle, its stage, its branch, what its branch is stacked
-  on (another task's GitButler branch, `stackedOn`, from either side, and a round stacked on the task's own open pull
-  request, `resolveRoundBase`), whether an agent works on it now (an active run) and the files it changed, marking
+  on (a round stacked on the task's own open pull request, `resolveRoundBase`), whether an agent works on it now (an active run) and the files it changed, marking
   those this task changes too (`serializeRepositoryWork`, `chat/repository-work.ts`). The server reads the files
   with git (`git/changed-files.ts`): the branch's commits since its base (the default branch, or the branch it is
-  stacked on), plus what its checkout has not committed (worktrees and the main checkout) or what the GitButler
-  ledger says it owns (GitButler, where one working directory holds every branch). A file list git cannot read
+  stacked on), plus what its checkout has not committed. A file list git cannot read
   shows as not known. The tool text is static, so the tool list stays the same for every turn of a session.
 - **Overlaps are facts in the log.** Before a commit hand-over (`complete_phase`, `complete_fix`) dispatches, and
   before `propose_plan` dispatches (adding the files the plan names to the planning task's own), the server compares
@@ -679,7 +562,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   findings, fix budget, result, proposal, pull request) are the current round's.
 - **How a new round is decided.** The classifier decides, not the agent, for every message, the task resting or not,
   except where you decide (below): one quick call on the classifier model reads your message against the task's rounds (each with its kind of work, its
-  status and what it did: the result, the report's headline or the plan's goal) and whether a round is in progress, and
+  status and what it did: the result, the report's headline or the plan's goal) and where the current round is, and
   answers `acknowledge`, `feedback`, `new_round` or `separate_task`. Most messages are no new work: thanks, "ok" or
   small talk is `acknowledge`, and a question about what a round did is `feedback`; only a message that asks for
   something to be done that has not been done is a new round (on a resting task a correction to finished work is one).
@@ -689,6 +572,12 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   shape question (`resolveRoundShape` in `triage/message.ts`, the task's rounds as context) before it dispatches, and
   the answer travels on the command like a classified message's, so replay never asks again. Only when the model is
   off or gives no usable answer does the round fall back to `change`.
+  The question has three forms (`resolveKindQuestion`): nothing in progress (a resting task: a correction to
+  finished work is a new round), a round in progress (an agent at work: new work is what the round does not cover),
+  and a round whose work is finished and waits for your review or your merge (stage `awaiting_review` or
+  `awaiting_merge`; the prompt's Now line says so). In the last, anything about that round is `feedback`: a change
+  to it, something to run or start so you can try it ("start the dev server so I can test the UI"), something to
+  check, or a question about it; only the next piece of work, a code change of its own, is `new_round`.
 - **Where you decide, a message is always the gate's reply.** At a plan gate, a review gate, an agent's question, your
   OK, an operation gate, a failure, Sign in or setup gate, and while planning with no agent running, the composer's
   words say what sending does (What a message does, below), and that is what it does: the classifier is not asked
@@ -697,8 +586,20 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   earlier, `--as` or `as`). So a message at the plan gate, "I agree, and then group the projects too", revises the
   plan with all of it, the new scope included; it never queues a round, is never only noted and never becomes a
   split-off, and it never approves the plan, which stays the gate's own approve. The merge gate is not one of them: a
-  round queued there starts at once (One active round, below), so the classifier still tells a change before the
-  merge from the next piece of work, and "thanks" from either.
+  round queued there for a change that ships through the pull request starts at once (One active round, below), so
+  the classifier still tells a change before the merge from the next piece of work, and "thanks" from either.
+- **New work never waits behind your own decision.** A round that would start only once you approve or merge the
+  current one (`resolveRoundRelease` in `decide/rounds.ts` is `approve`, `approve_and_merge` or `merge`, so
+  `isHeldByYourDecision`) is never queued: a message read as `new_round`, or as `separate_task` with no room left for
+  a suggestion, is delivered as `feedback` to the round that waits for you instead, whatever kind it carries. At the
+  merge gate that is every new round that ships no pull request (an answer, research, an investigation, an
+  operation) and every round of a task whose operation runs after the merge: "can you start the dev server so I can
+  test the UI?" withdraws the merge gate, the Agent's session does it (`send_back`; the fix prompt,
+  `resolveHumanFixPrompt`, tells it to run, start, check or answer what you asked and still hand over with
+  `complete_fix` when nothing in the work changes), and the merge comes back to you.
+  A queued round there would only start after the merge, which only you can do, so it would look as if it sends by
+  itself and never send. A round queued while an agent works still waits, since that round finishes on its own, and
+  work for another goal still becomes a split-off suggestion while there is room for one.
 - **A message that needs no new work stays in its round.** `acknowledge` is recorded in the chat (`task.messaged`,
   "Sent a message") and nothing else happens: no run, no round, wherever the task is but where you decide (above). A pure acknowledgement starts no agent on purpose: a reply would resume a session that has gone cold
   since the round ended, at the cost of reading its whole context again, to say "you're welcome"; the next agent of
@@ -772,8 +673,12 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
     becomes the request's first line; its kind of work and how it ships stay) and `round.remove` takes it out of
     the queue, the waiting rounds after it moving up one number (`round.updated`, `round.removed`, activity
     "Changed queued round 3: …" and "Removed queued round 3: …"). A round that started is refused
-    (`round_started`: send a message instead), as is a closed task. Both are on the surface (`shinsa rounds update`,
-    `rounds remove`; yours alone, so no agent has a tool for them) and done on your behalf like `round.ship`.
+    (`round_started`: send a message instead), as is a closed task. `round.send` sends a waiting round to the
+    current round now instead (the queue card's Send now): the round leaves the queue (`round.removed`, the rounds
+    after it moving up) and its request is delivered as your message, read as `feedback`, so it steers the agent at
+    work, or at the review or merge gate withdraws the gate for a change and the gate comes back after it. All three
+    are on the surface (`shinsa rounds update`, `rounds remove`, `rounds send`; yours alone, so no agent has a tool
+    for them) and done on your behalf like `round.ship`.
 - **One active round, and when the next one starts.** A new round waits (`round.queued`, round status `waiting`, at
   most five waiting) and
   starts by itself once the current round rests (`startQueuedRounds`, after every command, like `releaseWaiting`):
@@ -940,7 +845,8 @@ folds in `state/shapes.ts`).
   gate is open; the step is done once the proposal is accepted. The steps follow the pipeline's order, so an operation after
   the merge comes after Merge; Pre-merge and Post-merge show how many of their steps are done and wait on
   you while one is open (Pre-merge while the merge gate is open, Post-merge once the round rests); Checks and agent review is named for what the task keeps (Checks, Agent review), and a fix
-  in a change without either shows Build as current.
+  in a change without either shows Build as current. A fix of the pull request, of a conflict with its base or of an
+  update onto the base (`fixFor` `pull_request`, `conflict` or `update`) shows the Pull request step as current.
   Until the steps are settled nothing draws them: `resolveShapeState` (`domain/shapes.ts`) is `triage` while an Auto
   task has no pipeline yet, `agent` while the Agent of a task Shinsa shaped can still reshape it (planning or
   waiting, no plan, no composition, a pipeline that starts with a plan), and `settled` otherwise, so the web shows
@@ -1078,10 +984,8 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   is still planning cancels the planning run and puts it back to waiting (it plans again after the
   release). Once building has started, a new dependency only holds the merge gate until every
   task it waits on merges: the work is not thrown away.
-- **No stacking across tasks**, with one exception. A dependent waits for its parents to finish instead of branching
-  off an unmerged branch; only a task's own rounds stack (Rounds, above), and a GitButler task whose commit touches
-  lines another task's branch changed, which GitButler stacks on that branch and Shinsa makes wait on that task
-  (Where agents work → Stacking on conflict).
+- **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
+  branch; only a task's own rounds stack (Rounds, above).
 
 ## Gates
 
@@ -1090,9 +994,7 @@ Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your
 agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
 above), and `operation` an operation after the merge waiting for your OK on the merged commit. `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
-reached its usage or cost limit (`cause: budget`), or a GitButler task's pull request conflicts with its base and only
-updating the workspace can bring it in (`cause: workspace_update`; its approve is Update the workspace, which runs
-`but pull`, and its `reply` does the same with your words for the agent; Where agents work → GitButler, above), or the
+reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
 approve is Send to the agent again, another fix round with the hook's output, and its `reply` adds your words; there is
 no way to push without the hook; Pushing the branch, below). `configuration` means setup verification found something missing
@@ -1293,8 +1195,9 @@ checks it ran.
   the Agent attached this round (`describeEvidenceForReview`: kind, title, stage, width, theme) or told there is none,
   checks it against the diff, and may attach its own; its pieces show as from the agent review, independent of the
   author. How to capture (start the app per the repository, Playwright's command line or a script in a scratch folder,
-  1280px and 390px, light and dark, `git worktree add --detach` of the base for a before shot taken late, the
-  simulator for iOS) is the `evidence` skill (`apps/engine/plugin/skills/evidence/SKILL.md`), which the skill index
+  1280px and 390px, light and dark, at a device scale factor of 2 so a shot has two pixels per CSS pixel and stays
+  sharp on a Retina screen, `git worktree add --detach` of the base for a before shot taken late, the simulator for
+  iOS) is the `evidence` skill (`apps/engine/plugin/skills/evidence/SKILL.md`), which the skill index
   in the system prompt points to for a change a user sees and for a review of one.
 - **What it carries.** `attach_evidence` takes `kind`, a `title` (80) that a before and its after share, an optional
   `detail` (280, what to look at), `width` (CSS pixels), `theme` (`light`, `dark`), `stage` (`before`, `after`), an
@@ -1559,6 +1462,36 @@ checks it ran.
   “‹title›”", "Dismiss the suggested task"). A follow-up is something else: a message to a finished answer,
   investigation or report.
 
+### Memory
+
+Rules you want every later agent to follow, kept by you and proposed by agents: Shinsa's only memory across tasks
+(`domain/memory.ts`, `decide/memory.ts`, `state/memory.ts`, `prompts/memory.ts`). It holds only what the code cannot
+show an agent: your taste, your limits, how you want things written. Repository facts and overviews stay out:
+context an agent can find on its own makes it no better and costs every turn ("Evaluating AGENTS.md", ETH Zurich,
+February 2026, arXiv 2602.11988; SkillsBench, arXiv 2602.12670: rules written by people help, ones a model writes for
+itself do not).
+
+- **A rule** is a `MemoryEntry` in `state.memories`: one sentence of at most 240 characters (`MEMORY_LIMITS`), for
+  every project (`projectId: null`) or one project, `proposed` or `kept`. A scope keeps at most 20 rules; keeping one
+  more is refused (`memory_full`). Removing a project forgets its rules.
+- **Agents only propose.** `remember` (the Agent, answerer, investigator and researcher; never the reviewer or a
+  delegated agent) takes `scope` (`global`, or `project`: the task's project, refused for a task in none), `text` and
+  `why`. Its description says when: you corrected how it works, or said "always" or "never", and it would hold for
+  later tasks. A rule already known in that scope, whatever its case, is dropped; at most ten proposals wait at once
+  across Shinsa (`memory_proposals_full`). A proposal is recorded in its task's activity and shows as a card in the
+  chat; it changes nothing until you keep it.
+- **Only you keep, write or remove** (`memory.write`, `memory.accept`, `memory.remove`; Who can change Shinsa, below):
+  Settings → Agents → Memory, or `shinsa memory`. Writing over a proposal keeps it with your words and scope;
+  removing a proposal dismisses it. `shinsa memory write --id` without `--project` keeps the rule in its scope.
+- **What agents are told** (`resolveMemoryTold`, from `Decider.startRun`, in the user turn beside the project context,
+  never in the system prompt or a tool; Caching, below). A fresh session of the task's agent or of the reviewer gets
+  every kept rule for its project plus every global one, under one heading. A resumed session gets only the rules
+  kept or edited since its last turn started (`updatedAt` at or after the latest start of a run on that session),
+  under "kept new rules since your last turn"; nothing when there are none. A removal is not retold: a session that
+  heard a rule keeps it until its next fresh session. A resumed turn that must be briefed again (its session was
+  compacted, handed off or never had these house rules; `resolveRunBrief`) carries every rule again, for any briefed
+  role: the agent's round brief, a planning turn, the reviewer and the inquiry roles. Proposals are never told, and delegated agents and the quick calls get no memory.
+
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
@@ -1803,13 +1736,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 | `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut`; asked with `Accept: application/x-ndjson` (the web does), a stream of `SearchLine`s instead: `matches` lines as git finds them, then one `done` line with how it ended (or one `failed` line), `no-store` | `git grep -n -I --column`: a plain search that ignores case is `-E` with each letter folded into a class (`[cC][oO]…`, the rest escaped; `-i` made git grep up to twenty times slower), a case-sensitive one `-F`, `regex=1` is `-E` with `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked`. git is stopped at the 2,001st line, so a common word answers at once |
 | `GET /api/tasks/<id>/diff?base=&head=&path=&previous=` | `TaskDiff` with both ends: every changed file with its status, counts and risk, and the patch of the small ones only; the rest have `patch: ''` and `patchOmitted` (with `path`, and `previous` for a rename, the named file alone with its whole patch) | `git diff --raw --numstat -z --find-renames base head` for the list (`parseDiffSummary`), then one `git diff` over the files that fit the patch budget, in risk order (`selectPatchedFiles`, `mergeDiffPatches`: none over 2,000 changed lines or 256 KB, 20,000 lines and 1 MB in all, 400 files; a named file up to 2 MB); `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
 
-- **Where agents work.** The working copy is the task's own only in a worktree or a main checkout. A GitButler task
-  shares its checkout with every applied branch, so its head is its branch and its `working` ref is assembled: the
-  files the task owns in the ledger (its agent's uncommitted edits once a run's claim ended, and every edit you made in
-  the Code tab) are read from disk, and every other file from the branch (Where agents work → Your edits). Its refs
-  say `working: true`, and `dirty` when it owns any file; a search reads the branch and the owned files from disk;
-  the diff is the branch's against the base with each owned file's working-copy diff in its place
-  (`resolveWorkingDiff` with those paths).
+- **Where agents work.** The working copy is the task's own checkout in either mode: its worktree, or the main
+  checkout while the task holds it, so the `working` ref reads the checkout from disk (Where agents work).
 - **Refs.** A `ref` is a full commit id that `git cat-file -t` says is a commit of that repository, or `working` for
   the task's working copy while its checkout exists; nothing else is passed to git (`ref_invalid`, `ref_unknown`). A
   commit once found is remembered per repository (`assertCommit`), so later reads at it start no process. Leaving `ref` out
@@ -1896,8 +1824,8 @@ running when the window closes or the app quits, and a page that comes back find
   and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
   can change Shinsa, this keeps an agent from doing it by accident, not one set on it.
 - **An agent that needs you to run something** asks (`ask`) with the command in a ```` ```bash run ```` block in
-  its context, as the tool's description says; the house rules (`prompts/rules.ts`) and the `handover` and `review`
-  skills teach every role the `run` mark, and a plain ```` ```bash ```` block is an example with Copy alone. The
+  its context, as the tool's description says; the house rules' writing rules (`WRITING_RULES` in `prompts/rules.ts`)
+  teach every role the `run` mark, and a plain ```` ```bash ```` block is an example with Copy alone. The
   question card shows Run in terminal in that block's corner (as every block marked `run` on a task's pages does), which opens a terminal in the task's worktree, or its repository, and runs it. Nothing runs until you press it.
   Running types like a person (`TerminalSession.type`): it waits until the shell has printed and then been quiet for
   150 ms (its prompt; at most 5 s, so a busy program cannot hold it), types the command, and presses Enter 30 ms later
@@ -2031,6 +1959,8 @@ plainly what protects what.
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
+  - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
+    `memory.remove` on your behalf): an agent proposes with `remember` instead (Memory, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
@@ -2055,8 +1985,7 @@ plainly what protects what.
 - **What a shell can still do.** Anything your account can. An agent that sets out to could post a command to
   `localhost:7446/api/commands` itself, or run `gh pr merge` or `git push` directly, and Shinsa would not know.
   `agents/policy.ts` refuses the obvious ones (`gh pr merge|create`, `git commit|push|rebase|reset --hard`, a
-  `git pull` without `--no-rebase`, the default branch, every `but` command but the reads and the in-place conflict
-  resolution, the human-only `shinsa` commands, a whole test suite) so an agent does not do them by accident, but a policy over
+  `git pull` without `--no-rebase`, the default branch, the human-only `shinsa` commands, a whole test suite) so an agent does not do them by accident, but a policy over
   command text is a guard rail, not a lock. **The real safeguard for merges is GitHub's branch protection:** require
   a pull request review (from someone other than the account agents run as, or a code owner) and passing checks on
   the default branch, so a merge cannot happen without you whatever runs on your machine. Shinsa recommends it for
@@ -2215,8 +2144,8 @@ changes costs one call.
   rounds (checks by the ids of the checks that block, the pull request by the names of its failing CI checks, the
   ids of its unresolved review threads and a conflict). New comments alone key nothing: they have
   their own limit, ten updates in a row that bring only comments (The pull request watch, below).
-  `maxFixRounds` caps the automatic rounds; "until clean" keeps going, up to 12, while each round
-  changes something. The agent review never fails this way: it escalates to your review instead
+  `maxFixRounds` caps the automatic rounds; "until clean" (the default, `null`) has no cap and keeps
+  going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead
   (Review rounds escalate to you, above).
 - Retrying a task, and asking for changes yourself, start a fresh automatic budget. Changes you
   ask for never use it up.
@@ -2236,7 +2165,7 @@ changes costs one call.
   were working come back through restart continuation (The agent loop, below).
 - So every effect that touches the outside world is safe to run twice. A worktree's path depends only on the task
   and the branch it asked for, so a second `worktree.create` finds the first one and reuses it (a half-made folder
-  is cleared first); a GitButler branch already applied is reused and an unapplied one applied again, and a main
+  is cleared first), and a main
   checkout already on the task's branch is kept (Where agents work, above). Opening a pull request reuses an open one for the branch. Merging asks GitHub first and never
   asks it to merge a pull request that is already merged or queued; one GitHub still shows as open (and not queued)
   after the merge fails the effect, which retries and
@@ -2290,9 +2219,21 @@ truth, and a snapshot only saves replaying it.
   name it). Logs from before the walkthrough's guide for testing (log version 3) have a `testing` list of strings in
   `phase.completed`, `work.submitted` and `walkthrough.revised`; it becomes `{ automated: <the list>, manual: [] }`.
   Logs from before weekly readings (log version 4) have `weeklyPercent` on `run.metered`; it is dropped (Cost, above).
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 4) marks the log so
-  each pass runs once: a log at 1 or 2 only has its briefings moved, its testing lists and its meters rewritten, and
-  a log at 3 only its meters (`listLegacyEventTypes`). A role it does not know stays as written:
+  Logs from before the watch learned that a pull request can have no CI (log version 5, `WATCH_CI_LOG_VERSION`) have
+  `pull_request.watched` events whose `watch` lacks `ciAbsent`; it is set to `false`, so an old watch never reads as a
+  head that gets no checks.
+  Logs from before GitButler support was removed (log version 6, `NO_GITBUTLER_LOG_VERSION`) can name the `gitbutler`
+  workspace: on `repo.registered`, `repo.updated` and `worktree.requested` it becomes `worktrees`, and on
+  `worktree.created` it becomes `main_checkout`, since that task's checkout is the repository itself and only the
+  main-checkout strategy works there without creating, cleaning or removing a worktree (it refuses to commit while
+  the checkout is not on the task's branch). A `gate.opened` with `cause: 'workspace_update'` loses the cause, so it
+  is a plain failure gate whose retry pushes again. Old `task.stacked`, `task.unstacked` and `task.conflict_held`
+  events are types core no longer knows and replay as no-ops, and a `workspace.update` effect still open in the outbox
+  is failed on restart without running ("Shinsa does not know this kind of effect; another version wrote it.",
+  `reconcileAfterRestart`).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 6) marks the log so
+  each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
+  its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
   `run_purpose_unknown`, `run_purpose_unexpected`), so it shows in `/api/health` problems instead of reaching a page.
   Inspect mode writes nothing: it runs the same rules in memory on its read-only view instead
@@ -2334,7 +2275,7 @@ keeps beside its events (`store/event-log.ts`).
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
   `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`,
-  `:task.commit_edits:<tree>`, `:task.record_workspace_update`, and `<effect key>:effect.fail` when it gives up; the
+  `:task.commit_edits:<tree>`, and `<effect key>:effect.fail` when it gives up; the
   push names each report after its attempt too (`<effect key>:<attempt>:pull_request.record_step:<step>`,
   `:<attempt>:pull_request.record_update_conflict`, `:<attempt>:pull_request.record_hook_failure`), so a retry shows its
   steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
@@ -2427,8 +2368,8 @@ GitHub in four steps, and report each one to the task as `pull_request.record_st
 reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
 
 1. **Commit your edits** from the Code tab, if any (as before).
-2. **Update onto the base.** The base is the pull request's base (`resolvePullRequestBase`: an earlier round's branch
-   for a stacked round, another task's branch for a stacked GitButler task, else the default branch). Shinsa fetches
+2. **Update onto the base.** The base is the pull request's base (`resolveRoundBase`: an earlier round's branch
+   for a stacked round, else the default branch). Shinsa fetches
    it (`git fetch origin -- +refs/heads/<base>:refs/remotes/origin/<base>`) and, only when the branch does not already
    contain it, says "updating the branch onto ‹base›" and **merges** it in (`git merge --no-edit -m "Merge branch
    '‹base›' into ‹branch›"`, `updateOntoBase` in `git/update.ts`). A branch cut before a fix on the base, a newer
@@ -2440,16 +2381,13 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
      method you choose on GitHub still decides what reaches the default branch.
    - **Conflicts go to the agent.** When the merge conflicts, Shinsa lists the conflicted files, aborts the merge
      (`git merge --abort`, so the checkout is never left mid-merge, whatever happens next) and sends
-     `pull_request.record_update_conflict`. Core starts a fix round (`fixFor: 'update'`, "resolving conflicts with the
-     base branch") whose prompt says the branch was being updated onto ‹base›, lists the files, and asks the agent to
+     `pull_request.record_update_conflict`. Core starts a fix round (`fixFor: 'update'`, "resolving conflicts with ‹base›", or
+     "resolving conflicts with the base branch" when the base is not known, `resolveFixStageReason`) whose prompt says the branch was being updated onto ‹base›, lists the files, and asks the agent to
      `git merge origin/‹base›`, resolve, `git add` and hand over with the merge uncommitted. Shinsa commits the merge
      with the fix, runs the checks the resolved files touch (`startFixChecks`: the failing, named and touched ones),
      and, since a push is still pending, pushes again (`proceedAfterChecks` → `shipReviewedWork`) instead of going back
      to your review.
-   - **GitButler skips this step** (`GitButlerStrategy.syncBase` answers `skipped`). The only update `but` offers is
-     `but pull`, which rebases every applied branch, yours and other tasks' included, so it stays behind the Update
-     the workspace gate you answer (GitButler: whose change is whose). Its working directory is the workspace itself,
-     so its hooks are your checkout's current ones anyway. The main checkout merges like a worktree, on the task's
+   - **The main checkout** merges like a worktree, on the task's
      branch (`MainCheckoutStrategy.syncBase` checks the checkout is still on it).
 3. **Push.** Shinsa reads whether the repository has a pre-push hook (`hasPrePushHook`: `git rev-parse --git-path
    hooks/pre-push`, which follows `core.hooksPath`, executable, and for a husky stub in `…/_/` the hook it runs) and
@@ -2497,6 +2435,34 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
 - **Per-check diff.** A check reported failed is not reported again until the head moves or it
   passes and fails again. A read with no checks keeps the last state (a host can answer with an
   empty list when its check read fails).
+- **No checks yet is not clean.** GitHub registers a commit's check runs a few seconds after the
+  push, so a brand-new head with no checks is usually CI that has not started, not a repository
+  without CI. A head with no checks is clean only once Shinsa knows it gets none (`ciAbsent` on the
+  watch, decided per head by `evaluatePullRequestWatch`); until then the task stays "waiting for
+  CI" and no merge gate opens. What the repository has comes with the read (`pull_request.record`'s
+  `ci`, `RepoCi`), asked only when the head has no checks and kept per repository and base for an
+  hour (`RepoCiCache`, `apps/engine/src/github/ci.ts`; five minutes for an unknown answer): one
+  GraphQL read for the workflow files on the base (`.github/workflows/*.yml`, parsed with
+  `Bun.YAML`) and whether the base's head commit has checks, and the base's required checks from
+  branch protection (`repos/…/branches/<base>`) and rulesets (`repos/…/rules/branches/<base>`).
+  - `required`: the base requires checks. No checks is never clean; GitHub would refuse the merge.
+  - `workflows`: a workflow runs on `push`, `pull_request` or `pull_request_target` (one Shinsa
+    cannot parse counts), or the base commit has checks (CI outside Actions). No checks is clean
+    once `CI_GRACE_MS` (90 s, core) has passed since the head was pushed (`task.pushedAt`, set by
+    `pull_request.pushed` and by `pull_request.head_moved` for someone else's head; the watch's start
+    without either) and still nothing reported: a workflow whose path or branch filters skip this
+    pull request.
+  - `unknown` (a read GitHub refused, a repository not on GitHub, no `ci` on the command): the same
+    grace window.
+  - `none`: no such workflow, no checks on the base, nothing required. No checks is clean at once.
+  The grace window ends between reads, so a read that is otherwise unchanged counts as news when it
+  would flip `ciAbsent` (`hasPullRequestNews` evaluates the watch with the time and the repository's
+  CI), and the periodic sync records it.
+- **The merge gate holds for its head.** The merge gate records the head it was opened for
+  (`gate.commit`). A later read of that same head leaves it open unless it needs the Agent: a check
+  that failed, a new comment or a conflict. Checks that start after the gate opened, or GitHub
+  recomputing mergeability (`mergeable: null`), do not take it back; only a new head, a failure or
+  a new comment does, so a gate never opens and closes again on one commit.
 - **Required-gate growth.** "All checks passed" counts only the required checks when there are
   any, otherwise every check. It is reported again when a new required check shows up already
   passed (created and finished between two reads), never for another passing advisory check.
@@ -2537,10 +2503,13 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   conflict, ten of each at most and how many more; "Where it stands" lists the standing problems.
   The watch's changes also land in the task's activity.
 - **Conflicts.** A pull request GitHub reports as not mergeable (`mergeable: false`, CONFLICTING), whether
-  the default branch moved, a stacked round's or a stacked GitButler task's base merged (a squash merge leaves
-  the base's commits on the branch) or was force-updated, is fixed like any other problem: at the merge gate
+  the default branch moved, a stacked round's base merged (a squash merge leaves
+  the base's commits on the branch) or was force-updated, goes to the agent in every workspace: at the merge gate
   or while waiting for CI, the merge gate is withdrawn and the Agent takes a fix turn in its own session
-  (`purpose: 'fix'`, resuming `Decider.taskSession`). Before recording such a read the watch fetches the pull
+  (`reactToWatch` starts it with `fixFor: 'conflict'`, `purpose: 'fix'`, resuming `Decider.taskSession`). The task's
+  stage reason is "resolving conflicts with ‹base›", its activity line "Fix round N: resolving conflicts with the base
+  branch", and the prompt opens "The pull request conflicts with ‹base›, so the human cannot merge #N until you
+  resolve the conflicts." Before recording such a read the watch fetches the pull
   request's base (`git fetch origin -- <base>`; the base is the one the watch just retargeted to, so a
   stacked pull request whose base merged is merged with the default branch), and the prompt names it: merge
   it in with `git merge origin/<base>`, resolve every conflict, `git add` the files and leave the merge
@@ -2551,15 +2520,20 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   hand-over puts the merge back in progress, its message with it; the push then makes the pull request
   mergeable again. The merge commit carries git's own message, not the fix's: the subject git prepared in
   `MERGE_MSG`, with a merge of a remote-tracking branch named as the branch ("Merge branch 'main' into
-  fix/login", as GitHub's own update writes it), and the fix's subject only when git left no message. In a
-  GitButler workspace `git merge` would take the checkout out of GitButler, so there the watch opens the Update
-  the workspace gate instead of starting a fix (Where agents work → GitButler, above). A conflict the Agent
+  fix/login", as GitHub's own update writes it), and the fix's subject only when git left no message. A conflict the Agent
   leaves twice stops at "Fixing is not making progress", as any fix does.
 
 ## Merge queues
 
 A pull request GitHub puts in its merge queue, or on auto-merge, is waiting, not failed.
 
+- The merge effect merges only the head you approved: `pull_request.merge` carries `headSha`
+  (`gate.commit`, or the head the read showed when approving edits merged without a gate) and
+  `gh pr merge` gets `--match-head-commit <sha>`, so a push after the gate opened can never ride in on
+  your approval. A read before the merge that shows another head, or a merge GitHub refuses because
+  the head moved, is recorded instead of merged (no failure gate); core sends the task back to
+  shipping ("the branch changed before the merge") and judges the new head like any other, so the
+  merge gate comes back only for it.
 - The merge effect reads the pull request first and never asks GitHub to merge one that is already
   queued or merged. After `gh pr merge` it reads again: merged settles the task, queued (or
   auto-merge) is recorded and the effect succeeds, and only open and not queued fails (and is
@@ -2701,7 +2675,7 @@ and a session is resumed only by the provider that owns it. Two providers are re
 | Member | Contract |
 | --- | --- |
 | `id`, `label` | `claude` / `Claude`, `codex` / `Codex`. The id is what `settings.defaultProvider` and `settings.agentProviders` store |
-| `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no `but` command beyond reads and in-place conflict resolution, no whole test suite) |
+| `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no whole test suite) |
 | `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
 | `inspectSession({ cwd, sessionId })` | Optional. Whether the provider still has a session: `present`, `missing`, `empty` (metadata only, so it can neither be resumed nor recreated) or `unknown` |
 | `AgentSession.done` | Resolves to `{ outcome: completed \| failed \| cancelled, summary, failure?, undelivered?, usage?, subagentUsage?, context? }` when the run ends: `failure` is the classified `RunFailure`, `undelivered` the steered messages the agent never answered, `usage` the session's running totals (metered with `run.meter`), `subagentUsage` the totals of each agent it started on its own thread (Codex), `context` the tokens in use, when the prompt cache expires and whether background work is pending (idle compaction reads it) |
@@ -3020,7 +2994,10 @@ each follow-up turn's first request reads the whole earlier conversation from th
 written on turn 2; 109,402 read and 2,983 written on turn 3); what is written is that turn's new brief.
 
 **The house rules go to a session once.** Every role's brief opens with its house rules (`resolveHouseRules`, about
-7,000 characters: the voice, the worktree rule, the tools, references, delegation and the command surface). A session
+5,700 characters: the voice, the worktree rule, `ask` and waiting, the writing rules (`WRITING_RULES`: ten seconds per
+item, backticks, `run` blocks, references), when to delegate, and the command surface). They carry only what no tool
+says: how to brief a delegate, read another task or suggest one is in that tool's own description, and the
+`handover` skill keeps only what the hand-over schemas cannot say. `test/prompts/rules.test.ts` holds both. A session
 that already has them does not need them again, so a resumed turn sends only the instruction after them
 (`resolveTurnPrompt` in `agents/turns.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
 might not have these exact rules: a fresh session, a handoff (a provider switch, a lost session restored on a new one,
@@ -3348,6 +3325,7 @@ whole conversation again. These rules are hard rules (CLAUDE.md), each held by a
 - **Nothing variable goes into the system prompt or a tool spec.** No time, stage, round number, account, setting,
   task list, id, port or token. Everything that changes between turns goes into the user turn, at its tail, or, during
   a turn, into a steer, which is a user message appended to the conversation: the brief or the short instruction,
+  the rules you keep for agents (Memory, above: all of them for a fresh session, only the new ones for a resumed one),
   your edits (`describeHumanEdits`), the overlap note (Other work in the repository, steered into a running Agent),
   the adoption note of delegations, and the note that the session now works in another directory (`resolveMovedNote`,
   when a round after a merge runs in a new worktree or an answer runs in the repository itself: the directory the
@@ -3632,8 +3610,6 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  delegations (`delegations/<task>/<run>`)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
-    ├── workspaces/    One ledger per GitButler repository (`<repo id>.json`): which uncommitted paths belong to which
-    │                  task (Where agents work → GitButler, above)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
@@ -3675,7 +3651,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
-  `scripts/seed-media/`: before and after screenshots of a settings page in dark mode at 1280px and 390px and of a
+  `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
+  settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
   Shinsa's own Review tab for SMP-2, and test output for five tasks, each attached shortly before its run ended. The
   pages are rendered by `bun scripts/seed-media/generate.ts [origin]` (`shots.ts` lists every file and what it shows,

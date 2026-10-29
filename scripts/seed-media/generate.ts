@@ -19,6 +19,7 @@ const ONLY = Bun.env.SEED_MEDIA_ONLY ?? '';
 const FIXTURE_SETTLE_MS = 150;
 const APP_SETTLE_MS = 2500;
 const KEY_GAP_MS = 120;
+const SHOT_SCALE = 2;
 
 interface Frame {
   data: string;
@@ -39,7 +40,7 @@ async function openShot(page: ShellPage, shot: SeedShot, url: string) {
   await page.send('Emulation.setDeviceMetricsOverride', {
     width: shot.width,
     height: shot.height,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: SHOT_SCALE,
     mobile: false,
   });
   await page.send('Emulation.setEmulatedMedia', {
@@ -136,7 +137,7 @@ async function encodeVideo(frames: readonly RecordedFrame[], end: number, shot: 
       '-i',
       list,
       '-vf',
-      `fps=30,scale=${shot.width}:${shot.height}:flags=lanczos,format=yuv420p`,
+      `fps=30,scale=${shot.width * SHOT_SCALE}:${shot.height * SHOT_SCALE}:flags=lanczos,format=yuv420p`,
       '-c:v',
       'libvpx-vp9',
       '-b:v',
@@ -168,8 +169,8 @@ async function recordShot(page: ShellPage, shot: SeedShot, url: string, target: 
   await page.send('Page.startScreencast', {
     format: 'jpeg',
     quality: 92,
-    maxWidth: shot.width,
-    maxHeight: shot.height,
+    maxWidth: shot.width * SHOT_SCALE,
+    maxHeight: shot.height * SHOT_SCALE,
   });
   for (const step of shot.steps ?? []) await playStep(page, step);
   await page.send('Page.stopScreencast');

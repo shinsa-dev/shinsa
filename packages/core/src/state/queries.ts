@@ -8,7 +8,6 @@ import {
   parseTaskHandle,
   type Run,
   resolveRepoWorkspace,
-  resolveRoundBase,
   type Task,
   type WorkspaceMode,
 } from '../domain/index.ts';
@@ -112,39 +111,6 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
     pending.push(...(state.tasks[id]?.waitsOn ?? []));
   }
   return false;
-}
-
-export function selectStackTarget(state: ShinsaState, task: Task, branch: string) {
-  if (task.repoId === null) return null;
-  const below = Object.values(state.tasks).find(
-    (other) =>
-      other.id !== task.id &&
-      other.repoId === task.repoId &&
-      other.workspace === 'gitbutler' &&
-      other.worktreePath !== null &&
-      other.branch === branch &&
-      !isTaskSettled(other)
-  );
-  if (!below || isDependencyOf(state, task.id, below.id)) return null;
-  return below;
-}
-
-function selectStackBelow(state: ShinsaState, task: Task) {
-  const stacked = task.stackedOn;
-  const below = stacked ? state.tasks[stacked.taskId] : undefined;
-  return stacked && below && below.branch === stacked.branch ? below : null;
-}
-
-export function selectStackedOnTask(state: ShinsaState, task: Task) {
-  const below = selectStackBelow(state, task);
-  return below && !isTaskSettled(below) ? below : null;
-}
-
-export function resolvePullRequestBase(state: ShinsaState, task: Task) {
-  const round = resolveRoundBase(task);
-  if (round) return round;
-  const below = selectStackBelow(state, task);
-  return below?.pullRequest?.state === 'open' ? below.branch : null;
 }
 
 export function resolveTaskProject(state: ShinsaState, task: Task) {

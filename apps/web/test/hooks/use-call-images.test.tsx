@@ -17,9 +17,12 @@ describe('useCallImages', () => {
   const call = createToolCall(shinsaTool('attach_evidence', { title: 'Login page' }), { images: ['/r.png'] });
 
   it('adds the run evidence image for an evidence step', () => {
-    const evidence = [createEvidence({ id: 'shot', taskId: 't', title: 'Login page' })];
+    const evidence = [createEvidence({ id: 'shot', taskId: 't', title: 'Login page', width: 1280 })];
     const { result } = renderHook(() => useCallImages(call), { wrapper: withEvidence(evidence) });
-    expect(result.current).toEqual([{ src: '/api/evidence/shot.png', caption: 'Login page' }, '/r.png']);
+    expect(result.current).toEqual([
+      { src: '/api/evidence/shot.png', caption: 'Login page', width: 1280 },
+      '/r.png',
+    ]);
   });
 
   it('shows only the step images outside a run', () => {

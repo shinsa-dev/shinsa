@@ -560,6 +560,21 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
 
+#### shinsa rounds send
+
+Send a queued round to the current round now, as a message, instead of waiting.
+
+```
+shinsa rounds send <task> <round> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `round.send`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
+
 ### gates
 
 #### shinsa gates answer
@@ -1050,6 +1065,62 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 | `<secret>` | text, required | The signing secret. |
 
+### memory
+
+#### shinsa memory list
+
+List the rules agents remember, and the ones agents proposed that wait for you.
+
+```
+shinsa memory list [--json]
+```
+
+Every task agent's tool: `memory_list` (reads).
+
+#### shinsa memory write
+
+Write a rule every agent follows, or change one with --id.
+
+```
+shinsa memory write [--id <text>] [--project <text>] <text...> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `memory.write`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--id` | text, optional | The rule to change. Leave out to write a new one. |
+| `--project` | text, optional | Only for this project (key, name or id). Leave out for every project, or with --id to keep the rule where it is. |
+| `<text>` | text, required | The rule. |
+
+#### shinsa memory keep
+
+Keep a rule an agent proposed, so every later agent follows it.
+
+```
+shinsa memory keep <memory> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `memory.accept`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<memory>` | text, required | The memory id, from `shinsa memory list`. |
+
+#### shinsa memory remove
+
+Forget a rule, or dismiss one an agent proposed.
+
+```
+shinsa memory remove <memory> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `memory.remove`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<memory>` | text, required | The memory id, from `shinsa memory list`. |
+
 ### settings
 
 #### shinsa settings get
@@ -1224,7 +1295,7 @@ Every task agent's tool: `repos_list` (reads).
 Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|gitbutler|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -1236,7 +1307,7 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--default-branch` | text, optional | The branch pull requests target. |
 | `--project` | text, optional | Its project (key, name or id), or none. |
 | `--checks` | list, optional | The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them. |
-| `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
+| `--workspace` | choice, optional | Where agents work: worktrees (a worktree each) or main_checkout (one task at a time in the checkout). Only the human changes it. |
 | `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
 | `--coverage-command` | text, optional | With --coverage custom: the command that runs the tests with coverage. |
 | `--coverage-report` | text, optional | With --coverage custom: the report it writes, relative to the repository. |

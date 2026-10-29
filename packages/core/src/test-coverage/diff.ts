@@ -116,34 +116,3 @@ export function parseChangedLines(diff: string): ChangedLines {
   }
   return changed;
 }
-
-function mapLine(line: number, hunks: readonly DiffHunk[]) {
-  let offset = 0;
-  for (const hunk of hunks) {
-    if (hunk.oldCount === 0 ? line <= hunk.oldStart : line < hunk.oldStart) break;
-    if (line < hunk.oldStart + hunk.oldCount) return null;
-    offset += hunk.newCount - hunk.oldCount;
-  }
-  return line + offset;
-}
-
-export function mapChangedLines(changed: ChangedLines, drift: string): ChangedLines {
-  const moves = new Map<string, DiffFileLines>();
-  for (const file of parseDiffFiles(drift)) if (file.oldPath) moves.set(file.oldPath, file);
-  const mapped: ChangedLines = new Map();
-  for (const [path, lines] of changed) {
-    const move = moves.get(path);
-    if (!move) {
-      mapped.set(path, [...lines]);
-      continue;
-    }
-    if (!move.path) continue;
-    const hunks = [...move.hunks].sort((a, b) => a.oldStart - b.oldStart);
-    const kept = lines.flatMap((line) => {
-      const next = mapLine(line, hunks);
-      return next === null ? [] : [next];
-    });
-    if (kept.length > 0) mapped.set(move.path, kept);
-  }
-  return mapped;
-}

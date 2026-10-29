@@ -21,17 +21,21 @@ import {
 type ShippingChanger = (round: Round, shipping: RoundShipping) => Promise<unknown>;
 
 function RoundDetail({
+  state,
+  task,
   round,
   run,
   onOpen,
 }: {
+  state: ShinsaState;
+  task: Task;
   round: Round;
   run: Run | null;
   onOpen: (runId: string) => void;
 }) {
   return (
     <div className='flex flex-col gap-1.5 ps-7 pt-1.5'>
-      <InlineMarkdown text={resolveRoundSummary(round)} className='text-fg-3 text-xs' />
+      <InlineMarkdown text={resolveRoundSummary(state, task, round)} className='text-fg-3 text-xs' />
       {run && (
         <button
           type='button'
@@ -47,12 +51,14 @@ function RoundDetail({
 }
 
 function RoundRow({
+  state,
   task,
   round,
   run,
   onOpen,
   onShippingChange,
 }: {
+  state: ShinsaState;
   task: Task;
   round: Round;
   run: Run | null;
@@ -71,7 +77,7 @@ function RoundRow({
         disclosure={disclosure}
         {...(onShippingChange ? { onShippingChange } : {})}
       />
-      {disclosure.open && <RoundDetail round={round} run={run} onOpen={onOpen} />}
+      {disclosure.open && <RoundDetail state={state} task={task} round={round} run={run} onOpen={onOpen} />}
     </li>
   );
 }
@@ -94,6 +100,7 @@ export function RoundsPanel({
   const row = (round: Round, changer?: ShippingChanger) => (
     <RoundRow
       key={round.number}
+      state={state}
       task={task}
       round={round}
       run={selectRoundRun(runs, round)}

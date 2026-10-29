@@ -3,7 +3,17 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
-type OnBehalfCommand = Exclude<UserCommand, { type: 'gate.answer' | 'merge_step.tick' }>;
+type HumanOnlyType = 'gate.answer' | 'merge_step.tick' | 'memory.write' | 'memory.accept' | 'memory.remove';
+
+const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
+  'gate.answer',
+  'merge_step.tick',
+  'memory.write',
+  'memory.accept',
+  'memory.remove',
+]);
+
+type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;
 
 type Describe<T extends OnBehalfCommand['type']> = (state: ShinsaState, command: CommandOf<T>) => string;
 
@@ -52,6 +62,8 @@ const DESCRIPTIONS: Descriptions = {
     `Changed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
   'round.remove': (state, command) =>
     `Removed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
+  'round.send': (state, command) =>
+    `Sent queued round ${command.number} of ${quoteTask(state, command.taskId)} to its current round`,
   'suggestion.keep': (state, command) =>
     `Kept a split-off of ${quoteTask(state, command.taskId)} as its next round`,
   'monitor.check_in_now': (state, command) =>
@@ -87,7 +99,7 @@ function selectCreatedTask(decider: Decider) {
 }
 
 function isOnBehalfCommand(command: ShinsaCommand): command is OnBehalfCommand {
-  return isUserCommand(command) && command.type !== 'gate.answer' && command.type !== 'merge_step.tick';
+  return isUserCommand(command) && !HUMAN_ONLY_TYPES.has(command.type);
 }
 
 function selectActionTask(decider: Decider, command: OnBehalfCommand) {

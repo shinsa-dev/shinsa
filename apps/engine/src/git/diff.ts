@@ -103,7 +103,3 @@ export function readChangedLinesPatch(
     readDiffText({ cwd: worktree, range: [base], env, signal }, ['-U0'], paths)
   );
 }
-
-export function readCommitLinesPatch(repoPath: string, base: string, head: string, signal?: AbortSignal) {
-  return readDiffText({ cwd: repoPath, range: [base, head], signal }, ['-U0'], []);
-}
