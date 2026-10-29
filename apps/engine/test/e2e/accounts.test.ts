@@ -157,6 +157,14 @@ describe('accounts end to end', () => {
     expect(resumed?.prompt).toContain('The limit has reset.');
   });
 
+  test('a wait that never comes true gives up at its deadline while the clock is frozen at a reset', async () => {
+    const { world, clock } = await createBench(['a@example.com']);
+    await passReset(clock, Date.now() + RESET_IN_MS);
+    await expect(world.until('a planner that never starts', () => false, 50)).rejects.toThrow(
+      'Timed out waiting for a planner that never starts.'
+    );
+  });
+
   test('a task bound to an account never moves: it waits for that account to reset and resumes on it', async () => {
     const { world, added, clock } = await createBench(['a@example.com', 'b@example.com']);
     const bound = added[1] as StoredAccount;

@@ -443,6 +443,11 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `log.listEffectStatuses()`, or are fixed: `run.execute:<runId>`, `run.cancel:<runId>`), a deferred the fake
   resolves, `until(condition)` for another process or the file system, or `spyOn(log, …)` for a failure that is only
   logged. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
+- **Wait for what the test reads next, never for a stage a task passes through.** A task can go through `building`
+  and `checking` in a few milliseconds, and a polled `untilStage` on a loaded machine sees only the stage after them:
+  wait for an agent session count (`world.agents.of('plan').length === 2`), a gate, or a stage the task rests in.
+  `until` and `World.until` time their deadline with `performance.now()`, because `setSystemTime` freezes
+  `Date.now()`; a wait of your own does the same.
 - **A test file that starts the whole server** (`test/e2e/`), or drives a pull request through many fake `gh` calls
   (`test/runtime/effects.test.ts`, which gives those waits 25 s), sets `setDefaultTimeout(30_000)`: alone it takes a
   second, but `bun run test` runs every workspace at once and Bun's own 5 s limit then fails it at random.

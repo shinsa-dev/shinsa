@@ -701,9 +701,9 @@ export class World {
   }
 
   async until(describe: string, predicate: () => boolean, timeoutMs = 15_000) {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = performance.now() + timeoutMs;
     while (!predicate()) {
-      if (Date.now() > deadline) {
+      if (performance.now() > deadline) {
         const tasks = Object.values(this.state.tasks).map(
           (task) =>
             `${task.title}: ${task.stage} (${task.stageReason}) gates=${this.gates(task.id)
