@@ -904,7 +904,7 @@ An icon on either side of a button or badge trims that side's padding by 2px, so
 | Button `lg` | 30 | 12 (`px-3`) | 10 | 6 | `sm` 14 |
 | Button with a chevron as its icon | as size | 5 on the chevron's side (`pr-[5px]` / `pl-[5px]`) | | 2 (`gap-0.5`) | `sm` 14 |
 | `Input` `sm` / default | 24 / 26 | 8 / 10 | | | |
-| `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` / `md` |
+| `SelectTrigger` `sm` / default | 24 / 26 | 6 / 10 | | | `sm` 14 |
 | Menu, select, command row | 24 | 8 start (`pl-2`); select row 28 end (`pr-7`) for the check | | 6 | `sm` 14 |
 | Tab (default track) | 22 inside a 26 track | 8 (`px-2`) | | 6 | `sm` |
 | `Badge` `sm` / default | 18 / 20 | 6 / 8 | 4 on the icon side (2px trimmed) | 4 | `sm` 14 |
