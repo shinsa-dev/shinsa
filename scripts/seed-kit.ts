@@ -10,6 +10,7 @@ import type {
   PipelineStep,
   PlanCheck,
   PlanDocument,
+  PullRequestChanges,
   Repo,
   ReportCheck,
   ReviewDisagreement,
@@ -106,6 +107,7 @@ export interface SeedTask {
     comments?: number;
     mergeCommit?: string;
     ciRuns?: CiRun[];
+    changes?: PullRequestChanges;
   };
   merged?: boolean;
   note?: string;

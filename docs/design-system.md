@@ -1679,6 +1679,33 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 
 Do: one sentence of what will happen in the description. Don't: put a form in it, add a third button, or style the action by hand.
 
+#### AreaChart
+
+**For:** a count over time where the shape matters more than each value: pull requests merged per day or per week on Settings → Stats. One series, in the accent.
+
+**Not for:** several series (a stacked bar per day, as the token chart draws), a single number (a stat tile), or a part of a whole.
+
+**Wraps:** a plain `<svg>`; the caller computes the path data (`resolveAreaGeometry` in `apps/web/src/lib/stats/chart.ts`) and the point under the pointer (`resolveNearestIndex`).
+
+**Props:**
+
+| Prop | Default | Notes |
+| --- | --- | --- |
+| `width`, `height` | required | The drawing's own units; the chart stretches to its box (`preserveAspectRatio='none'`). |
+| `line`, `area` | required | SVG path data for the line and the closed area under it. |
+| `guide` | `null` | The x of a vertical guide line, the point under the pointer. |
+| `aria-label` | required | What the chart shows, in one sentence. |
+| `onPointerMove`, `onPointerLeave`, `className` | | |
+
+**Markup and classes:**
+
+- `<svg data-slot='area-chart' role='img'>`: `block w-full overflow-visible` + `className`; the caller gives the height (`h-30` on Stats).
+- The area: `fill-primary-a2`.
+- The guide: a 1px `stroke-fg-1` line, `vector-effect: non-scaling-stroke`.
+- The line: 1.5px `stroke-primary`, round joins and caps, `vector-effect: non-scaling-stroke`, so strokes keep their width however the chart stretches.
+
+**In Shinsa** the label above the chart reads the hovered point ("Week of Oct 6: 3 pull requests") and otherwise says what the chart shows; the peak and 0 sit to its left, the first and last dates under it, all in `text-2xs text-fg-2`.
+
 #### Badge
 
 **For:** a short status or label chip: "Default" on an account, a project's key, "Recommended" on an option, a count, a check result ("1 failing"). Non-interactive by default. **Not for:** an action (use `Button`), a keyboard key (use `Kbd`), a long sentence.
