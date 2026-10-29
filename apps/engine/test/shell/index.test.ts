@@ -2,7 +2,14 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from '../../src/log/index.ts';
-import { describeFailure, killProcessGroup, runCommand, runCommandOrThrow } from '../../src/shell/index.ts';
+import {
+  describeFailure,
+  killProcessGroup,
+  killProcessTree,
+  listDescendants,
+  runCommand,
+  runCommandOrThrow,
+} from '../../src/shell/index.ts';
 import { createTempDir, overrideEnv, until } from '../helpers/index.ts';
 
 function readProcessState(pid: number) {
@@ -173,6 +180,77 @@ describe('killProcessGroup', () => {
       parent.kill();
       await parent.exited;
     }
+  });
+});
+
+function isAlive(pid: number) {
+  const state = readProcessState(pid);
+  return state !== '' && !state.startsWith('Z');
+}
+
+describe('killProcessTree', () => {
+  test('lists every descendant of a process, however deep, and nothing else', () => {
+    const table = ['10 1', '11 10', '12 11', '13 10', '20 1', 'junk', '  14   12  ', ''].join('\n');
+    expect(listDescendants(table, 10).sort()).toEqual([11, 12, 13, 14]);
+    expect(listDescendants(table, 99)).toEqual([]);
+  });
+
+  test('kills a process and a grandchild that left its process group', async () => {
+    const leader = Bun.spawn(
+      [
+        'perl',
+        '-e',
+        '$| = 1; my $pid = fork(); if ($pid == 0) { setpgrp(0, 0); sleep 30; exit 0 } print "$pid\\n"; sleep 30',
+      ],
+      { stdout: 'pipe', detached: true }
+    );
+    const reader = leader.stdout.getReader();
+    const grandchild = Number(new TextDecoder().decode((await reader.read()).value).trim());
+    reader.releaseLock();
+    expect(isAlive(grandchild)).toBe(true);
+    await killProcessTree(leader.pid);
+    await leader.exited;
+    await until('the grandchild to stop', () => !isAlive(grandchild));
+  });
+
+  test('reports a descendant it may not stop, and ignores one already gone', async () => {
+    const leader = Bun.spawn(
+      ['perl', '-e', 'my $pid = fork(); if ($pid == 0) { sleep 30; exit 0 } sleep 30'],
+      {
+        detached: true,
+      }
+    );
+    const readChild = () =>
+      Number(
+        Bun.spawnSync(['pgrep', '-P', String(leader.pid)])
+          .stdout.toString()
+          .trim()
+      );
+    await until('the child to start', () => readChild() > 0);
+    const child = readChild();
+    const real = process.kill.bind(process);
+    let refused = false;
+    const kill = spyOn(process, 'kill').mockImplementation((pid: number, signal?: string | number) => {
+      if (pid === child && !refused) {
+        refused = true;
+        throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+      }
+      return real(pid, signal);
+    });
+    const warn = spyOn(log, 'warn');
+    try {
+      await killProcessTree(leader.pid);
+      expect(warn).toHaveBeenCalledWith('[Shell] Could not stop a process', {
+        pid: child,
+        error: 'not permitted',
+      });
+    } finally {
+      kill.mockRestore();
+      warn.mockRestore();
+      real(child, 'SIGKILL');
+      await leader.exited;
+    }
+    await killProcessTree(leader.pid);
   });
 });
 

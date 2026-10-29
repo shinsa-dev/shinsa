@@ -59,7 +59,7 @@ interface FakeSession {
 }
 
 function createSessions(
-  options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean } = {}
+  options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean; wedged?: boolean } = {}
 ) {
   const started: FakeSession[] = [];
   const startSession = (input: AgentSessionInput): AgentSession => {
@@ -79,6 +79,7 @@ function createSessions(
         },
         cancel: () => {
           fake.cancelled = true;
+          if (options.wedged) return new Promise<void>(() => undefined);
           done.resolve({ outcome: 'cancelled', summary: null });
           return options.cancelFails ? Promise.reject(new Error('already gone')) : Promise.resolve();
         },
@@ -644,6 +645,81 @@ describe('one agent at a time in a worktree', () => {
   test('quiesce without runs returns at once', async () => {
     const { supervisor } = setup(withTask(createTempDir()));
     await supervisor.quiesce('task-1');
+  });
+});
+
+describe('a session that never settles', () => {
+  test('a run whose session ignores its cancel stops holding the worktree, so the next run starts', async () => {
+    const wedged = createSessions({ wedged: true });
+    const healthy = createSessions();
+    let started = 0;
+    const warn = spyOn(log, 'warn');
+    const { supervisor } = setup(withTask(createTempDir(), [createRun(), createRun({ id: 'run-2' })]), {
+      startSession: (input) => {
+        started += 1;
+        return started === 1 ? wedged.startSession(input) : healthy.startSession(input);
+      },
+      quiesceMs: 20,
+      stopMs: 20,
+    });
+    try {
+      void supervisor.execute('run-1');
+      await until('the first session', () => wedged.started.length === 1);
+      const second = supervisor.execute('run-2');
+      await until('the second session', () => healthy.started.length === 1);
+      expect(wedged.started[0]?.cancelled).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        '[Runs] A run did not stop in time, so Shinsa stopped waiting for it',
+        {
+          runId: 'run-1',
+          taskId: 'task-1',
+        }
+      );
+      healthy.started[0]?.finish();
+      await second;
+      await supervisor.quiesce('task-1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('cancelling a run returns even when its session never answers', async () => {
+    const sessions = createSessions({ wedged: true });
+    const { supervisor } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      stopMs: 20,
+    });
+    void supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.cancel('run-1');
+    expect(sessions.started[0]?.cancelled).toBe(true);
+  });
+
+  test('a shutdown with a session that never settles still finishes', async () => {
+    const sessions = createSessions({ wedged: true });
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      stopMs: 20,
+    });
+    void supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.interruptForShutdown();
+    expect(sessions.started[0]?.cancelled).toBe(true);
+    expect(dispatched.filter((command) => command.type === 'run.interrupt')).toHaveLength(1);
+  });
+
+  test('a run dispatched while Shinsa stops is marked to resume on the next engine instead of starting', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched, commandIds } = setup(
+      withTask(createTempDir(), [createRun({ continuations: [1, 2] })]),
+      { startSession: sessions.startSession }
+    );
+    await supervisor.interruptForShutdown();
+    await supervisor.execute('run-1');
+    expect(sessions.started).toHaveLength(0);
+    const index = dispatched.findIndex((command) => command.type === 'run.interrupt');
+    expect(dispatched[index]).toEqual({ type: 'run.interrupt', runId: 'run-1', attemptId: null });
+    expect(commandIds[index]).toBe('run.interrupt:run-1:0:2');
   });
 });
 

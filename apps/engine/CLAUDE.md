@@ -361,13 +361,17 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
-  runs of its task that registered before it (60 s, then they are cancelled). Checks and pushes wait for all of them.
+  runs of its task that registered before it (60 s, then they are cancelled, and a run still not settled `stopMs`, 15 s,
+  later is dropped with a warning). Checks and pushes wait for all of them. No wait on a session is unbounded: a
+  Claude session kills its `claude` and every process it started 10 s after its turn closes the prompt queue, and its
+  `cancel()` gives `interrupt()` 5 s (`agents/providers/claude/process.ts`, `killProcessTree` in `shell/`).
 - **Workspaces go through their strategy.** Making, committing in, pushing and removing a task's checkout goes through
   `Workspaces.resolve(task)` (`workspaces/`), never through `git/` directly, and every place shares the one
   `Workspaces` the supervisor owns (`runs.workspaces`).
 - **The two-hour clock stops while a question is open**, counted per question, so parallel `ask` calls cannot
   double-count the pause or leave a stray timer.
-- **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`), then stops
+- **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`, which waits at
+  most `stopMs` for the sessions and marks a run dispatched while stopping instead of starting it), then stops
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart

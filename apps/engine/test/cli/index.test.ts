@@ -12,6 +12,7 @@ import {
   createWakeEngine,
   kickEngine,
   runCli,
+  stopForSignal,
   trimEngineLog,
   writeOutputTo,
 } from '../../src/cli/index.ts';
@@ -836,5 +837,26 @@ describe('managing Shinsa from the command line', () => {
       'Error: No command shinsa tasks lsit.',
       'Did you mean `shinsa tasks list`? Run `shinsa tasks --help` for its commands.',
     ]);
+  });
+});
+
+describe('stopping on a signal', () => {
+  test('exits 0 once stopped or once the deadline passes, so launchd leaves it stopped, and 1 when the stop fails', async () => {
+    const info = spyOn(log, 'info');
+    const error = spyOn(log, 'error');
+    try {
+      const codes: number[] = [];
+      const exit = (code: number) => {
+        codes.push(code);
+      };
+      await stopForSignal('SIGTERM', () => Promise.resolve(), exit, 20);
+      await stopForSignal('SIGTERM', () => new Promise<void>(() => undefined), exit, 20);
+      await stopForSignal('SIGINT', () => Promise.reject(new Error('log closed')), exit, 20);
+      expect(codes).toEqual([0, 0, 1]);
+      expect(info).toHaveBeenCalledWith('[Serve] Stopping', { signal: 'SIGINT' });
+    } finally {
+      info.mockRestore();
+      error.mockRestore();
+    }
   });
 });

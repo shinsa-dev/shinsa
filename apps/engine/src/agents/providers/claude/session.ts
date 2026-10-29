@@ -23,6 +23,7 @@ import { SHINSA_INSTRUCTIONS } from '../instructions.ts';
 import type { AgentSession, AgentSessionInput, AgentSessionResult } from '../types.ts';
 import { AsyncQueue } from './async-queue.ts';
 import {
+  appendStderr,
   cleanProcessError,
   createSetupFailure,
   createTurnEvidence,
@@ -35,6 +36,7 @@ import {
 import { listBackgroundWork, resolveCacheExpiry } from './context.ts';
 import { resolveClaudeExtensions, serializeClaudeServer } from './extensions.ts';
 import { guardCommand, listReadOnlyHooks } from './guard.ts';
+import { type ClaudeProcess, createClaudeProcess } from './process.ts';
 import { type ClaudeRecorder, createClaudeRecorder, resolveUsageSnapshot } from './recorder.ts';
 import { type EunoeLink, resolveClaudeRoute } from './route.ts';
 import { CLAUDE_RUNTIME, type ClaudeRuntime, resolveClaudeProcess } from './sdk.ts';
@@ -45,6 +47,9 @@ export interface ClaudeSessionOptions {
   eunoe?: EunoeLink | null;
   foldedTurnMs?: number;
   contextTimeoutMs?: number;
+  exitGraceMs?: number;
+  interruptTimeoutMs?: number;
+  createProcess?: () => ClaudeProcess;
   now?: () => number;
 }
 
@@ -57,6 +62,10 @@ interface PendingPrompt {
 const FOLDED_TURN_MS = 60_000;
 
 const CONTEXT_TIMEOUT_MS = 5_000;
+
+const EXIT_GRACE_MS = 10_000;
+
+const INTERRUPT_TIMEOUT_MS = 5_000;
 
 const SUMMARY_LIMIT = 2000;
 
@@ -210,17 +219,37 @@ export function startClaudeSession(
   const prompts = new AsyncQueue<SDKUserMessage>();
   const ledger = new PromptLedger(false);
   const recorder = createClaudeRecorder(input.onEntry, input.storeImage);
+  const child = (options.createProcess ?? createClaudeProcess)();
   let session: Query | null = null;
   let cancelled = false;
   let closed = false;
+  let terminated = false;
   let folded: ReturnType<typeof setTimeout> | null = null;
+  let exiting: ReturnType<typeof setTimeout> | null = null;
   let eunoe = false;
   let unwatch: (() => void) | null = null;
 
+  const terminate = async () => {
+    if (terminated) return;
+    terminated = true;
+    await child.terminate();
+    session?.close();
+  };
+  const awaitExit = () => {
+    if (exiting) return;
+    exiting = setTimeout(() => {
+      log.warn('[Claude] The agent’s process did not exit after its turn, so Shinsa stopped it', {
+        cwd: input.cwd,
+      });
+      void terminate();
+    }, options.exitGraceMs ?? EXIT_GRACE_MS);
+    exiting.unref();
+  };
   const close = () => {
     closed = true;
     if (folded) clearTimeout(folded);
     prompts.close();
+    awaitExit();
   };
   const closeFolded = () => {
     ledger.pending = [];
@@ -296,6 +325,7 @@ export function startClaudeSession(
           env: route.env,
         },
         ...process.options,
+        spawnClaudeCodeProcess: child.spawn,
         env: { ...process.options.env, ...resolveAccountEnv(configDir), ...route.env },
       },
     });
@@ -374,12 +404,14 @@ export function startClaudeSession(
 
   const crash = (error: unknown): AgentSessionResult => {
     const settled = ledger.pending.length === 0 ? verdict?.failure : null;
+    const finished = ledger.pending.length === 0 && verdict !== null;
     close();
+    if (terminated && finished && !cancelled) return finish();
     recorder.flush('interim');
     const undelivered = ledger.listUndelivered();
     if (cancelled) return { outcome: 'cancelled', summary: null, undelivered };
     if (settled) return { outcome: 'failed', summary, failure: settled, undelivered };
-    return endEarly(cleanProcessError(describeError(error)), undelivered);
+    return endEarly(cleanProcessError(appendStderr(describeError(error), child.readStderr())), undelivered);
   };
 
   const finish = (): AgentSessionResult => {
@@ -426,7 +458,7 @@ export function startClaudeSession(
     }
   };
 
-  const done = (async (): Promise<AgentSessionResult> => {
+  const run = async (): Promise<AgentSessionResult> => {
     try {
       session = await start();
     } catch (error) {
@@ -452,7 +484,10 @@ export function startClaudeSession(
         backgroundWork: background.size > 0,
       },
     };
-  })();
+  };
+  const done = run().finally(() => {
+    if (exiting) clearTimeout(exiting);
+  });
 
   return {
     done,
@@ -488,10 +523,21 @@ export function startClaudeSession(
       close();
       const active = session;
       if (!active) return;
+      const timeout = Promise.withResolvers<'timeout'>();
+      const timer = setTimeout(
+        () => timeout.resolve('timeout'),
+        options.interruptTimeoutMs ?? INTERRUPT_TIMEOUT_MS
+      );
       try {
-        await active.interrupt();
+        const stopped = await Promise.race([
+          active.interrupt().then(() => 'interrupted' as const),
+          timeout.promise,
+        ]);
+        if (stopped === 'timeout') await terminate();
       } catch {
-        active.close();
+        await terminate();
+      } finally {
+        clearTimeout(timer);
       }
     },
   };
