@@ -100,10 +100,10 @@ describe('resolveEngineView', () => {
         null
       ).banner?.text;
     expect(counted(1)).toBe(
-      'Shinsa 0.5.0 is installed. The engine moves to it once the 1 working agent hands over, by 2:32 PM at the latest. New steps wait until then.'
+      'Shinsa 0.5.0 is installed. 1 agent is working, and the engine moves to it once that agent hands over, by 2:32 PM at the latest. New steps wait until then.'
     );
     expect(counted(3)).toBe(
-      'Shinsa 0.5.0 is installed. The engine moves to it once the 3 working agents hand over, by 2:32 PM at the latest. New steps wait until then.'
+      'Shinsa 0.5.0 is installed. 3 agents are working, and the engine moves to it once they hand over, by 2:32 PM at the latest. New steps wait until then.'
     );
     const failed = resolveEngineView(APP, createHealth({ version: '0.4.0' }), 'It runs from a terminal.');
     expect(failed).toEqual({

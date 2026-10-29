@@ -6,7 +6,6 @@ import {
 } from '@shinsa/core';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { requestJson } from '@/lib/connection/http.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { formatClock } from '@/lib/format/time.ts';
 
 export type EngineAction = 'restart_now' | 'restart_idle' | 'update_app';
@@ -35,13 +34,16 @@ function describeRestarting(version: string) {
   return `Restarting the engine into Shinsa ${version}. Agents pick up where they were.`;
 }
 
+function describeMove(working: number, latest: string) {
+  if (working === 0) return `The engine moves to it once the working agents hand over${latest}.`;
+  if (working === 1)
+    return `1 agent is working, and the engine moves to it once that agent hands over${latest}.`;
+  return `${working} agents are working, and the engine moves to it once they hand over${latest}.`;
+}
+
 function describeWaiting(version: string, health: ServerHealth) {
-  const agents = health.working
-    ? formatCount(health.working, 'working agent hands', 'working agents hand')
-    : null;
-  const when = agents ? `once the ${agents} over` : 'once the working agents hand over';
   const latest = health.restartBy ? `, by ${formatClock(health.restartBy)} at the latest` : '';
-  return `Shinsa ${version} is installed. The engine moves to it ${when}${latest}. New steps wait until then.`;
+  return `Shinsa ${version} is installed. ${describeMove(health.working ?? 0, latest)} New steps wait until then.`;
 }
 
 export function resolveEngineView(

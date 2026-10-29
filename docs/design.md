@@ -1593,8 +1593,8 @@ Only these, and they win over anything below:
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
       banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
       (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
-      ("Shinsa 0.5.0 is installed. The engine moves to it once the 2 working agents hand over, by 2:32 PM at the
-      latest. New steps wait until then.", from `working` and `restartBy` in `/api/health`), the orange triangle when
+      ("Shinsa 0.5.0 is installed. 2 agents are working, and the engine moves to it once they hand over, by 2:32
+      PM at the latest. New steps wait until then.", from `working` and `restartBy` in `/api/health`), the orange triangle when
       you must act ("Shinsa 0.5.0 needs its engine restarted. Restarting now pauses working agents for a moment, then
       they carry on."), and `sm` buttons at the end, the last `primary` as macOS orders them: one alone (Restart now,
       Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents hand over `primary`. No dismiss: it goes when
