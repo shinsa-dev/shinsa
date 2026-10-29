@@ -29,7 +29,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -67,7 +67,7 @@ jobs:
     concurrency:
       group: ${{ needs.trigger.outputs.channel == 'canary' && 'release-canary' || 'release' }}
       cancel-in-progress: ${{ needs.trigger.outputs.channel == 'canary' }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-15
     timeout-minutes: 60
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -221,7 +221,7 @@ jobs:
 
   downloads:
     needs: [trigger, mac]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

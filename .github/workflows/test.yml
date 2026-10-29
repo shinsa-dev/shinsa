@@ -3,7 +3,16 @@ name: Test
 on:
   push:
     branches: [main]
+    paths: &tested
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - docs/cli.md
+      - docs/design-system.md
+      - .claude/skills/**
+      - apps/engine/plugin/**
   pull_request:
+    paths: *tested
 
 concurrency:
   group: test-${{ github.ref }}
@@ -11,7 +20,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +31,7 @@ jobs:
       - run: bun run test
 
   loading:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       SHELL_PERF_CHROME: /usr/bin/google-chrome
