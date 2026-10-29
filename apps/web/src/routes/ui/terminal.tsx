@@ -182,30 +182,44 @@ const SHOP_PLACES: TerminalPlace[] = [
   { path: '~/Developer/shop', label: 'shop', kind: 'repository', taskId: null },
 ];
 
+const REFINED: ServiceSuggestion[] = SUGGESTIONS.map((each) =>
+  each.name === 'web'
+    ? { ...each, command: 'bun run dev --port $PORT', previewUrl: 'http://localhost:{port}' }
+    : each
+);
+
 const PANEL_ACTIONS: ServicesPanelActions = {
   home: '~',
   focusForms: false,
   listPlaces: () => SHOP_PLACES,
   listSuggestions: async () => SUGGESTIONS,
+  refineSuggestions: async () => REFINED,
   add: async () => true,
   addOne: async () => true,
   update: async () => true,
   remove: async () => true,
 };
 
+const REFINING_ACTIONS: ServicesPanelActions = {
+  ...PANEL_ACTIONS,
+  refineSuggestions: () => new Promise(() => undefined),
+};
+
 function PanelSample({
   groups,
   scope = groups.map((group) => group.project),
   start,
+  actions = PANEL_ACTIONS,
 }: {
   groups: ServiceGroup[];
   scope?: Project[];
   start: ServicesPanelAction[];
+  actions?: ServicesPanelActions;
 }) {
   const [panel, dispatch] = React.useReducer(
     reduceServicesPanel,
     start,
-    (actions): ServicesPanelState => actions.reduce(reduceServicesPanel, createServicesPanel('list', 'shop'))
+    (initial): ServicesPanelState => initial.reduce(reduceServicesPanel, createServicesPanel('list', 'shop'))
   );
   return (
     <div className={cn(INSET, SERVICES_PANEL, 'overflow-hidden bg-popover [--available-height:28rem]')}>
@@ -214,7 +228,7 @@ function PanelSample({
         scope={scope}
         now={NOW}
         handlers={HANDLERS}
-        actions={PANEL_ACTIONS}
+        actions={actions}
         panel={panel}
         onPanel={dispatch}
         onCreateProject={acknowledgeSample}
@@ -355,9 +369,10 @@ export function TerminalSpecimens() {
           />
         </div>
       </Specimen>
-      <Specimen label='The Services popover · a project with none yet, and no project at all'>
+      <Specimen label='The Services popover · a project with none yet shows what was found, checked with AI; while the check runs; and no project at all'>
         <div className='flex flex-wrap items-start gap-3'>
           <PanelSample groups={[{ project: PROJECT, views: [] }]} start={[]} />
+          <PanelSample groups={[{ project: PROJECT, views: [] }]} start={[]} actions={REFINING_ACTIONS} />
           <PanelSample groups={[]} start={[]} />
         </div>
       </Specimen>

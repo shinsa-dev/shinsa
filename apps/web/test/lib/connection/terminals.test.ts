@@ -8,6 +8,7 @@ import {
   openTerminal,
   renameTerminal,
   reorderTerminals,
+  requestRefinedServiceSuggestions,
   requestServiceAdd,
   requestServiceSuggestions,
   requestServicesAdd,
@@ -168,6 +169,11 @@ describe('services', () => {
     fetch = serve({ suggestions: [suggestion] });
     expect(await requestServiceSuggestions('shop')).toEqual([suggestion]);
     expect(fetch.mock.calls[0]?.[0]).toBe('/api/services/suggestions?projectId=shop');
+    fetch = serve({ suggestions: [suggestion], refined: true });
+    expect(await requestRefinedServiceSuggestions('shop')).toEqual([suggestion]);
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/services/suggestions?projectId=shop&refine=1');
+    fetch = serve({ suggestions: [suggestion], refined: false });
+    expect(await requestRefinedServiceSuggestions('shop')).toBeNull();
   });
 
   it('adds and edits a service with its folder as the path, and keeps the new list', async () => {

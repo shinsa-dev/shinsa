@@ -73,7 +73,8 @@ src/
 │                        whose views are the list drawn as the compact queue (each project a CompactSection, its
 │                        play button that starts them all), Manage with its inline removal, Add services, the custom
 │                        form and a service's form, the always-there footer (Manage, Add…, Terminal) and the trigger
-│                        label; panel-views.tsx: Add services (what the engine found, ticked, with Custom service…),
+│                        label; panel-views.tsx: Add services (what the engine found, ticked, with Custom service…, then the
+│                        list the AI check returns; also the view a project with no services opens on),
 │                        the custom and edit forms, the views' header (12px at the top, as at the side), body and
 │                        footer, the found list's boxes the kit's outline Checkbox; service-form.tsx: the form's
 │                        fields with Environment under Advanced and when a field shows its problem; service-row.tsx: a

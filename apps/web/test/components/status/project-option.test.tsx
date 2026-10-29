@@ -103,6 +103,7 @@ describe('every project picker shows each project’s dot', () => {
           focusForms: true,
           listPlaces: () => [],
           listSuggestions: async () => [],
+          refineSuggestions: async () => null,
           add: async () => true,
           addOne: async () => true,
           update: async () => true,

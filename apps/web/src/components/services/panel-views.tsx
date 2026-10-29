@@ -22,14 +22,15 @@ import { LoadingLine } from '@/components/status/loading-line.tsx';
 import {
   createServiceDraft,
   describeAddServices,
+  describeFoundServices,
   describeNoSuggestions,
   describeServiceFolder,
   listAllPicks,
   listPickedInputs,
-  listRecommendedPicks,
   listServiceFolders,
   resolveServiceForm,
   resolveSuggestionKey,
+  resolveSuggestionPicks,
   type ServiceInput,
   togglePick,
 } from '@/lib/terminal/services.ts';
@@ -39,6 +40,7 @@ export interface ServicesPanelActions {
   focusForms: boolean;
   listPlaces: (projectId: string) => TerminalPlace[];
   listSuggestions: (projectId: string) => Promise<ServiceSuggestion[]>;
+  refineSuggestions: (projectId: string) => Promise<ServiceSuggestion[] | null>;
   add: (projectId: string, inputs: ServiceInput[]) => Promise<boolean>;
   addOne: (projectId: string, input: ServiceInput) => Promise<boolean>;
   update: (service: ServiceDefinition, input: ServiceInput) => Promise<boolean>;
@@ -193,23 +195,46 @@ function ServicePicker({
   );
 }
 
-function useSuggestions(projectId: string, listSuggestions: ServicesPanelActions['listSuggestions']) {
-  const [found, setFound] = React.useState<{ projectId: string; suggestions: ServiceSuggestion[] } | null>(
-    null
-  );
-  const latest = React.useRef(listSuggestions);
-  latest.current = listSuggestions;
+interface FoundSuggestions {
+  projectId: string;
+  suggestions: ServiceSuggestion[];
+  refining: boolean;
+}
+
+function useSuggestions(projectId: string, actions: ServicesPanelActions) {
+  const [found, setFound] = React.useState<FoundSuggestions | null>(null);
+  const latest = React.useRef(actions);
+  latest.current = actions;
   React.useEffect(() => {
     let current = true;
-    const keep = (suggestions: ServiceSuggestion[]) => {
-      if (current) setFound({ projectId, suggestions });
+    const keep = (suggestions: ServiceSuggestion[], refining: boolean) => {
+      if (current) setFound({ projectId, suggestions, refining });
     };
-    latest.current(projectId).then(keep, () => keep([]));
+    const refine = (scan: ServiceSuggestion[]) => {
+      keep(scan, scan.length > 0);
+      if (scan.length === 0) return;
+      latest.current.refineSuggestions(projectId).then(
+        (refined) => keep(refined ?? scan, false),
+        () => keep(scan, false)
+      );
+    };
+    latest.current.listSuggestions(projectId).then(refine, () => keep([], false));
     return () => {
       current = false;
     };
   }, [projectId]);
-  return found?.projectId === projectId ? found.suggestions : null;
+  return found?.projectId === projectId ? found : null;
+}
+
+function usePicks(suggestions: ServiceSuggestion[] | null) {
+  const [picked, setPicked] = React.useState<string[]>([]);
+  const seen = React.useRef<ServiceSuggestion[] | null>(null);
+  React.useEffect(() => {
+    const before = seen.current;
+    seen.current = suggestions;
+    if (suggestions) setPicked((current) => resolveSuggestionPicks(before, current, suggestions));
+  }, [suggestions]);
+  return [picked, setPicked] as const;
 }
 
 function useBusy() {
@@ -298,26 +323,26 @@ export function AddServicesView({
   onCustom,
   onBack,
   onDone,
+  empty,
 }: {
   projects: Project[];
   projectId: string;
   actions: ServicesPanelActions;
   onProject: (projectId: string) => void;
   onCustom: () => void;
-  onBack: () => void;
+  onBack: (() => void) | null;
   onDone: () => void;
+  empty?: React.ReactNode;
 }) {
   const project = projects.find((each) => each.id === projectId);
   const places = actions.listPlaces(projectId);
-  const suggestions = useSuggestions(projectId, actions.listSuggestions);
-  const [picked, setPicked] = React.useState<string[]>([]);
+  const found = useSuggestions(projectId, actions);
+  const suggestions = found?.suggestions ?? null;
+  const [picked, setPicked] = usePicks(suggestions);
   const { busy, run } = useBusy();
   const picker = <ProjectSelect projects={projects} value={projectId} onChange={onProject} />;
 
-  React.useEffect(() => {
-    if (suggestions) setPicked(listRecommendedPicks(suggestions));
-  }, [suggestions]);
-
+  if (suggestions?.length === 0 && empty) return empty;
   if (suggestions?.length === 0)
     return (
       <ServiceFormView
@@ -327,7 +352,7 @@ export function AddServicesView({
         folders={listServiceFolders(places, [], actions.home, null)}
         autoFocus={false}
         note={describeNoSuggestions(project?.name ?? 'the project')}
-        onBack={onBack}
+        onBack={onBack ?? onDone}
         onDone={onDone}
         onSubmit={(input) => actions.addOne(projectId, input)}
       >
@@ -335,7 +360,7 @@ export function AddServicesView({
       </ServiceFormView>
     );
 
-  const copy = resolveServiceForm('add', '');
+  const copy = onBack ? resolveServiceForm('add', '') : describeFoundServices(project?.name ?? 'the project');
   return (
     <>
       <PanelHeader title={copy.title} description={copy.description}>
@@ -353,11 +378,16 @@ export function AddServicesView({
         ) : (
           <LoadingLine label='Looking for services' className='h-10 px-3 text-xs' />
         )}
+        {found?.refining && (
+          <LoadingLine label='Checking names and ports with AI' className='h-8 px-3 text-2xs' />
+        )}
       </PanelBody>
       <div className={PANEL_FOOTER}>
-        <Button variant='secondary' size='sm' onClick={onBack}>
-          Back
-        </Button>
+        {onBack && (
+          <Button variant='secondary' size='sm' onClick={onBack}>
+            Back
+          </Button>
+        )}
         <span className='flex-1' />
         <Button
           size='sm'

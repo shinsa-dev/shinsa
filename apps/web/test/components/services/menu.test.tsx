@@ -8,7 +8,7 @@ import {
   type TerminalPlace,
 } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import * as React from 'react';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { ServicesPanel } from '@/components/services/menu.tsx';
@@ -88,7 +88,10 @@ const SUGGESTIONS: ServiceSuggestion[] = [
   { name: 'all', cwd: ROOT, command: 'bun run dev', source: 'package', recommended: false, ...DETECTED },
 ];
 
-function createActions(suggestions: ServiceSuggestion[] = SUGGESTIONS) {
+function createActions(
+  suggestions: ServiceSuggestion[] = SUGGESTIONS,
+  refine: () => Promise<ServiceSuggestion[] | null> = async () => null
+) {
   const calls: unknown[] = [];
   const answer =
     (name: string) =>
@@ -101,6 +104,7 @@ function createActions(suggestions: ServiceSuggestion[] = SUGGESTIONS) {
     focusForms: true,
     listPlaces: () => PLACES,
     listSuggestions: async () => suggestions,
+    refineSuggestions: refine,
     add: answer('add'),
     addOne: answer('addOne'),
     update: answer('update'),
@@ -148,10 +152,16 @@ function renderPanel(
     scope = groups.map((group) => group.project),
     mode = 'list',
     suggestions,
-  }: { scope?: Project[]; mode?: ServicesPanelMode; suggestions?: ServiceSuggestion[] } = {}
+    refine,
+  }: {
+    scope?: Project[];
+    mode?: ServicesPanelMode;
+    suggestions?: ServiceSuggestion[];
+    refine?: () => Promise<ServiceSuggestion[] | null>;
+  } = {}
 ) {
   const { calls, handlers } = createHandlers();
-  const panel = createActions(suggestions);
+  const panel = createActions(suggestions, refine);
   const created = mock(() => undefined);
   render(
     <TooltipProvider>
@@ -173,9 +183,9 @@ afterEach(() => {
 });
 
 describe('the Services popover', () => {
-  it('says what a service is when the project has none, with Add… in the footer that is always there', async () => {
-    renderPanel([{ project: SHOP, views: [] }]);
-    expect(screen.getByText('No services in Shop yet')).toBeTruthy();
+  it('says what a service is when the project has none and none were found, with Add… in the footer', async () => {
+    renderPanel([{ project: SHOP, views: [] }], { suggestions: [] });
+    expect(await screen.findByText('No services in Shop yet')).toBeTruthy();
     expect(
       screen.getByText('A service is a command you keep running for a project, like its dev server.')
     ).toBeTruthy();
@@ -183,7 +193,83 @@ describe('the Services popover', () => {
     expect(screen.getByRole('button', { name: 'Manage' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Terminal' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add…' }));
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();
+  });
+
+  it('shows what was found when the project has none yet, ticked and ready to add, with no Back', async () => {
+    const { sent } = renderPanel([{ project: SHOP, views: [] }]);
+    expect(await screen.findByText('No services in Shop yet')).toBeTruthy();
+    expect(
+      screen.getByText('These were found in its folders. Each runs in a terminal of its own.')
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add 2 services' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect((sent[0] as unknown[])[0]).toBe('add');
+  });
+
+  it('opens the custom form from what was found, and comes back to it', async () => {
+    renderPanel([{ project: SHOP, views: [] }]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Custom service…' }));
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByRole('button', { name: 'Add 2 services' })).toBeTruthy();
+  });
+
+  it('shows what was found at once, then the list checked with AI, ticked as it recommends', async () => {
+    let finish: (refined: ServiceSuggestion[] | null) => void = () => undefined;
+    const refined = [
+      { ...SUGGESTIONS[0], recommended: false },
+      { ...SUGGESTIONS[1], command: 'bun run dev --port $PORT', previewUrl: 'http://localhost:{port}' },
+      { ...SUGGESTIONS[2], recommended: true },
+    ] as ServiceSuggestion[];
+    const { sent } = renderPanel([{ project: SHOP, views: [] }], {
+      refine: () => new Promise((resolve) => (finish = resolve)),
+    });
+    expect(await screen.findByRole('button', { name: 'Add 2 services' })).toBeTruthy();
+    expect(await screen.findByText('Checking names and ports with AI')).toBeTruthy();
+    act(() => finish(refined));
+    expect(await screen.findByText('bun run dev --port $PORT')).toBeTruthy();
+    expect(screen.queryByText('Checking names and ports with AI')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add 2 services' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect((sent[0] as unknown[])[2]).toEqual([
+      {
+        name: 'web',
+        cwd: `${ROOT}/apps/web`,
+        command: 'bun run dev --port $PORT',
+        env: {},
+        previewUrl: 'http://localhost:{port}',
+        portVariable: 'PORT',
+      },
+      { name: 'all', cwd: ROOT, command: 'bun run dev', env: {}, ...NO_PREVIEW },
+    ]);
+  });
+
+  it('keeps the ticks you changed when the checked list arrives', async () => {
+    let finish: (refined: ServiceSuggestion[] | null) => void = () => undefined;
+    renderPanel([{ project: SHOP, views: [] }], {
+      refine: () => new Promise((resolve) => (finish = resolve)),
+    });
+    await screen.findByRole('button', { name: 'Add 2 services' });
+    fireEvent.click(screen.getByText('api'));
+    act(() => finish(SUGGESTIONS.map((each) => ({ ...each, command: `${each.command} --port $PORT` }))));
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: 'Services found' }).textContent).toContain(
+        'bun run dev --port $PORT in shop/apps/api'
+      )
+    );
+    expect(screen.getByRole('checkbox', { name: 'Add api' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('checkbox', { name: 'Add web' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('keeps the list found when the check with AI fails', async () => {
+    renderPanel([{ project: SHOP, views: [] }], { refine: () => Promise.reject(new Error('down')) });
+    expect(await screen.findByRole('button', { name: 'Add 2 services' })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Checking names and ports with AI')).toBeNull());
+    expect(screen.getByRole('group', { name: 'Services found' }).textContent).toContain(
+      'bun run dev in shop/apps/api'
+    );
   });
 
   it('asks for a project first when there is none to add services to', () => {
@@ -469,7 +555,7 @@ describe('the Services popover', () => {
     ).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByText('No services in Shop yet')).toBeTruthy();
+    expect(await screen.findByText('No services in Shop yet')).toBeTruthy();
   });
 
   it('ticks services in Manage and removes them in one go after an inline confirmation', async () => {

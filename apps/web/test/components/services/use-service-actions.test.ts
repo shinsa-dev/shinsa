@@ -50,6 +50,7 @@ describe('useServiceActions', () => {
     };
     await act(async () => {
       expect(await actions.listSuggestions('shop')).toEqual([]);
+      expect(await actions.refineSuggestions('shop')).toBeNull();
       expect(await actions.add('shop', [input])).toBe(true);
       expect(await actions.addOne('shop', input)).toBe(true);
       expect(await actions.update(api, input)).toBe(true);
@@ -61,6 +62,7 @@ describe('useServiceActions', () => {
       '/api/services/api/restart',
       '/api/services/start-all',
       '/api/services/suggestions?projectId=shop',
+      '/api/services/suggestions?projectId=shop&refine=1',
       '/api/services/batch',
       '/api/services',
       '/api/services/api/update',
