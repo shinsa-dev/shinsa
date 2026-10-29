@@ -4,6 +4,7 @@ import {
   EngineRestarter,
   EXIT_RESTART,
   isEngineBusy,
+  type RestartDrain,
 } from '../../src/instance/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
@@ -12,7 +13,18 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-function createRestarter(options: { service?: boolean; fail?: boolean } = {}) {
+function createDrain() {
+  const held = new Set<string>();
+  const calls: string[] = [];
+  const drain: RestartDrain = {
+    holdNewRuns: () => calls.push('hold'),
+    releaseHeldRuns: () => calls.push('release'),
+    isHeld: (runId) => held.has(runId),
+  };
+  return { drain, held, calls };
+}
+
+function createRestarter(options: { service?: boolean; fail?: boolean; drain?: RestartDrain } = {}) {
   const stub = createStubEngine();
   let restarts = 0;
   const scheduled: (() => void)[] = [];
@@ -22,6 +34,9 @@ function createRestarter(options: { service?: boolean; fail?: boolean } = {}) {
       restarts += 1;
       return options.fail ? Promise.reject(new Error('launchctl said no')) : Promise.resolve();
     },
+    drain: options.drain,
+    drainMs: 60_000,
+    now: () => 1_000,
     schedule: (run) => scheduled.push(run),
   });
   const flush = async () => {
@@ -45,6 +60,73 @@ describe('isEngineBusy', () => {
       state.runs.live = createRun({ id: 'live' });
     });
     expect(isEngineBusy(stub.state)).toBe(true);
+    expect(isEngineBusy(stub.state, (runId) => runId === 'live')).toBe(false);
+  });
+});
+
+describe('draining before a restart', () => {
+  test('holds new runs, ignores the held ones and restarts once the working ones hand over', async () => {
+    jest.useFakeTimers();
+    const { drain, held, calls } = createDrain();
+    const { stub, restarter, flush, restarts } = createRestarter({ drain });
+    stub.update((state) => {
+      state.runs.live = createRun({ id: 'live' });
+    });
+    expect(await restarter.request('idle')).toEqual({ restarting: false });
+    expect(await restarter.request('idle')).toEqual({ restarting: false });
+    expect(calls).toEqual(['hold']);
+    expect(restarter.deadlineAt).toBe(61_000);
+    stub.update((state) => {
+      state.runs.next = createRun({ id: 'next' });
+    });
+    held.add('next');
+    stub.update((state) => {
+      state.runs.live = createRun({ id: 'live', endedAt: 9 });
+    });
+    stub.notify();
+    await flush();
+    expect(restarts()).toBe(1);
+    expect(restarter.deadlineAt).toBeNull();
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(restarts()).toBe(1);
+  });
+
+  test('restarts at the deadline with agents still working, since their runs resume after it', async () => {
+    jest.useFakeTimers();
+    const infos = spyOn(log, 'info').mockImplementation(() => undefined);
+    const { stub, restarter, flush, restarts } = createRestarter();
+    stub.update((state) => {
+      state.runs.live = createRun({ id: 'live' });
+    });
+    await restarter.request('idle');
+    jest.advanceTimersByTime(59_999);
+    await flush();
+    expect(restarts()).toBe(0);
+    jest.advanceTimersByTime(1);
+    await flush();
+    expect(restarts()).toBe(1);
+    expect(infos).toHaveBeenCalledWith(
+      '[Engine] Agents still work past the restart deadline; their runs resume after it'
+    );
+    infos.mockRestore();
+  });
+
+  test('a restart that fails releases the held runs so work goes on', async () => {
+    jest.useFakeTimers();
+    const errors = spyOn(log, 'error').mockImplementation(() => undefined);
+    const { drain, calls } = createDrain();
+    const { stub, restarter, flush } = createRestarter({ drain, fail: true });
+    stub.update((state) => {
+      state.runs.live = createRun({ id: 'live' });
+    });
+    await restarter.request('idle');
+    await restarter.request('now');
+    await flush();
+    await Promise.resolve();
+    expect(calls).toEqual(['hold', 'release']);
+    expect(restarter.pending).toBeNull();
+    errors.mockRestore();
   });
 });
 

@@ -3792,7 +3792,8 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   `shinsa` command.
 - **Restarting.** A restart (`POST /api/engine/restart`, below) stops the engine cleanly and exits with 75
   (`EX_TEMPFAIL`, `EXIT_RESTART`); launchd starts the bundle's program again, which after an app update is the new
-  version.
+  version. One that waits for idle holds new runs back until the working ones hand over, for at most 15 minutes
+  (Health, below).
 - **By hand** (`apps/engine/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
   kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
   stopped until a start, the app, a command that needs it or the next login), `shinsa restart` is `launchctl
@@ -4042,7 +4043,13 @@ and the next line is never glued onto it (`readChatEntries`).
 interface and the engine breaks; `busy` is whether an agent run is mid-turn (`isEngineBusy`: a live run with status
 `running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
 /api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
-75 for launchd to start it again, and answers `{ restarting }` before it goes; it refuses with `restart_unsupported`
+75 for launchd to start it again, and answers `{ restarting }` before it goes. Waiting for idle drains the engine
+(`EngineRestarter`, `RestartDrain`): the supervisor holds back every new run (`holdNewRuns`; a turn that carries a
+prompt or a delivery, such as your answer, still starts), so the working runs hand over and the engine restarts
+between turns; a held run does not count as busy. Shutdown marks each held run (`run.interrupt`, command id
+`run.interrupt:<run>:held:<continuations>`), so the next engine starts it as a free shutdown continuation. After
+`RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
+restart that fails releases the held runs; it refuses with `restart_unsupported`
 unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 

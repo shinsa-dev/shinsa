@@ -234,6 +234,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     restarter: createLaunchdRestarter(engine, {
       byService: options.byService ?? false,
+      drain: services.runs,
       stop: () => services.stopShinsa?.() ?? Promise.resolve(),
       exit: options.exit,
     }),

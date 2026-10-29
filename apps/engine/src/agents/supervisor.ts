@@ -175,8 +175,10 @@ export class RunSupervisor {
   readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
   readonly #claims = new Map<string, AbortController>();
+  readonly #held = new Set<string>();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
+  #holding = false;
 
   constructor(
     engine: Engine,
@@ -238,6 +240,10 @@ export class RunSupervisor {
     const state = this.#engine.state;
     const run = state.runs[runId];
     if (this.#shuttingDown || !run || run.endedAt !== null || this.#active.has(runId)) return;
+    if (this.#holding && override === null && delivery === null) {
+      this.#held.add(runId);
+      return;
+    }
     const task = state.tasks[run.taskId];
     const workspace = task ? this.#resolveWorkspace(run, task) : null;
     if (!task || !workspace) {
@@ -831,10 +837,33 @@ export class RunSupervisor {
     await active.session?.cancel();
   }
 
+  holdNewRuns() {
+    this.#holding = true;
+  }
+
+  releaseHeldRuns() {
+    this.#holding = false;
+    const held = [...this.#held];
+    this.#held.clear();
+    for (const runId of held) {
+      this.execute(runId).catch((error: unknown) => {
+        log.error('[Runs] Could not start a run held for the restart', {
+          runId,
+          error: describeError(error),
+        });
+      });
+    }
+  }
+
+  isHeld(runId: string) {
+    return this.#held.has(runId);
+  }
+
   async interruptForShutdown() {
     this.#shuttingDown = true;
     for (const claim of this.#claims.values()) claim.abort();
     const compacting = this.#compaction.stop();
+    await this.#interruptHeld();
     const live = [...this.#active.entries()];
     for (const [runId, active] of live) {
       const continuations = this.#engine.state.runs[runId]?.continuations?.length ?? 0;
@@ -858,6 +887,24 @@ export class RunSupervisor {
       })
     );
     await Promise.allSettled([compacting, ...live.map(([, active]) => active.done)]);
+  }
+
+  async #interruptHeld() {
+    for (const runId of this.#held) {
+      const continuations = this.#engine.state.runs[runId]?.continuations?.length ?? 0;
+      try {
+        await this.#engine.dispatch(
+          { type: 'run.interrupt', runId, attemptId: null },
+          { id: `run.interrupt:${runId}:held:${continuations}` }
+        );
+      } catch (error) {
+        log.warn('[Runs] Could not mark a held run to start after the restart', {
+          runId,
+          error: describeError(error),
+        });
+      }
+    }
+    this.#held.clear();
   }
 
   resolveQuestion(gateId: string) {
