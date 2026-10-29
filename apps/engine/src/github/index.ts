@@ -10,12 +10,13 @@ import {
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
+  resolveCurrentRound,
   type Settings,
   serializeMergeStepsMarkdown,
   serializeTestingMarkdown,
   type Task,
 } from '@shinsa/core';
-import { assertRefName } from '../git/index.ts';
+import { assertRefName, resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 
 interface CheckEntry {
@@ -364,17 +365,27 @@ export function readStackedPullRequest(repo: Repo, number: number, signal?: Abor
   return readTarget(repo, String(number), signal);
 }
 
+export function serializePullRequestTitle(task: Task) {
+  return serializeConventionalSubject(resolveCommitType(task.branch), resolveCurrentRound(task).title);
+}
+
+function serializeTaskReference(task: Task) {
+  const link = `\`shinsa://task/${task.id}\``;
+  return task.handle ? `Shinsa task: ${task.handle}, ${link}` : `Shinsa task: ${link}`;
+}
+
 export function serializePullRequestBody(task: Task) {
   const testing = serializeTestingMarkdown(assembleReport(task).walkthrough?.testing);
   const steps = serializeMergeStepsMarkdown(listMergeSteps(task));
   return [
-    task.summary ?? '',
-    testing ? `\n${testing}` : '',
-    steps ? `\n${steps}` : '',
-    task.plan ? `\n<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
+    serializeTaskReference(task),
+    task.summary?.trim() ?? '',
+    testing,
+    steps,
+    task.plan ? `<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
   ]
-    .join('\n')
-    .trim();
+    .filter((part) => part.length > 0)
+    .join('\n\n');
 }
 
 export async function createPullRequest(
@@ -397,7 +408,7 @@ export async function createPullRequest(
       '--base',
       assertRefName(baseBranch ?? repo.defaultBranch),
       '--title',
-      task.title,
+      serializePullRequestTitle(task),
       '--body-file',
       '-',
     ],
