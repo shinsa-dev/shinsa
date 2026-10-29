@@ -1,6 +1,6 @@
 import type { AccountImport, AccountPatch, AccountsSnapshot, RunAccount } from '@shinsa/core';
 import { useSyncExternalStore } from 'react';
-import { ACCOUNT_LABEL, describeBinding, describeRerun } from '@/lib/accounts/account.ts';
+import { describeBinding, describeRerun } from '@/lib/accounts/account.ts';
 import { createUsageRecheck } from '@/lib/accounts/recheck.ts';
 import { type SignInDialogState, selectDialogLogin } from '@/lib/accounts/sign-in.ts';
 import { describeUsageWaitToggled } from '@/lib/accounts/usage-wait.ts';
@@ -67,12 +67,7 @@ function cancelLogin(loginId: string) {
 }
 
 export function importAccount(entry: AccountImport) {
-  if (entry.origin === 'cswap') return startImportSignIn(entry.email);
-  return updateAccounts(
-    '/api/accounts/import',
-    { origin: entry.origin, email: entry.email },
-    ACCOUNT_LABEL.addedClaudeLogin
-  );
+  return startImportSignIn(entry.email);
 }
 
 export function updateAccount(accountId: string, patch: AccountPatch, done: string) {

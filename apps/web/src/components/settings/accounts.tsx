@@ -23,14 +23,14 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import {
   ACCOUNT_LABEL,
-  describeCopiedLogin,
   describeDefaultChanged,
   describeDuplicate,
   describeImport,
   describeRemoval,
-  isCopiedLogin,
+  describeSharedLogin,
+  IMPORT_ICON,
+  isSharedLogin,
   MOVE_ACTION,
-  resolveImportIcon,
   resolvePauseAction,
 } from '@/lib/accounts/account.ts';
 import {
@@ -88,7 +88,7 @@ function AddAccountButton({ imports, actions }: { imports: AccountImport[]; acti
           return (
             <DropdownMenuItem
               key={`${entry.origin}-${entry.email}`}
-              icon={resolveImportIcon(entry)}
+              icon={IMPORT_ICON}
               onClick={() => actions.importLogin(entry)}
             >
               <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
@@ -305,11 +305,11 @@ export function AccountsGroup({
           actions={actions}
         />
       ))}
-      {accounts.filter(isCopiedLogin).map((account) => (
-        <SettingsEmpty key={`copied-${account.id}`}>{describeCopiedLogin(account)}</SettingsEmpty>
+      {accounts.filter(isSharedLogin).map((account) => (
+        <SettingsEmpty key={`shared-${account.id}`}>{describeSharedLogin(account)}</SettingsEmpty>
       ))}
       {duplicates.map((duplicate) => (
-        <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate, accounts)}</SettingsEmpty>
+        <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate)}</SettingsEmpty>
       ))}
       {providers.map((login) => (
         <ProviderLoginBlock key={login.provider} login={login} onRefresh={actions.refresh} />

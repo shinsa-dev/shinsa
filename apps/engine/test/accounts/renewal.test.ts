@@ -99,10 +99,10 @@ describe('noticing a login that works again', () => {
 describe('what the Sign in gate says', () => {
   test('names the account, the others that need signing in, and how to sign in for where the login comes from', () => {
     expect(describeExpiredLogin(account(), [])).toBe(
-      'Claude could not refresh the login of a@example.com. Sign in to it here, so Shinsa has a login of its own instead of a copy of claude-swap’s.'
+      'Claude could not refresh the login of a@example.com. Sign in to it here, so Shinsa has a login of its own.'
     );
     expect(describeExpiredLogin(account({ origin: 'claude' }), [account({ email: 'b@example.com' })])).toBe(
-      'Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too. Sign in to it here, or run `claude auth login` in a terminal.'
+      'Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too. Sign in to it here, so Shinsa has a login of its own.'
     );
     expect(
       describeExpiredLogin(account({ origin: 'login', email: null }), [

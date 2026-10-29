@@ -1,5 +1,4 @@
 import type { AccountImport, AccountSummary, ProviderLogin } from '@shinsa/core';
-import { Badge } from '@shinsa/ui/components/badge';
 import { Button } from '@shinsa/ui/components/button';
 import {
   DropdownMenu,
@@ -7,7 +6,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@shinsa/ui/components/dropdown-menu';
-import { Icon } from '@shinsa/ui/components/icon';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
@@ -18,16 +16,11 @@ import {
   ACCOUNT_LABEL,
   describeImport,
   describeRemoval,
+  IMPORT_ICON,
   resolveAccountLabel,
-  resolveImportIcon,
   resolveProviderIcon,
 } from '@/lib/accounts/account.ts';
-import {
-  describeAccountSource,
-  describeProviderSource,
-  isImportedNow,
-  resolveProviderChoice,
-} from '@/lib/onboarding.ts';
+import { describeAccountSource, describeProviderSource, resolveProviderChoice } from '@/lib/onboarding.ts';
 
 export interface OnboardingAccountActions {
   signIn: (accountId: string | null) => void;
@@ -38,18 +31,15 @@ export interface OnboardingAccountActions {
 
 function AccountActions({
   account,
-  imported,
   actions,
 }: {
   account: AccountSummary;
-  imported: AccountImport[];
   actions: OnboardingAccountActions;
 }) {
   const dialog = useDialogState<true>();
   const removal = describeRemoval(account);
   return (
     <span className='flex shrink-0 items-center gap-1.5'>
-      {isImportedNow(account, imported) && <Badge size='sm'>Added</Badge>}
       {account.signIn === 'signed_out' && (
         <Button variant='secondary' size='sm' onClick={() => actions.signIn(account.id)}>
           Sign in again
@@ -123,7 +113,7 @@ export function OnboardingAddAccount({
           return (
             <DropdownMenuItem
               key={`${entry.origin}-${entry.email}`}
-              icon={resolveImportIcon(entry)}
+              icon={IMPORT_ICON}
               onClick={() => actions.importLogin(entry)}
             >
               <span className='flex min-w-0 flex-1 flex-col'>
@@ -158,11 +148,9 @@ export function OnboardingAddAccount({
 
 function AccountRows({
   accounts,
-  imported,
   actions,
 }: {
   accounts: AccountSummary[] | null;
-  imported: AccountImport[];
   actions: OnboardingAccountActions;
 }) {
   if (accounts === null) {
@@ -183,7 +171,7 @@ function AccountRows({
             iconLabel='Claude'
             title={resolveAccountLabel(account)}
             path={describeAccountSource(account)}
-            action={<AccountActions account={account} imported={imported} actions={actions} />}
+            action={<AccountActions account={account} actions={actions} />}
           />
         </li>
       ))}
@@ -194,20 +182,16 @@ function AccountRows({
 export function OnboardingAccounts({
   accounts,
   providers,
-  imported,
-  notes,
   actions,
 }: {
   accounts: AccountSummary[] | null;
   providers: ProviderLogin[];
-  imported: AccountImport[];
-  notes: string[];
   actions: OnboardingAccountActions;
 }) {
   return (
     <div className='flex flex-col gap-3'>
       <SettingsCard>
-        <AccountRows accounts={accounts} imported={imported} actions={actions} />
+        <AccountRows accounts={accounts} actions={actions} />
         {providers.length > 0 && (
           <ul className='flex flex-col'>
             {providers.map((login) => (
@@ -218,12 +202,6 @@ export function OnboardingAccounts({
           </ul>
         )}
       </SettingsCard>
-      {notes.map((note) => (
-        <p key={note} className='flex items-start gap-1.25 px-1 text-amber-text text-xs'>
-          <Icon name='IconExclamationCircle' size='sm' className='mt-px' />
-          {note}
-        </p>
-      ))}
     </div>
   );
 }

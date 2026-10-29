@@ -50,7 +50,6 @@ async function setup(answers: unknown[] = []) {
     run: () => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false }),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),
-    accountActions: { listImports: () => Promise.resolve([]), importAccount: () => Promise.resolve() },
   });
   return { root, engine, onboarding, acme, projects, repos, asked };
 }

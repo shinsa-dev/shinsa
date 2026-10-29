@@ -238,8 +238,6 @@ function StepBody({
       <OnboardingAccounts
         accounts={accounts.list}
         providers={accounts.providers}
-        imported={step.imported}
-        notes={step.notes}
         actions={accounts.actions}
       />
     );

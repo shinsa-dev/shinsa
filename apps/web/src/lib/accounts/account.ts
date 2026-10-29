@@ -20,7 +20,6 @@ export const ACCOUNT_LABEL = {
   add: 'Add account',
   addClaude: 'Add a Claude account',
   signInAnother: 'Sign in with another account',
-  addedClaudeLogin: 'Added your Claude Code login.',
   options: 'Account options',
   makeDefault: 'Set as default',
   default: 'Default',
@@ -150,28 +149,26 @@ export function resolvePauseAction(account: AccountSummary): AccountAction {
   return { label: 'Leave out of new work', icon: 'IconPause', done: `New work skips ${label}.` };
 }
 
-export function describeDuplicate(duplicate: AccountDuplicate, accounts: AccountSummary[]) {
-  const kept = accounts.find((account) => account.id === duplicate.keptId);
-  if (kept?.origin === 'claude') {
-    return `Your Claude Code login is now ${duplicate.email}, which is also one of your accounts. Shinsa runs it from your Claude Code login and leaves the other copy alone.`;
-  }
+export function describeDuplicate(duplicate: AccountDuplicate) {
   return `${duplicate.email} is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.`;
 }
 
-export function isCopiedLogin(account: AccountSummary) {
-  return account.origin === 'cswap';
+export function isSharedLogin(account: AccountSummary) {
+  return account.origin !== 'login';
 }
 
-export function resolveImportIcon(entry: AccountImport): IconName {
-  return entry.origin === 'claude' ? 'IconClaudeai' : 'IconArrowsRepeatRightLeft';
-}
+export const IMPORT_ICON: IconName = 'IconArrowsRepeatRightLeft';
 
-export function describeCopiedLogin(account: AccountSummary) {
-  return `${resolveAccountLabel(account)} is a copy of claude-swap’s login, so each one signs the other out. Sign in to it again from its menu to give Shinsa a login of its own.`;
+export function describeSharedLogin(account: AccountSummary) {
+  const label = resolveAccountLabel(account);
+  const fix = 'Sign in to it again from its menu to give Shinsa a login of its own.';
+  if (account.origin === 'claude') {
+    return `${label} runs on your Claude Code login, which Claude Code and claude-swap change and refresh too. ${fix}`;
+  }
+  return `${label} is a copy of claude-swap’s login, so each one signs the other out. ${fix}`;
 }
 
 export function describeImport(entry: AccountImport) {
-  if (entry.origin === 'claude') return { label: 'Use your Claude Code login', detail: entry.email };
   return { label: `Sign in to ${entry.email}`, detail: 'From claude-swap' };
 }
 

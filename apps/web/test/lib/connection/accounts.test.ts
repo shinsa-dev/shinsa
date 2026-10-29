@@ -111,16 +111,6 @@ describe('account changes', () => {
     expect(toasts.success.mock.calls.map(([text]) => text)).toEqual(['Paused.', 'Account removed.']);
   });
 
-  it('adds your Claude Code login with a plain confirmation, and says why an import failed', async () => {
-    fake = startFakeOnboarding({ 'POST /api/accounts/import': { answer: ACCOUNTS } });
-    expect(await importAccount({ origin: 'claude', email: 'me@example.com', plan: 'max' })).toBe(true);
-    expect(toasts.success).toHaveBeenCalledWith('Added your Claude Code login.');
-    fake?.stop();
-    fake = startFakeOnboarding({ 'POST /api/accounts/import': REFUSED });
-    expect(await importAccount({ origin: 'claude', email: 'me@example.com', plan: null })).toBe(false);
-    expect(toasts.error).toHaveBeenCalledWith('A sign-in is already running.');
-  });
-
   it('binds tasks and changes their usage waits through commands', async () => {
     const spies = spyOnCommands();
     await bindTaskAccount('t', { id: 'a', email: 'a@example.com' });

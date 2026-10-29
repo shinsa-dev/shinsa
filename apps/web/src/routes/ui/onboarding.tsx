@@ -39,8 +39,6 @@ function createSampleStep(
     access: [],
     checks: [],
     ready: true,
-    imported: [],
-    notes: [],
     problem: null,
     submitLabel: 'Continue',
     ...step,
@@ -216,8 +214,6 @@ const ACCOUNTS = createSampleStep({
   title: 'Which accounts can agents use?',
   description:
     'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
-  imported: [{ origin: 'claude', email: 'christo@superwall.com', plan: 'max' }],
-  notes: ['Your Claude Code login is no longer side@superwall.com. Check again.'],
 });
 
 const TOOLS = createSampleStep({
@@ -249,7 +245,7 @@ const TOOLS = createSampleStep({
 });
 
 const SAMPLE_ORIGINS: Record<string, AccountSummary['origin']> = {
-  work: 'claude',
+  work: 'login',
   team: 'login',
   lapsed: 'login',
 };
@@ -331,7 +327,7 @@ export function OnboardingSpecimens() {
       <Specimen label='Defaults · the recommended choice picked in each group, Continue keeps them all; run again from Settings'>
         <StepSpecimen step={DEFAULTS} revisit />
       </Specimen>
-      <Specimen label='Accounts · imported for you, one added now, one that could not be, each removable'>
+      <Specimen label='Accounts · each one signed in here, one signed out, each removable'>
         <StepSpecimen step={ACCOUNTS} />
       </Specimen>
       <Specimen label='Tools · passed, failed with its fix and the command to copy, optional and missing'>

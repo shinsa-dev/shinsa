@@ -265,16 +265,12 @@ describe('the Accounts settings', () => {
   it('offers the logins it can import next to signing in another account', async () => {
     renderAccounts({
       ...ACCOUNTS,
-      imports: [
-        { origin: 'claude', email: 'me@example.com', plan: 'max' },
-        { origin: 'cswap', email: 'two@example.com', plan: 'pro' },
-      ],
+      imports: [{ origin: 'cswap', email: 'two@example.com', plan: 'pro' }],
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
     await settle();
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Sign in with another account',
-      'Use your Claude Code loginme@example.com',
       'Sign in to two@example.comFrom claude-swap',
     ]);
     await pickItem(/Sign in to two@example.com/);
@@ -298,7 +294,7 @@ describe('the Accounts settings', () => {
   });
 
   it('signs in another account from the Add account menu', async () => {
-    renderAccounts({ ...ACCOUNTS, imports: [{ origin: 'claude', email: 'me@example.com', plan: 'max' }] });
+    renderAccounts({ ...ACCOUNTS, imports: [{ origin: 'cswap', email: 'me@example.com', plan: 'max' }] });
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
     await settle();
     await pickItem('Sign in with another account');

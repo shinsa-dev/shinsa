@@ -13,7 +13,7 @@ import { writeJsonFile } from '../config/file.ts';
 import { describeError, log } from '../log/index.ts';
 import type { UsageLimits } from './limits.ts';
 import { describeExpiredLogin, isTokenFailure, type LoginRenewal } from './renewal.ts';
-import { type AccountStore, isCopiedLogin, type StoredAccount } from './store.ts';
+import { type AccountStore, isSharedLogin, type StoredAccount } from './store.ts';
 
 export interface SignInState {
   signIn: AccountSignIn;
@@ -110,7 +110,7 @@ export class AccountRotation {
     const duplicates = store.resolveDuplicates();
     return store
       .listDistinct()
-      .filter((account) => !isCopiedLogin(account))
+      .filter((account) => !isSharedLogin(account))
       .map((account) => ({
         id: account.id,
         isDefault: store.isDefault(account.id, duplicates),

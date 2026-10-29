@@ -43,9 +43,8 @@ function listEmails(accounts: StoredAccount[]) {
 }
 
 function describeSignIn(account: StoredAccount) {
-  if (account.origin === 'claude') return 'Sign in to it here, or run `claude auth login` in a terminal.';
   if (account.origin === 'login') return 'Sign in to it here.';
-  return 'Sign in to it here, so Shinsa has a login of its own instead of a copy of claude-swap’s.';
+  return 'Sign in to it here, so Shinsa has a login of its own.';
 }
 
 export class LoginRenewal {

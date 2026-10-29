@@ -146,10 +146,6 @@ export function createTestOnboarding(engine: Engine, config: ServerConfig, run: 
       run,
       models: { listModels: () => Promise.resolve([]) },
       accounts: () => Promise.resolve([]),
-      accountActions: {
-        listImports: () => Promise.resolve([]),
-        importAccount: () => Promise.resolve(),
-      },
     }),
   };
 }

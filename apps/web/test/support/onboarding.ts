@@ -99,8 +99,6 @@ export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingS
     access: [],
     checks: [],
     ready: true,
-    imported: [],
-    notes: [],
     problem: null,
     submitLabel: 'Continue',
     ...overrides,

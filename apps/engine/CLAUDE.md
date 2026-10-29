@@ -228,8 +228,7 @@ src/
 │                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
 │                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
-│                        back, its saved state and the Claude logins it imports (flow.ts), the accounts it reads and
-│                        the imports it runs (accounts.ts)
+│                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts

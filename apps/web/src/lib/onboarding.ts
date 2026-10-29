@@ -133,10 +133,6 @@ export function resolveFolderOptions(options: OnboardingOption[], typed: string[
   return [...options, ...added];
 }
 
-export function isImportedNow(account: AccountSummary, imported: AccountImport[]) {
-  return imported.some((entry) => entry.email.toLowerCase() === account.email?.toLowerCase());
-}
-
 export function describeAccountSource(account: AccountSummary) {
   const plan = resolvePlanLabel(account.plan);
   const parts = [ACCOUNT_ORIGIN[account.origin]];

@@ -145,8 +145,8 @@ function createAccountScenes(now: number): { label: string; snapshot: AccountsSn
           ...(fresh ? [fresh] : []),
         ],
         imports: [
-          { origin: 'claude', email: 'christo@superwall.com', plan: 'max' },
           { origin: 'cswap', email: 'swap@superwall.com', plan: null },
+          { origin: 'cswap', email: 'side@superwall.com', plan: null },
         ],
         providers: selectSampleLogin(logins, 'signed_in'),
       },

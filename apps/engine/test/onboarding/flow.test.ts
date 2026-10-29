@@ -1,21 +1,10 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  type AccountImport,
-  type AgentModel,
-  DomainError,
-  type OnboardingFlow,
-  type OnboardingStepId,
-} from '@shinsa/core';
+import type { AgentModel, OnboardingFlow, OnboardingStepId } from '@shinsa/core';
 import { ConfigStore } from '../../src/config/index.ts';
 import { log } from '../../src/log/index.ts';
-import {
-  type AccountActions,
-  type ClaudeAccount,
-  type CommandRunner,
-  Onboarding,
-} from '../../src/onboarding/index.ts';
+import { type ClaudeAccount, type CommandRunner, Onboarding } from '../../src/onboarding/index.ts';
 import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
@@ -47,8 +36,6 @@ const NO_BUN: CommandRunner = (command) =>
 
 interface Setup {
   accounts?: ClaudeAccount[];
-  imports?: AccountImport[];
-  importAccount?: AccountActions['importAccount'];
   run?: CommandRunner;
   suggestions?: boolean;
   inspect?: boolean;
@@ -64,20 +51,6 @@ function setup(options: Setup = {}) {
   mkdirSync(join(developer, 'app', '.git'), { recursive: true });
   mkdirSync(work, { recursive: true });
   const accounts = [...(options.accounts ?? [ME])];
-  const imports = [...(options.imports ?? [])];
-  const importCalls: string[] = [];
-  const actions: AccountActions = {
-    listImports: () => Promise.resolve([...imports]),
-    importAccount: async (origin, email) => {
-      importCalls.push(`${origin}:${email}`);
-      await options.importAccount?.(origin, email);
-      imports.splice(
-        imports.findIndex((entry) => entry.email === email),
-        1
-      );
-      accounts.push({ id: `a-${accounts.length + 1}`, email, signedIn: true });
-    },
-  };
   function open() {
     const store = new ConfigStore(config.configPath);
     const roots = new Roots([], store, root, () =>
@@ -102,12 +75,11 @@ function setup(options: Setup = {}) {
       run: options.run ?? ALL_OK,
       models: { listModels: () => Promise.resolve(options.models ?? MODELS) },
       accounts: () => Promise.resolve([...accounts]),
-      accountActions: actions,
     });
     return { onboarding, store };
   }
   const first = open();
-  return { root, config, engine, developer, work, accounts, imports, importCalls, open, ...first };
+  return { root, config, engine, developer, work, accounts, open, ...first };
 }
 
 function answer(onboarding: Onboarding, stepId: OnboardingStepId, ...values: string[]) {
@@ -206,7 +178,7 @@ describe('the setup steps', () => {
       mergeMethod: 'rebase',
       approvePlans: false,
     });
-    expect(accounts.step).toMatchObject({ id: 'accounts', submitLabel: 'Continue', imported: [], notes: [] });
+    expect(accounts.step).toMatchObject({ id: 'accounts', submitLabel: 'Continue' });
     expect(accounts.steps.map((step) => step.summary)).toEqual([
       expect.stringMatching(/Developer and 1 more$/),
       null,
@@ -326,55 +298,6 @@ describe('the setup steps', () => {
 });
 
 describe('the accounts step', () => {
-  test('adds your Claude Code login once, skips one already in your accounts, says what failed, and never signs in to claude-swap’s', async () => {
-    const world = setup({
-      imports: [
-        { origin: 'claude', email: 'me@example.com', plan: 'max' },
-        { origin: 'claude', email: 'work@example.com', plan: null },
-        { origin: 'cswap', email: 'swap@example.com', plan: null },
-      ],
-    });
-    const flow = await reachAccounts(world);
-    expect(world.importCalls).toEqual(['claude:work@example.com']);
-    expect(flow.step).toMatchObject({
-      imported: [{ origin: 'claude', email: 'work@example.com', plan: null }],
-      notes: [],
-    });
-    await world.onboarding.setup.resolve();
-    expect(world.importCalls).toHaveLength(1);
-    expect(flow.steps[3]?.summary).toBeNull();
-  });
-
-  test('an import that fails is noted, and one you removed after it was imported is not imported again', async () => {
-    const failing = setup({
-      imports: [{ origin: 'claude', email: 'broken@example.com', plan: null }],
-      importAccount: () =>
-        Promise.reject(
-          new DomainError('import_failed', 'Your Claude Code login is no longer broken@example.com.')
-        ),
-    });
-    expect((await reachAccounts(failing)).step).toMatchObject({
-      imported: [],
-      notes: ['Your Claude Code login is no longer broken@example.com.'],
-    });
-
-    const world = setup({ imports: [{ origin: 'claude', email: 'work@example.com', plan: null }] });
-    await reachAccounts(world);
-    world.accounts.pop();
-    world.imports.push({ origin: 'claude', email: 'work@example.com', plan: null });
-    await openStep(world.onboarding, 'defaults');
-    await answer(world.onboarding, 'defaults', 'model=opus', 'merge=squash', 'plans=no');
-    expect(world.importCalls).toEqual(['claude:work@example.com']);
-  });
-
-  test('an import that fails in a way Shinsa did not expect is not swallowed', async () => {
-    const world = setup({
-      imports: [{ origin: 'claude', email: 'work@example.com', plan: null }],
-      importAccount: () => Promise.reject(new Error('disk full')),
-    });
-    await expect(reachAccounts(world)).rejects.toThrow('disk full');
-  });
-
   test('with no account signed in it offers to skip, and continuing moves on to the tools', async () => {
     const world = setup({ accounts: [{ id: 'a-1', email: null, signedIn: false }] });
     const flow = await reachAccounts(world);
@@ -481,16 +404,12 @@ describe('the saved setup', () => {
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 5, index: 0 });
   });
 
-  test('in inspect mode it shows the first step, writes nothing and imports nothing', async () => {
-    const world = setup({
-      inspect: true,
-      imports: [{ origin: 'cswap', email: 'w@example.com', plan: null }],
-    });
+  test('in inspect mode it shows the first step and writes nothing', async () => {
+    const world = setup({ inspect: true });
     expect((await world.onboarding.setup.resolve()).step?.id).toBe('roots');
     expect(() => readFileSync(join(world.config.dataDir, 'onboarding.json'))).toThrow();
     world.store.update({ onboardedAt: 1 });
     const inspected = world.open().onboarding;
-    expect((await inspected.setup.reply({ type: 'open', stepId: 'accounts' })).step?.imported).toEqual([]);
-    expect(world.importCalls).toEqual([]);
+    expect((await inspected.setup.reply({ type: 'open', stepId: 'accounts' })).step?.id).toBe('accounts');
   });
 });
