@@ -41,6 +41,8 @@ export function FileCard({
   mimeType,
   size,
   href = null,
+  onOpen,
+  originRef,
   busy = false,
   busyLabel,
   children,
@@ -49,6 +51,8 @@ export function FileCard({
   mimeType: string | null;
   size: number | null;
   href?: string | null;
+  onOpen?: () => void;
+  originRef?: (element: HTMLElement | null) => void;
   busy?: boolean;
   busyLabel?: string;
   children?: React.ReactNode;
@@ -60,6 +64,24 @@ export function FileCard({
       <FileLines name={name} meta={meta} />
     </>
   );
+  if (onOpen) {
+    return (
+      <button
+        ref={originRef}
+        type='button'
+        onClick={onOpen}
+        aria-label={`Open ${name}`}
+        className={cn(FILE_CARD, 'cursor-zoom-in text-left outline-none hover:bg-bg-a1 active:bg-bg-a1')}
+      >
+        {content}
+        <Icon
+          size='sm'
+          name='IconExpandSimple'
+          className='shrink-0 text-fg-2 opacity-0 group-hover:opacity-100 group-active:opacity-100'
+        />
+      </button>
+    );
+  }
   if (!href) {
     return (
       <div className={FILE_CARD}>

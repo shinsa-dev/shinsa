@@ -177,7 +177,9 @@ Only these, and they win over anything below:
      long output capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
-     the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
+     the chat and in evidence: attachments (sent ones, and the image chips in the composer and the new task form, so
+     you can look at a draft before sending it), tool results, evidence, and an evidence or attached recording (a sent
+     video file chip opens it there instead of a new tab), which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
      and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
      CSS pixels) is laid out at that width, never at its file's: a 2560px shot taken at 1280px shows 1280px wide, two
@@ -220,7 +222,8 @@ Only these, and they win over anything below:
      title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
      parts (Before, After, or each state's label) that switches the image in place.
    - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
-     attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
+     attachments sit above it as thumbnails, or as file chips when the browser can't load the path; a video's chip
+     opens the image viewer (`cursor-zoom-in`, `IconExpandSimple` on hover), every other chip a new tab.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
      outside its box so the wash wraps the full-width content instead of sitting flush with it; a delegation card
      opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash. The run's
@@ -620,8 +623,8 @@ Only these, and they win over anything below:
       dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
-      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and
-      the engine moves to the new version once they hand over."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
+      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
+      own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
@@ -1677,14 +1680,12 @@ Only these, and they win over anything below:
       then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
       `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
-      banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
-      (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
-      ("Shinsa 0.5.0 is installed. 2 agents are working, and the engine moves to it once they hand over, by 2:32
-      PM at the latest. New steps wait until then.", from `working` and `restartBy` in `/api/health`), the orange triangle when
-      you must act ("Shinsa 0.5.0 needs its engine restarted. Restarting now pauses working agents for a moment, then
-      they carry on."), and `sm` buttons at the end, the last `primary` as macOS orders them: one alone (Restart now,
-      Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents hand over `primary`. No dismiss: it goes when
-      the versions match. `/ui` shows `EngineCard` in its three states.
+      banner, the same `CARD` row, shown only in the desktop app and only when you must act: the orange triangle
+      and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
+      Shinsa, or "Restart Shinsa’s engine to finish updating to 0.5.0." and the reason when the restart failed. An
+      engine older than the app is restarted at once, without a banner (the page asks for `when: now`, working
+      agents pick up where they were); while it moves, Settings → Updates says so in its Engine row. No dismiss: it
+      goes when the versions match. `/ui` shows `EngineCard` in its two states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
       scales in (`fade-in-0 zoom-in-95`, 200 ms), its tooltip names the version and says the app restarts for a
@@ -1700,17 +1701,20 @@ Only these, and they win over anything below:
       update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
-      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Under it, a wrapping `2xs` `fg-2`
-      line says the one thing people fear about updating: "Updating or quitting the app never stops your agents. The
-      engine keeps running and moves to the new version once the working agents hand over." Update channel: a select
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". While the engine and the app
+      differ, an Engine row of one line: the engine's version (`TOKEN_TEXT`) and "Moving to 1.3.1…", or in orange
+      "Newer than this app" or "Restart it to move to 1.3.1" (`resolveEngineView`'s `status`). Update channel: a select
       of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
       "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
       pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
       pass. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
       place with the same data and engine. ⌘K's Change a setting has Update channel with the same three in the app.
       `/ui` → Settings shows Stable up to date, Beta with an update ready, a beta switched to Stable offered the
-      latest stable, Canary downloading the next canary, a downloaded beta being prepared, and a beta restarting to
-      install.
+      latest stable, Canary downloading the next canary, a downloaded beta being prepared, a beta restarting to
+      install, and the engine moving to the version just installed. Under the card, as the group's `description`
+      (`SettingsGroup`, a `2xs` `fg-2` line), the one thing people fear about updating: "Updating or quitting the app
+      never stops your agents. After an update the engine restarts into the new version on its own, and agents pick
+      up where they were."
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 

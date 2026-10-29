@@ -25,11 +25,13 @@ const BLOCK_HEADER = 'flex h-8 items-center gap-1.5 pr-1.5 pl-2';
 export function SettingsGroup({
   title,
   action,
+  description,
   className,
   children,
 }: {
   title: string;
   action?: React.ReactNode;
+  description?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -39,6 +41,7 @@ export function SettingsGroup({
         {title}
       </SectionLabel>
       <SettingsCard className={className}>{children}</SettingsCard>
+      {description && <p className='px-1 pt-1 text-2xs text-fg-2'>{description}</p>}
     </section>
   );
 }
