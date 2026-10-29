@@ -4,52 +4,54 @@ import {
   resolveEngineFit,
   type ShinsaBuild,
 } from '@shinsa/core';
+import * as React from 'react';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { requestJson } from '@/lib/connection/http.ts';
-import { formatClock } from '@/lib/format/time.ts';
+import type { Tone } from '@/lib/format/tone.ts';
+import { createSignal } from '@/lib/signal.ts';
 
-export type EngineAction = 'restart_now' | 'restart_idle' | 'update_app';
+export type EngineAction = 'update_app';
 
 export interface EngineBannerView {
-  tone: 'info' | 'warning';
   text: string;
   actions: EngineAction[];
 }
 
+export interface EngineStatus {
+  version: string;
+  label: string;
+  tone: Tone;
+}
+
 export interface EngineView {
   banner: EngineBannerView | null;
+  status: EngineStatus | null;
   automatic: EngineRestartWhen | null;
   key: string;
 }
 
 export const ENGINE_ACTION_LABEL: Record<EngineAction, string> = {
-  restart_now: 'Restart now',
-  restart_idle: 'When agents hand over',
   update_app: 'Update Shinsa',
 };
 
-const NOTHING: EngineView = { banner: null, automatic: null, key: '' };
+const NOTHING: EngineView = { banner: null, status: null, automatic: null, key: '' };
 
-function describeRestarting(version: string) {
-  return `Restarting the engine into Shinsa ${version}. Agents pick up where they were.`;
+let failure: string | null = null;
+const signal = createSignal();
+
+export function recordEngineFailure(message: string | null) {
+  failure = message;
+  signal.publish();
 }
 
-function describeMove(working: number, latest: string) {
-  if (working === 0) return `The engine moves to it once the working agents hand over${latest}.`;
-  if (working === 1)
-    return `1 agent is working, and the engine moves to it once that agent hands over${latest}.`;
-  return `${working} agents are working, and the engine moves to it once they hand over${latest}.`;
-}
-
-function describeWaiting(version: string, health: ServerHealth) {
-  const latest = health.restartBy ? `, by ${formatClock(health.restartBy)} at the latest` : '';
-  return `Shinsa ${version} is installed. ${describeMove(health.working ?? 0, latest)} New steps wait until then.`;
+export function useEngineFailure() {
+  return React.useSyncExternalStore(signal.subscribe, () => failure);
 }
 
 export function resolveEngineView(
   build: ShinsaBuild | null,
   health: ServerHealth | null,
-  failure: string | null
+  failed: string | null
 ): EngineView {
   if (!build || health?.protocol === undefined) return NOTHING;
   const engine = { version: health.version ?? DEVELOPMENT_VERSION, protocol: health.protocol };
@@ -58,38 +60,31 @@ export function resolveEngineView(
   if (fit.kind === 'match') return NOTHING;
   if (fit.kind === 'update_app') {
     if (!fit.required) return NOTHING;
-    const text = 'This app is older than Shinsa’s engine. Update Shinsa to keep working.';
-    return { banner: { tone: 'warning', text, actions: ['update_app'] }, automatic: null, key };
-  }
-  if (failure) {
-    const text = `Restart Shinsa’s engine to finish updating to ${build.version}. ${failure}`;
-    return { banner: { tone: 'warning', text, actions: [] }, automatic: null, key };
-  }
-  if (health.restart === 'idle') {
     return {
-      banner: { tone: 'info', text: describeWaiting(build.version, health), actions: ['restart_now'] },
+      banner: {
+        text: 'This app is older than Shinsa’s engine. Update Shinsa to keep working.',
+        actions: ['update_app'],
+      },
+      status: { version: engine.version, label: 'Newer than this app', tone: 'orange' },
       automatic: null,
       key,
     };
   }
-  if (!health.busy) {
+  if (failed) {
     return {
-      banner: { tone: 'info', text: describeRestarting(build.version), actions: [] },
-      automatic: 'now',
-      key,
-    };
-  }
-  if (fit.required) {
-    const text = `Shinsa ${build.version} needs its engine restarted. Restarting now pauses working agents for a moment, then they carry on.`;
-    return {
-      banner: { tone: 'warning', text, actions: ['restart_now', 'restart_idle'] },
+      banner: {
+        text: `Restart Shinsa’s engine to finish updating to ${build.version}. ${failed}`,
+        actions: [],
+      },
+      status: { version: engine.version, label: `Restart it to move to ${build.version}`, tone: 'orange' },
       automatic: null,
       key,
     };
   }
   return {
-    banner: { tone: 'info', text: describeWaiting(build.version, health), actions: ['restart_now'] },
-    automatic: 'idle',
+    banner: null,
+    status: { version: engine.version, label: `Moving to ${build.version}…`, tone: 'neutral' },
+    automatic: 'now',
     key,
   };
 }

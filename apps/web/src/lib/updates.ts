@@ -12,12 +12,13 @@ export const UPDATES_LABEL = {
   restart: 'Restart to update',
   downgrade: 'Download and install',
   browser: 'Shinsa for Mac updates itself. Its version and update channel are in its own Settings.',
+  engine: 'Engine',
   agents:
-    'Updating or quitting the app never stops your agents. The engine keeps running and moves to the new version once the working agents hand over.',
+    'Updating or quitting the app never stops your agents. After an update the engine restarts into the new version on its own, and agents pick up where they were.',
 } as const;
 
 export function describeUpdateHint(version: string) {
-  return `Shinsa ${version} is ready. Only the app restarts: agents keep working, and the engine moves to the new version once they hand over.`;
+  return `Shinsa ${version} is ready. The app restarts, then the engine follows on its own and agents pick up where they were.`;
 }
 
 const CHANNEL_ITEM: Record<UpdateChannel, { value: UpdateChannel; label: string; icon: IconName }> = {

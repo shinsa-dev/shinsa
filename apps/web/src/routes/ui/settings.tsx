@@ -21,6 +21,7 @@ import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedul
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
+import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
@@ -73,7 +74,13 @@ const SAMPLE_UPDATE_ACTIONS: UpdateActions = {
   answerDowngrade: () => void acknowledgeSample(),
 };
 
-const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; update: DesktopUpdate }[] = [
+const UPDATE_SCENES: {
+  label: string;
+  version: string;
+  channel: UpdateChannel;
+  update: DesktopUpdate;
+  engine?: EngineStatus | null;
+}[] = [
   {
     label: 'UpdatesGroup · Stable, up to date',
     version: '1.3.0',
@@ -109,6 +116,17 @@ const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; u
     version: '1.3.0-beta.2',
     channel: 'beta',
     update: { status: 'installing', version: '1.3.0-beta.3' },
+  },
+  {
+    label: 'UpdatesGroup · Beta, the engine moving to the version just installed',
+    version: '1.3.0-beta.3',
+    channel: 'beta',
+    update: { status: 'current' },
+    engine: resolveEngineView(
+      { version: '1.3.0-beta.3', protocol: 2 },
+      { ok: true, seq: 1, problems: [], version: '1.3.0-beta.2', protocol: 2 },
+      null
+    ).status,
   },
 ];
 
@@ -326,10 +344,10 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      {UPDATE_SCENES.map(({ label, ...app }) => (
+      {UPDATE_SCENES.map(({ label, engine, ...app }) => (
         <Specimen key={label} label={label}>
           <div className='w-full max-w-xl'>
-            <UpdatesGroup app={app} actions={SAMPLE_UPDATE_ACTIONS} />
+            <UpdatesGroup app={app} engine={engine} actions={SAMPLE_UPDATE_ACTIONS} />
           </div>
         </Specimen>
       ))}

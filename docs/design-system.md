@@ -5160,8 +5160,8 @@ spinner.
 - `ConnectionStatus`: nothing while connected; while reconnecting an amber `Pulse` in
   `grid size-5 place-items-center`, `role='status'`, `aria-label` and tooltip "Reconnecting".
 - `UpdateButtonView({ version, onClick })`: a primary `sm` Button "Update" entering with
-  `fade-in-0 zoom-in-95 animate-in duration-200`; tooltip "Shinsa ‹version› is ready. Only the app restarts: agents keep
-  working, and the engine moves to the new version once they hand over." `UpdateButton` shows it only once the desktop app has an update downloaded.
+  `fade-in-0 zoom-in-95 animate-in duration-200`; tooltip "Shinsa ‹version› is ready. The app restarts, then the engine follows
+  on its own and agents pick up where they were." `UpdateButton` shows it only once the desktop app has an update downloaded.
 
 #### HealthCard and EngineCard (the banner card)
 
@@ -5173,8 +5173,8 @@ app-level notice.
   `min-w-0 flex-1 text-fg-3`, a quiet "Details" trigger (`shrink-0 cursor-default text-fg-2 hover:text-fg-4 active:text-fg-4`)
   for a `w-80` `InfoPopover` (an `InfoHeader` and one `InfoRow` per problem with the orange warning icon), and a
   `secondary` `icon-xs` `IconCrossSmall` dismiss with its `Hint`.
-- `EngineCard({ banner, onAction })`: a 14px `IconExclamationTriangle` (`text-orange-text`) for a warning or
-  `IconArrowsRepeat` (`text-fg-2`), the text `min-w-0 flex-1 py-0.5 text-fg-3`, then one `sm` button per action, the
+- `EngineCard({ banner, onAction })`: a 14px `IconExclamationTriangle` (`text-orange-text`; it shows only when
+  you must act), the text `min-w-0 flex-1 py-0.5 text-fg-3`, then one `sm` button per action, the
   last `primary` and the others `secondary`, each `shrink-0`.
 
 ```tsx
@@ -8950,7 +8950,7 @@ Mistakes that were made before and must not come back:
 | Error title | What happened | Yes when a sentence | "This page hit an error.", "This part of Shinsa hit an error." |
 | Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "“Base” was cancelled, so there is nothing to wait for.", "This task is finished. Start a new one." |
 | Failure decision | Title says what stopped; body says why and what Retry does | Title no, body yes | "Out of automatic fix rounds" |
-| Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and the engine moves to the new version once they hand over." |
+| Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its own and agents pick up where they were." |
 | Disabled reason | Plain sentence | No | "Send your line comments to the agent or remove them first" |
 | Dialog title | Noun phrase or a question | Question ends "?", else none | "Add an MCP", "Edit api", "Remove project?" |
 | Dialog description | Full sentences | Yes | "Shinsa signs this account out. Runs on it move to the next account." |
