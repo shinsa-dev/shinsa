@@ -135,6 +135,9 @@ describe('what a prompt says about the work it builds on', () => {
     expect(last).toContain(preview);
     expect(last).toContain('as `preview` evidence');
     expect(last).toContain('the local preview you attached');
+    expect(last).toContain(
+      'When no service shows the change, add the one that would with `add_service` first.'
+    );
   });
 
   test('a plan that asks for screenshots gets before shots first and everything before the last phase', () => {

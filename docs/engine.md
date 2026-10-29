@@ -2044,7 +2044,20 @@ beside your run (Runs for a task, below).
   twice) and a workspace under `packages/`, `libs/` or `lib/` (a library's watcher, not a server). Two of one name
   are told apart by their folder. It leaves out what you already added (a service of the project with the same
   folder and command, or with the same name, which could not be added again) and offers 24 at most. Nothing is
-  added or started until you press it.
+  added or started until you press it. A suggestion carries the preview URL and port variable it would be added
+  with: none and `PORT` from the scan.
+- **Refined by a quick call.** `GET /api/services/suggestions?projectId=&refine=1` sends the scan's suggestions through
+  `ServiceRefiner` (`refine.ts`), on the classifier's quick call (`quick.classify`, Sonnet by default, 20 s): the
+  prompt is the candidates (index, name, folder, command, source) and, for each folder, its `package.json` scripts
+  (12, 200 characters each) and dependency names (60). It answers per candidate, by index, a name, the command (with
+  `--port $PORT` where the server needs it, such as Vite), a preview URL with `{port}` for a server you open in a
+  browser, the port variable and whether it is recommended; it never adds a candidate. Each field is checked as an
+  added service's would be (`isServicePreviewUrl`, `isServiceEnvKey`, the limits) and an invalid one keeps the
+  scan's value; a candidate it leaves out stays as found; two of one name keep the scan's name, then a numbered
+  one. The answer is `{ suggestions, refined }`, `refined: false` (the scan's list) when the call fails, which is
+  not cached so the next open asks again. A good answer is cached in memory per project for as long as the prompt
+  is the same, so reopening Add services asks nothing until the files or the candidates change, and two requests
+  at once share one call. The refined list leaves out the names the project already has, like the scan's.
 - **Adding and changing.** `POST /api/services { projectId, name, path, command, env }`, `POST /api/services/batch
   { projectId, services: [{ name, path, command, env }…] }` (what Add services sends for the suggestions you tick:
   every one is checked, names unique among them too, and the limit counted, before any is added; the answer is
@@ -2062,9 +2075,19 @@ beside your run (Runs for a task, below).
   yours or another task's. `list_services` lists the services the task can run with their state and folder in the
   worktree, and with `service` the run's last 60 lines of output as plain text (`TerminalMirror.readLines`); a start
   of a running one says so, and both report the run's preview URL. The house rules ask an agent to stop what it
-  started, except a preview it attaches for the review. Definitions stay yours: no tool
-  adds, changes or removes one, `shinsa services` stays human-only, and `agents/policy.ts` still refuses a shell
-  command naming `/api/services` as it does `/api/terminals`.
+  started, except a preview it attaches for the review. `shinsa services` stays human-only, and `agents/policy.ts`
+  still refuses a shell command naming `/api/services` as it does `/api/terminals`.
+- **Agents add the services they need.** An agent only runs a service that exists, so the Agent and the investigator
+  also have `add_service` (the reviewer does not, and is refused by `assertRunTool` like the inquiry roles): a name, a
+  folder relative to the task's repository (`path`, its root when left out), the command, and optionally
+  `preview_url`, `port_variable` and `env`. The folder resolves under the repository's own checkout, never the
+  worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
+  path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
+  `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
+  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
+  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
+  one that shows the change when none does.
 
 ## Agents manage Shinsa
 

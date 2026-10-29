@@ -871,6 +871,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Services per task (2026-10-27).** A project's services run for a task in its worktree, started by you or by the
   task's agent (`list_services`, `run_service`), shown under each service and among the task's facts
   (`docs/engine.md` → Services → Runs for a task).
+- **Agents add services (2026-10-29).** The task's agent adds a service the project lacks (`add_service`), such as
+  the dev server that shows its change, so it can run it and attach the preview (`docs/engine.md` → Services →
+  Agents add the services they need).
 - **Local previews (2026-10-29).** A service's preview URL and port variable, a free port per task run, Open in
   the Services popovers, a task's Services fact and the Terminal toolbar, and the agent's `preview` evidence before
   the review (`docs/engine.md` → Services → A live preview).

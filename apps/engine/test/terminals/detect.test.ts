@@ -14,6 +14,8 @@ import {
 } from '../../src/terminals/detect.ts';
 import { createTempDir } from '../helpers/index.ts';
 
+const DETECTED = { previewUrl: null, portVariable: 'PORT' };
+
 function writeFiles(root: string, files: Record<string, unknown>) {
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -48,6 +50,7 @@ describe('listServiceSuggestions', () => {
         command: 'bun run dev',
         source: 'package',
         recommended: true,
+        ...DETECTED,
       },
       {
         name: 'web',
@@ -55,6 +58,7 @@ describe('listServiceSuggestions', () => {
         command: 'bun run dev',
         source: 'package',
         recommended: true,
+        ...DETECTED,
       },
       {
         name: 'ui',
@@ -62,8 +66,9 @@ describe('listServiceSuggestions', () => {
         command: 'bun run dev',
         source: 'package',
         recommended: false,
+        ...DETECTED,
       },
-      { name: 'all', cwd: root, command: 'bun run dev', source: 'package', recommended: false },
+      { name: 'all', cwd: root, command: 'bun run dev', source: 'package', recommended: false, ...DETECTED },
     ]);
   });
 

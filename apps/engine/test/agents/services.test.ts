@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ShinsaState, Task } from '@shinsa/core';
-import { handleServiceTool, SERVICE_OUTPUT_LINES } from '../../src/agents/services.ts';
+import { handleServiceTool, SERVICE_OUTPUT_LINES, type ServiceToolName } from '../../src/agents/services.ts';
 import { Terminals } from '../../src/terminals/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
@@ -46,11 +46,8 @@ function setup(options: { services?: boolean; worktree?: boolean } = {}) {
     });
     runner.addService('p1', { name: 'notes', cwd: root, command: 'ls', env: {}, ...NO_PREVIEW });
   }
-  const call = (
-    name: 'list_services' | 'run_service',
-    input: Record<string, unknown> = {},
-    on: Task = task
-  ) => handleServiceTool(name, input, { state, task: on, runner, now: 200_000 });
+  const call = (name: ServiceToolName, input: Record<string, unknown> = {}, on: Task = task) =>
+    handleServiceTool(name, input, { state, task: on, runner, now: 200_000 });
   return { call, runner, fake, worktree, repoPath, other };
 }
 
@@ -67,7 +64,7 @@ describe('the service tools', () => {
 
   test('says why there is nothing to run', async () => {
     expect(await setup({ services: false }).call('list_services')).toBe(
-      'The project has no services. The human adds them in Shinsa under Services.'
+      'The project has no services. Add the one you need with add_service.'
     );
     const { call, other } = setup();
     expect(await call('list_services', {}, { ...other, worktreePath: null })).toStartWith(
@@ -153,5 +150,70 @@ describe('the service tools', () => {
         { ...other, id: 'gone', worktreePath: '/nowhere' }
       )
     ).rejects.toThrow('api cannot run for this task.');
+  });
+
+  test('adds a service in the repository’s own checkout, which the task can then run', async () => {
+    const { call, runner, repoPath, worktree } = setup({ services: false });
+    expect(
+      await call('add_service', {
+        name: 'api',
+        path: './apps/api/',
+        command: ' bun run dev ',
+        preview_url: 'http://localhost:{port}',
+        port_variable: 'API_PORT',
+        env: { NODE_ENV: 'development' },
+      })
+    ).toBe(
+      'Added api to the project: `bun run dev` in `apps/api`. The human sees it under Services. Start it for this task with run_service.'
+    );
+    expect(runner.snapshot().services).toEqual([
+      {
+        id: 'id-1',
+        projectId: 'p1',
+        name: 'api',
+        cwd: join(repoPath, 'apps/api'),
+        command: 'bun run dev',
+        env: { NODE_ENV: 'development' },
+        previewUrl: 'http://localhost:{port}',
+        portVariable: 'API_PORT',
+      },
+    ]);
+    expect(await call('list_services')).toBe(
+      [
+        'The project’s services, as they run for this task:',
+        `- api (stopped): \`bun run dev\` in ${join(worktree, 'apps/api')}`,
+      ].join('\n')
+    );
+    expect(await call('add_service', { name: 'all', command: 'bun dev', env: null })).toStartWith(
+      'Added all to the project: `bun dev` in the repository’s root.'
+    );
+    expect(runner.findService('id-2')).toMatchObject({ cwd: repoPath, env: {}, portVariable: 'PORT' });
+  });
+
+  test('refuses a folder outside the repository or not in its checkout, and what the Services form refuses', async () => {
+    const { call } = setup();
+    expect(call('add_service', { name: 'web', path: '../other', command: 'x' })).rejects.toThrow(
+      'path must be a folder inside this task’s repository'
+    );
+    expect(call('add_service', { name: 'web', path: '/etc', command: 'x' })).rejects.toThrow(
+      'path must be a folder inside this task’s repository'
+    );
+    expect(call('add_service', { name: 'web', path: 'apps/web', command: 'x' })).rejects.toThrow(
+      '`apps/web` is not in the repository’s own checkout yet.'
+    );
+    expect(call('add_service', { name: 'API', path: 'apps/api', command: 'x' })).rejects.toThrow(
+      'This project already has a service called “API”.'
+    );
+    expect(
+      call('add_service', { name: 'web', command: 'x', preview_url: 'http://localhost:3000' })
+    ).rejects.toThrow('with {port} where the run’s port goes');
+    expect(call('add_service', { name: 'web' })).rejects.toThrow('Send “command” as text');
+  });
+
+  test('refuses a task outside a project’s repository', async () => {
+    const { call, other } = setup();
+    expect(call('add_service', { name: 'web', command: 'x' }, { ...other, repoId: null })).rejects.toThrow(
+      'add_service needs a task that works in a project’s repository.'
+    );
   });
 });

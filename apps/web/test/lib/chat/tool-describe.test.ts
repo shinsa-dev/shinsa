@@ -248,6 +248,7 @@ describe('describeTool', () => {
     expect(shinsa('run_service', { service: 'api', action: 'stop' })).toBe('Stopped a service: api');
     expect(shinsa('run_service', { service: 'api', action: 'restart' })).toBe('Restarted a service: api');
     expect(shinsa('run_service', { service: 'api' })).toBe('Ran a service: api');
+    expect(shinsa('add_service', { name: 'web', command: 'bun dev' })).toBe('Added a service: web');
     expect(shinsa('note', { note: 'Remember' })).toBe('Left a note: Remember');
     expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check-in: The deploy');
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe('Suggested 2 tasks');
@@ -478,6 +479,7 @@ describe('resolveGroupPhrase', () => {
       'Listed the task’s services 2 times',
       'Ran 2 services',
     ]);
+    expect(phrase('add_service', 1)).toBe('Added 1 service');
     expect([phrase('wait_for', 1), phrase('suggest_tasks', 1), phrase('answer', 1)]).toEqual([
       'Scheduled a check-in',
       'Suggested tasks',

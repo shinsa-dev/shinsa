@@ -20,6 +20,7 @@ import { type JsonObject, readJsonObject } from '../http/body.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { listServiceSuggestions } from './detect.ts';
 import type { ServiceInput, ServiceRun, TerminalStart, Terminals, TerminalViewer } from './index.ts';
+import type { ServiceRefiner } from './refine.ts';
 
 export interface TerminalRoute {
   method: 'GET' | 'POST';
@@ -138,7 +139,7 @@ function readPortVariable(body: JsonObject) {
   return name;
 }
 
-function readServiceInput(
+export function readServiceInput(
   body: JsonObject,
   others: ServiceDefinition[],
   places: TerminalPlace[],
@@ -202,9 +203,8 @@ function readServiceIds(body: JsonObject) {
   return [...new Set(ids as string[])];
 }
 
-function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition[]): ServiceSuggestion[] {
-  const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
-  return listServiceSuggestions(roots).filter(
+function listNewServiceSuggestions(suggestions: ServiceSuggestion[], services: ServiceDefinition[]) {
+  return suggestions.filter(
     (suggestion) =>
       !services.some(
         (service) =>
@@ -212,6 +212,11 @@ function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition
           (service.cwd === suggestion.cwd && service.command === suggestion.command)
       )
   );
+}
+
+function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition[]): ServiceSuggestion[] {
+  const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
+  return listNewServiceSuggestions(listServiceSuggestions(roots), services);
 }
 
 function resolveBrowserRefusal(request: Request) {
@@ -241,7 +246,11 @@ export function readTerminalSocketId(pathname: string) {
   return SOCKET_PATH.exec(pathname)?.[1] ?? null;
 }
 
-export function createTerminalRoutes(engine: Engine, terminals: Terminals): TerminalRoute[] {
+export function createTerminalRoutes(
+  engine: Engine,
+  terminals: Terminals,
+  refiner: ServiceRefiner | null = null
+): TerminalRoute[] {
   const { home } = terminals;
   const respond = (body: unknown) => Response.json(body);
   const guarded =
@@ -291,10 +300,16 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
     {
       method: 'GET',
       pattern: /^\/api\/services\/suggestions$/,
-      respond: (_match, request) => {
-        const projectId = new URL(request.url).searchParams.get('projectId') ?? '';
+      respond: async (_match, request) => {
+        const params = new URL(request.url).searchParams;
+        const projectId = params.get('projectId') ?? '';
         const suggestions = listNewSuggestions(projectOf(projectId), others(projectId, null));
-        return Promise.resolve(respond({ suggestions }));
+        if (!(refiner && params.get('refine') === '1')) return respond({ suggestions, refined: false });
+        const answer = await refiner.refine(projectId, suggestions);
+        return respond({
+          suggestions: listNewServiceSuggestions(answer.suggestions, others(projectId, null)),
+          refined: answer.refined,
+        });
       },
     },
     {
