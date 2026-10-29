@@ -458,7 +458,7 @@ describe('the setup page', () => {
     expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
   });
 
-  it('asks for a change in words with your edits, clears the box once it is done, and shows the reply', async () => {
+  it('asks for a change in words with your edits, clears the box once it is done, and shows no earlier messages', async () => {
     const revised = createStep({
       ...PROJECTS,
       projects: [
@@ -488,8 +488,13 @@ describe('the setup page', () => {
         },
       ])
     );
-    expect(await screen.findByText('I renamed Acme to Acme Corp.')).toBeTruthy();
-    expect((screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).value).toBe('');
+    await waitFor(() =>
+      expect((screen.getByRole('textbox', { name: 'Change the projects' }) as HTMLInputElement).value).toBe(
+        ''
+      )
+    );
+    expect(screen.queryByText('I renamed Acme to Acme Corp.')).toBeNull();
+    expect(screen.queryByText('rename acme')).toBeNull();
     expect((screen.getAllByRole('textbox', { name: 'Project name' })[0] as HTMLInputElement).value).toBe(
       'Acme Corp'
     );

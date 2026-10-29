@@ -1143,7 +1143,7 @@ Only these, and they win over anything below:
       one out ("2 of 3 repositories"). The primary button counts what you keep ("Create 6 projects", "Create the
       project", "Continue without projects"), is off while a kept project has no name, and shows its spinner while the
       projects are made; the rows are locked meanwhile. Under the list, outside any card, sits a plain chat box for a change in words
-      (`OnboardingProjectsChat`): each request in `text-xs` `fg-4` over the reply in `fg-3`, then a `default` field
+      (`OnboardingProjectsChat`), with no earlier messages shown: a `default` field
       ("Ask for a change, like …") with a secondary Ask button, no icon, which sends the request with your edits and
       shows its spinner; the box clears once the change is made and keeps your words when it is not. The projects you
       already made are a read-only card (`OnboardingFiledProjects`: the dot, the name, and the count, folder and first

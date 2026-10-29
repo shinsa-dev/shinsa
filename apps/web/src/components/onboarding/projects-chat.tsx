@@ -1,4 +1,4 @@
-import { ONBOARDING_REQUEST_LIMIT, type OnboardingProjectTurn, type ProjectSuggestion } from '@shinsa/core';
+import { ONBOARDING_REQUEST_LIMIT, type ProjectSuggestion } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -9,22 +9,11 @@ import { ROW_INSET, SettingsCard } from '@/components/settings/group.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { describeFiledSummary } from '@/lib/onboarding-projects.ts';
 
-function Turn({ turn }: { turn: OnboardingProjectTurn }) {
-  return (
-    <li className='flex flex-col gap-px'>
-      <span className='selectable text-fg-4 text-xs'>{turn.request}</span>
-      <span className='selectable text-fg-3 text-xs'>{turn.reply}</span>
-    </li>
-  );
-}
-
 export function OnboardingProjectsChat({
-  conversation,
   busy,
   disabled,
   onSend,
 }: {
-  conversation: OnboardingProjectTurn[];
   busy: boolean;
   disabled: boolean;
   onSend: (text: string) => Promise<boolean>;
@@ -33,14 +22,6 @@ export function OnboardingProjectsChat({
   const trimmed = text.trim();
   return (
     <div className='flex flex-col gap-3'>
-      {conversation.length > 0 && (
-        <ul className='flex flex-col gap-2.5 px-1'>
-          {conversation.map((turn, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: turns are only ever appended, so each keeps its place
-            <Turn key={index} turn={turn} />
-          ))}
-        </ul>
-      )}
       <form
         className='flex items-center gap-1.5'
         onSubmit={(event) => {

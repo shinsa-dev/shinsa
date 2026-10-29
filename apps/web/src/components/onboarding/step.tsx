@@ -195,7 +195,6 @@ function StepBody({
         />
         {step.projects.length > 0 && (
           <OnboardingProjectsChat
-            conversation={step.conversation}
             busy={pending === REVISE_KEY}
             disabled={pending !== null}
             onSend={(text) => actions.revise(text, resolveProjectChoices(step.projects, drafts.list))}
