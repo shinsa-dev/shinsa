@@ -189,6 +189,10 @@ src/
 │                    estimate while the account is learning), and each run's share of the weekly window: its cost
 │                    at the window's current rate, learned from the readings (rate.ts: resolveUsageRates,
 │                    resolveUsageShares, USAGE_RATE_LIMITS)
+├── stats/           The Stats tab's fold (resolveStats): merged pull requests, lines changed, finished tasks and
+│                    tokens per day over the days the caller names (it passes dayOf, so core stays free of time
+│                    zones; a run's tokens land when each meter ended), the shipping streak, tokens by role, kind of
+│                    work, model and task, and cache hit rates
 ├── test-coverage/   Changed-line coverage, pure: the per-repository setting (setting.ts: resolveRepoCoverage,
 │                    resolveCoverageFormat), the lcov, Cobertura and Go profile parsers taking text (reports.ts),
 │                    unified diff to new-file line numbers and those lines moved through a later diff (diff.ts:

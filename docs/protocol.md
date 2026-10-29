@@ -250,7 +250,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `pullRequest` | `PullRequest` \| null | number, url, state, CI (`checks: CiState`, `checkRuns: CiRun[]`), comments, mergeable, head, merge queue, merge commit |
+| `pullRequest` | `PullRequest` \| null | number, url, state, CI (`checks: CiState`, `checkRuns: CiRun[]`), comments, mergeable, head, merge queue, merge commit, `changes` (`PullRequestChanges`: additions, deletions, changedFiles, from `gh pr view`; null when GitHub gives none) |
 | `pullRequestWatch?` | `PullRequestWatch` \| null | the watch's memory: per-check states, comment watermark, conflict, stop reason, and whether no checks on this head means it has no CI (`ciAbsent`) |
 | `pullRequestReadFailures?` | number | failed reads in a row (stops at 8) |
 | `pushedSha?`, `pushedAt?`, `pushedFrom?`, `pushPending?` | | the push Shinsa made (or the head someone else pushed), when, and whether GitHub has shown it; the wait for CI to start counts from `pushedAt` |
@@ -308,6 +308,7 @@ export interface RoundPullRequest {
   url: string;
   state: PullRequest['state'];
   base: string | null;
+  changes?: PullRequestChanges | null;
 }
 
 export interface RoundOutcome {
@@ -343,7 +344,7 @@ export interface Round {
 | `status` | `waiting` (waits for the current round to rest), `active` (the one being worked), `shipped` (its commits sit in an open pull request while a later round works), `merged`, `finished` (an inquiry or operation ended, or the task was marked done), `cancelled` |
 | `pipeline` | its steps; the task's `pipeline` while it is active, archived when it ends |
 | `branch`, `base` | the branch it pushes to; for a stacked round, the branch it stacks on |
-| `pullRequest` | the pull request its commits went to |
+| `pullRequest` | the pull request its commits went to, with its `changes` (lines added and removed, files changed) once read; the Stats tab counts them for merged rounds |
 | `outcome` | what it kept when it ended: plan goal, phase titles, the work's headline, the result |
 
 `Run.round`, `Gate.round`, `Evidence.round` and `Activity.round` name the round a step, a gate, a piece of evidence or an

@@ -1679,6 +1679,40 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 
 Do: one sentence of what will happen in the description. Don't: put a form in it, add a third button, or style the action by hand.
 
+#### AreaChart
+
+**For:** a count over time where the shape matters more than each value: pull requests merged per day or per week on Settings → Statistics. One series, in the accent.
+
+**Not for:** several series (a stacked bar per day, as the token chart draws), a single number (a stat tile), or a part of a whole.
+
+**Wraps:** a plain `<svg aria-hidden>` that draws the data only; the caller computes the path data (`resolveAreaGeometry` in `apps/web/src/lib/stats/chart.ts`, a monotone curve that never overshoots a peak) and lays the grid, the crosshair, the point under the pointer and its `ChartTooltip` over it (`ChartPlot` in `apps/web/src/components/settings/stats/chart-plot.tsx`).
+
+**Props:**
+
+| Prop | Default | Notes |
+| --- | --- | --- |
+| `width`, `height` | required | The drawing's own units; the chart stretches to its box (`preserveAspectRatio='none'`). |
+| `line`, `area` | required | SVG path data for the line and the closed area under it. |
+| `className` | | The caller sizes it, usually `absolute inset-0` over its plot. |
+
+**Markup and classes:**
+
+- `<svg data-slot='area-chart'>`: `block size-full overflow-visible` + `className`.
+- The area: a vertical gradient of `--primary` from 24% to nothing at the baseline.
+- The line: 2px `stroke-primary`, round joins and caps, `vector-effect: non-scaling-stroke`, so it keeps its width however the chart stretches.
+
+**In Shinsa** the plot runs the full width of its panel: three dashed `border-border` grid lines (the top of a readable scale, its middle and 0, none stronger than the others) that fade out at both ends, the top value alone in a small label above the top right, up to five dates under it, and on hover a dashed `border-fg-1` crosshair and an 8px accent dot ringed in the card colour that glide to the next point (200ms ease-out), with a `ChartTooltip` above the point.
+
+#### ChartTooltip
+
+**For:** the readout a chart shows under the pointer: a day in the contribution graph, a point on an area chart, a bar of a stacked chart. **Not for:** anything with a trigger element (use `Hint` or `useTooltipTrigger`, which wait `TOOLTIP_DELAY`); a chart's readout follows the pointer at once.
+
+**Wraps:** a `div role='status'` the chart places itself, in pixels from its own top left corner (the chart's box is `relative`); it centres above its point and hugs an edge within 88px of it.
+
+**Parts:** `ChartTooltip` (`x`, `y`, `width`, children), `ChartTooltipTitle` (what the point is, `text-fg-2`), `ChartTooltipRow` (`swatch`: a short line key in the series' fill, `label`, and `value`, which leads in `font-medium text-fg-4 tabular-nums`).
+
+**Markup and classes:** the page tooltip's chip (`rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4`, `shadow-2`), `pointer-events-none`, 10px above its point. It fades in (`starting:opacity-0`) and glides from point to point (`left`, `top` and its edge shift ease over 200ms), so moving along a chart never jumps.
+
 #### Badge
 
 **For:** a short status or label chip: "Default" on an account, a project's key, "Recommended" on an option, a count, a check result ("1 failing"). Non-interactive by default. **Not for:** an action (use `Button`), a keyboard key (use `Kbd`), a long sentence.

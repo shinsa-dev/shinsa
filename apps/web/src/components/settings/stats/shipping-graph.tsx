@@ -1,0 +1,128 @@
+import type { Stats } from '@shinsa/core';
+import { ChartTooltip, ChartTooltipRow, ChartTooltipTitle } from '@shinsa/ui/components/chart-tooltip';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
+import { formatDayLabel } from '@/lib/stats/days.ts';
+import {
+  describeShippingYear,
+  formatPullRequests,
+  resolveShippingGrid,
+  type ShippingCell,
+  type ShippingLevel,
+} from '@/lib/stats/shipping.ts';
+import { ChartPanel } from './chart-plot.tsx';
+
+const LEVEL_FILL: Record<ShippingLevel, string> = {
+  0: 'bg-bg-a2',
+  1: 'bg-primary/25',
+  2: 'bg-primary/45',
+  3: 'bg-primary/70',
+  4: 'bg-primary',
+};
+
+const LEVELS: ShippingLevel[] = [0, 1, 2, 3, 4];
+
+const WEEKDAYS = Array.from({ length: 7 }, (_, weekday) =>
+  new Date(2026, 10, 1 + weekday).toLocaleDateString(undefined, { weekday: 'short' })
+);
+
+const CELL_GAP = 3;
+
+const CELL_MAX = 14;
+
+interface HoveredCell {
+  cell: ShippingCell;
+  x: number;
+  y: number;
+  width: number;
+}
+
+function ShippingLegend() {
+  return (
+    <span className='inline-flex items-center gap-1'>
+      Less
+      {LEVELS.map((level) => (
+        <span key={level} className={cn('size-2 rounded-xs', LEVEL_FILL[level])} />
+      ))}
+      More
+    </span>
+  );
+}
+
+export function ShippingGraph({ year }: { year: Stats }) {
+  const grid = React.useMemo(() => resolveShippingGrid(year.days), [year.days]);
+  const [hovered, setHovered] = React.useState<HoveredCell | null>(null);
+  const board = React.useRef<HTMLDivElement>(null);
+  const today = year.days.at(-1)?.day;
+  const columns = {
+    gap: CELL_GAP,
+    gridTemplateColumns: `2rem repeat(${grid.weeks.length}, minmax(0, 1fr))`,
+  };
+  const reach = { maxWidth: `calc(2rem + ${grid.weeks.length * (CELL_MAX + CELL_GAP)}px)` };
+  const show = (cell: ShippingCell, element: Element) => {
+    const frame = board.current?.getBoundingClientRect();
+    const box = element.getBoundingClientRect();
+    if (!frame) return;
+    setHovered({
+      cell,
+      x: box.left - frame.left + box.width / 2,
+      y: box.top - frame.top,
+      width: frame.width,
+    });
+  };
+  return (
+    <ChartPanel title={describeShippingYear(year)} aside={<ShippingLegend />}>
+      <div ref={board} className='relative mx-auto flex w-full flex-col gap-1' style={reach}>
+        <div aria-hidden className='grid h-4' style={columns}>
+          <span />
+          {grid.weeks.map((cells, week) => (
+            <span
+              key={cells.find(Boolean)?.day}
+              className='overflow-visible whitespace-nowrap text-2xs text-fg-2'
+            >
+              {grid.months.find((entry) => entry.week === week)?.label ?? ''}
+            </span>
+          ))}
+        </div>
+        <div
+          role='img'
+          aria-label={describeShippingYear(year)}
+          className='grid grid-flow-col grid-rows-7'
+          style={columns}
+          onPointerLeave={() => setHovered(null)}
+        >
+          {WEEKDAYS.map((weekday) => (
+            <span
+              key={weekday}
+              aria-hidden
+              className='flex items-center overflow-visible text-2xs text-fg-2 leading-none'
+            >
+              {weekday}
+            </span>
+          ))}
+          {grid.weeks.flatMap((week, column) =>
+            week.map((cell, row) => (
+              <span
+                key={cell?.day ?? `${column}-${row}`}
+                data-day={cell?.day}
+                className={cn(
+                  'aspect-square rounded-xs',
+                  cell ? LEVEL_FILL[cell.level] : 'invisible',
+                  cell?.day === today && 'ring-1 ring-fg-4',
+                  cell && hovered?.cell.day === cell.day && 'ring-1 ring-fg-4'
+                )}
+                onPointerEnter={cell ? (event) => show(cell, event.currentTarget) : undefined}
+              />
+            ))
+          )}
+        </div>
+        {hovered && (
+          <ChartTooltip x={hovered.x} y={hovered.y} width={hovered.width}>
+            <ChartTooltipTitle>{formatDayLabel(hovered.cell.day)}</ChartTooltipTitle>
+            <ChartTooltipRow value={formatPullRequests(hovered.cell.pullRequests)} />
+          </ChartTooltip>
+        )}
+      </div>
+    </ChartPanel>
+  );
+}

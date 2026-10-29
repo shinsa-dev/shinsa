@@ -1,7 +1,7 @@
 import { splitMessageAttachments } from '../chat/attachments.ts';
 import { isTaskSettled } from './stages.ts';
 import type { PipelineStep } from './steps.ts';
-import type { PullRequest, Task } from './types.ts';
+import type { PullRequest, PullRequestChanges, Task } from './types.ts';
 
 export type RoundShipping = 'onto_pull_request' | 'stacked';
 
@@ -14,6 +14,7 @@ export interface RoundPullRequest {
   url: string;
   state: PullRequest['state'];
   base: string | null;
+  changes?: PullRequestChanges | null;
 }
 
 export interface RoundOutcome {
@@ -99,6 +100,7 @@ export function toRoundPullRequest(pullRequest: PullRequest): RoundPullRequest {
     url: pullRequest.url,
     state: pullRequest.state,
     base: pullRequest.base ?? null,
+    ...(pullRequest.changes ? { changes: pullRequest.changes } : {}),
   };
 }
 

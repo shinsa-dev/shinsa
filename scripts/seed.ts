@@ -62,6 +62,7 @@ import { EXPORT_FILES_BASE, EXPORT_FILES_NEW, listProcessTasks } from './seed-pr
 import { resolveRunOpening, stampRunPrompts } from './seed-prompts.ts';
 import { listRoundTasks } from './seed-rounds.ts';
 import { listShapeTasks, resolveShapeHandover } from './seed-shapes.ts';
+import { listHistoryTasks } from './seed-stats.ts';
 import { listTriggerTasks, writeAccountFiles, writeAccountTranscripts } from './seed-triggers.ts';
 
 const ROOT = Bun.env.SHINSA_SEED_DIR ?? join(homedir(), '.shinsa-seed');
@@ -1690,6 +1691,7 @@ function resolveSeedPullRequest(task: SeedTask, at: number): PullRequest | null 
     mergeable: task.pullRequest.checks === 'passing',
     updatedAt: at,
     ...(task.pullRequest.mergeCommit ? { mergeCommit: task.pullRequest.mergeCommit } : {}),
+    ...(task.pullRequest.changes ? { changes: task.pullRequest.changes } : {}),
   };
 }
 
@@ -4852,6 +4854,7 @@ function listTasks(repos: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
     ...listTriggerTasks({ paywall, kanna }),
     ...listRoundTasks({ paywall }, worktrees.rounds),
     ...listMergeStepTasks({ paywall, kanna }),
+    ...listHistoryTasks(paywall),
   ];
 }
 

@@ -239,6 +239,7 @@ function resolvePullRequestShape(pullRequest: PullRequest) {
     pullRequest.unresolvedThreads ?? null,
     pullRequest.mergeQueue ?? null,
     pullRequest.queueRemoval ?? null,
+    pullRequest.changes ?? null,
   ]);
 }
 
