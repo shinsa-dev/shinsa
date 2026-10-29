@@ -416,6 +416,51 @@ describe('changing the suggested projects in words', () => {
     expect(flow.step?.conversation.map((turn) => turn.reply)).toEqual(['Renamed Acme.']);
   });
 
+  test('a repository added after a request joins the changed project it was grouped with, under one key', async () => {
+    const world = await setup([
+      { reply: 'Kept.', projects: [{ name: 'Acme', repos: ['r1', 'r2'] }] },
+      { reply: 'Split.', projects: [{ name: 'Web', repos: ['r2'] }] },
+    ]);
+    await world.onboarding.setup.reply({ type: 'answer', stepId: 'roots', values: [world.acme] });
+    await revise(world.onboarding, 'keep acme');
+    const later = join(world.root, 'Later');
+    await createRepo(later, 'cli', 'acme/cli');
+    await createRepo(later, 'tool', 'acme/tool');
+    await world.onboarding.setup.reply({ type: 'open', stepId: 'roots' });
+    const flow = await world.onboarding.setup.reply({
+      type: 'answer',
+      stepId: 'roots',
+      values: [world.acme, later],
+    });
+    expect(
+      flow.step?.projects.map((project) => [project.name, project.key, project.repos.map((r) => r.name)])
+    ).toEqual([['Acme', 'ACM', ['api', 'web', 'cli', 'tool']]]);
+    await answerProjects(world.onboarding);
+    expect(listProjects(world.engine)).toEqual([
+      { name: 'Acme', key: 'ACM', folders: [], repos: ['api', 'cli', 'tool', 'web'] },
+    ]);
+  });
+
+  test('a repository added after its group was left out keeps its own row under a free key', async () => {
+    const world = await setup([{ reply: 'Only notes.', projects: [{ name: 'Acme', repos: ['r3'] }] }]);
+    await answerFolders(world);
+    await revise(world.onboarding, 'call notes acme and drop the rest');
+    const later = join(world.root, 'Later');
+    await createRepo(later, 'cli', 'acme/cli');
+    await world.onboarding.setup.reply({ type: 'open', stepId: 'roots' });
+    const flow = await world.onboarding.setup.reply({
+      type: 'answer',
+      stepId: 'roots',
+      values: [world.acme, world.projects, later],
+    });
+    const keys = flow.step?.projects.map((project) => project.key) ?? [];
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(flow.step?.projects.map((project) => project.repos.map((r) => r.name))).toEqual([
+      ['notes'],
+      ['cli'],
+    ]);
+  });
+
   test('a repository filed since the request is dropped from the revised projects', async () => {
     const world = await setup([
       {

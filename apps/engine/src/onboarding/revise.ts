@@ -84,11 +84,6 @@ export function applyRevision(
     ...projects.map((project) => project.key),
     ...kept.flatMap((suggestion) => (suggestion ? [suggestion.key] : [])),
   ];
-  const seen = new Set(revision.seen);
-  const unseen = suggestions.flatMap((suggestion) => {
-    const repos = suggestion.repos.filter((repo) => !seen.has(repo.path));
-    return repos.length === 0 ? [] : [{ ...suggestion, repos, folders: [] }];
-  });
   const changed = revision.projects.flatMap((revised, index) => {
     const repos = revised.repos.flatMap((path) => known.get(path) ?? []);
     if (repos.length === 0) return [];
@@ -109,7 +104,29 @@ export function applyRevision(
       },
     ];
   });
-  return [...changed, ...unseen];
+  return [...changed, ...placeUnseen(suggestions, new Set(revision.seen), changed, taken)];
+}
+
+function placeUnseen(
+  suggestions: ProjectSuggestion[],
+  seen: Set<string>,
+  changed: ProjectSuggestion[],
+  taken: string[]
+) {
+  return suggestions.flatMap((suggestion) => {
+    const repos = suggestion.repos.filter((repo) => !seen.has(repo.path));
+    if (repos.length === 0) return [];
+    const siblings = new Set(suggestion.repos.map((repo) => repo.path));
+    const home = changed.find((project) => project.repos.some((repo) => siblings.has(repo.path)));
+    if (home) {
+      home.repos = [...home.repos, ...repos];
+      home.folders = [];
+      return [];
+    }
+    const key = taken.includes(suggestion.key) ? resolveProjectKey(suggestion.name, taken) : suggestion.key;
+    taken.push(key);
+    return [{ ...suggestion, key, repos, folders: [] }];
+  });
 }
 
 function resolveBase(suggestions: ProjectSuggestion[], choices: OnboardingProjectChoice[] | undefined) {
