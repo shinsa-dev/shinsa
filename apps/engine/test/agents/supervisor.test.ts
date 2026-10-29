@@ -2051,6 +2051,86 @@ describe('shutdown and restart continuation', () => {
   });
 });
 
+describe('holding new runs for a restart', () => {
+  test('a new run waits while a restart drains, and starts when the hold is released', async () => {
+    const sessions = createSessions();
+    const { supervisor } = setup(withTask(createTempDir()), { startSession: sessions.startSession });
+    let held = 0;
+    supervisor.holdNewRuns(() => {
+      held += 1;
+    });
+    await supervisor.execute('run-1');
+    await supervisor.execute('run-1');
+    expect(sessions.started).toHaveLength(0);
+    expect(held).toBe(1);
+    expect(supervisor.isHeld('run-1')).toBe(true);
+    supervisor.releaseHeldRuns();
+    await until('the session', () => sessions.started.length === 1);
+    expect(supervisor.isHeld('run-1')).toBe(false);
+    sessions.started[0]?.finish();
+  });
+
+  test('a turn that carries a prompt or a delivery is never held, so an answer is not lost', async () => {
+    const sessions = createSessions();
+    const { supervisor } = setup(withTask(createTempDir()), { startSession: sessions.startSession });
+    supervisor.holdNewRuns(() => undefined);
+    const running = supervisor.execute('run-1', 'The answer is yes.');
+    await until('the session', () => sessions.started.length === 1);
+    expect(supervisor.isHeld('run-1')).toBe(false);
+    sessions.started[0]?.finish();
+    await running;
+  });
+
+  test('a held run that cannot start is logged', async () => {
+    const errors = spyOn(log, 'error').mockImplementation(() => undefined);
+    const { supervisor, reject } = setup(
+      (state) => {
+        state.runs['run-1'] = createRun();
+      },
+      { startSession: createSessions().startSession }
+    );
+    reject((command) => command.type === 'run.end', new Error('log full'));
+    supervisor.holdNewRuns(() => undefined);
+    await supervisor.execute('run-1');
+    supervisor.releaseHeldRuns();
+    await until('the log line', () => errors.mock.calls.length > 0);
+    expect(errors).toHaveBeenCalledWith('[Runs] Could not start a run held for the restart', {
+      runId: 'run-1',
+      error: 'log full',
+    });
+    errors.mockRestore();
+  });
+
+  test('shutdown marks a held run to start on the next engine, per continuation', async () => {
+    const warnings = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { supervisor, dispatched, reject, update } = setup(
+      withTask(createTempDir(), [createRun(), createRun({ id: 'run-2', continuations: [5] })]),
+      { startSession: createSessions().startSession }
+    );
+    reject(
+      (command) => command.type === 'run.interrupt' && command.runId === 'run-2',
+      new Error('engine stopped')
+    );
+    supervisor.holdNewRuns(() => undefined);
+    await supervisor.execute('run-1');
+    await supervisor.execute('run-2');
+    update((state) => {
+      delete state.runs['run-2'];
+    });
+    await supervisor.interruptForShutdown();
+    expect(dispatched.filter((command) => command.type === 'run.interrupt')).toEqual([
+      { type: 'run.interrupt', runId: 'run-1', attemptId: null },
+      { type: 'run.interrupt', runId: 'run-2', attemptId: null },
+    ]);
+    expect(warnings).toHaveBeenCalledWith('[Runs] Could not mark a run to resume after the restart', {
+      runId: 'run-2',
+      error: 'engine stopped',
+    });
+    expect(supervisor.isHeld('run-1')).toBe(false);
+    warnings.mockRestore();
+  });
+});
+
 describe('the process tools and what a run cost', () => {
   test('an answerer runs in the repository itself, read-only, with no worktree needed', async () => {
     const sessions = createSessions();

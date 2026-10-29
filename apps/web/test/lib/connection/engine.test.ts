@@ -72,14 +72,14 @@ describe('resolveEngineView', () => {
     expect(later.automatic).toBe('idle');
     expect(later.banner).toEqual({
       tone: 'info',
-      text: 'The engine restarts into Shinsa 0.5.0 once agents are idle.',
+      text: 'Shinsa 0.5.0 is installed. The engine moves to it once the working agents hand over. New steps wait until then.',
       actions: ['restart_now'],
     });
     const choose = resolveEngineView(APP, createHealth({ version: '0.4.0', protocol: 1, busy: true }), null);
     expect(choose.automatic).toBeNull();
     expect(choose.banner).toEqual({
       tone: 'warning',
-      text: 'Shinsa 0.5.0 needs its engine restarted.',
+      text: 'Shinsa 0.5.0 needs its engine restarted. Restarting now pauses working agents for a moment, then they carry on.',
       actions: ['restart_now', 'restart_idle'],
     });
   });
@@ -92,6 +92,19 @@ describe('resolveEngineView', () => {
     );
     expect(waiting.automatic).toBeNull();
     expect(waiting.banner?.actions).toEqual(['restart_now']);
+    const by = new Date(2026, 9, 29, 14, 32).getTime();
+    const counted = (working: number) =>
+      resolveEngineView(
+        APP,
+        createHealth({ version: '0.4.0', busy: true, restart: 'idle', working, restartBy: by }),
+        null
+      ).banner?.text;
+    expect(counted(1)).toBe(
+      'Shinsa 0.5.0 is installed. 1 agent is working, and the engine moves to it once that agent hands over, by 2:32 PM at the latest. New steps wait until then.'
+    );
+    expect(counted(3)).toBe(
+      'Shinsa 0.5.0 is installed. 3 agents are working, and the engine moves to it once they hand over, by 2:32 PM at the latest. New steps wait until then.'
+    );
     const failed = resolveEngineView(APP, createHealth({ version: '0.4.0' }), 'It runs from a terminal.');
     expect(failed).toEqual({
       banner: {

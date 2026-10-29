@@ -620,8 +620,8 @@ Only these, and they win over anything below:
       dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
-      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts for a moment and agents keep
-      working."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
+      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and
+      the engine moves to the new version once they hand over."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
@@ -1676,10 +1676,11 @@ Only these, and they win over anything below:
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
       banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
       (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
-      ("The engine restarts into Shinsa 0.5.0 once agents are idle."), the orange triangle when you must act ("Shinsa
-      0.5.0 needs its engine restarted."), and `sm` buttons at the end, the last `primary` as macOS orders them: one
-      alone (Restart now, Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents are idle
-      `primary`. No dismiss: it goes when
+      ("Shinsa 0.5.0 is installed. 2 agents are working, and the engine moves to it once they hand over, by 2:32
+      PM at the latest. New steps wait until then.", from `working` and `restartBy` in `/api/health`), the orange triangle when
+      you must act ("Shinsa 0.5.0 needs its engine restarted. Restarting now pauses working agents for a moment, then
+      they carry on."), and `sm` buttons at the end, the last `primary` as macOS orders them: one alone (Restart now,
+      Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents hand over `primary`. No dismiss: it goes when
       the versions match. `/ui` shows `EngineCard` in its three states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
@@ -1696,7 +1697,9 @@ Only these, and they win over anything below:
       update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
-      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: a select
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Under it, a wrapping `2xs` `fg-2`
+      line says the one thing people fear about updating: "Updating or quitting the app never stops your agents. The
+      engine keeps running and moves to the new version once the working agents hand over." Update channel: a select
       of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
       "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
       pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
@@ -1906,11 +1909,23 @@ Only these, and they win over anything below:
       Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
       the engine stops answering for 15 s while you work (`apps/desktop/src/lib/engine.ts`,
       `static/waiting.html`).
-    - **The window**: closing it hides it (the page keeps its socket, so the badge and notifications go on), the
-      Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the engine. Its size and place
-      are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own (Settings… ⌘,
-      opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no other shortcut
-      and no menu bar icon.
+    - **The window**: closing it hides it and the Dock icon with it, so the app lives on in the menu bar (the page
+      keeps its socket, so notifications go on); the menu bar item's Open Shinsa, a `shinsa://` link, a
+      notification or opening Shinsa again brings both back, and ⌘Q quits the app and never stops the engine. Its
+      size and place are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own
+      (Settings… ⌘, opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no
+      other shortcut.
+    - **The menu bar item** shows while the app runs (`main/tray.ts`, its text in `lib/tray.ts`): the Shinsa mark at
+      14 of the 18 points as a template image (`static/trayTemplate.png`, written by `scripts/icon.ts`), so macOS
+      draws it in the menu bar's own colour, with the number of decisions waiting for you beside it (none when
+      there are none). Its menu: the engine's state as a disabled first line ("The engine is running", or "The
+      engine is running. 2 agents are working" from `working` in `/api/health` when the queue cannot be read, or
+      "The engine is not answering"), "Moves to the new version once
+      agents hand over" under it while a restart waits; then, from `/api/queue`, a Needs you (3) header over each
+      decision and a Working (2) header over each working task, each task its title over what it waits for or is
+      doing ("Review · LOC-4", "Building · LOC-9"), opening the task in the window, the first 5 of each and "2 more"
+      opening Home; then Open Shinsa, and Quit Shinsa over the line "The engine and your agents keep running". It is
+      read with the app's 5 s engine check.
     - **It is called Shinsa** in the menu bar, its first menu (About Shinsa, Hide Shinsa, Quit Shinsa), the About
       panel, the Dock and notifications, packaged and in development alike. The menu bar and the Dock read the
       bundle's `CFBundleName`, so `bun run dev` runs a copy of Electron.app renamed to `.electron/Shinsa.app`
