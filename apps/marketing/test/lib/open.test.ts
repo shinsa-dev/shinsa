@@ -44,9 +44,14 @@ describe('readReviewFragment', () => {
       title: 'Fix the tabs',
       summary: 'Tabs stay put.',
       pullRequest: 23,
+      repo: null,
+      slug: null,
+      branch: null,
+      coverage: null,
     },
     report: { headline: 'H', sections: [], checks: [], judgementCalls: [], walkthrough: null },
     evidence: [],
+    review: null,
   };
 
   test('reads the review the pull request link carries in its fragment', async () => {

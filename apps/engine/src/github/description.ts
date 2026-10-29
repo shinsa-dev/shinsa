@@ -34,8 +34,8 @@ const ATTACHMENT_TYPES: Record<string, { contentType: string; limit: number }> =
 
 const REVIEW_LINK_LIMIT = 24_000;
 
-export function serializeReviewLink(task: Task, evidence: readonly Evidence[]) {
-  const payload = JSON.stringify(serializeReviewPayload(task, evidence));
+export function serializeReviewLink(task: Task, evidence: readonly Evidence[], repo: Repo | null = null) {
+  const payload = JSON.stringify(serializeReviewPayload(task, evidence, repo));
   const encoded = deflateRawSync(Buffer.from(payload)).toString('base64url');
   return encoded.length <= REVIEW_LINK_LIMIT ? encoded : null;
 }
@@ -80,7 +80,7 @@ export class PullRequestDescriptions {
           return text === null ? [] : [[piece.id, text]];
         })
     );
-    const review = serializeReviewLink(task, published);
+    const review = serializeReviewLink(task, published, repo);
     return { body: serializePullRequestMarkdown({ task, evidence: published, notes, review }), uploads };
   }
 

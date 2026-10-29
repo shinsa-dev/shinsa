@@ -1,4 +1,4 @@
-import type { Evidence, ReviewPayload, ShinsaState, Task } from '@shinsa/core';
+import type { Evidence, Repo, ReviewPayload, ShinsaState, Task } from '@shinsa/core';
 import { createSampleState, createSampleTask } from '@/routes/ui/samples.ts';
 import { OPEN_TASK_ID } from './demo-repo.ts';
 
@@ -20,7 +20,40 @@ function toEvidence(payload: ReviewPayload, now: number): Evidence[] {
   }));
 }
 
+export const OPEN_REPO_ID = 'open-repository';
+
+const REPO_CHECK = /^r\d+$/;
+
+function createOpenRepo(payload: ReviewPayload): Repo | null {
+  const { repo, slug } = payload.task;
+  if (!repo) return null;
+  return {
+    id: OPEN_REPO_ID,
+    name: repo,
+    path: slug ?? repo,
+    defaultBranch: 'main',
+    remote: slug ? `github.com/${slug}` : null,
+    projectId: null,
+    checkCommands: [],
+  };
+}
+
+function createOpenPullRequest(payload: ReviewPayload, now: number): Task['pullRequest'] {
+  const { pullRequest, slug } = payload.task;
+  if (!pullRequest || !slug) return null;
+  return {
+    number: pullRequest,
+    url: `https://github.com/${slug}/pull/${pullRequest}`,
+    state: 'open',
+    checks: 'none',
+    unresolvedComments: 0,
+    mergeable: true,
+    updatedAt: now,
+  };
+}
+
 export function createOpenState(payload: ReviewPayload, now: number): { state: ShinsaState; task: Task } {
+  const repo = createOpenRepo(payload);
   const task = createSampleTask(now, {
     id: OPEN_TASK_ID,
     handle: payload.task.handle,
@@ -28,13 +61,30 @@ export function createOpenState(payload: ReviewPayload, now: number): { state: S
     summary: payload.task.summary,
     stage: 'shipping',
     stageReason: 'pull request open',
-    pipeline: ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge'],
+    pipeline: payload.review
+      ? ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge']
+      : ['plan', 'build', 'checks', 'your_review', 'pull_request', 'merge'],
+    reviewSummary: payload.review?.summary ?? null,
+    findings: payload.review?.findings ?? [],
     report: payload.report,
     checkResults: payload.report.checks,
-    repoId: null,
-    pullRequest: null,
+    checks: payload.report.checks.map((check) => ({
+      id: check.id,
+      label: check.label,
+      command: check.command,
+      phases: [],
+      source: REPO_CHECK.test(check.id) ? 'repo' : 'plan',
+    })),
+    request: '',
+    branch: payload.task.branch,
+    coverage: payload.task.coverage
+      ? { status: 'measured', command: '', files: [], ...payload.task.coverage }
+      : null,
+    repoId: repo ? repo.id : null,
+    pullRequest: createOpenPullRequest(payload, now),
   });
   const base = createSampleState({ tasks: [task] });
   const evidence = Object.fromEntries(toEvidence(payload, now).map((piece) => [piece.id, piece]));
-  return { task, state: { ...base, evidence } };
+  const repos = repo ? { ...base.repos, [repo.id]: repo } : base.repos;
+  return { task, state: { ...base, repos, evidence } };
 }

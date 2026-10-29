@@ -2502,20 +2502,25 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
 - **The link.** GitHub drops links of other schemes, so "Open it in Shinsa" goes to
   `https://shinsa.dev/open?task=<id>&handle=<handle>&title=<title>` (`resolveShinsaTaskUrl`, the title cut to 120
   characters) plus `#review=<data>`, a static page of the site (`apps/marketing/src/pages/open.astro`) that is this pull
-  request's review as a page: the app's own Review tab filling the window under the site's header, opened by a card
+  request's review as a page: the task page's header pinned at the top (the task's title, Download Shinsa and Open in
+  Shinsa where the tabs sit, and the shared facts, `TaskSharedFacts`), the app's own Review tab scrolling under it, opened by a card
   naming the pull request (its number when known and the task's handle) and its title, with Open in Shinsa (a button
   that opens `shinsa://task/<id>` in the Mac app) as the main button and the download beside it, in place of the
   app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data it shows the
   task's handle and title and the same two buttons. The data is a compact copy of the review (`serializeReviewPayload`,
-  `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the walkthrough, the checks without their output, the
-  judgement calls and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
+  `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
+  task page's header shows that are not private (the repository's name and GitHub slug, the branch, the changed-line
+  coverage; never the status, priority, start time, cost, account or local paths), the walkthrough, the checks without their output, the
+  judgement calls, the agent review's summary and findings once it ran (without their code or suggested fix; the page
+  shows no agent review when the link carries none) and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
   `apps/engine/src/github/description.ts`), left out when it is longer than 24,000 characters. It rides in the
   fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
   repository's review never leaves the reader's browser; the page reads it back through `parseReviewPayload`, which
   keeps only well-formed fields, drops any check output and keeps only images and recordings on GitHub's own
   attachment hosts (`github.com/user-attachments/`, `*.githubusercontent.com`). Anyone can write such a link, so the
-  page says the review is read from the link and that the pull request on GitHub is the record. The page never opens the app by itself: browsers refuse
-  an external scheme without a click.
+  page says the review is read from the link and that the pull request on GitHub is the record. The page is never indexed: its
+  `noindex, nofollow, noarchive` meta tag and `X-Robots-Tag` header (`public/_headers`), and no referrer leaves it.
+  The page never opens the app by itself: browsers refuse an external scheme without a click.
 - **Evidence.** The evidence of the current round and of every earlier round on the same pull request, as items (`listPullRequestEvidence`), without linked tests
   and checks, which the Checks table already shows. An all-screenshot comparison is a table, one column per part
   (Before, After or the part's label); a comparison with a recording lists its parts in turn, since GitHub plays a

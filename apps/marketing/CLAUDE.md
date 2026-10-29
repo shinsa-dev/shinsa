@@ -81,7 +81,8 @@ src/
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
-                            own review as a page, the web's Review tab filling the window under the header with its
+                            own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:
+                            handle, repository, branch, pull request, checks, coverage), the web's Review tab under it with its
                             summary replaced by a card naming the pull request (describePullRequestEyebrow, in blue) and
                             the task, Download Shinsa as an outline button and then Open in Shinsa, `shinsa://task/<id>` from `?task=` (resolveTaskInvite,
                             lib/open.ts, which refuses anything else), and Download Shinsa; the review read from the
@@ -90,7 +91,8 @@ src/
                             components/demos/open-review.tsx, which marks `<html data-review>` once it reads). Without a
                             review it shows the handle and title from `?handle=` and `?title=` and the same buttons,
                             Download alone and primary under "This link does not lead to a review" when the link names no task. The page is the window's height and
-                            never scrolls itself; copy in content.ts `openTask`; left out of the sitemap), og.png, llms.txt and design.md; public/ holds the
+                            never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
+                            `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket

@@ -408,6 +408,28 @@ function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
+export function TaskSharedFacts({
+  state,
+  task,
+  className,
+}: {
+  state: ShinsaState;
+  task: Task;
+  className?: string;
+}) {
+  const checks = resolveChecksView(state, task);
+  return (
+    <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
+      <HandleFact task={task} />
+      <RepoFact state={state} task={task} />
+      <BranchFact state={state} task={task} />
+      <PullRequestFact state={state} task={task} />
+      {checks && <ChecksFact view={checks} />}
+      <CoverageFact task={task} />
+    </div>
+  );
+}
+
 export function TaskFacts({
   state,
   task,

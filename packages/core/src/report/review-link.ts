@@ -1,4 +1,4 @@
-import type { Evidence, EvidenceStage, EvidenceTheme, Task } from '../domain/types.ts';
+import type { Evidence, EvidenceStage, EvidenceTheme, Repo, Task } from '../domain/types.ts';
 import { EVIDENCE_STAGES, EVIDENCE_THEMES } from '../domain/verification.ts';
 import { assembleReport } from './assemble.ts';
 import { listPullRequestEvidence, resolvePublicUrl } from './pull-request.ts';
@@ -8,6 +8,7 @@ import type {
   ReportCheck,
   ReportRisk,
   ReportWalkthrough,
+  ReviewFinding,
   WorkReport,
 } from './types.ts';
 
@@ -16,6 +17,8 @@ export const REVIEW_PAYLOAD_VERSION = 1;
 type ReviewEvidenceKind = Extract<Evidence['kind'], 'screenshot' | 'recording' | 'preview'>;
 
 const REVIEW_EVIDENCE_KINDS: readonly ReviewEvidenceKind[] = ['screenshot', 'recording', 'preview'];
+
+const FINDING_SEVERITIES: readonly ReviewFinding['severity'][] = ['blocking', 'suggestion'];
 
 const CHECK_OUTCOMES: readonly ReportCheck['outcome'][] = ['pass', 'fail', 'skipped'];
 
@@ -47,10 +50,29 @@ export interface ReviewPayload {
     title: string;
     summary: string | null;
     pullRequest: number | null;
+    repo: string | null;
+    slug: string | null;
+    branch: string | null;
+    coverage: ReviewPayloadCoverage | null;
   };
   report: WorkReport;
   evidence: ReviewPayloadEvidence[];
+  review: ReviewPayloadVerdict | null;
 }
+
+interface ReviewPayloadCoverage {
+  covered: number;
+  executable: number;
+}
+
+interface ReviewPayloadVerdict {
+  summary: string;
+  findings: ReviewFinding[];
+}
+
+const REPO_SLUG = /^[\w.-]+\/[\w.-]+$/;
+
+const BRANCH_NAME = /^[\w./-]{1,200}$/;
 
 const GITHUB_ATTACHMENT =
   /^https:\/\/(?:github\.com\/user-attachments\/|[a-z0-9-]+\.githubusercontent\.com\/)/;
@@ -82,7 +104,41 @@ function listPayloadEvidence(task: Task, evidence: readonly Evidence[]): ReviewP
   );
 }
 
-export function serializeReviewPayload(task: Task, evidence: readonly Evidence[]): ReviewPayload {
+function resolveRepoSlug(remote: string | null) {
+  const slug =
+    remote
+      ?.replace(/\.git$/, '')
+      .split(/[/:]/)
+      .slice(-2)
+      .join('/') ?? '';
+  return REPO_SLUG.test(slug) ? slug : null;
+}
+
+function serializeCoverage(task: Task): ReviewPayloadCoverage | null {
+  const coverage = task.coverage;
+  if (coverage?.status !== 'measured') return null;
+  return { covered: coverage.covered, executable: coverage.executable };
+}
+
+function serializeVerdict(task: Task): ReviewPayloadVerdict | null {
+  if (task.reviewSummary === null) return null;
+  return {
+    summary: task.reviewSummary,
+    findings: task.findings.map((finding) => ({
+      severity: finding.severity,
+      file: null,
+      line: null,
+      ...(finding.title ? { title: finding.title } : {}),
+      message: finding.message,
+    })),
+  };
+}
+
+export function serializeReviewPayload(
+  task: Task,
+  evidence: readonly Evidence[],
+  repo: Pick<Repo, 'name' | 'remote'> | null = null
+): ReviewPayload {
   const report = assembleReport(task);
   const walkthrough = report.walkthrough
     ? {
@@ -98,6 +154,10 @@ export function serializeReviewPayload(task: Task, evidence: readonly Evidence[]
       title: task.title,
       summary: task.summary,
       pullRequest: task.pullRequest?.number ?? null,
+      repo: repo?.name ?? null,
+      slug: resolveRepoSlug(repo?.remote ?? null),
+      branch: task.branch,
+      coverage: serializeCoverage(task),
     },
     report: {
       ...report,
@@ -107,6 +167,7 @@ export function serializeReviewPayload(task: Task, evidence: readonly Evidence[]
       walkthrough,
     },
     evidence: listPayloadEvidence(task, evidence),
+    review: serializeVerdict(task),
   };
 }
 
@@ -238,6 +299,34 @@ function parseEvidence(fields: Fields): ReviewPayloadEvidence | null {
   };
 }
 
+function parseCoverage(value: unknown): ReviewPayloadCoverage | null {
+  if (!isFields(value)) return null;
+  const covered = readNumber(value, 'covered');
+  const executable = readNumber(value, 'executable');
+  if (covered === null || executable === null || covered < 0 || covered > executable) return null;
+  return { covered, executable };
+}
+
+function readMatch(fields: Fields, key: string, pattern: RegExp) {
+  const value = readText(fields, key);
+  return value !== null && pattern.test(value) ? value : null;
+}
+
+function parseFinding(fields: Fields): ReviewFinding | null {
+  const severity = readChoice(fields, 'severity', FINDING_SEVERITIES);
+  const message = readText(fields, 'message');
+  if (!severity || !message) return null;
+  const title = readText(fields, 'title');
+  return { severity, file: null, line: null, ...(title ? { title } : {}), message };
+}
+
+function parseVerdict(value: unknown): ReviewPayloadVerdict | null {
+  if (!isFields(value)) return null;
+  const summary = readText(value, 'summary');
+  if (summary === null) return null;
+  return { summary, findings: listFields(value.findings).flatMap((finding) => parseFinding(finding) ?? []) };
+}
+
 export function parseReviewPayload(value: unknown): ReviewPayload | null {
   if (!isFields(value) || value.v !== REVIEW_PAYLOAD_VERSION) return null;
   if (!isFields(value.task) || !isFields(value.report)) return null;
@@ -252,8 +341,13 @@ export function parseReviewPayload(value: unknown): ReviewPayload | null {
       title,
       summary: readText(value.task, 'summary'),
       pullRequest: readPullRequestNumber(value.task),
+      repo: readMatch(value.task, 'repo', /^[\w.-]{1,100}$/),
+      slug: readMatch(value.task, 'slug', REPO_SLUG),
+      branch: readMatch(value.task, 'branch', BRANCH_NAME),
+      coverage: parseCoverage(value.task.coverage),
     },
     report: parseReport(value.report),
     evidence: listFields(value.evidence).flatMap((piece) => parseEvidence(piece) ?? []),
+    review: parseVerdict(value.review),
   };
 }

@@ -114,6 +114,10 @@ describe('serializeReviewPayload', () => {
       title: task.title,
       summary: 'Tabs stay put.',
       pullRequest: 23,
+      repo: null,
+      slug: null,
+      branch: task.branch,
+      coverage: null,
     });
     expect(serializeReviewPayload({ ...task, pullRequest: null }, []).task.pullRequest).toBeNull();
     expect(payload.report.sections.every((section) => section.spots.length === 0)).toBe(true);
@@ -133,6 +137,59 @@ describe('serializeReviewPayload', () => {
     expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
   });
 
+  test('carries the agent review’s summary and findings without their code, and none before it ran', () => {
+    const task: Task = {
+      ...reviewedTask(),
+      reviewSummary: 'Looks right.',
+      findings: [
+        {
+          severity: 'suggestion',
+          file: 'src/a.ts',
+          line: 4,
+          title: 'Name it',
+          message: 'Give the map a name.',
+          fix: 'const x = 1;',
+        },
+        { severity: 'blocking', file: null, line: null, message: 'Breaks the build.' },
+      ],
+    };
+    const payload = serializeReviewPayload(task, []);
+    expect(payload.review).toEqual({
+      summary: 'Looks right.',
+      findings: [
+        { severity: 'suggestion', file: null, line: null, title: 'Name it', message: 'Give the map a name.' },
+        { severity: 'blocking', file: null, line: null, message: 'Breaks the build.' },
+      ],
+    });
+    expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(serializeReviewPayload({ ...task, reviewSummary: null }, []).review).toBeNull();
+  });
+
+  test('carries the facts the task header shows: repository, its GitHub slug, branch and changed-line coverage', () => {
+    const task: Task = {
+      ...reviewedTask(),
+      branch: 'feat/rich-pr',
+      coverage: { status: 'measured', command: 'bun test', covered: 46, executable: 48, files: [] },
+    };
+    const facts = (remote: string | null) =>
+      serializeReviewPayload(task, [], { name: 'shinsa', remote }).task;
+    expect(facts('https://github.com/shinsa-dev/shinsa.git')).toMatchObject({
+      repo: 'shinsa',
+      slug: 'shinsa-dev/shinsa',
+      branch: 'feat/rich-pr',
+      coverage: { covered: 46, executable: 48 },
+    });
+    expect(facts('git@github.com:shinsa-dev/shinsa.git').slug).toBe('shinsa-dev/shinsa');
+    expect(facts(null).slug).toBeNull();
+    const unmeasured = { ...task, coverage: { status: 'unavailable' as const, command: 'x', reason: 'y' } };
+    expect(serializeReviewPayload(unmeasured, []).task.coverage).toBeNull();
+    const payload = serializeReviewPayload(task, [], {
+      name: 'shinsa',
+      remote: 'github.com/shinsa-dev/shinsa',
+    });
+    expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+  });
+
   test('a task without a handle, summary or walkthrough still reads back', () => {
     const task = { ...reviewedTask(), handle: undefined, summary: null, phaseReports: [] };
     const payload = serializeReviewPayload(task, []);
@@ -143,6 +200,49 @@ describe('serializeReviewPayload', () => {
 });
 
 describe('parseReviewPayload', () => {
+  test('reads malformed header facts as none', () => {
+    const task = {
+      id: 'a',
+      title: 'T',
+      repo: '../etc',
+      slug: 'not a slug',
+      branch: 'a b',
+      coverage: { covered: 9, executable: 3 },
+    };
+    expect(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task, report: {} })?.task).toMatchObject({
+      repo: null,
+      slug: null,
+      branch: null,
+      coverage: null,
+    });
+    const partial = { ...task, coverage: { covered: 1 } };
+    expect(
+      parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: partial, report: {} })?.task.coverage
+    ).toBeNull();
+    const raw = { ...task, coverage: 'all' };
+    expect(
+      parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: raw, report: {} })?.task.coverage
+    ).toBeNull();
+  });
+
+  test('reads a malformed agent review as none and drops malformed findings', () => {
+    const base = { v: REVIEW_PAYLOAD_VERSION, task: { id: 'a', title: 'T' }, report: {} };
+    expect(parseReviewPayload({ ...base, review: 'yes' })?.review).toBeNull();
+    expect(parseReviewPayload({ ...base, review: { findings: [] } })?.review).toBeNull();
+    const review = {
+      summary: 'Fine.',
+      findings: [
+        { severity: 'fatal', message: 'x' },
+        { severity: 'blocking' },
+        { severity: 'blocking', message: 'Ok.' },
+      ],
+    };
+    expect(parseReviewPayload({ ...base, review })?.review).toEqual({
+      summary: 'Fine.',
+      findings: [{ severity: 'blocking', file: null, line: null, message: 'Ok.' }],
+    });
+  });
+
   test('refuses anything that is not a review of this version', () => {
     expect(parseReviewPayload(null)).toBeNull();
     expect(parseReviewPayload([])).toBeNull();
@@ -204,7 +304,17 @@ describe('parseReviewPayload', () => {
         { id: 'e3', itemId: 'i', kind: 'note', title: 'Note', url: 'https://x.dev/n' },
       ],
     });
-    expect(payload?.task).toEqual({ id: 'a', handle: null, title: 'T', summary: null, pullRequest: null });
+    expect(payload?.task).toEqual({
+      id: 'a',
+      handle: null,
+      title: 'T',
+      summary: null,
+      pullRequest: null,
+      repo: null,
+      slug: null,
+      branch: null,
+      coverage: null,
+    });
     const numbered = parseReviewPayload({
       v: REVIEW_PAYLOAD_VERSION,
       task: { id: 'a', title: 'T', pullRequest: 23 },
