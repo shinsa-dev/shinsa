@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { app } from 'electron';
 import { parseHealthText, type ServerHealth } from '../lib/health.ts';
 import { parseConfigPort, resolveConfigPath, resolveServerUrl } from '../lib/server-url.ts';
+import { parseTrayQueueText, type TrayQueue } from '../lib/tray.ts';
 
 const HEALTH_TIMEOUT_MS = 1500;
 
@@ -24,8 +25,8 @@ export function resolveAppServerUrl() {
   });
 }
 
-export function requestHealth(url: string): Promise<ServerHealth | null> {
-  const target = new URL('/api/health', url);
+function requestJson<T>(url: string, path: string, parse: (text: string) => T | null): Promise<T | null> {
+  const target = new URL(path, url);
   const get = target.protocol === 'https:' ? getHttps : getHttp;
   return new Promise((resolve) => {
     const request = get(target, { timeout: HEALTH_TIMEOUT_MS }, (response) => {
@@ -35,9 +36,17 @@ export function requestHealth(url: string): Promise<ServerHealth | null> {
         body += chunk;
       });
       response.on('error', () => resolve(null));
-      response.on('end', () => resolve(response.statusCode === 200 ? parseHealthText(body) : null));
+      response.on('end', () => resolve(response.statusCode === 200 ? parse(body) : null));
     });
     request.on('timeout', () => request.destroy());
     request.on('error', () => resolve(null));
   });
+}
+
+export function requestHealth(url: string): Promise<ServerHealth | null> {
+  return requestJson(url, '/api/health', parseHealthText);
+}
+
+export function requestTrayQueue(url: string): Promise<TrayQueue | null> {
+  return requestJson(url, '/api/queue', parseTrayQueueText);
 }

@@ -5160,8 +5160,8 @@ spinner.
 - `ConnectionStatus`: nothing while connected; while reconnecting an amber `Pulse` in
   `grid size-5 place-items-center`, `role='status'`, `aria-label` and tooltip "Reconnecting".
 - `UpdateButtonView({ version, onClick })`: a primary `sm` Button "Update" entering with
-  `fade-in-0 zoom-in-95 animate-in duration-200`; tooltip "Shinsa ‹version› is ready. The app restarts for a moment and
-  agents keep working." `UpdateButton` shows it only once the desktop app has an update downloaded.
+  `fade-in-0 zoom-in-95 animate-in duration-200`; tooltip "Shinsa ‹version› is ready. Only the app restarts: agents keep
+  working, and the engine moves to the new version once they hand over." `UpdateButton` shows it only once the desktop app has an update downloaded.
 
 #### HealthCard and EngineCard (the banner card)
 
@@ -7844,7 +7844,7 @@ A problem with the app itself is a one-line card at the top of the page column, 
 
 A control that appears because something became available (a downloaded update) fades and scales in
 (`fade-in-0 zoom-in-95 animate-in duration-200`), as a `primary` `sm` button in the header's trailing group, with a
-tooltip saying what it does and what to expect ("the app restarts for a moment and agents keep working"). Nothing
+tooltip saying what it does and what to expect ("only the app restarts: agents keep working"). Nothing
 shows before it is ready.
 
 #### Rows for updatable things
@@ -7975,7 +7975,8 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 
 **Rules**
 
-- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; View has Reload ⌘R, zoom and full screen; Go has Back ⌘[, Forward ⌘] and Home ⇧⌘H, as in Finder and Safari. No other app-level shortcut and no menu bar (status) icon.
+- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; View has Reload ⌘R, zoom and full screen; Go has Back ⌘[, Forward ⌘] and Home ⇧⌘H, as in Finder and Safari. No other app-level shortcut.
+- A menu bar (status) item shows while the app runs: the product mark as a template image with the count of decisions waiting beside it, and a menu with the engine's state, what needs you and what is working (each task opens its page), Open and Quit, Quit saying the engine and its agents keep running.
 - Back and Forward step through the page's own history and never onto the engine's waiting page.
 - A focused code editor keeps ⌘[ and ⌘] for outdent and indent: the page sees the key before the menu does.
 - Closing the window hides it; the page keeps its socket, so badges and notifications continue. The Dock icon or Window → (app name) brings it back. ⌘Q quits the app and never stops the background engine.
@@ -8949,7 +8950,7 @@ Mistakes that were made before and must not come back:
 | Error title | What happened | Yes when a sentence | "This page hit an error.", "This part of Shinsa hit an error." |
 | Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "“Base” was cancelled, so there is nothing to wait for.", "This task is finished. Start a new one." |
 | Failure decision | Title says what stopped; body says why and what Retry does | Title no, body yes | "Out of automatic fix rounds" |
-| Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. The app restarts for a moment and agents keep working." |
+| Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and the engine moves to the new version once they hand over." |
 | Disabled reason | Plain sentence | No | "Send your line comments to the agent or remove them first" |
 | Dialog title | Noun phrase or a question | Question ends "?", else none | "Add an MCP", "Edit api", "Remove project?" |
 | Dialog description | Full sentences | Yes | "Shinsa signs this account out. Runs on it move to the next account." |

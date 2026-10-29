@@ -3995,7 +3995,8 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   `shinsa` command.
 - **Restarting.** A restart (`POST /api/engine/restart`, below) stops the engine cleanly and exits with 75
   (`EX_TEMPFAIL`, `EXIT_RESTART`); launchd starts the bundle's program again, which after an app update is the new
-  version.
+  version. One that waits for idle holds new runs back until the working ones hand over, for at most 15 minutes
+  (Health, below).
 - **By hand** (`apps/engine/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
   kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
   stopped until a start, the app, a command that needs it or the next login; an engine still answering after 40 s,
@@ -4271,7 +4272,7 @@ says hello counts as no desktop.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, working, restart, restartBy, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
 (`resolveHealth`, `apps/engine/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
 which Shinsa answered: `version` is the engine package's version, `commit` the checkout's `HEAD` (null outside a git
 checkout), `installPath` the folder holding `apps/engine`, and `startedAt` and `uptimeMs` count from when the server
@@ -4286,9 +4287,18 @@ and the next line is never glued onto it (`readChatEntries`).
 
 `protocol` is `ENGINE_PROTOCOL` (`packages/core/src/protocol/engine.ts`), raised only when the contract between the
 interface and the engine breaks; `busy` is whether an agent run is mid-turn (`isEngineBusy`: a live run with status
-`running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
+`running`, not counting a run held for the restart), `working` how many such runs there are, `restart` is `idle`
+while the engine waits for them to end before restarting, and `restartBy` the time it restarts at the latest (null
+when no restart waits; `resolveEngineActivity`). **`POST
 /api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
-75 for launchd to start it again, and answers `{ restarting }` before it goes; it refuses with `restart_unsupported`
+75 for launchd to start it again, and answers `{ restarting }` before it goes. Waiting for idle drains the engine
+(`EngineRestarter`, `RestartDrain`): the supervisor holds back every new run (`holdNewRuns`; a turn that carries a
+prompt or a delivery, such as your answer, still starts, and each hold tells the restarter to look again, since a
+run is held after the state change that dispatched it), so the working runs hand over and the engine restarts
+between turns; a held run does not count as busy. Shutdown marks each held run as it marks a run dispatched while stopping (`run.interrupt`,
+command id `run.interrupt:<run>:0:<continuations>`), so the next engine starts it as a free shutdown continuation. After
+`RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
+restart that fails releases the held runs; it refuses with `restart_unsupported`
 unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
@@ -4371,6 +4381,9 @@ following a file through its watch and the check every second, both triggered by
     a crash loop, a dead session and a provider switch; a round's session lost mid-round, restarted on a handoff that
     holds the full brief (the plan, the finished phases with their summaries, the current phase), and a session
     compacted after its brief getting the full brief again;
+  - `engine-restart.test.ts`: a restart for an update through `EngineRestarter` on the whole engine: the drain waits
+    for the working agent to hand over, holds the steps that come after it and starts them on the next engine with
+    no recovery spent, and the deadline cuts a working agent, which resumes its own session;
   - `eunoe.test.ts`: the real Claude adapter over a scripted SDK and the fake eunoe: a run routed through Shinsa's
     eunoe in compact mode and fast mode, with eunoe's compaction in its transcript; eunoe always fold running eunoe in
     its `default` mode, each budget fold a quiet line; a proxy that cannot start, so the run goes direct with a

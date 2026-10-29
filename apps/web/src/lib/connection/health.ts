@@ -17,7 +17,9 @@ export interface ServerHealth {
   version?: string;
   protocol?: number;
   busy?: boolean;
+  working?: number;
   restart?: 'idle' | null;
+  restartBy?: number | null;
   dataDir?: string;
 }
 
