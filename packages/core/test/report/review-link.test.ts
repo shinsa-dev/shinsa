@@ -165,6 +165,20 @@ describe('serializeReviewPayload', () => {
     expect(serializeReviewPayload({ ...task, reviewSummary: null }, []).review).toBeNull();
   });
 
+  test('leaves out every finding you judged, so a dismissed one never shows as open', () => {
+    const open = { severity: 'suggestion' as const, file: null, line: null, message: 'Still open.' };
+    const task: Task = {
+      ...reviewedTask(),
+      reviewSummary: 'Two notes.',
+      findings: [
+        { severity: 'blocking', file: null, line: null, message: 'Not a problem.', verdict: 'dismiss' },
+        { severity: 'blocking', file: null, line: null, message: 'Fixed.', verdict: 'fix' },
+        open,
+      ],
+    };
+    expect(serializeReviewPayload(task, []).review?.findings).toEqual([open]);
+  });
+
   test('carries the facts the task header shows: repository, its GitHub slug, branch and changed-line coverage', () => {
     const task: Task = {
       ...reviewedTask(),

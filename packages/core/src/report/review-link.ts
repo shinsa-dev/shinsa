@@ -124,13 +124,15 @@ function serializeVerdict(task: Task): ReviewPayloadVerdict | null {
   if (task.reviewSummary === null) return null;
   return {
     summary: task.reviewSummary,
-    findings: task.findings.map((finding) => ({
-      severity: finding.severity,
-      file: null,
-      line: null,
-      ...(finding.title ? { title: finding.title } : {}),
-      message: finding.message,
-    })),
+    findings: task.findings
+      .filter((finding) => finding.verdict === undefined)
+      .map((finding) => ({
+        severity: finding.severity,
+        file: null,
+        line: null,
+        ...(finding.title ? { title: finding.title } : {}),
+        message: finding.message,
+      })),
   };
 }
 

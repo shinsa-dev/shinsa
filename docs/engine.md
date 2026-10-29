@@ -2511,7 +2511,7 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
   task page's header shows that are not private (the repository's name and GitHub slug, the branch, the changed-line
   coverage; never the status, priority, start time, cost, account or local paths), the walkthrough, the checks without their output, the
-  judgement calls, the agent review's summary and findings once it ran (without their code or suggested fix; the page
+  judgement calls, the agent review's summary and the findings you have not judged once it ran (a finding you dismissed or sent back is left out; without their code or suggested fix; the page
   shows no agent review when the link carries none) and every piece of evidence GitHub hosts, without the code), JSON deflated and in base64url (`serializeReviewLink`,
   `apps/engine/src/github/description.ts`), left out when it is longer than 24,000 characters. It rides in the
   fragment, which a browser never sends to a server, so the page needs no server and no GitHub access and a private
