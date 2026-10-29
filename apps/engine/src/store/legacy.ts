@@ -42,7 +42,7 @@ const STAGE_PURPOSE = new Map<unknown, RunPurpose>([
   ['operating', 'operate'],
 ]);
 
-const RUN_PURPOSES: readonly unknown[] = [...STAGE_PURPOSE.values()];
+const RUN_PURPOSES: readonly unknown[] = [...STAGE_PURPOSE.values(), 'watch', 'intake'];
 
 const INQUIRY_ROLES: readonly unknown[] = ['reviewer', 'answerer', 'investigator', 'researcher'];
 

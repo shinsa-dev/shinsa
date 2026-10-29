@@ -76,7 +76,7 @@ export function describeScheduleSummary(state: ShinsaState, schedule: Schedule) 
 }
 
 export function describeOpenTask(schedule: Schedule) {
-  return schedule.source ? 'Show its reads' : 'Open the task';
+  return schedule.source ? 'Open the watch' : 'Open the task';
 }
 
 export function resolveScheduleStatus(schedule: Schedule): ScheduleStatus | null {

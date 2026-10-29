@@ -98,7 +98,7 @@ describe('resolveReportFact', () => {
     expect(resolveReportFact(createShinsaState({}), createTask({ id: 't' }))).toBeNull();
   });
 
-  it('names the source, who wrote it and when, the automation and the task that read it', () => {
+  it('names the source, who wrote it and when, and the watch that filed it, which opens its own page', () => {
     const reader = createTask({ id: 'reader', title: 'Read #support' });
     const task = createTask({
       id: 't',
@@ -115,7 +115,7 @@ describe('resolveReportFact', () => {
       text: report.text,
       link: report.link,
       automation: 'Support reports',
-      reader,
+      watchId: 's-read',
     });
   });
 
@@ -128,7 +128,7 @@ describe('resolveReportFact', () => {
       byline: 'yesterday',
       link: null,
       automation: null,
-      reader: null,
+      watchId: null,
     });
     const bare = { ...task, sourceReport: { ...report, author: null, postedAt: null, link: null } };
     expect(resolveReportFact(createShinsaState({ tasks: [bare] }), bare, NOW)).toMatchObject({

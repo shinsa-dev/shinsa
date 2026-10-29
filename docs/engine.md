@@ -1731,8 +1731,15 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   run; where another run would open a failure gate, the read gives up instead (`missIntakeRead`): the task rests and
   the next fire reads again. The filed task's activity says which automation filed it from whose report, and the
   home's activity lists each task it filed. Settings → Automations shows a watch as "Watch · <server> · <when> ·
-  N tasks filed", with Show its reads (the home's page) in its menu; a filed task's facts show "Reported in <server>", whose card has the report, its author
-  and time, the automation and a link to the report (an http or https link only, since an agent wrote it).
+  N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
+  `routes/automation.tsx`): what it reads and when, the tasks it filed and every read with its summary, newest first,
+  with the runs it skipped or failed. The home never shows as a task page: `/tasks/<home>` replaces itself with the
+  watch's page. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
+  automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
+- **New automation** (Settings → Automations): a form that writes a Schedule (every N minutes, a new task in a
+  repository or the one triage picks), a Trigger (a webhook that starts a new task, its URL in the row's menu) or a
+  Watch (an integration a project uses, every N minutes, and what counts as a report) as one `schedule.write`
+  (`lib/automations.ts`).
 - **Secrets are one-use refs** (`request_secret {label, reason}`, `agent.request_secret`): the agent's run waits on a
   question gate with `secret: {label}`; you paste the value into a password field that posts to
   `/api/secrets/<gate>` (never a command), and the server keeps it in `secrets.json` (mode 600) and answers the gate

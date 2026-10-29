@@ -1910,7 +1910,10 @@ function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]
     counts.set(counted, number);
     return { projectId: projectId && key ? projectId : null, handle: formatTaskHandle(counted, number) };
   };
+  const homes = new Set<string>();
   return timeline.map(({ at, event }) => {
+    if (event.type === 'task.created' && event.watchHome) homes.add(event.taskId);
+    if (homes.has('taskId' in event ? String(event.taskId) : '')) return { at, event };
     if (event.type === 'task.created') {
       const projectId = repos.find((repo) => repo.id === event.repoId)?.projectId ?? null;
       if (!projectId || !projects.some((project) => project.id === projectId)) return { at, event };

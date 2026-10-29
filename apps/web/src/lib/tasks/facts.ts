@@ -42,13 +42,13 @@ export function resolveReportFact(state: ShinsaState, task: Task, now = Date.now
   const report = task.sourceReport;
   if (!report) return null;
   const byline = [report.author, describePostedAt(report.postedAt, now)].filter(Boolean).join(' · ');
-  const readerId = task.createdBy?.kind === 'intake' ? task.createdBy.taskId : null;
+  const watch = state.schedules[report.scheduleId] ?? null;
   return {
     label: `Reported in ${report.server}`,
     byline: byline || null,
     text: report.text,
     link: isWebLink(report.link) ? report.link : null,
-    automation: state.schedules[report.scheduleId]?.name ?? null,
-    reader: readerId ? (state.tasks[readerId] ?? null) : null,
+    automation: watch?.name ?? null,
+    watchId: watch?.id ?? null,
   };
 }

@@ -1,4 +1,5 @@
 import { listSchedules, type Schedule, type ShinsaState } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,24 +26,33 @@ import {
   resolveScheduleTaskId,
   updateScheduleEnabled,
 } from '@/lib/schedules.ts';
-import { navigate, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
+import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
+import { AutomationDialog } from './automation-dialog.tsx';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 export interface ScheduleActions {
   enable: (schedule: Schedule, enabled: boolean) => Promise<unknown>;
   copyWebhook: (schedule: Schedule) => Promise<unknown>;
-  open: (taskId: string) => void;
+  open: (schedule: Schedule) => void;
   remove: (schedule: Schedule) => Promise<unknown>;
 }
 
-function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: ScheduleActions }) {
+export function ScheduleMenu({
+  schedule,
+  actions,
+  showOpen = true,
+}: {
+  schedule: Schedule;
+  actions: ScheduleActions;
+  showOpen?: boolean;
+}) {
   const removing = useDialogState<'remove'>();
-  const taskId = resolveScheduleTaskId(schedule);
+  const canOpen = showOpen && (schedule.source !== null || resolveScheduleTaskId(schedule) !== null);
   const removal = describeRemoval(schedule);
   return (
     <>
       <DropdownMenu>
-        <OptionsTrigger label='Schedule options' />
+        <OptionsTrigger label='Automation options' />
         <DropdownMenuContent align='end' className='min-w-52'>
           <DropdownMenuGroup>
             {schedule.enabled && (
@@ -60,15 +70,15 @@ function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: Sche
                 Copy webhook URL
               </DropdownMenuItem>
             )}
-            {taskId && (
-              <DropdownMenuItem icon='IconArrowUpRight' onClick={() => actions.open(taskId)}>
+            {canOpen && (
+              <DropdownMenuItem icon='IconArrowUpRight' onClick={() => actions.open(schedule)}>
                 {describeOpenTask(schedule)}
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem icon='IconTrashCan' variant='destructive' onClick={() => removing.show('remove')}>
-            Delete schedule
+            Delete automation
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -77,7 +87,7 @@ function ScheduleMenu({ schedule, actions }: { schedule: Schedule; actions: Sche
           control={removing.control}
           title={removal.title}
           body={removal.body}
-          action='Delete schedule'
+          action='Delete automation'
           onConfirm={() => void actions.remove(schedule)}
         />
       )}
@@ -114,19 +124,39 @@ export function ScheduleRow({
   );
 }
 
-export function ScheduleSettings({ state }: { state: ShinsaState }) {
-  const schedules = listSchedules(state);
-  const actions: ScheduleActions = {
+export function createScheduleActions(state: ShinsaState): ScheduleActions {
+  return {
     enable: updateScheduleEnabled,
     copyWebhook: copyWebhookUrl,
-    open: (taskId) => navigate(resolveTaskPath(resolveTaskTarget(state, taskId))),
+    open: (schedule) => {
+      const taskId = resolveScheduleTaskId(schedule);
+      if (schedule.source) navigate(resolveAutomationPath(schedule.id));
+      else if (taskId) navigate(resolveTaskPath(resolveTaskTarget(state, taskId)));
+    },
     remove: removeSchedule,
   };
+}
+
+function NewAutomationButton({ state }: { state: ShinsaState }) {
+  const dialog = useDialogState<'create'>();
   return (
-    <SettingsGroup title='Schedules'>
+    <>
+      <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={() => dialog.show('create')}>
+        New automation
+      </Button>
+      {dialog.value && <AutomationDialog control={dialog.control} state={state} />}
+    </>
+  );
+}
+
+export function ScheduleSettings({ state }: { state: ShinsaState }) {
+  const schedules = listSchedules(state);
+  const actions = createScheduleActions(state);
+  return (
+    <SettingsGroup title='Automations' action={<NewAutomationButton state={state} />}>
       {schedules.length === 0 && (
         <SettingsEmpty>
-          Ask an agent to do something on a schedule or when a webhook is called, and it shows up here.
+          Create a schedule, a trigger or a watch, or ask an agent for one, and it shows up here.
         </SettingsEmpty>
       )}
       {schedules.map((schedule) => (

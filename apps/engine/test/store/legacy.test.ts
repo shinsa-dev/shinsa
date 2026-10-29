@@ -117,6 +117,8 @@ describe('rewriting events an older Shinsa wrote', () => {
     expect(rewriteRun({ ...agent, phaseIndex: 0 })?.purpose).toBe('build');
     expect(rewriteRun({ ...agent, taskId: 7 }, staged('fixing'))?.purpose).toBe('plan');
     expect(rewriteRun({ ...agent, purpose: 'operate' })).toBeNull();
+    expect(rewriteRun({ ...agent, purpose: 'watch' }, staged('watching'))).toBeNull();
+    expect(rewriteRun({ ...agent, purpose: 'intake' }, staged('watching'))).toBeNull();
     expect(rewriteRun({ ...agent, purpose: 'ship' })?.purpose).toBe('plan');
   });
 

@@ -59,7 +59,7 @@ describe('describing a schedule', () => {
     ).toBe('Trigger · Starts a new task · when its webhook is called');
     expect(describeOpenTask(message)).toBe('Open the task');
     expect(describeOpenTask({ ...message, source: { projectId: 'p', server: 'slack' } })).toBe(
-      'Show its reads'
+      'Open the watch'
     );
     expect(
       [

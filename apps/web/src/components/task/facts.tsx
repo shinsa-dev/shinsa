@@ -56,7 +56,7 @@ import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
-import { navigate, resolveTaskPath } from '@/router.ts';
+import { navigate, resolveAutomationPath, resolveTaskPath } from '@/router.ts';
 
 function FactPopover({
   trigger,
@@ -396,7 +396,7 @@ function RelatedFact({
 function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
   const report = resolveReportFact(state, task);
   if (!report) return null;
-  const reader = report.reader;
+  const watchId = report.watchId;
   return (
     <FactPopover
       className='max-w-72'
@@ -419,8 +419,8 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
         </InfoSection>
       )}
       {report.link && <InfoAction label='Open the report' href={report.link} />}
-      {reader && (
-        <InfoAction label='Show the watch’s reads' onClick={() => navigate(resolveTaskPath(reader))} />
+      {watchId && (
+        <InfoAction label='Open the watch' onClick={() => navigate(resolveAutomationPath(watchId))} />
       )}
     </FactPopover>
   );
