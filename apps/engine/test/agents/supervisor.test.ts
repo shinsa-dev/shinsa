@@ -1944,10 +1944,14 @@ describe('holding new runs for a restart', () => {
   test('a new run waits while a restart drains, and starts when the hold is released', async () => {
     const sessions = createSessions();
     const { supervisor } = setup(withTask(createTempDir()), { startSession: sessions.startSession });
-    supervisor.holdNewRuns();
+    let held = 0;
+    supervisor.holdNewRuns(() => {
+      held += 1;
+    });
     await supervisor.execute('run-1');
     await supervisor.execute('run-1');
     expect(sessions.started).toHaveLength(0);
+    expect(held).toBe(1);
     expect(supervisor.isHeld('run-1')).toBe(true);
     supervisor.releaseHeldRuns();
     await until('the session', () => sessions.started.length === 1);
@@ -1958,7 +1962,7 @@ describe('holding new runs for a restart', () => {
   test('a turn that carries a prompt or a delivery is never held, so an answer is not lost', async () => {
     const sessions = createSessions();
     const { supervisor } = setup(withTask(createTempDir()), { startSession: sessions.startSession });
-    supervisor.holdNewRuns();
+    supervisor.holdNewRuns(() => undefined);
     const running = supervisor.execute('run-1', 'The answer is yes.');
     await until('the session', () => sessions.started.length === 1);
     expect(supervisor.isHeld('run-1')).toBe(false);
@@ -1975,7 +1979,7 @@ describe('holding new runs for a restart', () => {
       { startSession: createSessions().startSession }
     );
     reject((command) => command.type === 'run.end', new Error('log full'));
-    supervisor.holdNewRuns();
+    supervisor.holdNewRuns(() => undefined);
     await supervisor.execute('run-1');
     supervisor.releaseHeldRuns();
     await until('the log line', () => errors.mock.calls.length > 0);
@@ -1996,7 +2000,7 @@ describe('holding new runs for a restart', () => {
       (command) => command.type === 'run.interrupt' && command.runId === 'run-2',
       new Error('engine stopped')
     );
-    supervisor.holdNewRuns();
+    supervisor.holdNewRuns(() => undefined);
     await supervisor.execute('run-1');
     await supervisor.execute('run-2');
     update((state) => {

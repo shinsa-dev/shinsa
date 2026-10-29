@@ -16,12 +16,16 @@ afterEach(() => {
 function createDrain() {
   const held = new Set<string>();
   const calls: string[] = [];
+  const onHeld: (() => void)[] = [];
   const drain: RestartDrain = {
-    holdNewRuns: () => calls.push('hold'),
+    holdNewRuns: (listener) => {
+      calls.push('hold');
+      onHeld.push(listener);
+    },
     releaseHeldRuns: () => calls.push('release'),
     isHeld: (runId) => held.has(runId),
   };
-  return { drain, held, calls };
+  return { drain, held, calls, onHeld };
 }
 
 function createRestarter(options: { service?: boolean; fail?: boolean; drain?: RestartDrain } = {}) {
@@ -88,6 +92,23 @@ describe('draining before a restart', () => {
     expect(restarts()).toBe(1);
     expect(restarter.deadlineAt).toBeNull();
     jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(restarts()).toBe(1);
+  });
+
+  test('a run held after the last state change still lets the engine restart', async () => {
+    jest.useFakeTimers();
+    const { drain, held, onHeld } = createDrain();
+    const { stub, restarter, flush, restarts } = createRestarter({ drain });
+    stub.update((state) => {
+      state.runs.live = createRun({ id: 'live' });
+    });
+    await restarter.request('idle');
+    onHeld[0]?.();
+    await flush();
+    expect(restarts()).toBe(0);
+    held.add('live');
+    onHeld[0]?.();
     await flush();
     expect(restarts()).toBe(1);
   });

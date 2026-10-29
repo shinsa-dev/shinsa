@@ -4045,7 +4045,8 @@ interface and the engine breaks; `busy` is whether an agent run is mid-turn (`is
 /api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
 75 for launchd to start it again, and answers `{ restarting }` before it goes. Waiting for idle drains the engine
 (`EngineRestarter`, `RestartDrain`): the supervisor holds back every new run (`holdNewRuns`; a turn that carries a
-prompt or a delivery, such as your answer, still starts), so the working runs hand over and the engine restarts
+prompt or a delivery, such as your answer, still starts, and each hold tells the restarter to look again, since a
+run is held after the state change that dispatched it), so the working runs hand over and the engine restarts
 between turns; a held run does not count as busy. Shutdown marks each held run (`run.interrupt`, command id
 `run.interrupt:<run>:held:<continuations>`), so the next engine starts it as a free shutdown continuation. After
 `RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
@@ -4132,6 +4133,9 @@ following a file through its watch and the check every second, both triggered by
     a crash loop, a dead session and a provider switch; a round's session lost mid-round, restarted on a handoff that
     holds the full brief (the plan, the finished phases with their summaries, the current phase), and a session
     compacted after its brief getting the full brief again;
+  - `engine-restart.test.ts`: a restart for an update through `EngineRestarter` on the whole engine: the drain waits
+    for the working agent to hand over, holds the steps that come after it and starts them on the next engine with
+    no recovery spent, and the deadline cuts a working agent, which resumes its own session;
   - `eunoe.test.ts`: the real Claude adapter over a scripted SDK and the fake eunoe: a run routed through Shinsa's
     eunoe in compact mode and fast mode, with eunoe's compaction in its transcript; eunoe always fold running eunoe in
     its `default` mode, each budget fold a quiet line; a proxy that cannot start, so the run goes direct with a

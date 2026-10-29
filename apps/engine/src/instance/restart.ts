@@ -7,7 +7,7 @@ interface RestartSource {
 }
 
 export interface RestartDrain {
-  holdNewRuns: () => void;
+  holdNewRuns: (onHeld: () => void) => void;
   releaseHeldRuns: () => void;
   isHeld: (runId: string) => boolean;
 }
@@ -74,7 +74,7 @@ export class EngineRestarter {
   #drain() {
     if (this.#pending) return;
     this.#pending = 'idle';
-    this.#options.drain?.holdNewRuns();
+    this.#options.drain?.holdNewRuns(() => this.#restartWhenIdle());
     const drainMs = this.#options.drainMs ?? RESTART_DRAIN_MS;
     this.#deadlineAt = (this.#options.now ?? Date.now)() + drainMs;
     this.#deadline = setTimeout(() => {
@@ -82,9 +82,11 @@ export class EngineRestarter {
       this.#restartSoon();
     }, drainMs);
     this.#deadline.unref?.();
-    this.#stopWatching = this.#source.subscribe((state) => {
-      if (!this.#isBusy(state)) this.#restartSoon();
-    });
+    this.#stopWatching = this.#source.subscribe(() => this.#restartWhenIdle());
+  }
+
+  #restartWhenIdle() {
+    if (!this.#isBusy(this.#source.state)) this.#restartSoon();
   }
 
   #endDrain() {

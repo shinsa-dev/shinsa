@@ -178,7 +178,7 @@ export class RunSupervisor {
   readonly #held = new Set<string>();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
-  #holding = false;
+  #holding: (() => void) | null = null;
 
   constructor(
     engine: Engine,
@@ -241,7 +241,9 @@ export class RunSupervisor {
     const run = state.runs[runId];
     if (this.#shuttingDown || !run || run.endedAt !== null || this.#active.has(runId)) return;
     if (this.#holding && override === null && delivery === null) {
+      if (this.#held.has(runId)) return;
       this.#held.add(runId);
+      this.#holding();
       return;
     }
     const task = state.tasks[run.taskId];
@@ -837,12 +839,12 @@ export class RunSupervisor {
     await active.session?.cancel();
   }
 
-  holdNewRuns() {
-    this.#holding = true;
+  holdNewRuns(onHeld: () => void) {
+    this.#holding = onHeld;
   }
 
   releaseHeldRuns() {
-    this.#holding = false;
+    this.#holding = null;
     const held = [...this.#held];
     this.#held.clear();
     for (const runId of held) {
