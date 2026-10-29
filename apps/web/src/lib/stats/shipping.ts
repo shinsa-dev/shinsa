@@ -112,7 +112,7 @@ export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {
     },
     {
       key: 'lines',
-      label: `Lines changed in ${formatCount(total.changedFiles, 'file', 'files')}`,
+      label: `Lines merged in ${formatCount(total.changedFiles, 'file', 'files')}`,
       value: formatNumber(total.additions + total.deletions),
       detail: null,
       changes: { added: total.additions, removed: total.deletions },

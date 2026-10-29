@@ -81,7 +81,7 @@ describe('shipping', () => {
       { key: 'tasks', label: 'Tasks finished', value: '4', detail: null },
       {
         key: 'lines',
-        label: 'Lines changed in 1 file',
+        label: 'Lines merged in 1 file',
         value: '1,520',
         detail: null,
         changes: { added: 1500, removed: 20 },

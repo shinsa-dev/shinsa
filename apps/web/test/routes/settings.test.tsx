@@ -134,7 +134,7 @@ describe('Settings stats', () => {
     expect(screen.getByText('Pull requests merged')).toBeTruthy();
     expect(screen.getByText('+40').className).toContain('text-green-text');
     expect(screen.getByText('−2').className).toContain('text-red-text');
-    expect(screen.getByText('Lines changed in 3 files')).toBeTruthy();
+    expect(screen.getByText('Lines merged in 3 files')).toBeTruthy();
     expect(screen.getByText('1 day')).toBeTruthy();
     const graph = screen.getByRole('img', { name: '1 pull request merged in the last year' });
     const cells = graph.querySelectorAll('[data-day]');
