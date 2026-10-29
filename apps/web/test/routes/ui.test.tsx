@@ -144,7 +144,7 @@ describe('the /ui gallery', () => {
     );
     expect(setup.getByText('macOS keeps ~/Documents private')).toBeTruthy();
     expect(setup.getByRole('option', { name: /Squash/ }).getAttribute('aria-selected')).toBe('true');
-    expect(setup.getByText('Added')).toBeTruthy();
+    expect(setup.getAllByRole('button', { name: 'Sign in again' }).length).toBeGreaterThan(0);
     expect(setup.getByText('Not signed in.')).toBeTruthy();
     expect(setup.getByRole('heading', { name: 'Shinsa is ready' })).toBeTruthy();
     expect(shinsa.getByRole('button', { name: 'Remove account' })).toBeTruthy();
