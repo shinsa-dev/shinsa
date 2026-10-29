@@ -17,7 +17,9 @@ import type {
   RunPurpose,
   RunRole,
   ShinsaEventInput,
+  SourceReport,
   TaskAuto,
+  TaskCreator,
   TaskPriority,
   TaskShape,
   TaskSize,
@@ -88,6 +90,8 @@ export interface SeedTask {
   planFirst?: boolean;
   waitsOn?: string[];
   forkOf?: string;
+  createdBy?: TaskCreator;
+  sourceReport?: SourceReport;
   worktreePath?: string;
   plan?: PlanDocument;
   verification?: PlanCheck[];

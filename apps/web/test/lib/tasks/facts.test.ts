@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { describePullRequestFact, describeStarted, listForkSources, listForks } from '@/lib/tasks/facts.ts';
+import { formatMoment } from '@/lib/format/time.ts';
+import {
+  describePullRequestFact,
+  describeStarted,
+  listForkSources,
+  listForks,
+  resolveReportFact,
+} from '@/lib/tasks/facts.ts';
+import { createSchedule } from '../../support/schedules.ts';
 import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 type PullRequest = NonNullable<Task['pullRequest']>;
@@ -72,5 +80,60 @@ describe('forks', () => {
     expect(listForkSources(state, source)).toEqual([]);
     expect(listForkSources(state, createTask({ id: 'x', forkOf: 'gone' }))).toEqual([]);
     expect(listForks(state, source).map((task) => task.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('resolveReportFact', () => {
+  const report = {
+    scheduleId: 's-read',
+    server: 'composio-slack',
+    reportId: '1730120000.1234',
+    link: 'https://acme.slack.com/archives/C1/p1730120000',
+    author: 'Ana Ruiz',
+    postedAt: new Date(NOW - 2 * 60 * 60_000).toISOString(),
+    text: 'The docs ask me to sign in again on my phone.',
+  };
+
+  it('is absent on a task no automation filed', () => {
+    expect(resolveReportFact(createShinsaState({}), createTask({ id: 't' }))).toBeNull();
+  });
+
+  it('names the source, who wrote it and when, the automation and the task that read it', () => {
+    const reader = createTask({ id: 'reader', title: 'Read #support' });
+    const task = createTask({
+      id: 't',
+      sourceReport: report,
+      createdBy: { kind: 'intake', taskId: 'reader', runId: 'r', requestKey: report.link },
+    });
+    const state = createShinsaState({
+      tasks: [reader, task],
+      patch: { schedules: { 's-read': createSchedule({ id: 's-read', name: 'Support reports' }) } },
+    });
+    expect(resolveReportFact(state, task, NOW)).toEqual({
+      label: 'Reported in composio-slack',
+      byline: `Ana Ruiz · ${formatMoment(NOW - 2 * 60 * 60_000, NOW)}`,
+      text: report.text,
+      link: report.link,
+      automation: 'Support reports',
+      reader,
+    });
+  });
+
+  it('keeps a time it cannot read as written, opens only web links, and survives a deleted automation', () => {
+    const task = createTask({
+      id: 't',
+      sourceReport: { ...report, author: null, postedAt: 'yesterday', link: 'slack://channel?id=C1' },
+    });
+    expect(resolveReportFact(createShinsaState({ tasks: [task] }), task, NOW)).toMatchObject({
+      byline: 'yesterday',
+      link: null,
+      automation: null,
+      reader: null,
+    });
+    const bare = { ...task, sourceReport: { ...report, author: null, postedAt: null, link: null } };
+    expect(resolveReportFact(createShinsaState({ tasks: [bare] }), bare, NOW)).toMatchObject({
+      byline: null,
+      link: null,
+    });
   });
 });

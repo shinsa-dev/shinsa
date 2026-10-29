@@ -80,6 +80,7 @@ function scheduleRun(
 function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'text' | 'trigger'>): Schedule {
   return {
     target: { kind: 'new_task', repoId: 'repo-paywall', priority: 'normal', mode: 'build' },
+    source: null,
     timeZone: 'Europe/Berlin',
     enabled: true,
     runCount: 0,
@@ -131,6 +132,17 @@ function listSchedules(): Schedule[] {
       },
       runCount: 2,
       runs: [scheduleRun('sent', 26 * HOUR)],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
+      id: 'schedule-support',
+      name: 'Support reports',
+      text: 'Bug reports and feature requests about the docs and the paywalls.',
+      trigger: { kind: 'interval', everyMinutes: 60 },
+      target: { kind: 'task', taskId: 'task-support-intake' },
+      source: { projectId: 'project-superwall', server: 'composio-slack' },
+      runCount: 48,
+      runs: [scheduleRun('sent', 50 * MINUTE), scheduleRun('sent', 110 * MINUTE)],
       createdBy: { kind: 'you' },
     }),
   ];

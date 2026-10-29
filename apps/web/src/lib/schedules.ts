@@ -10,6 +10,7 @@ import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { copyText, describeFailure, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
+import { formatCount } from '@/lib/format/count.ts';
 import { formatClock, formatMoment } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -50,8 +51,20 @@ export function describeScheduleWhat(state: ShinsaState, schedule: Schedule) {
   return describeScheduleTarget(schedule, (taskId) => state.tasks[taskId]?.title ?? null);
 }
 
+function countFiledTasks(state: ShinsaState, schedule: Schedule) {
+  return Object.values(state.tasks).filter((task) => task.sourceReport?.scheduleId === schedule.id).length;
+}
+
+function describeFiled(count: number) {
+  return count === 0 ? 'nothing filed yet' : `${formatCount(count, 'task', 'tasks')} filed`;
+}
+
 export function describeScheduleSummary(state: ShinsaState, schedule: Schedule) {
-  return `${describeScheduleWhat(state, schedule)} · ${lowerFirst(describeScheduleWhen(schedule))}`;
+  const when = lowerFirst(describeScheduleWhen(schedule));
+  if (schedule.source) {
+    return `Reads ${schedule.source.server} · ${when} · ${describeFiled(countFiledTasks(state, schedule))}`;
+  }
+  return `${describeScheduleWhat(state, schedule)} · ${when}`;
 }
 
 export function resolveScheduleStatus(schedule: Schedule): ScheduleStatus | null {
