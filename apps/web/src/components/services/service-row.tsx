@@ -53,7 +53,7 @@ export function ServiceActionButton({
   );
 }
 
-export function ServicePreviewButton({
+function ServicePreviewButton({
   view,
   label = null,
   size = 'icon-sm',
