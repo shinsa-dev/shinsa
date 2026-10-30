@@ -429,7 +429,7 @@ function ServicesPanelContent({
       ) : (
         <div className='min-h-0 overflow-y-auto'>
           <CompactSections
-            className={cn(COMPACT_POPOVER_INSET, 'pb-0.5 has-[>section:last-of-type[data-folded]]:pb-1.5')}
+            className={cn(COMPACT_POPOVER_INSET, 'pb-0.5 has-[>section:only-of-type[data-folded]]:pb-1.5')}
           >
             {groups.map((group) => (
               <ServiceGroupSection
