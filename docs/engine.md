@@ -617,10 +617,16 @@ them in the order they need:
 ```
 
 - **The Agent is taught it.** A fresh run's project context (`resolveProjectContext`, `prompts/project.ts`) adds a
-  short guide when the task has a repository and the project has another (`describeCrossRepositoryWork`): read the
-  other repository at its path, never change files outside its own worktree, file the other part with `create_task`
-  in that repository and forked from this task, set the order, and link it in the plan and hand-over. A project with
-  one repository never gets the guide. The guide sits in the brief, the user turn, so the session's cached prefix
+  short guide when the task has a repository and the project has another, or has folders that may hold one
+  (`describeCrossRepositoryWork`): read the other repository at its path, never edit, stage or commit in another
+  checkout, file the other part with `create_task` in that repository and forked from this task, set the order, never
+  hand you a step to commit, push or open a pull request there, and link it in the plan and hand-over. A project with
+  one repository and no folders never gets the guide.
+- **A repository in the project's folders is registered when named.** `create_task`'s `repository` is a registered
+  repository's name or, failing that, the folder name of a git repository directly inside one of the task's project
+  folders (`upsertProjectFolderRepo` in `repos/index.ts`, through `OrchestrationCall.registerRepo`): it is registered
+  into that project the way triage registers one (`upsertRepo`), and the new task works there. A name found in
+  neither is refused with the repositories Shinsa knows. The guide sits in the brief, the user turn, so the session's cached prefix
   does not change (Caching).
 - **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
   merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
@@ -661,7 +667,10 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   and a round whose work is finished and waits for your review or your merge (stage `awaiting_review` or
   `awaiting_merge`; the prompt's Now line says so). In the last, anything about that round is `feedback`: a change
   to it, something to run or start so you can try it ("start the dev server so I can test the UI"), something to
-  check, or a question about it; only the next piece of work, a code change of its own, is `new_round`.
+  check, or a question about it; only the next piece of work, a code change of its own, is `new_round`. In every
+  form, a message about the round's own work (its files, its steps around the merge, the part it needs in another
+  repository) is never `separate_task`, even when it names another checkout: pasting a step's paths and branches
+  back to the agent is feedback, not another goal.
 - **Where you decide, a message is always the gate's reply.** At a plan gate, a review gate, an agent's question, your
   OK, an operation gate, a failure, Sign in or setup gate, and while planning with no agent running, the composer's
   words say what sending does (What a message does, below), and that is what it does: the classifier is not asked
@@ -1222,9 +1231,14 @@ has production access, and none should, so the Agent hands these over as steps f
 names the thing, a `detail` with where and how, and the exact `command` when the step is one; `docs/protocol.md` →
 Hand-overs). The last phase's instruction (`resolvePhaseInstruction`) and the handover skill ask for them: everything
 the Agent can do inside the repository it does itself (code, tests, docs, `.env.example`, the migration file); a step
-names its variable and where to set it, never a secret's value. A fix that changes them sends the whole new list in its
+names its variable and where to set it, never a secret's value. Shipping code is never your step: a step whose command
+stages, commits, pushes, or opens or merges a pull request (`git add`, `git commit`, `git push`, also with `-C`, and
+`gh pr create` or `merge`) is refused with the hand-over (`readMergeSteps` in `report/validate.ts`), since Shinsa ships
+this repository and work in another one is a task the Agent files with `create_task` (Where agents work → Work
+across repositories). A fix that changes them sends the whole new list in its
 `walkthrough` revision. The reviewer's brief lists them (`describeMergeStepsForReview`) and asks it to check the list
-is complete: a variable the code reads that no step names, or a step an agent could have done, is a finding.
+is complete: a variable the code reads that no step names, a step an agent could have done, or one that ships code
+anywhere is a finding.
 
 You tick a step once you did it (`merge_step.tick`, human-only: core refuses it on your behalf, and its spec,
 `shinsa merges tick`, is `humanOnly`); `merge_step.ticked` keeps the step's key in `Task.mergeStepsDone`. A step's key

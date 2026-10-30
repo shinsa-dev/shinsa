@@ -76,7 +76,7 @@ const ACKNOWLEDGE =
   'needs nothing: thanks, an acknowledgement ("ok", "great", "sick thank you"), praise or small talk';
 
 const SEPARATE_TASK =
-  'asks for work toward another goal, for example in another repository, which belongs in a task of its own';
+  "asks for work toward another goal, which belongs in a task of its own; a message about this task's own work, its files, its steps or the parts it needs in other repositories is not this, even when it names another repository or checkout";
 
 const RESTING_KIND_QUESTION: ChoiceQuestion = {
   type: 'choice',
@@ -97,7 +97,7 @@ const WORKING_KIND_QUESTION: ChoiceQuestion = {
   criteria: {
     acknowledge: ACKNOWLEDGE,
     feedback:
-      'about the work of the current round: a correction, an answer, guidance, a nudge or a question about what it does',
+      'about the work of the current round: a correction, an answer, guidance, a nudge or a question about what it does, including its files, its steps around the merge and what it needs in other repositories',
     new_round:
       'new work for this task that the current round does not cover: a new idea, an extension or the next step of the same goal',
     separate_task: SEPARATE_TASK,
@@ -115,7 +115,7 @@ function createGateKindQuestion(decision: string): ChoiceQuestion {
     instructions: `The work of the current round is finished and waits for the human to ${decision} it. Nothing else is in progress. What is this message?`,
     criteria: {
       acknowledge: ACKNOWLEDGE,
-      feedback: `about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script), something to check, or a question about it`,
+      feedback: `about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script), something to check, a question about it, or its files, its steps around the merge and what it needs in other repositories (even when the message names another checkout)`,
       new_round:
         'the next piece of work after this round: a new idea or an extension of the same goal that is a code change of its own, not something needed to try or finish this round',
       separate_task: SEPARATE_TASK,

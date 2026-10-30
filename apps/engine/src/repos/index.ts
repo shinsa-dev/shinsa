@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { Repo } from '@shinsa/core';
+import { type Repo, resolveTaskProject, type Task } from '@shinsa/core';
 import { inspectRepo, resolveRepoRemote, resolveRepoRoot } from '../git/index.ts';
 import { GITHUB_TIMEOUT_MS } from '../github/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
@@ -124,6 +124,15 @@ export async function upsertRepo(
   const registered = selectRepoByPath(engine, candidate.path);
   if (!registered) throw new Error(`Could not register ${candidate.name}.`);
   return registered;
+}
+
+export async function upsertProjectFolderRepo(engine: Engine, task: Task, name: string) {
+  const projectId = resolveTaskProject(engine.state, task);
+  const project = projectId ? engine.state.projects[projectId] : undefined;
+  if (!project) return null;
+  const local = listLocalRepos(project.folders).find((repo) => repo.name === name);
+  if (!local) return null;
+  return await upsertRepo(engine, local.path, () => Promise.resolve(null), project.id);
 }
 
 export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {

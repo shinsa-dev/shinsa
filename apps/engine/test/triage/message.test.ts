@@ -99,6 +99,9 @@ describe('reading what a message asks for', () => {
     );
     expect(call?.prompt).toContain('Now: round 1 is in progress, building.');
     expect(call?.prompt).toContain('A round of this task is in progress. What is this message?');
+    expect(call?.prompt).toContain(
+      'including its files, its steps around the merge and what it needs in other repositories'
+    );
     expect(call?.prompt).toContain('Message:\nAlso add search');
   });
 
@@ -136,6 +139,12 @@ describe('reading what a message asks for', () => {
         `"feedback": about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script)`
       );
       expect(read).toContain('not something needed to try or finish this round');
+      expect(read).toContain(
+        'its files, its steps around the merge and what it needs in other repositories (even when the message names another checkout)'
+      );
+      expect(read).toContain(
+        `"separate_task": asks for work toward another goal, which belongs in a task of its own; a message about this task's own work, its files, its steps or the parts it needs in other repositories is not this, even when it names another repository or checkout`
+      );
     }
   );
 
