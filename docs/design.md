@@ -2873,11 +2873,12 @@ Only these, and they win over anything below:
       change." A check running is the stage Checking a watchdog.
     - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
       many still watch and how long is left, then one row per watchdog in two lines. The first has its title, its
-      status in its tone and, quiet at the end, where it stands ("18 h left · 5 checks", "Not started"); hovering or
-      focusing the status opens a card with what it checks, its schedule and its source. The second is one sentence
+      status in its tone and, quiet right after it at the same size, where it stands ("18 h left · 5 checks", "3
+      checks"; nothing while it has not started, which its status already says, and never at the row's end beside
+      Stop); hovering or focusing the status opens a card with what it checks, its schedule and its source. The second is one sentence
       that changes with the state: the last check's summary while it watches, "First check in 20 min.", "Starts once
-      the change is live in production.", "Held up for 72 h with nothing wrong.", or the issue it found and the task
-      it filed, as a link. Stop is a secondary button on the rows still active.
+      the change is live in production.", "Held up for 72 h with nothing wrong.", or the issue it found with the task
+      it filed and any task a watch filed first ("Already filed as …"), as links. Stop is a secondary button on the rows still active.
     - **A source request asks, it never connects.** A watchdog waiting for a source shows, in an `INSET` block under its
       row (a border, no tint, so the fields keep their contrast on the card), the data it needs, where the code sends
       it and the servers it suggests, then a small server field and a "what it holds" field with Connect, as the secret

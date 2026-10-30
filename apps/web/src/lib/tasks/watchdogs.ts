@@ -47,7 +47,7 @@ export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
   switch (watchdog.status) {
     case 'needs_source':
     case 'awaiting_production':
-      return 'Not started';
+      return null;
     case 'watching':
       return `${formatHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
     case 'passed':

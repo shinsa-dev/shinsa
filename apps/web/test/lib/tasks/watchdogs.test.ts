@@ -123,8 +123,8 @@ describe('describing a watchdog', () => {
     const meta = (overrides: Partial<Watchdog>) => describeWatchdogMeta(createWatchdog(overrides), NOW);
     expect(meta({})).toBe('31 h left · 1 check');
     expect(meta({ endsAt: null })).toBe('1 h left · 1 check');
-    expect(meta({ status: 'needs_source' })).toBe('Not started');
-    expect(meta({ status: 'awaiting_production' })).toBe('Not started');
+    expect(meta({ status: 'needs_source' })).toBeNull();
+    expect(meta({ status: 'awaiting_production' })).toBeNull();
     expect(meta({ status: 'passed', checks: [] })).toBe('0 checks');
     expect(WATCHDOG_STATUS.tripped).toEqual({ label: 'Found an issue', tone: 'red' });
   });
