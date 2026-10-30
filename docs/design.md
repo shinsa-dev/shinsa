@@ -384,7 +384,8 @@ Only these, and they win over anything below:
    one the classifier read as needing nothing (no agent runs for it), "Not delivered. ‹reason›" in
    `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`), or, for
    one read as another task's work (a split-off), its suggested task as a card under the bubble (`SplitOffCard`,
-   `components/chat/split-off-card.tsx`): a chat card at most four fifths wide, its line "Suggested as a separate
+   `components/chat/split-off-card.tsx`): a reply to the bubble, so it sits on the agent's side, full width like a
+   hand-over card and not under the bubble's right edge, its line "Suggested as a separate
    task" with `IconLightbulbGlow` and its state at the right ("Not sent to the agent", "Made into a task" or
    "Dismissed", `describeSplitOffState`). While open its body is the Overview's suggested-task row (`SuggestionRow`:
    title over why, When to start, Keep it here and Make it a task), so you decide in the chat; once made a task it

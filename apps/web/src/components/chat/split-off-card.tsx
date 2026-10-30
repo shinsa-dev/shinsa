@@ -47,7 +47,7 @@ export function SplitOffCard({ reference }: { reference: SplitOffReference }) {
   return (
     <section
       data-split-off={suggestion.status}
-      className={cn(CARD, 'flex w-full min-w-0 max-w-4/5 flex-col overflow-hidden')}
+      className={cn(CARD, 'mt-2 flex min-w-0 flex-col self-stretch overflow-hidden')}
     >
       <CardLine
         icon='IconLightbulbGlow'
