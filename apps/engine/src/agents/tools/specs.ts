@@ -356,7 +356,7 @@ export const TOOL_SPECS = {
         approval: {
           type: 'boolean',
           description:
-            'True asks the human to approve the plan before anything is built or run, even when Approve plans is off. Set it when the change is risky.',
+            'True asks the human to approve the plan before anything is built or run, at every Approve plans setting: on When you ask, and on Large plans even when the plan is small. Set it when the change is risky.',
         },
         operation: textList(
           'Only for a task that both changes code and runs an operation: the operation’s steps in order, each with how to check it worked. Leave it out otherwise.',

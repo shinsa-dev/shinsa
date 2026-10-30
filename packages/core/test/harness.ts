@@ -133,6 +133,15 @@ export const PLAN: PlanDocument = {
   questions: [],
 };
 
+export const LARGE_PLAN: PlanDocument = {
+  ...PLAN,
+  phases: [
+    ...PLAN.phases,
+    { title: 'Cover the edge cases', detail: 'Test narrow and wide panels.' },
+    { title: 'Write the docs', detail: 'Describe the clamp.' },
+  ],
+};
+
 export const IMPACT =
   'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 

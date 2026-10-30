@@ -61,14 +61,14 @@ describe('Onboarding', () => {
       roots: ['~/Developer', `${developer}/`],
       defaultModel: 'sonnet',
       mergeMethod: 'rebase',
-      approvePlans: true,
+      approvePlans: 'large',
     });
     expect(status.roots).toMatchObject({ source: 'configured', configured: [developer] });
     expect(status.defaults).toEqual({ model: 'sonnet', mergeMethod: 'rebase' });
     expect(engine.state.settings).toMatchObject({
       defaultModel: 'sonnet',
       mergeMethod: 'rebase',
-      approvePlans: true,
+      approvePlans: 'large',
     });
     expect(store.config.roots).toEqual([developer]);
     expect((await onboarding.listSuggestions(true)).suggestions[0]?.chosen).toBe(true);
@@ -92,7 +92,7 @@ describe('Onboarding', () => {
       [{ roots: ['/no/such/folder'] }, '/no/such/folder is not a folder on this machine.'],
       [{ roots: [root], defaultModel: 'rm -rf' }, 'Pick a model from the list.'],
       [{ roots: [root], mergeMethod: 'fast-forward' }, 'Merge with squash, merge or rebase.'],
-      [{ roots: [root], approvePlans: 'sometimes' }, 'Say yes or no to approving plans.'],
+      [{ roots: [root], approvePlans: true }, 'Approve plans when you ask, for large plans or always.'],
     ] as const) {
       await expect(onboarding.applySetup(body)).rejects.toThrow(message);
     }

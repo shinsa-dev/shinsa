@@ -111,7 +111,7 @@ describe('the project context', () => {
 
   test('a fresh run’s prompt carries the project context and a resumed run’s does not', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const { server } = createBasket(harness);
     const taskId = createTask(harness, { repoId: server, size: 'large' });
     const context = resolveProjectContext(harness.state, harness.task(taskId));

@@ -1145,7 +1145,7 @@ Only these, and they win over anything below:
       movement clock; in a pick-one list it rests on your pick and slides back to it when the pointer leaves. The first
       list takes focus when the step opens: the arrows, Home and End move the highlight (`aria-activedescendant`) and
       Enter or Space picks, so setup runs from the keyboard alone; these keys belong to the list, not the page (10).
-    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Large tasks, each a
+    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Plans, each a
       `SectionLabel` over its list card, 16px apart. The recommended choice of each starts picked, so one Continue
       keeps them all; a click only moves that list's mark, and nothing is sent until Continue.
     - **Projects** (`OnboardingProjects`) are one card of the projects Shinsa suggests, all kept: a row each with a
@@ -1476,7 +1476,7 @@ Only these, and they win over anything below:
       away: the task waits as "Waiting for usage: pauses for you at 3:40 PM" and its failure gate opens at the
       reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
       rows, without Other….
-    - **Settings → Agents → Engine** is titles-only rows: Approve plans, Automatic fix rounds, Delegations at once
+    - **Settings → Agents → Engine** is titles-only rows: Approve plans (When you ask, Large plans, Always), Automatic fix rounds, Delegations at once
       (No limit, the default, or 2, 4, 8 or 16 at once, a stored number not in the list added in order, and
       Custom…, which opens a dialog for any whole number of 1 or more; `delegationLimit`, `docs/engine.md` →
       Delegation) and Merge with. ⌘K's Change a setting has the same rows, without Custom….

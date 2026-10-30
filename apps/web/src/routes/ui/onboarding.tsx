@@ -191,16 +191,21 @@ const DEFAULTS = createSampleStep({
     },
     {
       id: 'plans',
-      label: 'Large tasks',
+      label: 'Plans',
       options: [
         createSampleChoice(
-          'plans=yes',
-          'Show me the plan first',
-          'Before building a large task, the agent waits for you to approve its plan.',
+          'plans=large',
+          'Show me large plans first',
+          'Before building a plan with more than 3 phases or 6 files, the agent waits for you to approve it.',
           true
         ),
         createSampleChoice(
-          'plans=no',
+          'plans=always',
+          'Show me every plan first',
+          'The agent waits for you to approve every plan before it builds.'
+        ),
+        createSampleChoice(
+          'plans=when_asked',
           'Start building',
           'Agents plan on their own and show you a plan only when you ask for one.'
         ),

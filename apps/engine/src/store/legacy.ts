@@ -2,6 +2,7 @@ import {
   type Briefing,
   DEFAULT_WORKSPACE_MODE,
   DELEGATE_ROLES,
+  type PlanApproval,
   type RunPurpose,
   type RunRole,
   type StoredBriefing,
@@ -71,6 +72,13 @@ const SCHEDULE_SOURCE_LOG_VERSION = 8;
 
 const WATCHDOG_READS_LOG_VERSION = 9;
 
+const PLAN_APPROVAL_LOG_VERSION = 10;
+
+const PLAN_APPROVAL_BY_SWITCH = new Map<unknown, PlanApproval>([
+  [true, 'large'],
+  [false, 'when_asked'],
+]);
+
 const WATCHDOG_READS_EVENT_TYPES = ['task.created', 'watchdog.armed', 'watchdog.checked'];
 
 const GITBUTLER_EVENT_TYPES = [
@@ -91,6 +99,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < FINDING_LEVELS_LOG_VERSION ? ['review.reported'] : []),
     ...(version < SCHEDULE_SOURCE_LOG_VERSION ? ['schedule.written'] : []),
     ...(version < WATCHDOG_READS_LOG_VERSION ? WATCHDOG_READS_EVENT_TYPES : []),
+    ...(version < PLAN_APPROVAL_LOG_VERSION ? ['settings.changed'] : []),
   ];
 }
 
@@ -170,6 +179,12 @@ function resolvePlanFirst(event: Payload): Payload {
   return { ...rest, planFirst: event.planFirst ?? specFirst };
 }
 
+function resolveSettings(settings: Payload) {
+  const current = withoutKeys(settings, ['worktreesDirectory']);
+  const approvePlans = PLAN_APPROVAL_BY_SWITCH.get(current.approvePlans);
+  return approvePlans ? { ...current, approvePlans } : current;
+}
+
 function resolveGate(event: Payload) {
   if (!isRecord(event.gate) || event.gate.cause !== 'workspace_update') return event;
   return { ...event, gate: withoutKeys(event.gate, ['cause']) };
@@ -200,7 +215,7 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return event;
     case 'settings.changed':
       if (!isRecord(event.settings)) return event;
-      return { ...event, settings: withoutKeys(event.settings, ['worktreesDirectory']) };
+      return { ...event, settings: resolveSettings(event.settings) };
     case 'repo.registered':
     case 'repo.updated':
       return resolveRepo(event);

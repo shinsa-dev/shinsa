@@ -15,6 +15,7 @@ import {
   createHarness,
   createTask,
   type Harness,
+  LARGE_PLAN,
   PASSING,
   PLAN,
   proposePlan,
@@ -85,7 +86,7 @@ describe('answering a gate', () => {
 
   test('approving a plan stores the answers to its questions and starts building', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
     approve(harness, taskId, '  Use 240px.  ');
@@ -95,7 +96,7 @@ describe('answering a gate', () => {
 
   test('asking for changes to a plan sends it back to the agent', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
     harness.send({
@@ -174,7 +175,7 @@ describe('answering a gate', () => {
 describe('approving a plan', () => {
   function planGate() {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
     return { harness, taskId, gate: harness.openGate(taskId) };
@@ -310,7 +311,7 @@ describe('verdicts on review findings', () => {
 
   test('only review findings take verdicts, and an empty list is no verdict', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
@@ -374,7 +375,7 @@ describe('line comments with a request for changes', () => {
     expect(harness.state.gates[gate.id]?.status).toBe('answered');
 
     const planned = createHarness();
-    planned.send({ type: 'settings.change', patch: { approvePlans: true } });
+    planned.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(planned, { size: 'large' });
     proposePlan(planned, taskId);
     expect(() =>
@@ -433,14 +434,14 @@ describe('decisions only the human makes', () => {
 
   function openEveryGate() {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'large' } });
     const gates = new Map<GateType, string>();
     const remember = (taskId: string) => {
       const gate = harness.openGate(taskId);
       gates.set(gate.type, gate.id);
     };
     const plan = createTask(harness, { request: 'Plan', size: 'large' });
-    proposePlan(harness, plan);
+    proposePlan(harness, plan, LARGE_PLAN);
     remember(plan);
     const review = createTask(harness, { request: 'Review' });
     reachReviewGate(harness, review);

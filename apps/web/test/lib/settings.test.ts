@@ -120,7 +120,7 @@ describe('setting choices', () => {
   });
 
   it('offers plan, merge and role choices', () => {
-    expect(PLAN_ITEMS.map((item) => item.value)).toEqual(['never', 'large']);
+    expect(PLAN_ITEMS.map((item) => item.value)).toEqual(['when_asked', 'large', 'always']);
     expect(MERGE_ITEMS.map((item) => item.value)).toEqual(['squash', 'merge', 'rebase']);
     expect(AGENT_GROUPS.map((group) => [group.title, group.roles.map((entry) => entry.title)])).toEqual([
       ['Task agents', ['Agent', 'Reviewer', 'Answerer']],
@@ -163,9 +163,10 @@ describe('setting values', () => {
     expect(resolveAttentionValue(settings({ attentionLimit: 0 }))).toBe('1');
   });
 
-  it('reads whether plans need approval', () => {
-    expect(resolvePlanValue(settings({ approvePlans: true }))).toBe('large');
-    expect(resolvePlanValue(settings({ approvePlans: false }))).toBe('never');
+  it('reads which plans need approval, when you ask by default', () => {
+    expect(resolvePlanValue(settings({ approvePlans: 'large' }))).toBe('large');
+    expect(resolvePlanValue(settings({ approvePlans: 'always' }))).toBe('always');
+    expect(resolvePlanValue(settings({ approvePlans: undefined }))).toBe('when_asked');
   });
 
   it('round-trips the fix round limit, with no limit as until clean', () => {

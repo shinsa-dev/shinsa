@@ -132,7 +132,7 @@ describe('the cost limit per task', () => {
     meter(harness, taskId, 6);
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 10 } });
     expect(harness.state.gates[gate.id]?.status).toBe('withdrawn');
     expect(harness.task(taskId).budgetAcknowledgedUsd).toBeUndefined();
