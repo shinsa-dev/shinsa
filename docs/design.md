@@ -816,14 +816,14 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Updates, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
+      Attention, Notifications, Context, Updates, Setup), Statistics (Shipping, Token usage), Agents (Models, Engine, Memory, Versions), Agent Usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
       folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
       tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
       floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
       scroll-spy table of contents would have kept that page. The tab is in the URL (`?tab=agents`; General is
       the bare `/settings`), and a link to a section (`/settings#limits`, the old `#agent-usage`, `#usage`, `#codex`
       and `#agents` too) opens its tab and scrolls to it. A card never repeats its page's name: the Agents tab's
-      model card is Models and Agent usage's account card is Accounts; Projects keeps its Projects card, the
+      model card is Models and Agent Usage's account card is Accounts; Projects keeps its Projects card, the
       list of projects themselves. The tabs are the segmented `Choice` under the heading, the task page's tab
       control, at every width: there is no rail of tabs beside the column, however wide the window (Layout, No
       sidebars). The column stays on Home's axis (`PAGE_COLUMN`) and the bar scrolls with the page; switching tabs
@@ -3109,7 +3109,7 @@ the string. Product copy is US English ("organization", "canceled", "color").
 ### Case
 
 - **Sentence case everywhere:** page titles, headings, card titles, buttons,
-  tabs, menu and select items, field labels, placeholders, table headers,
+  tabs (except the Settings tabs, which are title case: "Agent Usage"), menu and select items, field labels, placeholders, table headers,
   metric names, badges, tooltips, toasts, empty states and dialog titles.
   Capitalize the first word and proper nouns only — "All campaigns", "Main
   events", "Total proceeds", "Add product".
