@@ -70,7 +70,7 @@ src/
 │                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts, checks, finished),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
 │                        services (menu.tsx: Services beside Tasks and in the rail, its popover (SERVICES_PANEL, the
-│                        queue popover's COMPACT_POPOVER: the list as tall as its content, the forms at one height)
+│                        queue popover's COMPACT_POPOVER, which the queue's QUEUE_POPOVER widens to fit its rows: the list as tall as its content, the forms at one height)
 │                        whose views are the list drawn as the compact queue (each project a CompactSection, its
 │                        play button that starts them all), Manage with its inline removal, Add services, the custom
 │                        form and a service's form, the always-there footer (Manage, Add…, Terminal) and the trigger
