@@ -50,6 +50,7 @@ import {
   WatchdogClock,
 } from './runtime/index.ts';
 import { Schedules } from './schedules/index.ts';
+import { createWatchWriter } from './schedules/suggest.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
 import { ServiceRefiner, Terminals, type TerminalsOptions } from './terminals/index.ts';
@@ -208,6 +209,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       workspaces: runs.workspaces,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
+      wordWatch: createWatchWriter(quick.write),
       resolveLogin,
       roots,
       services: terminals,

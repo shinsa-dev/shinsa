@@ -52,7 +52,11 @@ function only(harness: Harness) {
   return first;
 }
 
-function requestSchedule(harness: Harness, taskId: string, input: Partial<CommandOf<'agent.set_schedule'>> = {}) {
+function requestSchedule(
+  harness: Harness,
+  taskId: string,
+  input: Partial<CommandOf<'agent.set_schedule'>> = {}
+) {
   return harness.send({
     type: 'agent.set_schedule',
     runId: harness.activeRun(taskId).id,
@@ -70,6 +74,24 @@ function requestSchedule(harness: Harness, taskId: string, input: Partial<Comman
 }
 
 describe('a watch suggested for a new integration', () => {
+  test('is asked for when a project starts using an integration, once', () => {
+    const { harness, projectId } = createProject();
+    expect(harness.lastEffect('watch.suggest')).toEqual({ kind: 'watch.suggest', projectId, ...FEEDBACK });
+    harness.send({
+      type: 'watch_source.write',
+      projectId,
+      server: 'slack',
+      data: 'Every message',
+      repoIds: [],
+    });
+    harness.send({ type: 'watch_source.write', projectId, server: 'posthog', data: 'Errors', repoIds: [] });
+    record(harness, { server: 'posthog' });
+    harness.send({ type: 'watch_suggestion.dismiss', suggestionId: suggestions(harness)[0]?.id ?? '' });
+    harness.send({ type: 'watch_source.remove', projectId, server: 'posthog' });
+    harness.send({ type: 'watch_source.write', projectId, server: 'posthog', data: 'Errors', repoIds: [] });
+    expect(harness.effectsOf('watch.suggest').map((effect) => effect.server)).toEqual(['slack', 'posthog']);
+  });
+
   test('is recorded hourly, for the human to accept or dismiss, and starts nothing', () => {
     const { harness, projectId } = createProject();
     record(harness);
@@ -226,11 +248,13 @@ describe('a watch an agent sets', () => {
   test('is checked like any watch before it is suggested', () => {
     const { harness } = createProject();
     const taskId = createTask(harness);
-    expect(refusal(() => requestSchedule(harness, taskId, { source: 'maple' })).code).toBe('source_not_found');
-    expect(refusal(() => requestSchedule(harness, taskId, { trigger: null })).code).toBe('schedule_invalid');
-    expect(refusal(() => requestSchedule(harness, taskId, { target: { kind: 'task', taskId: null } })).code).toBe(
-      'source_target'
+    expect(refusal(() => requestSchedule(harness, taskId, { source: 'maple' })).code).toBe(
+      'source_not_found'
     );
+    expect(refusal(() => requestSchedule(harness, taskId, { trigger: null })).code).toBe('schedule_invalid');
+    expect(
+      refusal(() => requestSchedule(harness, taskId, { target: { kind: 'task', taskId: null } })).code
+    ).toBe('source_target');
     expect(suggestions(harness)).toEqual([]);
   });
 

@@ -7,6 +7,7 @@ import {
   TASK_PRIORITIES,
   type TaskPriority,
   validateScheduleRequest,
+  type WatchSuggestion,
 } from '@shinsa/core';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
@@ -21,6 +22,14 @@ const SCHEDULE_FIELD: FieldSpec = {
   description: 'The schedule id, from `shinsa schedules list`.',
 };
 
+const SUGGESTION_FIELD: FieldSpec = {
+  name: 'suggestion',
+  kind: 'text',
+  positional: 'one',
+  required: true,
+  description: 'The suggested watch, from `shinsa schedules suggestions`.',
+};
+
 interface Webhook {
   url: string;
   signature: { header: string; encoding: string; prefix: string } | null;
@@ -32,6 +41,10 @@ function describeSchedule(schedule: Schedule, titleOf: (taskId: string) => strin
   const state = schedule.stopped ? 'finished' : schedule.enabled ? 'on' : 'paused';
   const next = schedule.nextRunAt ? ` · next ${new Date(schedule.nextRunAt).toISOString()}` : '';
   return `${schedule.id}  ${schedule.name}  (${state}) ${describeScheduleTrigger(schedule.trigger)} · ${describeScheduleTarget(schedule, titleOf)}${next}`;
+}
+
+function describeSuggestion(suggestion: WatchSuggestion) {
+  return `${suggestion.id}  ${suggestion.name}  (${suggestion.server}) ${describeScheduleTrigger(suggestion.trigger)} · ${suggestion.text}`;
 }
 
 function readWeekdays(values: Values) {
@@ -231,6 +244,33 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
     fields: [SCHEDULE_FIELD],
     build: (values) => ({ type: 'schedule.remove', scheduleId: readValue(values, 'schedule') }),
     done: () => 'Deleted.',
+  }),
+  defineRead<{ suggestions: WatchSuggestion[] }>({
+    path: ['schedules', 'suggestions'],
+    summary: 'List the suggested watches that wait for you to accept or dismiss them.',
+    fields: [],
+    request: () => '/api/schedules',
+    format: ({ suggestions }) => {
+      const open = suggestions.filter((suggestion) => suggestion.status === 'open');
+      return open.length === 0 ? 'No suggested watches.' : open.map(describeSuggestion).join('\n');
+    },
+  }),
+  defineCommand({
+    path: ['schedules', 'accept'],
+    summary: 'Accept a suggested watch: it starts reading its data source on its schedule.',
+    command: 'watch_suggestion.accept',
+    humanOnly: true,
+    fields: [SUGGESTION_FIELD],
+    build: (values) => ({ type: 'watch_suggestion.accept', suggestionId: readValue(values, 'suggestion') }),
+    done: () => 'Accepted. `shinsa schedules list` shows the watch.',
+  }),
+  defineCommand({
+    path: ['schedules', 'dismiss'],
+    summary: 'Dismiss a suggested watch. It is not suggested again.',
+    command: 'watch_suggestion.dismiss',
+    fields: [SUGGESTION_FIELD],
+    build: (values) => ({ type: 'watch_suggestion.dismiss', suggestionId: readValue(values, 'suggestion') }),
+    done: () => 'Dismissed.',
   }),
   defineRead<Webhook>({
     path: ['schedules', 'webhook'],

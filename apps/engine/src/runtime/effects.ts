@@ -62,6 +62,7 @@ import {
   upsertRepo,
   verifySetup,
 } from '../repos/index.ts';
+import type { WatchWriter } from '../schedules/suggest.ts';
 import { EvidenceStore } from '../store/evidence.ts';
 import { measureTaskCoverage } from '../test-coverage/index.ts';
 import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
@@ -72,6 +73,8 @@ import { resolveShippingError } from './failures.ts';
 
 export interface EffectRunnerOptions {
   triage: TriageResolver;
+  wordWatch?: WatchWriter;
+  timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
   roots?: RootSource;
@@ -87,6 +90,8 @@ export interface TaskServices {
 const WATCH_INTERVAL_MS = 45_000;
 
 type ChecksEffect = Extract<ShinsaEffect, { kind: 'checks.run' }>;
+
+type SuggestEffect = Extract<ShinsaEffect, { kind: 'watch.suggest' }>;
 
 type MergeEffect = Extract<ShinsaEffect, { kind: 'pull_request.merge' }>;
 
@@ -140,6 +145,8 @@ export class EffectRunner {
   readonly #runs: RunSupervisor;
   readonly #briefings: Briefings;
   readonly #triageTask: TriageResolver;
+  readonly #wordWatch: WatchWriter;
+  readonly #timeZone: string;
   readonly #findRepository: RepositoryFinder;
   readonly #resolveLogin: LoginResolver;
   readonly #roots: RootSource;
@@ -169,6 +176,8 @@ export class EffectRunner {
     this.#runs = runs;
     this.#briefings = briefings;
     this.#triageTask = options.triage;
+    this.#wordWatch = options.wordWatch ?? (() => Promise.resolve({ name: null, text: null }));
+    this.#timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.#findRepository = options.findRepository ?? (() => Promise.resolve(null));
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
@@ -213,6 +222,8 @@ export class EffectRunner {
       case 'briefing.request':
         this.#briefings.schedule();
         return Promise.resolve();
+      case 'watch.suggest':
+        return this.#suggestWatch(effect, context);
       case 'run.wake':
         return this.#runs.wake(effect.runId, effect.generation);
       case 'delegation.steer':
@@ -220,6 +231,21 @@ export class EffectRunner {
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
     }
+  }
+
+  async #suggestWatch(effect: SuggestEffect, context: EffectContext) {
+    const wording = await this.#wordWatch(effect.server, effect.data);
+    await this.#engine.dispatch(
+      {
+        type: 'watch_suggestion.record',
+        projectId: effect.projectId,
+        server: effect.server,
+        name: wording.name,
+        text: wording.text,
+        timeZone: this.#timeZone,
+      },
+      { id: `${context.key}:watch_suggestion.record` }
+    );
   }
 
   async #watch(taskId: string, context: EffectContext) {

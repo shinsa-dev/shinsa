@@ -64,13 +64,15 @@ export function suggestWatch(decider: Decider, input: WatchSuggestionInput) {
   return suggestion.id;
 }
 
+export function isWatchSuggestible(decider: Decider, projectId: string, server: string) {
+  if (!selectProjectSource(decider, { projectId, server })) return false;
+  if (isWatched(decider, projectId, server) || wasSuggested(decider, projectId, server)) return false;
+  return listOpenWatchSuggestions(decider.state).length < SCHEDULE_LIMITS.openSuggestions;
+}
+
 export function recordWatchSuggestion(decider: Decider, command: CommandOf<'watch_suggestion.record'>) {
   const server = command.server.trim();
-  const source = { projectId: command.projectId, server };
-  if (!selectProjectSource(decider, source)) return;
-  if (isWatched(decider, command.projectId, server) || wasSuggested(decider, command.projectId, server))
-    return;
-  if (listOpenWatchSuggestions(decider.state).length >= SCHEDULE_LIMITS.openSuggestions) return;
+  if (!isWatchSuggestible(decider, command.projectId, server)) return;
   suggestWatch(decider, {
     projectId: command.projectId,
     server,

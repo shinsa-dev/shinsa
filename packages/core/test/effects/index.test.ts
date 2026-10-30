@@ -35,6 +35,9 @@ describe('resolveEffectKey', () => {
     ).toBe('checks.run:t:2:4');
     expect(resolveEffectKey({ kind: 'briefing.request', projectId: null }, 4)).toBe('briefing.request:*:4');
     expect(resolveEffectKey({ kind: 'briefing.request', projectId: 'a' }, 4)).toBe('briefing.request:a:4');
+    expect(
+      resolveEffectKey({ kind: 'watch.suggest', projectId: 'a', server: 'slack', data: 'Bugs' }, 4)
+    ).toBe('watch.suggest:a:slack:4');
     for (const effect of TASK_EFFECTS) {
       expect(resolveEffectKey(effect, 4)).toBe(`${effect.kind}:t:4`);
     }
@@ -48,6 +51,9 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectLane({ kind: 'run.steer', runId: 'r', text: 'x' })).toBe('steer:r');
     expect(resolveEffectLane({ kind: 'question.resolve', gateId: 'g' })).toBe('gate:g');
     expect(resolveEffectLane({ kind: 'briefing.request', projectId: 'a' })).toBe('briefing');
+    expect(resolveEffectLane({ kind: 'watch.suggest', projectId: 'a', server: 'slack', data: 'Bugs' })).toBe(
+      'suggest:a'
+    );
   });
 
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {

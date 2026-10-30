@@ -69,7 +69,7 @@ describe('set_schedule', () => {
     expect(reply).toContain('It is paused. Starts a new task.');
   });
 
-  test('a watch set by an agent reads in a home of its own and says what it watches', async () => {
+  test('a watch set by an agent is suggested for the human to accept, and once accepted reads in a home of its own', async () => {
     const base = await createWorld();
     await base.engine.dispatch({
       type: 'repo.register',
@@ -88,17 +88,23 @@ describe('set_schedule', () => {
       repoIds: [],
     });
     const { tool } = setUp(world);
-    const reply = await tool('set_schedule', {
+    const watch = {
+      name: 'Feedback bugs',
       message: 'Bug reports and feature requests.',
       every_minutes: 60,
       source: 'slack',
-    });
+    };
+    const reply = await tool('set_schedule', watch);
+    expect(world.engine.state.schedules).toEqual({});
+    expect(reply).toStartWith('Suggested the watch “Feedback bugs” for the human to accept.');
+    expect(await tool('set_schedule', watch)).toBe(reply);
+    const [suggestion] = Object.values(world.engine.state.watchSuggestions);
+    await world.engine.dispatch({ type: 'watch_suggestion.accept', suggestionId: suggestion?.id ?? '' });
     const schedule = only(world);
     expect(schedule.source).toEqual({ projectId, server: 'slack' });
     const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
     expect(homeId).not.toBe(reader.taskId);
     expect(world.engine.state.tasks[homeId]?.watchHome).toBe(true);
-    expect(reply).toEndWith('Watches slack and files a task for each new report.');
   });
 
   test('a message into another task names it', async () => {

@@ -2,7 +2,8 @@ import { TASK_SHAPES, type TaskShape } from '@shinsa/core';
 import type { ChoiceQuestion } from '../agents/quick/decide.ts';
 
 const SHAPE_MEANINGS: Record<TaskShape, string> = {
-  answer: 'a question answered from the code, nothing changes',
+  answer:
+    'a question answered from the code, or a request to set up an automation (a schedule, a trigger or a watch of an integration) that its agent sets or suggests for the human to accept; nothing in the code changes',
   investigate: 'find the cause of a problem and report it, may propose a fix for the human’s OK',
   research: 'compare options or research a topic and write a report',
   change: 'change the code and ship it as a pull request',

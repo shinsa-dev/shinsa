@@ -76,7 +76,7 @@ export const SCHEDULE_TOOL_SPECS = {
           type: 'string',
           maxLength: L.reference,
           description:
-            'Read this data source of the project (its server) on each run and file a task for each new report, in this task or task_id, never with new_task.',
+            'Read this data source of the project (its server) on each run and file a task for each new report, never with new_task or task_id. A new watch is a suggestion: it starts once the human accepts it with one click.',
         },
         in_minutes: {
           type: 'integer',

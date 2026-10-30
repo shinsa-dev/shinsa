@@ -27,7 +27,7 @@ import { settleTask } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { resolveRestingStage } from './shapes.ts';
 import { createTask } from './tasks.ts';
-import { removeSourceSuggestions } from './watch-suggestions.ts';
+import { isWatchSuggestible, removeSourceSuggestions } from './watch-suggestions.ts';
 
 function selectWatchdog(task: Task, watchdogId: string) {
   return (task.watchdogs ?? []).find((watchdog) => watchdog.id === watchdogId) ?? null;
@@ -115,6 +115,8 @@ function writeSource(decider: Decider, projectId: string, source: WatchSource) {
   const written = { ...source, repoIds: known && known.repoIds.length === 0 ? [] : repoIds };
   if (known && known.data === written.data && known.repoIds.join() === written.repoIds.join()) return;
   decider.emit({ type: 'watch_source.written', projectId, source: written });
+  if (known || !isWatchSuggestible(decider, projectId, written.server)) return;
+  decider.run({ kind: 'watch.suggest', projectId, server: written.server, data: written.data });
 }
 
 function recordAgentSource(decider: Decider, task: Task, source: WatchdogSource) {
