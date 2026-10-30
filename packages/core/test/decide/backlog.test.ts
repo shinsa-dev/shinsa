@@ -93,7 +93,7 @@ describe('the backlog', () => {
     );
   });
 
-  test('Back to Needs you turns it into a normal plan to approve', () => {
+  test('Remove from the backlog turns it into a normal plan to approve', () => {
     const harness = createHarness();
     const taskId = park(harness);
     harness.send({ type: 'task.remove_from_backlog', taskId });
@@ -101,7 +101,7 @@ describe('the backlog', () => {
     expect(task.backlog).toBeNull();
     expect(task.stageReason).toBe('plan ready for you');
     expect(resolveQueue(harness.state, harness.now).ready.map((entry) => entry.task.id)).toEqual([taskId]);
-    expect(task.activity.at(-1)).toMatchObject({ actor: 'you', text: 'Moved back to Needs you' });
+    expect(task.activity.at(-1)).toMatchObject({ actor: 'you', text: 'Removed from the backlog' });
     const events = harness.events.length;
     harness.send({ type: 'task.remove_from_backlog', taskId });
     expect(harness.events).toHaveLength(events);

@@ -998,8 +998,8 @@ function listBacklogMarks(state: ShinsaState) {
     ...task.activity.map((entry) =>
       entry.text === 'Started building from the backlog'
         ? 'started from the backlog'
-        : entry.text === 'Moved back to Needs you'
-          ? 'back to Needs you'
+        : entry.text === 'Removed from the backlog'
+          ? 'removed from the backlog'
           : entry.text.startsWith('Started at once')
             ? 'inquiry started at once'
             : null
@@ -1447,9 +1447,9 @@ describe('decide under random command sequences', () => {
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'backlog', collect);
       expect([...reached].sort()).toEqual([
-        'back to Needs you',
         'inquiry started at once',
         'plan held in the backlog',
+        'removed from the backlog',
         'started from the backlog',
       ]);
     },

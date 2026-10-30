@@ -41,7 +41,7 @@ describe('listTaskActions', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([]);
   });
 
-  it('offers Move to the backlog before building starts, and Back to Needs you once it is there', () => {
+  it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
       ['fork'],
       ['moveToBacklog'],
@@ -117,7 +117,10 @@ describe('runTaskAction', () => {
     runTaskAction(FULL, 'removeFromBacklog');
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.move_to_backlog', taskId: 'full' }, 'Moved to the backlog.'],
-      [{ type: 'task.remove_from_backlog', taskId: 'full' }, 'Moved back to Needs you.'],
+      [
+        { type: 'task.remove_from_backlog', taskId: 'full' },
+        'Removed from the backlog. Its plan now waits for your approval.',
+      ],
     ]);
   });
 });

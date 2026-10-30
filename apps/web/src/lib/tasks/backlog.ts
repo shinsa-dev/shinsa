@@ -1,5 +1,4 @@
 import type { Task } from '@shinsa/core';
-import { runTaskAction } from '@/lib/tasks/actions.ts';
 import { resolvePlanReply } from '@/lib/tasks/gates.ts';
 
 export interface PlanCardCopy {
@@ -21,8 +20,4 @@ export function describePlanCard(task: Task): PlanCardCopy {
     approve: resolvePlanReply(task) === 'approveOperationPlan' ? 'Start the operation' : 'Start building',
     note: 'Starting moves the worktree onto the latest default branch first. To change the plan, say it in the chat.',
   };
-}
-
-export function requestRemoveFromBacklog(task: Task) {
-  runTaskAction(task, 'removeFromBacklog');
 }

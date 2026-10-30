@@ -275,7 +275,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   triaged (a clean title, the repository, the kind of task, a priority) and planned, which costs a small share of a
   task, and then stops: its plan stays out of Needs you, the queue, the guide and the Dock badge, and shows in the
   Backlog group of All tasks. Start building approves the plan, moves its worktree onto the latest default branch
-  and builds; Back to Needs you makes it a plan to approve. You put work there yourself (When to start → Backlog,
+  and builds; Remove from the backlog (the task's menu or ⌘K) makes it a plan to approve. You put work there yourself (When to start → Backlog,
   Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
   Shinsa never decides it for you. Questions, research and investigations never wait there.
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of

@@ -1119,7 +1119,7 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
   notification. Any other gate on a backlog task (a question, a failure, setup to fix) reaches you as usual. A task
   triage makes an inquiry leaves the backlog at once (`cause: inquiry`, "Started at once: questions, research and
   investigations never wait in the backlog"). A backlog task can still wait on other tasks; it plans once they finish.
-- **Taking it out.** `task.remove_from_backlog` (Back to Needs you, `shinsa tasks remove-from-backlog`) clears it,
+- **Taking it out.** `task.remove_from_backlog` (Remove from the backlog, `shinsa tasks remove-from-backlog`) clears it,
   and its plan waits in Needs you as a plan to approve ("plan ready for you").
 - **Starting.** Approving the held plan (Start building, or Start the operation for an operation) is the start: the
   task goes back to triage, `worktree.create` resets its worktree onto the freshly fetched default branch (planning

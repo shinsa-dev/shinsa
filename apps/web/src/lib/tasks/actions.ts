@@ -30,7 +30,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   finder: { label: 'Show in Finder', icon: 'IconFolder1' },
   fork: { label: FORK_TITLE, icon: 'IconFork' },
   moveToBacklog: { label: 'Move to the backlog', icon: 'IconArchive' },
-  removeFromBacklog: { label: 'Back to Needs you', icon: 'IconInboxEmpty' },
+  removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
   complete: { label: 'Mark as done', icon: 'IconCheckCircle2' },
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
@@ -78,7 +78,7 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
     case 'removeFromBacklog':
       void sendCommandWithToast(
         { type: 'task.remove_from_backlog', taskId: task.id },
-        'Moved back to Needs you.'
+        'Removed from the backlog. Its plan now waits for your approval.'
       );
       return;
     case 'restart':

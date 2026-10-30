@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { describePlanCard, requestRemoveFromBacklog } from '@/lib/tasks/backlog.ts';
-import { spyOnCommands } from '../../support/commands.ts';
+import { describe, expect, it } from 'bun:test';
+import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import { createTask } from '../../support/state.ts';
 
 describe('describePlanCard', () => {
@@ -23,24 +22,5 @@ describe('describePlanCard', () => {
       pipeline: ['plan', 'operate'] as Parameters<typeof createTask>[0]['pipeline'],
     };
     expect(describePlanCard(operation).approve).toBe('Start the operation');
-  });
-});
-
-describe('requestRemoveFromBacklog', () => {
-  let spies: ReturnType<typeof spyOnCommands>;
-
-  beforeEach(() => {
-    spies = spyOnCommands();
-  });
-
-  afterEach(() => {
-    spies.restore();
-  });
-
-  it('sends the task back to Needs you', () => {
-    requestRemoveFromBacklog(createTask({ id: 't', backlog: { at: 1 } }));
-    expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.remove_from_backlog', taskId: 't' }, 'Moved back to Needs you.'],
-    ] as never);
   });
 });

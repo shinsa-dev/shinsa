@@ -283,7 +283,7 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
 }
 
 const BACKLOG_LEFT: Record<BacklogCause, string> = {
-  you: 'Moved back to Needs you',
+  you: 'Removed from the backlog',
   started: 'Started building from the backlog',
   inquiry: 'Started at once: questions, research and investigations never wait in the backlog',
 };

@@ -522,7 +522,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
       type: 'task.remove_from_backlog',
       taskId: await findTaskId(client, readValue(values, 'task')),
     }),
-    done: () => 'Moved back to Needs you.',
+    done: () => 'Removed from the backlog. Its plan now waits for your approval.',
   }),
   defineCommand({
     path: ['tasks', 'bind'],

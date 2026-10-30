@@ -1014,9 +1014,9 @@ Only these, and they win over anything below:
       other gate on a backlog task (a question, a failure) sorts it by that gate, as on any task.
     - **The backlog plan card.** A backlog task's plan on its Overview reads "Planned and kept in the backlog", with
       Start building (Start the operation for an operation; the plan's approve, `startBacklog` in
-      `lib/tasks/gates.ts`) and Back to Needs you, and the note "Starting moves the worktree onto the latest default
+      `lib/tasks/gates.ts`) as its one button, and the note "Starting moves the worktree onto the latest default
       branch first." (`describePlanCard` in `lib/tasks/backlog.ts`). A task's menu, its row's menu and ⌘K offer
-      Move to the backlog while `resolveBacklogRefusal` (core) allows it, and Back to Needs you on a backlog task
+      Move to the backlog while `resolveBacklogRefusal` (core) allows it, and Remove from the backlog on a backlog task
       (`lib/tasks/actions.ts`). Accepting a suggested task offers Backlog beside Start now and After this task.
 17. **New tasks can wait.** Home's composer has a When to start select beside priority with four items, each with a
     hint line (`listNewTaskStarts` in `lib/new-task.ts`): Auto start ("Now, or after work it builds on"), Start now

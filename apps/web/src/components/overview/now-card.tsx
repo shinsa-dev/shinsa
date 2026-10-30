@@ -52,7 +52,7 @@ import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { listMergeWaits } from '@/lib/review/merge-steps.ts';
-import { describePlanCard, requestRemoveFromBacklog } from '@/lib/tasks/backlog.ts';
+import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
@@ -211,27 +211,13 @@ export function PlanCard({
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
       title={copy.title}
       action={
-        <span className='flex items-center gap-1.5'>
-          {task.backlog && (
-            <Button
-              size='sm'
-              variant='secondary'
-              disabled={busy !== null}
-              onClick={() => requestRemoveFromBacklog(task)}
-            >
-              Back to Needs you
-            </Button>
-          )}
-          <Button
-            size='sm'
-            loading={busy === approve}
-            onClick={() =>
-              void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))
-            }
-          >
-            {copy.approve}
-          </Button>
-        </span>
+        <Button
+          size='sm'
+          loading={busy === approve}
+          onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))}
+        >
+          {copy.approve}
+        </Button>
       }
       footer={
         <FooterNote note={copy.note}>

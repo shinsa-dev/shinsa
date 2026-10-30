@@ -362,7 +362,7 @@ describe('the task commands', () => {
     [
       ['tasks', 'remove-from-backlog', 'fix'],
       { type: 'task.remove_from_backlog', taskId: 'task-123' },
-      'Moved back to Needs you.',
+      'Removed from the backlog. Its plan now waits for your approval.',
     ],
     [
       ['tasks', 'bind', 'fix', 'any'],
