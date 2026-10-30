@@ -34,11 +34,18 @@ function FileChip({
   );
 }
 
-function Files({ files }: { files: ChatAttachment[] }) {
+const ALIGN = {
+  start: 'justify-start',
+  end: 'max-w-4/5 justify-end',
+};
+
+type AttachmentAlign = keyof typeof ALIGN;
+
+function Files({ files, align }: { files: ChatAttachment[]; align: AttachmentAlign }) {
   const viewer = useImageViewer();
   const videos = files.filter(canPlayAttachment);
   return (
-    <div className='flex max-w-4/5 flex-wrap justify-end gap-2'>
+    <div className={cn('flex flex-wrap gap-2', ALIGN[align])}>
       {files.map((attachment, index) => {
         const at = videos.indexOf(attachment);
         return (
@@ -58,19 +65,27 @@ function Files({ files }: { files: ChatAttachment[] }) {
   );
 }
 
-function Attachments({ attachments }: { attachments: ChatAttachment[] }) {
+export function MessageAttachments({
+  attachments,
+  align = 'end',
+  size = 'lg',
+}: {
+  attachments: ChatAttachment[];
+  align?: AttachmentAlign;
+  size?: 'sm' | 'lg';
+}) {
   const { images, files } = splitAttachments(attachments);
   return (
     <>
       {images.length > 0 && (
         <ImageStrip
           images={images.map((attachment) => ({ src: attachment.url, caption: attachment.name }))}
-          size='lg'
+          size={size}
           corner={ATTACHMENT_CORNER}
-          className='max-w-4/5 justify-end'
+          className={ALIGN[align]}
         />
       )}
-      {files.length > 0 && <Files files={files} />}
+      {files.length > 0 && <Files files={files} align={align} />}
     </>
   );
 }
@@ -122,7 +137,7 @@ export function UserMessage({
   const long = body.split('\n').length > CLAMP_LINES || body.length > CLAMP_CHARACTERS;
   return (
     <div data-message data-delivery={delivery ?? undefined} className='flex min-w-0 flex-col items-end gap-2'>
-      <Attachments attachments={shown} />
+      <MessageAttachments attachments={shown} />
       {body && (
         <div className='relative min-w-0 max-w-4/5'>
           <div className={cn(BUBBLE, 'selectable')}>

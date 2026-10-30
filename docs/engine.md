@@ -3034,7 +3034,8 @@ names: a provider adapter maps into it, and the web renders only it. Each entry 
 
 ### Attachments
 
-You can attach files and images to a new task's request and to any message in a task. The web uploads each file as
+You can attach files and images to a new task's request, to any message in a task and to your answer to a question
+(the answer box on its card, `AnswerBox`). The web uploads each file as
 it is picked, pasted or dropped: `POST /api/attachments` with `{ name, mimeType, data }` (`data` in base64, since the
 guard takes JSON bodies only) writes it to `<data>/attachments/<UUIDv7>/<safe file name>` (`AttachmentStore`, 25 MB a
 file; this route alone takes a body up to the base64 of that, every other one stays at 8 MB) and answers with a
@@ -3047,7 +3048,7 @@ to the request or message, one `<attachment kind display_name mime_type size_byt
 path a message takes (a steer, the wake queue, a gate reply, planning, a fix, a new round, a new task) carries them
 without a field of its own. The agent reads `path`, the absolute file, with its own tools (Claude's Read shows it an
 image). `splitMessageAttachments` takes the block back out wherever text is shown, preferring `url`, so the page
-renders thumbnails and file chips instead of markup, and `resolveRoundTitle` skips it (a round of attachments
+renders thumbnails and file chips instead of markup (an answered question's card too, through `resolveAskAnswer`), and `resolveRoundTitle` skips it (a round of attachments
 alone is titled by their names). The same parser reads the attachment blocks of imported Kanna transcripts. Nothing
 removes an upload when its task goes.
 
