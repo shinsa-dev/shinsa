@@ -75,5 +75,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
   the `shinsa.dev` zone), and `ALLOWED_GITHUB_LOGINS`, the comma-separated GitHub logins that may sign in. It is a
   secret, not a `vars` entry, so `wrangler deploy` never overwrites it with an empty list.
+- The Worker also owns the route `shinsa.dev/app*` (`routes` in `wrangler.jsonc`). A route runs before the marketing
+  Worker's custom domain on the same hostname, so `/app` is served by this Worker whatever the marketing deploy is; the
+  marketing Worker's `CLOUD` binding only matters for `www.shinsa.dev/app`, which it redirects.
 - Deploy this Worker before the marketing Worker binds it (`services` in `apps/marketing/wrangler.jsonc`): merging to
   `main` deploys the marketing site, and a deploy naming a service that does not exist fails.

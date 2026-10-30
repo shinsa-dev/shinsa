@@ -160,7 +160,8 @@ is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/work
 `/download/*`, `/open`, `/app` and `/app/*` (`assets.run_worker_first`); every other request is a plain static asset
 hit. `bun run preview` serves `/open` without the Worker, so its tab keeps the generic title; `bunx wrangler dev`
 after a build shows it as production does.
-`/app` is the remote dashboard (`docs/engine.md` → Remote access): `src/worker/app.ts` hands it, as it came, to the
+`/app` is the remote dashboard (`docs/engine.md` → Remote access). On `shinsa.dev` the `shinsa-cloud` Worker's own
+route `shinsa.dev/app*` answers it before this Worker runs; otherwise `src/worker/app.ts` hands it, as it came, to the
 `shinsa-cloud` Worker (`apps/cloud`) through the `CLOUD` service binding, sends `www.shinsa.dev/app` to
 `shinsa.dev/app`, and answers 503 while the binding is missing. Only the production deploy carries the binding: a
 preview has none (`previews` leaves it out), so a branch builds whether or not `shinsa-cloud` exists and its `/app`
