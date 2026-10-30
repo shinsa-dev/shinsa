@@ -335,8 +335,9 @@ Only these, and they win over anything below:
    toggled a section yourself it opens when it holds the task on screen; after that your choice
    wins everywhere (`queue:section:<section>`, `resolveSectionId` with `resolveSectionDefault` from `lib/queue.ts`, 40). A section is
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
-   (37), and the queue popover is `COMPACT_POPOVER` (320px, as tall as its content up to the room under the button,
-   then it scrolls) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   (37), and the queue popover is `QUEUE_POPOVER` (`COMPACT_POPOVER`, as tall as its content up to the room under the button,
+   then it scrolls, and at least 320px wide, growing to fit its widest row, such as a long status with a long step
+   track, up to 448px or the room left in the window) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
    sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since
