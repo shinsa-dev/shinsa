@@ -42,6 +42,19 @@ function describeSteps(steps: Step[]) {
 }
 
 describe('resolveSteps', () => {
+  it('keeps the steps a cancelled task finished and marks the build it stopped in as cancelled', () => {
+    const task = withPlan(
+      { id: 'stopped', stage: 'cancelled', cancelledFrom: 'building', repoId: 'repo-1' },
+      ['Set up', 'Wire'],
+      ['done', 'active']
+    );
+    expect(describeSteps(resolveSteps(resolveTaskProgress(task))).slice(0, 3)).toEqual([
+      'Plan: done',
+      'Build 1/2: cancelled',
+      'Checks: pending',
+    ]);
+  });
+
   it('shows no repository step for a question that has no repository, and one for work that needs it', () => {
     const question = createTask({ id: 'hey', stage: 'answering', size: 'small', pipeline: ['answer'] });
     expect(describeSteps(resolveSteps(resolveTaskProgress(question)))).toEqual(['Answer: current']);
@@ -197,6 +210,7 @@ describe('isStepReached', () => {
     expect(isStepReached(step('current'))).toBe(false);
     expect(isStepReached(step('waiting'))).toBe(false);
     expect(isStepReached(step('pending'))).toBe(false);
+    expect(isStepReached(step('cancelled'))).toBe(false);
   });
 });
 
@@ -208,6 +222,7 @@ describe('STEP_STATUS_LABEL', () => {
       current: 'In progress',
       waiting: 'Waiting on you',
       pending: 'Not started',
+      cancelled: 'Cancelled',
     });
   });
 });
@@ -471,6 +486,12 @@ describe('the current step', () => {
     ];
     expect(selectCurrentStep(between)).toBeNull();
     expect(describeTrackPosition(between)).toBe('2 of 3 steps done');
+  });
+
+  it('names the step a cancelled task stopped at', () => {
+    const steps = [sampleStep('Pull request', 'done'), sampleStep('Merge', 'cancelled')];
+    expect(selectCurrentStep(steps)).toBeNull();
+    expect(describeTrackPosition(steps)).toBe('Cancelled at step 2 of 2: Merge');
   });
 
   it('follows a real task through the track', () => {

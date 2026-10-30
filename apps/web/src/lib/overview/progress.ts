@@ -9,7 +9,7 @@ import {
 } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
 
-export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped';
+export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped' | 'cancelled';
 
 export interface Step {
   key: string;
@@ -41,6 +41,7 @@ export const STEP_STATUS_LABEL: Record<StepStatus, string> = {
   current: 'In progress',
   waiting: 'Waiting on you',
   pending: 'Not started',
+  cancelled: 'Cancelled',
 };
 
 export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
@@ -49,6 +50,7 @@ export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
   current: 'blue',
   waiting: 'amber',
   pending: 'neutral',
+  cancelled: 'neutral',
 };
 
 const CONFLICT_FIXES: ReadonlySet<FixReason | null> = new Set(['conflict', 'update']);
@@ -75,6 +77,7 @@ function resolveBuildStep(build: DisplayPhase[]): Step {
   const finished = build.filter(isFinished).length;
   let status: StepStatus = 'pending';
   if (build.some((phase) => phase.status === 'active')) status = 'current';
+  else if (build.some((phase) => phase.status === 'cancelled')) status = 'cancelled';
   else if (finished === build.length) status = 'done';
   return {
     key: 'build',
@@ -109,6 +112,10 @@ export function isStepReached(step: Step) {
   return step.status === 'done' || step.status === 'skipped';
 }
 
+export function selectCancelledStep(steps: Step[]) {
+  return steps.find((step) => step.status === 'cancelled') ?? null;
+}
+
 export function selectCurrentStep(steps: Step[]) {
   return steps.find((step) => step.status === 'current' || step.status === 'waiting') ?? null;
 }
@@ -125,6 +132,9 @@ export function describeStepCount(step: Step | null, status: string) {
 export function describeTrackPosition(steps: Step[]) {
   const current = selectCurrentStep(steps);
   if (current) return `Step ${steps.indexOf(current) + 1} of ${steps.length}: ${describeStep(current)}`;
+  const cancelled = selectCancelledStep(steps);
+  if (cancelled)
+    return `Cancelled at step ${steps.indexOf(cancelled) + 1} of ${steps.length}: ${describeStep(cancelled)}`;
   return `${steps.filter(isStepReached).length} of ${steps.length} steps done`;
 }
 

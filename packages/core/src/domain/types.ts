@@ -400,6 +400,7 @@ export interface Task {
   planFirst: boolean;
   stage: TaskStage;
   stageReason: string;
+  cancelledFrom?: TaskStage | null;
   priority: TaskPriority;
   branch: string | null;
   worktreePath: string | null;

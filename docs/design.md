@@ -818,7 +818,13 @@ Only these, and they win over anything below:
       `ChecklistMark`, below). They come from `components/status/check-mark.tsx` (`CheckMark`, `SelectedMark`, `CHECK_TEXT`,
       `CheckOutcomeIcon` for pass / fail / skipped). The one exception
       is the progress track: its done steps (a 15px check on `green` at 29%) and the line
-      between them are green, so done reads apart from the blue pulse of the current step.
+      between them are green, so done reads apart from the blue pulse of the current step. A cancelled
+      task keeps its track: the steps it finished stay done and the step it was on when it was
+      cancelled shows Cancelled (an `fg-3` `IconCancelMark` on a `bg-a3` disc: the done step's
+      circle in grey, its X drawn in `components/icon/custom.ts` on the small check's footprint and
+      2-unit stroke so it reads as the check's twin, and a filled `fg-2` dot on a queue row's
+      mini track), from `Task.cancelledFrom`; its now card says where
+      and why, "Cancelled at Merge: the pull request was closed without merging."
     - **Page headings** (`components/layout/page/heading.tsx`): one `PageHeading` for Task, All tasks
       and Settings (Home's greeting uses its `PAGE_TITLE`): a `text-base` medium `fg-4` title on a
       20px line (`leading-tight`), the description or count `text-xs` `fg-2` directly under it

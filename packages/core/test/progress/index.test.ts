@@ -91,6 +91,93 @@ describe('resolveTaskProgress', () => {
     expect(resolveTaskProgress(harness.task(parent)).done).toBe(0);
   });
 
+  test('a pull request closed at the merge keeps every step before it done and marks the merge cancelled', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachShipping(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    expect(harness.task(taskId).stage).toBe('awaiting_merge');
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'closed' }) });
+    const task = harness.task(taskId);
+    expect(task).toMatchObject({ stage: 'cancelled', cancelledFrom: 'awaiting_merge' });
+    expect(statuses(task)).toEqual([
+      'plan:done',
+      'plan-0:done',
+      'plan-1:done',
+      'check:done',
+      'review:done',
+      'pull-request:done',
+      'merge:cancelled',
+    ]);
+    expect(resolveTaskProgress(task)).toMatchObject({ current: null, done: 6, total: 7, position: 6 });
+  });
+
+  test('a task cancelled mid-build marks the phase it was on cancelled and keeps its detail', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    completePhase(harness, taskId);
+    harness.send({ type: 'task.cancel', taskId });
+    const task = harness.task(taskId);
+    expect(task.cancelledFrom).toBe('building');
+    expect(statuses(task).slice(0, 4)).toEqual([
+      'plan:done',
+      'plan-0:done',
+      'plan-1:cancelled',
+      'check:pending',
+    ]);
+    expect(resolveTaskProgress(task).phases[2]?.detail).toBe(task.plan?.document?.phases[1]?.detail ?? '');
+  });
+
+  test('a task you cancel at any step keeps the steps before it done and marks that step cancelled', () => {
+    const cancelAt = (reach: (harness: ReturnType<typeof createHarness>, taskId: string) => void) => {
+      const harness = createHarness();
+      const taskId = createTask(harness);
+      reach(harness, taskId);
+      harness.send({ type: 'task.cancel', taskId });
+      return statuses(harness.task(taskId)).filter((status) => !status.endsWith(':pending'));
+    };
+    expect(cancelAt(() => undefined)).toEqual(['plan:cancelled']);
+    expect(cancelAt((harness, taskId) => proposePlan(harness, taskId))).toEqual([
+      'plan:done',
+      'plan-0:cancelled',
+    ]);
+    expect(cancelAt(reachReviewGate)).toEqual([
+      'plan:done',
+      'plan-0:done',
+      'plan-1:done',
+      'check:done',
+      'review:cancelled',
+    ]);
+    expect(cancelAt(reachShipping)).toEqual([
+      'plan:done',
+      'plan-0:done',
+      'plan-1:done',
+      'check:done',
+      'review:done',
+      'pull-request:cancelled',
+    ]);
+  });
+
+  test('a task cancelled while it waits on another task marks its first step cancelled without the wait', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const child = createTask(harness, { request: 'Child', waitsOn: [parent] });
+    harness.send({ type: 'task.cancel', taskId: child });
+    expect(harness.task(child).cancelledFrom).toBe('waiting_on_tasks');
+    expect(resolveTaskProgress(harness.task(child)).phases[0]).toMatchObject({
+      status: 'cancelled',
+      detail: null,
+    });
+  });
+
+  test('a cancelled task with no stage to return to shows nothing done', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = { ...harness.task(taskId), stage: 'cancelled' as const, cancelledFrom: null };
+    expect(statuses(task).every((status) => status.endsWith(':pending'))).toBe(true);
+  });
+
   test('a task waiting on several tasks says it starts when they all finish', () => {
     const harness = createHarness();
     const first = createTask(harness, { request: 'First' });
