@@ -610,7 +610,7 @@ describe('the agent reshapes', () => {
 
   test('once a plan exists the agent revises it instead', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
     harness.send({
