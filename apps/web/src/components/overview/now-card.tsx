@@ -51,6 +51,7 @@ import { describePlanEyebrow, resolvePlanVersion } from '@/lib/overview/plan-ver
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
+import { listMergeWaits } from '@/lib/review/merge-steps.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
@@ -286,6 +287,7 @@ function ReviewCard({
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
+  const waits = listMergeWaits(state, task);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -305,7 +307,7 @@ function ReviewCard({
       </p>
       {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
-      {merge && <MergeStepsBlock task={task} when='pre_merge' />}
+      {(merge || waits.length > 0) && <MergeStepsBlock task={task} when='pre_merge' waits={waits} />}
     </NowFrame>
   );
 }

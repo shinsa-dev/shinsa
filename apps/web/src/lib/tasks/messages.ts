@@ -1,4 +1,10 @@
-import { type MessageEffect, resolveMessageEffect, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  type MessageEffect,
+  resolveMessageEffect,
+  type ShinsaState,
+  type Task,
+  type TaskSuggestion,
+} from '@shinsa/core';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { sendThroughOutbox } from '@/lib/tasks/outbox.ts';
@@ -95,4 +101,14 @@ export function describeMessageStatus({
 
 export function isDelivering(message: Pick<HumanMessage, 'status'>) {
   return message.status === 'delivering';
+}
+
+const SPLIT_OFF_STATE: Record<TaskSuggestion['status'], string> = {
+  open: 'Not sent to the agent',
+  accepted: 'Made into a task',
+  dismissed: 'Dismissed',
+};
+
+export function describeSplitOffState(suggestion: Pick<TaskSuggestion, 'status'>) {
+  return SPLIT_OFF_STATE[suggestion.status];
 }

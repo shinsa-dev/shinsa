@@ -36,6 +36,7 @@ import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import {
   dropMessage,
+  keepSuggestion,
   messageTask,
   receiveMessage,
   redeliverMessage,
@@ -91,7 +92,7 @@ import {
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
-import { acceptSuggestion, dismissSuggestion, keepSuggestion, suggestTasks } from './suggestions.ts';
+import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
   cancelTask,
   completeTask,

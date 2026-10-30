@@ -77,8 +77,7 @@ const DESCRIPTIONS: Descriptions = {
     `Removed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
   'round.send': (state, command) =>
     `Sent queued round ${command.number} of ${quoteTask(state, command.taskId)} to its current round`,
-  'suggestion.keep': (state, command) =>
-    `Kept a split-off of ${quoteTask(state, command.taskId)} as its next round`,
+  'suggestion.keep': (state, command) => `Kept a split-off in ${quoteTask(state, command.taskId)}`,
   'monitor.check_in_now': (state, command) =>
     `Checked now what ${quoteTask(state, command.taskId)} waits for`,
   'run.snooze_silence': (state, command) =>

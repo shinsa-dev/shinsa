@@ -381,8 +381,16 @@ Only these, and they win over anything below:
      starts, its message joins the chat under its round's divider as your bubble, delivering, then settles. Several
      messages routed together are one round, so one row, delivered together.
    Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
-   one the classifier read as needing nothing (no agent runs for it), or "Not delivered. ‹reason›" in
-   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`).
+   one the classifier read as needing nothing (no agent runs for it), "Not delivered. ‹reason›" in
+   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`), or, for
+   one read as another task's work (a split-off), its suggested task as a card under the bubble (`SplitOffCard`,
+   `components/chat/split-off-card.tsx`): a reply to the bubble, so it sits on the agent's side, full width like a
+   hand-over card and not under the bubble's right edge, its line "Suggested as a separate
+   task" with `IconLightbulbGlow` and its state at the right ("Not sent to the agent", "Made into a task" or
+   "Dismissed", `describeSplitOffState`). While open its body is the Overview's suggested-task row (`SuggestionRow`:
+   title over why, When to start, Keep it here and Make it a task), so you decide in the chat; once made a task it
+   links that task (`TaskLink`), once dismissed it shows the title and why with no buttons. A kept one leaves the
+   chat, since keeping sends it again as your message.
    Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
    Queued messages).
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
@@ -465,7 +473,14 @@ Only these, and they win over anything below:
       `run` in a task does; nothing runs on its own. A list opens with its title (Pre-merge steps, Post-merge steps) and how far it is ("1 of 2 done",
       "All done") at the right. A tick is `merge_step.tick`; the box waits for the server and a refusal is a toast. A
       post-merge step cannot be ticked before the pull request merged: its box is disabled and its tooltip
-      says so. The merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
+      says so. **A task the merge waits on is a pre-merge row too**: "Merges after ‹task› finishes", the task's title a
+      link, its kind "Linked task" with `IconHourglass`, after the agent's steps; you never tick it (its box is
+      disabled, its tooltip "Ticks itself once that task finishes", then "That task finished") and it is ticked as
+      soon as that task settles, as the merge hold reads it (`listOpenBlockers`): merged, marked done, or cancelled,
+      which reads "No longer waits for ‹task›: it was cancelled" (`listMergeWaits` in `lib/review/merge-steps.ts`,
+      from `Task.waitsOn`).
+      The review gate's now card lists Pre-merge steps when the merge waits on a task, so you see the hold before
+      you approve; the merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
       gate, a now card titled "Merged. 2 steps left to do." that lists Post-merge steps
       (`components/overview/merge-steps-card.tsx`, the gate's card in `now-card.tsx`); while a later round works, the
       steps an earlier round left show in a Post-merge steps panel under the now card (`routes/task/overview.tsx`).
@@ -1870,8 +1885,9 @@ Only these, and they win over anything below:
       (Waiting to start) and its request as soon as one is queued. A merged task keeps its composer: "Ask for the next piece of work. It
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
     - **A split-off is a suggested task's row** in Suggested tasks with Make it a task (outline) and Keep it here
-      (secondary, in Dismiss's place); keeping it queues the next round ("Kept in this task. It starts as the next
-      round."). ⌘K offers "Keep “‹title›” in this task" and, per round whose shipping can change, "Ship round 4 as a
+      (secondary, in Dismiss's place); keeping it sends it to this task now, as a message to the open round or a new
+      round of a resting task ("Kept in this task. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
+      ("The agent takes it now") and, per round whose shipping can change, "Ship round 4 as a
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
 
@@ -2405,7 +2421,8 @@ Only these, and they win over anything below:
         How it's built, after How it works.
       - **Pre-merge steps** and **Post-merge steps**: the steps around the merge as checklists (Steps around the
         merge, 12), each panel's count beside its title; you
-        tick them here as on the Overview.
+        tick them here as on the Overview. Pre-merge also shows when the agent left no pre-merge step but the merge
+        waits on a task, with that task's row.
       - **Agent review**: one panel with the reviewer's summary in its own words, what it found and "A signal for you,
         never the approval.", then each finding's card (`rounded-lg`, nested) with Fix / Dismiss at a review gate, the
         shared `FindingVerdictChoice` (`components/review/verdict-choice.tsx`) the Overview's finding verdicts and the

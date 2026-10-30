@@ -78,7 +78,7 @@ export const WORK_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['suggestions', 'keep'],
-    summary: 'Keep a suggested task in this task instead, as its next round.',
+    summary: 'Keep a suggested task in this task instead: it goes to the agent now.',
     command: 'suggestion.keep',
     fields: [TASK_FIELD, SUGGESTION_FIELD],
     build: async (values, client) => ({

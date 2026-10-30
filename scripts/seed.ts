@@ -2450,6 +2450,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
       reason: 'built, checked and ready for review',
       branch: 'feat/embedded-chat-mcp',
       ageHours: 28,
+      waitsOn: ['task-webhook-signing', 'task-docs-gate'],
       worktreePath: chatPath,
       addedChecks: [
         {
@@ -4133,7 +4134,32 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       ageHours: 50,
       pullRequest: { number: 339, checks: 'passing' },
       merged: true,
-      extra: listDocsGateWatchdogs(),
+      extra: [
+        ...listDocsGateWatchdogs(),
+        {
+          type: 'task.messaged',
+          taskId: 'task-docs-gate',
+          text: 'Also drop the access gate from the skills repo, on the cli-v2 branch.',
+          kind: 'separate_task',
+          suggestionId: 'suggestion-docs-gate-skills',
+        },
+        {
+          type: 'task.suggested',
+          taskId: 'task-docs-gate',
+          suggestion: {
+            id: 'suggestion-docs-gate-skills',
+            runId: null,
+            title: 'Drop the access gate from the skills repo',
+            request: 'Also drop the access gate from the skills repo, on the cli-v2 branch.',
+            why: 'The skills repo is another repository, so it belongs in a task of its own.',
+            waitsOnThis: false,
+            status: 'open',
+            createdTaskId: null,
+            suggestedAt: NOW - HOUR,
+            splitOff: true,
+          },
+        },
+      ],
     },
     {
       id: 'task-docs-safari',

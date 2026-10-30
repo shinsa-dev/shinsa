@@ -11,6 +11,7 @@ import {
   type MessageKind,
   MINUTE_MS,
   type Run,
+  resolveCurrentRound,
   resolveNextRoundNumber,
   SHAPE_PIPELINES,
   type Task,
@@ -25,7 +26,7 @@ import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
-import { findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
+import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
   acceptsFollowUp,
   answerFollowUp,
@@ -35,7 +36,7 @@ import {
   startInquiry,
   startOperation,
 } from './shapes.ts';
-import { hasRoomForSuggestion, suggestSplitOff } from './suggestions.ts';
+import { findOpenSuggestion, hasRoomForSuggestion, suggestSplitOff } from './suggestions.ts';
 
 type StageEffect =
   | 'kept'
@@ -287,8 +288,9 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   }
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
-    recordMessages(decider, task.id, texts, { kind });
-    suggestSplitOff(decider, task.id, text, send.title ?? null, send.why ?? null);
+    const suggestionId = decider.context.newId();
+    recordMessages(decider, task.id, texts, { kind, suggestionId });
+    suggestSplitOff(decider, task.id, suggestionId, text, send.title ?? null, send.why ?? null);
     return;
   }
   if (
@@ -319,6 +321,33 @@ export function sendQueuedRound(decider: Decider, command: CommandOf<'round.send
   const round = findWaitingRound(decider.task(command.taskId), command.number);
   decider.emit({ type: 'round.removed', taskId: command.taskId, number: round.number });
   sendMessages(decider, { taskId: command.taskId, texts: [round.request], kind: 'feedback' }, null);
+}
+
+export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.keep'>) {
+  const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
+  const task = decider.task(command.taskId);
+  assertTakesMessages(task);
+  const resting = isTaskResting(task);
+  decider.emit({
+    type: 'suggestion.settled',
+    taskId: task.id,
+    suggestionId: suggestion.id,
+    status: 'dismissed',
+    createdTaskId: null,
+    keptRound: resting ? resolveNextRoundNumber(task) : resolveCurrentRound(task).number,
+  });
+  sendMessages(
+    decider,
+    {
+      taskId: task.id,
+      texts: [suggestion.request],
+      kind: resting ? 'new_round' : 'feedback',
+      title: suggestion.title,
+      why: suggestion.why,
+      ...(command.shape ? { shape: command.shape } : {}),
+    },
+    null
+  );
 }
 
 export function redeliverMessage(decider: Decider, command: CommandOf<'message.deliver'>) {

@@ -375,6 +375,7 @@ export interface Activity {
   round?: number;
   noted?: boolean;
   undelivered?: UndeliveredMessage;
+  suggestionId?: string;
 }
 
 export interface UndeliveredMessage {

@@ -167,6 +167,33 @@ describe('NowCard on the Overview', () => {
     expect(card.getByText('bun test a.test.ts')).toBeTruthy();
   });
 
+  it('lists the tasks the merge waits on under Pre-merge steps, ticked once each finishes and never by you', async () => {
+    const docs = createTask({ id: 'docs', title: 'Document the agent login', stage: 'building' });
+    const skills = createTask({ id: 'skills', title: 'Teach the skill to log in', stage: 'merged' });
+    const task = createTask({ id: 'task-1', stage: 'awaiting_review', waitsOn: ['docs', 'skills'] });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'review' });
+    const state = createShinsaState({ tasks: [docs, skills, task], gates: [gate] });
+    const { view } = renderOverview(state, task, gate);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Pre-merge steps')).toBeTruthy();
+    expect(card.getByText('Document the agent login')).toBeTruthy();
+    expect(card.getAllByText('Linked task')).toHaveLength(2);
+    const boxes = card.getAllByRole('checkbox');
+    expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual(['false', 'true']);
+    expect(boxes.every((box) => box.hasAttribute('data-disabled'))).toBe(true);
+    fireEvent.click(boxes[0] as HTMLElement);
+    expect(listSentCommands().filter((command) => command.type === 'merge_step.tick')).toEqual([]);
+    expect(await findTooltipText(boxes[0]?.parentElement as HTMLElement)).toContain(
+      'Ticks itself once that task finishes'
+    );
+  });
+
+  it('shows no Pre-merge steps on a review gate with no steps and nothing to wait on', () => {
+    const { task, gate, state } = reviewing();
+    const { view } = renderOverview(state, task, gate);
+    expect(view.queryByText('Pre-merge steps')).toBeNull();
+  });
+
   it('offers Review then Approve changes on a review gate', () => {
     const { task, gate, state } = reviewing();
     const { view } = renderOverview(state, task, gate);

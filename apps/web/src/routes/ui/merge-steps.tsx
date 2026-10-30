@@ -7,7 +7,7 @@ import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
 import { MergeStepsBlock, MergeStepsPanel } from '@/components/review/merge-steps.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { describeMergeBlock } from '@/lib/review/merge-steps.ts';
+import { describeMergeBlock, type MergeWaitView } from '@/lib/review/merge-steps.ts';
 import { SAMPLE_EVIDENCE_CHECKS } from './sample-evidence.ts';
 import { createMergeStepTasks, FULL_COVERAGE, PARTIAL_COVERAGE, TESTING } from './sample-merge-steps.ts';
 import { acknowledgeSample } from './samples.ts';
@@ -63,6 +63,25 @@ function PostMerge({ state, initial }: { state: ShinsaState; initial: Task }) {
   return <PostMergeCard state={state} task={task} onTick={tick} />;
 }
 
+const SAMPLE_WAITS: MergeWaitView[] = [
+  {
+    key: 'wait:docs',
+    taskId: 'sample-docs',
+    title: 'Merges after [Document the agent login](shinsa://task/sample-docs) finishes',
+    detail: null,
+    command: null,
+    done: false,
+  },
+  {
+    key: 'wait:skills',
+    taskId: 'sample-skills',
+    title: 'Merges after [Teach the skill to log in](shinsa://task/sample-skills) finishes',
+    detail: null,
+    command: null,
+    done: true,
+  },
+];
+
 function ReviewPanels({ initial }: { initial: Task }) {
   const { task, tick } = useTicks(initial);
   return (
@@ -71,6 +90,7 @@ function ReviewPanels({ initial }: { initial: Task }) {
         persistId={createDisclosureId('ui', 'merge-steps', 'panel', 'pre_merge')}
         task={task}
         when='pre_merge'
+        waits={SAMPLE_WAITS}
         onTick={tick}
       />
       <MergeStepsPanel
@@ -123,7 +143,7 @@ export function MergeStepSpecimens({ state }: { state: ShinsaState }) {
           />
         </div>
       </Specimen>
-      <Specimen label='MergeStepsPanel · the Review tab’s Pre-merge and Post-merge, in How it’s built'>
+      <Specimen label='MergeStepsPanel · the Review tab’s Pre-merge and Post-merge, in How it’s built; a task the merge waits on is a linked row that ticks itself once it finishes'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           <ReviewPanels initial={tasks.gate} />
         </div>

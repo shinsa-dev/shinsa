@@ -126,7 +126,7 @@ describe('process commands', () => {
     }
   });
 
-  it('keeps a separate-task suggestion here as the next round, and switches how a waiting round ships', () => {
+  it('keeps a separate-task suggestion here, and switches how a waiting round ships', () => {
     const task = createTask({
       id: 't',
       stage: 'building',

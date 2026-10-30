@@ -7,7 +7,6 @@ import {
   type TaskSuggestion,
 } from '../domain/index.ts';
 import type { Decider } from './decider.ts';
-import { assertTakesMessages, queueRound } from './rounds.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -36,6 +35,7 @@ export function hasRoomForSuggestion(task: Task) {
 export function suggestSplitOff(
   decider: Decider,
   taskId: string,
+  suggestionId: string,
   request: string,
   title: string | null,
   why: string | null
@@ -44,7 +44,7 @@ export function suggestSplitOff(
     type: 'task.suggested',
     taskId,
     suggestion: {
-      id: decider.context.newId(),
+      id: suggestionId,
       runId: null,
       title: title?.trim() || resolveRoundTitle(request),
       request,
@@ -94,7 +94,7 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
   }
 }
 
-function findOpenSuggestion(decider: Decider, taskId: string, suggestionId: string): TaskSuggestion {
+export function findOpenSuggestion(decider: Decider, taskId: string, suggestionId: string): TaskSuggestion {
   const suggestion = decider.task(taskId).suggestions?.find((candidate) => candidate.id === suggestionId);
   if (!suggestion) throw new DomainError('suggestion_not_found', `No suggestion ${suggestionId}`);
   if (suggestion.status !== 'open') {
@@ -131,24 +131,5 @@ export function dismissSuggestion(decider: Decider, command: CommandOf<'suggesti
     suggestionId: suggestion.id,
     status: 'dismissed',
     createdTaskId: null,
-  });
-}
-
-export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.keep'>) {
-  const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
-  assertTakesMessages(decider.task(command.taskId));
-  const keptRound = queueRound(decider, command.taskId, {
-    request: suggestion.request,
-    title: suggestion.title,
-    why: suggestion.why,
-    shape: command.shape ?? null,
-  });
-  decider.emit({
-    type: 'suggestion.settled',
-    taskId: command.taskId,
-    suggestionId: suggestion.id,
-    status: 'dismissed',
-    createdTaskId: null,
-    keptRound,
   });
 }

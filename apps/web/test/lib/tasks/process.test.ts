@@ -56,7 +56,7 @@ describe('process actions', () => {
       [{ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' }, 'Dismissed.'],
       [
         { type: 'suggestion.keep', taskId: 't', suggestionId: 's' },
-        'Kept in this task. It starts as the next round.',
+        'Kept in this task. The agent takes it now.',
       ],
     ] as never);
   });

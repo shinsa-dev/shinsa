@@ -8,6 +8,7 @@ import {
   resolveContainingRepo,
   resolveProjectName,
   syncRepoRemote,
+  upsertProjectFolderRepo,
   upsertRepo,
 } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -123,6 +124,30 @@ describe('upsertRepo', () => {
     await expect(upsertRepo(engine, path, () => Promise.resolve(null))).rejects.toThrow(
       'Could not register app.'
     );
+  });
+});
+
+describe('upsertProjectFolderRepo', () => {
+  test('registers a repository from the task’s project folders into that project, by its folder name', async () => {
+    const folder = createTempDir();
+    await createGitRepo({ root: folder, name: 'app', remote: false });
+    await createGitRepo({ root: folder, name: 'docs', remote: false });
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    await engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Superwall', color: 'blue', folders: [folder] },
+    });
+    const projectId = Object.keys(engine.state.projects)[0] ?? '';
+    const app = await upsertRepo(engine, join(folder, 'app'), () => Promise.resolve(null), projectId);
+    await engine.dispatch({ type: 'task.create', request: 'Add agent login', repoId: app.id });
+    const task = Object.values(engine.state.tasks)[0];
+    if (!task) throw new Error('no task');
+    const docs = await upsertProjectFolderRepo(engine, task, 'docs');
+    expect(docs).toMatchObject({ name: 'docs', projectId, path: realpathSync(join(folder, 'docs')) });
+    expect(await upsertProjectFolderRepo(engine, task, 'skills')).toBeNull();
+    expect(
+      await upsertProjectFolderRepo(engine, { ...task, projectId: null, repoId: null }, 'docs')
+    ).toBeNull();
   });
 });
 

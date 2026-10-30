@@ -105,7 +105,7 @@ function listSuggestionCommands(task: Task): Command[] {
             kind: 'run',
             id: `${id}.keep`,
             label: `Keep “${suggestion.title}” in this task`,
-            hint: 'As the next round',
+            hint: 'The agent takes it now',
             icon: ROUND_ICON,
             keywords: ['split', 'separate', 'round', 'keep', 'decline'],
             run: () => void keepSuggestion(task, suggestion),
