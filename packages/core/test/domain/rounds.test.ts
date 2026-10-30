@@ -48,7 +48,7 @@ function taskOf(rounds: Round[], pullRequest: Task['pullRequest'] = null) {
 
 describe('rounds', () => {
   test('a round is named by its number, and its title is the first line of the request', () => {
-    expect(formatRoundLabel({ number: 3 })).toBe('round 3');
+    expect(formatRoundLabel({ number: 3 })).toBe('Round 3');
     expect(resolveRoundTitle(`  ${'x'.repeat(100)}\nmore`)).toHaveLength(80);
     expect(resolveRoundTitle('Add search\nand filters')).toBe('Add search');
     expect(

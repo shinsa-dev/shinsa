@@ -114,6 +114,6 @@ describe('the rounds of a task on its Overview', () => {
         <TaskHandlePrefix task={createTask({ id: 'x' })} />
       </>
     );
-    expect(view.container.textContent).toBe('SW-14 · round 2SW-14 · round 2 · ');
+    expect(view.container.textContent).toBe('SW-14 · Round 2SW-14 · Round 2 · ');
   });
 });

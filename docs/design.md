@@ -250,7 +250,8 @@ Only these, and they win over anything below:
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
    over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
-   and shows in full in a tooltip); otherwise the current
+   and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: `ShimmeringText` counts
+   the ones its clipping box shows, `countVisibleChars`); otherwise the current
    step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
    ("Pre-merge · 1 step left"), and nothing more. That text after the dots is on Home's rows only: the rail and the
    Needs you popover end at the dots (`RowSummary`'s `detail`, on for the wide queue). The
