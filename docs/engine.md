@@ -385,10 +385,11 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
-   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise, with
-   Settings → Agents → Engine, Approve plans on (`approvePlans`, off by default), a large task's plan or a revised
-   plan waits there (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once
-   when it does not. A decision
+   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise Settings → Agents →
+   Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
+   large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
+   does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
+   not. The size is the plan's, never triage's guess from the request. A decision
    only the human can make is asked with `ask` before planning finishes.
 3. **Build.** Each phase is a run of its own on the session that planned it, now able to edit. Its prompt is short
    (`resolvePhaseInstruction`: "Phase 1 is committed. Now build phase 2 of 3: …" and how to hand it over), since the
@@ -1084,8 +1085,8 @@ no way to push without the hook; Pushing the branch, below). `configuration` mea
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
-first or a plan that asks for `approval`; with Approve plans on, also for a large task or a revised plan. Nothing else
-waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+first or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
+6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
@@ -2592,7 +2593,9 @@ truth, and a snapshot only saves replaying it.
   Logs from before a watchdog filed through `file_report` (log version 9, `WATCHDOG_READS_LOG_VERSION`) have a
   watchdog's one `forkTaskId` on `watchdog.armed` and `watchdog.checked`, which becomes `forkTaskIds` (that task, or
   none), an armed watchdog without `linkedTaskIds` (set to none), and `task.created` reports without `watchdogId`, which is set to `null`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 9) marks the log so
+  Logs from before Approve plans had three choices (log version 10, `PLAN_APPROVAL_LOG_VERSION`) have
+  `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 10) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
@@ -2784,7 +2787,8 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
 `git/conventional.ts` (`COMMIT_TYPES`: feat, fix, chore, refactor, docs, perf, test):
 
 - **Branches** are `<type>/<kebab-slug>`. Triage asks the classifier for one and accepts only that form
-  (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one; a later round's branch
+  (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one (the size triage
+  guesses only picks this prefix; the plan gate reads the plan's own size); a later round's branch
   is the first one plus `-round-<n>`, and core's last resort is `chore/shinsa-task`.
 - **Commits.** A phase commits as `<type>: <phase title>`, its type the branch's prefix (`resolveCommitType`, `feat`
   when the prefix is not a type), its subject lower-cased, never repeating the type, and cut at a word to at most 72
@@ -4332,7 +4336,7 @@ into hidden folders, `node_modules`, `Library`, caches, build output or media fo
 ```
 
 **`POST /api/onboarding/setup`** with `{ roots: string[]; defaultModel?: string | null; mergeMethod?: 'squash' |
-'merge' | 'rebase'; approvePlans?: boolean }`: saves the folders to `config.json` and the defaults as a
+'merge' | 'rebase'; approvePlans?: 'when_asked' | 'large' | 'always' }`: saves the folders to `config.json` and the defaults as a
 `settings.change` event, then answers like `GET /api/onboarding`. Folders may start with `~/`; each must be an
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
@@ -4367,7 +4371,8 @@ The web's setup is a short run of steps the server keeps (`apps/engine/src/onboa
 ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
 discovered folders with their repository counts, several at once, and any other folder by its path), `projects`
 (the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
-default model, from the provider's catalog, or each role's own; the merge method; plan approval for large tasks),
+default model, from the provider's catalog, or each role's own; the merge method; plan approval: large plans first, the
+recommended pick, every plan first, or start building),
 `accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
 bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
 the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.

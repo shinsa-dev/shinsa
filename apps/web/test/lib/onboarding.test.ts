@@ -95,7 +95,7 @@ describe('the steps', () => {
     });
     expect(listChosenValues(step)).toEqual(['squash']);
     expect(resolveSubmitValues(step, ['rebase'])).toEqual(['rebase']);
-    expect(listChosenValues(createStep())).toEqual(['merge=squash', 'plans=yes']);
+    expect(listChosenValues(createStep())).toEqual(['merge=squash', 'plans=large']);
     expect(resolveSubmitValues(createStep(), ['merge=rebase'])).toEqual(['merge=rebase']);
     expect(resolveSubmitValues(createStep({ id: 'roots', options: [] }), ['/a'])).toEqual(['/a']);
     expect(resolveSubmitValues(createStep({ id: 'accounts', groups: [] }), [])).toEqual(['continue']);
@@ -111,8 +111,8 @@ describe('the steps', () => {
 
   it('picking a choice replaces only its own group’s pick', () => {
     const [merge] = createStep().groups;
-    expect(resolvePickedChoices(merge as never, ['merge=squash', 'plans=yes'], 'merge=rebase')).toEqual([
-      'plans=yes',
+    expect(resolvePickedChoices(merge as never, ['merge=squash', 'plans=large'], 'merge=rebase')).toEqual([
+      'plans=large',
       'merge=rebase',
     ]);
     expect(resolvePickedChoices(merge as never, [], 'merge=squash')).toEqual(['merge=squash']);

@@ -533,8 +533,10 @@ An inquiry has no gate of its own: a proposal goes to `your_ok`. An inquiry that
 pull_request, merge]` (`resolveProposalUpgrade`) and waits at `your_ok`, so a proposal and a composed OK take one path.
 
 **The plan gate rule** is data, `PLAN_GATE_RULE` (`domain/steps.ts`): `always` when the task operates, was created
-plan first or the plan asks for approval (`operates`, `plan_first`, `asks_approval`); with Approve plans on, also when
-the task is large or the plan is a revision (`withApprovePlans`: `large`, `revised`). `describePlanGateRule()` writes
+plan first or the plan asks for approval (`operates`, `plan_first`, `asks_approval`); with Approve plans
+(`approvePlans`, a `PlanApproval`: `when_asked`, `large`, `always`) on Large plans, also when the plan has more than 3
+phases or 6 files or is a revision (`withLargePlans`: `large`, `revised`; the limits are `PLAN_SIZE_LIMITS`, counted on
+the plan document, never the triage size); on Always, every plan. `describePlanGateRule()` writes
 the plan step's `when` from it and `needsPlanApproval` (`decide/lifecycle.ts`) evaluates it, so the prose and the
 check cannot drift.
 
