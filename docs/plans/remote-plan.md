@@ -59,6 +59,11 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 - **Who can get in.** Sign-in is GitHub OAuth with PKCE, open to any GitHub account: an account
   lists only the machines it paired, and even a signed-in account reaches no machine: the tunnel answers only the sealed channel,
   which needs a device key that machine enrolled and proves the machine's own key, pinned from its QR.
+- **Anyone can make a tunnel on our account.** Any GitHub account can pair up to 5 machines, and each is a named
+  Cloudflare tunnel and a proxied `t-<id>.shinsa.dev` host on our account, serving whatever that machine answers (the
+  engine answers only health, webhooks and the sealed channel, but a modified engine could serve anything under our
+  domain). The Worker caps the whole service at `MAX_INSTANCES` (50 by default) so the account's tunnel and DNS quotas
+  hold; past it an approval is refused with `service_full`. Abuse is handled by removing the instance.
 - **A second public entry point.** The request class is decided once, first, from `cf-connecting-ip`, and every route
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.

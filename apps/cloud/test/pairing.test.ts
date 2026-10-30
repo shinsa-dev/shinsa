@@ -165,6 +165,21 @@ describe('pairing a machine', () => {
     });
   });
 
+  test('refuses a pairing once the service holds its most machines', async () => {
+    const harness = createHarness({ maxInstances: 1 });
+    const session = await harness.signIn();
+    const first = await startPair(harness);
+    expect((await harness.post(resolvePairApprovePath(first.start.claimCode), {}, { session })).status).toBe(
+      200
+    );
+    const second = await startPair(harness);
+    const full = await harness.post(resolvePairApprovePath(second.start.claimCode), {}, { session });
+    expect(full.status).toBe(503);
+    expect(await readJson<{ error: { code: string } }>(full)).toMatchObject({
+      error: { code: 'service_full' },
+    });
+  });
+
   test('cleans up a half-made tunnel when Cloudflare refuses a later step', async () => {
     const harness = createHarness();
     harness.handlers.push((call) =>

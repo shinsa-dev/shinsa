@@ -52,7 +52,9 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   it only once (a failed approval releases it): the Worker makes the tunnel `shinsa-<instance>`, its ingress to `http://127.0.0.1:7446`
   with a 404 for anything else, its token and the proxied CNAME `t-<instance>.shinsa.dev`, then the instance with
   the hash of a new machine token and a new connect key. A failed step removes the half-made tunnel. The machine's
-  next poll with the right secret collects the credentials once; the row is then gone. At most 5 machines per account.
+  next poll with the right secret collects the credentials once; the row is then gone. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
+  variable in `wrangler.jsonc`) on the whole service, each one a tunnel and a DNS record on our Cloudflare account; past
+  it an approval is 503 `service_full`.
 - **Machines.** A heartbeat (machine token as bearer) marks the instance online and, when the machine's loopback
   address changed, moves the tunnel's ingress there; any address but loopback is refused. Online means a heartbeat in
   the last 5 minutes and no offline call since. An unknown machine token is 401, which the machine reads as revoked.

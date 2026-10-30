@@ -121,6 +121,12 @@ export async function respondPairApprove(request: Request, claimCode: string, wo
       `You can pair up to ${MAX_INSTANCES_PER_USER} machines. Remove one on the dashboard first.`,
       409
     );
+  if ((await world.store.countInstances()) >= world.config.maxInstances)
+    throw new CloudError(
+      'service_full',
+      'Remote access has no room for another machine right now. Try again later.',
+      503
+    );
   if (!(await world.store.reservePairClaim(row.claim_code, user.login)))
     throw new CloudError('pair_claimed', 'This Mac is already paired.', 409);
   const instanceId = createInstanceId();

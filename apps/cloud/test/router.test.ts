@@ -89,6 +89,7 @@ describe('the helpers', () => {
       cloudflareAccountId: '',
       cloudflareApiToken: '',
       tunnelZone: 'shinsa.dev',
+      maxInstances: 50,
     });
     expect(
       resolveCloudConfig({
@@ -98,6 +99,7 @@ describe('the helpers', () => {
         CLOUDFLARE_ACCOUNT_ID: 'account',
         CLOUDFLARE_API_TOKEN: 'token',
         TUNNEL_ZONE: 'example.dev',
+        MAX_INSTANCES: '3',
       })
     ).toEqual({
       origin: 'http://localhost:5183',
@@ -106,6 +108,7 @@ describe('the helpers', () => {
       cloudflareAccountId: 'account',
       cloudflareApiToken: 'token',
       tunnelZone: 'example.dev',
+      maxInstances: 3,
     });
   });
 });

@@ -3,6 +3,8 @@ import type { CloudStore } from './database.ts';
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
+export const DEFAULT_MAX_INSTANCES = 50;
+
 export interface CloudConfig {
   origin: string;
   githubClientId: string;
@@ -10,6 +12,7 @@ export interface CloudConfig {
   cloudflareAccountId: string;
   cloudflareApiToken: string;
   tunnelZone: string;
+  maxInstances: number;
 }
 
 export interface CloudWorld {
@@ -27,6 +30,7 @@ export interface CloudEnv {
   CLOUDFLARE_API_TOKEN?: string;
   TUNNEL_ZONE?: string;
   APP_ORIGIN?: string;
+  MAX_INSTANCES?: string;
 }
 
 export function resolveCloudConfig(env: CloudEnv): CloudConfig {
@@ -37,5 +41,6 @@ export function resolveCloudConfig(env: CloudEnv): CloudConfig {
     cloudflareAccountId: env.CLOUDFLARE_ACCOUNT_ID ?? '',
     cloudflareApiToken: env.CLOUDFLARE_API_TOKEN ?? '',
     tunnelZone: env.TUNNEL_ZONE || 'shinsa.dev',
+    maxInstances: Number(env.MAX_INSTANCES) || DEFAULT_MAX_INSTANCES,
   };
 }

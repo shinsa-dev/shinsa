@@ -62,6 +62,7 @@ export const TEST_CONFIG: CloudConfig = {
   cloudflareAccountId: 'account-1',
   cloudflareApiToken: 'api-token',
   tunnelZone: 'shinsa.dev',
+  maxInstances: 50,
 };
 
 export interface Harness {

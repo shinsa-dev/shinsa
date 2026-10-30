@@ -173,6 +173,11 @@ export function createStore(db: Database) {
         .run();
     },
 
+    async countInstances() {
+      const row = await db.prepare('SELECT COUNT(*) AS total FROM instances').first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
     async listUserInstances(userId: string) {
       const { results } = await db
         .prepare(`SELECT ${INSTANCE_COLUMNS} FROM instances WHERE user_id = ? ORDER BY created_at`)

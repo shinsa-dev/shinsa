@@ -50,7 +50,7 @@ export function EnrollPage({
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a browser'>
           It is incomplete or was already used. On your Mac, open Settings, Remote access and choose Add
-          device for a new one.
+          browser for a new one.
         </RemoteHero>
         <Button
           className='w-full'
