@@ -105,7 +105,7 @@ function ReviewPage({ scene }: { scene: OpenScene }) {
 export function OpenLoading() {
   return (
     <div className='flex min-h-0 flex-1 items-center justify-center text-fg-2'>
-      <Spinner size='lg' />
+      <Spinner size='md' />
     </div>
   );
 }

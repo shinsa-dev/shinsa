@@ -1263,8 +1263,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 | Size | px | Where |
 | --- | --- | --- |
 | `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, every button (icon-only ones too), every select, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: default inputs |
-| `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: default inputs, a full-page wait's spinner |
+| `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
 - Never a `size-*`, `w-*` or `h-*` class on an icon, never `[&_svg]:size-*`, colour or opacity on a parent, never `[--icon-size:…]` or `[--icon-color:…]` in app code (all fail the lint).
