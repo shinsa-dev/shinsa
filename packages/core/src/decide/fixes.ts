@@ -59,12 +59,22 @@ function resolveFixStop(decider: Decider, task: Task, stalled: number): FixStop 
   return null;
 }
 
-function failFixing(decider: Decider, task: Task, stop: FixStop) {
+type FailingFixReason = Exclude<FixReason, 'you' | 'review'>;
+
+const STALLED_FIX_SUBJECT: Record<FailingFixReason, string> = {
+  checks: 'The failing checks',
+  pull_request: 'The pull request’s failing checks, open threads or conflict',
+  conflict: 'The conflict with the base branch',
+  update: 'The conflict with the base branch',
+  hook: 'What the pre-push hook found',
+};
+
+function failFixing(decider: Decider, task: Task, reason: FailingFixReason, stop: FixStop) {
   if (stop.reason === 'stalled') {
     decider.fail(
       task.id,
       'Fixing is not making progress',
-      `The same problems came back after ${stop.stalled} fix rounds. Steer the agent in the chat, or retry.`
+      `${STALLED_FIX_SUBJECT[reason]} came back after ${stop.stalled} fix rounds. Steer the agent in the chat, or retry.`
     );
     return;
   }
@@ -85,6 +95,14 @@ function escalateReview(decider: Decider, taskId: string, reason: ReviewEscalati
   openReviewGate(decider, taskId, escalation);
 }
 
+function stopFixing(decider: Decider, task: Task, reason: Exclude<FixReason, 'you'>, stop: FixStop) {
+  if (reason === 'review') {
+    escalateReview(decider, task.id, stop.reason);
+    return;
+  }
+  failFixing(decider, task, reason, stop);
+}
+
 function listAgentEvidence(decider: Decider, task: Task) {
   return Object.values(decider.state.evidence)
     .filter(
@@ -97,23 +115,21 @@ function listAgentEvidence(decider: Decider, task: Task) {
     .sort((a, b) => a.attachedAt - b.attachedAt);
 }
 
+type FixOptions = { base?: string | null; commentsOnly?: boolean };
+
 export function startFix(
   decider: Decider,
   taskId: string,
   reason: FixReason,
   prompt: string,
   signature: string | null,
-  base: string | null = null
+  { base = null, commentsOnly = false }: FixOptions = {}
 ) {
   const task = decider.task(taskId);
-  const stalled = countFixRepeats(task, reason, signature);
+  const stalled = commentsOnly ? 0 : countFixRepeats(task, reason, signature);
   const stop = reason === 'you' ? null : resolveFixStop(decider, task, stalled);
-  if (stop && reason === 'review') {
-    escalateReview(decider, taskId, stop.reason);
-    return;
-  }
-  if (stop) {
-    failFixing(decider, task, stop);
+  if (stop && reason !== 'you') {
+    stopFixing(decider, task, reason, stop);
     return;
   }
   const round = reason === 'you' ? 0 : task.fixRounds + 1;
@@ -124,7 +140,7 @@ export function startFix(
     reason,
     signature,
     stalled,
-    treeHash: task.treeHash ?? null,
+    treeHash: commentsOnly ? null : (task.treeHash ?? null),
   });
   decider.stage(taskId, 'fixing', resolveFixStageReason(reason, base));
   const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));

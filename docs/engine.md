@@ -2432,8 +2432,15 @@ changes costs one call.
   (a fresh-class failure), so `run.prompt` holds the brief and `run.rolePrompt` the short form.
 - A fix loop stops with "not making progress" when the same failures come back after two fix
   rounds (checks by the ids of the checks that block, the pull request by the names of its failing CI checks, the
-  ids of its unresolved review threads and a conflict). New comments alone key nothing: they have
-  their own limit, ten updates in a row that bring only comments (The pull request watch, below).
+  ids of its unresolved review threads and a conflict), or after two rounds that left the code as it was
+  (the fingerprint's tree). This is what stops an agent that cannot fix a failure under "until clean". New
+  comments alone key nothing, by signature or by tree: a pull request fix started only by them, with no
+  failing check, open thread or conflict (`commentsOnly`, from `reactToWatch`), counts no repeats and
+  records no tree, so an agent that answers a bot's comment with nothing to fix is never stopped for it,
+  and those rounds never count against a later failure. Comments have their own limit, ten updates in a
+  row that bring only comments (The pull request watch, below). The gate names what came back: the
+  failing checks, the pull request's failing checks, open threads or conflict, the conflict with the
+  base branch, or what the pre-push hook found (`STALLED_FIX_SUBJECT`).
   `maxFixRounds` caps the automatic rounds; "until clean" (the default, `null`) has no cap and keeps
   going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead
   (Review rounds escalate to you, above).
@@ -2876,7 +2883,8 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   every push.
 - **Ten comment-only updates in a row stop the watch** (`PULL_REQUEST_WATCH_WAKE_LIMIT`). A head
   that moves, or any check or conflict news, resets the count, so this only stops a chatty bot
-  looping a fix. The watch stops (`stopped: 'comment_limit'`) and a failure gate says so.
+  looping a fix. The watch stops (`stopped: 'comment_limit'`) and a failure gate says so. It is the
+  only limit on comment-only fixes: they never count toward "not making progress" (Recovery, above).
 - **One read of a task at a time.** The watch effect, the periodic sync and the sync after a push
   queue behind each other per task, so an older read is never recorded after a newer one. A read
   stopped by a cancel or a shutdown records nothing and does not count as failed.
