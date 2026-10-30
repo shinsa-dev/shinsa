@@ -33,7 +33,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 
 - **Sign-in.** `/__remote/sign-in?return=<path>` sends you to GitHub with a random `state` kept in a short
   `__Host-shinsa_oauth` cookie; the callback checks it, reads who you are from GitHub, refuses a login not in
-  `ALLOWED_GITHUB_LOGINS` when that list is set, and sets `__Host-shinsa_session` (HttpOnly, Secure, SameSite=Lax, 30
+  `ALLOWED_GITHUB_LOGINS` (an empty or missing list lets nobody in, so a deploy without it is closed), and sets `__Host-shinsa_session` (HttpOnly, Secure, SameSite=Lax, 30
   days). D1 keeps only the SHA-256 of the session token. The return path stays on this site. A failed callback
   sends you to `/?sign_in_error=<code>`.
 - **Pairing.** The machine posts its name and public key to `pair/start` (no account yet; at most 10 waiting pairings
@@ -61,10 +61,13 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 ## Running and deploying
 
 - `bun test test` (100% line and function coverage, `bunfig.toml`) and `bun run check-types`.
-- `bun run dev` runs `wrangler dev` on :5183; `APP_ORIGIN` points the Worker at that origin.
-- The assets are `../web/dist-remote`, the web app's remote build: `bun run --cwd apps/web build:remote` before `wrangler dev` or a deploy.
+- `bun run dev:worker` builds the web app's remote build, then runs `wrangler dev` on :5183; `APP_ORIGIN` points the
+  Worker at that origin, and `SHINSA_REMOTE_ORIGIN` points an engine at it (its channel origin check, enroll and webhook
+  links follow). It is not called `dev`, so the root `bun dev` (turbo) never starts it.
+- The assets are `../web/dist-remote`, the web app's remote build: `bun run --cwd apps/web build:remote` before a deploy.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone). `ALLOWED_GITHUB_LOGINS`, a comma-separated list, keeps the dashboard to those accounts.
+  the `shinsa.dev` zone), and `ALLOWED_GITHUB_LOGINS`, the comma-separated GitHub logins that may sign in. It is a
+  secret, not a `vars` entry, so `wrangler deploy` never overwrites it with an empty list.

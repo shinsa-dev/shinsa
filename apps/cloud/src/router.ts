@@ -117,8 +117,9 @@ function respondCallbackFailure(error: CloudError) {
 }
 
 function describeFailure(error: unknown) {
-  if (error instanceof CloudError) return error;
+  if (error instanceof CloudError && error.status < 500) return error;
   recordFailure('[Cloud] Request failed', { error });
+  if (error instanceof CloudError) return error;
   return new CloudError('server_error', 'Something went wrong on app.shinsa.dev. Try again.', 500);
 }
 

@@ -61,7 +61,7 @@ export const TEST_CONFIG: CloudConfig = {
   cloudflareAccountId: 'account-1',
   cloudflareApiToken: 'api-token',
   tunnelZone: 'shinsa.dev',
-  allowedLogins: [],
+  allowedLogins: ['mona', 'kai'],
 };
 
 export interface Harness {

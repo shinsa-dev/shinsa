@@ -40,6 +40,15 @@ describe('the remote contract', () => {
     });
   });
 
+  test('builds the webhook and enrollment links on another origin, such as a local wrangler dev', () => {
+    expect(resolveRemoteHookUrl('k3x9', 's', 't', 'http://127.0.0.1:5183')).toBe(
+      'http://127.0.0.1:5183/hooks/k3x9/s/t'
+    );
+    expect(resolveEnrollUrl('k3x9', 'key', 'secret', 'http://127.0.0.1:5183')).toBe(
+      'http://127.0.0.1:5183/enroll#k3x9.key.secret'
+    );
+  });
+
   test('refuses a hook path of another shape', () => {
     expect(parseRemoteHookPath('/api/hooks/a/b')).toBeNull();
     expect(parseRemoteHookPath('/hooks/a/b')).toBeNull();

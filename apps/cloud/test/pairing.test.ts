@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   type PairPollResponse,
   type PairStartResponse,
@@ -157,8 +157,11 @@ describe('pairing a machine', () => {
     );
     const session = await harness.signIn();
     const { start } = await startPair(harness);
+    const logged = spyOn(console, 'error').mockImplementation(() => undefined);
     const failed = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
     expect(failed.status).toBe(502);
+    expect(logged.mock.calls.map((call) => call[0])).toContain('[Cloud] Request failed');
+    logged.mockRestore();
     expect((await readJson<{ error: { message: string } }>(failed)).error.message).toContain('record exists');
     expect(harness.calls.at(-1)).toMatchObject({ method: 'DELETE' });
     expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 0 });

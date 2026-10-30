@@ -120,8 +120,13 @@ export function resolveInstanceRemovePath(instanceId: string) {
   return `${resolveInstancePath(instanceId)}/remove`;
 }
 
-export function resolveRemoteHookUrl(instanceId: string, scheduleId: string, token: string) {
-  return `${REMOTE_APP_ORIGIN}${REMOTE_PATHS.hooks}${[instanceId, scheduleId, token].map(encodeURIComponent).join('/')}`;
+export function resolveRemoteHookUrl(
+  instanceId: string,
+  scheduleId: string,
+  token: string,
+  origin: string = REMOTE_APP_ORIGIN
+) {
+  return `${origin}${REMOTE_PATHS.hooks}${[instanceId, scheduleId, token].map(encodeURIComponent).join('/')}`;
 }
 
 export function parseRemoteHookPath(pathname: string) {
@@ -143,6 +148,11 @@ export function parseEnrollFragment(fragment: string) {
   return { instanceId, machineKey, secret };
 }
 
-export function resolveEnrollUrl(instanceId: string, machineKey: string, secret: string) {
-  return `${REMOTE_APP_ORIGIN}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(instanceId, machineKey, secret)}`;
+export function resolveEnrollUrl(
+  instanceId: string,
+  machineKey: string,
+  secret: string,
+  origin: string = REMOTE_APP_ORIGIN
+) {
+  return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(instanceId, machineKey, secret)}`;
 }

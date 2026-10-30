@@ -105,8 +105,7 @@ async function requestGitHubUser(code: string, world: CloudWorld): Promise<GitHu
 }
 
 function isAllowedLogin(login: string, world: CloudWorld) {
-  const { allowedLogins } = world.config;
-  return allowedLogins.length === 0 || allowedLogins.includes(login.toLowerCase());
+  return world.config.allowedLogins.includes(login.toLowerCase());
 }
 
 export async function respondSignInCallback(request: Request, url: URL, world: CloudWorld) {

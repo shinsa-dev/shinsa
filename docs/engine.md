@@ -4134,7 +4134,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
   directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
   command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_REMOTE_ORIGIN` points remote access at
-  another app.shinsa.dev (a local `wrangler dev`). `SHINSA_WEB_DIR` serves
+  another app.shinsa.dev (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
+  Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no

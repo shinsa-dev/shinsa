@@ -68,12 +68,18 @@ describe('signing in with GitHub', () => {
     expect(unknown.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
   });
 
-  test('lets in only the GitHub accounts on the list, when there is one', async () => {
+  test('lets in only the GitHub accounts on the list', async () => {
     const harness = createHarness({ allowedLogins: ['mona'] });
     expect(await harness.signIn('Mona', 1)).not.toBe('');
     expect(await harness.signIn('kai', 2)).toBe('');
     const rows = harness.db.sqlite.query('SELECT login FROM users').all() as { login: string }[];
     expect(rows.map((row) => row.login)).toEqual(['Mona']);
+  });
+
+  test('lets nobody in while the list is empty, so a deploy without it is closed', async () => {
+    const harness = createHarness({ allowedLogins: [] });
+    expect(await harness.signIn('mona', 1)).toBe('');
+    expect(harness.db.sqlite.query('SELECT login FROM users').all()).toEqual([]);
   });
 
   test('says nobody is signed in without a session or with an expired one', async () => {

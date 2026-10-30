@@ -143,13 +143,14 @@ interface OpenChannel {
 }
 
 async function openChannel(
+  origin: string,
   port: number | undefined,
   enrollSecret: string,
   machineKey: string
 ): Promise<OpenChannel> {
   const token = await createToken();
   const socket = new WebSocket(`ws://127.0.0.1:${port}/remote?token=${encodeURIComponent(token)}`, {
-    headers: { origin: REMOTE_APP_ORIGIN, 'cf-connecting-ip': '203.0.113.9' },
+    headers: { origin, 'cf-connecting-ip': '203.0.113.9' },
   } as unknown as string[]);
   socket.binaryType = 'arraybuffer';
   const inbox: (string | Bytes)[] = [];
@@ -205,9 +206,9 @@ describe('the tunnel entry point', () => {
   });
 
   test('answers nothing while remote access is off', async () => {
-    const { tunnel } = await start({ enabled: false });
+    const { tunnel, remote } = await start({ enabled: false });
     expect((await tunnel('/health')).status).toBe(404);
-    expect((await tunnel('/remote', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(404);
+    expect((await tunnel('/remote', { headers: { origin: remote.appOrigin } })).status).toBe(404);
   });
 
   test('keeps webhooks read-only in inspect mode', async () => {
@@ -216,17 +217,18 @@ describe('the tunnel entry point', () => {
   });
 
   test('refuses the channel from another origin, without a token or with a bad one', async () => {
-    const { tunnel } = await start();
+    const { tunnel, remote, plane } = await start();
+    expect(remote.appOrigin).toBe(plane.origin);
+    const origin = { origin: remote.appOrigin };
     expect((await tunnel('/remote', { headers: { origin: 'https://evil.dev' } })).status).toBe(403);
-    expect((await tunnel('/remote', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(401);
-    const expired = encodeURIComponent(await createToken(Date.now() - 1));
-    expect(
-      (await tunnel(`/remote?token=${expired}`, { headers: { origin: REMOTE_APP_ORIGIN } })).status
-    ).toBe(401);
     const good = encodeURIComponent(await createToken());
     expect((await tunnel(`/remote?token=${good}`, { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(
-      400
+      403
     );
+    expect((await tunnel('/remote', { headers: origin })).status).toBe(401);
+    const expired = encodeURIComponent(await createToken(Date.now() - 1));
+    expect((await tunnel(`/remote?token=${expired}`, { headers: origin })).status).toBe(401);
+    expect((await tunnel(`/remote?token=${good}`, { headers: origin })).status).toBe(400);
   });
 
   test('never treats a tunnel request as local, whatever its Host says', async () => {
@@ -242,7 +244,12 @@ describe('the sealed channel over the tunnel', () => {
   test('enrolls a device, serves the app socket and the API inside it, and refuses local-only commands', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      remote.enrollments.create('Phone').secret,
+      machine.publicKey
+    );
     expect(await channel.next()).toEqual({ t: 'ready' });
     expect(remote.snapshot().devices).toHaveLength(1);
     await channel.send({ t: 'ready' });
@@ -285,7 +292,12 @@ describe('the sealed channel over the tunnel', () => {
     const { remote, port, connectors } = await start();
     remote.start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      remote.enrollments.create('Phone').secret,
+      machine.publicKey
+    );
     expect(await channel.next()).toEqual({ t: 'ready' });
     await remote.stop();
     expect(await channel.closed).toBe(1008);
@@ -295,7 +307,12 @@ describe('the sealed channel over the tunnel', () => {
   test('closes a channel the browser closes without breaking the server', async () => {
     const { remote, port, tunnel } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      remote.enrollments.create('Phone').secret,
+      machine.publicKey
+    );
     expect(await channel.next()).toEqual({ t: 'ready' });
     channel.socket.close();
     await channel.closed;
@@ -427,7 +444,7 @@ describe('managing remote access on the Mac', () => {
     expect(remote.resolveHookUrl('s1', 'tok')).toBeNull();
     expect((await readSnapshot(await local('/api/remote/enable', {}))).enabled).toBe(true);
     await until('tunnel restarted', () => connectors.length === 2);
-    expect(remote.resolveHookUrl('s1', 'tok')).toBe('https://app.shinsa.dev/hooks/k3x9/s1/tok');
+    expect(remote.resolveHookUrl('s1', 'tok')).toBe(`${plane.origin}/hooks/k3x9/s1/tok`);
     plane.answers.set(REMOTE_PATHS.machineRemove, () => new Response('', { status: 500 }));
     const removed = await readSnapshot(await local('/api/remote/remove', {}));
     expect(removed).toMatchObject({ paired: false, enabled: false, devices: [] });
@@ -451,9 +468,10 @@ describe('managing remote access on the Mac', () => {
     };
     expect(enrollment.name).toBe('iPhone');
     const machine = await remote.store.resolveMachineKey();
+    expect(enrollment.url.startsWith(`${remote.appOrigin}/enroll#`)).toBe(true);
     const fragment = parseEnrollFragment(new URL(enrollment.url).hash);
     expect(fragment).toMatchObject({ instanceId: 'k3x9', machineKey: machine.publicKey });
-    const channel = await openChannel(port, fragment?.secret ?? '', machine.publicKey);
+    const channel = await openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey);
     expect(await channel.next()).toEqual({ t: 'ready' });
     const listed = await readSnapshot(await local('/api/remote'));
     expect(listed.devices.map((device) => device.name)).toEqual(['iPhone']);
@@ -475,7 +493,12 @@ describe('managing remote access on the Mac', () => {
   test('refuses from a remote device what stays at the keyboard, over HTTP as over the socket', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      remote.enrollments.create('Phone').secret,
+      machine.publicKey
+    );
     expect(await channel.next()).toEqual({ t: 'ready' });
     const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
     await channel.send({

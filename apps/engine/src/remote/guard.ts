@@ -24,5 +24,5 @@ export function resolveTunnelRoute(request: Request, url: URL): TunnelRoute | nu
 export function resolveChannelOriginRefusal(request: Request, appOrigin = REMOTE_APP_ORIGIN) {
   const origin = request.headers.get('origin');
   if (origin === appOrigin) return null;
-  return 'The remote channel only opens from app.shinsa.dev.';
+  return `The remote channel only opens from ${new URL(appOrigin).host}.`;
 }

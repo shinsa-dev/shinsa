@@ -128,6 +128,10 @@ export class Remote {
     this.supervisor.subscribe(() => this.#publish());
   }
 
+  get appOrigin() {
+    return this.control.origin;
+  }
+
   get isEnabled() {
     const { file } = this.store;
     return file.enabled && file.credentials !== null;
@@ -184,7 +188,7 @@ export class Remote {
   resolveHookUrl(scheduleId: string, token: string) {
     const { credentials } = this.store.file;
     if (!(credentials && this.isEnabled)) return null;
-    return resolveRemoteHookUrl(credentials.instanceId, scheduleId, token);
+    return resolveRemoteHookUrl(credentials.instanceId, scheduleId, token, this.appOrigin);
   }
 
   cancelPairing() {
@@ -241,7 +245,7 @@ export class Remote {
     const machine = await this.store.resolveMachineKey();
     const { secret, expiresAt } = this.enrollments.create(deviceName);
     return {
-      url: resolveEnrollUrl(credentials.instanceId, machine.publicKey, secret),
+      url: resolveEnrollUrl(credentials.instanceId, machine.publicKey, secret, this.appOrigin),
       name: deviceName,
       expiresAt,
     };

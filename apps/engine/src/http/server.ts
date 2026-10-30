@@ -197,7 +197,7 @@ export function startServer(context: HttpContext) {
       return context.schedules.handleWebhook(request, url);
     }
     if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
-    const originRefusal = resolveChannelOriginRefusal(request);
+    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
     if (originRefusal) return respondError('forbidden', originRefusal, 403);
     const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
     if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
