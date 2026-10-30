@@ -1253,8 +1253,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
   repository finds it; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
   them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
-  connects one for you. A watch reads one too, filing a task for each new report in it (Schedules and webhooks,
-  below).
+  connects one for you. A watch reads one too, filing a task for each new report in it, and a project that starts
+  using an integration is offered one (Schedules and webhooks → Suggested watches, below).
 - **Armed by the merge.** After every command, `syncWatchdogs` looks at the tasks it changed: a round whose pull
   request merged with watchdogs in its walkthrough arms each once (`watchdog.armed`, keyed by the round). One with a
   source starts watching at once (`endsAt` the merge plus its window, `nextCheckAt` its first check in); one with a source
@@ -1705,7 +1705,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 - **A watch reads in a home of its own** (`decide/intake.ts`, `prompts/intake.ts`). `Schedule.source`
   (`ScheduleSource`: `projectId`, `server`) names an integration the project uses (Watchdogs, above), and one the
   project does not use is refused (`source_not_found`). Writing one (`schedule.write` with `source`, `shinsa
-  schedules write --source <server> --project <project>`, or an agent's `set_schedule {source}`) creates its home
+  schedules write --source <server> --project <project>`, or accepting a suggested watch, below) creates its home
   (`createWatchHome`): a task marked `watchHome`, with no handle, no triage and no agent, resting at once (`done`,
   "waiting for its first read"). A watch never takes a target of its own (`source_target`), and a schedule that
   starts or messages a task cannot become one (`source_change`). A home is on no list: the roadmap, the queue, Home,
@@ -1752,7 +1752,39 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
 - **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
   in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
-  pauses, resumes and deletes them.
+  pauses, resumes and deletes them. A new watch an agent writes is a suggested watch for you to accept (below).
+  Triage reads a request to set up an automation as a question with no repository (the `answer` shape's meaning and
+  the no-repository rule in `apps/engine/src/triage/`, which name “watch #feedback for bugs, hourly”), so asking for a
+  watch from Home leaves one thing to approve: the suggested watch, with no plan, review or pull request.
+- **Suggested watches** (`domain/schedules.ts` `WatchSuggestion`, `decide/watch-suggestions.ts`,
+  `state/watch-suggestions.ts`). A suggested watch is a `schedule.write` with `source` waiting for you, in
+  `state.watchSuggestions`: its project and server, name, text, trigger, time zone and `maxRuns`, where it came from
+  (`origin`: `source`, or `agent` with the task and run), and `open`, `accepted` (with the `scheduleId` it became) or
+  `dismissed`. Nothing reads until you accept it. It comes from two places:
+  - **A project starts using an integration.** When `watch_source.write` (yours, or an agent's on your behalf) or an
+    armed or connected watchdog adds a server the project did not list, `writeSource` runs the `watch.suggest` effect,
+    unless a live watch already reads it, it was suggested before (in any status), or 10 suggestions are open
+    (`SCHEDULE_LIMITS.openSuggestions`; `isWatchSuggestible`). The engine words it with one Writer quick call on the
+    server and what it holds (`apps/engine/src/schedules/suggest.ts`: a fixed system prompt, the integration in the
+    user prompt; a `text` like “File a task for each new bug in #feedback.” and a short `name`) and sends
+    `watch_suggestion.record` with the machine's time zone; core checks the same conditions again and records it
+    hourly (`suggestedEveryMinutes`), worded “File a task for each new report in <server>.” and named “Watch
+    <server>” when the Writer gave nothing usable.
+  - **An agent asks for a watch.** `set_schedule {source}` with no `schedule_id`, and a new sourced `schedule.write`
+    sent on your behalf (`schedules_write`), are checked like any watch (the integration, the message, the trigger,
+    no target) and recorded as a suggestion from that task (in its activity, “Suggested the watch “…””) instead of a
+    live watch; the same open suggestion again records nothing, and an eleventh open one is refused
+    (`suggestion_limit`). The tool's reply says it starts only once you accept it. A watch an agent set before this
+    still takes its changes in place.
+  Accepting (`watch_suggestion.accept`, human-only: core refuses it on your behalf; `shinsa schedules accept`) writes
+  it as your own `schedule.write` (`createdBy: you`, its home, its first read a slot later); dismissing
+  (`watch_suggestion.dismiss`, `shinsa schedules dismiss`, open to agents) keeps it, so that integration is never
+  offered again. A decided suggestion takes neither (`suggestion_decided`). Removing the integration drops its open
+  suggestion (so adding it again offers one again), and removing the project drops all of its suggestions. On
+  screen a suggested watch shows its text, its server and when it runs, with Add the watch and Dismiss: under its
+  integration in Settings → Projects, in a Suggested watches block at the top of Settings → Automations (with its
+  project), and as the card of the agent's `set_schedule` in the task chat (“Suggested a watch”), which then reads
+  Added (with Open the watch) or Dismissed. `shinsa schedules suggestions` lists the open ones.
 - **Secrets are one-use refs** (`request_secret {label, reason}`, `agent.request_secret`): the agent's run waits on a
   question gate with `secret: {label}`; you paste the value into a password field that posts to
   `/api/secrets/<gate>` (never a command), and the server keeps it in `secrets.json` (mode 600) and answers the gate
@@ -2217,6 +2249,8 @@ plainly what protects what.
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
     `memory.remove` on your behalf): an agent proposes with `remember` instead (Memory, above);
+  - accepting a suggested watch (`schedules accept`; core refuses `watch_suggestion.accept` on your behalf): an
+    agent's new watch is a suggestion instead (Schedules and webhooks → Suggested watches, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
