@@ -21,6 +21,7 @@ export const REMOTE_PATHS = {
   signInCallback: '/__remote/sign-in/callback',
   signOut: '/__remote/sign-out',
   instances: '/__remote/instances',
+  pairs: '/__remote/pairs',
   hooks: '/hooks/',
 } as const;
 
@@ -92,6 +93,18 @@ export function resolveInstanceConnectPath(instanceId: string) {
 
 export function resolveInstancePath(instanceId: string) {
   return `${REMOTE_PATHS.instances}/${encodeURIComponent(instanceId)}`;
+}
+
+export function resolvePairPath(claimCode: string) {
+  return `${REMOTE_PATHS.pairs}/${encodeURIComponent(claimCode)}`;
+}
+
+export function resolvePairApprovePath(claimCode: string) {
+  return `${resolvePairPath(claimCode)}/approve`;
+}
+
+export function resolveInstanceRemovePath(instanceId: string) {
+  return `${resolveInstancePath(instanceId)}/remove`;
 }
 
 export function resolveRemoteHookUrl(instanceId: string, scheduleId: string, token: string) {

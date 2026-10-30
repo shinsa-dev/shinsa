@@ -2192,7 +2192,9 @@ tools and T3's MCP toolkits.
 
 Reaching this machine from any browser at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
 devices enrolled at the Mac. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
-core's `remote/` (`packages/core/CLAUDE.md`). The machine side is `apps/engine/src/remote/`:
+core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
+machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
+The machine side is `apps/engine/src/remote/`:
 
 - **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
   on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,

@@ -23,6 +23,9 @@
         "scripts/*.ts"
       ]
     },
+    "apps/cloud": {
+      "entry": ["test/**/*.test.ts"]
+    },
     "apps/marketing": {
       "entry": ["test/**/*.test.ts"],
       "ignoreDependencies": ["@shinsa/web"]

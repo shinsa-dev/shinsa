@@ -6,6 +6,9 @@ import {
   resolveEnrollUrl,
   resolveInstanceConnectPath,
   resolveInstancePath,
+  resolveInstanceRemovePath,
+  resolvePairApprovePath,
+  resolvePairPath,
   resolveRemoteHookUrl,
   resolveTunnelHost,
 } from '../../src/remote/contract.ts';
@@ -23,6 +26,9 @@ describe('the remote contract', () => {
     expect(resolveTunnelHost('k3x9')).toBe('t-k3x9.shinsa.dev');
     expect(resolveInstancePath('k3x9')).toBe('/__remote/instances/k3x9');
     expect(resolveInstanceConnectPath('k3x9')).toBe('/__remote/instances/k3x9/connect');
+    expect(resolveInstanceRemovePath('k3x9')).toBe('/__remote/instances/k3x9/remove');
+    expect(resolvePairPath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345');
+    expect(resolvePairApprovePath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345/approve');
   });
 
   test('gives a webhook one stable URL on app.shinsa.dev and maps it to the engine path', () => {
