@@ -59,12 +59,21 @@ function applyArmed(state: ShinsaState, event: EventOf<'watchdog.armed'>) {
   });
 }
 
-function describeFiled(state: ShinsaState, taskIds: readonly string[]) {
-  const names = taskIds.flatMap((id) => {
+function listTaskNames(state: ShinsaState, taskIds: readonly string[]) {
+  return taskIds.flatMap((id) => {
     const task = state.tasks[id];
     return task ? [task.handle ?? task.title] : [];
   });
-  return names.length > 0 ? ` and filed ${describeList(names)}` : '';
+}
+
+function describeFound(state: ShinsaState, watchdog: Watchdog) {
+  const filed = listTaskNames(state, watchdog.forkTaskIds);
+  const linked = listTaskNames(state, watchdog.linkedTaskIds);
+  const filedText = filed.length > 0 ? ` and filed ${describeList(filed)}` : '';
+  if (linked.length === 0) return filedText;
+  const joint = filed.length > 0 ? ', with' : ', already filed as';
+  const already = filed.length > 0 ? ' already filed' : '';
+  return `${filedText}${joint} ${describeList(linked)}${already}`;
 }
 
 function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
@@ -82,14 +91,14 @@ function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
     kind: 'watchdog',
     text: event.check.healthy
       ? `The watchdog “${next.title}” found nothing wrong`
-      : `The watchdog “${next.title}” found an issue${describeFiled(state, event.forkTaskIds)}`,
+      : `The watchdog “${next.title}” found an issue${describeFound(state, next)}`,
     detail: event.check.summary,
   });
 }
 
 function applyReportLinked(state: ShinsaState, event: EventOf<'watchdog.report_linked'>) {
   const next = updateWatchdog(state, event, (watchdog) => ({
-    forkTaskIds: [...new Set([...watchdog.forkTaskIds, event.reportTaskId])],
+    linkedTaskIds: [...new Set([...watchdog.linkedTaskIds, event.reportTaskId])],
   }));
   const report = state.tasks[event.reportTaskId];
   if (!next || !report) return;

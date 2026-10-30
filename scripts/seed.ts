@@ -4326,6 +4326,7 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
     sourceRequest: null,
     runId: null,
     forkTaskIds: [],
+    linkedTaskIds: [],
     armedAt: mergedAt,
     awaitingSince: null,
     startedAt: mergedAt,

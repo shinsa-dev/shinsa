@@ -93,6 +93,7 @@ function createWatchdog(decider: Decider, spec: WatchdogSpec, round: number): Wa
     runId: null,
     checks: [],
     forkTaskIds: [],
+    linkedTaskIds: [],
     endedAt: null,
   };
 }
@@ -261,21 +262,24 @@ function startLiveWindow(decider: Decider, task: Task, watchdog: Watchdog) {
 }
 
 function listFiledTaskIds(decider: Decider, watchdog: Watchdog) {
-  const filed = Object.values(decider.state.tasks)
+  return Object.values(decider.state.tasks)
     .filter((candidate) => candidate.sourceReport?.watchdogId === watchdog.id)
     .sort((a, b) => a.createdAt - b.createdAt)
     .map((candidate) => candidate.id);
-  return [...new Set([...watchdog.forkTaskIds, ...filed])];
 }
 
-function resolveLive(read: ReadReport, filed: readonly string[]) {
-  if (filed.length > 0 && read.live === false) {
+function hasFoundReports(filed: readonly string[], watchdog: Watchdog) {
+  return filed.length > 0 || watchdog.linkedTaskIds.length > 0;
+}
+
+function resolveLive(read: ReadReport, found: boolean) {
+  if (found && read.live === false) {
     throw new DomainError(
       'live_filed',
       'You filed a report on the change, so it is live in production. Set `live` true.'
     );
   }
-  const live = read.live ?? (filed.length > 0 ? true : null);
+  const live = read.live ?? (found ? true : null);
   if (live === null && read.reached) {
     throw new DomainError(
       'live_required',
@@ -307,11 +311,16 @@ function recordMiss(decider: Decider, task: Task, watchdog: Watchdog, reason: st
   });
 }
 
+function describeTripRun(filed: readonly string[], watchdog: Watchdog) {
+  if (filed.length > 0) return `Filed ${describeCount(filed.length, 'report')} on the change.`;
+  return `Found ${describeCount(watchdog.linkedTaskIds.length, 'report')} on the change already filed.`;
+}
+
 function recordCheck(decider: Decider, task: Task, run: Run, watchdog: Watchdog, read: ReadReport) {
   const filed = listFiledTaskIds(decider, watchdog);
-  if (filed.length > 0) {
+  if (hasFoundReports(filed, watchdog)) {
     recordTrip(decider, task, watchdog, read.summary, filed);
-    decider.endRun(run, 'completed', `Filed ${describeCount(filed.length, 'report')} on the change.`);
+    decider.endRun(run, 'completed', describeTripRun(filed, watchdog));
     return 'checked a watchdog';
   }
   if (!read.reached) {
@@ -336,7 +345,7 @@ function recordCheck(decider: Decider, task: Task, run: Run, watchdog: Watchdog,
 
 function resolveCheckedWatchdog(decider: Decider, task: Task, found: Watchdog, read: ReadReport) {
   if (found.status !== 'awaiting_production') return found;
-  const live = resolveLive(read, listFiledTaskIds(decider, found));
+  const live = resolveLive(read, hasFoundReports(listFiledTaskIds(decider, found), found));
   if (live === null) return found;
   if (!live) return null;
   return startLiveWindow(decider, task, found);
@@ -367,7 +376,7 @@ export function missWatchCheck(decider: Decider, runId: string, reason: string) 
   const watchdog = selectWatchingRun(task, runId);
   if (!watchdog) return false;
   const filed = listFiledTaskIds(decider, watchdog);
-  if (filed.length > 0) recordTrip(decider, task, watchdog, reason, filed);
+  if (hasFoundReports(filed, watchdog)) recordTrip(decider, task, watchdog, reason, filed);
   else recordMiss(decider, task, watchdog, reason);
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'could not check a watchdog');
   return true;

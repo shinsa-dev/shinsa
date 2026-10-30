@@ -28,6 +28,7 @@ function watchdog(overrides: Partial<Watchdog>): Watchdog {
     runId: null,
     checks: [{ at: NOW, healthy: true, summary: 'p95 is 210 ms.' }],
     forkTaskIds: [],
+    linkedTaskIds: [],
     endedAt: null,
     ...overrides,
   };

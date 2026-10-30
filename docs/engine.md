@@ -1295,7 +1295,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 - **What a check leads to.** Each thing wrong that the change caused is a report the agent files with `file_report`
   (`decide/reads.ts`), as in a watch: the report's id or link, author, time and text, deduped against every task the
   project has from that server, a watch's or a watchdog's. A report another watch or watchdog filed first is not filed
-  again: it is linked to this watchdog (`watchdog.report_linked`, into `forkTaskIds`) and counts for the check like one
+  again: it is linked to this watchdog (`watchdog.report_linked`, into `linkedTaskIds`, apart from the forks it files) and counts for the check like one
   it filed, so the watchdog never passes with the issue open; only a report this watchdog already holds is refused
   (`report_filed`). A watchdog's filing always forks the shipped
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
@@ -1304,8 +1304,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   quotes the report ("Reported in <server> …"); its Reported in fact names the watchdog and opens the shipped task.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
   kept (`watchdog.checked`, the last 20), and the next one is due an interval later; when that would fall past the
-  window, the watchdog passes. One that filed a report trips it (`tripped`, `forkTaskIds` the tasks it filed), and the
-  watchdog stops. A source the agent cannot reach after 3 tries ends with `reached: false`: the check is missed
+  window, the watchdog passes. One that filed or linked a report trips it (`tripped`, `forkTaskIds` the forks it
+  filed, `linkedTaskIds` the tasks a watch or another watchdog filed first), and the watchdog stops. A source the agent cannot reach after 3 tries ends with `reached: false`: the check is missed
   (`watchdog.missed` with its summary, the run failed) and the next one is due an interval later, as for a check that
   cannot run. Either way the task rests again (`merged`). A check run that fails or ends without `report_read` is
   recovered like any run (its nudged or resumed run takes the check over, `watchdog.checking`), but where any other
@@ -2513,7 +2513,7 @@ truth, and a snapshot only saves replaying it.
   and has never finished a read.
   Logs from before a watchdog filed through `file_report` (log version 9, `WATCHDOG_READS_LOG_VERSION`) have a
   watchdog's one `forkTaskId` on `watchdog.armed` and `watchdog.checked`, which becomes `forkTaskIds` (that task, or
-  none), and `task.created` reports without `watchdogId`, which is set to `null`.
+  none), an armed watchdog without `linkedTaskIds` (set to none), and `task.created` reports without `watchdogId`, which is set to `null`.
   A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 9) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:

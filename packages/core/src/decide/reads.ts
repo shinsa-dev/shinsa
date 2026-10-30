@@ -88,7 +88,7 @@ function assertNotFiled(decider: Decider, task: Task, report: SourceReport) {
 }
 
 function linkFiledReport(decider: Decider, task: Task, watchdog: Watchdog, filed: Task) {
-  if (filed.sourceReport?.watchdogId === watchdog.id || watchdog.forkTaskIds.includes(filed.id)) {
+  if (filed.sourceReport?.watchdogId === watchdog.id || watchdog.linkedTaskIds.includes(filed.id)) {
     refuseFiled(filed);
   }
   decider.emit({

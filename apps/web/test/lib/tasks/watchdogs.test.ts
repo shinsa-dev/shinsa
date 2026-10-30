@@ -47,6 +47,7 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
     runId: null,
     checks: [{ at: NOW, healthy: true, summary: 'Fine.' }],
     forkTaskIds: [],
+    linkedTaskIds: [],
     endedAt: null,
     ...overrides,
   };
@@ -102,6 +103,21 @@ describe('describing a watchdog', () => {
         checks: [{ at: NOW, healthy: false, summary: 'Two errors.' }],
       })
     ).toBe('Two errors. Filed [SW-9](shinsa://task/f) and [SW-10](shinsa://task/g) to fix it.');
+    expect(
+      summary({
+        status: 'tripped',
+        linkedTaskIds: ['g'],
+        checks: [{ at: NOW, healthy: false, summary: 'Errors in Safari.' }],
+      })
+    ).toBe('Errors in Safari. Already filed as [SW-10](shinsa://task/g).');
+    expect(
+      summary({
+        status: 'tripped',
+        forkTaskIds: ['f'],
+        linkedTaskIds: ['g', 'gone'],
+        checks: [{ at: NOW, healthy: false, summary: 'Two errors.' }],
+      })
+    ).toBe('Two errors. Filed [SW-9](shinsa://task/f) to fix it. Already filed as [SW-10](shinsa://task/g).');
     expect(summary({ status: 'tripped', checks: [] })).toBe('Found an issue.');
     expect(summary({ status: 'stopped' })).toBe('Stopped after 1 check.');
     const meta = (overrides: Partial<Watchdog>) => describeWatchdogMeta(createWatchdog(overrides), NOW);

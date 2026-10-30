@@ -154,6 +154,11 @@ function resolveForkTaskIds(value: Payload) {
   return { ...withoutKeys(value, ['forkTaskId']), forkTaskIds };
 }
 
+function resolveArmedWatchdog(watchdog: Payload) {
+  const resolved = resolveForkTaskIds(watchdog);
+  return 'linkedTaskIds' in resolved ? resolved : { ...resolved, linkedTaskIds: [] };
+}
+
 function resolveCreatedTask(event: Payload) {
   const created = 'specFirst' in event ? resolvePlanFirst(event) : event;
   if (!isRecord(created.sourceReport) || 'watchdogId' in created.sourceReport) return created;
@@ -230,7 +235,7 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return resolveFindings(event);
     case 'watchdog.armed':
       if (!isRecord(event.watchdog)) return event;
-      return { ...event, watchdog: resolveForkTaskIds(event.watchdog) };
+      return { ...event, watchdog: resolveArmedWatchdog(event.watchdog) };
     case 'watchdog.checked':
       return resolveForkTaskIds(event);
     default:

@@ -379,7 +379,7 @@ describe('watchdogs from before they filed through file_report', () => {
     text: 'Hi',
   };
 
-  test('a watchdog keeps the task it filed as a list, and a filed report says it came from no watchdog', () => {
+  test('a watchdog keeps the task it filed as a list and links none, and a filed report says it came from no watchdog', () => {
     expect(
       rewrite(
         { type: 'watchdog.armed', taskId: TASK, watchdog: { id: 'w1', forkTaskId: null } },
@@ -392,7 +392,11 @@ describe('watchdogs from before they filed through file_report', () => {
       {
         seq: 1,
         type: 'watchdog.armed',
-        event: { type: 'watchdog.armed', taskId: TASK, watchdog: { id: 'w1', forkTaskIds: [] } },
+        event: {
+          type: 'watchdog.armed',
+          taskId: TASK,
+          watchdog: { id: 'w1', forkTaskIds: [], linkedTaskIds: [] },
+        },
       },
       {
         seq: 2,
@@ -429,6 +433,11 @@ describe('watchdogs from before they filed through file_report', () => {
     expect(
       rewrite(
         { type: 'watchdog.armed', taskId: TASK, watchdog: null },
+        {
+          type: 'watchdog.armed',
+          taskId: TASK,
+          watchdog: { id: 'w2', forkTaskIds: [], linkedTaskIds: [] },
+        },
         { type: 'watchdog.checked', taskId: TASK, watchdogId: 'w1', forkTaskIds: ['fork'] },
         { type: 'task.created', taskId: 'filed', sourceReport: { ...report, watchdogId: 'w1' } },
         { type: 'task.created', taskId: 'plain', planFirst: false }

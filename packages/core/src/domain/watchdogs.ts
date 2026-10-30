@@ -35,6 +35,7 @@ export interface Watchdog {
   runId: string | null;
   checks: WatchdogCheck[];
   forkTaskIds: string[];
+  linkedTaskIds: string[];
   endedAt: number | null;
 }
 

@@ -61,6 +61,13 @@ function describeLastCheck(watchdog: Watchdog) {
   return watchdog.checks.at(-1)?.summary ?? null;
 }
 
+function listTaskLinks(state: ShinsaState, taskIds: readonly string[]) {
+  return taskIds.flatMap((id) => {
+    const task = state.tasks[id];
+    return task ? [`[${task.handle ?? task.title}](shinsa://task/${task.id})`] : [];
+  });
+}
+
 export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, now: number) {
   const last = describeLastCheck(watchdog);
   switch (watchdog.status) {
@@ -78,10 +85,11 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
     case 'passed':
       return `Held up for ${formatMinutes(watchdog.forMinutes)} with nothing wrong.`;
     case 'tripped': {
-      const forks = watchdog.forkTaskIds.flatMap((id) => state.tasks[id] ?? []);
-      const links = forks.map((fork) => `[${fork.handle ?? fork.title}](shinsa://task/${fork.id})`);
-      const filed = links.length > 0 ? ` Filed ${describeList(links)} to fix it.` : '';
-      return `${last ?? 'Found an issue.'}${filed}`;
+      const filed = listTaskLinks(state, watchdog.forkTaskIds);
+      const linked = listTaskLinks(state, watchdog.linkedTaskIds);
+      const filedText = filed.length > 0 ? ` Filed ${describeList(filed)} to fix it.` : '';
+      const linkedText = linked.length > 0 ? ` Already filed as ${describeList(linked)}.` : '';
+      return `${last ?? 'Found an issue.'}${filedText}${linkedText}`;
     }
     case 'stopped':
       return `Stopped after ${formatCount(watchdog.checks.length, 'check', 'checks')}.`;

@@ -282,7 +282,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
-| `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its tripping check filed, `endedAt` (`docs/engine.md` → Watchdogs) |
+| `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its checks filed (forks of this task), the `linkedTaskIds` they found already filed by a watch or another watchdog, `endedAt` (`docs/engine.md` → Watchdogs) |
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
 | `watchHome?` | boolean | the home a watch reads in: no handle, no triage, on no list, takes no messages (`docs/engine.md` → Schedules and webhooks) |
@@ -925,7 +925,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watchdog.started` | a watchdog that waited got its source (`source`, `status`: watching, or waiting for production; `awaitingSince`, `startedAt`, `endsAt`, `nextCheckAt`) |
 | `watchdog.checking`, `watchdog.deferred` | a check started on a run (`runId`), or moved on 15 minutes while the task worked (`nextCheckAt`) |
 | `watchdog.checked` | a check's result (`check`, `status`, `nextCheckAt`, `forkTaskIds`) |
-| `watchdog.report_linked` | a check found a report another watch or watchdog already filed (`reportTaskId`); it joins `forkTaskIds` and trips the watchdog at the check's end |
+| `watchdog.report_linked` | a check found a report another watch or watchdog already filed (`reportTaskId`); it joins `linkedTaskIds`, never `forkTaskIds`, and trips the watchdog at the check's end |
 | `watchdog.live` | the change reached production, so the window starts (`endsAt`, `nextCheckAt`), for every watchdog of the task that waited for it |
 | `watchdog.missed` | a check that could not run, given up without a gate (`reason`, `nextCheckAt`; none left stops the watchdog) |
 | `watchdog.ended` | you stopped a watchdog (Stop, or the task marked done or cancelled) |
