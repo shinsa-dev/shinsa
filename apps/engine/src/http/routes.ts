@@ -4,7 +4,10 @@ import {
   DomainError,
   type EngineRestartWhen,
   KNOWN_AGENT_PROVIDERS,
+  LOCAL_ONLY_CODE,
   parseUserCommand,
+  type RequestOrigin,
+  resolveLocalOnlyRefusal,
   resolveQueueSummary,
   type ShinsaEvent,
   selectTaskByReference,
@@ -27,6 +30,8 @@ import {
 import { describeError } from '../log/index.ts';
 import type { Onboarding } from '../onboarding/index.ts';
 import { createProjectRoutes } from '../projects/routes.ts';
+import { type Remote, resolveRequestOrigin } from '../remote/index.ts';
+import { createRemoteRoutes } from '../remote/routes.ts';
 import { createLoginResolver, type LoginResolver, type RootSource } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
@@ -52,6 +57,7 @@ export type Launcher = (command: string[], cwd: string) => Promise<CommandResult
 
 export interface ApiContext {
   engine: Engine;
+  remote?: Remote;
   config: ServerConfig;
   instance?: ServerInstance;
   evidence: EvidenceStore;
@@ -111,10 +117,13 @@ export async function dispatchUserCommand(
   engine: Engine,
   body: unknown,
   clientId: string | null = null,
-  classify: Classifier | null = null
+  classify: Classifier | null = null,
+  origin: RequestOrigin = 'local'
 ) {
   if (engine.readOnly) throw createReadOnlyError();
   const command = parseUserCommand(body);
+  const refusal = resolveLocalOnlyRefusal(origin, command);
+  if (refusal) throw new DomainError(LOCAL_ONLY_CODE, refusal);
   return selectCreatedTaskId(
     await routeUserCommand(engine, command, clientId ? `client:${clientId}` : null, classify)
   );
@@ -189,7 +198,13 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
   const attachments = new AttachmentStore(config.attachmentsDir);
   async function respondCommand(request: Request) {
     const key = readIdempotencyKey(request);
-    const taskId = await dispatchUserCommand(engine, await readJson(request), key, classify ?? null);
+    const taskId = await dispatchUserCommand(
+      engine,
+      await readJson(request),
+      key,
+      classify ?? null,
+      resolveRequestOrigin(request)
+    );
     const handle = taskId ? (engine.state.tasks[taskId]?.handle ?? null) : null;
     return respondJson({ ok: true, taskId, handle });
   }
@@ -342,6 +357,7 @@ export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
     ...(context.transcripts ? createReadRoutes(context.engine, context.transcripts) : []),
     ...(context.extensions ? createExtensionRoutes(context.extensions) : []),
     ...(context.versions ? createVersionRoutes(context.versions) : []),
+    ...(context.remote ? createRemoteRoutes(context.remote) : []),
     ...(context.roots
       ? createProjectRoutes({
           engine: context.engine,

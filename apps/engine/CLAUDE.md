@@ -52,7 +52,7 @@ src/
 │                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
 │                        the seam the command line and the management tools both run through), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
-│                        plugins, services, system),
+│                        plugins, services, remote, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
@@ -165,8 +165,11 @@ src/
 │                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
 │                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
 │                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
-│                        enrollments.ts (one-time enrollment secrets), channel.ts (RemoteChannel: the handshake, sealed
-│                        frames, the app socket and HTTP inside), index.ts (Remote: wires them, markRemoteRequest and
+│                        enrollments.ts (one-time enrollment secrets, each for a named device), channel.ts
+│                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
+│                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
+│                        (the routes a remote request is refused), routes.ts (/api/remote), index.ts (Remote: wires
+│                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
 │                        MCP sign-ins

@@ -39,9 +39,11 @@ import {
   ControlClient,
   createCloudflaredConnector,
   installCloudflared,
+  openRemoteUrl,
   REMOTE_FILE,
   Remote,
   resolveCloudflaredAsset,
+  resolveMachineName,
   type StartConnector,
 } from './remote/index.ts';
 import {
@@ -98,6 +100,7 @@ export interface ShinsaOptions {
   versions?: VersionsOptions;
   terminals?: Pick<TerminalsOptions, 'spawn' | 'readForeground' | 'env'>;
   remoteConnect?: StartConnector;
+  openRemoteUrl?: (url: string) => Promise<void>;
   byService?: boolean;
   exit?: (code: number) => void;
 }
@@ -151,18 +154,6 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     onUpdated: () => accounts.syncProviderLogins(),
     ...options.versions,
   });
-  const schedules = new Schedules(engine, secrets, {
-    ...options.scheduleClock,
-    baseUrl: () => address.url,
-    ...(options.timeZone ? { timeZone: options.timeZone } : {}),
-  });
-  const terminals = new Terminals({
-    dataDir: config.dataDir,
-    home: config.userHome,
-    version: instance.version,
-    readOnly: config.inspect,
-    ...options.terminals,
-  });
   const remote = new Remote({
     path: join(config.dataDir, REMOTE_FILE),
     control: new ControlClient({ origin: config.remoteOrigin }),
@@ -178,6 +169,21 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     localUrl: () => address.url,
     version: instance.version,
     maxBodyBytes: ATTACHMENT_REQUEST_LIMIT_BYTES,
+    machineName: resolveMachineName(),
+    openUrl: options.openRemoteUrl ?? ((url) => openRemoteUrl(url, config.userHome)),
+  });
+  const schedules = new Schedules(engine, secrets, {
+    ...options.scheduleClock,
+    baseUrl: () => address.url,
+    hookUrl: (scheduleId, token) => remote.resolveHookUrl(scheduleId, token),
+    ...(options.timeZone ? { timeZone: options.timeZone } : {}),
+  });
+  const terminals = new Terminals({
+    dataDir: config.dataDir,
+    home: config.userHome,
+    version: instance.version,
+    readOnly: config.inspect,
+    ...options.terminals,
   });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,

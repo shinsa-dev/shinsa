@@ -9,6 +9,7 @@ const MAX_PENDING = 5;
 
 interface PendingEnrollment {
   secret: string;
+  name: string;
   expiresAt: number;
 }
 
@@ -20,11 +21,11 @@ export class Enrollments {
     this.#now = now;
   }
 
-  create() {
+  create(name: string) {
     const now = this.#now();
     const secret = serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES)));
     const expiresAt = now + ENROLLMENT_TTL_MS;
-    this.#pending = [...this.#listLive(now), { secret, expiresAt }].slice(-MAX_PENDING);
+    this.#pending = [...this.#listLive(now), { secret, name, expiresAt }].slice(-MAX_PENDING);
     return { secret, expiresAt };
   }
 
@@ -41,9 +42,9 @@ export class Enrollments {
     for (const entry of live) {
       if (!(await verifyEnrollProof(entry.secret, proof, keys))) continue;
       this.#pending = this.#pending.filter((pending) => pending !== entry);
-      return true;
+      return entry.name;
     }
     this.#pending = live;
-    return false;
+    return null;
   }
 }

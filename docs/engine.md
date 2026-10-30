@@ -1682,10 +1682,12 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 - **Webhooks** (`apps/engine/src/schedules/webhook.ts`): each webhook schedule has a URL with a 24-byte token
   (`/api/hooks/<id>/<token>`, `secrets.json`), outside the host guard so services can reach it. The token is
   created when the schedule is written (and for any webhook schedule without one, on every state change), so
-  showing the URL never writes. The URL is this machine's own address (`http://<host>:<port>`, from `SHINSA_HOST`
-  and `SHINSA_PORT` or `config.json`), so a service on the internet cannot reach it as it is: run a tunnel to that
-  port (`cloudflared`, `ngrok`, Tailscale Funnel) and give the sender the tunnel's address with the same
-  `/api/hooks/<id>/<token>` path. A path that is not a hook, including one with a broken `%` escape, is 404. The
+  showing the URL never writes. With remote access on, the URL is the stable
+  `https://app.shinsa.dev/hooks/<instance>/<id>/<token>`, which reaches this machine through its tunnel (Remote
+  access, below). Otherwise it is this machine's own address (`http://<host>:<port>`, from `SHINSA_HOST` and
+  `SHINSA_PORT` or `config.json`), which a service on the internet cannot reach as it is: turn on remote access, or
+  run a tunnel of your own to that port and give the sender its address with the same `/api/hooks/<id>/<token>`
+  path. A path that is not a hook, including one with a broken `%` escape, is 404. The
   request is checked in order: the token (constant time), a rate limit (60 a minute per schedule, 429), paused
   (409), the body (1 MB, 413), then an optional HMAC-SHA256 signature over the raw body (`webhook.signature
   {header, prefix, encoding, secret_ref}`, 401). Then the prompt template (the schedule's message) is filled:
@@ -2223,9 +2225,38 @@ core's `remote/` (`packages/core/CLAUDE.md`). The machine side is `apps/engine/s
   fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
   routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
-  handshake did. A remote socket's command that is local only (`isLocalOnlyCommand`: a human-only setting or
-  repository field, binding an account) is answered with `local_only`. Removing a device closes its channels; turning
-  remote access off or a revocation closes all of them.
+  handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
+- **Pairing** (`pairing.ts`, `Remote.startPairing`): Settings → Remote access → Turn on, or `shinsa remote pair`,
+  makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
+  without `.local`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
+  where you sign in with GitHub and approve. The engine polls every 2 seconds with a poll secret that never leaves it,
+  through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
+  `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired Mac is refused
+  (`remote_paired`): remove it first.
+- **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
+  secret for a named device (60 characters at most) and answers its link,
+  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>`; the device it enrolls takes that name. `shinsa
+  remote forget-device <key>` removes one.
+- **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
+  channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
+  logged) and forgets the credentials and every device. Each needs a paired Mac (`remote_not_paired`).
+- **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
+  owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
+  `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).
+- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the Mac
+  Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
+  repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
+  takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
+  plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
+  programs, opening a task on the Mac and restarting the engine; terminals and services are refused even to read.
+  Everything else, closing gates included, is you, as on the Mac.
+- **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
+  `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
+  `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
+  machine's own address, as before.
+- **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
+  every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the Mac already
+  reaches the engine, and the danger is a copy leaving the machine.
 
 ## Who can change Shinsa
 
@@ -2262,6 +2293,8 @@ plainly what protects what.
   - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
     `memory.remove` on your behalf): an agent proposes with `remember` instead (Memory, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
+  - remote access: pairing this Mac, pausing, resuming and removing it, and enrolling or forgetting a device
+    (`remote pair`, `enable`, `disable`, `remove`, `enroll`, `forget-device`; Remote access, above);
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
     command at all (Terminals, above);

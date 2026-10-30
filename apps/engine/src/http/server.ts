@@ -1,4 +1,4 @@
-import { REMOTE_CONNECT_PARAM } from '@shinsa/core';
+import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
@@ -7,9 +7,9 @@ import { describeError, log } from '../log/index.ts';
 import {
   isTunnelRequest,
   markRemoteRequest,
-  type Remote,
   type RemoteChannel,
   resolveChannelOriginRefusal,
+  resolveLocalOnlyRoute,
   resolveTunnelRoute,
 } from '../remote/index.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
@@ -40,7 +40,6 @@ export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
   terminals?: Terminals;
   refiner?: ServiceRefiner;
-  remote?: Remote;
 }
 
 interface RemoteSocketData {
@@ -165,6 +164,8 @@ export function startServer(context: HttpContext) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/'))
       return Promise.resolve(respondError('not_found', 'No such endpoint.', 404));
+    if (resolveLocalOnlyRoute(request.method, url.pathname))
+      return Promise.resolve(respondError(LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, 403));
     return respondApi(markRemoteRequest(request), url);
   }
 

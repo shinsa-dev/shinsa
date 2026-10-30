@@ -12,6 +12,7 @@ import { EXTENSION_SPECS } from './extensions.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
 import { MEMORY_SPECS } from './memory.ts';
+import { REMOTE_SPECS } from './remote.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
 import { SERVICE_SPECS } from './services.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
@@ -59,6 +60,7 @@ export const SURFACE: SurfaceSpec[] = [
   ...SERVICE_SPECS,
   ...EXTENSION_SPECS,
   ...WATCHDOG_SPECS,
+  ...REMOTE_SPECS,
   COMMAND_SPEC,
 ];
 
@@ -208,6 +210,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],
       ['folders', 'Choose the folders Shinsa searches for repositories.'],
       ['accounts', 'Sign in, import, refresh or remove the Claude accounts agents run on.'],
+      ['remote', 'Reach this Mac from app.shinsa.dev: pair it, pause it and add or remove devices.'],
       ['settings', 'Read or change a setting by its name.'],
       ['setup', 'Show where setup stands, and check the tools Shinsa needs.'],
     ],

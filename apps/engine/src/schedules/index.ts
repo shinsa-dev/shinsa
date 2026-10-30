@@ -10,6 +10,7 @@ export type { ScheduleToolCall } from './tools.ts';
 
 export interface SchedulesOptions extends StateClockOptions {
   baseUrl: () => string;
+  hookUrl?: (scheduleId: string, token: string) => string | null;
   timeZone?: string;
   newId?: () => string;
 }
@@ -34,6 +35,7 @@ export class Schedules {
     this.context = {
       secrets,
       baseUrl: options.baseUrl,
+      hookUrl: options.hookUrl ?? (() => null),
       timeZone: options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       now,
     };

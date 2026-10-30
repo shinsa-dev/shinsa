@@ -1940,6 +1940,86 @@ Every task agent's tool: `sources_remove`. Sends `watch_source.remove`.
 | `<project>` | text, required | The project: its key, name or id. |
 | `--server` | text, required | The MCP server that holds the data, by name, as Settings → Integrations lists it. |
 
+### remote
+
+#### shinsa remote status
+
+Show whether this Mac can be reached from app.shinsa.dev, and its enrolled devices.
+
+```
+shinsa remote status [--json]
+```
+
+Every task agent's tool: `remote_status` (reads).
+
+#### shinsa remote pair
+
+Turn on remote access: sign in with GitHub in the browser to give this Mac its tunnel.
+
+```
+shinsa remote pair [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+#### shinsa remote enable
+
+Start the tunnel again after pausing it.
+
+```
+shinsa remote enable [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+#### shinsa remote disable
+
+Pause remote access: stop the tunnel and close every open session.
+
+```
+shinsa remote disable [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+#### shinsa remote remove
+
+Remove this Mac from app.shinsa.dev and forget its tunnel and devices.
+
+```
+shinsa remote remove [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+#### shinsa remote enroll
+
+Make a one-time link that adds a phone or browser to this Mac.
+
+```
+shinsa remote enroll <name> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<name>` | text, required | What to call the device, such as iPhone. |
+
+#### shinsa remote forget-device
+
+Remove an enrolled device and close its open sessions.
+
+```
+shinsa remote forget-device <device> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<device>` | text, required | The device’s key, from `shinsa remote status`. |
+
 ### command
 
 #### shinsa command

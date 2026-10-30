@@ -7,18 +7,28 @@ import {
   type ChannelMessage,
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
+  parseEnrollFragment,
   REMOTE_APP_ORIGIN,
+  REMOTE_PATHS,
   serializeBase64Url,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { log } from '../../src/log/index.ts';
-import { ControlClient, Remote, requestHealth, resolveRequestOrigin } from '../../src/remote/index.ts';
+import {
+  ControlClient,
+  openRemoteUrl,
+  Remote,
+  type RemoteSnapshot,
+  requestHealth,
+  resolveMachineName,
+  resolveRequestOrigin,
+} from '../../src/remote/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { createTempDir, createTestConfig, createTestOnboarding } from '../helpers/index.ts';
+import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
 import { createKeyPair, startHandshake, type TestSession } from './client.ts';
 import { startFakeControlPlane } from './control-plane.ts';
 
@@ -50,15 +60,24 @@ function createFakeSchedules() {
   } as unknown as Schedules;
 }
 
-async function start(options: { enabled?: boolean; config?: Partial<ServerConfig> } = {}) {
+async function start(
+  options: {
+    enabled?: boolean;
+    paired?: boolean;
+    config?: Partial<ServerConfig>;
+    openUrl?: (url: string) => Promise<void>;
+  } = {}
+) {
   const config = createTestConfig(createTempDir(), options.config);
   const plane = startFakeControlPlane();
   running.push(plane.stop);
   const path = join(config.dataDir, 'remote.json');
-  writeFileSync(
-    path,
-    JSON.stringify({ credentials: CREDENTIALS, enabled: options.enabled ?? true, owner: 'mona' })
-  );
+  if (options.paired ?? true)
+    writeFileSync(
+      path,
+      JSON.stringify({ credentials: CREDENTIALS, enabled: options.enabled ?? true, owner: 'mona' })
+    );
+  const opened: string[] = [];
   const connectors: { stopped: boolean }[] = [];
   const remote = new Remote({
     path,
@@ -75,6 +94,14 @@ async function start(options: { enabled?: boolean; config?: Partial<ServerConfig
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024 * 1024,
+    machineName: 'Studio',
+    openUrl:
+      options.openUrl ??
+      ((url) => {
+        opened.push(url);
+        return Promise.resolve();
+      }),
+    pairPollMs: 1,
   });
   const engine = new Engine(new EventLog(config.databasePath));
   const http = startServer({
@@ -94,7 +121,13 @@ async function start(options: { enabled?: boolean; config?: Partial<ServerConfig
   const base = `http://127.0.0.1:${http.server.port}`;
   const tunnel = (route: string, init: RequestInit = {}) =>
     fetch(`${base}${route}`, { ...init, headers: { 'cf-connecting-ip': '203.0.113.9', ...init.headers } });
-  return { remote, base, tunnel, port: http.server.port, plane, connectors };
+  const local = (route: string, body?: unknown) =>
+    fetch(`${base}${route}`, {
+      ...(body === undefined
+        ? {}
+        : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    });
+  return { remote, base, tunnel, local, port: http.server.port, plane, connectors, opened };
 }
 
 async function createToken(expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS) {
@@ -209,7 +242,7 @@ describe('the sealed channel over the tunnel', () => {
   test('enrolls a device, serves the app socket and the API inside it, and refuses local-only commands', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create().secret, machine.publicKey);
+    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
     expect(await channel.next()).toEqual({ t: 'ready' });
     expect(remote.snapshot().devices).toHaveLength(1);
     await channel.send({ t: 'ready' });
@@ -252,7 +285,7 @@ describe('the sealed channel over the tunnel', () => {
     const { remote, port, connectors } = await start();
     remote.start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create().secret, machine.publicKey);
+    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
     expect(await channel.next()).toEqual({ t: 'ready' });
     await remote.stop();
     expect(await channel.closed).toBe(1008);
@@ -262,7 +295,7 @@ describe('the sealed channel over the tunnel', () => {
   test('closes a channel the browser closes without breaking the server', async () => {
     const { remote, port, tunnel } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(port, remote.enrollments.create().secret, machine.publicKey);
+    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
     expect(await channel.next()).toEqual({ t: 'ready' });
     channel.socket.close();
     await channel.closed;
@@ -314,5 +347,179 @@ describe('the health ping', () => {
     expect(await requestHealth(`http://127.0.0.1:${server.port}/health`)).toBe(true);
     expect(await requestHealth(`http://127.0.0.1:${server.port}/down`)).toBe(false);
     expect(await requestHealth('http://127.0.0.1:1/health')).toBe(false);
+  });
+});
+
+async function readSnapshot(response: Response) {
+  return (await response.json()) as RemoteSnapshot;
+}
+
+async function readError(response: Response) {
+  return ((await response.json()) as { error: { code: string } }).error.code;
+}
+
+describe('pairing this Mac', () => {
+  test('starts with GitHub sign-in in the browser and starts the tunnel once the instance is claimed', async () => {
+    const { remote, local, plane, opened, connectors } = await start({ paired: false });
+    let polls = 0;
+    plane.answers.set(REMOTE_PATHS.pairStart, () =>
+      Response.json({
+        claimCode: 'K7PQ',
+        pollSecret: 'poll',
+        url: 'https://app.shinsa.dev/pair?code=K7PQ',
+        expiresAt: Date.now() + 60_000,
+      })
+    );
+    plane.answers.set(REMOTE_PATHS.pairPoll, () => {
+      polls += 1;
+      if (polls < 3) return Response.json({ status: 'pending' });
+      return Response.json({ status: 'claimed', credentials: CREDENTIALS, owner: 'mona' });
+    });
+    const started = await readSnapshot(await local('/api/remote/pair', {}));
+    expect(started.pairing).toEqual({
+      claimCode: 'K7PQ',
+      url: 'https://app.shinsa.dev/pair?code=K7PQ',
+      expiresAt: expect.any(Number),
+    });
+    expect(opened).toEqual(['https://app.shinsa.dev/pair?code=K7PQ']);
+    const startCall = plane.calls.find((call) => call.path === REMOTE_PATHS.pairStart);
+    expect(startCall?.body).toEqual({ name: 'Studio', publicKey: started.machineKey, version: '1' });
+    expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');
+    await until('paired', () => remote.snapshot().paired);
+    expect(remote.snapshot()).toMatchObject({ paired: true, enabled: true, owner: 'mona', pairing: null });
+    await until('tunnel started', () => connectors.length === 1);
+    expect(await readError(await local('/api/remote/pair', {}))).toBe('remote_paired');
+  });
+
+  test('ends a pairing that expired or was cancelled without pairing, and survives a browser that will not open', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { remote, local, plane } = await start({
+      paired: false,
+      openUrl: () => Promise.reject(new Error('no browser')),
+    });
+    plane.answers.set(REMOTE_PATHS.pairStart, () =>
+      Response.json({ claimCode: 'A', pollSecret: 'p', url: 'u', expiresAt: Date.now() + 60_000 })
+    );
+    plane.answers.set(REMOTE_PATHS.pairPoll, () => Response.json({ status: 'expired' }));
+    await local('/api/remote/pair', {});
+    await until('pairing ended', () => remote.snapshot().pairing === null);
+    expect(remote.snapshot().paired).toBe(false);
+    plane.answers.set(REMOTE_PATHS.pairPoll, () => Response.json({ status: 'pending' }));
+    await local('/api/remote/pair', {});
+    expect(remote.snapshot().pairing).not.toBeNull();
+    await local('/api/remote/pair/cancel', {});
+    await until('pairing ended', () => remote.snapshot().pairing === null);
+    expect(warn).toHaveBeenCalledWith('[Remote] Could not open the pairing page', expect.anything());
+    warn.mockRestore();
+  });
+});
+
+describe('managing remote access on the Mac', () => {
+  test('pauses, resumes and removes the instance through its routes', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { remote, local, plane, connectors } = await start();
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const paused = await readSnapshot(await local('/api/remote/disable', {}));
+    expect(paused).toMatchObject({ paired: true, enabled: false, status: 'off' });
+    expect(connectors[0]?.stopped).toBe(true);
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.offline)).toBe(true);
+    expect(remote.resolveHookUrl('s1', 'tok')).toBeNull();
+    expect((await readSnapshot(await local('/api/remote/enable', {}))).enabled).toBe(true);
+    await until('tunnel restarted', () => connectors.length === 2);
+    expect(remote.resolveHookUrl('s1', 'tok')).toBe('https://app.shinsa.dev/hooks/k3x9/s1/tok');
+    plane.answers.set(REMOTE_PATHS.machineRemove, () => new Response('', { status: 500 }));
+    const removed = await readSnapshot(await local('/api/remote/remove', {}));
+    expect(removed).toMatchObject({ paired: false, enabled: false, devices: [] });
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineRemove)).toBe(true);
+    for (const route of ['/api/remote/enable', '/api/remote/disable', '/api/remote/remove']) {
+      expect(await readError(await local(route, {}))).toBe('remote_not_paired');
+    }
+    expect(await readError(await local('/api/remote/devices/enroll', { name: 'iPhone' }))).toBe(
+      'remote_not_paired'
+    );
+    warn.mockRestore();
+  });
+
+  test('enrolls a named device from a one-time link and forgets it on request', async () => {
+    const { remote, local, port } = await start();
+    expect(await readError(await local('/api/remote/devices/enroll', { name: ' ' }))).toBe('name_invalid');
+    expect(await readError(await local('/api/remote/devices/enroll', {}))).toBe('name_invalid');
+    const enrollment = (await (await local('/api/remote/devices/enroll', { name: '  iPhone ' })).json()) as {
+      url: string;
+      name: string;
+    };
+    expect(enrollment.name).toBe('iPhone');
+    const machine = await remote.store.resolveMachineKey();
+    const fragment = parseEnrollFragment(new URL(enrollment.url).hash);
+    expect(fragment).toMatchObject({ instanceId: 'k3x9', machineKey: machine.publicKey });
+    const channel = await openChannel(port, fragment?.secret ?? '', machine.publicKey);
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    const listed = await readSnapshot(await local('/api/remote'));
+    expect(listed.devices.map((device) => device.name)).toEqual(['iPhone']);
+    expect(await readError(await local('/api/remote/devices/remove', { publicKey: 'nope' }))).toBe(
+      'device_not_found'
+    );
+    expect(await readError(await local('/api/remote/devices/remove', {}))).toBe('publicKey_invalid');
+    const key = listed.devices[0]?.publicKey ?? '';
+    expect(
+      (await readSnapshot(await local('/api/remote/devices/remove', { publicKey: key }))).devices
+    ).toEqual([]);
+    expect(await channel.closed).toBe(1008);
+    const long = (await (await local('/api/remote/devices/enroll', { name: 'x'.repeat(80) })).json()) as {
+      name: string;
+    };
+    expect(long.name).toHaveLength(60);
+  });
+
+  test('refuses from a remote device what stays at the keyboard, over HTTP as over the socket', async () => {
+    const { remote, port } = await start();
+    const machine = await remote.store.resolveMachineKey();
+    const channel = await openChannel(port, remote.enrollments.create('Phone').secret, machine.publicKey);
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
+    await channel.send({
+      t: 'request',
+      id: 'pair',
+      method: 'POST',
+      path: '/api/remote/disable',
+      headers: [],
+    });
+    await channel.send({ t: 'end', id: 'pair' });
+    await channel.send({ t: 'request', id: 'read', method: 'GET', path: '/api/remote', headers: [] });
+    await channel.send({ t: 'end', id: 'read' });
+    await channel.send({
+      t: 'request',
+      id: 'cmd',
+      method: 'POST',
+      path: '/api/commands',
+      headers: [['content-type', 'application/json']],
+    });
+    await channel.send({
+      t: 'body',
+      id: 'cmd',
+      chunk: body(JSON.stringify({ type: 'settings.change', patch: { mergeMethod: 'squash' } })),
+    });
+    await channel.send({ t: 'end', id: 'cmd' });
+    const statuses = new Map<string, number>();
+    while (statuses.size < 3) {
+      const message = await channel.next();
+      if (message.t === 'response') statuses.set(message.id, message.status);
+    }
+    expect(Object.fromEntries(statuses)).toEqual({ pair: 403, read: 200, cmd: 400 });
+    expect(remote.snapshot().enabled).toBe(true);
+  });
+});
+
+describe('naming and opening', () => {
+  test('names the Mac after its host name without .local', () => {
+    expect(resolveMachineName('Mona-MBP.local')).toBe('Mona-MBP');
+    expect(resolveMachineName('')).toBe('Mac');
+    expect(resolveMachineName()).not.toBe('');
+  });
+
+  test('opens a page with the system opener and reports when it fails', async () => {
+    await openRemoteUrl('https://app.shinsa.dev/pair', createTempDir());
+    await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
   });
 });

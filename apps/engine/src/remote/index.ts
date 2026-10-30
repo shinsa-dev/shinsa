@@ -1,7 +1,18 @@
-import { type ConnectClaim, type RequestOrigin, verifyConnectToken } from '@shinsa/core';
+import { hostname } from 'node:os';
+import {
+  type ConnectClaim,
+  DomainError,
+  type RequestOrigin,
+  resolveEnrollUrl,
+  resolveRemoteHookUrl,
+  verifyConnectToken,
+} from '@shinsa/core';
+import { describeError, log } from '../log/index.ts';
+import { runCommandOrThrow } from '../shell/index.ts';
 import { type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient } from './control.ts';
 import { Enrollments } from './enrollments.ts';
+import { PAIR_POLL_MS, type PairedMachine, Pairing, type PairingView } from './pairing.ts';
 import { type RemoteDevice, RemoteStore } from './store.ts';
 import {
   type StartConnector,
@@ -26,6 +37,8 @@ export {
   resolveTunnelRoute,
   type TunnelRoute,
 } from './guard.ts';
+export { resolveLocalOnlyRoute } from './local-only.ts';
+export { PAIR_POLL_MS, type PairingView } from './pairing.ts';
 export { REMOTE_FILE, type RemoteDevice, type RemoteFile, RemoteStore, readRemoteFile } from './store.ts';
 export {
   resolveRestartDelay,
@@ -57,8 +70,19 @@ export interface RemoteSnapshot {
   status: TunnelStatus;
   instanceId: string | null;
   owner: string | null;
+  machineName: string;
+  machineKey: string | null;
+  pairing: PairingView | null;
   devices: RemoteDevice[];
 }
+
+export interface RemoteEnrollment {
+  url: string;
+  name: string;
+  expiresAt: number;
+}
+
+const DEVICE_NAME_LIMIT = 60;
 
 export interface RemoteOptions {
   path: string;
@@ -70,9 +94,20 @@ export interface RemoteOptions {
   maxBodyBytes: number;
   timings?: TunnelTimings;
   now?: () => number;
+  machineName: string;
+  openUrl: (url: string) => Promise<void>;
+  pairPollMs?: number;
 }
 
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
+
+export function resolveMachineName(name = hostname()) {
+  return name.replace(/\.local$/i, '') || 'Mac';
+}
+
+export async function openRemoteUrl(url: string, cwd: string) {
+  await runCommandOrThrow(['open', url], cwd);
+}
 
 export async function requestHealth(url: string) {
   try {
@@ -92,6 +127,7 @@ export class Remote {
   readonly #now: () => number;
   readonly #channels = new Set<RemoteChannel>();
   readonly #listeners = new Set<() => void>();
+  #pairing: Pairing | null = null;
 
   constructor(options: RemoteOptions) {
     this.#options = options;
@@ -129,7 +165,105 @@ export class Remote {
       status: this.supervisor.status,
       instanceId: file.credentials?.instanceId ?? null,
       owner: file.owner,
+      machineName: this.#options.machineName,
+      machineKey: file.machine?.publicKey ?? null,
+      pairing: this.#pairing?.view ?? null,
       devices: file.devices,
+    };
+  }
+
+  async startPairing() {
+    if (this.store.file.credentials)
+      throw new DomainError('remote_paired', 'This Mac is already paired. Remove it first to pair it again.');
+    if (this.#pairing) return this.#pairing.view;
+    const machine = await this.store.resolveMachineKey();
+    const start = await this.control.requestPairStart({
+      name: this.#options.machineName,
+      publicKey: machine.publicKey,
+      version: this.#options.version,
+    });
+    const pairing = new Pairing({
+      control: this.control,
+      start,
+      pollMs: this.#options.pairPollMs ?? PAIR_POLL_MS,
+      now: this.#now,
+    });
+    this.#pairing = pairing;
+    this.#publish();
+    void pairing.done.then((end) => {
+      if (this.#pairing === pairing) this.#pairing = null;
+      if (end.status === 'claimed') this.#recordPaired(end.machine);
+      this.#publish();
+    });
+    await this.#options.openUrl(start.url).catch((error: unknown) => {
+      log.warn('[Remote] Could not open the pairing page', { error: describeError(error) });
+    });
+    return pairing.view;
+  }
+
+  resolveHookUrl(scheduleId: string, token: string) {
+    const { credentials } = this.store.file;
+    if (!(credentials && this.isEnabled)) return null;
+    return resolveRemoteHookUrl(credentials.instanceId, scheduleId, token);
+  }
+
+  cancelPairing() {
+    this.#pairing?.cancel();
+  }
+
+  #recordPaired(machine: PairedMachine) {
+    this.store.update((file) => ({
+      ...file,
+      credentials: machine.credentials,
+      owner: machine.owner,
+      enabled: true,
+    }));
+    log.info('[Remote] Paired', { instanceId: machine.credentials.instanceId, owner: machine.owner });
+    this.start();
+  }
+
+  #assertPaired() {
+    const { credentials } = this.store.file;
+    if (!credentials) throw new DomainError('remote_not_paired', 'Turn on remote access first.');
+    return credentials;
+  }
+
+  enable() {
+    this.#assertPaired();
+    this.store.update((file) => ({ ...file, enabled: true }));
+    this.start();
+    this.#publish();
+  }
+
+  async disable() {
+    this.#assertPaired();
+    this.store.update((file) => ({ ...file, enabled: false }));
+    await this.stop();
+    this.#publish();
+  }
+
+  async remove() {
+    const credentials = this.#assertPaired();
+    await this.stop();
+    try {
+      await this.control.requestRemoval(credentials.machineToken);
+    } catch (error) {
+      log.warn('[Remote] app.shinsa.dev did not confirm the removal', { error: describeError(error) });
+    }
+    this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, devices: [] }));
+    this.#publish();
+  }
+
+  async createEnrollment(name: string): Promise<RemoteEnrollment> {
+    const credentials = this.#assertPaired();
+    const deviceName = name.trim().slice(0, DEVICE_NAME_LIMIT);
+    if (!deviceName) throw new DomainError('device_name_missing', 'Name the device you are adding.');
+    const machine = await this.store.resolveMachineKey();
+    const { secret, expiresAt } = this.enrollments.create(deviceName);
+    return {
+      url: resolveEnrollUrl(credentials.instanceId, machine.publicKey, secret),
+      name: deviceName,
+      expiresAt,
     };
   }
 
@@ -149,6 +283,7 @@ export class Remote {
   }
 
   async stop() {
+    this.#pairing?.cancel();
     this.#closeChannels(isAnyChannel);
     this.enrollments.clear();
     await this.supervisor.stop();
@@ -172,10 +307,11 @@ export class Remote {
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.store.selectDevice(device) !== null,
       redeemEnrollment: async (proof, keys) => {
-        if (!(await this.enrollments.redeem(proof, keys))) return false;
+        const name = await this.enrollments.redeem(proof, keys);
+        if (name === null) return false;
         this.store.upsertDevice({
           publicKey: keys.device,
-          name: 'Browser',
+          name,
           enrolledAt: this.#now(),
           lastSeenAt: null,
         });

@@ -3,10 +3,7 @@ import {
   type ClientMessage,
   DomainError,
   isSurface,
-  LOCAL_ONLY_CODE,
-  parseUserCommand,
   type RequestOrigin,
-  resolveLocalOnlyRefusal,
   resolveStatePatch,
   type ServerMessage,
   type Surface,
@@ -85,15 +82,6 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | null {
   return null;
 }
 
-function resolveCommandRefusal(origin: RequestOrigin, command: unknown) {
-  if (origin === 'local') return null;
-  try {
-    return resolveLocalOnlyRefusal(origin, parseUserCommand(command));
-  } catch {
-    return null;
-  }
-}
-
 export function createSocketHub(
   engine: Engine,
   transcripts: Transcripts,
@@ -155,13 +143,8 @@ export function createSocketHub(
         syncSurfaces();
         return;
       case 'command': {
-        const refusal = resolveCommandRefusal(socket.data.origin, message.command);
-        if (refusal) {
-          send(socket, { type: 'ack', id: message.id, error: { code: LOCAL_ONLY_CODE, message: refusal } });
-          return;
-        }
         try {
-          await dispatchUserCommand(engine, message.command, message.id, classify);
+          await dispatchUserCommand(engine, message.command, message.id, classify, socket.data.origin);
           send(socket, { type: 'ack', id: message.id, error: null });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'command_failed';
