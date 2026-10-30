@@ -1,4 +1,10 @@
-import { type MessageEffect, resolveMessageEffect, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  type MessageEffect,
+  resolveMessageEffect,
+  type ShinsaState,
+  type Task,
+  type TaskSuggestion,
+} from '@shinsa/core';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { sendThroughOutbox } from '@/lib/tasks/outbox.ts';
@@ -81,11 +87,8 @@ export function sendTaskMessage(task: Task, hint: MessageHint, text: string) {
 
 export interface MessageStatusLine {
   text: string;
-  tone: 'quiet' | 'notice' | 'refused';
+  tone: 'quiet' | 'refused';
 }
-
-const SPLIT_OFF_TEXT =
-  'Not sent to the agent: it reads as work for another task. Make it a task or keep it here under Suggested tasks on the Overview.';
 
 export function describeMessageStatus({
   status,
@@ -93,14 +96,19 @@ export function describeMessageStatus({
 }: Pick<HumanMessage, 'status' | 'reason'>): MessageStatusLine | null {
   if (status === 'noted') return { text: 'Noted. It needs no reply.', tone: 'quiet' };
   if (status === 'undelivered') return { text: `Not delivered. ${reason ?? ''}`.trim(), tone: 'refused' };
-  if (status === 'split_off') return { text: SPLIT_OFF_TEXT, tone: 'notice' };
-  if (status === 'made_task') return { text: 'Made into a task of its own.', tone: 'quiet' };
-  if (status === 'split_off_dismissed') {
-    return { text: 'Suggested as a separate task, then dismissed.', tone: 'quiet' };
-  }
   return null;
 }
 
 export function isDelivering(message: Pick<HumanMessage, 'status'>) {
   return message.status === 'delivering';
+}
+
+const SPLIT_OFF_STATE: Record<TaskSuggestion['status'], string> = {
+  open: 'Not sent to the agent',
+  accepted: 'Made into a task',
+  dismissed: 'Dismissed',
+};
+
+export function describeSplitOffState(suggestion: Pick<TaskSuggestion, 'status'>) {
+  return SPLIT_OFF_STATE[suggestion.status];
 }

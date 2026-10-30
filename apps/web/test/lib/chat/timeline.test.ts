@@ -183,9 +183,9 @@ describe('a message read as work for another task', () => {
       ],
     });
     expect(listHumanMessages(task)).toEqual([
-      { at: 1, text: 'Stage the docs', status: 'split_off' },
-      { at: 2, text: 'Redo billing', status: 'made_task' },
-      { at: 3, text: 'Rename the page', status: 'split_off_dismissed' },
+      { at: 1, text: 'Stage the docs', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's1' } },
+      { at: 2, text: 'Redo billing', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's2' } },
+      { at: 3, text: 'Rename the page', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's3' } },
       { at: 7, text: 'Commit the skills' },
     ]);
   });
@@ -269,12 +269,16 @@ describe('resolveTimeline', () => {
         { at: 5, text: 'sent' },
         { at: 6, text: 'on its way', status: 'delivering' },
         { at: 7, text: 'refused', status: 'undelivered', reason: 'This task is finished.' },
+        { at: 8, text: 'elsewhere', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's1' } },
       ]
     );
-    expect(only(items, 'human').map(({ status, reason }) => ({ status, reason }))).toEqual([
-      { status: undefined, reason: undefined },
-      { status: 'delivering', reason: undefined },
-      { status: 'undelivered', reason: 'This task is finished.' },
+    expect(
+      only(items, 'human').map(({ status, reason, splitOff }) => ({ status, reason, splitOff }))
+    ).toEqual([
+      { status: undefined, reason: undefined, splitOff: undefined },
+      { status: 'delivering', reason: undefined, splitOff: undefined },
+      { status: 'undelivered', reason: 'This task is finished.', splitOff: undefined },
+      { status: 'split_off', reason: undefined, splitOff: { taskId: 't', suggestionId: 's1' } },
     ]);
   });
 

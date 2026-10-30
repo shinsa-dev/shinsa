@@ -383,10 +383,13 @@ Only these, and they win over anything below:
    Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
    one the classifier read as needing nothing (no agent runs for it), "Not delivered. ‹reason›" in
    `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`), or, for
-   one read as another task's work (a split-off), what became of its suggested task: "Not sent to the agent: it reads
-   as work for another task. Make it a task or keep it here under Suggested tasks on the Overview." in
-   `text-amber-text` while it is open, then "Made into a task of its own." or "Suggested as a separate task, then
-   dismissed." in `text-fg-2`. A kept one leaves the chat, since keeping sends it again as your message.
+   one read as another task's work (a split-off), its suggested task as a card under the bubble (`SplitOffCard`,
+   `components/chat/split-off-card.tsx`): a chat card at most four fifths wide, its line "Suggested as a separate
+   task" with `IconLightbulbGlow` and its state at the right ("Not sent to the agent", "Made into a task" or
+   "Dismissed", `describeSplitOffState`). While open its body is the Overview's suggested-task row (`SuggestionRow`:
+   title over why, When to start, Keep it here and Make it a task), so you decide in the chat; once made a task it
+   links that task (`TaskLink`), once dismissed it shows the title and why with no buttons. A kept one leaves the
+   chat, since keeping sends it again as your message.
    Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
    Queued messages).
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one

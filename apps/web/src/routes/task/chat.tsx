@@ -74,6 +74,7 @@ function TranscriptBlockView({
             text={block.message.text}
             status={block.message.status}
             reason={block.message.reason}
+            splitOff={block.message.splitOff}
           />
         </div>
       );

@@ -817,8 +817,9 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
 - **Splitting off.** When an idea does not belong in the task, it is suggested as a separate task through the existing
   suggested tasks: the classifier's `separate_task` records one (`splitOff`, from Shinsa), and a working agent can
   mark its own `suggest_tasks` entry `split_off`. A split-off message stays in the chat: its `task.messaged` carries
-  the suggestion's id (`suggestionId`, also on its activity entry), so the chat reads what became of the suggestion
-  and says so under the bubble (`listSplitOffs` in `lib/chat/timeline.ts`; the lines are `docs/design.md`, 9), and the
+  the suggestion's id (`suggestionId`, also on its activity entry), so the chat shows the suggested task as a card
+  under the bubble, where you keep it or make it a task (`listSplitOffs` in `lib/chat/timeline.ts`, `SplitOffCard`;
+  `docs/design.md`, 9), and the
   Overview lists Suggested tasks right under the now card. You make it a task (`suggestion.accept`) or decline and keep it in the
   chat (`suggestion.keep`), which sends its request now, as if you had typed it (`keepSuggestion` in
   `decide/messages.ts`, through `sendMessages`): to an open round as `feedback`, so it steers a working agent, asks

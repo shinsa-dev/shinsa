@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   describeMessageStatus,
+  describeSplitOffState,
   isDelivering,
   resolveMessageHint,
   sendTaskMessage,
@@ -119,18 +120,10 @@ describe('describeMessageStatus', () => {
     });
   });
 
-  it('says where a message read as another task’s work went, and what became of it', () => {
-    expect(describeMessageStatus({ status: 'split_off' })).toEqual({
-      text: 'Not sent to the agent: it reads as work for another task. Make it a task or keep it here under Suggested tasks on the Overview.',
-      tone: 'notice',
-    });
-    expect(describeMessageStatus({ status: 'made_task' })).toEqual({
-      text: 'Made into a task of its own.',
-      tone: 'quiet',
-    });
-    expect(describeMessageStatus({ status: 'split_off_dismissed' })).toEqual({
-      text: 'Suggested as a separate task, then dismissed.',
-      tone: 'quiet',
-    });
+  it('leaves a message read as another task’s work to its suggested-task card, which says what became of it', () => {
+    expect(describeMessageStatus({ status: 'split_off' })).toBeNull();
+    expect(describeSplitOffState({ status: 'open' })).toBe('Not sent to the agent');
+    expect(describeSplitOffState({ status: 'accepted' })).toBe('Made into a task');
+    expect(describeSplitOffState({ status: 'dismissed' })).toBe('Dismissed');
   });
 });

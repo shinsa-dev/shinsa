@@ -16,19 +16,22 @@ import {
   type ShinsaToolName,
   splitMessageAttachments,
   type Task,
-  type TaskSuggestion,
 } from '@shinsa/core';
 import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
 
-type MessageStatus = 'delivering' | 'noted' | 'undelivered' | SplitOffStatus;
+type MessageStatus = 'delivering' | 'noted' | 'undelivered' | 'split_off';
 
-type SplitOffStatus = 'split_off' | 'made_task' | 'split_off_dismissed';
+export interface SplitOffReference {
+  taskId: string;
+  suggestionId: string;
+}
 
 export interface HumanMessage {
   at: number;
   text: string;
   status?: MessageStatus;
   reason?: string;
+  splitOff?: SplitOffReference;
 }
 
 export interface ToolCall {
@@ -46,7 +49,7 @@ export type TimelineItem =
   | { kind: 'instructions'; key: string; at: number; text: string; first: boolean }
   | ({ kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[] } & Pick<
       HumanMessage,
-      'status' | 'reason'
+      'status' | 'reason' | 'splitOff'
     >)
   | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
   | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
@@ -117,23 +120,16 @@ function listMessagesOf(task: Task, kinds: readonly string[]): HumanMessage[] {
     });
 }
 
-const SPLIT_OFF_STATUS: Record<TaskSuggestion['status'], SplitOffStatus> = {
-  open: 'split_off',
-  accepted: 'made_task',
-  dismissed: 'split_off_dismissed',
-};
-
-function resolveSplitOffStatus(task: Task, suggestionId: string): SplitOffStatus | null {
+function isShownSplitOff(task: Task, suggestionId: string) {
   const suggestion = task.suggestions?.find((candidate) => candidate.id === suggestionId);
-  if (!suggestion || suggestion.keptRound !== undefined) return null;
-  return SPLIT_OFF_STATUS[suggestion.status];
+  return suggestion !== undefined && suggestion.keptRound === undefined;
 }
 
 function listSplitOffs(task: Task): HumanMessage[] {
   return task.activity.flatMap((entry) => {
-    if (entry.actor !== 'you' || !entry.suggestionId || !entry.detail) return [];
-    const status = resolveSplitOffStatus(task, entry.suggestionId);
-    return status ? [{ at: entry.at, text: entry.detail, status }] : [];
+    const { suggestionId, detail } = entry;
+    if (entry.actor !== 'you' || !suggestionId || !detail || !isShownSplitOff(task, suggestionId)) return [];
+    return [{ at: entry.at, text: detail, status: 'split_off', splitOff: { taskId: task.id, suggestionId } }];
   });
 }
 
@@ -406,7 +402,7 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
   for (const [index, part] of mergeByTime(entries, messages).entries()) {
     if (part.type === 'human') {
       builder.group = null;
-      const { at, text, status, reason } = part.message;
+      const { at, text, status, reason, splitOff } = part.message;
       builder.items.push({
         kind: 'human',
         key: `human-${at}-${index}`,
@@ -415,6 +411,7 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
         attachments: [],
         ...(status ? { status } : {}),
         ...(reason ? { reason } : {}),
+        ...(splitOff ? { splitOff } : {}),
       });
     } else if (!isSubagentEvent(part.entry)) {
       applyEntry(builder, part.entry);

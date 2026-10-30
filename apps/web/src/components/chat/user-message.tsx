@@ -2,6 +2,7 @@ import { type ChatAttachment, splitMessageAttachments } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { FileCard } from '@/components/chat/file-card.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
+import { SplitOffCard } from '@/components/chat/split-off-card.tsx';
 import { ATTACHMENT_CORNER } from '@/components/layout/surface/card.ts';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
@@ -92,7 +93,6 @@ export function MessageAttachments({
 
 const STATUS_TONE: Record<MessageStatusLine['tone'], string> = {
   quiet: 'text-fg-2',
-  notice: 'text-amber-text',
   refused: 'text-red-text',
 };
 
@@ -122,11 +122,12 @@ export function UserMessage({
   attachments = [],
   status,
   reason,
+  splitOff,
 }: {
   persistId: DisclosurePersistId;
   text: string;
   attachments?: ChatAttachment[];
-} & Pick<HumanMessage, 'status' | 'reason'>) {
+} & Pick<HumanMessage, 'status' | 'reason' | 'splitOff'>) {
   const { open: expanded, toggle } = useDisclosure(persistId, false);
   const delivery = useSettling(isDelivering({ status }));
   const split = splitMessageAttachments(text);
@@ -159,6 +160,7 @@ export function UserMessage({
       )}
       {delivery === 'active' && <span className='sr-only'>Sending</span>}
       <MessageStatus status={status} reason={reason} />
+      {splitOff && <SplitOffCard reference={splitOff} />}
     </div>
   );
 }

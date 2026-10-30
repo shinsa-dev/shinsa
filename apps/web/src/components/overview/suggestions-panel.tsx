@@ -21,7 +21,7 @@ type SuggestionDismisser = (suggestion: TaskSuggestion) => Promise<boolean>;
 
 type SuggestionKeeper = (suggestion: TaskSuggestion) => Promise<boolean>;
 
-function SuggestionRow({
+export function SuggestionRow({
   suggestion,
   onAccept,
   onDismiss,
