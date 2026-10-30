@@ -203,6 +203,29 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
   });
 
+  it('says why the last reading is kept when it cannot be read again, under its windows', () => {
+    const expired = 'The login needs refreshing. It refreshes the next time an agent runs on this account.';
+    renderAccounts(
+      createSnapshot({
+        accounts: [
+          createAccount({
+            id: 'a',
+            usage: {
+              status: 'ok',
+              windows: [createWindow({ id: 's', usedPercent: 42 })],
+              detail: expired,
+              checkedAt: Date.now() - 3 * HOUR,
+              source: 'read',
+            },
+          }),
+        ],
+      })
+    );
+    expect(screen.getByText('42%')).toBeTruthy();
+    expect(screen.getByText(expired)).toBeTruthy();
+    expect(screen.getByText('Updated 3h ago')).toBeTruthy();
+  });
+
   it('refreshes the usage of every account from one button in the section header', async () => {
     renderAccounts(ACCOUNTS);
     expect(screen.getAllByRole('button', { name: 'Refresh usage' })).toHaveLength(1);

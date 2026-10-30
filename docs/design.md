@@ -1397,7 +1397,8 @@ Only these, and they win over anything below:
       is never signed out). Under it, on the block's shelf, one 40px row per usage window: label over "Resets in 3h" (`ResetTime`, the
       exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
       `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
-      muted line, "No usage reported yet." before the first read. An account that still runs on your Claude Code
+      muted line, "No usage reported yet." before the first read, and with windows a detail (why the last reading
+      is kept: a login that needs refreshing, Claude asking for fewer reads) is a muted row after them. An account that still runs on your Claude Code
       login or a copy of claude-swap's (`docs/engine.md` → A shared login) reads "Needs sign-in" and a muted
       `SettingsEmpty` row after the accounts says why and to sign in to it again from its menu
       (`describeSharedLogin`). A login in your accounts twice shows once; after the accounts, a muted
