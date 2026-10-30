@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { useAttachments } from '@/hooks/use-attachments.ts';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
+import * as React from 'react';
+import { type Attachments, useAttachments } from '@/hooks/use-attachments.ts';
 import { spyOnToasts } from '../support/commands.ts';
 
 const realFetch = globalThis.fetch;
@@ -11,7 +12,11 @@ let revoked: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
   toasts = spyOnToasts();
-  created = spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+  let made = 0;
+  created = spyOn(URL, 'createObjectURL').mockImplementation(() => {
+    made += 1;
+    return `blob:preview-${made}`;
+  });
   revoked = spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined);
 });
 
@@ -47,12 +52,13 @@ describe('useAttachments', () => {
       result.current.add([new File(['x'], 'a.png', { type: 'image/png' }), new File(['y'], 'b.txt')])
     );
     expect(result.current.drafts.map((draft) => [draft.kind, draft.preview])).toEqual([
-      ['image', 'blob:preview'],
+      ['image', 'blob:preview-1'],
       ['file', null],
     ]);
     await waitFor(() => expect(result.current.ready.map((item) => item.name)).toEqual(['a.png', 'b.txt']));
+    expect(created).toHaveBeenCalledTimes(1);
     act(() => result.current.remove(result.current.drafts[0]?.key ?? ''));
-    expect(revoked).toHaveBeenCalledWith('blob:preview');
+    expect(revoked).toHaveBeenCalledWith('blob:preview-1');
     act(() => result.current.remove('missing'));
     act(() => result.current.clear());
     expect(result.current.drafts).toEqual([]);
@@ -80,6 +86,28 @@ describe('useAttachments', () => {
     expect(toasts.error).toHaveBeenCalledWith('Each file must be between 1 byte and 25 MB.');
     act(() => result.current.add([new File(['x'], 'c.png', { type: 'image/png' })]));
     unmount();
-    expect(revoked).toHaveBeenCalledWith('blob:preview');
+    expect(revoked).toHaveBeenCalledWith('blob:preview-1');
+  });
+
+  it('makes new previews when a hidden page shows again', () => {
+    serve((name) => Response.json(stored(name)));
+    const seen: { attachments: Attachments | null } = { attachments: null };
+    function Composer() {
+      seen.attachments = useAttachments();
+      return null;
+    }
+    const page = (mode: 'visible' | 'hidden') => (
+      <React.Activity mode={mode}>
+        <Composer />
+      </React.Activity>
+    );
+    const { rerender } = render(page('visible'));
+    act(() => seen.attachments?.add([new File(['x'], 'a.png', { type: 'image/png' })]));
+    expect(seen.attachments?.drafts[0]?.preview).toBe('blob:preview-1');
+    act(() => rerender(page('hidden')));
+    expect(revoked).toHaveBeenCalledWith('blob:preview-1');
+    act(() => rerender(page('visible')));
+    expect(seen.attachments?.drafts[0]?.preview).toBe('blob:preview-2');
+    expect(revoked).not.toHaveBeenCalledWith('blob:preview-2');
   });
 });
