@@ -43,7 +43,7 @@ export function dismissSuggestion(task: Task, suggestion: TaskSuggestion) {
 export function keepSuggestion(task: Task, suggestion: TaskSuggestion) {
   return sendCommandWithToast(
     { type: 'suggestion.keep', taskId: task.id, suggestionId: suggestion.id },
-    'Kept in this task. It starts as the next round.'
+    'Kept in this task. The agent takes it now.'
   );
 }
 

@@ -344,6 +344,7 @@ function selectShapelessRound(engine: Engine, command: UserCommand): ShapelessRo
   if (command.type === 'task.message') {
     return command.kind === 'new_round' ? { task, command, request: command.text } : null;
   }
+  if (!isTaskResting(task)) return null;
   const suggestion = task.suggestions?.find((candidate) => candidate.id === command.suggestionId);
   return suggestion?.status === 'open' ? { task, command, request: suggestion.request } : null;
 }

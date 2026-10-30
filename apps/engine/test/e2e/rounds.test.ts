@@ -335,10 +335,17 @@ describe('a task that runs in rounds', () => {
     ).toEqual([text]);
   });
 
-  test('a split-off the classifier suggests can be declined and kept in the chat as the next round', async () => {
+  test('a split-off the classifier suggests can be kept in this task, and it reaches the agent at once', async () => {
     const w = await open();
+    let release: (() => void) | null = null;
+    w.agents.queue('plan', async (agent) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      expect(agent.steers.some((text) => text.includes('Can you also redo the billing page?'))).toBe(true);
+    });
     const taskId = await w.createTask('Add MCP v2');
-    await w.until('the planner', () => w.agents.of('plan').length === 1);
+    await w.until('the planner', () => release !== null);
     await send(
       w,
       taskId,
@@ -349,15 +356,10 @@ describe('a task that runs in rounds', () => {
     expect(suggestion).toMatchObject({ splitOff: true, title: 'Redo the billing page', status: 'open' });
     expect(statuses(w, taskId)).toEqual([[1, 'active']]);
     await w.engine.dispatch({ type: 'suggestion.keep', taskId, suggestionId: suggestion?.id ?? '' });
-    expect(w.task(taskId).suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 2 });
-    expect(statuses(w, taskId)).toEqual([
-      [1, 'active'],
-      [2, 'waiting'],
-    ]);
-    await shipRound(w, taskId);
-    await w.until('round 2 to start', () => resolveCurrentRound(w.task(taskId)).number === 2);
-    await w.until('the round 2 planner', () => w.agents.of('plan').length === 2);
-    expect(w.agents.of('plan')[1]?.prompt).toContain('Can you also redo the billing page?');
+    expect(w.task(taskId).suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 1 });
+    expect(statuses(w, taskId)).toEqual([[1, 'active']]);
+    await w.until('the steer', () => (w.agents.of('plan')[0]?.steers.length ?? 0) > 0);
+    (release as (() => void) | null)?.();
   });
 
   test('a restart mid-round resumes the round where it was, with its rounds intact', async () => {

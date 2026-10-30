@@ -652,7 +652,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   something to be done that has not been done is a new round (on a resting task a correction to finished work is one).
   You override it by saying what the message is (`shinsa tasks message --as new_round`, an agent's `tasks_message`
   with `as`), which skips the classifier. A new round sent that way without a `shape`, and a suggestion kept as the
-  next round (`suggestion.keep` without one), still gets its kind of task: the server asks the classifier the same
+  next round of a resting task (`suggestion.keep` without one), still gets its kind of task: the server asks the classifier the same
   shape question (`resolveRoundShape` in `triage/message.ts`, the task's rounds as context) before it dispatches, and
   the answer travels on the command like a classified message's, so replay never asks again. Only when the model is
   off or gives no usable answer does the round fall back to `change`.
@@ -699,7 +699,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   question (`SHAPE_QUESTION`), read as the request of a new task with the earlier rounds as its context, and the round
   takes that preset's steps: "how many ended up in Archive?" is an answer round, "open a pull request for it" a change,
   "move the old checkout under Archive instead" an operation. Only a round with no shape (`--as new_round` with none, or a
-  suggested task kept as the next round) starts as a change, which its Agent may reshape. A round whose kind needs
+  suggested task kept on a resting task) starts as a change, which its Agent may reshape. A round whose kind needs
   code on a task with no repository binds one as it starts (A task without a repository, above).
 - **Accepted at once, routed after.** A message you write is accepted before anything is classified
   (`routeUserCommand` on the socket and `POST /api/commands`): it becomes `message.receive`, which core checks and keeps
@@ -808,8 +808,12 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
 - **Splitting off.** When an idea does not belong in the task, it is suggested as a separate task through the existing
   suggested tasks: the classifier's `separate_task` records one (`splitOff`, from Shinsa), and a working agent can
   mark its own `suggest_tasks` entry `split_off`. You make it a task (`suggestion.accept`) or decline and keep it in the
-  chat (`suggestion.keep`, with an optional `shape`), which queues it as the next round of that kind (asked of the
-  classifier when it is left out, above).
+  chat (`suggestion.keep`), which sends its request now, as if you had typed it (`keepSuggestion` in
+  `decide/messages.ts`, through `sendMessages`): to an open round as `feedback`, so it steers a working agent, asks
+  for the change at the review gate and sends the work back at the merge gate, never queued for after the merge; to a
+  resting task as a new round that starts at once, of the kind its optional `shape` names (asked of the classifier
+  when it is left out, above, and only then). The suggestion settles as dismissed with `keptRound`, the round it went
+  to ("Kept “‹title›” in this task and sent it to the agent", or "… as round 3" for a new round).
 - **When a task is done.** After a merge the task stays open: it rests, with no run, gate or worktree, and its chat
   takes the next round. You mark it done (`task.complete`, which closes it: `closedAt`), or an agent does when the work
   is complete and nothing is open. Core refuses `task.complete` while an earlier round's pull request is still open
@@ -4705,7 +4709,7 @@ following a file through its watch and the check every second, both triggered by
     merges every round, every step of every round resumes the first Agent session); a round shipped as a stacked pull request
     (its own branch and pull request based on the first, the stack merged top down); a new round after a merge from
     fresh main on a new branch; feedback steering the agent and a new idea queued, through the typed decision; a
-    split-off the classifier suggests, declined and kept in the chat as the next round; a restart mid-round that
+    split-off the classifier suggests, declined and kept in the chat, reaching the working agent at once; a restart mid-round that
     resumes the round's Agent on its session;
   - `prompt-cache.test.ts`: the real Claude adapter over a scripted SDK that models the provider's prompt cache from
     what the adapter sends (tools listed, system prompt, settings): a change round with a failed check and its fix,

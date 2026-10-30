@@ -466,7 +466,7 @@ describe('the summary of each action', () => {
     harness.send({ type: 'task.message', taskId, text: 'Rename the settings page.', kind: 'separate_task' });
     const split = harness.task(taskId).suggestions?.find((suggestion) => suggestion.splitOff)?.id ?? '';
     actOnBehalf(harness, { type: 'suggestion.keep', taskId, suggestionId: split });
-    expect(lastAction(harness).summary).toBe('Kept a split-off of “Fix tab group scroll” as its next round');
+    expect(lastAction(harness).summary).toBe('Kept a split-off in “Fix tab group scroll”');
   });
 
   test('names what it did to a task waiting for a usage limit', () => {

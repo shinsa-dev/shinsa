@@ -1869,8 +1869,9 @@ Only these, and they win over anything below:
       (Waiting to start) and its request as soon as one is queued. A merged task keeps its composer: "Ask for the next piece of work. It
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
     - **A split-off is a suggested task's row** in Suggested tasks with Make it a task (outline) and Keep it here
-      (secondary, in Dismiss's place); keeping it queues the next round ("Kept in this task. It starts as the next
-      round."). ⌘K offers "Keep “‹title›” in this task" and, per round whose shipping can change, "Ship round 4 as a
+      (secondary, in Dismiss's place); keeping it sends it to this task now, as a message to the open round or a new
+      round of a resting task ("Kept in this task. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
+      ("The agent takes it now") and, per round whose shipping can change, "Ship round 4 as a
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
 

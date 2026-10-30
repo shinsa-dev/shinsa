@@ -85,7 +85,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
-| split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here as the next round | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
+| split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here, which sends it to this task now | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
 
 ### Two names for one thing
 
@@ -744,7 +744,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
-| `suggestion.keep` | keeps a split-off in this task as its next round (`shape` optional; the server asks the classifier when it is left out) | `suggestions keep` | agent |
+| `suggestion.keep` | keeps a split-off in this task and sends it now: feedback to the open round, or a new round on a resting task (`shape` optional; the server asks the classifier for a new round when it is left out) | `suggestions keep` | agent |
 | `memory.write` | writes a rule (`text`, `projectId` or null for every project) or, with `memoryId`, changes one; writing over a proposal keeps it; at most 240 characters and 20 kept rules per scope (`memory_invalid`, `memory_full`) | `memory write` | **human** |
 | `memory.accept` | keeps a rule an agent proposed | `memory keep` | **human** |
 | `memory.remove` | forgets a rule, or dismisses a proposal | `memory remove` | **human** |

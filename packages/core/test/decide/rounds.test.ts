@@ -3,6 +3,8 @@ import {
   createState,
   isTaskClosed,
   isTaskResting,
+  listOpenGates,
+  listQueuedRounds,
   listStackedPullRequests,
   needsMessageKind,
   replayEventLog,
@@ -263,7 +265,12 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
   });
 
-  test('work that belongs elsewhere becomes a separate-task suggestion you can keep here as a round', () => {
+  function splitOff(harness: Harness, taskId: string, text: string) {
+    harness.send({ type: 'task.message', taskId, text, kind: 'separate_task', why: 'It is its own goal.' });
+    return harness.task(taskId).suggestions?.find((suggestion) => suggestion.request === text)?.id ?? '';
+  }
+
+  test('work that belongs elsewhere becomes a separate-task suggestion, and keeping it steers the agent now', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({
@@ -285,36 +292,69 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     );
     harness.send({ type: 'suggestion.keep', taskId, suggestionId: suggestion?.id ?? '' });
     const task = harness.task(taskId);
-    expect(task.suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 2 });
-    expect(listStatuses(task)).toEqual([
-      [1, 'active'],
-      [2, 'waiting'],
-    ]);
-    expect(task.activity.at(-1)?.text).toBe('Kept “Also redesign the billing page” in this task as round 2');
-    expect(resolveTaskRounds(task)[1]?.pipeline).toEqual([...SHAPE_PIPELINES.change]);
+    expect(task.suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 1 });
+    expect(listStatuses(task)).toEqual([[1, 'active']]);
+    expect(harness.lastEffect('run.steer')).toMatchObject({ text: 'Also redesign the billing page' });
+    expect(task.activity.map((entry) => entry.text)).toContain(
+      'Kept “Also redesign the billing page” in this task and sent it to the agent'
+    );
+    expect(task.activity.at(-1)).toMatchObject({ kind: 'message', detail: 'Also redesign the billing page' });
     expect(() =>
       harness.send({ type: 'suggestion.keep', taskId, suggestionId: suggestion?.id ?? '' })
     ).toThrow('already been added or dismissed');
   });
 
-  test('a suggestion kept with a kind of task becomes a round of that kind', () => {
+  test('keeping a split-off at the review gate asks for the change before the merge', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    harness.send({
-      type: 'task.message',
-      taskId,
-      text: 'Why is the import slow?',
-      kind: 'separate_task',
-      why: 'It is its own question.',
-    });
-    const [suggestion] = harness.task(taskId).suggestions ?? [];
-    harness.send({
-      type: 'suggestion.keep',
-      taskId,
-      suggestionId: suggestion?.id ?? '',
-      shape: 'investigate',
-    });
-    expect(resolveTaskRounds(harness.task(taskId))[1]?.pipeline).toEqual([...SHAPE_PIPELINES.investigate]);
+    const suggestionId = splitOff(harness, taskId, 'Commit the docs edits too.');
+    reachReviewGate(harness, taskId);
+    harness.send({ type: 'suggestion.keep', taskId, suggestionId });
+    const task = harness.task(taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
+    expect(listQueuedRounds(task)).toEqual([]);
+    expect(task.suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 1 });
+  });
+
+  test('keeping a split-off at the merge gate sends the work back instead of waiting for the merge', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachMergeGate(harness, taskId);
+    const suggestionId = splitOff(harness, taskId, 'Also file the docs part.');
+    harness.send({ type: 'suggestion.keep', taskId, suggestionId });
+    const task = harness.task(taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
+    expect(listQueuedRounds(task)).toEqual([]);
+    expect(listOpenGates(harness.state, taskId)).toEqual([]);
+  });
+
+  test('keeping a split-off on a resting task starts the next round at once, of the kind you chose', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    shipAndMerge(harness, taskId);
+    const suggestionId = splitOff(harness, taskId, 'Why is the import slow?');
+    harness.send({ type: 'suggestion.keep', taskId, suggestionId, shape: 'investigate' });
+    const task = harness.task(taskId);
+    expect(task.suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 2 });
+    expect(listStatuses(task)).toEqual([
+      [1, 'merged'],
+      [2, 'active'],
+    ]);
+    expect(resolveTaskRounds(task)[1]?.pipeline).toEqual([...SHAPE_PIPELINES.investigate]);
+    expect(task.activity.map((entry) => entry.text)).toContain(
+      'Kept “Why is the import slow?” in this task as round 2'
+    );
+  });
+
+  test('keeping a split-off on a finished task is refused', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    shipAndMerge(harness, taskId);
+    const suggestionId = splitOff(harness, taskId, 'Rename the page.');
+    harness.send({ type: 'task.complete', taskId });
+    expect(() => harness.send({ type: 'suggestion.keep', taskId, suggestionId })).toThrow(
+      'This task is finished'
+    );
   });
 
   test('a split-off with no room for another suggestion starts a round instead', () => {
