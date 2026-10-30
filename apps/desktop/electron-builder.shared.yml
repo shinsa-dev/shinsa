@@ -8,6 +8,8 @@ files:
 extraResources:
   - from: ../engine/dist/engine
     to: engine
+  - from: resources/app-update.yml
+    to: app-update.yml
 mac:
   target:
     - target: dir

@@ -1,0 +1,4 @@
+provider: github
+owner: shinsa-dev
+repo: shinsa
+updaterCacheDirName: shinsa-updater
