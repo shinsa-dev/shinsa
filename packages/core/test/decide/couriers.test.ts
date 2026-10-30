@@ -5,6 +5,7 @@ import {
   createTask,
   type Harness,
   proposePlan,
+  readyWorktree,
   registerRepo,
   shipAndMerge,
 } from '../harness.ts';
@@ -129,6 +130,41 @@ describe('a courier task', () => {
     expect(harness.task(createdId).stage).toBe('waiting_on_tasks');
     shipAndMerge(harness, taskId);
     expect(harness.task(taskId).stage).toBe('merged');
+    expect(harness.task(createdId).stage).not.toBe('waiting_on_tasks');
+  });
+
+  test('waiting for an investigation, starts once it hands over its diagnosis, with no merge', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    harness.send({ type: 'task.create', request: 'Why does the export hang?', repoId });
+    const taskId = Object.keys(harness.state.tasks)[0] ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: 'Find why the export hangs',
+      repoId,
+      size: 'small',
+      branch: 'fix/export',
+      waitsOn: [],
+      shape: 'investigate',
+    });
+    readyWorktree(harness, taskId);
+    const investigator = harness.activeRun(taskId);
+    expect(investigator.role).toBe('investigator');
+    const [task] = courier(harness, investigator.id, { afterThis: true });
+    const createdId = task?.id ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId: createdId,
+      title: 'Stream the export',
+      repoId,
+      size: 'small',
+      branch: 'fix/stream-export',
+      waitsOn: [],
+    });
+    expect(harness.task(createdId).stage).toBe('waiting_on_tasks');
+    harness.send({ type: 'agent.deliver', runId: investigator.id, step: 'investigate', body: 'It buffers.' });
+    expect(harness.task(taskId).stage).toBe('done');
     expect(harness.task(createdId).stage).not.toBe('waiting_on_tasks');
   });
 

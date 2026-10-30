@@ -625,11 +625,13 @@ them in the order they need:
   merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
   (`cannot_wait`, whose message points a planner at its first phase or at `after_this`). `after_this` makes the new
   task wait on this one (the other part uses what this task adds); any run may set it, since it never holds this
-  task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`).
+  task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`). A wait ends
+  when the task waited on is finished, merged or done (`isTaskComplete`), so a task that ships no pull request
+  releases its waiters too: an answer, research or investigation settles as done when it hands over (or when you
+  veto its proposal), an operation when it ends, and one whose proposal you approve becomes a change that merges.
 - **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
-  task merged, so it holds this task's whole build and review and its fork note says the code is on the default
-  branch.
+  task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
 
 ## Rounds
 
