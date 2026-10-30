@@ -4851,7 +4851,11 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       report: {
         headline: 'A paywall option hides the native purchase spinner.',
         sections: [
-          { title: 'Document and test the option', summary: 'Documented the option and tested both values.', spots: [] },
+          {
+            title: 'Document and test the option',
+            summary: 'Documented the option and tested both values.',
+            spots: [],
+          },
           { title: 'Changelog and lint', summary: 'Added the changelog entry.', spots: [] },
         ],
         judgementCalls: [],
@@ -4861,7 +4865,30 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
         { role: 'reviewer', minutes: 2, summary: 'No findings.' },
       ],
       pullRequest: { number: 4575, checks: 'passing' },
-      extra: [{ type: 'task.staged', taskId: 'task-closed-spinner', stage: 'awaiting_merge', reason: 'ready to merge' }],
+      extra: [
+        {
+          type: 'task.staged',
+          taskId: 'task-closed-spinner',
+          stage: 'awaiting_merge',
+          reason: 'ready to merge',
+        },
+      ],
+    },
+    {
+      id: 'task-cancelled-export',
+      request: 'export paywall analytics as CSV',
+      title: 'Export paywall analytics as CSV',
+      repo: paywall,
+      size: 'large',
+      stage: 'cancelled',
+      reason: 'cancelled by you',
+      branch: 'feat/analytics-csv-export',
+      ageHours: 3,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Built the first phase.' }],
+      extra: [
+        { type: 'phase.updated', taskId: 'task-cancelled-export', index: 0, status: 'done' },
+        { type: 'task.staged', taskId: 'task-cancelled-export', stage: 'building', reason: 'building' },
+      ],
     },
   ];
 }

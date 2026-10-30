@@ -39,7 +39,9 @@ function StepMark({ status }: { status: StepStatus }) {
   }
   if (status === 'cancelled') {
     return (
-      <Icon size='sm' name='IconCircleX' ariaLabel={STEP_STATUS_LABEL.cancelled} className='text-fg-3' />
+      <span className='grid size-4 shrink-0 place-items-center rounded-full bg-bg-a3'>
+        <Icon size='sm' name='IconCrossSmall' ariaLabel={STEP_STATUS_LABEL.cancelled} className='text-fg-3' />
+      </span>
     );
   }
   if (status === 'current') {
