@@ -130,10 +130,10 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
     await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
   },
   watch: async (agent) => {
-    await agent.call('report_watch', { healthy: true, summary: 'The greeting still renders.' });
+    await agent.call('report_read', { summary: 'The greeting still renders.' });
   },
   intake: async (agent) => {
-    await agent.call('report_intake', { summary: 'Read the channel; nothing new to file.' });
+    await agent.call('report_read', { summary: 'Read the channel; nothing new to file.' });
   },
   planner: async (agent) => {
     agent.say('Read the code; nothing to add.');

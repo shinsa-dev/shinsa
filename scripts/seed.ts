@@ -1459,9 +1459,8 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     ...(task.forkOf ? { forkOf: task.forkOf } : {}),
     ...(task.createdBy ? { createdBy: task.createdBy } : {}),
     ...(task.watchHome ? { watchHome: true } : {}),
-    ...(task.sourceReport
-      ? { sourceReport: task.sourceReport, scheduleId: task.sourceReport.scheduleId }
-      : {}),
+    ...(task.sourceReport ? { sourceReport: task.sourceReport } : {}),
+    ...(task.sourceReport?.scheduleId ? { scheduleId: task.sourceReport.scheduleId } : {}),
     ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
     auto: task.auto ?? CHOSEN_BY_YOU,
   });
@@ -4138,8 +4137,15 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
     },
     {
       id: 'task-docs-safari',
-      request:
-        'The framework docs show a blank page in Safari 17\n\nSince #339 merged, Maple shows Safari 17 throwing `TypeError: undefined is not an object` on `/docs/framework` 41 times, and Chrome and Firefox none. The page renders nothing for those visitors. Find the cause and fix it so the page works in Safari 17.\n\nFound by the watchdog “Docs errors in Safari and Chrome” of SW-2 after its change merged.',
+      request: [
+        'Fix the blank framework docs page in Safari 17',
+        '',
+        'Since #339 merged, Safari 17 throws on `/docs/framework` and the page renders nothing for those visitors; Chrome and Firefox throw none. Find the cause and fix it so the page works in Safari 17.',
+        '',
+        'Reported in maple on 2026-10-29T03:10:00Z (https://maple.dev/superwall/errors/err-7f3a):',
+        '',
+        '> TypeError: undefined is not an object (evaluating `window.__gate.ready`) on /docs/framework, Safari 17.6, 41 events since 03:10.',
+      ].join('\n'),
       title: 'Fix the blank framework docs page in Safari 17',
       repo: docs,
       size: 'small',
@@ -4149,6 +4155,22 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       branch: 'fix/docs-safari-blank',
       ageHours: 0.3,
       forkOf: 'task-docs-gate',
+      createdBy: {
+        kind: 'watchdog',
+        taskId: 'task-docs-gate',
+        runId: 'task-docs-gate-watch',
+        requestKey: 'https://maple.dev/superwall/errors/err-7f3a',
+      },
+      sourceReport: {
+        scheduleId: null,
+        watchdogId: 'watchdog-docs-errors',
+        server: 'maple',
+        reportId: 'err-7f3a',
+        link: 'https://maple.dev/superwall/errors/err-7f3a',
+        author: null,
+        postedAt: '2026-10-29T03:10:00Z',
+        text: 'TypeError: undefined is not an object (evaluating `window.__gate.ready`) on /docs/framework, Safari 17.6, 41 events since 03:10.',
+      },
       runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
     },
     {
@@ -4239,6 +4261,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       },
       sourceReport: {
         scheduleId: 'schedule-support',
+        watchdogId: null,
         server: 'composio-slack',
         reportId: '1761711000.002300',
         link: 'https://superwall.slack.com/archives/C04SUPPORT/p1761711000',
@@ -4283,6 +4306,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       },
       sourceReport: {
         scheduleId: 'schedule-support',
+        watchdogId: null,
         server: 'composio-slack',
         reportId: '1761725520.004100',
         link: 'https://superwall.slack.com/archives/C04SUPPORT/p1761725520',
@@ -4301,7 +4325,7 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
     round: 1,
     sourceRequest: null,
     runId: null,
-    forkTaskId: null,
+    forkTaskIds: [],
     armedAt: mergedAt,
     awaitingSince: null,
     startedAt: mergedAt,
@@ -4344,7 +4368,7 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
       },
       status: 'tripped',
       nextCheckAt: null,
-      forkTaskId: 'task-docs-safari',
+      forkTaskIds: ['task-docs-safari'],
     },
     {
       type: 'watch_source.written',

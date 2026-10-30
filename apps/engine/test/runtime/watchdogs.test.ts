@@ -25,7 +25,7 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
     nextCheckAt: 1_000,
     runId: null,
     checks: [],
-    forkTaskId: null,
+    forkTaskIds: [],
     endedAt: null,
     ...overrides,
   };
