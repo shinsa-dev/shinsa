@@ -12,6 +12,7 @@ import * as React from 'react';
 import { SuggestedWatchButtons } from '@/components/automations/suggested-watch.tsx';
 import { CardLine, ROW_INDENT } from '@/components/chat/chat-line.tsx';
 import { ToolRow } from '@/components/chat/tool-group.tsx';
+import { MessageAttachments } from '@/components/chat/user-message.tsx';
 import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
@@ -231,7 +232,12 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
       {answer !== null && (
         <div className='flex gap-2 border-border border-t pt-2.5 text-xs'>
           <span className='shrink-0 text-fg-2'>{delegated ? 'Its answer' : 'Your answer'}</span>
-          <span className='selectable min-w-0 whitespace-pre-wrap text-fg-4'>{answer}</span>
+          <div className='flex min-w-0 flex-1 flex-col gap-2'>
+            {answer.text && (
+              <span className='selectable min-w-0 whitespace-pre-wrap text-fg-4'>{answer.text}</span>
+            )}
+            <MessageAttachments attachments={answer.attachments} align='start' size='sm' />
+          </div>
         </div>
       )}
     </Card>

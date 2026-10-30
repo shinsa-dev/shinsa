@@ -1,4 +1,9 @@
-import { type ChatToolArgs, QUESTION_WITHDRAWN, readAnsweredReply } from '@shinsa/core';
+import {
+  type ChatToolArgs,
+  QUESTION_WITHDRAWN,
+  readAnsweredReply,
+  splitMessageAttachments,
+} from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
@@ -16,7 +21,7 @@ export function resolveAskMeta(call: ToolCall, delegated: boolean) {
 
 export function resolveAskAnswer(call: ToolCall) {
   if (call.result === null || call.failed || isWithdrawn(call)) return null;
-  return readAnsweredReply(call.result);
+  return splitMessageAttachments(readAnsweredReply(call.result));
 }
 
 export function resolveSpotsMeta(args: ChatToolArgs) {
