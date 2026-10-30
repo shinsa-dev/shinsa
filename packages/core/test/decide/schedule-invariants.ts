@@ -4,6 +4,7 @@ import {
   isTaskSettled,
   listActiveRuns,
   listOpenGates,
+  listOpenWatchSuggestions,
   type RunRole,
   SCHEDULE_LIMITS,
   type ScheduleTrigger,
@@ -160,6 +161,24 @@ export function assertScheduleInvariants(state: ShinsaState) {
   for (const [owner, count] of live) {
     if (owner !== 'you') expect(count, owner).toBeLessThanOrEqual(SCHEDULE_LIMITS.perTask);
   }
+  assertWatchSuggestionInvariants(state);
+}
+
+function assertWatchSuggestionInvariants(state: ShinsaState) {
+  expect(listOpenWatchSuggestions(state).length).toBeLessThanOrEqual(SCHEDULE_LIMITS.openSuggestions);
+  for (const suggestion of Object.values(state.watchSuggestions)) {
+    const context = `watch suggestion ${suggestion.id} (${suggestion.status})`;
+    expect(state.projects[suggestion.projectId], context).toBeDefined();
+    expect(suggestion.scheduleId !== null, context).toBe(suggestion.status === 'accepted');
+    expect(suggestion.decidedAt !== null, context).toBe(suggestion.status !== 'open');
+    if (suggestion.status === 'open') {
+      const sources = state.projects[suggestion.projectId]?.watchSources ?? [];
+      expect(
+        sources.some((source) => source.server === suggestion.server),
+        context
+      ).toBe(true);
+    }
+  }
 }
 
 const WRITE_ODDS = 0.2;
@@ -211,8 +230,14 @@ function listUserWrites(state: ShinsaState, random: Random): ShinsaCommand[] {
         },
       ]
     : [{ type: 'project.write', project: { name: 'Feedback', color: 'blue' } }];
+  const suggested = listOpenWatchSuggestions(state).flatMap((suggestion): ShinsaCommand[] => [
+    { type: 'watch_suggestion.accept', suggestionId: suggestion.id },
+    { type: 'watch_suggestion.accept', suggestionId: suggestion.id },
+    { type: 'watch_suggestion.dismiss', suggestionId: suggestion.id },
+  ]);
   return [
     ...sourced,
+    ...suggested,
     {
       ...write,
       scheduleId: null,
@@ -258,6 +283,12 @@ export function listScheduleWriteMarks(state: ShinsaState) {
   return [
     schedules.some((schedule) => schedule.createdBy.kind === 'you') ? 'schedule you wrote' : null,
     runs.some((run) => run.purpose === 'intake') ? 'intake turn' : null,
+    Object.values(state.watchSuggestions).some((suggestion) => suggestion.status === 'accepted')
+      ? 'accepted watch suggestion'
+      : null,
+    Object.values(state.watchSuggestions).some((suggestion) => suggestion.status === 'dismissed')
+      ? 'dismissed watch suggestion'
+      : null,
     runs.some((run) => run.purpose === 'intake' && run.outcome === 'completed') ? 'reported intake' : null,
     schedules.some((schedule) => schedule.createdBy.kind === 'you' && schedule.updatedAt > schedule.createdAt)
       ? 'schedule you changed'

@@ -1,7 +1,15 @@
-import { type ChatToolArgs, capitalise, type Run, resolvePhaseChange, type Task } from '@shinsa/core';
+import {
+  type ChatToolArgs,
+  capitalise,
+  type Run,
+  resolvePhaseChange,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
-import type * as React from 'react';
+import * as React from 'react';
+import { SuggestedWatchButtons } from '@/components/automations/suggested-watch.tsx';
 import { CardLine, ROW_INDENT } from '@/components/chat/chat-line.tsx';
 import { ToolRow } from '@/components/chat/tool-group.tsx';
 import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
@@ -24,12 +32,19 @@ import {
 } from '@/lib/chat/handover.ts';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { listRevisionChanges } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
 import { describeSteps } from '@/lib/tasks/shapes.ts';
+import {
+  describeSuggestionDetail,
+  describeSuggestionStatus,
+  selectCallSuggestion,
+} from '@/lib/watch-suggestions.ts';
+import { resolveAutomationPath } from '@/router.ts';
 
 function Card({
   icon,
@@ -256,6 +271,35 @@ function RememberCard({ args }: { args: ChatToolArgs }) {
   );
 }
 
+function SuggestedWatchCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
+  const taskId = task?.id ?? null;
+  const select = React.useCallback(
+    (state: ShinsaState) => selectCallSuggestion(state, taskId, args),
+    [taskId, args]
+  );
+  const suggestion = useShinsaSelector(select);
+  const open = suggestion?.status === 'open';
+  return (
+    <Card icon='IconRadar' title='Suggested a watch' meta={describeSuggestionStatus(suggestion)}>
+      <div className='flex flex-col gap-px text-xs'>
+        <InlineMarkdown
+          text={readString(args, 'message') ?? ''}
+          className='selectable font-medium text-fg-4'
+        />
+        <span className='text-fg-3'>
+          {suggestion ? describeSuggestionDetail(suggestion) : (readString(args, 'source') ?? '')}
+        </span>
+      </div>
+      {open && suggestion && <SuggestedWatchButtons suggestion={suggestion} primary />}
+      {suggestion?.status === 'accepted' && suggestion.scheduleId && (
+        <InAppLink className='text-xs' path={resolveAutomationPath(suggestion.scheduleId)}>
+          Open the watch
+        </InAppLink>
+      )}
+    </Card>
+  );
+}
+
 function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArgs; field: string }) {
   const proposal = readProposedChange(args);
   return (
@@ -356,6 +400,8 @@ export function HandoverCard({
       return <DeliveryCard title='Reported what it read' args={tool.args} field='summary' />;
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
+    case 'set_schedule':
+      return <SuggestedWatchCard args={tool.args} task={task} />;
     case 'attach_evidence':
     case 'remove_evidence':
     case 'find_tasks':

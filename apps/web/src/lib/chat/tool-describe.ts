@@ -36,8 +36,17 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'reshape_task',
 ]);
 
+function isWatchSuggestionCall(tool: ChatTool) {
+  return (
+    tool.kind === 'shinsa' &&
+    tool.name === 'set_schedule' &&
+    readString(tool.args, 'source') !== null &&
+    readString(tool.args, 'schedule_id') === null
+  );
+}
+
 export function isHandover(tool: ChatTool) {
-  return tool.kind === 'shinsa' && HANDOVER_TOOLS.has(tool.name);
+  return (tool.kind === 'shinsa' && HANDOVER_TOOLS.has(tool.name)) || isWatchSuggestionCall(tool);
 }
 
 export function resolveGroupKey(tool: ChatTool): ToolGroupKey {
@@ -193,8 +202,8 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
       );
     case 'set_schedule':
       return plain(
-        'IconClock',
-        'Set a schedule:',
+        readString(args, 'source') ? 'IconRadar' : 'IconClock',
+        readString(args, 'source') ? 'Suggested a watch:' : 'Set a schedule:',
         readString(args, 'name') ?? firstLine(readString(args, 'message') ?? '')
       );
     default:

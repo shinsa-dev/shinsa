@@ -22,6 +22,7 @@ import {
   SHAPE_PIPELINES,
   type Task,
   type TaskShape,
+  type WatchSuggestion,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { resolveMergeStepKey } from '../report/merge-steps.ts';
@@ -54,6 +55,7 @@ import { applyScheduledTask, applyScheduleEvent, describeSchedule } from './sche
 import { applyShapeEvent, describeShape } from './shapes.ts';
 import { applySuggested, applySuggestionSettled } from './suggestions.ts';
 import { applyWaitEvent } from './waits.ts';
+import { applyWatchSuggestionEvent } from './watch-suggestions.ts';
 import { applyWatchdogEvent } from './watchdogs.ts';
 import { applyOnBehalf, record, updateTask } from './write.ts';
 
@@ -71,6 +73,7 @@ export interface ShinsaState {
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
   memories: Record<string, MemoryEntry>;
+  watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
   onBehalfActions: OnBehalfAction[];
 }
@@ -94,6 +97,7 @@ export function createState(): ShinsaState {
     briefings: {},
     schedules: {},
     memories: {},
+    watchSuggestions: {},
     sessionUsage: {},
     onBehalfActions: [],
   };
@@ -929,6 +933,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'memory.proposed':
     case 'memory.removed':
       applyMemoryEvent(state, event);
+      break;
+    case 'watch_suggestion.recorded':
+    case 'watch_suggestion.accepted':
+    case 'watch_suggestion.dismissed':
+    case 'watch_suggestion.removed':
+      applyWatchSuggestionEvent(state, event);
       break;
   }
   return state;

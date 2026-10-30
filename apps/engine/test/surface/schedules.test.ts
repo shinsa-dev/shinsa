@@ -1,6 +1,6 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
 import { MINUTE_MS } from '@shinsa/core';
-import { createFakeClient, createTaskDetail, runSpec } from './fixtures.ts';
+import { createFakeClient, createTaskDetail, findSpec, runSpec } from './fixtures.ts';
 
 const NOW = Date.UTC(2026, 9, 23, 9, 0);
 
@@ -207,6 +207,48 @@ describe('switching schedules on and off', () => {
       { type: 'schedule.enable', scheduleId: 'sch-1', enabled: false },
       { type: 'schedule.remove', scheduleId: 'sch-1' },
     ]);
+  });
+});
+
+describe('suggested watches', () => {
+  function suggestion(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'sug-1',
+      name: 'Bugs in #feedback',
+      server: 'slack',
+      text: 'File a task for each new bug in #feedback.',
+      trigger: { kind: 'interval', everyMinutes: 60 },
+      status: 'open',
+      ...overrides,
+    };
+  }
+
+  test('lists the open ones with their source, schedule and text', async () => {
+    const fake = createFakeClient({
+      '/api/schedules': {
+        schedules: [],
+        suggestions: [suggestion(), suggestion({ id: 'sug-2', status: 'dismissed' })],
+      },
+    });
+    expect((await runSpec(fake, ['schedules', 'suggestions'])).text).toBe(
+      'sug-1  Bugs in #feedback  (slack) Every hour · File a task for each new bug in #feedback.'
+    );
+    const empty = createFakeClient({ '/api/schedules': { schedules: [], suggestions: [] } });
+    expect((await runSpec(empty, ['schedules', 'suggestions'])).text).toBe('No suggested watches.');
+  });
+
+  test('accepting is yours alone; dismissing is open to agents too', async () => {
+    const fake = createFakeClient();
+    expect((await runSpec(fake, ['schedules', 'accept', 'sug-1'])).text).toBe(
+      'Accepted. `shinsa schedules list` shows the watch.'
+    );
+    expect((await runSpec(fake, ['schedules', 'dismiss', 'sug-1'])).text).toBe('Dismissed.');
+    expect(fake.sent).toEqual([
+      { type: 'watch_suggestion.accept', suggestionId: 'sug-1' },
+      { type: 'watch_suggestion.dismiss', suggestionId: 'sug-1' },
+    ]);
+    expect(findSpec(['schedules', 'accept']).humanOnly).toBe(true);
+    expect(findSpec(['schedules', 'dismiss']).humanOnly).toBeUndefined();
   });
 });
 

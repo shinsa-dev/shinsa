@@ -615,6 +615,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   still open. A watch reads one of a project's integrations (a Slack channel, a support inbox,
   traces) on a clock or a webhook, out of sight, and files a task for each new report in it, with the report kept on the
   task, forked from the task that shipped the feature it is about, and never filed twice.
+  A project that starts using an integration is offered one watch suited to it ("File a task for
+  each new bug in #feedback", hourly), added or dismissed in one click; a watch an agent sets, such
+  as one asked for from Home ("watch #feedback for bugs, hourly"), is that same suggestion, the one
+  thing to approve.
   Settings → Automations and ⌘K pause, resume and delete them. Webhooks are signed
   (HMAC), deduped by a replay key and rate limited, and what they carry reaches the agent framed as
   untrusted data.
