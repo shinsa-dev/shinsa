@@ -7871,7 +7871,7 @@ A problem with the app itself is a one-line card at the top of the page column, 
 - A banner that needs an action has `sm` buttons at the end instead of a dismiss, the last one `primary` as macOS
   orders them: one alone is primary; of two, the first is `secondary` and the last `primary`. It goes away when its
   cause does.
-- Dismissing hides it for the session, until the problem changes.
+- Dismissing is remembered across reloads and restarts, until the problem changes.
 - Example: "Shinsa skipped 2 damaged entries in its log at start. Everything else loaded."
 
 #### Something new in the toolbar
