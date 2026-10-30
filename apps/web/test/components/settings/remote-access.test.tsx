@@ -119,6 +119,8 @@ describe('Settings → Remote access', () => {
     expect(actions.createEnrollment).toHaveBeenCalledWith('iPhone');
     expect(screen.getByText('Add iPhone')).toBeTruthy();
     expect(screen.getByText(ENROLL_URL)).toBeTruthy();
-    expect(screen.getByText('Add this device').closest('a')?.getAttribute('href')).toBe(resolveOnMachineUrl(ENROLL_URL));
+    expect(screen.getByText('Add this device').closest('a')?.getAttribute('href')).toBe(
+      resolveOnMachineUrl(ENROLL_URL)
+    );
   });
 });

@@ -1,9 +1,4 @@
-import {
-  type PlacementMachine,
-  resolveTaskProject,
-  type ShinsaState,
-  serializeAttachments,
-} from '@shinsa/core';
+import { resolveTaskProject, type ShinsaState, serializeAttachments } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shinsa/ui/components/select';
 import { cn } from '@shinsa/ui/lib/utils';

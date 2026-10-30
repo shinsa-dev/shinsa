@@ -383,17 +383,17 @@ describe('settings', () => {
     }
   });
 
-  test('placement rules are a short list of words or phrases', () => {
+  test('a machine holds up to 20 placement policies of 240 characters', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { placementRules: ['iOS', 'benchmark'] } });
-    expect(harness.state.settings.placementRules).toEqual(['iOS', 'benchmark']);
-    for (const placementRules of [
+    harness.send({ type: 'settings.change', patch: { placementPolicies: ['iOS, simulator', 'benchmark'] } });
+    expect(harness.state.settings.placementPolicies).toEqual(['iOS, simulator', 'benchmark']);
+    for (const placementPolicies of [
       [' '],
-      ['x'.repeat(41)],
+      ['x'.repeat(241)],
       Array.from({ length: 21 }, (_, index) => `w${index}`),
     ]) {
-      expect(() => harness.send({ type: 'settings.change', patch: { placementRules } })).toThrow(
-        'Placement rules are up to 20 words or phrases of 1 to 40 characters each.'
+      expect(() => harness.send({ type: 'settings.change', patch: { placementPolicies } })).toThrow(
+        'A machine has up to 20 policies of 1 to 240 characters each.'
       );
     }
   });

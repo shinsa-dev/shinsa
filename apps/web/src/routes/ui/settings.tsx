@@ -19,6 +19,7 @@ import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
 import { PluginsGroup } from '@/components/settings/plugins.tsx';
+import { PolicySettings } from '@/components/settings/policies.tsx';
 import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
@@ -31,6 +32,7 @@ import { replaceConnection } from '@/lib/connection/socket.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
+import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
@@ -254,6 +256,27 @@ const SAMPLE_MEMORY_ACTIONS: MemoryActions = {
   remove: acknowledgeSample,
 };
 
+const SAMPLE_POLICY_ACTIONS: PolicyActions = { write: acknowledgeSample };
+
+const SAMPLE_POLICY_MACHINES = [
+  {
+    id: 'studio',
+    name: 'Studio',
+    current: true,
+    state: {
+      tasks: {},
+      projects: {},
+      settings: { placementPolicies: ['iOS, simulator, Xcode', 'TestFlight'] },
+    },
+  },
+  {
+    id: 'server',
+    name: 'Build server',
+    current: false,
+    state: { tasks: {}, projects: {}, settings: { placementPolicies: ['benchmark, load test'] } },
+  },
+];
+
 function createMemoryScene(now: number): ShinsaState {
   const project: Project = {
     id: 'shinsa',
@@ -367,6 +390,11 @@ export function SettingsSpecimens() {
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
           </RemoteServicesContext.Provider>
+        </div>
+      </Specimen>
+      <Specimen label='PolicySettings · on app.shinsa.dev: which machine runs which work, by the words a request names'>
+        <div className='w-full max-w-xl'>
+          <PolicySettings machines={SAMPLE_POLICY_MACHINES} actions={SAMPLE_POLICY_ACTIONS} />
         </div>
       </Specimen>
       <Specimen label='TaskFacts · on app.shinsa.dev with several machines, each task shows the machine it runs on'>

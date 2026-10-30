@@ -2378,24 +2378,27 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
-  Settings → General → Machines lists every machine with its status beside its name (online or last seen), whether it is
-  in this dashboard, and Remove; machines in the dashboard also show their open tasks, their task capacity and their
-  placement rules. Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
+  Settings → General → Machines lists every machine in rows like Remote access's: its name with its status beside it
+  (online or last seen), whether it is in this dashboard, and Remove; machines in the dashboard also show their open
+  tasks and their task capacity. Below it, Policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  lists each machine's placement policies the way Memory lists rules: New policy opens a one-line form with the machine
+  it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both.
+  Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
   New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
-  disk; `resolveProjectMachine`); then a placement rule: a machine's `placementRules`, words or phrases such as
-  `iOS`, `simulator` or `benchmark`, take a request that names one as a whole word in any case (`resolveRuleMachine`,
-  the first machine with a match; New task shows the rule beside Automatic); then the focus project's machine; then
+  disk; `resolveProjectMachine`); then a placement policy: a machine's `placementPolicies`, each a comma-separated
+  list of words or phrases such as `iOS, simulator, Xcode`, take a request that names one of its terms as a whole word
+  in any case (`resolvePolicyMachine`, the first machine with a match; New task shows the term beside Automatic); then the focus project's machine; then
   the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
-  steers placement: a machine still runs a task you send it when full. Placement rules are each machine's own setting
-  too (`placementRules`, at most 20 of 1 to 40 characters), typed comma-separated in Settings → Machines. The fleet sends `task.create` to the chosen
+  steers placement: a machine still runs a task you send it when full. Placement policies are each machine's own setting
+  too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already

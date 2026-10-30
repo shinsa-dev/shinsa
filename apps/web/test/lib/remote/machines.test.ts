@@ -11,7 +11,6 @@ import {
   listTaskCapacityItems,
   parseTaskCapacity,
   resolveTaskCapacityValue,
-  serializePlacementRules,
 } from '@/lib/remote/machines.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
@@ -121,7 +120,5 @@ describe('a machine’s task capacity', () => {
     expect(resolveTaskCapacityValue(8)).toBe('8');
     expect(parseTaskCapacity('none')).toBeNull();
     expect(parseTaskCapacity('8')).toBe(8);
-    expect(serializePlacementRules(['iOS', 'benchmark'])).toBe('iOS, benchmark');
-    expect(serializePlacementRules(undefined)).toBe('');
   });
 });

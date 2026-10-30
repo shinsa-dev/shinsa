@@ -83,15 +83,15 @@ export {
   resolveLocalOnlyRefusal,
 } from './local-only.ts';
 export {
-  isPlacementRulesValid,
+  isPlacementPoliciesValid,
+  listPolicyTerms,
   type MachineLoad,
-  PLACEMENT_RULE_LIMITS,
+  PLACEMENT_POLICY_LIMITS,
   type PlacementMachine,
-  parsePlacementRules,
   resolveMachineLoad,
   resolvePlacement,
+  resolvePolicyMachine,
   resolveProjectMachine,
-  resolveRuleMachine,
 } from './placement.ts';
 export type {
   PairingView,

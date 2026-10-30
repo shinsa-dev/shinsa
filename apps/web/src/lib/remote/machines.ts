@@ -79,14 +79,6 @@ export function createFleetMember(
 
 export const TASK_CAPACITY_TITLE = 'Task capacity';
 
-export const PLACEMENT_RULES_TITLE = 'Placement rules';
-
-export const PLACEMENT_RULES_PLACEHOLDER = 'For example: iOS, simulator, benchmark';
-
-export function serializePlacementRules(rules: readonly string[] | undefined) {
-  return (rules ?? []).join(', ');
-}
-
 export const NO_TASK_CAPACITY = 'none';
 
 const TASK_CAPACITIES = [2, 4, 8, 16];

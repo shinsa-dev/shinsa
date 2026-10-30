@@ -188,7 +188,7 @@ describe('the machine a new task runs on', () => {
   const box = { ...createMachine('box', 1, null), current: false };
   const ruled = {
     ...box,
-    state: { ...box.state, settings: { taskCapacity: null, placementRules: ['benchmark'] } },
+    state: { ...box.state, settings: { taskCapacity: null, placementPolicies: ['benchmark'] } },
   };
   const auto = { machine: 'auto', project: 'auto' } as const;
 

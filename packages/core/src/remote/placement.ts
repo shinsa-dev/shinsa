@@ -8,47 +8,42 @@ export interface PlacementMachine {
   state: {
     tasks: Record<string, Pick<Task, 'stage'>>;
     projects: Record<string, unknown>;
-    settings: Pick<Settings, 'taskCapacity' | 'placementRules'>;
+    settings: Pick<Settings, 'taskCapacity' | 'placementPolicies'>;
   };
 }
 
-export const PLACEMENT_RULE_LIMITS = { count: 20, length: 40 } as const;
+export const PLACEMENT_POLICY_LIMITS = { text: 240, perMachine: 20 } as const;
 
-export function isPlacementRulesValid(rules: readonly string[]) {
+export function isPlacementPoliciesValid(policies: readonly string[]) {
   return (
-    rules.length <= PLACEMENT_RULE_LIMITS.count &&
-    rules.every((rule) => rule.trim().length > 0 && rule.length <= PLACEMENT_RULE_LIMITS.length)
+    policies.length <= PLACEMENT_POLICY_LIMITS.perMachine &&
+    policies.every(
+      (policy) => policy.trim().length > 0 && policy.trim().length <= PLACEMENT_POLICY_LIMITS.text
+    )
   );
 }
 
-export function parsePlacementRules(text: string) {
-  return [
-    ...new Set(
-      text
-        .split(',')
-        .map((rule) => rule.trim())
-        .filter((rule) => rule.length > 0)
-    ),
-  ];
+export function listPolicyTerms(policy: string) {
+  return policy
+    .split(',')
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0);
 }
 
 function escapePattern(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function matchesRule(request: string, rule: string) {
-  return new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(rule.trim())}($|[^\\p{L}\\p{N}])`, 'iu').test(
-    request
-  );
+function matchesTerm(request: string, term: string) {
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(term)}($|[^\\p{L}\\p{N}])`, 'iu').test(request);
 }
 
-export function resolveRuleMachine(machines: PlacementMachine[], request: string) {
-  for (const machine of machines) {
-    const rule = (machine.state.settings.placementRules ?? []).find((candidate) =>
-      matchesRule(request, candidate)
-    );
-    if (rule) return { id: machine.id, rule };
-  }
+export function resolvePolicyMachine(machines: PlacementMachine[], request: string) {
+  for (const machine of machines)
+    for (const policy of machine.state.settings.placementPolicies ?? []) {
+      const term = listPolicyTerms(policy).find((candidate) => matchesTerm(request, candidate));
+      if (term) return { id: machine.id, policy, term };
+    }
   return null;
 }
 
@@ -81,7 +76,7 @@ export function resolveProjectMachine(machines: PlacementMachine[], projectId: s
 export function resolvePlacement(machines: PlacementMachine[], projectId: string | null, request = '') {
   const owner = projectId ? resolveProjectMachine(machines, projectId) : null;
   if (owner) return owner;
-  const ruled = resolveRuleMachine(machines, request);
+  const ruled = resolvePolicyMachine(machines, request);
   if (ruled) return ruled.id;
   const loads = machines.map(resolveMachineLoad);
   const roomy = loads.filter((load) => !load.full);

@@ -1,19 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import type { TaskStage } from '../../src/domain/types.ts';
 import {
-  isPlacementRulesValid,
+  isPlacementPoliciesValid,
+  listPolicyTerms,
   type PlacementMachine,
-  parsePlacementRules,
   resolveMachineLoad,
   resolvePlacement,
+  resolvePolicyMachine,
   resolveProjectMachine,
-  resolveRuleMachine,
 } from '../../src/remote/placement.ts';
 
 function machine(
   id: string,
   stages: TaskStage[],
-  options: { capacity?: number | null; projects?: string[]; rules?: string[] } = {}
+  options: { capacity?: number | null; projects?: string[]; policies?: string[] } = {}
 ): PlacementMachine {
   return {
     id,
@@ -23,7 +23,7 @@ function machine(
       projects: Object.fromEntries((options.projects ?? []).map((project) => [project, {}])),
       settings: {
         ...(options.capacity === undefined ? {} : { taskCapacity: options.capacity }),
-        ...(options.rules ? { placementRules: options.rules } : {}),
+        ...(options.policies ? { placementPolicies: options.policies } : {}),
       },
     },
   };
@@ -99,36 +99,39 @@ describe('placement', () => {
   });
 });
 
-describe('placement rules', () => {
-  const studio = machine('studio', [], { rules: ['iOS', 'simulator'] });
+describe('placement policies', () => {
+  const studio = machine('studio', [], { policies: ['iOS, simulator'] });
   const server = machine('server', ['building', 'building'], {
-    rules: ['bench mark', 'C++'],
+    policies: ['bench mark', 'C++, Rust'],
     projects: ['p'],
   });
 
-  test('a request naming a machine’s word or phrase goes there, as a whole word and in any case', () => {
-    expect(resolveRuleMachine([studio, server], 'Run the iOS tests')).toEqual({ id: 'studio', rule: 'iOS' });
-    expect(resolveRuleMachine([studio, server], 'a Bench Mark run')).toEqual({
-      id: 'server',
-      rule: 'bench mark',
+  test('a request naming a term of a machine’s policy goes there, as a whole word and in any case', () => {
+    expect(resolvePolicyMachine([studio, server], 'Run the iOS tests')).toEqual({
+      id: 'studio',
+      policy: 'iOS, simulator',
+      term: 'iOS',
     });
-    expect(resolveRuleMachine([studio, server], 'build with c++ flags')).toEqual({
+    expect(resolvePolicyMachine([studio, server], 'a Bench Mark run')).toMatchObject({
       id: 'server',
-      rule: 'C++',
+      term: 'bench mark',
     });
-    expect(resolveRuleMachine([studio, server], 'a kiosk with simulators')).toBeNull();
-    expect(resolveRuleMachine([machine('bare', [])], 'iOS')).toBeNull();
+    expect(resolvePolicyMachine([studio, server], 'build with c++ flags')).toMatchObject({ term: 'C++' });
+    expect(resolvePolicyMachine([studio, server], 'a kiosk with simulators')).toBeNull();
+    expect(resolvePolicyMachine([machine('bare', [])], 'iOS')).toBeNull();
   });
 
-  test('a project still wins, a rule beats room, and room decides the rest', () => {
+  test('a project still wins, a policy beats room, and room decides the rest', () => {
     expect(resolvePlacement([studio, server], 'p', 'iOS work')).toBe('server');
     expect(resolvePlacement([server, studio], null, 'benchmark')).toBe('studio');
     expect(resolvePlacement([studio, server], null, 'a bench mark')).toBe('server');
   });
 
-  test('rules are read from comma-separated text, trimmed and without repeats, and checked for size', () => {
-    expect(parsePlacementRules(' iOS, simulator ,, iOS ')).toEqual(['iOS', 'simulator']);
-    expect(isPlacementRulesValid(['iOS'])).toBe(true);
-    expect(isPlacementRulesValid([''])).toBe(false);
+  test('a policy’s terms are its comma-separated words, and a machine holds up to 20 of 240 characters', () => {
+    expect(listPolicyTerms(' iOS, simulator ,, Xcode ')).toEqual(['iOS', 'simulator', 'Xcode']);
+    expect(isPlacementPoliciesValid(['iOS'])).toBe(true);
+    expect(isPlacementPoliciesValid([' '])).toBe(false);
+    expect(isPlacementPoliciesValid(['x'.repeat(241)])).toBe(false);
+    expect(isPlacementPoliciesValid(Array.from({ length: 21 }, (_, index) => `w${index}`))).toBe(false);
   });
 });

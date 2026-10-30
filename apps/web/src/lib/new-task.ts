@@ -4,8 +4,8 @@ import {
   type PlacementMachine,
   resolveMachineLoad,
   resolvePlacement,
+  resolvePolicyMachine,
   resolveProjectMachine,
-  resolveRuleMachine,
   type ShinsaState,
   type Task,
   type TaskPriority,
@@ -184,8 +184,8 @@ export function resolveNewTaskMachine(
   const named = choices.project === 'auto' || choices.project === NO_PROJECT ? null : choices.project;
   const owner = named ? resolveProjectMachine(machines, named) : null;
   if (owner) return { id: owner, rule: null };
-  const ruled = resolveRuleMachine(machines, request);
-  if (ruled) return ruled;
+  const ruled = resolvePolicyMachine(machines, request);
+  if (ruled) return { id: ruled.id, rule: ruled.term };
   const placed = resolvePlacement(machines, shownProject === NO_PROJECT ? null : shownProject);
   return placed ? { id: placed, rule: null } : null;
 }
