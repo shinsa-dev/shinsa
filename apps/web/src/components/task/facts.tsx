@@ -229,12 +229,13 @@ function BranchFact({ state, task }: { state: ShinsaState; task: Task }) {
 function PullRequestFact({ state, task }: { state: ShinsaState; task: Task }) {
   const pullRequest = task.pullRequest;
   if (!pullRequest) return null;
+  const tone = TONE_TEXT[resolvePullRequestTone(pullRequest)];
   return (
     <FactPopover
       trigger={
         <>
-          <Icon size='sm' name='IconPullRequest' className={TONE_TEXT[resolvePullRequestTone(pullRequest)]} />
-          <span className='tabular-nums'>#{pullRequest.number}</span>
+          <Icon size='sm' name='IconPullRequest' className={tone} />
+          <span className={cn('tabular-nums', tone)}>#{pullRequest.number}</span>
           {describePullRequestFact(pullRequest).map((note) => (
             <span key={note.text} className={TONE_TEXT[note.tone]}>
               {note.text}
