@@ -143,7 +143,7 @@ controls; `gap-2` icon to label in rows and controls in one set; `p-2.5` popover
 `p-4` dialog padding; `gap-6` section to section. The parent owns spacing, never a child's margin.
 
 **Icons.** `size='sm'` 14px (12 to 13px text, rows, 22/24 controls, every button, the default), `'md'` 16px (14px+ text,
-`lg` and `icon` buttons, 26/30 inputs and selects), `'lg'` 20px (empty states, full-page waits). Inside a primitive pass nothing.
+`lg` and `icon` buttons, 26/30 inputs and selects, full-page waits), `'lg'` 20px (empty states). Inside a primitive pass nothing.
 
 **Motion and timing.** State 0ms. Movement 200ms on `cubic-bezier(0.22, 1, 0.36, 1)`. Menus and popovers 200ms,
 tooltips 150ms, dialogs 150ms in and 100ms out (`DIALOG_MOTION`), ⌘K 75ms (`COMMAND_MOTION`). Every tooltip opens
@@ -5177,7 +5177,7 @@ spinner.
 
 - `LoadingLine({ label, className })`: `flex items-center gap-2 text-fg-2`, a `Spinner size='sm'` and the label;
   `invisible` and `aria-hidden` until 300ms have passed (it keeps its space, so nothing moves when it appears).
-- `LoadingSpinner({ label })`: nothing for 300ms, then `inline-flex text-fg-2` with a `Spinner size='lg'`
+- `LoadingSpinner({ label })`: nothing for 300ms, then `inline-flex text-fg-2` with a `Spinner size='md'`
   (`aria-label` the label), for full-page waits.
 - `CodeLoading({ label })`: the centred wait every Code tab read shows,
   `flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-2 p-3 text-center font-sans text-fg-2 text-xs`,
@@ -8672,7 +8672,7 @@ export function useDelayed(active: boolean, delayMs: number = LOADING_DELAY_MS) 
   Only the standard 256-colour cube beyond the sixteen comes from the library. Colours are converted from OKLCH and `color-mix(…, transparent)` to hex for the renderer, and switch with the theme. Find matches use the editor's find colours: `--terminal-find-match` = `amber-a2`, `--terminal-find-active` = `amber-a4`.
 - Scrollbar is the app's: 5px of `fg-a1` at 60%, 3px from the right, 4px from the ends, 7px and full strength under the pointer or while dragged, on a 14px strip. It shows while scrolling and while the pointer is on its strip (never merely over the terminal), fading 200ms after 500ms.
 - Font size: ⌘+ / ⌘− a step between 9 and 24px; ⌘0 resets; applies to every terminal.
-- Rendering: xterm.js 6 with WebGL, Unicode 11 widths, clickable links (plain URLs and OSC 8, opened in the browser), 5,000 lines of scrollback, refit on pane resize. One view object per terminal lives outside React for the terminal's life. The last 6 shown keep their WebGL renderer; the oldest gives its context back. While it connects or reconnects, a delayed `LoadingSpinner` (`lg`, labelled "Connecting" or "Reconnecting") sits in its top-right corner (`pointer-events-none absolute end-3 top-2`).
+- Rendering: xterm.js 6 with WebGL, Unicode 11 widths, clickable links (plain URLs and OSC 8, opened in the browser), 5,000 lines of scrollback, refit on pane resize. One view object per terminal lives outside React for the terminal's life. The last 6 shown keep their WebGL renderer; the oldest gives its context back. While it connects or reconnects, a delayed `LoadingSpinner` (`md`, labelled "Connecting" or "Reconnecting") sits in its top-right corner (`pointer-events-none absolute end-3 top-2`).
 - Find (⌘F or the button): the shared find bar searching the scrollback; Enter next, ⇧Enter previous, Escape closes and returns focus.
 - Keys, through the terminal's own handler while it has focus: every key a Mac terminal takes, Ctrl ones included (Ctrl-K is the shell's). Mac: ⌘⌫ `^U`, ⌘← / ⌘→ `^A` / `^E`, ⌥⌫ `ESC DEL`, ⌥← / ⌥→ `ESC b` / `ESC f`, ⌥ is Meta unless the layout types a character with it (⌥L is @ on a German Mac), ⇧⏎ and ⌥⏎ send `ESC CR` (a new line, not run), ⌘C copies a selection (nothing without one), ⌘V pastes (bracketed when asked), ⌘A selects all, ⌘F finds, ⌘L clears the scrollback (and sends `^L` outside a full-screen program), ⌘+ ⌘− ⌘0 font size, ⌘Home / ⌘End / ⌘PageUp / ⌘PageDown scroll; plain Home, End, PageUp, PageDown go to the program. Every other ⌘ key belongs to the app (⌘K stays the command menu, where Clear the scrollback is a command). Off the Mac: Ctrl+Shift+C, V, A, F, L, and Ctrl K goes to the shell.
 - ⌘T opens a tab where the front tab is (else the project's first place) and ⌘W closes the front one, only while the terminal page is open. The desktop menu has no Close Window, so ⌘W reaches the page; a browser keeps both.
@@ -10699,7 +10699,7 @@ Apply every line to any component you build or touch. When a line and a section 
 
 - Heights: 18 (`icon-2xs`, `Badge sm`), 20 (`Badge`, `Kbd`, switch track), 22 (`xs`, `icon-xs`), 24 (`sm`, `icon-sm`, menu, select and command rows, section labels, the `line` header), 26 (`default`, `icon`, `Input`, `SelectTrigger`, `default` and `ghost` tab lists), 28 (one-line list rows, the `strip` header, info popover rows), 30 (`lg`, `icon-lg`), 32 (`underline` tab list, the `block` header), 36 (card header bands, toolbars), 40 (settings rows, the command input row).
 - Never hand-set a height on a control, strip or row; the primitive owns it. Every control in one row shares one height.
-- Icons: `sm` 14 in every button and select, rows and badges; `md` 16 in `default` inputs; `lg` 20 for empty-state figures and full-page waits. No other size.
+- Icons: `sm` 14 in every button and select, rows and badges; `md` 16 in `default` inputs and full-page waits; `lg` 20 for empty-state figures. No other size.
 
 **Spacing**
 
