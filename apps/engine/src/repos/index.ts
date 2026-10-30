@@ -67,17 +67,17 @@ function titleCase(text: string) {
     .join(' ');
 }
 
-export async function resolveProjectName(remote: string | null, resolveLogin: LoginResolver) {
+export async function resolveProjectName(remote: string | null, resolveLogin: LoginResolver | null) {
   const owner = remote?.split('/')[1]?.toLowerCase();
   if (!owner) return 'Local';
-  if (owner === (await resolveLogin())) return 'Personal';
+  if (owner === (await resolveLogin?.())) return 'Personal';
   return titleCase(owner);
 }
 
 async function resolveFallbackProjectName(
   engine: Engine,
   remote: string | null,
-  resolveLogin: LoginResolver,
+  resolveLogin: LoginResolver | null,
   projectId: string | null
 ) {
   if (projectId && engine.state.projects[projectId]) return null;
@@ -103,7 +103,7 @@ function selectRepoByPath(engine: Engine, path: string) {
 export async function upsertRepo(
   engine: Engine,
   path: string,
-  resolveLogin: LoginResolver,
+  resolveLogin: LoginResolver | null,
   projectId: string | null = null,
   from: DispatchOptions = {}
 ): Promise<Repo> {
@@ -132,7 +132,7 @@ export async function upsertProjectFolderRepo(engine: Engine, task: Task, name: 
   if (!project) return null;
   const local = listLocalRepos(project.folders).find((repo) => repo.name === name);
   if (!local) return null;
-  return await upsertRepo(engine, local.path, () => Promise.resolve(null), project.id);
+  return await upsertRepo(engine, local.path, null, project.id);
 }
 
 export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
