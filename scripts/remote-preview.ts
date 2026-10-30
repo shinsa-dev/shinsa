@@ -311,7 +311,10 @@ async function main() {
       if (enrolling) {
         const enrollment = await enrolling.remote.createEnrollment('This browser');
         const onMachine = url.searchParams.has('on');
-        return Response.redirect(onMachine ? enrollment.url.replace('#', '?on=machine#') : enrollment.url, 302);
+        return Response.redirect(
+          onMachine ? enrollment.url.replace('#', '?on=machine#') : enrollment.url,
+          302
+        );
       }
       const tunnel = /^\/__preview\/tunnel\/([a-z]+)$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);

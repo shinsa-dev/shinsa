@@ -207,9 +207,7 @@ export class Fleet implements ShinsaConnection {
     });
     const merged = mergeFleetStates(parts);
     this.#machines =
-      parts.length < 2
-        ? NO_MACHINES
-        : parts.map((part) => ({ ...part.view, state: part.state }));
+      parts.length < 2 ? NO_MACHINES : parts.map((part) => ({ ...part.view, state: part.state }));
     this.#owners = merged?.owners ?? EMPTY_OWNERS;
     replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {

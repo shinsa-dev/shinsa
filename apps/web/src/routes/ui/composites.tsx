@@ -143,7 +143,12 @@ function ComposerSpecimen() {
   );
   const [chosen, setChosen] = React.useState<NewTaskChoices>(AUTO_CHOICES);
   const machines = [
-    { id: 'studio', name: 'Studio', current: true, state: { ...state, settings: { ...state.settings, taskCapacity: 8 } } },
+    {
+      id: 'studio',
+      name: 'Studio',
+      current: true,
+      state: { ...state, settings: { ...state.settings, taskCapacity: 8 } },
+    },
     {
       id: 'build-box',
       name: 'Build box',
