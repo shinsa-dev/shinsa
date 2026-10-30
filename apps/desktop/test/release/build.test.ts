@@ -13,10 +13,16 @@ interface BuilderConfig {
   protocols?: { name: string; schemes: string[] }[];
   mac?: { icon?: string };
   dmg?: { background?: string };
+  extraResources?: { from: string; to: string }[];
+  publish?: Record<string, string>;
+}
+
+function readYaml(name: string) {
+  return Bun.YAML.parse(readFileSync(join(desktopDir, name), 'utf8'));
 }
 
 function readConfig(name: string) {
-  return Bun.YAML.parse(readFileSync(join(desktopDir, name), 'utf8')) as BuilderConfig;
+  return readYaml(name) as BuilderConfig;
 }
 
 function readIdentity() {
@@ -26,14 +32,15 @@ function readIdentity() {
     "import { URL_SCHEME } from './src/lib/deep-link.ts';",
     "import { resolveCommandLink } from './src/lib/command-line.ts';",
     "import { resolveServerUrl } from './src/lib/server-url.ts';",
+    "import { UPDATE_FEED } from './src/lib/update-channel.ts';",
     'console.log(JSON.stringify({ APP_ID, ENGINE_LABEL, APP_NAME, URL_SCHEME,',
     "  command: resolveCommandLink('/u'), data: resolveDataDir({}, '/u'),",
-    '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null }) }));',
+    '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null }), feed: UPDATE_FEED }));',
   ].join('\n');
   const env = { ...process.env, SHINSA_APP_ID: '' };
   const result = Bun.spawnSync([process.execPath, '-e', script], { cwd: desktopDir, env });
   if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-  return JSON.parse(result.stdout.toString()) as Record<string, string>;
+  return JSON.parse(result.stdout.toString()) as Record<string, unknown>;
 }
 
 describe('the Shinsa build', () => {
@@ -56,6 +63,15 @@ describe('the Shinsa build', () => {
     expect(readdirSync(join(desktopDir, 'resources/LaunchAgents'))).toEqual([`${appId}.engine.plist`]);
   });
 
+  it('bundles app-update.yml, which electron-updater reads before every download', () => {
+    expect(shared.extraResources).toContainEqual({ from: 'resources/app-update.yml', to: 'app-update.yml' });
+    expect(shared.publish).toEqual(readIdentity().feed as Record<string, string>);
+    expect(readYaml('resources/app-update.yml')).toEqual({
+      ...shared.publish,
+      updaterCacheDirName: 'shinsa-updater',
+    });
+  });
+
   it('has a disk image background for each channel', () => {
     expect(existsSync(join(desktopDir, 'resources', build.mac?.icon ?? 'missing'))).toBe(true);
     for (const channel of ['stable', 'beta', 'canary'])
@@ -72,6 +88,7 @@ describe('the Shinsa build', () => {
       command: '/u/.local/bin/shinsa',
       data: '/u/.config/shinsa/data',
       url: 'http://127.0.0.1:7446',
+      feed: { provider: 'github', owner: 'shinsa-dev', repo: 'shinsa' },
     });
   });
 });
