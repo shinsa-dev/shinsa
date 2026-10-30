@@ -22,7 +22,7 @@ export function LoadingSpinner({ label, className }: { label: string; className?
   if (!shown) return <span data-loading-pending={label} />;
   return (
     <span data-loading-state={label} className={cn('inline-flex text-fg-2', className)}>
-      <Spinner size='lg' aria-label={label} />
+      <Spinner size='md' aria-label={label} />
     </span>
   );
 }

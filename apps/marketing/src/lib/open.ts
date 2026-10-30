@@ -44,23 +44,14 @@ export function resolveDocumentTitle(invite: TaskInvite | null): string | null {
   return `${invite.handle ?? 'Task'}: ${invite.title} · Shinsa`;
 }
 
-export interface PendingHeader {
+export interface InviteHeader {
   title: string;
   description: string;
   handle: string;
   link: string | null;
-  documentTitle: string | null;
 }
 
-export const OPEN_SHELL: PendingHeader = {
-  title: '',
-  description: '',
-  handle: '',
-  link: 'shinsa://',
-  documentTitle: null,
-};
-
-export function resolvePendingHeader(search: string): PendingHeader {
+export function resolveInviteHeader(search: string): InviteHeader {
   const invite = resolveTaskInvite(search);
   if (!invite) {
     return {
@@ -68,7 +59,6 @@ export function resolvePendingHeader(search: string): PendingHeader {
       description: openTask.missing,
       handle: '',
       link: null,
-      documentTitle: null,
     };
   }
   return {
@@ -76,6 +66,5 @@ export function resolvePendingHeader(search: string): PendingHeader {
     description: '',
     handle: invite.handle ?? '',
     link: invite.link,
-    documentTitle: resolveDocumentTitle(invite),
   };
 }
