@@ -1083,7 +1083,10 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   open; Stop waiting clears them all and releases the task at once. Waiting added to a task that
   is still planning cancels the planning run and puts it back to waiting (it plans again after the
   release). Once building has started, a new dependency only holds the merge gate until every
-  task it waits on merges: the work is not thrown away.
+  task it waits on merges: the work is not thrown away. This is how a change whose other part lives in another
+  repository locks its merge to that part (`create_task` with `this_task_waits`, Work across repositories): the
+  pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
+  on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
 - **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
   branch; only a task's own rounds stack (Rounds, above).
 

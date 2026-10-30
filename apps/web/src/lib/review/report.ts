@@ -231,7 +231,8 @@ function toProse(...keys: ReviewProseId[]): ReviewProse[] {
 function listBuiltProse(
   report: WorkReport | null,
   steps: readonly MergeStep[],
-  coverage: Coverage | null
+  coverage: Coverage | null,
+  waiting: boolean
 ): ReviewProseId[] {
   const walkthrough = report?.walkthrough ?? null;
   const tested =
@@ -242,7 +243,7 @@ function listBuiltProse(
   return [
     ...(walkthrough ? (['approach', 'flow'] as const) : []),
     ...(tested ? (['testing'] as const) : []),
-    ...timed('pre_merge'),
+    ...(waiting ? (['pre_merge'] as const) : timed('pre_merge')),
     ...timed('post_merge'),
   ];
 }
@@ -250,10 +251,11 @@ function listBuiltProse(
 function listChapterProse(
   report: WorkReport | null,
   steps: readonly MergeStep[],
-  coverage: Coverage | null
+  coverage: Coverage | null,
+  waiting: boolean
 ): Record<ReviewChapterId, ReviewProse[]> {
   return {
-    built: toProse(...listBuiltProse(report, steps, coverage)),
+    built: toProse(...listBuiltProse(report, steps, coverage, waiting)),
     code: [],
     calls: [],
     careful: [],
@@ -266,10 +268,11 @@ export function listReviewChapters(
   findings: readonly ReviewFinding[],
   disagreements: readonly ReviewDisagreement[] = [],
   steps: readonly MergeStep[] = report?.walkthrough?.steps ?? [],
-  coverage: Coverage | null = null
+  coverage: Coverage | null = null,
+  waiting = false
 ): ReviewChapter[] {
   const spots = report ? listSpotItems(report) : [];
-  const prose = listChapterProse(report, steps, coverage);
+  const prose = listChapterProse(report, steps, coverage, waiting);
   const items: Record<ReviewChapterId, ReviewItem[]> = {
     built: [],
     code: spots.filter((item) => !isCareful(item)),

@@ -469,7 +469,12 @@ Only these, and they win over anything below:
       `run` in a task does; nothing runs on its own. A list opens with its title (Pre-merge steps, Post-merge steps) and how far it is ("1 of 2 done",
       "All done") at the right. A tick is `merge_step.tick`; the box waits for the server and a refusal is a toast. A
       post-merge step cannot be ticked before the pull request merged: its box is disabled and its tooltip
-      says so. The merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
+      says so. **A task the merge waits on is a pre-merge row too**: "Merges after ‹task› finishes", the task's title a
+      link, its kind "Linked task" with `IconHourglass`, after the agent's steps; you never tick it (its box is
+      disabled, its tooltip "Ticks itself once that task finishes", then "That task finished") and it is ticked as
+      soon as that task merges or is marked done (`listMergeWaits` in `lib/review/merge-steps.ts`, from `Task.waitsOn`).
+      The review gate's now card lists Pre-merge steps when the merge waits on a task, so you see the hold before
+      you approve; the merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
       gate, a now card titled "Merged. 2 steps left to do." that lists Post-merge steps
       (`components/overview/merge-steps-card.tsx`, the gate's card in `now-card.tsx`); while a later round works, the
       steps an earlier round left show in a Post-merge steps panel under the now card (`routes/task/overview.tsx`).
@@ -2409,7 +2414,8 @@ Only these, and they win over anything below:
         How it's built, after How it works.
       - **Pre-merge steps** and **Post-merge steps**: the steps around the merge as checklists (Steps around the
         merge, 12), each panel's count beside its title; you
-        tick them here as on the Overview.
+        tick them here as on the Overview. Pre-merge also shows when the agent left no pre-merge step but the merge
+        waits on a task, with that task's row.
       - **Agent review**: one panel with the reviewer's summary in its own words, what it found and "A signal for you,
         never the approval.", then each finding's card (`rounded-lg`, nested) with Fix / Dismiss at a review gate, the
         shared `FindingVerdictChoice` (`components/review/verdict-choice.tsx`) the Overview's finding verdicts and the

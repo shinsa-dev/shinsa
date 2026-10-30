@@ -5,11 +5,14 @@ import {
   describeMergeBlock,
   describePostMergeStatus,
   describePostMergeTitle,
+  isMergeWait,
+  listMergeWaits,
   listTimedSteps,
   MERGE_STEP_KIND,
   resolveTickBlock,
+  resolveWaitBlock,
 } from '@/lib/review/merge-steps.ts';
-import { createTask } from '../../support/state.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 
 const STEP: MergeStep = {
   when: 'pre_merge',
@@ -98,5 +101,39 @@ describe('the steps around the merge', () => {
     expect(resolveTickBlock(merged, due)).toBeNull();
     expect(resolveTickBlock(merged, done)).toBe('The merge is done');
     expect(resolveTickBlock(withSteps({ stage: 'cancelled' }), before)).toBe('The task was cancelled');
+  });
+
+  it('lists each task the merge waits on as a linked row that ticks itself once that task finishes', () => {
+    const docs = createTask({ id: 'docs', title: 'Document the agent login', stage: 'building' });
+    const skills = createTask({ id: 'skills', title: 'Teach the skill to log in', stage: 'merged' });
+    const task = createTask({ id: 't1', waitsOn: ['docs', 'skills', 'gone'] });
+    const waits = listMergeWaits(createShinsaState({ tasks: [docs, skills, task] }), task);
+    expect(waits).toEqual([
+      {
+        key: 'wait:docs',
+        taskId: 'docs',
+        title: 'Merges after [Document the agent login](shinsa://task/docs) finishes',
+        detail: null,
+        command: null,
+        done: false,
+      },
+      {
+        key: 'wait:skills',
+        taskId: 'skills',
+        title: 'Merges after [Teach the skill to log in](shinsa://task/skills) finishes',
+        detail: null,
+        command: null,
+        done: true,
+      },
+    ]);
+    const [open, finished] = waits;
+    if (!(open && finished)) throw new Error('no waits');
+    expect(resolveWaitBlock(open)).toBe('Ticks itself once that task finishes');
+    expect(resolveWaitBlock(finished)).toBe('That task finished');
+    expect(isMergeWait(open)).toBe(true);
+    const [step] = listMergeSteps(withSteps());
+    if (!step) throw new Error('no step');
+    expect(isMergeWait(step)).toBe(false);
+    expect(listMergeWaits(createShinsaState({ tasks: [task] }), createTask({ id: 't2' }))).toEqual([]);
   });
 });

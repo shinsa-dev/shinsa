@@ -2450,6 +2450,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
       reason: 'built, checked and ready for review',
       branch: 'feat/embedded-chat-mcp',
       ageHours: 28,
+      waitsOn: ['task-webhook-signing', 'task-docs-gate'],
       worktreePath: chatPath,
       addedChecks: [
         {
