@@ -420,6 +420,19 @@ describe('create_task and split_task', () => {
     ).rejects.toThrow('There is no task "LOC-999" to fork.');
   });
 
+  test('create_task with after_this makes the new task wait for this one to merge', async () => {
+    const { core, run, taskId } = await building();
+    const { call } = createCall(core, run.id);
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Use the new endpoint in the admin app.', repository: 'admin', after_this: true },
+      call
+    );
+    const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
+    expect(created?.waitsOn).toEqual([taskId]);
+    expect(core.state.tasks[taskId]?.waitsOn).toEqual([]);
+  });
+
   test('create_task refuses a repository Shinsa does not know, naming the ones it does', async () => {
     const { core, run } = await building();
     await expect(

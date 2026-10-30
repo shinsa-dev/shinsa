@@ -3736,8 +3736,8 @@ the glyphs inside it.
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, every button (icon-only ones too), every select, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` inputs, tabs, nav rows, ⌘K's search glyph, the logo |
-| `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` inputs, tabs, nav rows, ⌘K's search glyph, the logo, a full-page wait's spinner |
+| `lg` | 20     | Rare and large: the `EmptyState` tile, an evidence recording's play glyph, the icon specimens on `/ui`                                                  |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
   box) at the text's x-height-plus, so it reads as a word in the line; 16 is the

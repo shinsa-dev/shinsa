@@ -169,6 +169,9 @@ describe('checks and agent review', () => {
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('failure');
     expect(gate.title).toBe('Fixing is not making progress');
+    expect(gate.body).toBe(
+      'The failing checks came back after 2 fix rounds. Steer the agent in the chat, or retry.'
+    );
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
 

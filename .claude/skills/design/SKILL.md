@@ -46,7 +46,7 @@ Checklist:
       `opacity-100`), `[&_svg]:` colour or opacity, or `[--icon-color:…]` (lint fails;
       docs/design.md → Where Shinsa differs, 19, and Iconography → Icon colour).
 - [ ] Three icon sizes: `size='sm'` 14 (12–13px text, rows, 22/24 controls, every button and select), `'md'` 16
-      (14px+ text, 26/30 inputs), `'lg'` 20 (empty states, full-page waits). Inside a primitive pass nothing;
+      (14px+ text, 26/30 inputs, full-page waits), `'lg'` 20 (empty states). Inside a primitive pass nothing;
       elsewhere pass `size`. Never `size-*`/`w-*`/`h-*` on an icon (lint fails). Every icon in one row
       is the same size and ink, chevrons and spinners included.
 - [ ] Icons are Central (`<Icon name='Icon…' />`), never a hand-drawn `<svg>`; run
