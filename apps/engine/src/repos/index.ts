@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { Repo } from '@shinsa/core';
+import { type Repo, resolveTaskProject, type Task } from '@shinsa/core';
 import { inspectRepo, resolveRepoRemote, resolveRepoRoot } from '../git/index.ts';
 import { GITHUB_TIMEOUT_MS } from '../github/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
@@ -67,17 +67,17 @@ function titleCase(text: string) {
     .join(' ');
 }
 
-export async function resolveProjectName(remote: string | null, resolveLogin: LoginResolver) {
+export async function resolveProjectName(remote: string | null, resolveLogin: LoginResolver | null) {
   const owner = remote?.split('/')[1]?.toLowerCase();
   if (!owner) return 'Local';
-  if (owner === (await resolveLogin())) return 'Personal';
+  if (owner === (await resolveLogin?.())) return 'Personal';
   return titleCase(owner);
 }
 
 async function resolveFallbackProjectName(
   engine: Engine,
   remote: string | null,
-  resolveLogin: LoginResolver,
+  resolveLogin: LoginResolver | null,
   projectId: string | null
 ) {
   if (projectId && engine.state.projects[projectId]) return null;
@@ -103,7 +103,7 @@ function selectRepoByPath(engine: Engine, path: string) {
 export async function upsertRepo(
   engine: Engine,
   path: string,
-  resolveLogin: LoginResolver,
+  resolveLogin: LoginResolver | null,
   projectId: string | null = null,
   from: DispatchOptions = {}
 ): Promise<Repo> {
@@ -124,6 +124,15 @@ export async function upsertRepo(
   const registered = selectRepoByPath(engine, candidate.path);
   if (!registered) throw new Error(`Could not register ${candidate.name}.`);
   return registered;
+}
+
+export async function upsertProjectFolderRepo(engine: Engine, task: Task, name: string) {
+  const projectId = resolveTaskProject(engine.state, task);
+  const project = projectId ? engine.state.projects[projectId] : undefined;
+  if (!project) return null;
+  const local = listLocalRepos(project.folders).find((repo) => repo.name === name);
+  if (!local) return null;
+  return await upsertRepo(engine, local.path, null, project.id);
 }
 
 export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {

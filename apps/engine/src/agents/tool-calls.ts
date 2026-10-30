@@ -15,6 +15,7 @@ import {
   validateReview,
 } from '@shinsa/core';
 import { resolveHead } from '../git/index.ts';
+import { upsertProjectFolderRepo } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { ScheduleToolCall } from '../schedules/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
@@ -283,6 +284,7 @@ export class ToolCalls {
       state: () => engine.state,
       dispatch,
       resolveBaseCommit: () => resolveHead(this.#findCurrent(runId, attemptId).task.worktreePath ?? ''),
+      registerRepo: (task, repoName) => upsertProjectFolderRepo(engine, task, repoName),
       hasProvider: (id) => providers.select(id) !== null,
       awaitDelegation: (childRunId, timeoutMs, waitSignal) =>
         awaitDelegation(engine, childRunId, timeoutMs, waitSignal),

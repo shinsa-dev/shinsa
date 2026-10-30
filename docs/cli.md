@@ -875,7 +875,7 @@ Every task agent's tool: `suggestions_dismiss`. Sends `suggestion.dismiss`.
 
 #### shinsa suggestions keep
 
-Keep a suggested task in this task instead, as its next round.
+Keep a suggested task in this task instead: it goes to the agent now.
 
 ```
 shinsa suggestions keep <task> <suggestion> [--json]

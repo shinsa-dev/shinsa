@@ -411,6 +411,8 @@ function readMergeStep(reader: Reader, raw: unknown, path: string): MergeStep {
   };
 }
 
+const SHIPPING_COMMAND = /\bgit\s+(?:-C\s+\S+\s+)*(?:add|commit|push)\b|\bgh\s+pr\s+(?:create|merge)\b/;
+
 function readMergeSteps(reader: Reader, value: unknown) {
   const steps = reader
     .list(value, 'walkthrough.steps', PROTOCOL_LIMITS.mergeSteps)
@@ -420,6 +422,11 @@ function readMergeSteps(reader: Reader, value: unknown) {
     if (first < index) {
       reader.errors.push(
         `walkthrough.steps[${index}].title repeats walkthrough.steps[${first}]; give each step its own title.`
+      );
+    }
+    if (step.command && SHIPPING_COMMAND.test(step.command)) {
+      reader.errors.push(
+        `walkthrough.steps[${index}].command stages, commits, pushes or opens a pull request, which is never the human's step. Shinsa commits and pushes this repository; file work in another repository with \`create_task\` instead.`
       );
     }
   });

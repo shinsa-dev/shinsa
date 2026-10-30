@@ -5,11 +5,15 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { DisclosurePersistId } from '@/lib/preferences/disclosure.ts';
 import {
+  isMergeWait,
   listTimedSteps,
   MERGE_STEP_ICON,
   MERGE_STEP_KIND,
   MERGE_STEP_TITLE,
+  type MergeWaitView,
+  type PreMergeItem,
   resolveTickBlock,
+  resolveWaitBlock,
 } from '@/lib/review/merge-steps.ts';
 
 type StepTicker = (step: MergeStepView, done: boolean) => unknown;
@@ -17,11 +21,14 @@ type StepTicker = (step: MergeStepView, done: boolean) => unknown;
 interface MergeStepsProps {
   task: Task;
   when: MergeStepTiming;
+  waits?: MergeWaitView[];
   onTick?: StepTicker;
 }
 
-function StepKind({ step }: { step: MergeStepView }) {
-  const kind = MERGE_STEP_KIND[step.kind];
+function StepKind({ item }: { item: PreMergeItem }) {
+  const kind = isMergeWait(item)
+    ? { icon: 'IconHourglass' as const, label: 'Linked task' }
+    : MERGE_STEP_KIND[item.kind];
   return (
     <>
       <Icon size='sm' name={kind.icon} aria-hidden className='shrink-0 text-fg-2' />
@@ -33,14 +40,15 @@ function StepKind({ step }: { step: MergeStepView }) {
 function resolveChecklist({
   task,
   when,
+  waits = [],
   onTick = (step, done) =>
     sendCommandWithToast({ type: 'merge_step.tick', taskId: task.id, key: step.key, done }),
-}: MergeStepsProps): ChecklistProps<MergeStepView> {
+}: MergeStepsProps): ChecklistProps<PreMergeItem> {
   return {
-    items: listTimedSteps(task, when),
-    onTick,
-    describeBlock: (step) => resolveTickBlock(task, step),
-    meta: (step) => <StepKind step={step} />,
+    items: [...listTimedSteps(task, when), ...(when === 'pre_merge' ? waits : [])],
+    onTick: (item, done) => (isMergeWait(item) ? undefined : onTick(item, done)),
+    describeBlock: (item) => (isMergeWait(item) ? resolveWaitBlock(item) : resolveTickBlock(task, item)),
+    meta: (item) => <StepKind item={item} />,
   };
 }
 

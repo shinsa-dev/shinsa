@@ -9,6 +9,7 @@ import {
   listChildRuns,
   listLiveChildRuns,
   PROTOCOL_LIMITS,
+  type Repo,
   type Run,
   type RunRole,
   resolveDelegationStatus,
@@ -213,6 +214,7 @@ export interface OrchestrationCall {
   state: () => ShinsaState;
   dispatch: (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
   resolveBaseCommit: () => Promise<string>;
+  registerRepo: (task: Task, name: string) => Promise<Repo | null>;
   hasProvider: (id: string) => boolean;
   awaitDelegation: (childRunId: string, timeoutMs: number, signal: AbortSignal) => Promise<DelegationOutcome>;
   recordStarted: (childRunId: string) => void;
@@ -352,12 +354,17 @@ async function answerDelegation(input: Record<string, unknown>, call: Orchestrat
   return 'Answered. The agent carries on, and its result arrives here when it finishes.';
 }
 
-function resolveRepoId(state: ShinsaState, task: Task, name: string | null) {
+async function resolveRepoId(call: OrchestrationCall, task: Task, name: string | null) {
   if (!name) return null;
-  const repo = Object.values(state.repos).find((candidate) => candidate.name === name);
+  const state = call.state();
+  const repo =
+    Object.values(state.repos).find((candidate) => candidate.name === name) ??
+    (await call.registerRepo(task, name));
   if (!repo) {
     const known = Object.values(state.repos).map((candidate) => candidate.name);
-    throw new Error(`There is no repository "${name}". Known: ${known.join(', ') || 'none'}.`);
+    throw new Error(
+      `There is no repository "${name}" in Shinsa or in the project's folders. Known: ${known.join(', ') || 'none'}.`
+    );
   }
   return repo.id === task.repoId ? null : repo.id;
 }
@@ -383,6 +390,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
   const request = assertProtocol(validateCourierTask(input));
   const source = findTaskOf(call, findParent(call));
   const requestKey = request.requestKey ?? call.requestKey;
+  const repoId = await resolveRepoId(call, source, request.repository);
   await call.dispatch(
     {
       type: 'agent.create_task',
@@ -390,7 +398,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       attemptId: call.attemptId,
       requestKey,
       request: request.request,
-      repoId: resolveRepoId(call.state(), source, request.repository),
+      repoId,
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,

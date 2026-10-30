@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Activity, ChatEntry } from '@shinsa/core';
+import type { Activity, ChatEntry, TaskSuggestion } from '@shinsa/core';
 import {
   listFollowUpMessages,
   listHumanMessages,
@@ -136,6 +136,68 @@ describe('listHumanMessages', () => {
   });
 });
 
+describe('a message read as work for another task', () => {
+  function splitOff(at: number, text: string, suggestionId: string) {
+    return activity({
+      at,
+      kind: 'round',
+      text: 'Asked for work that belongs in another task',
+      detail: text,
+      suggestionId,
+    });
+  }
+
+  function suggestion(id: string, overrides: Partial<TaskSuggestion>): TaskSuggestion {
+    return {
+      id,
+      runId: null,
+      title: id,
+      request: id,
+      why: 'It is its own goal.',
+      waitsOnThis: false,
+      status: 'open',
+      createdTaskId: null,
+      suggestedAt: NOW,
+      splitOff: true,
+      ...overrides,
+    };
+  }
+
+  it('stays in the chat with what became of its suggestion, and a kept one shows only as the copy it sent', () => {
+    const task = createTask({
+      id: 't',
+      activity: [
+        splitOff(1, 'Stage the docs', 's1'),
+        splitOff(2, 'Redo billing', 's2'),
+        splitOff(3, 'Rename the page', 's3'),
+        splitOff(4, 'Commit the skills', 's4'),
+        splitOff(5, 'Lost', 'gone'),
+        activity({ at: 6, kind: 'round', text: 'Asked for more work in this task', detail: 'Add search' }),
+        activity({ at: 7, kind: 'message', detail: 'Commit the skills' }),
+      ],
+      suggestions: [
+        suggestion('s1', {}),
+        suggestion('s2', { status: 'accepted', createdTaskId: 't2' }),
+        suggestion('s3', { status: 'dismissed' }),
+        suggestion('s4', { status: 'dismissed', keptRound: 1 }),
+      ],
+    });
+    expect(listHumanMessages(task)).toEqual([
+      { at: 1, text: 'Stage the docs', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's1' } },
+      { at: 2, text: 'Redo billing', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's2' } },
+      { at: 3, text: 'Rename the page', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's3' } },
+      { at: 7, text: 'Commit the skills' },
+    ]);
+  });
+
+  it('belongs to the run it was sent during, like a message that was only noted', () => {
+    const run = createRun({ id: 'a', taskId: 't', startedAt: 100, endedAt: 200 });
+    const later = createRun({ id: 'b', taskId: 't', startedAt: 300 });
+    const message = { at: 250, text: 'Stage the docs', status: 'split_off' as const };
+    expect(resolveRunMessages([run, later], [message]).byRun.get('a')).toEqual([message]);
+  });
+});
+
 describe('resolveRunMessages', () => {
   const first = createRun({ id: 'a', taskId: 't', startedAt: 100 });
   const second = createRun({ id: 'b', taskId: 't', startedAt: 200 });
@@ -207,12 +269,16 @@ describe('resolveTimeline', () => {
         { at: 5, text: 'sent' },
         { at: 6, text: 'on its way', status: 'delivering' },
         { at: 7, text: 'refused', status: 'undelivered', reason: 'This task is finished.' },
+        { at: 8, text: 'elsewhere', status: 'split_off', splitOff: { taskId: 't', suggestionId: 's1' } },
       ]
     );
-    expect(only(items, 'human').map(({ status, reason }) => ({ status, reason }))).toEqual([
-      { status: undefined, reason: undefined },
-      { status: 'delivering', reason: undefined },
-      { status: 'undelivered', reason: 'This task is finished.' },
+    expect(
+      only(items, 'human').map(({ status, reason, splitOff }) => ({ status, reason, splitOff }))
+    ).toEqual([
+      { status: undefined, reason: undefined, splitOff: undefined },
+      { status: 'delivering', reason: undefined, splitOff: undefined },
+      { status: 'undelivered', reason: 'This task is finished.', splitOff: undefined },
+      { status: 'split_off', reason: undefined, splitOff: { taskId: 't', suggestionId: 's1' } },
     ]);
   });
 

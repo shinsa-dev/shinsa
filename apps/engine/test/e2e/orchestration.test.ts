@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { isDelegatedRun, listChildRuns, listOpenGates, type Run } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
+import { createGitRepo } from '../helpers/index.ts';
 import { type AgentContext, PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -361,5 +362,38 @@ describe('delegating work to other agents', () => {
     expect(cwd).toContain(`${w.config.worktreesDir}/delegations/${taskId}/`);
     expect(steered).toContain('Its changes are not committed: 1 file in its own checkout');
     await w.untilStage(taskId, 'awaiting_review');
+  });
+});
+
+describe('filing work in another repository', () => {
+  test('an agent files the other part in a repository of the project folder that Shinsa had not registered', async () => {
+    const w = await open();
+    await createGitRepo({ root: w.root, name: 'docs', remote: false });
+    await w.engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Superwall', color: 'blue', folders: [w.root] },
+    });
+    const projectId = Object.keys(w.state.projects)[0] ?? '';
+    let reply = '';
+    w.agents.queue('plan', async (agent) => {
+      reply = await agent.call('create_task', {
+        request: 'Document the agent login in the docs.',
+        repository: 'docs',
+        after_this: true,
+      });
+      await agent.call('propose_plan', toolPlan(PLAN));
+    });
+    await w.engine.dispatch({
+      type: 'task.create',
+      request: 'Add the agent login',
+      repoId: w.repoId,
+      projectId,
+    });
+    await w.until('the courier', () => reply.length > 0);
+    const docs = Object.values(w.state.repos).find((repo) => repo.name === 'docs');
+    expect(docs?.projectId).toBe(projectId);
+    const courier = Object.values(w.state.tasks).find((task) => task.createdBy?.kind === 'courier');
+    expect(courier?.repoId).toBe(docs?.id);
+    expect(reply).toContain('Created.');
   });
 });
