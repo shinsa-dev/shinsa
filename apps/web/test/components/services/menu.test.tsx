@@ -350,7 +350,7 @@ describe('the Services popover', () => {
     expect(shop.hasAttribute('data-folded')).toBe(false);
     fireEvent.click(shop.querySelector('[data-disclosure-header]') as HTMLElement);
     expect(shop.hasAttribute('data-folded')).toBe(true);
-    expect(shop.parentElement?.className).toContain('has-[>section:last-of-type[data-folded]]:pb-1.5');
+    expect(shop.parentElement?.className).toContain('has-[>section:only-of-type[data-folded]]:pb-1.5');
   });
 
   it('draws each project as the compact queue draws a section, the play button in the column of the rows’ buttons', () => {
