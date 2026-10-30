@@ -1,6 +1,7 @@
-import type { ReviewPayload, ShinsaState, Task } from '@shinsa/core';
+import type { ReviewPayload } from '@shinsa/core';
 import { buttonVariants } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
+import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
@@ -8,45 +9,27 @@ import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import { OPEN_SHELL, type PendingHeader, readReviewFragment, resolvePendingHeader } from '../../lib/open.ts';
-import { createOpenState } from '../../lib/open-scene.ts';
+import type { PendingHeader } from '../../lib/open.ts';
+import { type OpenPage, type OpenScene, readOpenPage } from '../../lib/open-page.ts';
 import { site } from '../../lib/site.ts';
 import { DemoRoot } from './frame.tsx';
 
-interface OpenScene {
-  state: ShinsaState;
-  task: Task;
-  payload: ReviewPayload;
-  link: string | null;
-}
-
 function OpenActions({ link }: { link: string | null }) {
+  if (!link) {
+    return (
+      <div className='flex shrink-0 flex-wrap items-center gap-2'>
+        <a href={site.downloadUrl} className={buttonVariants({ variant: 'primary' })}>
+          {openTask.secondary}
+        </a>
+      </div>
+    );
+  }
   return (
     <div className='flex shrink-0 flex-wrap items-center gap-2'>
-      <a
-        href={site.downloadUrl}
-        data-open-task-only
-        hidden={!link}
-        className={buttonVariants({ variant: 'outline' })}
-      >
+      <a href={site.downloadUrl} className={buttonVariants({ variant: 'outline' })}>
         {openTask.secondary}
       </a>
-      <a
-        href={site.downloadUrl}
-        data-open-missing-only
-        hidden={Boolean(link)}
-        className={buttonVariants({ variant: 'primary' })}
-      >
-        {openTask.secondary}
-      </a>
-      <a
-        href={link ?? 'shinsa://'}
-        data-open-link
-        data-open-task-only
-        hidden={!link}
-        data-icon='inline-start'
-        className={buttonVariants({ variant: 'primary' })}
-      >
+      <a href={link} data-icon='inline-start' className={buttonVariants({ variant: 'primary' })}>
         <Icon name='IconArrowUpRight' />
         {openTask.primary}
       </a>
@@ -85,26 +68,13 @@ function ReviewDescription({ payload }: { payload: ReviewPayload }) {
   );
 }
 
-function InviteHeader({ header, facts }: { header: PendingHeader; facts: React.ReactNode }) {
-  return (
-    <OpenHeader
-      title={<span data-open-title>{header.title}</span>}
-      description={
-        <p data-open-description className={PAGE_DESCRIPTION}>
-          {header.description}
-        </p>
-      }
-      link={header.link}
-      facts={facts}
-    />
-  );
-}
-
 function InvitePage({ header }: { header: PendingHeader }) {
   return (
     <>
-      <InviteHeader
-        header={header}
+      <OpenHeader
+        title={header.title}
+        description={header.description && <p className={PAGE_DESCRIPTION}>{header.description}</p>}
+        link={header.link}
         facts={header.handle && <p className='text-fg-2 text-xs'>{header.handle}</p>}
       />
       {header.link && (
@@ -132,22 +102,20 @@ function ReviewPage({ scene }: { scene: OpenScene }) {
   );
 }
 
-function resolveFirstHeader() {
-  if (import.meta.env.SSR) return OPEN_SHELL;
-  return resolvePendingHeader(window.location.search);
+export function OpenLoading() {
+  return (
+    <div className='flex min-h-0 flex-1 items-center justify-center text-fg-2'>
+      <Spinner size='lg' />
+    </div>
+  );
 }
 
 export function OpenReview() {
-  const [header] = React.useState(resolveFirstHeader);
-  const [scene, setScene] = React.useState<OpenScene | null>(null);
-  const [read, setRead] = React.useState(false);
+  const [page, setPage] = React.useState<OpenPage | null>(null);
   React.useEffect(() => {
-    void readReviewFragment(window.location.hash).then((payload) => {
-      if (payload) setScene({ ...createOpenState(payload, Date.now()), payload, link: header.link });
-      setRead(true);
-    });
-  }, [header.link]);
-  if (scene) return <ReviewPage scene={scene} />;
-  if (read) return <InvitePage header={header} />;
-  return <InviteHeader header={header} facts={null} />;
+    void readOpenPage(window.location.search, window.location.hash, Date.now()).then(setPage);
+  }, []);
+  if (!page) return <OpenLoading />;
+  if ('scene' in page) return <ReviewPage scene={page.scene} />;
+  return <InvitePage header={page.header} />;
 }
