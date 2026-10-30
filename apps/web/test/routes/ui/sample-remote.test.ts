@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'bun:test';
+import { createState } from '@shinsa/core';
+import {
+  createSampleFleet,
+  createSampleMachineServices,
+  createSampleRemote,
+  createSampleRemoteActions,
+} from '@/routes/ui/sample-remote.ts';
+
+const NOW = 1_800_000_000_000;
+
+const REFUSED = 'This is a sample. Nothing changes here.';
+
+describe('the /ui remote access samples', () => {
+  it('show each Remote access state, and change nothing but a sample device link', async () => {
+    expect(createSampleRemote(NOW).map((sample) => sample.snapshot.status)).toEqual([
+      'off',
+      'off',
+      'connected',
+      'connected',
+      'off',
+    ]);
+    const actions = createSampleRemoteActions(NOW);
+    await expect(actions.pair()).rejects.toThrow(REFUSED);
+    for (const refused of [actions.cancelPairing, actions.resume, actions.pause, actions.remove])
+      await expect(refused()).rejects.toThrow(REFUSED);
+    await expect(actions.forgetDevice('dev-1')).rejects.toThrow(REFUSED);
+    expect(await actions.createEnrollment('iPad')).toMatchObject({
+      name: 'iPad',
+      expiresAt: NOW + 10 * 60_000,
+    });
+  });
+
+  it('list three Macs, two of them added in this browser, and refuse every change', async () => {
+    const { dashboard, devices } = createSampleMachineServices(NOW);
+    const macs = await dashboard.listInstances();
+    expect(macs.map((mac) => [mac.name, mac.online, mac.lastSeenAt])).toEqual([
+      ['Studio', true, NOW],
+      ['MacBook Air', false, NOW - 26 * 3_600_000],
+      ['Office mini', true, NOW],
+    ]);
+    expect(await devices.selectDevice('k3x9')).toMatchObject({ instanceId: 'k3x9' });
+    expect(await devices.selectDevice('w4t8')).toBeNull();
+    await expect(dashboard.readSession()).rejects.toThrow(REFUSED);
+  });
+
+  it('merge two Macs that never connect, send nothing, and keep every call quiet', async () => {
+    const fleet = createSampleFleet([
+      { name: 'Studio', state: createState() },
+      { name: 'Laptop', state: createState() },
+    ]);
+    fleet.start();
+    fleet.reset();
+    fleet.flush();
+    expect(fleet.snapshot().status).toBe('open');
+    expect(fleet.members.map((member) => member.name)).toEqual(['Studio', 'Laptop']);
+    expect(fleet.selectTranscript('run')).toEqual([]);
+    fleet.watchTranscript('run')();
+    fleet.subscribe(() => undefined)();
+    expect(fleet.selectAccounts()).toBeNull();
+    fleet.replaceAccounts(null as never);
+    expect(fleet.isDesktopConnected()).toBe(false);
+    expect(fleet.selectTerminals()).toBeNull();
+    fleet.replaceTerminals(null as never);
+    expect(fleet.selectMachine('task')).toBeNull();
+    await expect(fleet.command({ type: 'focus.clear' } as never)).rejects.toThrow(REFUSED);
+    await expect(fleet.fetch(new Request('http://mac/api/tasks'))).rejects.toThrow('Nothing is sent.');
+    fleet.close();
+  });
+});

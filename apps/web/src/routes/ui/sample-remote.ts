@@ -135,6 +135,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
 function createStaticConnection(state: ShinsaState): ShinsaConnection {
   const snapshot = { state: state as unknown as WireState, status: 'open' as const };
   const quiet = () => () => undefined;
+  const none = () => null;
   return {
     start: () => undefined,
     subscribe: quiet,
@@ -143,14 +144,14 @@ function createStaticConnection(state: ShinsaState): ShinsaConnection {
     selectTranscript: () => NO_ENTRIES,
     watchTranscript: () => () => undefined,
     subscribeAccounts: quiet,
-    selectAccounts: () => null,
+    selectAccounts: none,
     replaceAccounts: () => undefined,
     subscribeSurfaces: quiet,
     isDesktopConnected: () => false,
     subscribeTerminals: quiet,
-    selectTerminals: () => null,
+    selectTerminals: none,
     replaceTerminals: () => undefined,
-    selectMachine: () => null,
+    selectMachine: none,
     command: () => Promise.reject(new Error('This is a sample. Nothing changes here.')),
     reset: () => undefined,
     flush: () => undefined,
