@@ -3134,8 +3134,11 @@ and any provider that writes markdown can use them. `packages/core/src/chat/refe
 | Branch | `shinsa://branch/<name>` | the branch chip |
 
 `listReferenceSpans` also finds bare `shinsa://` URLs, quoted exact task titles, exact titles of 12
-characters or more and a bare `#N` that exactly one pull request has; code spans, fences and
-other links are left alone. `linkReferences` rewrites those into links before markdown renders.
+characters or more and a bare `#N` that exactly one pull request of the text's repository has
+(`ReferenceOptions.repo`: the web passes the open task's repository, so a `superwall` task's `#16`
+never links `shinsa#16`, and with no repository a bare `#N` stays plain); a `shinsa://pr/<n>` with no
+repository resolves in the open task's repository too. Code spans, fences and other links are left
+alone. `linkReferences` rewrites those into links before markdown renders.
 Anything that does not parse or resolve renders as its plain label. Agents learn the syntax from
 `REFERENCE_RULES` in every role's house rules (`prompts/rules.ts`), each prompt links its own task, and
 the `find_tasks` tool (`serializeTaskReferences`) returns tasks as ready links with status,
