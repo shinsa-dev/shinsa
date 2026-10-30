@@ -15,6 +15,7 @@ function createAccounts() {
   const accounts = {
     snapshot: record('snapshot', { accounts: [], defaultAccountId: null }),
     refresh: record('refresh', Promise.resolve({ refreshed: true })),
+    refreshUsage: record('refreshUsage', Promise.resolve({ usageRefreshed: true })),
     startLogin: record('startLogin', Promise.resolve({ id: 'login-1', phase: 'starting' })),
     submitLoginCode: record('submitLoginCode', { submitted: true }),
     cancelLogin: record('cancelLogin', { cancelled: true }),
@@ -66,6 +67,9 @@ describe('account routes', () => {
   test('each POST passes its fields to the accounts and answers with the result', async () => {
     const { routes, calls } = createAccounts();
     expect(await post(routes, '/api/accounts/refresh', '{}')).toEqual({ refreshed: true });
+    expect(await post(routes, '/api/accounts/refresh', '{"scope":"usage"}')).toEqual({
+      usageRefreshed: true,
+    });
     expect(await post(routes, '/api/accounts/login', '{"accountId":"acc-1"}')).toEqual({
       id: 'login-1',
       phase: 'starting',
@@ -87,6 +91,7 @@ describe('account routes', () => {
     expect(await post(routes, '/api/accounts/remove', '{"accountId":"acc-1"}')).toEqual({ removed: true });
     expect(calls).toEqual([
       ['refresh'],
+      ['refreshUsage'],
       ['startLogin', 'acc-1'],
       ['submitLoginCode', 'login-1', 'abc#def'],
       ['cancelLogin', 'login-1'],

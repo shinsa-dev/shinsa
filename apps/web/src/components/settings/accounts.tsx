@@ -24,7 +24,6 @@ import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import {
   ACCOUNT_LABEL,
   describeDefaultChanged,
-  describeDuplicate,
   describeImport,
   describeRemoval,
   describeSharedLogin,
@@ -276,7 +275,7 @@ export function AccountsGroup({
   settings: Settings;
   actions: AccountActions;
 }) {
-  const { accounts, imports, duplicates = [], providers = [] } = snapshot;
+  const { accounts, imports, providers = [] } = snapshot;
   return (
     <SettingsGroup
       title={ACCOUNT_LABEL.section}
@@ -307,9 +306,6 @@ export function AccountsGroup({
       ))}
       {accounts.filter(isSharedLogin).map((account) => (
         <SettingsEmpty key={`shared-${account.id}`}>{describeSharedLogin(account)}</SettingsEmpty>
-      ))}
-      {duplicates.map((duplicate) => (
-        <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate)}</SettingsEmpty>
       ))}
       {providers.map((login) => (
         <ProviderLoginBlock key={login.provider} login={login} onRefresh={actions.refresh} />

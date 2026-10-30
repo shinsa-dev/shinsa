@@ -11,6 +11,7 @@ export interface RecheckPage {
 
 export interface UsageRecheckOptions {
   refresh: () => Promise<unknown>;
+  read?: () => Promise<unknown>;
   intervalMs?: number;
   freshMs?: number;
   now?: () => number;
@@ -30,6 +31,7 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
   const freshMs = options.freshMs ?? RECHECK_FRESH_MS;
   const now = options.now ?? Date.now;
   const page = options.page ?? DOCUMENT_PAGE;
+  const read = options.read ?? options.refresh;
   let running: Promise<RecheckResult> | null = null;
   let checkedAt = Number.NEGATIVE_INFINITY;
   let watchers = 0;
@@ -44,7 +46,7 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
   function schedule() {
     clear();
     if (watchers === 0 || running !== null || !page.isVisible()) return;
-    timer = setTimeout(() => void check(), Math.max(0, checkedAt + intervalMs - now()));
+    timer = setTimeout(() => void start(read), Math.max(0, checkedAt + intervalMs - now()));
   }
 
   function settle(result: RecheckResult) {
@@ -54,13 +56,17 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
     return result;
   }
 
-  function check() {
+  function start(request: () => Promise<unknown>) {
     clear();
-    running ??= options.refresh().then(
+    running ??= request().then(
       (): RecheckResult => settle({ ok: true }),
       (error: unknown): RecheckResult => settle({ ok: false, error })
     );
     return running;
+  }
+
+  function check() {
+    return start(options.refresh);
   }
 
   function wake(staleAfterMs: number) {
@@ -68,7 +74,7 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
       clear();
       return;
     }
-    if (now() - checkedAt >= staleAfterMs) void check();
+    if (now() - checkedAt >= staleAfterMs) void start(read);
     else schedule();
   }
 
@@ -88,5 +94,11 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
     };
   }
 
-  return { check, watch };
+  function reset() {
+    clear();
+    running = null;
+    checkedAt = Number.NEGATIVE_INFINITY;
+  }
+
+  return { check, watch, reset };
 }

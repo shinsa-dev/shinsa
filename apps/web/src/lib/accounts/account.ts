@@ -1,5 +1,4 @@
 import {
-  type AccountDuplicate,
   type AccountImport,
   type AccountSummary,
   type AccountSwitchReason,
@@ -147,10 +146,6 @@ export function resolvePauseAction(account: AccountSummary): AccountAction {
   if (account.paused)
     return { label: 'Use for new work', icon: 'IconPlay', done: `${label} takes new work again.` };
   return { label: 'Leave out of new work', icon: 'IconPause', done: `New work skips ${label}.` };
-}
-
-export function describeDuplicate(duplicate: AccountDuplicate) {
-  return `${duplicate.email} is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.`;
 }
 
 export function isSharedLogin(account: AccountSummary) {

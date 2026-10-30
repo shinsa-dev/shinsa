@@ -42,7 +42,7 @@ import { LoginRenewal, type RenewedLogin } from './renewal.ts';
 import { AccountRotation, type SignInState } from './rotation.ts';
 import { type AuthStatus, type ClaudeRunner, readAuthStatus, STATUS_TIMEOUT_MS } from './status.ts';
 import { AccountStore, isSharedLogin, type StoredAccount } from './store.ts';
-import { PROVIDER_WINDOWS, requestUsage, type UsageRequester } from './usage.ts';
+import { EXPIRED_READ, PROVIDER_WINDOWS, requestUsage, type UsageRequester } from './usage.ts';
 
 export { UsageResumeClock } from './resume.ts';
 
@@ -309,7 +309,7 @@ export class Accounts {
       this.store.update(account.id, {
         email: status.email ?? account.email,
         organization: status.organization ?? account.organization,
-        plan: status.plan ?? account.plan,
+        plan: account.plan ?? status.plan,
       });
     }
     this.#changed();
@@ -338,7 +338,8 @@ export class Accounts {
         retryAfterMs: null,
       };
     }
-    if (login.plan && login.plan !== account.plan) this.store.update(account.id, { plan: login.plan });
+    if (login.plan && !account.plan) this.store.update(account.id, { plan: login.plan });
+    if (login.expiresAt !== null && login.expiresAt <= this.#now()) return EXPIRED_READ;
     return requestUsage(login.accessToken, this.#requestHttp);
   }
 
@@ -553,6 +554,12 @@ export class Accounts {
     return this.snapshot();
   }
 
+  async refreshUsage() {
+    this.#assertChangeable();
+    await Promise.all([this.limits.refresh(this.#listIds()), this.#refreshProviderUsage()]);
+    return this.snapshot();
+  }
+
   #assertChangeable() {
     if (!this.#config.inspect) return;
     throw createReadOnlyError(
@@ -604,7 +611,7 @@ export class Accounts {
     this.store.update(accountId, {
       email: status.email ?? account.email,
       organization: status.organization ?? account.organization,
-      plan: status.plan ?? account.plan,
+      plan: account.plan ?? status.plan,
       origin: 'login',
     });
     this.#signIns.set(accountId, { signIn: 'signed_in', detail: null });

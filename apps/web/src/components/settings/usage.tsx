@@ -51,15 +51,17 @@ function WindowRow({ row }: { row: UsageRow }) {
   );
 }
 
+function DetailRow({ text }: { text: string }) {
+  return (
+    <div className={SETTING_ROW}>
+      <span className='min-w-0 flex-1 text-fg-2 text-xs'>{text}</span>
+    </div>
+  );
+}
+
 export function UsageWindows({ account }: { account: { usage: AccountUsage } }) {
   const rows = listUsageRows(account);
-  if (rows.length === 0) {
-    return (
-      <div className={SETTING_ROW}>
-        <span className='min-w-0 flex-1 text-fg-2 text-xs'>{describeUsageDetail(account)}</span>
-      </div>
-    );
-  }
+  if (rows.length === 0) return <DetailRow text={describeUsageDetail(account)} />;
   return rows.map((row) => <WindowRow key={row.id} row={row} />);
 }
 
