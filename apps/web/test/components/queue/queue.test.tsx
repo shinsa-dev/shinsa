@@ -256,6 +256,26 @@ describe('a row’s summary line', () => {
     expect(row(/Build the export/).textContent).toContain('Running bun test apps/web');
   });
 
+  it('names the current step instead of the agent’s action when the queue leaves activity out', () => {
+    renderQueue({
+      activity: false,
+      state: createShinsaState({
+        tasks: [BUILDING],
+        runs: [createRun({ id: 'run-popover', taskId: 'build', purpose: 'build' })],
+      }),
+    });
+    pushTranscript('run-popover', [
+      createCallEntry('call-1', {
+        kind: 'command',
+        action: 'run',
+        command: 'bun test apps/web',
+        description: null,
+      }),
+    ]);
+    expect(row(/Build the export/).textContent).not.toContain('Running bun test apps/web');
+    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+  });
+
   it('names the current step until the agent has done anything', () => {
     renderQueue({
       state: createShinsaState({

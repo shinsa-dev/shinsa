@@ -39,6 +39,7 @@ export function QueueMenu({ state, activeTaskId }: { state: ShinsaState; activeT
           variant='compact'
           activeTaskId={activeTaskId}
           className={COMPACT_POPOVER_INSET}
+          activity={false}
           onNavigate={() => setOpen(false)}
         />
       </PopoverContent>

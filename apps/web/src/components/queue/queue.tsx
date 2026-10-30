@@ -108,12 +108,14 @@ function QueueSectionView({
   section,
   variant,
   activeTaskId,
+  activity,
   onNavigate,
 }: {
   state: ShinsaState;
   section: QueueSection;
   variant: Variant;
   activeTaskId: string | null;
+  activity: boolean;
   onNavigate: () => void;
 }) {
   const shown = useProgressiveCount(section.items.length, FIRST_ROWS);
@@ -125,7 +127,7 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
-      summary={<RowSummary state={state} task={item.task} />}
+      summary={<RowSummary state={state} task={item.task} activity={activity} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
         navigate(resolveTaskPath(item.task));
@@ -158,6 +160,7 @@ export function TaskQueue({
   activeTaskId = null,
   sections = listQueueSections(state, resolveQueue(state, Date.now())),
   className,
+  activity = true,
   onNavigate = () => {},
 }: {
   state: ShinsaState;
@@ -165,6 +168,7 @@ export function TaskQueue({
   activeTaskId?: string | null;
   sections?: QueueSection[];
   className?: string;
+  activity?: boolean;
   onNavigate?: () => void;
 }) {
   const views = sections.map((section) => (
@@ -174,6 +178,7 @@ export function TaskQueue({
       section={section}
       variant={variant}
       activeTaskId={activeTaskId}
+      activity={activity}
       onNavigate={onNavigate}
     />
   ));
