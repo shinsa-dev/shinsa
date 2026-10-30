@@ -82,3 +82,10 @@ export {
   type RequestOrigin,
   resolveLocalOnlyRefusal,
 } from './local-only.ts';
+export type {
+  PairingView,
+  RemoteDevice,
+  RemoteEnrollment,
+  RemoteSnapshot,
+  TunnelStatus,
+} from './status.ts';

@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import type { RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
 import {
   type ConnectClaim,
   DomainError,
@@ -12,14 +13,9 @@ import { runCommandOrThrow } from '../shell/index.ts';
 import { type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient } from './control.ts';
 import { Enrollments } from './enrollments.ts';
-import { PAIR_POLL_MS, type PairedMachine, Pairing, type PairingView } from './pairing.ts';
-import { type RemoteDevice, RemoteStore } from './store.ts';
-import {
-  type StartConnector,
-  type TunnelStatus,
-  TunnelSupervisor,
-  type TunnelTimings,
-} from './supervisor.ts';
+import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
+import { RemoteStore } from './store.ts';
+import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
 export { CHANNEL_REQUEST_ORIGIN, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 export {
@@ -64,23 +60,7 @@ export function resolveRequestOrigin(request: Request): RequestOrigin {
   return remoteRequests.has(request) ? 'remote' : 'local';
 }
 
-export interface RemoteSnapshot {
-  paired: boolean;
-  enabled: boolean;
-  status: TunnelStatus;
-  instanceId: string | null;
-  owner: string | null;
-  machineName: string;
-  machineKey: string | null;
-  pairing: PairingView | null;
-  devices: RemoteDevice[];
-}
-
-export interface RemoteEnrollment {
-  url: string;
-  name: string;
-  expiresAt: number;
-}
+export type { RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
 
 const DEVICE_NAME_LIMIT = 60;
 

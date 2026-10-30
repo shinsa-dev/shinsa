@@ -1,14 +1,10 @@
-import type { MachineCredentials, PairPollResponse, PairStartResponse } from '@shinsa/core';
+import type { MachineCredentials, PairingView, PairPollResponse, PairStartResponse } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { ControlClient } from './control.ts';
 
 export const PAIR_POLL_MS = 2_000;
 
-export interface PairingView {
-  claimCode: string;
-  url: string;
-  expiresAt: number;
-}
+export type { PairingView } from '@shinsa/core';
 
 export interface PairedMachine {
   credentials: MachineCredentials;

@@ -1,4 +1,6 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
+import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
 import { USAGE_SECTION } from '@/lib/stats/usage.ts';
@@ -24,7 +26,15 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   general: {
     id: 'general',
     label: 'General',
-    sections: ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', UPDATES_SECTION],
+    sections: [
+      'Appearance',
+      'Attention',
+      'Notifications',
+      'Context',
+      ...(isRemoteBuild() ? [] : [REMOTE_ACCESS_SECTION]),
+      'Setup',
+      UPDATES_SECTION,
+    ],
   },
   statistics: {
     id: 'statistics',

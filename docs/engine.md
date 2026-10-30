@@ -2242,6 +2242,13 @@ The machine side is `apps/engine/src/remote/`:
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired Mac (`remote_not_paired`).
+- **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
+  `lib/connection/remote-access.ts`): the Mac's name and status (Off, Waiting for sign-in with the code and Open
+  sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
+  added devices with when each was last used and Forget, and Add device: you name the device, and the one-time link
+  shows as a QR code to scan with a phone, with Copy and Add this browser for the browser in front of you. It reads
+  `GET /api/remote` when Settings opens and every 2 seconds while pairing or connecting. The remote build leaves the
+  section out, since every change to it is refused from off the Mac.
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
   owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
   `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).

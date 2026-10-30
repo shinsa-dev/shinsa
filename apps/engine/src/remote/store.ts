@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import type { RemoteDevice } from '@shinsa/core';
 import {
   type MachineCredentials,
   parsePrivateKey,
@@ -11,12 +12,7 @@ import { describeError, log } from '../log/index.ts';
 
 export const REMOTE_FILE = 'remote.json';
 
-export interface RemoteDevice {
-  publicKey: string;
-  name: string;
-  enrolledAt: number;
-  lastSeenAt: number | null;
-}
+export type { RemoteDevice } from '@shinsa/core';
 
 interface MachineKey {
   publicKey: string;

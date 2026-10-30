@@ -17,6 +17,7 @@ import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
 import { PluginsGroup } from '@/components/settings/plugins.tsx';
+import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
@@ -28,6 +29,7 @@ import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
+import { createSampleRemote, createSampleRemoteActions } from './sample-remote.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
@@ -304,9 +306,18 @@ export function SettingsSpecimens() {
   const [extensions] = React.useState(() => createSampleExtensions(now));
   const [versions] = React.useState(createSampleVersions);
   const [memory] = React.useState(() => createMemoryScene(now));
+  const [remote] = React.useState(() => createSampleRemote(now));
+  const [remoteActions] = React.useState(() => createSampleRemoteActions(now));
   const settings = createSettings();
   return (
     <>
+      {remote.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <RemoteAccessGroup snapshot={scene.snapshot} failure={null} actions={remoteActions} />
+          </div>
+        </Specimen>
+      ))}
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>
         <div className='w-full max-w-xl'>
           <MemorySettings state={memory} actions={SAMPLE_MEMORY_ACTIONS} />

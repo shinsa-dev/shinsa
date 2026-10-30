@@ -1,8 +1,8 @@
-import type { MachineCredentials } from '@shinsa/core';
+import type { MachineCredentials, TunnelStatus } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import { type ControlClient, RevokedError } from './control.ts';
 
-export type TunnelStatus = 'off' | 'starting' | 'connected' | 'reconnecting' | 'revoked';
+export type { TunnelStatus } from '@shinsa/core';
 
 export interface TunnelConnector {
   exited: Promise<unknown>;

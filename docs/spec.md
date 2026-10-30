@@ -358,9 +358,11 @@ The Mac app (`apps/desktop`) is how you run Shinsa: the engine is compiled into 
 app registers, so it keeps working when the window is closed or the app quit, and the app adds the Dock badge,
 notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
-Planned, not built: signing with a Developer ID, the hosted dashboard, other providers (Cursor), and dev-server and
+Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
-Remote access (being built): `docs/plans/remote-plan.md`.
+Remote access: Settings → General → Remote access pairs this Mac with app.shinsa.dev through GitHub sign-in and adds
+the browsers and phones that may reach it (`docs/engine.md` → Remote access; what is still to come is
+`docs/plans/remote-plan.md`).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -395,8 +397,8 @@ Remote access (being built): `docs/plans/remote-plan.md`.
   Shinsa's own transcripts; an agent that needs one later, or that you name one to ("use the Maple MCP"), loads it
   mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
-- **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access, being
-  built, opens your machine from one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
+- **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
+  opens your machine from one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
   machine dials out, end to end encrypted to devices enrolled at the Mac; the cloud holds no state
   (`docs/plans/remote-plan.md`).
 

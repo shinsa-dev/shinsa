@@ -1158,6 +1158,73 @@ An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `
 value changed, each a `ValueChange`, and the ones that went away). A `ValueChange` is `{ put }` or `{ drop, append }`:
 a list that lost `drop` entries at its start and gained `append` at its end, the way a task's activity grows.
 
+## Remote access
+
+Everything the engine, the web app and the Worker on app.shinsa.dev share for remote access is in
+`packages/core/src/remote/` (how it behaves is `docs/engine.md` → Remote access). It uses WebCrypto only, and key
+pairs and secrets come from the caller, so core stays free of randomness.
+
+**The wire contract** (`contract.ts`, append-only: a paired machine updates on its own schedule and the Worker deploys
+on merge, so a path or field is never renamed or removed, only optional fields added):
+
+| Path on app.shinsa.dev (`REMOTE_PATHS`) | Who calls it | What it does |
+| --- | --- | --- |
+| `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
+| `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
+| `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
+| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port; a 401 means revoked |
+| `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
+| `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
+| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
+
+`MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
+`resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
+key>.<secret>` (`resolveEnrollUrl`, `parseEnrollFragment`): everything after `#` stays in the browser.
+
+**Connect tokens** (`connect-token.ts`): `<payload>.<signature>`, base64url, the payload `{ i: instance, u: GitHub
+user, e: expiry }` and the signature an HMAC-SHA256 with the instance's connect key. `verifyConnectToken` refuses
+another instance, an expired token and one that lives longer than `CONNECT_TOKEN_TTL_MS` (60 s).
+
+**The handshake** (`handshake.ts`, `REMOTE_PROTOCOL_VERSION` 1), on `wss://<tunnel host>/remote?token=…`, as text frames:
+
+| Message | From | Fields |
+| --- | --- | --- |
+| `hello` | The browser | `version`, `device` (its P-256 public key, raw, base64url), `ephemeral` (a fresh one), `enroll` (null, or the proof) |
+| `welcome` | The engine | `ephemeral` (its fresh key) |
+| `refused` | The engine | `reason`; the socket then closes |
+
+Both sides compute three ECDH secrets, `ee` (the two ephemerals), `es` (the browser's ephemeral and the machine's
+key) and `se` (the device's key and the engine's ephemeral), and HKDF-SHA-256 over them, salted with a SHA-256 of
+the four public keys, gives one AES-256-GCM key per direction (`deriveClientSession`, `deriveServerSession`). Only
+the holder of the machine's private key and of an enrolled device's private key can finish it. The enrollment proof
+is an HMAC-SHA256 with the one-time secret over the machine key, the device key and the browser's ephemeral
+(`createEnrollProof`, `verifyEnrollProof`), so a proof seen on the way works for no other device.
+
+**Frames** (`frames.ts`): every message after the handshake is one binary frame, an 8-byte counter and the AES-GCM
+ciphertext, the counter as the nonce, so no nonce repeats. Sealing and opening run in call order; a frame that is
+short, out of order or fails to open throws `FrameError` and the channel closes.
+
+**Inside the channel** (`channel.ts`, `ChannelMessage`, JSON in each sealed frame):
+
+| Message | What it carries |
+| --- | --- |
+| `{ t: 'ready' }` | Each side's first frame: it confirms the key |
+| `{ t: 'socket', data }` | One message of the app socket (`ClientMessage` or `ServerMessage` above) |
+| `{ t: 'request', id, method, path, headers }` | An HTTP request; `path` starts with `/` |
+| `{ t: 'response', id, status, headers }` | Its answer |
+| `{ t: 'body', id, chunk }` / `{ t: 'end', id }` | A body in base64url chunks of 256 KB (`CHANNEL_BODY_CHUNK_BYTES`), then its end |
+| `{ t: 'abort', id }` | The page gave up on a request |
+
+**What stays at the keyboard** (`local-only.ts`): `isLocalOnlyCommand` names the user commands a remote request may
+not send (a human-only setting or repository field, `task.bind_account`); the refusal's code is `local_only`
+(`LOCAL_ONLY_CODE`, `LOCAL_ONLY_MESSAGE`). A request's `RequestOrigin` (`local` or `remote`) comes from how it
+arrived, never from the page.
+
+**The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
+(`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
+`machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`) and `devices` (`RemoteDevice`: `publicKey`,
+`name`, `enrolledAt`, `lastSeenAt`); `RemoteEnrollment` is the `url`, `name` and `expiresAt` Add device answers.
+
 ## Where it lives
 
 | What | Code |
