@@ -107,7 +107,8 @@ describe('Settings → Remote access', () => {
 
   it('adds a device: names it, then shows its one-time link as a QR code', async () => {
     const actions = renderGroup(createRemoteSnapshot());
-    expect(screen.getByText(/No devices yet/)).toBeTruthy();
+    expect(screen.getByText('Phones and browsers that can reach Studio')).toBeTruthy();
+    expect(screen.getByText(/None yet/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add device' }));
     const make = await screen.findByRole('button', { name: 'Make link' });
     expect(make.hasAttribute('disabled')).toBe(true);

@@ -31,7 +31,7 @@ import {
   REMOTE_ACCESS_SECTION,
   resolveQrImage,
 } from '@/lib/remote-access.ts';
-import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 const DESCRIPTION =
   'Reach this Mac from any browser at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each browser or phone is added here once.';
@@ -295,9 +295,14 @@ export function RemoteAccessGroup({
       {snapshot && (
         <StatusRow snapshot={snapshot} actions={actions} onRemove={() => dialog.show({ kind: 'remove' })} />
       )}
+      {canAdd && (
+        <p className={`mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 ${ROW_INSET}`}>
+          Phones and browsers that can reach {snapshot.machineName}
+        </p>
+      )}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
-          No devices yet. Add the browser or phone you want to use away from this Mac.
+          None yet. Add device sets up the phone or browser you use away from this Mac.
         </SettingsEmpty>
       )}
       {snapshot?.devices.map((device) => (
