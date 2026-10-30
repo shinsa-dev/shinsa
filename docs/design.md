@@ -249,7 +249,8 @@ Only these, and they win over anything below:
    (`describeTrackPosition`), no tooltip per dot since the row is already a button. After the dots,
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
-   over the run's transcript, which the row follows only while it is mounted); otherwise the current
+   over the run's transcript, which the row follows only while it is mounted), on Home and in the rail but not in the
+   Needs you popover, which has no room for it (`TaskQueue`'s `activity`, off in `QueueMenu`); otherwise the current
    step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
    ("Pre-merge · 1 step left"), and nothing more. The
    queue rows carry no now line or stage reason: the status and the dots already say it, and a static
@@ -337,7 +338,7 @@ Only these, and they win over anything below:
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
    (37), and the queue popover is `QUEUE_POPOVER` (`COMPACT_POPOVER`, as tall as its content up to the room under the button,
    then it scrolls, and at least 320px wide, growing just enough to fit its widest status and step track, never past the
-   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both, and its rows leave out the agent's latest action) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
    sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since
