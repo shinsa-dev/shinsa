@@ -1,60 +1,11 @@
 ---
 import { OpenReview } from '../components/demos/open-review';
-import Button from '../components/ui/Button.astro';
 import Site from '../layouts/Site.astro';
-import { openTask } from '../lib/content';
 import { site } from '../lib/site';
 ---
 
 <Site title='Open a task · Shinsa' description={site.description} noindex>
   <div class='flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col'>
-    <section class='flex flex-1 flex-col items-center justify-center px-6 pb-14 in-data-review:hidden'>
-      <div class='flex max-w-2xl flex-col items-center gap-4 text-center'>
-        <p data-open-handle hidden class='font-medium font-mono text-fg-2 text-sm'></p>
-        <h1
-          data-open-title
-          class='font-medium text-3xl text-fg-4 leading-[1.1] tracking-tight text-balance in-data-missing:hidden md:text-4xl'
-        >
-          {openTask.title}
-        </h1>
-        <h1
-          class='font-medium text-3xl text-fg-4 leading-[1.1] tracking-tight text-balance not-in-data-missing:hidden md:text-4xl'
-        >
-          {openTask.missingTitle}
-        </h1>
-        <p class='max-w-xl text-base text-fg-2 leading-relaxed text-pretty in-data-missing:hidden'>{openTask.text}</p>
-        <p class='max-w-xl text-base text-fg-2 leading-relaxed text-pretty not-in-data-missing:hidden'>
-          {openTask.missing}
-        </p>
-        <div class='mt-2 flex flex-wrap items-center justify-center gap-2'>
-          <Button href={site.downloadUrl} variant='outline' class='in-data-missing:hidden'>{openTask.secondary}</Button>
-          <Button href='shinsa://' icon='IconArrowUpRight' class='in-data-missing:hidden'>{openTask.primary}</Button>
-          <Button href={site.downloadUrl} class='not-in-data-missing:hidden'>{openTask.secondary}</Button>
-        </div>
-      </div>
-    </section>
-    <OpenReview client:only='react' />
+    <OpenReview client:load />
   </div>
 </Site>
-
-<script>
-  import { resolveTaskInvite } from '../lib/open';
-
-  const invite = resolveTaskInvite(window.location.search);
-  const button = document.querySelector<HTMLAnchorElement>('a[href="shinsa://"]');
-  if (invite && button) {
-    button.href = invite.link;
-    const handle = document.querySelector<HTMLElement>('[data-open-handle]');
-    if (invite.handle && handle) {
-      handle.textContent = invite.handle;
-      handle.hidden = false;
-    }
-    const title = document.querySelector<HTMLElement>('[data-open-title]');
-    if (invite.title && title) {
-      title.textContent = invite.title;
-      document.title = `${invite.handle ?? 'Task'}: ${invite.title} · Shinsa`;
-    }
-  } else {
-    document.documentElement.dataset.missing = '';
-  }
-</script>

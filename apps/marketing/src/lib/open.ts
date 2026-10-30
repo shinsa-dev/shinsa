@@ -1,4 +1,5 @@
 import { parseReviewPayload, type ReviewPayload } from '@shinsa/core';
+import { openTask } from './content.ts';
 
 const TASK_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 
@@ -36,4 +37,45 @@ export async function readReviewFragment(hash: string): Promise<ReviewPayload | 
   } catch {
     return null;
   }
+}
+
+export function resolveDocumentTitle(invite: TaskInvite | null): string | null {
+  if (!invite?.title) return null;
+  return `${invite.handle ?? 'Task'}: ${invite.title} · Shinsa`;
+}
+
+export interface PendingHeader {
+  title: string;
+  description: string;
+  handle: string;
+  link: string | null;
+  documentTitle: string | null;
+}
+
+export const OPEN_SHELL: PendingHeader = {
+  title: '',
+  description: '',
+  handle: '',
+  link: 'shinsa://',
+  documentTitle: null,
+};
+
+export function resolvePendingHeader(search: string): PendingHeader {
+  const invite = resolveTaskInvite(search);
+  if (!invite) {
+    return {
+      title: openTask.missingTitle,
+      description: openTask.missing,
+      handle: '',
+      link: null,
+      documentTitle: null,
+    };
+  }
+  return {
+    title: invite.title ?? openTask.untitled,
+    description: '',
+    handle: invite.handle ?? '',
+    link: invite.link,
+    documentTitle: resolveDocumentTitle(invite),
+  };
 }

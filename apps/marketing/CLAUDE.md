@@ -87,15 +87,22 @@ src/
                             lib/open.ts, which refuses anything else), and Download Shinsa; the review read from the
                             link's `#review=` fragment (readReviewFragment in lib/open.ts; the task built in
                             lib/open-scene.ts on OPEN_TASK_ID, which the demo server gives no repository;
-                            components/demos/open-review.tsx, which marks `<html data-review>` once it reads). Without a
-                            review it shows the handle and title from `?handle=` and `?title=` and the same buttons,
-                            Download alone and primary under "This link does not lead to a review" when the link names no task. The page is the window's height and
+                            components/demos/open-review.tsx, the page's only content, rendered at build time as the header
+                            with an empty title and description and no handle; worker/open.ts fills them, the Open in Shinsa
+                            link and the tab's title from the query before the page is sent (resolvePendingHeader), and
+                            the island's first render in the browser computes the same header, so hydration matches the
+                            Worker's HTML; both Download buttons are rendered and the Worker only toggles `hidden`, so
+                            the first paint is already the title and buttons, and everything the review adds appears
+                            under them, so nothing painted moves). Without a review the same pinned header stays as
+                            painted, with the handle and "This link carries no review" under it and no Review tab, and Download alone and primary under "This link does
+                            not lead to a review" when the link names no task. The page is the window's height and
                             never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
-                            into download.ts, which answers the download paths (tested in test/worker/ at 100%,
+                            into download.ts, which answers the download paths, and open.ts, which fills the open
+                            page's header from the query with HTMLRewriter (tested in test/worker/ at 100%,
                             `bun run test`)
 ```
 
@@ -128,7 +135,7 @@ key skill phrase, not a changed rule.
 
 It is served as `text/markdown; charset=utf-8`: Wrangler already types `.md` that way, and `public/_headers` says so
 for `/design.md` in case that ever changes (a static endpoint's own headers are not kept in a static build, and the
-Worker runs only for the download paths). `bun run preview` (Astro's static server) sends `text/markdown` without the
+Worker runs only for the download paths and `/open`, which sets its own two headers). `bun run preview` (Astro's static server) sends `text/markdown` without the
 charset; `bunx wrangler dev` serves `dist` as production does.
 
 ## Rules
@@ -149,8 +156,10 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 `bun run deploy:preview` (`wrangler preview`) on every other branch. A preview is its own copy of the Worker on
 workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
 preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
-is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download` and
-`/download/*` (`assets.run_worker_first`); every other request is a plain static asset hit.
+is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download`,
+`/download/*` and `/open` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
+preview` serves `/open` without the Worker, so its header fills in only once the island hydrates; `bunx wrangler dev`
+after a build shows it as production does.
 
 The downloads are served from Cloudflare R2, so they never wait on GitHub and have no request limit and no egress fee.
 The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in `wrangler.jsonc`), bound as
