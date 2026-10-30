@@ -1783,9 +1783,10 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   (`watch_suggestion.dismiss`, `shinsa schedules dismiss`, open to agents) keeps it, so that integration is never
   offered again. A decided suggestion takes neither (`suggestion_decided`). Removing the integration drops its open
   suggestion (so adding it again offers one again), and removing the project drops all of its suggestions. On
-  screen a suggested watch shows its text, its server and when it runs, with Add the watch and Dismiss: under its
-  integration in Settings → Projects, in a Suggested watches block at the top of Settings → Automations (with its
-  project), and as the card of the agent's `set_schedule` in the task chat (“Suggested a watch”), which then reads
+  screen a suggested watch shows its text, its server and when it runs, with Add the watch: under its integration in
+  Settings → Projects and in a Suggested watches block at the top of Settings → Automations (with its project), each
+  dismissed with the cross beside it (“Dismiss the suggested watch”), and as the card of the agent's `set_schedule` in
+  the task chat (“Suggested a watch”), with Add the watch as the primary button and Cancel beside it, which then reads
   Added (with Open the watch) or Dismissed. `shinsa schedules suggestions` lists the open ones.
 - **Secrets are one-use refs** (`request_secret {label, reason}`, `agent.request_secret`): the agent's run waits on a
   question gate with `secret: {label}`; you paste the value into a password field that posts to
