@@ -52,7 +52,7 @@ export function ListRow({
     >
       {leading}
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className={LIST_ROW_TITLE}>{title}</Truncate>
+        <Truncate className={cn(LIST_ROW_TITLE, 'contain-inline-size')}>{title}</Truncate>
         {meta && <Truncate className={LIST_ROW_META}>{meta}</Truncate>}
         {summary && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{summary}</span>}
       </span>

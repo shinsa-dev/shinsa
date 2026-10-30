@@ -7,7 +7,7 @@ import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/discl
 
 export const COMPACT_POPOVER = 'max-h-(--available-height) w-80 gap-0 p-0';
 
-export const QUEUE_POPOVER = cn(COMPACT_POPOVER, 'w-max min-w-80 max-w-[min(28rem,var(--available-width))]');
+export const QUEUE_POPOVER = cn(COMPACT_POPOVER, 'w-max min-w-80 max-w-(--available-width)');
 
 export const COMPACT_POPOVER_INSET = 'pt-1.5';
 

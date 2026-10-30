@@ -50,7 +50,9 @@ export function RowSummary({ state, task }: { state: ShinsaState; task: Task }) 
         <span className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</span>
       </span>
       {track}
-      {run ? <LiveActivity run={run} fallback={note} /> : note && <Truncate>{note}</Truncate>}
+      <span className='flex min-w-0 flex-1 contain-inline-size'>
+        {run ? <LiveActivity run={run} fallback={note} /> : note && <Truncate>{note}</Truncate>}
+      </span>
     </span>
   );
 }
