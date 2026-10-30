@@ -2,7 +2,7 @@ import type { PairView } from '@shinsa/core';
 import { REMOTE_PATHS } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
-import { SETTING_ROW, SettingsCard } from '@/components/settings/group.tsx';
+import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { RemoteHero, RemoteLoading } from './shell.tsx';
 
@@ -65,24 +65,25 @@ export function PairPage({
             Your Mac shows this code in Settings, Remote access.
           </span>
         </div>
-        <div className={`${SETTING_ROW} border-border border-t`}>
-          <span className='flex-1 text-fg-2 text-xs'>Mac key</span>
-          <span className='font-mono text-2xs text-fg-3'>{view.fingerprint}</span>
-        </div>
       </SettingsCard>
-      <Button
-        className='w-full'
-        loading={state.kind === 'approving'}
-        onClick={() => {
-          setState({ kind: 'approving', view });
-          dashboard.approvePair(view.claimCode).then(
-            (approved) => setState({ kind: 'approved', name: approved.name }),
-            (error: unknown) => setState({ kind: 'failed', message: (error as Error).message })
-          );
-        }}
-      >
-        Approve
-      </Button>
+      <div className='flex w-full flex-col items-center gap-2'>
+        <Button
+          className='w-full'
+          loading={state.kind === 'approving'}
+          onClick={() => {
+            setState({ kind: 'approving', view });
+            dashboard.approvePair(view.claimCode).then(
+              (approved) => setState({ kind: 'approved', name: approved.name }),
+              (error: unknown) => setState({ kind: 'failed', message: (error as Error).message })
+            );
+          }}
+        >
+          Approve
+        </Button>
+        <p className='text-2xs text-fg-2'>
+          Mac key: <span className='font-mono'>{view.fingerprint}</span>
+        </p>
+      </div>
     </section>
   );
 }

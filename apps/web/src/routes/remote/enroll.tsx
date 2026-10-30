@@ -99,7 +99,7 @@ export function EnrollPage({
           Add this browser
         </Button>
         <p className='text-2xs text-fg-2'>
-          Mac key <span className='font-mono'>{fingerprint ?? '…'}</span>
+          Mac key: <span className='font-mono'>{fingerprint ?? '…'}</span>
         </p>
       </div>
     </section>
