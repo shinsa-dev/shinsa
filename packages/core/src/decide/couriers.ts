@@ -17,13 +17,22 @@ function assertCanWait(run: Run) {
   if (run.purpose === 'build' || run.purpose === 'fix') return;
   throw new DomainError(
     'cannot_wait',
-    'Only a task that is building can wait on a task it creates. Create it without this_task_waits and say how the two relate in your hand-over.'
+    'Only a task that is building can wait on a task it creates. Create it with this_task_waits once you build, or now with after_this when it should merge after this task; otherwise create it without either and say how the two relate in your hand-over.'
+  );
+}
+
+function assertOneOrder(command: CommandOf<'agent.create_task'>) {
+  if (!command.thisWaits || !command.afterThis) return;
+  throw new DomainError(
+    'dependency_cycle',
+    'Set this_task_waits or after_this, not both: two tasks cannot each wait for the other to merge.'
   );
 }
 
 interface SpawnOptions {
   parent: boolean;
   forkOf?: string;
+  waitsOn?: string[];
 }
 
 function spawnTask(
@@ -43,6 +52,7 @@ function spawnTask(
       priority: source.priority,
       origin: source.origin,
       ...(options.forkOf ? { forkOf: options.forkOf } : {}),
+      ...(options.waitsOn ? { waitsOn: options.waitsOn } : {}),
     },
     { createdBy: creator, ...(parent ? { parentTaskId: source.id, shape: 'change' as const } : {}) }
   );
@@ -55,13 +65,18 @@ function waitOn(decider: Decider, task: Task, ids: string[]) {
 export function createCourierTask(decider: Decider, command: CommandOf<'agent.create_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'create_task');
   if (selectCreated(decider, task, command.requestKey)) return;
+  assertOneOrder(command);
   if (command.thisWaits) assertCanWait(run);
   const createdId = spawnTask(
     decider,
     command.repoId ? { ...task, repoId: command.repoId } : task,
     command.request,
     { kind: 'courier', taskId: task.id, runId: run.id, requestKey: command.requestKey },
-    { parent: false, ...(command.forkOf ? { forkOf: command.forkOf } : {}) }
+    {
+      parent: false,
+      ...(command.forkOf ? { forkOf: command.forkOf } : {}),
+      ...(command.afterThis ? { waitsOn: [task.id] } : {}),
+    }
   );
   if (command.thisWaits) waitOn(decider, decider.task(task.id), [createdId]);
 }

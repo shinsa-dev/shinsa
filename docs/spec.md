@@ -201,6 +201,10 @@ not chat text.
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
   `docs/engine.md` → Forking a task).
+- **Work across repositories.** A task works in one repository and ships one pull request. A change that also needs
+  another repository of the project is a second task its agent files there, forked from the first and ordered with
+  `this_task_waits` or `after_this`, so each pull request merges in the order the change needs (`docs/engine.md` →
+  Work across repositories).
 - Nothing in it approves a gate, merges or commits to the default branch on its own.
 
 ### Focus
