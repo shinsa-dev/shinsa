@@ -110,7 +110,7 @@ describe('the cost of a task', () => {
         '$2.00 and 5k tokens, as estimated by the agent provider. The share is learned from 5 tasks on this account.',
       budget: null,
       byRole: [{ key: 'agent', label: 'Agent', cost: '4%', tokens: '5k tokens' }],
-      byPhase: [{ key: 'phase-0', label: 'Write a', cost: '3%', tokens: '3k tokens' }],
+      byPhase: [{ key: 'phase-0', label: 'Write a', cost: '3%', tokens: '2.5k tokens' }],
     });
     const costLimited = createShinsaState({
       tasks: [task],

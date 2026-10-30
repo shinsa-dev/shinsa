@@ -69,6 +69,10 @@ const FINDING_LEVELS_LOG_VERSION = 7;
 
 const SCHEDULE_SOURCE_LOG_VERSION = 8;
 
+const WATCHDOG_READS_LOG_VERSION = 9;
+
+const WATCHDOG_READS_EVENT_TYPES = ['task.created', 'watchdog.armed', 'watchdog.checked'];
+
 const GITBUTLER_EVENT_TYPES = [
   'repo.registered',
   'repo.updated',
@@ -86,6 +90,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < NO_GITBUTLER_LOG_VERSION ? GITBUTLER_EVENT_TYPES : []),
     ...(version < FINDING_LEVELS_LOG_VERSION ? ['review.reported'] : []),
     ...(version < SCHEDULE_SOURCE_LOG_VERSION ? ['schedule.written'] : []),
+    ...(version < WATCHDOG_READS_LOG_VERSION ? WATCHDOG_READS_EVENT_TYPES : []),
   ];
 }
 
@@ -143,6 +148,28 @@ function resolveSchedule(event: Payload) {
   return { ...event, schedule: { source: null, lastReadAt: null, ...event.schedule } };
 }
 
+function resolveForkTaskIds(value: Payload) {
+  if (!('forkTaskId' in value)) return value;
+  const forkTaskIds = typeof value.forkTaskId === 'string' ? [value.forkTaskId] : [];
+  return { ...withoutKeys(value, ['forkTaskId']), forkTaskIds };
+}
+
+function resolveArmedWatchdog(watchdog: Payload) {
+  const resolved = resolveForkTaskIds(watchdog);
+  return 'linkedTaskIds' in resolved ? resolved : { ...resolved, linkedTaskIds: [] };
+}
+
+function resolveCreatedTask(event: Payload) {
+  const created = 'specFirst' in event ? resolvePlanFirst(event) : event;
+  if (!isRecord(created.sourceReport) || 'watchdogId' in created.sourceReport) return created;
+  return { ...created, sourceReport: { ...created.sourceReport, watchdogId: null } };
+}
+
+function resolvePlanFirst(event: Payload): Payload {
+  const { specFirst, ...rest } = event;
+  return { ...rest, planFirst: event.planFirst ?? specFirst };
+}
+
 function resolveGate(event: Payload) {
   if (!isRecord(event.gate) || event.gate.cause !== 'workspace_update') return event;
   return { ...event, gate: withoutKeys(event.gate, ['cause']) };
@@ -164,11 +191,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       const { answer, ...rest } = event;
       return { ...rest, type: 'task.delivered', step: 'answer', body: answer, runId: event.runId ?? null };
     }
-    case 'task.created': {
-      if (!('specFirst' in event)) return event;
-      const { specFirst, ...rest } = event;
-      return { ...rest, planFirst: event.planFirst ?? specFirst };
-    }
+    case 'task.created':
+      return resolveCreatedTask(event);
     case 'task.staged':
       if (typeof event.taskId === 'string' && typeof event.stage === 'string') {
         stages.set(event.taskId, event.stage);
@@ -209,6 +233,11 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return { ...event, watch: { ...event.watch, ciAbsent: false } };
     case 'review.reported':
       return resolveFindings(event);
+    case 'watchdog.armed':
+      if (!isRecord(event.watchdog)) return event;
+      return { ...event, watchdog: resolveArmedWatchdog(event.watchdog) };
+    case 'watchdog.checked':
+      return resolveForkTaskIds(event);
     default:
       return event;
   }

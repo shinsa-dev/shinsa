@@ -1039,6 +1039,44 @@ Every task agent's tool: `schedules_delete`. Sends `schedule.remove`.
 | --- | --- | --- |
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 
+#### shinsa schedules suggestions
+
+List the suggested watches that wait for you to accept or dismiss them.
+
+```
+shinsa schedules suggestions [--json]
+```
+
+Every task agent's tool: `schedules_suggestions` (reads).
+
+#### shinsa schedules accept
+
+Accept a suggested watch: it starts reading its data source on its schedule.
+
+```
+shinsa schedules accept <suggestion> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `watch_suggestion.accept`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<suggestion>` | text, required | The suggested watch, from `shinsa schedules suggestions`. |
+
+#### shinsa schedules dismiss
+
+Dismiss a suggested watch. It is not suggested again.
+
+```
+shinsa schedules dismiss <suggestion> [--json]
+```
+
+Every task agent's tool: `schedules_dismiss`. Sends `watch_suggestion.dismiss`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<suggestion>` | text, required | The suggested watch, from `shinsa schedules suggestions`. |
+
 #### shinsa schedules webhook
 
 Show a webhook schedule's URL and its signature check.

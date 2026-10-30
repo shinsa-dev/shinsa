@@ -50,7 +50,7 @@ import type {
 import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
-import type { WatchdogAgentCommand, WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
+import type { WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
   request: string;
@@ -226,7 +226,6 @@ type AgentCommand =
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
   | ScheduleAgentCommand
-  | WatchdogAgentCommand
   | MemoryAgentCommand;
 
 type SystemCommand =

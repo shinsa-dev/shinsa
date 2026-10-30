@@ -27,7 +27,8 @@ export interface ScheduleSource {
 }
 
 export interface SourceReport {
-  scheduleId: string;
+  scheduleId: string | null;
+  watchdogId: string | null;
   server: string;
   reportId: string | null;
   link: string | null;
@@ -73,6 +74,28 @@ export interface Schedule {
   replayKeys: Record<string, number>;
 }
 
+export type WatchSuggestionOrigin =
+  | { kind: 'source' }
+  | { kind: 'agent'; taskId: string | null; runId: string | null };
+
+export type WatchSuggestionStatus = 'open' | 'accepted' | 'dismissed';
+
+export interface WatchSuggestion {
+  id: string;
+  projectId: string;
+  server: string;
+  name: string;
+  text: string;
+  trigger: ScheduleTrigger;
+  timeZone: string;
+  maxRuns: number | null;
+  origin: WatchSuggestionOrigin;
+  status: WatchSuggestionStatus;
+  scheduleId: string | null;
+  createdAt: number;
+  decidedAt: number | null;
+}
+
 export interface GateSecret {
   label: string;
 }
@@ -97,7 +120,7 @@ export const SCHEDULE_LIMITS = {
   secretLabel: 80,
   secretReason: 300,
   detail: 300,
-  intakeSummary: 1_000,
+  readSummary: 1_000,
   readAttempts: 3,
   reportTitle: 100,
   reportRequest: 2_000,
@@ -113,6 +136,8 @@ export const SCHEDULE_LIMITS = {
   dailyAt: 5,
   secretRef: 60,
   weekdays: 7,
+  suggestedEveryMinutes: 60,
+  openSuggestions: 10,
 } as const;
 
 export const SECRET_REF_PATTERN = /^secret-ref:[0-9a-f]{32}$/;
@@ -123,4 +148,12 @@ export function isScheduleLive(schedule: Schedule) {
 
 export function isWatchHome(task: Pick<Task, 'watchHome'>) {
   return task.watchHome === true;
+}
+
+export function resolveSuggestedWatchText(server: string) {
+  return `File a task for each new report in ${server}.`;
+}
+
+export function resolveSuggestedWatchName(server: string) {
+  return `Watch ${server}`.slice(0, SCHEDULE_LIMITS.name);
 }

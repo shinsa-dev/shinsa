@@ -2,6 +2,7 @@ import {
   DomainError,
   describeScheduleTarget,
   describeScheduleTrigger,
+  listOpenWatchSuggestions,
   listProjectRepos,
   listSchedules,
   type Schedule,
@@ -113,6 +114,17 @@ function writeSigningSecret(
   }
 }
 
+function describeSuggested(state: ShinsaState, events: ShinsaEvent[], taskId: string) {
+  const recorded = events.find((event) => event.type === 'watch_suggestion.recorded')?.suggestion;
+  const suggestion =
+    recorded ??
+    listOpenWatchSuggestions(state)
+      .filter((candidate) => candidate.origin.kind === 'agent' && candidate.origin.taskId === taskId)
+      .at(-1);
+  const name = suggestion ? `“${suggestion.name}” ` : '';
+  return `Suggested the watch ${name}for the human to accept. It starts reading only once they accept it, with one click on the card in this chat or in Settings → Automations. Tell them so in your hand-over; do not set it again.`;
+}
+
 async function writeSchedule(
   input: Record<string, unknown>,
   call: ScheduleToolCall,
@@ -136,6 +148,7 @@ async function writeSchedule(
     maxRuns: request.maxRuns,
     timeZone: request.timeZone ?? existing?.timeZone ?? context.timeZone,
   });
+  if (request.source && !existing) return describeSuggested(call.state(), events, task.id);
   const written = events.find((event) => event.type === 'schedule.written');
   const schedule = written?.schedule ?? existing;
   if (!schedule) throw new Error('Nothing was saved. Call set_schedule again with a time and a message.');
@@ -219,6 +232,11 @@ async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall
     forkOf: forkFrom === null ? null : findForkSource(state, forkFrom),
     repoId: resolveFiledRepo(state, call.runId, repository),
   });
+  const linked = events.find((event) => event.type === 'watchdog.report_linked');
+  if (linked?.type === 'watchdog.report_linked') {
+    const known = call.state().tasks[linked.reportTaskId];
+    return `This report was already filed as ${known?.handle ?? linked.reportTaskId} “${known?.title ?? ''}”, so the watchdog counts it. Go on with the next report.`;
+  }
   const created = events.find((event) => event.type === 'task.created');
   const task = created?.type === 'task.created' ? call.state().tasks[created.taskId] : undefined;
   if (!task) throw new Error('Nothing was filed. Call file_report again.');

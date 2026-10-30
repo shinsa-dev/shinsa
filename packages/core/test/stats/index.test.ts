@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  type Repo,
   type Round,
   type Run,
   type RunUsage,
   resolveCacheHitRate,
+  resolveProjectStatsSource,
   resolveStats,
   type ShinsaState,
   type StatsWindow,
@@ -260,5 +262,41 @@ describe('cache rates', () => {
     expect(resolveCacheHitRate(line)).toBe(0.6);
     const empty = { ...line, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     expect(resolveCacheHitRate(empty)).toBeNull();
+  });
+});
+
+describe('resolveProjectStatsSource', () => {
+  const repo: Repo = {
+    id: 'repo-a',
+    name: 'a',
+    path: '/a',
+    defaultBranch: 'main',
+    remote: null,
+    projectId: 'project-a',
+    checkCommands: [],
+  };
+  const source = {
+    ...stateOf(
+      [
+        task('own', { projectId: 'project-a', repoId: null }),
+        task('by-repo', { projectId: null, repoId: 'repo-a' }),
+        task('other', { projectId: 'project-b', repoId: null }),
+        task('loose', { projectId: null, repoId: null }),
+      ],
+      [run('r-own', 'own'), run('r-by-repo', 'by-repo'), run('r-other', 'other'), run('r-gone', 'gone')]
+    ),
+    repos: { [repo.id]: repo },
+  };
+
+  test('no project keeps every task and run', () => {
+    const scoped = resolveProjectStatsSource(source, null);
+    expect(scoped.tasks).toBe(source.tasks);
+    expect(scoped.runs).toBe(source.runs);
+  });
+
+  test('a project keeps its tasks, by their own project or their repository, and only their runs', () => {
+    const scoped = resolveProjectStatsSource(source, 'project-a');
+    expect(Object.keys(scoped.tasks).sort()).toEqual(['by-repo', 'own']);
+    expect(Object.keys(scoped.runs).sort()).toEqual(['r-by-repo', 'r-own']);
   });
 });

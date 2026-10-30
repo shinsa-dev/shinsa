@@ -6,6 +6,7 @@ import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { type CoverageDetectionMap, resetCoverageDetection } from '@/lib/connection/coverage.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
 import { findTooltipText } from '../../support/hover.ts';
+import { createWatchSuggestion } from '../../support/schedules.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
 import { waitForGone } from '../../support/wait.ts';
 
@@ -426,5 +427,30 @@ describe('Settings → Projects', () => {
     await settle();
     expect(actions.changeBaseline.mock.calls[0]?.[1]).toEqual(['bun run lint']);
     expect(screen.getByText('Always run before review', { selector: 'h2' })).toBeDefined();
+  });
+});
+
+describe('a suggested watch under its integration', () => {
+  it('shows the open suggestion as one row right below the integration it reads, without the project', () => {
+    const project = {
+      ...SUPERWALL,
+      watchSources: [
+        { server: 'slack', data: 'The #feedback channel', repoIds: [], addedBy: 'you' as const, addedAt: 0 },
+        { server: 'maple', data: 'Errors', repoIds: [], addedBy: 'you' as const, addedAt: 0 },
+      ],
+    };
+    const state = createShinsaState({
+      projects: [project],
+      patch: { watchSuggestions: { s1: createWatchSuggestion({ id: 's1' }) } },
+    });
+    renderProjects(state);
+    const suggestion = screen.getByText('File a task for each new bug in #feedback.');
+    const row = suggestion.closest('span.flex.min-w-0.flex-1')?.parentElement;
+    expect(row?.previousElementSibling?.textContent).toContain('slack');
+    expect(row?.textContent).toBe(
+      'File a task for each new bug in #feedback.slack · every hourAdd the watch'
+    );
+    expect(screen.getByText('slack · every hour')).toBeDefined();
+    expect(screen.getAllByRole('button', { name: 'Add the watch' })).toHaveLength(1);
   });
 });

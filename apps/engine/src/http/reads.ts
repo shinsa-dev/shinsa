@@ -8,6 +8,7 @@ import {
   listOpenGates,
   listProjectRepos,
   listWaitsOn,
+  listWatchSuggestions,
   type Run,
   SETTINGS_KEYS,
   type ShinsaState,
@@ -309,7 +310,11 @@ export function createReadRoutes(engine: Engine, transcripts: Transcripts): Read
     {
       method: 'GET',
       pattern: /^\/api\/schedules$/,
-      respond: () => respond({ schedules: Object.values(engine.state.schedules) }),
+      respond: () =>
+        respond({
+          schedules: Object.values(engine.state.schedules),
+          suggestions: listWatchSuggestions(engine.state),
+        }),
     },
     {
       method: 'GET',

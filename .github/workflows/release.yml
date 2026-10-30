@@ -183,6 +183,10 @@ jobs:
             echo "::error title=Identity::Every channel builds studio.overclock.shinsa, not $bundle_id."
             exit 1
           fi
+          if [ ! -f "$app/Contents/Resources/app-update.yml" ]; then
+            echo "::error title=Updates::The app has no Contents/Resources/app-update.yml, so it could never download an update (docs/release.md)."
+            exit 1
+          fi
           codesign --verify --deep --strict "$app"
           if [ "$MODE" = signed ]; then
             spctl --assess --type execute --verbose=2 "$app"

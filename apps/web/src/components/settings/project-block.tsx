@@ -7,6 +7,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { SuggestedSourceWatchRow } from '@/components/automations/suggested-watch.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
@@ -22,6 +23,7 @@ import {
   validateFolderPath,
 } from '@/lib/projects.ts';
 import { describeWatchSource, removeWatchSource, WATCH_SOURCE_HINT } from '@/lib/tasks/watchdogs.ts';
+import { selectSourceSuggestion } from '@/lib/watch-suggestions.ts';
 import { BaselineSelect } from './baseline-select.tsx';
 import { CoverageSelect } from './coverage-select.tsx';
 import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx';
@@ -269,21 +271,26 @@ export function ProjectBlock({
         <ProjectFolderRow key={folder} project={project} folder={folder} actions={actions} />
       ))}
       {adding && <ProjectFolderForm project={project} actions={actions} onDone={() => setAdding(false)} />}
-      {(project.watchSources ?? []).map((source) => (
-        <PathRow
-          key={source.server}
-          icon='IconRadar'
-          iconLabel={WATCH_SOURCE_HINT}
-          title={source.server}
-          path={describeWatchSource(state, source)}
-          action={
-            <RemoveButton
-              label={`Remove ${source.server} from the project`}
-              onClick={() => void removeWatchSource(project.id, source.server)}
+      {(project.watchSources ?? []).map((source) => {
+        const suggestion = selectSourceSuggestion(state, project.id, source.server);
+        return (
+          <React.Fragment key={source.server}>
+            <PathRow
+              icon='IconRadar'
+              iconLabel={WATCH_SOURCE_HINT}
+              title={source.server}
+              path={describeWatchSource(state, source)}
+              action={
+                <RemoveButton
+                  label={`Remove ${source.server} from the project`}
+                  onClick={() => void removeWatchSource(project.id, source.server)}
+                />
+              }
             />
-          }
-        />
-      ))}
+            {suggestion && <SuggestedSourceWatchRow suggestion={suggestion} />}
+          </React.Fragment>
+        );
+      })}
     </SettingsBlock>
   );
 }

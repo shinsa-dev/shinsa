@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   SCHEDULE_LIMITS,
-  validateIntakeReport,
+  validateReadReport,
   validateReportFiling,
   validateScheduleRequest,
   validateSecretRequest,
@@ -187,15 +187,23 @@ describe('a report to file', () => {
 
 describe('a read of a data source to report', () => {
   test('needs a summary within its limit', () => {
-    expect(validateIntakeReport({ summary: 'Filed 2.' })).toEqual({
+    expect(validateReadReport({ summary: 'Filed 2.' })).toEqual({
       ok: true,
-      value: { summary: 'Filed 2.', reached: true },
+      value: { summary: 'Filed 2.', reached: true, live: null },
     });
-    expect(validateIntakeReport({ summary: 'It timed out.', reached: false })).toEqual({
+    expect(validateReadReport({ summary: 'It timed out.', reached: false })).toEqual({
       ok: true,
-      value: { summary: 'It timed out.', reached: false },
+      value: { summary: 'It timed out.', reached: false, live: null },
     });
-    expect(validateIntakeReport({ summary: 'Filed 2.', reached: 'no' }).ok).toBe(false);
-    expect(validateIntakeReport({ summary: 'x'.repeat(SCHEDULE_LIMITS.intakeSummary + 1) }).ok).toBe(false);
+    expect(validateReadReport({ summary: 'Filed 2.', reached: 'no' }).ok).toBe(false);
+    expect(validateReadReport({ summary: 'x'.repeat(SCHEDULE_LIMITS.readSummary + 1) }).ok).toBe(false);
+  });
+
+  test('takes live for a watchdog that waits for production', () => {
+    expect(validateReadReport({ summary: 'Not live yet.', live: false })).toEqual({
+      ok: true,
+      value: { summary: 'Not live yet.', reached: true, live: false },
+    });
+    expect(validateReadReport({ summary: 'Live.', live: 'yes' }).ok).toBe(false);
   });
 });

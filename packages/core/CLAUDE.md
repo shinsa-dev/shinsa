@@ -162,7 +162,9 @@ src/
 │   ├── monitors.ts  wait_for: arming, waking and checking a monitor
 │   ├── watchdogs.ts Watchdogs after a merge: arming them from the walkthrough (syncWatchdogs, after every command),
 │   │                firing a check as a read-only `watch` turn of the task's session, deferring it while the task
-│   │                works, recording report_watch, tripping into a forked task, stopping them, connecting a source;
+│   │                works, ending a check (endWatchCheck: tripped by the reports it filed, missed when the source
+│   │                was out of reach, healthy otherwise; `live` while it waits for production), stopping them,
+│   │                connecting a source;
 │   │                a project's data sources (watch_source.write, watch_source.remove)
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
 │   ├── silence.ts   Snoozing and dismissing a quiet run
@@ -176,8 +178,10 @@ src/
 │   ├── orchestration.ts  Routing the delegation commands
 │   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook deliveries
 │   ├── intake.ts    A watch (a schedule that reads an integration): its hidden home (createWatchHome, closeWatchHome),
-│   │                a read as a read-only `intake` turn, file_report (dedupe by the filed tasks' reports, forks),
-│   │                report_intake, a read that gives up
+│   │                a read as a read-only `intake` turn, ending one (endIntakeRead), a read that gives up
+│   ├── reads.ts     What a watch and a watchdog share: file_report (dedupe by the project's filed reports, a watch's
+│   │                forks of any task, a watchdog's of its own), report_read (to endIntakeRead or endWatchCheck),
+│   │                missRead (a read that gives up), isReadBusy, listSourceFiledTasks
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
 │   ├── on-behalf.ts What a user command sent on your behalf records (`on_behalf.acted`, its sentence, task and
 │   │                acting task, kept as `OnBehalfAction`); a system command records nothing here
@@ -235,7 +239,7 @@ src/
 │                    (context.ts), the full brief a resumed agent run sends when its session cannot hold the round
 │                    (root.ts: resolveRunBrief), fix prompts, what a fix is for (focus.ts: resolveFixFocus, from the fix
 │                    prompts' first words), session prompts (restart,
-│                    steer, answer, superseded, usage resume), monitor prompts (waits.ts), the delegated agent's and
+│                    steer, answer, superseded, usage resume), monitor prompts (waits.ts), the read prompt a watch and a watchdog share (reads.ts: resolveReadPrompt, resolveFiledRequest), the delegated agent's and
 │                    the delivery prompts (orchestration.ts), the budgeted context handoff (handoff.ts), the
 │                    rules for managing Shinsa every role gets (manage.ts, MANAGE_RULES), the follow-up on a finished
 │                    round (follow-up.ts, resolveFollowUpPrompt), the project a fresh

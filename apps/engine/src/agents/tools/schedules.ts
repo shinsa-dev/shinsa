@@ -76,7 +76,7 @@ export const SCHEDULE_TOOL_SPECS = {
           type: 'string',
           maxLength: L.reference,
           description:
-            'Read this data source of the project (its server) on each run and file a task for each new report, in this task or task_id, never with new_task.',
+            'Read this data source of the project (its server) on each run and file a task for each new report, never with new_task or task_id. A new watch is a suggestion: it starts once the human accepts it with one click.',
         },
         in_minutes: {
           type: 'integer',
@@ -138,8 +138,8 @@ export const SCHEDULE_TOOL_SPECS = {
   file_report: {
     name: 'file_report',
     description: [
-      'While you read an automation’s data source: file a new task for one report you found in it, with the report itself.',
-      'Shinsa refuses a report it already filed, by its report_id or link; skip it and go on. Set fork_from when the report is about a feature an earlier task shipped, so the new task starts from that task’s conversation.',
+      'While you read a data source, for an automation or a watchdog: file a new task for one report you found in it, with the report itself.',
+      'Shinsa refuses a report it already filed, by its report_id or link; skip it and go on. For an automation, set fork_from when the report is about a feature an earlier task shipped, so the new task starts from that task’s conversation. A watchdog always files forks of the task it watches.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -157,7 +157,8 @@ export const SCHEDULE_TOOL_SPECS = {
         fork_from: {
           type: 'string',
           maxLength: L.reference,
-          description: 'The task that shipped the feature the report is about, by id or handle.',
+          description:
+            'For an automation: the task that shipped the feature the report is about, by id or handle. Leave it out in a watchdog check.',
         },
         repository: {
           type: 'string',

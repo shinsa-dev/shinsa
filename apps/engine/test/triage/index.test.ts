@@ -3,6 +3,7 @@ import { createState, type ShinsaState, type Task } from '@shinsa/core';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import type { LocalRepo } from '../../src/repos/index.ts';
+import { SHAPE_QUESTION } from '../../src/triage/decisions.ts';
 import { resolveRepoProject, resolveTriage } from '../../src/triage/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 
@@ -200,6 +201,24 @@ describe('the branch triage names', () => {
       type: 'string',
       pattern: '^(feat|fix|chore|refactor|docs|perf|test)\\/[a-z0-9-]+$',
     });
+  });
+
+  test('a request to set up an automation, such as a watch, needs no repository and reads as an answer', async () => {
+    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, schema });
+      return Promise.resolve(null as T);
+    };
+    await resolveTriage(stateWith(), newTask(), LOCAL, ask);
+    expect(calls[0]?.system).toContain('a request to set up a Shinsa automation');
+    expect(calls[0]?.system).toContain('rather than code such as a cron job in a repository');
+    expect(calls[0]?.system).toContain('“watch #feedback for bugs, hourly”');
+    expect(SHAPE_QUESTION.criteria.answer).toContain(
+      'so a cron job or a scheduler in a repository is a change'
+    );
+    expect(SHAPE_QUESTION.criteria.answer).toContain(
+      'a request to set up a Shinsa automation (a schedule, a trigger or a watch of an integration) that its agent sets or suggests'
+    );
   });
 });
 

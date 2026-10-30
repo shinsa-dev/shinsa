@@ -84,6 +84,13 @@ function needsPullRequestFix(pullRequest: PullRequest) {
   );
 }
 
+function isCommentsOnly(pullRequest: PullRequest, changes: PullRequestWatchChange[]) {
+  return (
+    !needsPullRequestFix(pullRequest) &&
+    changes.every((change) => change.kind === 'remarks' || change.kind === 'checks_passed')
+  );
+}
+
 function isShipping(task: Task) {
   return task.stage === 'shipping' || task.stage === 'awaiting_merge';
 }
@@ -310,7 +317,7 @@ function reactToWatch(
     pullRequest.mergeable === false ? 'conflict' : 'pull_request',
     resolvePullRequestFixPrompt(pullRequest, trimWatchChanges(report.changes), removal),
     resolvePullRequestSignature(pullRequest, report.next),
-    pullRequest.base ?? null
+    { base: pullRequest.base ?? null, commentsOnly: isCommentsOnly(pullRequest, report.changes) }
   );
 }
 
@@ -437,7 +444,7 @@ export function recordUpdateConflict(
     'update',
     resolveUpdateConflictFixPrompt(command.base, files),
     `update:${command.base}:${files.join('\n')}`,
-    command.base
+    { base: command.base }
   );
 }
 

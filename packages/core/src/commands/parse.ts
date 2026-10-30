@@ -664,6 +664,14 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'schedule.enable': readScheduleEnable,
   'schedule.remove': (fields) => ({ type: 'schedule.remove', scheduleId: readId(fields, 'scheduleId') }),
   'schedule.write': readScheduleWrite,
+  'watch_suggestion.accept': (fields) => ({
+    type: 'watch_suggestion.accept',
+    suggestionId: readId(fields, 'suggestionId'),
+  }),
+  'watch_suggestion.dismiss': (fields) => ({
+    type: 'watch_suggestion.dismiss',
+    suggestionId: readId(fields, 'suggestionId'),
+  }),
   'watchdog.stop': (fields) => ({
     type: 'watchdog.stop',
     taskId: readId(fields, 'taskId'),

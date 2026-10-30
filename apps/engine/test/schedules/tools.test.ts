@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { listActiveRuns, type ShinsaCommand } from '@shinsa/core';
+import { listActiveRuns, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
 import { Schedules } from '../../src/schedules/index.ts';
 import { createWorld, startTask, type World } from './fixtures.ts';
 
@@ -69,7 +69,7 @@ describe('set_schedule', () => {
     expect(reply).toContain('It is paused. Starts a new task.');
   });
 
-  test('a watch set by an agent reads in a home of its own and says what it watches', async () => {
+  test('a watch set by an agent is suggested for the human to accept, and once accepted reads in a home of its own', async () => {
     const base = await createWorld();
     await base.engine.dispatch({
       type: 'repo.register',
@@ -88,17 +88,23 @@ describe('set_schedule', () => {
       repoIds: [],
     });
     const { tool } = setUp(world);
-    const reply = await tool('set_schedule', {
+    const watch = {
+      name: 'Feedback bugs',
       message: 'Bug reports and feature requests.',
       every_minutes: 60,
       source: 'slack',
-    });
+    };
+    const reply = await tool('set_schedule', watch);
+    expect(world.engine.state.schedules).toEqual({});
+    expect(reply).toStartWith('Suggested the watch “Feedback bugs” for the human to accept.');
+    expect(await tool('set_schedule', watch)).toBe(reply);
+    const [suggestion] = Object.values(world.engine.state.watchSuggestions);
+    await world.engine.dispatch({ type: 'watch_suggestion.accept', suggestionId: suggestion?.id ?? '' });
     const schedule = only(world);
     expect(schedule.source).toEqual({ projectId, server: 'slack' });
     const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
     expect(homeId).not.toBe(reader.taskId);
     expect(world.engine.state.tasks[homeId]?.watchHome).toBe(true);
-    expect(reply).toEndWith('Watches slack and files a task for each new report.');
   });
 
   test('a message into another task names it', async () => {
@@ -370,5 +376,30 @@ describe('file_report', () => {
     });
     const reply = silent.handleTool('file_report', report, { ...call, dispatch: async () => [] });
     await expect(reply ?? Promise.resolve('')).rejects.toThrow('Nothing was filed.');
+  });
+
+  test('a report another watch filed first is counted by the watchdog that finds it, not filed again', async () => {
+    const world = await createWorld();
+    const read = await startIntakeRead(world);
+    const { call } = setUp({ ...world, runId: read.runId });
+    const known = world.engine.state.tasks[world.taskId];
+    const linked = new Schedules(world.engine, world.secrets, {
+      baseUrl: () => '',
+      timeZone: 'UTC',
+      now: () => NOW,
+    });
+    const event = {
+      type: 'watchdog.report_linked',
+      taskId: 't',
+      watchdogId: 'w',
+      reportTaskId: world.taskId,
+    };
+    const reply = linked.handleTool('file_report', report, {
+      ...call,
+      dispatch: async () => [event] as unknown as ShinsaEvent[],
+    });
+    await expect(reply ?? Promise.resolve('')).resolves.toBe(
+      `This report was already filed as ${known?.handle} “${known?.title}”, so the watchdog counts it. Go on with the next report.`
+    );
   });
 });

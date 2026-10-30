@@ -14,7 +14,6 @@ import {
   validateReview,
   validateSuggestions,
   validateWait,
-  validateWatchReport,
 } from '../../src/index.ts';
 
 function errorsOf<T>(result: Validation<T>) {
@@ -1328,57 +1327,6 @@ describe('watchdogs in the walkthrough', () => {
     ).toEqual([
       'walkthrough.watchdogs[0].production_check is required when it starts on production: how to tell the merged change is live there.',
       'walkthrough.watchdogs[1].starts must be one of merge, production.',
-    ]);
-  });
-});
-
-describe('validateWatchReport', () => {
-  test('reads a healthy check and one with an issue', () => {
-    expect(readValue(validateWatchReport({ healthy: true, summary: 'p95 210 ms.' }))).toEqual({
-      live: null,
-      healthy: true,
-      summary: 'p95 210 ms.',
-      issue: null,
-    });
-    expect(
-      readValue(
-        validateWatchReport({
-          healthy: false,
-          summary: 'Slow.',
-          issue: { title: 'Slow in Safari', request: 'Fix it.' },
-        })
-      ).issue
-    ).toEqual({ title: 'Slow in Safari', request: 'Fix it.' });
-  });
-
-  test('reads a change not live in production yet without a verdict, and refuses an issue with it', () => {
-    expect(readValue(validateWatchReport({ live: false, summary: 'Still on staging.' }))).toEqual({
-      live: false,
-      healthy: true,
-      summary: 'Still on staging.',
-      issue: null,
-    });
-    expect(
-      errorsOf(validateWatchReport({ live: false, summary: 'x', issue: { title: 't', request: 'r' } }))
-    ).toEqual(['A change that is not live in production yet has no issue. Leave issue out.']);
-    expect(readValue(validateWatchReport({ live: true, healthy: true, summary: 'Live, fine.' })).live).toBe(
-      true
-    );
-  });
-
-  test('refuses a missing verdict, a healthy check with an issue and an issue without its fields', () => {
-    expect(errorsOf(validateWatchReport({ summary: 'ok' }))).toEqual([
-      'healthy is required: true when nothing is wrong.',
-    ]);
-    expect(
-      errorsOf(validateWatchReport({ healthy: true, summary: 'ok', issue: { title: 't', request: 'r' } }))
-    ).toEqual(['A healthy check has no issue. Leave issue out, or set healthy to false.']);
-    expect(errorsOf(validateWatchReport({ healthy: false, summary: 'bad' }))).toEqual([
-      'An unhealthy check needs issue: a title and the request for the task that fixes it.',
-    ]);
-    expect(errorsOf(validateWatchReport({ healthy: false, summary: 'bad', issue: { title: '' } }))).toEqual([
-      'issue.title is required.',
-      'issue.request is required.',
     ]);
   });
 });

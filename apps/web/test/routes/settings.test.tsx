@@ -8,7 +8,7 @@ import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
 import { createRound } from '../support/rounds.ts';
 import { clearAccounts, pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
-import { createRun, createShinsaState, createTask } from '../support/state.ts';
+import { createProject, createRun, createShinsaState, createTask } from '../support/state.ts';
 
 let requests: Mock<(input: RequestInfo | URL) => Promise<Response>>;
 
@@ -56,7 +56,7 @@ describe('Settings tabs', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent)
-    ).toEqual(['General', 'Statistics', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
+    ).toEqual(['General', 'Statistics', 'Agents', 'Agent Usage', 'Projects', 'Integrations', 'Automations']);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
     for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
       expect(screen.getByText(section)).toBeTruthy();
@@ -205,6 +205,42 @@ describe('Settings stats', () => {
     expect(within(readout).getByText('Cache read')).toBeTruthy();
     fireEvent.pointerLeave(chart);
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('counts only the project in focus, and everything once the focus ends', async () => {
+    const now = Date.now();
+    const project = createProject({ id: 'p1', name: 'Parser' });
+    const tasks = [
+      createTask({ id: 't1', title: 'Rebuild the parser', projectId: 'p1' }),
+      createTask({ id: 't2', title: 'Tidy the docs', projectId: 'p2' }),
+    ];
+    const runs = ['t1', 't2'].map((taskId) =>
+      createRun({
+        id: `r-${taskId}`,
+        taskId,
+        startedAt: now,
+        endedAt: now,
+        usage: { inputTokens: 1_000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 1 },
+      })
+    );
+    const focused = createShinsaState({
+      tasks,
+      runs,
+      projects: [project],
+      patch: { focus: { projectId: 'p1', until: null } },
+    });
+    const view = await renderSettings('/settings?tab=statistics', focused);
+    expect(screen.getAllByText('Only Parser, the project in focus')).toHaveLength(2);
+    expect(document.querySelectorAll('[data-task="t1"]').length).toBe(1);
+    expect(document.querySelectorAll('[data-task="t2"]').length).toBe(0);
+    view.rerender(
+      <TooltipProvider>
+        <SettingsPage state={{ ...focused, focus: { projectId: 'p1', until: now - 1 } }} />
+      </TooltipProvider>
+    );
+    await settle();
+    expect(screen.queryByText('Only Parser, the project in focus')).toBeNull();
+    expect(document.querySelectorAll('[data-task="t2"]').length).toBe(1);
   });
 
   it('says so when no agent ran', async () => {

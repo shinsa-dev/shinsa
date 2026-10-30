@@ -2,10 +2,11 @@ import { type ShinsaState, selectTaskByReference } from '@shinsa/core';
 import * as React from 'react';
 import { useMinute } from '@/hooks/use-minute.ts';
 import { useDesktopConnected } from '@/lib/connection/socket.ts';
-import { isPageQuiet, notifyDesktop } from '@/lib/desktop.ts';
+import { isPageQuiet, notifyDesktop, subscribeDesktopNotifyFailed } from '@/lib/desktop.ts';
 import { resolvePageAttention, resolveTaskSubject } from '@/lib/notifications/attention.ts';
 import { showDecisionNotification } from '@/lib/notifications/browser.ts';
 import { writePageAttention } from '@/lib/notifications/page.ts';
+import { showNotifyBlocked } from '@/lib/notifications/settings.ts';
 import { playSound } from '@/lib/notifications/sounds.ts';
 import { AttentionWatcher } from '@/lib/notifications/watcher.ts';
 import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
@@ -38,6 +39,7 @@ export function useAttention(state: ShinsaState, taskReference: string | null = 
   React.useEffect(() => {
     watcher.observe(state);
   }, [watcher, state]);
+  React.useEffect(() => subscribeDesktopNotifyFailed(showNotifyBlocked), []);
   React.useLayoutEffect(() => {
     writePageAttention({ status, badge }, subject);
   }, [status, badge, subject]);

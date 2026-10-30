@@ -8,6 +8,7 @@ import {
 import { HOUR_MS } from '../domain/time.ts';
 import type { WatchdogSpec } from '../report/types.ts';
 import { PROTOCOL_LIMITS } from '../report/validate.ts';
+import { resolveReadPrompt } from './reads.ts';
 
 function describeHours(ms: number) {
   const hours = Math.max(1, Math.round(ms / HOUR_MS));
@@ -16,51 +17,56 @@ function describeHours(ms: number) {
 
 function describeLastChecks(watchdog: Watchdog) {
   const last = watchdog.checks.slice(-3);
-  if (last.length === 0) return 'This is its first check.';
+  if (last.length === 0) return ['This is its first check.'];
   return [
     'Its last checks:',
     ...last.map((check) => `- ${check.healthy ? 'Healthy' : 'Issue'}: ${check.summary}`),
-  ].join('\n');
+  ];
 }
 
-function describeSource(watchdog: Watchdog) {
-  if (!watchdog.source) return '';
-  return `Read it from the MCP server \`${watchdog.source.server}\` (${watchdog.source.data}). If it was left out of this run, load it with \`load_mcp_server\` first.`;
+function describeSince(watchdog: Watchdog) {
+  const last = watchdog.checks.at(-1)?.at ?? watchdog.startedAt;
+  if (watchdog.status === 'awaiting_production' || last === null) {
+    return 'Look only at what arrived since the change went live.';
+  }
+  return `Look only at what arrived since ${new Date(last).toISOString()}.`;
 }
 
-function resolveProductionPrompt(task: Task, watchdog: Watchdog) {
+function resolveWatchOpening(task: Task, watchdog: Watchdog, now: number) {
   const merged = task.pullRequest ? ` in pull request #${task.pullRequest.number}` : '';
-  return [
-    `Shinsa woke you to see whether the change you shipped${merged} is live in production yet, so the watchdog “${watchdog.title}” can start watching.`,
-    `How to tell: ${watchdog.productionCheck ?? ''}`,
-    'This check is read-only: look, do not change files.',
-    `Report with \`report_watch\`: \`live\` false and a \`summary\` of what you saw while it is not live. Your answer counts for every watchdog of this task that waits for production. Shinsa asks again later, less often the longer it waits (from every ${WATCHDOG_LIMITS.productionPollMinutes} minutes to every ${WATCHDOG_LIMITS.productionPollMaxMinutes / 60} hours), for up to ${WATCHDOG_LIMITS.productionWaitHours} hours.`,
-    `Once it is live, set \`live\` true and do the watchdog's first check in the same turn: ${watchdog.check}`,
-    describeSource(watchdog),
-    'Then report it as any check: `healthy`, the `summary`, and an `issue` when something is wrong that the change caused.',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-export function resolveWatchPrompt(task: Task, watchdog: Watchdog, now: number) {
-  if (watchdog.status === 'awaiting_production') return resolveProductionPrompt(task, watchdog);
-  const merged = task.pullRequest ? ` in pull request #${task.pullRequest.number}` : '';
+  if (watchdog.status === 'awaiting_production') {
+    return [
+      `Shinsa woke you to see whether the change you shipped${merged} is live in production yet, so the watchdog “${watchdog.title}” can start watching.`,
+      `How to tell: ${watchdog.productionCheck ?? ''}`,
+      `While it is not live, call \`report_read\` with \`live\` false and a \`summary\` of what you saw, and file nothing. Your answer counts for every watchdog of this task that waits for production. Shinsa asks again later, less often the longer it waits (from every ${WATCHDOG_LIMITS.productionPollMinutes} minutes to every ${WATCHDOG_LIMITS.productionPollMaxMinutes / 60} hours), for up to ${WATCHDOG_LIMITS.productionWaitHours} hours.`,
+      'Once it is live, do the watchdog’s first check in the same turn, as below, and end it with `live` true.',
+    ];
+  }
   const since = describeHours(now - (watchdog.startedAt ?? now));
   const left = describeHours((watchdog.endsAt ?? now) - now);
   return [
     `Shinsa woke you for a check of the watchdog “${watchdog.title}” on the change you shipped${merged}. It has watched for ${since}, and ${left} are left.`,
-    `What to check: ${watchdog.check}`,
-    describeSource(watchdog),
-    describeLastChecks(watchdog),
-    '',
-    'This check is read-only: look, do not change files. Look only at what this watchdog is about, since the change shipped.',
-    `Report what you found with \`report_watch\`: \`healthy\` true when nothing is wrong, and a \`summary\` of what you looked at and saw (at most ${PROTOCOL_LIMITS.watchSummary} characters, with the numbers).`,
-    `When something is wrong that the change caused, set \`healthy\` false and add \`issue\`: a \`title\` and a \`request\` (at most ${PROTOCOL_LIMITS.watchIssueRequest} characters) written as the human would ask for the fix, with the evidence. Shinsa files it as a new task forked from this one, so its agent starts from this conversation.`,
-    'A source you cannot reach is not an issue of the change: report it healthy and say so in the summary.',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  ];
+}
+
+export function resolveWatchPrompt(task: Task, watchdog: Watchdog, now: number, filed: readonly Task[]) {
+  const source = watchdog.source ?? { server: '', data: '' };
+  const live = watchdog.status === 'awaiting_production' ? ' with `live` true' : '';
+  return resolveReadPrompt({
+    opening: resolveWatchOpening(task, watchdog, now),
+    source,
+    lookFor: watchdog.check,
+    since: describeSince(watchdog),
+    context: describeLastChecks(watchdog),
+    filed,
+    filing: [
+      'A report here is something wrong that the change caused: an error, a broken signal, a number past what the check allows. Look only at what this watchdog is about.',
+      'Every task you file forks this one, so its agent starts from this conversation: leave `fork_from` out. `repository` defaults to this task’s.',
+      'When what you found has no id of its own (a latency, a rate), give the `link` of the query or dashboard that shows it, and the numbers in `text`.',
+    ],
+    missed: 'Shinsa counts the check as missed and checks again at the next one.',
+    ending: `When you are done, call \`report_read\`${live} with a \`summary\` of what you looked at and saw, with the numbers. A check that filed nothing is healthy; one that filed a report trips the watchdog, which then stops. Then stop.`,
+  });
 }
 
 function describeKnownSource(source: WatchSource) {

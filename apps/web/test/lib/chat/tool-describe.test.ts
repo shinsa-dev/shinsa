@@ -51,6 +51,14 @@ describe('isHandover', () => {
     }
     expect(isHandover({ kind: 'other', name: 'ask', args: {} })).toBe(false);
   });
+
+  it('shows a new watch an agent suggests as a card, never a schedule it sets or changes', () => {
+    const schedule = (args: Record<string, unknown>) =>
+      isHandover({ kind: 'shinsa', name: 'set_schedule', args });
+    expect(schedule({ source: 'slack', message: 'Bugs.' })).toBe(true);
+    expect(schedule({ source: 'slack', schedule_id: 'w1' })).toBe(false);
+    expect(schedule({ message: 'Nightly.' })).toBe(false);
+  });
 });
 
 describe('resolveGroupKey', () => {
@@ -294,6 +302,9 @@ describe('describeTool', () => {
     const shinsa = (name: Extract<ChatTool, { kind: 'shinsa' }>['name'], args = {}) =>
       line({ kind: 'shinsa', name, args });
     expect(shinsa('set_schedule', { name: 'Nightly sync' })).toBe('Set a schedule: Nightly sync');
+    expect(shinsa('set_schedule', { name: 'Bugs in #feedback', source: 'slack' })).toBe(
+      'Suggested a watch: Bugs in #feedback'
+    );
     expect(shinsa('set_schedule', { message: 'Sync the docs\nThen report' })).toBe(
       'Set a schedule: Sync the docs'
     );
@@ -410,12 +421,8 @@ describe('resolveRunningLabel', () => {
 });
 
 describe('resolveGroupPhrase', () => {
-  it('names a watchdog check the agent reported', () => {
-    expect(resolveGroupPhrase(['report_watch'])).toBe('Reported the watchdog check');
-  });
-
-  it('names a read of a data source the agent reported', () => {
-    expect(resolveGroupPhrase(['report_intake'])).toBe('Reported what the watch found');
+  it('names a read of a data source the agent reported, for a watch or a watchdog', () => {
+    expect(resolveGroupPhrase(['report_read'])).toBe('Reported what it read');
   });
 
   it('counts each kind of step in the order it first appeared', () => {

@@ -56,10 +56,11 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
-| watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; an issue it finds files a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `report_watch` | Watchdogs, Watching |
+| watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; each check is a read of that source scoped to the change, and a report it files is a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `file_report`, `report_read` | Watchdogs, Watching |
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
 | watch | An automation that reads one of its project's integrations on a clock or a webhook and files a task per new report, from a home task no list shows | `Schedule.source`, `Task.watchHome`, `isWatchHome`, purpose `intake` | Watch, Show its reads |
-| report | One message in an integration a watch read (a Slack message, a support email) that it filed as a task, kept on that task with its id or link, author, time and text; the filed tasks are what dedupes the next read | `SourceReport` (`Task.sourceReport`), purpose `intake`, `file_report`, `report_intake`, `TaskCreator.kind: 'intake'` | Reported in, N tasks filed |
+| suggested watch | A watch offered for one click, never running until you accept it: one per integration a project starts using, worded from what it holds, or one an agent asked for; accepting writes it as yours, dismissing keeps it from being offered again | `WatchSuggestion` (`state.watchSuggestions`), `watch_suggestion.record`, `watch_suggestion.accept`, `watch_suggestion.dismiss`, the effect `watch.suggest` | Suggested watch, Add the watch, Dismiss the suggested watch (the cross in Settings), Cancel (the chat card) |
+| report | One message or signal in an integration a watch or a watchdog read (a Slack message, a support email, an error) that it filed as a task, kept on that task with its id or link, author, time and text; the filed tasks are what dedupes the next read, a watch's and a watchdog's alike | `SourceReport` (`Task.sourceReport`), purposes `intake` and `watch`, `file_report`, `report_read`, `TaskCreator.kind: 'intake'` or `'watchdog'` | Reported in, N tasks filed |
 | fork | A task whose Agent starts from a copy of another task's conversation | `Task.forkOf`, `Run.fork` | Fork into a new task, Forked from, Forked into |
 | point | Anything the Review tab marks for you to read: a spot, a judgement call, a risk or a finding | `ReviewItem` (web, `lib/review/report.ts`) | point, "Every point" |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
@@ -68,7 +69,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
-| courier | A new task an agent files for work that belongs elsewhere (`create_task`), optionally making its own task wait on it | `TaskCreator.kind: 'courier'` | a task |
+| courier | A new task an agent files for work that belongs elsewhere (`create_task`), such as the part of a change in another repository, optionally making its own task wait on it (`this_task_waits`) or waiting on its own task (`after_this`) | `TaskCreator.kind: 'courier'` | a task |
 | memory | The rules you keep for every later agent, for every project or one; an agent proposes one with `remember` and only you keep it (`docs/engine.md` → Memory) | `MemoryEntry`, `state.memories`, `MEMORY_LIMITS` | Memory, "rule" |
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
@@ -280,13 +281,13 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | --- | --- | --- |
 | `suggestions?` | `TaskSuggestion[]` | tasks agents suggested |
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
-| `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (a tripped watchdog) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
+| `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
-| `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskId` it filed, `endedAt` (`docs/engine.md` → Watchdogs) |
+| `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its checks filed (forks of this task), the `linkedTaskIds` they found already filed by a watch or another watchdog, `endedAt` (`docs/engine.md` → Watchdogs) |
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
 | `watchHome?` | boolean | the home a watch reads in: no handle, no triage, on no list, takes no messages (`docs/engine.md` → Schedules and webhooks) |
-| `sourceReport?` | `SourceReport` \| null | the report it was filed from: `scheduleId`, `server`, `reportId`, `link` (one of the two is set), `author`, `postedAt`, `text` (`docs/engine.md` → Schedules and webhooks) |
+| `sourceReport?` | `SourceReport` \| null | the report it was filed from: `scheduleId` (a watch's) or `watchdogId` (a watchdog's; the other is null), `server`, `reportId`, `link` (one of the two is set), `author`, `postedAt`, `text` (`docs/engine.md` → Schedules and webhooks) |
 
 **Rounds**
 
@@ -471,7 +472,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_watch` (watch, read-only, in the repository), `report_intake` after any `file_report` (intake, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -751,8 +752,10 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `run.snooze_silence` | snoozes a quiet-run warning | `runs snooze` | agent |
 | `run.dismiss_silence` | dismisses it for the run | `runs dismiss` | agent |
 | `delegation.cancel` | stops a delegation and what it delegated | `delegations stop` | agent |
-| `schedule.write` | creates or changes a schedule; with `source` (`projectId`, `server`) it is a watch, reading that integration in a home it creates; no target (`source_target`), and a schedule that starts or messages a task never becomes one (`source_change`) | `schedules write` | agent |
+| `schedule.write` | creates or changes a schedule; with `source` (`projectId`, `server`) it is a watch, reading that integration in a home it creates; no target (`source_target`), and a schedule that starts or messages a task never becomes one (`source_change`); a new watch sent for you is recorded as a suggested watch instead (`watch_suggestion.recorded`, origin the acting task) | `schedules write` | agent |
 | `schedule.enable` | pauses or resumes one | `schedules enable`, `schedules disable` | agent |
+| `watch_suggestion.accept` | accepts a suggested watch: writes it as your `schedule.write` with `source` (`createdBy: you`, its home, its first read a slot later); refused once decided (`suggestion_decided`) or with its integration gone (`source_not_found`) | `schedules accept` | **human** |
+| `watch_suggestion.dismiss` | dismisses a suggested watch, which is never offered again for that integration | `schedules dismiss` | agent |
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
 | `project.remove` | removes one | `projects remove` | agent |
@@ -818,12 +821,11 @@ role without the tool (`hasTool`).
 | `agent.cancel_delegation` | `delegation_cancel` | stops one |
 | `agent.answer_delegation` | `delegation_answer` | answers a delegation's question |
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
-| `agent.report_watch` | `report_watch` | records a watchdog check (`live` for one waiting for production); an issue trips the watchdog and files a task forked from this one |
-| `agent.file_report` | `file_report` | in a watch's read only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`) |
-| `agent.report_intake` | `report_intake` | ends a watch's read with its `summary`, as not finished with `reached: false` (the next read covers the same time); the home rests again |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it or forked from a task (`forkOf`) |
+| `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
+| `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`) or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
-| `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch, from a home of its own |
+| `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
 The delegation tools name a delegation by `delegation_id`. Reads with no command: `find_tasks`, `read_task`,
@@ -868,6 +870,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
+| `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries.ts` | a delivery claim was taken, or released |
@@ -925,7 +928,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watchdog.armed` | a merged round's walkthrough armed a watchdog (watching, or waiting for a source) |
 | `watchdog.started` | a watchdog that waited got its source (`source`, `status`: watching, or waiting for production; `awaitingSince`, `startedAt`, `endsAt`, `nextCheckAt`) |
 | `watchdog.checking`, `watchdog.deferred` | a check started on a run (`runId`), or moved on 15 minutes while the task worked (`nextCheckAt`) |
-| `watchdog.checked` | a check's result (`check`, `status`, `nextCheckAt`, `forkTaskId`) |
+| `watchdog.checked` | a check's result (`check`, `status`, `nextCheckAt`, `forkTaskIds`) |
+| `watchdog.report_linked` | a check found a report another watch or watchdog already filed (`reportTaskId`); it joins `linkedTaskIds`, never `forkTaskIds`, and trips the watchdog at the check's end |
 | `watchdog.live` | the change reached production, so the window starts (`endsAt`, `nextCheckAt`), for every watchdog of the task that waited for it |
 | `watchdog.missed` | a check that could not run, given up without a gate (`reason`, `nextCheckAt`; none left stops the watchdog) |
 | `watchdog.ended` | you stopped a watchdog (Stop, or the task marked done or cancelled) |
@@ -966,7 +970,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.message_queued` | your message was queued for a waiting step |
 | `memory.written`, `memory.proposed`, `memory.removed` | you wrote, kept or changed a rule (the whole `entry`); an agent proposed one (recorded in its task's activity); a rule was forgotten or a proposal dismissed, or its project removed |
 | `schedule.written`, `schedule.removed`, `schedule.fired` | a schedule was written, removed, fired (with its run) |
-| `schedule.read` | a watch's read finished with `report_intake`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
+| `watch_suggestion.recorded`, `watch_suggestion.accepted`, `watch_suggestion.dismissed`, `watch_suggestion.removed` | a watch was suggested (the whole `suggestion`; an agent's is recorded in its task's activity); you accepted it (with the `scheduleId` it became) or dismissed it; an open one was dropped with its integration, or any with its project |
+| `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 
 ## Effects
@@ -986,6 +991,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.push` | replay_safe | `task:<id>` | as `pull_request.open`, without opening when the pull request is open; then rewrites the description's block (`evidence.record_uploads` for what it uploaded) |
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
+| `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
@@ -1018,8 +1024,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `report_diagnosis` | | | | ✓ | | | |
 | `submit_report` | | | | | ✓ | | |
 | `report_outcome` | ✓ operate | | | | | | |
-| `report_watch` | ✓ watch | | | | | | |
-| `report_intake` | ✓ intake | | | | | | |
+| `report_read` | ✓ watch, intake | | | | | | |
 | `ask` | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `attach_evidence` | ✓ | ✓ | | ✓ | | ✓ | ✓ |
 | `remove_evidence` | ✓ | ✓ | | ✓ | | | |
@@ -1033,14 +1038,14 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `split_task` | ✓ | | | | | | |
-| `file_report` | ✓ intake | | | | | | |
+| `file_report` | ✓ watch, intake | | | | | | |
 | `set_schedule`, `list_schedules`, `delete_schedule` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `request_secret` | ✓ | | ✓ | ✓ | ✓ | | |
 
-Hand-over tools (the first eleven rows, `isHandOverTool`) end the step. Every task-session role is served every tool of
+Hand-over tools (the first ten rows, `isHandOverTool`) end the step. Every task-session role is served every tool of
 the union in every run, since the session's tool list must not change between turns (the prompt cache); the agent
 may call only the hand-over its purpose names (`PURPOSE_HAND_OVERS`, the word after ✓), and another is refused with
-`wrong_step`; `file_report` is refused outside an `intake` run the same way. A delegated
+`wrong_step`; `file_report` is refused outside a `watch` or `intake` run the same way. A delegated
 `planner` or `builder` has only the delegated tools. The reviewer cannot ask you anything.
 
 Three more tools come from the server, not from `listToolNames`, and only in a run the context optimizer left
@@ -1067,9 +1072,8 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |
 | `submit_report` | **`report`**; `propose_change` | 40,000 |
 | `report_outcome` | **`outcome`** | 8,000 |
-| `report_watch` | **`summary`**; `live` (required for a watchdog waiting for production: false while it is not live, with no verdict or issue); **`healthy`** otherwise; `issue` (**`title`**, **`request`**), required when not healthy and refused when healthy | summary 600; issue title 80, request 2,000 |
-| `report_intake` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out) | 1,000 |
-| `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle), `repository` (a name) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
+| `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (only for a watchdog waiting for production: false while it is not live, true once it is; a report filed counts as true) | 1,000 |
+| `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |
 | `remove_evidence` | **`items`** (by key or id), **`reason`**: why it no longer applies | 1 to 24 items of 60; reason 200 |

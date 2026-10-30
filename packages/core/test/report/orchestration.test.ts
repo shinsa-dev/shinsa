@@ -107,6 +107,7 @@ describe('the other orchestration tools', () => {
         repository: 'admin',
         forkFrom: null,
         thisTaskWaits: true,
+        afterThis: false,
       },
     });
     expect(validateCourierTask({ request: 'Fix it in Safari.', fork_from: 'LOC-3' })).toEqual({
@@ -117,7 +118,12 @@ describe('the other orchestration tools', () => {
         repository: null,
         forkFrom: 'LOC-3',
         thisTaskWaits: false,
+        afterThis: false,
       },
+    });
+    expect(validateCourierTask({ request: 'Use the new endpoint.', after_this: true })).toMatchObject({
+      ok: true,
+      value: { thisTaskWaits: false, afterThis: true },
     });
     expect(validateCourierTask({})).toEqual({ ok: false, errors: ['request is required.'] });
   });

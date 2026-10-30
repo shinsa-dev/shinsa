@@ -48,7 +48,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   },
   accounts: {
     id: 'accounts',
-    label: 'Agent usage',
+    label: 'Agent Usage',
     sections: [ACCOUNT_LABEL.section, 'Limits'],
   },
   projects: {

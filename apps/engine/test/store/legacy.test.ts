@@ -241,6 +241,7 @@ describe('a walkthrough’s testing as a plain list', () => {
       'review.reported',
     ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
+    const watchdogReads = ['task.created', 'watchdog.armed', 'watchdog.checked'];
     expect(listLegacyEventTypes(2)).toEqual([
       'phase.completed',
       'work.submitted',
@@ -249,18 +250,26 @@ describe('a walkthrough’s testing as a plain list', () => {
       'pull_request.watched',
       ...gitbutler,
       'schedule.written',
+      ...watchdogReads,
     ]);
     expect(listLegacyEventTypes(3)).toEqual([
       'run.metered',
       'pull_request.watched',
       ...gitbutler,
       'schedule.written',
+      ...watchdogReads,
     ]);
-    expect(listLegacyEventTypes(4)).toEqual(['pull_request.watched', ...gitbutler, 'schedule.written']);
-    expect(listLegacyEventTypes(5)).toEqual([...gitbutler, 'schedule.written']);
-    expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written']);
-    expect(listLegacyEventTypes(7)).toEqual(['schedule.written']);
-    expect(listLegacyEventTypes(8)).toEqual([]);
+    expect(listLegacyEventTypes(4)).toEqual([
+      'pull_request.watched',
+      ...gitbutler,
+      'schedule.written',
+      ...watchdogReads,
+    ]);
+    expect(listLegacyEventTypes(5)).toEqual([...gitbutler, 'schedule.written', ...watchdogReads]);
+    expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written', ...watchdogReads]);
+    expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...watchdogReads]);
+    expect(listLegacyEventTypes(8)).toEqual(watchdogReads);
+    expect(listLegacyEventTypes(9)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -276,7 +285,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(8);
+    expect(readStoredLog(path).version).toBe(9);
   });
 });
 
@@ -301,7 +310,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(8);
+    expect(stored.version).toBe(9);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);
@@ -356,6 +365,84 @@ describe('a schedule from before it could read a data source', () => {
         event: { type: 'schedule.written', schedule: { ...schedule, source, lastReadAt: null } },
       },
     ]);
+  });
+});
+
+describe('watchdogs from before they filed through file_report', () => {
+  const report = {
+    scheduleId: 's1',
+    server: 'slack',
+    reportId: 'r1',
+    link: null,
+    author: null,
+    postedAt: null,
+    text: 'Hi',
+  };
+
+  test('a watchdog keeps the task it filed as a list and links none, and a filed report says it came from no watchdog', () => {
+    expect(
+      rewrite(
+        { type: 'watchdog.armed', taskId: TASK, watchdog: { id: 'w1', forkTaskId: null } },
+        { type: 'watchdog.checked', taskId: TASK, watchdogId: 'w1', status: 'tripped', forkTaskId: 'fork' },
+        { type: 'watchdog.checked', taskId: TASK, watchdogId: 'w1', status: 'watching', forkTaskId: null },
+        { type: 'task.created', taskId: 'filed', sourceReport: report },
+        { type: 'task.created', taskId: 'plain', specFirst: true }
+      )
+    ).toEqual([
+      {
+        seq: 1,
+        type: 'watchdog.armed',
+        event: {
+          type: 'watchdog.armed',
+          taskId: TASK,
+          watchdog: { id: 'w1', forkTaskIds: [], linkedTaskIds: [] },
+        },
+      },
+      {
+        seq: 2,
+        type: 'watchdog.checked',
+        event: {
+          type: 'watchdog.checked',
+          taskId: TASK,
+          watchdogId: 'w1',
+          status: 'tripped',
+          forkTaskIds: ['fork'],
+        },
+      },
+      {
+        seq: 3,
+        type: 'watchdog.checked',
+        event: {
+          type: 'watchdog.checked',
+          taskId: TASK,
+          watchdogId: 'w1',
+          status: 'watching',
+          forkTaskIds: [],
+        },
+      },
+      {
+        seq: 4,
+        type: 'task.created',
+        event: { type: 'task.created', taskId: 'filed', sourceReport: { ...report, watchdogId: null } },
+      },
+      { seq: 5, type: 'task.created', event: { type: 'task.created', taskId: 'plain', planFirst: true } },
+    ]);
+  });
+
+  test('events already in the new shape, or with no watchdog, are left alone', () => {
+    expect(
+      rewrite(
+        { type: 'watchdog.armed', taskId: TASK, watchdog: null },
+        {
+          type: 'watchdog.armed',
+          taskId: TASK,
+          watchdog: { id: 'w2', forkTaskIds: [], linkedTaskIds: [] },
+        },
+        { type: 'watchdog.checked', taskId: TASK, watchdogId: 'w1', forkTaskIds: ['fork'] },
+        { type: 'task.created', taskId: 'filed', sourceReport: { ...report, watchdogId: 'w1' } },
+        { type: 'task.created', taskId: 'plain', planFirst: false }
+      )
+    ).toEqual([]);
   });
 });
 

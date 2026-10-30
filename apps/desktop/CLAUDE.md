@@ -36,12 +36,13 @@ src/
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours), update-log.ts
 │                   (the updater log, `~/Library/Logs/<app>/updater.log`)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
-                    updateBadge, notify, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
+                    updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
                     onWindowState, onUpdate) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
 static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
-                    all written by scripts/icon.ts; the engine's job in LaunchAgents/
+                    all written by scripts/icon.ts; the engine's job in LaunchAgents/; app-update.yml, the updater's
+                    config the build copies into Contents/Resources (Updates, below)
 scripts/            build.ts (bundles main and preload), dev.ts, icon.ts, dmg-background.ts
 electron-builder.shared.yml    The build settings; electron-builder.yml extends it with what names the app (its id,
                                scheme, icon and engine job). Every channel builds this one app, so a stable, beta or
@@ -61,6 +62,13 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   `apps/web/src/lib/desktop.ts`, from `window.shinsaDesktop`), and while it is connected the server tells every other
   page, browser tabs and Floaty, to stay quiet: no sound and no notification, while the count in the title and
   Floaty's tags stay (`docs/engine.md` → The socket). Nothing in `main/` decides this; it follows from the preload bridge being there.
+- **macOS decides whether anything shows.** Banners and the Dock badge appear only while System Settings →
+  Notifications allows Shinsa; once you deny it (or dismiss the first prompt), macOS takes notifications without
+  showing them and never asks again, and Electron has no way to read that setting. So Settings → Notifications in the
+  app always has a macOS notifications row whose Open settings sends `shinsa:notification-settings`, and main opens
+  that pane for `APP_ID` (`resolveNotificationSettingsUrl` in `lib/notice.ts`). When Electron reports a notification
+  `failed`, `notifications.ts` tells the page on `shinsa:notify-failed` and the page shows a toast with the same
+  action. Signed builds only: an unsigned dev build delivers no notifications at all.
 - **The icon** follows macOS's 1024px grid: a light 824px squircle (continuous corners of about 185px) inset 100px,
   with room for its shadow, and the Shinsa mark from `packages/ui/src/components/logo.tsx` in near-black at 488px,
   centred, on every channel. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from
@@ -135,7 +143,8 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
 
 **Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads the GitHub releases of
-`shinsa-dev/shinsa` (`publish` in `electron-builder.shared.yml`), downloads a new version in the background and installs it
+`shinsa-dev/shinsa` (`publish` in `electron-builder.shared.yml`; the same feed in `UPDATE_FEED` and in `resources/app-update.yml`, which
+electron-updater reads from `Contents/Resources` before every download and `test/release/build.test.ts` keeps equal), downloads a new version in the background and installs it
 when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server, so an update never
 interrupts an agent. Everything that waits happens before Restart is offered, so the click only quits and the swap
 and relaunch follow: the updater goes `downloading` (with its percent) → `preparing` (electron-updater has the zip,

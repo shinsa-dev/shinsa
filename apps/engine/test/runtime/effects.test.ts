@@ -258,6 +258,57 @@ describe('routing effects', () => {
   });
 });
 
+describe('suggesting a watch', () => {
+  test('words the watch for the new integration and records it under an id the effect decides', async () => {
+    const asked: string[] = [];
+    const { runner, dispatched, commandIds } = setup(() => undefined, {
+      timeZone: 'Europe/Sofia',
+      wordWatch: (server, data) => {
+        asked.push(`${server}: ${data}`);
+        return Promise.resolve({
+          name: 'Bugs in #feedback',
+          text: 'File a task for each new bug in #feedback.',
+        });
+      },
+    });
+    const context = createContext();
+    await runner.apply(
+      { kind: 'watch.suggest', projectId: 'p1', server: 'slack', data: 'Bug reports in #feedback' },
+      context
+    );
+    expect(asked).toEqual(['slack: Bug reports in #feedback']);
+    expect(dispatched).toEqual([
+      {
+        type: 'watch_suggestion.record',
+        projectId: 'p1',
+        server: 'slack',
+        name: 'Bugs in #feedback',
+        text: 'File a task for each new bug in #feedback.',
+        timeZone: 'Europe/Sofia',
+      },
+    ]);
+    expect(commandIds).toEqual([`${context.key}:watch_suggestion.record`]);
+  });
+
+  test('without a writer it records the suggestion for core to word plainly, in the machine’s time zone', async () => {
+    const { runner, dispatched } = setup();
+    await runner.apply(
+      { kind: 'watch.suggest', projectId: 'p1', server: 'maple', data: 'Errors' },
+      createContext()
+    );
+    expect(dispatched).toEqual([
+      {
+        type: 'watch_suggestion.record',
+        projectId: 'p1',
+        server: 'maple',
+        name: null,
+        text: null,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+    ]);
+  });
+});
+
 describe('triage', () => {
   test('a settled, unknown or already triaged task is left alone', async () => {
     const { runner, dispatched } = setup((state) => {

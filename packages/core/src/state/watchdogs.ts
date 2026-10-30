@@ -1,3 +1,4 @@
+import { describeList } from '../chat/text.ts';
 import { WATCHDOG_LIMITS, type Watchdog } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { writeEntry } from './draft.ts';
@@ -15,6 +16,7 @@ type WatchdogEvent = Extract<
       | 'watchdog.deferred'
       | 'watchdog.missed'
       | 'watchdog.checked'
+      | 'watchdog.report_linked'
       | 'watchdog.ended'
       | 'watch_source.written'
       | 'watch_source.removed';
@@ -57,25 +59,53 @@ function applyArmed(state: ShinsaState, event: EventOf<'watchdog.armed'>) {
   });
 }
 
+function listTaskNames(state: ShinsaState, taskIds: readonly string[]) {
+  return taskIds.flatMap((id) => {
+    const task = state.tasks[id];
+    return task ? [task.handle ?? task.title] : [];
+  });
+}
+
+function describeFound(state: ShinsaState, watchdog: Watchdog) {
+  const filed = listTaskNames(state, watchdog.forkTaskIds);
+  const linked = listTaskNames(state, watchdog.linkedTaskIds);
+  const filedText = filed.length > 0 ? ` and filed ${describeList(filed)}` : '';
+  if (linked.length === 0) return filedText;
+  const joint = filed.length > 0 ? ', with' : ', already filed as';
+  const already = filed.length > 0 ? ' already filed' : '';
+  return `${filedText}${joint} ${describeList(linked)}${already}`;
+}
+
 function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
   const next = updateWatchdog(state, event, (watchdog) => ({
     status: event.status,
     nextCheckAt: event.nextCheckAt,
     runId: null,
     checks: [...watchdog.checks, event.check].slice(-WATCHDOG_LIMITS.checksKept),
-    forkTaskId: event.forkTaskId,
+    forkTaskIds: event.forkTaskIds,
     endedAt: event.status === 'watching' ? null : event.at,
   }));
   if (!next) return;
-  const forked = event.forkTaskId ? state.tasks[event.forkTaskId] : undefined;
-  const found = forked ? ` and filed ${forked.handle ?? forked.title}` : '';
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'watchdog',
     text: event.check.healthy
       ? `The watchdog “${next.title}” found nothing wrong`
-      : `The watchdog “${next.title}” found an issue${found}`,
+      : `The watchdog “${next.title}” found an issue${describeFound(state, next)}`,
     detail: event.check.summary,
+  });
+}
+
+function applyReportLinked(state: ShinsaState, event: EventOf<'watchdog.report_linked'>) {
+  const next = updateWatchdog(state, event, (watchdog) => ({
+    linkedTaskIds: [...new Set([...watchdog.linkedTaskIds, event.reportTaskId])],
+  }));
+  const report = state.tasks[event.reportTaskId];
+  if (!next || !report) return;
+  record(state, event.taskId, event.at, {
+    actor: 'agent',
+    kind: 'watchdog',
+    text: `The watchdog “${next.title}” found a report already filed as ${report.handle ?? report.title}`,
   });
 }
 
@@ -168,6 +198,9 @@ export function applyWatchdogEvent(state: ShinsaState, event: WatchdogEvent) {
       return;
     case 'watchdog.checked':
       applyChecked(state, event);
+      return;
+    case 'watchdog.report_linked':
+      applyReportLinked(state, event);
       return;
     case 'watchdog.ended':
       applyEnded(state, event);

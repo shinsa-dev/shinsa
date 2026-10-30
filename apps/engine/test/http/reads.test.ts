@@ -332,7 +332,7 @@ describe('the other read endpoints', () => {
       focus: { projectId: null },
     };
     expect((await read('/api/projects')).body).toMatchObject(expected);
-    expect((await read('/api/schedules')).body).toEqual({ schedules: [] });
+    expect((await read('/api/schedules')).body).toEqual({ schedules: [], suggestions: [] });
   });
 
   test('memory lists every rule with the name of its project', async () => {

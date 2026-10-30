@@ -20,6 +20,7 @@ export type ShinsaEffect =
   | { kind: 'scratch.remove'; taskId: string }
   | { kind: 'config.verify'; taskId: string }
   | { kind: 'briefing.request'; projectId: string | null }
+  | { kind: 'watch.suggest'; projectId: string; server: string; data: string }
   | { kind: 'run.wake'; runId: string; generation: number }
   | { kind: 'delegation.steer'; runId: string; generation: number }
   | { kind: 'delegation.reply'; runId: string; questionId: string };
@@ -44,6 +45,7 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'scratch.remove': 'replay_safe',
   'config.verify': 'replay_safe',
   'briefing.request': 'replay_safe',
+  'watch.suggest': 'replay_safe',
   'run.wake': 'process_bound',
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
@@ -83,6 +85,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.taskId}:${effect.round}:${seq}`;
     case 'briefing.request':
       return `${effect.kind}:${effect.projectId ?? '*'}:${seq}`;
+    case 'watch.suggest':
+      return `${effect.kind}:${effect.projectId}:${effect.server}:${seq}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
@@ -100,6 +104,8 @@ export function resolveEffectLane(effect: ShinsaEffect) {
   switch (effect.kind) {
     case 'briefing.request':
       return 'briefing';
+    case 'watch.suggest':
+      return `suggest:${effect.projectId}`;
     case 'run.execute':
     case 'run.wake':
       return `run:${effect.runId}`;

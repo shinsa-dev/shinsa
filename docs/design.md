@@ -816,14 +816,14 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Updates, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
+      Attention, Notifications, Context, Updates, Setup), Statistics (Shipping, Token usage), Agents (Models, Engine, Memory, Versions), Agent Usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
       folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
       tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
       floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
       scroll-spy table of contents would have kept that page. The tab is in the URL (`?tab=agents`; General is
       the bare `/settings`), and a link to a section (`/settings#limits`, the old `#agent-usage`, `#usage`, `#codex`
       and `#agents` too) opens its tab and scrolls to it. A card never repeats its page's name: the Agents tab's
-      model card is Models and Agent usage's account card is Accounts; Projects keeps its Projects card, the
+      model card is Models and Agent Usage's account card is Accounts; Projects keeps its Projects card, the
       list of projects themselves. The tabs are the segmented `Choice` under the heading, the task page's tab
       control, at every width: there is no rail of tabs beside the column, however wide the window (Layout, No
       sidebars). The column stays on Home's axis (`PAGE_COLUMN`) and the bar scrolls with the page; switching tabs
@@ -1660,7 +1660,11 @@ Only these, and they win over anything below:
       which: "Play the sound" or "Play the sound and show a test notification", 13; a blocked browser gets the same
       toast as below) and Show a notification (Never by default; choosing another asks the browser first and stays off
       with a toast when it is blocked). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
-      take the media keys.
+      take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
+      button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
+      only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,
+      "macOS blocked a notification. Allow notifications for Shinsa in System Settings.", with the action Open
+      settings (`apps/desktop/CLAUDE.md` → Rules).
     - **What triggers them**: a gate that newly enters Needs you within the focus project. The first snapshot after a
       load never chimes, a gate outside the focus project never does, and neither does one that comes into view when the
       focus changes or lifts. One chime per burst (repeated up to three times for several), one notification per gate
@@ -2873,11 +2877,12 @@ Only these, and they win over anything below:
       change." A check running is the stage Checking a watchdog.
     - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
       many still watch and how long is left, then one row per watchdog in two lines. The first has its title, its
-      status in its tone and, quiet at the end, where it stands ("18 h left · 5 checks", "Not started"); hovering or
-      focusing the status opens a card with what it checks, its schedule and its source. The second is one sentence
+      status in its tone and, quiet right after it at the same size, where it stands ("18 h left · 5 checks", "3
+      checks"; nothing while it has not started, which its status already says, and never at the row's end beside
+      Stop); hovering or focusing the status opens a card with what it checks, its schedule and its source. The second is one sentence
       that changes with the state: the last check's summary while it watches, "First check in 20 min.", "Starts once
-      the change is live in production.", "Held up for 72 h with nothing wrong.", or the issue it found and the task
-      it filed, as a link. Stop is a secondary button on the rows still active.
+      the change is live in production.", "Held up for 72 h with nothing wrong.", or the issue it found with the task
+      it filed and any task a watch filed first ("Already filed as …"), as links. Stop is a secondary button on the rows still active.
     - **A source request asks, it never connects.** A watchdog waiting for a source shows, in an `INSET` block under its
       row (a border, no tint, so the fields keep their contrast on the card), the data it needs, where the code sends
       it and the servers it suggests, then a small server field and a "what it holds" field with Connect, as the secret
@@ -3108,7 +3113,7 @@ the string. Product copy is US English ("organization", "canceled", "color").
 ### Case
 
 - **Sentence case everywhere:** page titles, headings, card titles, buttons,
-  tabs, menu and select items, field labels, placeholders, table headers,
+  tabs (except the Settings tabs, which are title case: "Agent Usage"), menu and select items, field labels, placeholders, table headers,
   metric names, badges, tooltips, toasts, empty states and dialog titles.
   Capitalize the first word and proper nouns only — "All campaigns", "Main
   events", "Total proceeds", "Add product".
@@ -3732,8 +3737,8 @@ the glyphs inside it.
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, every button (icon-only ones too), every select, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` inputs, tabs, nav rows, ⌘K's search glyph, the logo |
-| `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default` inputs, tabs, nav rows, ⌘K's search glyph, the logo, a full-page wait's spinner |
+| `lg` | 20     | Rare and large: the `EmptyState` tile, an evidence recording's play glyph, the icon specimens on `/ui`                                                  |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
   box) at the text's x-height-plus, so it reads as a word in the line; 16 is the
