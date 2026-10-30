@@ -214,9 +214,9 @@ describe('waiting on another task', () => {
 });
 
 describe('plan approval', () => {
-  test('with plan approval on, a large task waits for the plan and a revision resumes the planner', async () => {
+  test('with Approve plans on Always, a plan waits for you and a revision resumes the planner', async () => {
     const w = await open();
-    await w.engine.dispatch({ type: 'settings.change', patch: { approvePlans: true } });
+    await w.engine.dispatch({ type: 'settings.change', patch: { approvePlans: 'always' } });
     w.agents.queue('plan', async (agent) => {
       await agent.call('propose_plan', toolPlan(PLAN));
     });

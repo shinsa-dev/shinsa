@@ -107,7 +107,7 @@ function listPicked(flow: OnboardingFlow) {
 
 async function reachAccounts(world: ReturnType<typeof setup>) {
   await answerFolders(world.onboarding, world.developer);
-  return answer(world.onboarding, 'defaults', 'model=opus', 'merge=squash', 'plans=yes');
+  return answer(world.onboarding, 'defaults', 'model=opus', 'merge=squash', 'plans=large');
 }
 
 describe('the setup steps', () => {
@@ -159,7 +159,7 @@ describe('the setup steps', () => {
     expect(defaults.step?.groups.map((group) => [group.id, group.label])).toEqual([
       ['model', 'Model'],
       ['merge', 'Merging'],
-      ['plans', 'Large tasks'],
+      ['plans', 'Plans'],
     ]);
     expect(defaults.step?.groups[0]?.options.map((option) => [option.value, option.detail])).toEqual([
       ['model=opus', null],
@@ -171,12 +171,12 @@ describe('the setup steps', () => {
       ['merge=merge', false],
       ['merge=rebase', false],
     ]);
-    expect(listPicked(defaults)).toEqual(['model=opus', 'merge=squash', 'plans=yes']);
-    const accounts = await answer(onboarding, 'defaults', 'plans=no', 'model=sonnet', 'merge=rebase');
+    expect(listPicked(defaults)).toEqual(['model=opus', 'merge=squash', 'plans=large']);
+    const accounts = await answer(onboarding, 'defaults', 'plans=when_asked', 'model=sonnet', 'merge=rebase');
     expect(engine.state.settings).toMatchObject({
       defaultModel: 'sonnet',
       mergeMethod: 'rebase',
-      approvePlans: false,
+      approvePlans: 'when_asked',
     });
     expect(accounts.step).toMatchObject({ id: 'accounts', submitLabel: 'Continue' });
     expect(accounts.steps.map((step) => step.summary)).toEqual([
@@ -191,17 +191,17 @@ describe('the setup steps', () => {
   test('going back to the defaults shows what you saved, and each role’s own model saves no model', async () => {
     const { onboarding, engine, developer } = setup();
     await answerFolders(onboarding, developer);
-    await answer(onboarding, 'defaults', 'model=:roles', 'merge=merge', 'plans=no');
+    await answer(onboarding, 'defaults', 'model=:roles', 'merge=merge', 'plans=when_asked');
     expect(engine.state.settings.defaultModel).toBeNull();
     const back = await openStep(onboarding, 'defaults');
     expect(back.index).toBe(2);
-    expect(listPicked(back)).toEqual(['model=:roles', 'merge=merge', 'plans=no']);
+    expect(listPicked(back)).toEqual(['model=:roles', 'merge=merge', 'plans=when_asked']);
     expect(back.steps[3]).toMatchObject({ reached: true, summary: null });
-    const next = await answer(onboarding, 'defaults', 'model=opus', 'merge=merge', 'plans=yes');
-    expect(next.steps[2]?.summary).toBe('Opus 5.5 · Merge commit · Plan first');
+    const next = await answer(onboarding, 'defaults', 'model=opus', 'merge=merge', 'plans=large');
+    expect(next.steps[2]?.summary).toBe('Opus 5.5 · Merge commit · Large plans first');
     await openStep(onboarding, 'defaults');
-    const roles = await answer(onboarding, 'defaults', 'model=:roles', 'merge=squash', 'plans=yes');
-    expect(roles.steps[2]?.summary).toBe('Each role’s own model · Squash · Plan first');
+    const roles = await answer(onboarding, 'defaults', 'model=:roles', 'merge=squash', 'plans=large');
+    expect(roles.steps[2]?.summary).toBe('Each role’s own model · Squash · Large plans first');
   });
 
   test('refuses a step you have not reached and an answer for a step that is not open', async () => {
@@ -219,17 +219,17 @@ describe('the setup steps', () => {
     });
     await answerFolders(onboarding, developer);
     for (const values of [
-      ['model=gpt', 'merge=squash', 'plans=yes'],
-      ['merge=squash', 'plans=yes'],
-      ['model=opus', 'model=sonnet', 'merge=squash', 'plans=yes'],
-      ['opus', 'merge=squash', 'plans=yes'],
+      ['model=gpt', 'merge=squash', 'plans=large'],
+      ['merge=squash', 'plans=large'],
+      ['model=opus', 'model=sonnet', 'merge=squash', 'plans=large'],
+      ['opus', 'merge=squash', 'plans=large'],
     ]) {
       const wrong = await answer(onboarding, 'defaults', ...values);
       expect(wrong.step?.problem).toBe(
         'Pick one model option: Opus 5.5, Sonnet 5.5 or Each role’s own model.'
       );
     }
-    const merge = await answer(onboarding, 'defaults', 'model=opus', 'merge=fast', 'plans=yes');
+    const merge = await answer(onboarding, 'defaults', 'model=opus', 'merge=fast', 'plans=large');
     expect(merge.step?.problem).toBe('Pick one merging option: Squash, Merge commit or Rebase.');
     expect((await openStep(onboarding, 'defaults')).step?.problem).toBeNull();
   });
@@ -279,7 +279,7 @@ describe('the setup steps', () => {
       chosen: true,
       recommended: true,
     });
-    await answer(onboarding, 'defaults', 'model=claude-legacy', 'merge=squash', 'plans=yes');
+    await answer(onboarding, 'defaults', 'model=claude-legacy', 'merge=squash', 'plans=large');
     expect(engine.state.settings.defaultModel).toBe('claude-legacy');
   });
 
@@ -350,7 +350,7 @@ describe('finishing', () => {
     expect(listPicked(await openStep(world.onboarding, 'defaults'))).toEqual([
       'model=opus',
       'merge=squash',
-      'plans=yes',
+      'plans=large',
     ]);
     await openStep(world.onboarding, 'prerequisites');
     expect((await answer(world.onboarding, 'prerequisites', 'continue')).step).toBeNull();
