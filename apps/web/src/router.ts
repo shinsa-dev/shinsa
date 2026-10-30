@@ -141,8 +141,18 @@ export interface TaskPathOptions {
 
 export type TaskPathTarget = Pick<Task, 'id'> & { handle?: string | null };
 
+let sharedHandles: ReadonlySet<string> = new Set();
+
+export function replaceSharedHandles(handles: ReadonlySet<string>) {
+  sharedHandles = handles;
+}
+
+function resolveTaskReference(task: TaskPathTarget) {
+  return task.handle && !sharedHandles.has(task.handle) ? task.handle : task.id;
+}
+
 export function resolveCanonicalTaskPath(task: TaskPathTarget, segment: string, query: string) {
-  if (!task.handle || segment === task.handle) return null;
+  if (!task.handle || sharedHandles.has(task.handle) || segment === task.handle) return null;
   return `${resolveTaskPath(task)}${query}`;
 }
 
@@ -165,5 +175,5 @@ export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions =
   if (options.spot) params.set('spot', options.spot);
   if (options.run) params.set('run', options.run);
   const query = params.toString();
-  return `/tasks/${encodeURIComponent(task.handle ?? task.id)}${query ? `?${query}` : ''}`;
+  return `/tasks/${encodeURIComponent(resolveTaskReference(task))}${query ? `?${query}` : ''}`;
 }

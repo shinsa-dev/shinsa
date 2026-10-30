@@ -51,6 +51,13 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 - **The code's origin is trusted.** The web app's JavaScript comes from shinsa.dev/app through Cloudflare. Whoever
   controls that deploy, or Cloudflare acting against you, could serve code that sends keys away. Browser E2E cannot
   remove this; it protects against reading traffic, not against altered code. An installed app would.
+- **The dashboard shares its origin with the marketing site.** shinsa.dev/app and every page of shinsa.dev are one
+  origin, so a script running on any marketing page runs where the enrolled device keys (IndexedDB), the session
+  cookie's same-origin requests and `/app/__remote/instances/<id>/connect` are. The keys are non-extractable, so such a
+  script could not copy them out, but while the page is open it could use them to open a channel and act on your
+  Macs. So the marketing site stays static and first-party: no third-party script, analytics, embed or user content,
+  and its Worker runs only for `/download` and `/app` (`apps/marketing/CLAUDE.md`). Moving the dashboard to its own
+  origin (a subdomain) removes this risk, at the cost of the second URL you chose not to have.
 - **A second public entry point.** The request class is decided once, first, from `cf-connecting-ip`, and every route
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.

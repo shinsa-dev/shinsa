@@ -153,8 +153,13 @@ is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/work
 `/download/*`, `/app` and `/app/*` (`assets.run_worker_first`); every other request is a plain static asset hit.
 `/app` is the remote dashboard (`docs/engine.md` → Remote access): `src/worker/app.ts` hands it, as it came, to the
 `shinsa-cloud` Worker (`apps/cloud`) through the `CLOUD` service binding, sends `www.shinsa.dev/app` to
-`shinsa.dev/app`, and answers 503 while the binding is missing. Deploy `shinsa-cloud` before the first deploy that
-binds it.
+`shinsa.dev/app`, and answers 503 while the binding is missing. `shinsa-cloud` must exist before this Worker deploys with the binding
+(a deploy naming a missing service fails), so deploy it before the change that adds the binding merges.
+
+The site shares its origin with the dashboard at `/app`, which keeps each browser's device keys and session there
+(`docs/plans/remote-plan.md` → Risks). So nothing on the site may run code from anywhere else: no third-party script,
+analytics, tag, embed or iframe, and no content a visitor or anyone outside the repository writes. The Worker runs only
+for `/download` and `/app`.
 
 The downloads are served from Cloudflare R2, so they never wait on GitHub and have no request limit and no egress fee.
 The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in `wrangler.jsonc`), bound as

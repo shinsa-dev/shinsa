@@ -5,12 +5,14 @@ import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   Fleet,
   type FleetMember,
+  listSharedHandles,
   mergeFleetStates,
   resolveCommandOwner,
   resolveFleetStatus,
   resolveRequestOwner,
 } from '@/lib/remote/fleet.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
 import { createTask } from '../../support/state.ts';
 
 function createWire(seq: number, records: Partial<WireState> = {}): WireState {
@@ -105,6 +107,28 @@ function createFleet() {
 }
 
 describe('merging the state of several Macs', () => {
+  it('links a task by its id when another Mac has a task with the same handle', () => {
+    const studio = createMember('m1', 'Studio');
+    const laptop = createMember('m2', 'Laptop');
+    const fleet = new Fleet([studio.member, laptop.member]);
+    const onStudio = createTask({ id: 'task-studio', handle: 'LOC-1' });
+    const onLaptop = createTask({ id: 'task-laptop', handle: 'LOC-1' });
+    const unique = createTask({ id: 'task-unique', handle: 'LOC-2' });
+    studio.connection.push({
+      state: createWire(1, { tasks: { [onStudio.id]: onStudio, [unique.id]: unique } }),
+      status: 'open',
+    });
+    laptop.connection.push({ state: createWire(1, { tasks: { [onLaptop.id]: onLaptop } }), status: 'open' });
+    fleet.snapshot();
+    expect(resolveTaskPath(onLaptop)).toBe('/tasks/task-laptop');
+    expect(resolveTaskPath(onStudio)).toBe('/tasks/task-studio');
+    expect(resolveTaskPath(unique)).toBe('/tasks/LOC-2');
+    expect(resolveCanonicalTaskPath(onLaptop, 'task-laptop', '')).toBeNull();
+    expect(
+      listSharedHandles([{ id: 'm1', state: createWire(1, { tasks: { a: onStudio, b: onStudio } }) }])
+    ).toEqual(new Set());
+  });
+
   it('puts every Mac’s tasks in one state, keeps the first Mac’s settings and knows who owns what', () => {
     const { fleet } = createFleet();
     const { state } = fleet.snapshot();

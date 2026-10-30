@@ -7,6 +7,7 @@ import {
   type Snapshot,
 } from '@/lib/connection/socket.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { replaceSharedHandles } from '@/router.ts';
 
 export interface FleetMember {
   id: string;
@@ -38,10 +39,24 @@ interface FleetPart {
 export interface FleetState {
   state: WireState;
   owners: ReadonlyMap<string, string>;
+  sharedHandles: ReadonlySet<string>;
 }
 
 function mergeRecords(parts: FleetPart[], key: (typeof FLEET_RECORDS)[number]) {
   return Object.assign({}, ...parts.map((part) => part.state[key])) as WireState[typeof key];
+}
+
+export function listSharedHandles(parts: FleetPart[]) {
+  const seen = new Map<string, string>();
+  const shared = new Set<string>();
+  for (const part of parts)
+    for (const task of Object.values(part.state.tasks)) {
+      if (!task.handle) continue;
+      const first = seen.get(task.handle);
+      if (first === undefined) seen.set(task.handle, part.id);
+      else if (first !== part.id) shared.add(task.handle);
+    }
+  return shared;
 }
 
 export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
@@ -50,7 +65,8 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
   const owners = new Map<string, string>();
   for (const part of parts)
     for (const key of FLEET_RECORDS) for (const id of Object.keys(part.state[key])) owners.set(id, part.id);
-  if (parts.length === 1) return { state: home.state, owners };
+  const sharedHandles = listSharedHandles(parts);
+  if (parts.length === 1) return { state: home.state, owners, sharedHandles };
   const state: WireState = {
     ...home.state,
     seq: parts.reduce((total, part) => total + part.state.seq, 0),
@@ -58,7 +74,7 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
     onBehalfActions: parts.flatMap((part) => part.state.onBehalfActions),
   };
   for (const key of FLEET_RECORDS) Object.assign(state, { [key]: mergeRecords(parts, key) });
-  return { state, owners };
+  return { state, owners, sharedHandles };
 }
 
 export function resolveFleetStatus(statuses: ConnectionStatus[]): ConnectionStatus {
@@ -107,6 +123,8 @@ interface FleetEntry {
 }
 
 const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
+
+const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 
 export class Fleet implements ShinsaConnection {
   #entries: FleetEntry[] = [];
@@ -185,6 +203,7 @@ export class Fleet implements ShinsaConnection {
     });
     const merged = mergeFleetStates(parts);
     this.#owners = merged?.owners ?? EMPTY_OWNERS;
+    replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {
       state: merged?.state ?? null,
       status: resolveFleetStatus(inputs.map((input) => input.status)),

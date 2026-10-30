@@ -2194,7 +2194,8 @@ Reaching this machine from any browser at `https://shinsa.dev/app`, behind GitHu
 devices enrolled at the Mac. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
 core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on shinsa.dev/app that signs you in, pairs
 machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
-The machine side is `apps/engine/src/remote/`:
+The dashboard shares the shinsa.dev origin with the marketing site, so that site stays static and first-party
+(`docs/plans/remote-plan.md` → Risks). The machine side is `apps/engine/src/remote/`:
 
 - **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
   on first use), the credentials shinsa.dev/app gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
