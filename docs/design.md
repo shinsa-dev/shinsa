@@ -381,8 +381,12 @@ Only these, and they win over anything below:
      starts, its message joins the chat under its round's divider as your bubble, delivering, then settles. Several
      messages routed together are one round, so one row, delivered together.
    Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
-   one the classifier read as needing nothing (no agent runs for it), or "Not delivered. ‹reason›" in
-   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`).
+   one the classifier read as needing nothing (no agent runs for it), "Not delivered. ‹reason›" in
+   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`), or, for
+   one read as another task's work (a split-off), what became of its suggested task: "Not sent to the agent: it reads
+   as work for another task. Make it a task or keep it here under Suggested tasks on the Overview." in
+   `text-amber-text` while it is open, then "Made into a task of its own." or "Suggested as a separate task, then
+   dismissed." in `text-fg-2`. A kept one leaves the chat, since keeping sends it again as your message.
    Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
    Queued messages).
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one

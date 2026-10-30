@@ -899,7 +899,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
-| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work |
+| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off |
 | `task.message_received`, `task.message_routed`, `task.message_dropped` | a message of yours entered the inbox, left it to be delivered, or left it undelivered (`reason`) |
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
 | `round.started` | a round became the active one (`branch`, `base`, `onto`: the pull request it ships onto); the round before it, if any, is archived as shipped |

@@ -288,8 +288,9 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   }
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
-    recordMessages(decider, task.id, texts, { kind });
-    suggestSplitOff(decider, task.id, text, send.title ?? null, send.why ?? null);
+    const suggestionId = decider.context.newId();
+    recordMessages(decider, task.id, texts, { kind, suggestionId });
+    suggestSplitOff(decider, task.id, suggestionId, text, send.title ?? null, send.why ?? null);
     return;
   }
   if (

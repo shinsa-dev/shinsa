@@ -128,6 +128,7 @@ type EventBody =
       scheduleId?: string | null;
       kind?: MessageKind;
       round?: number;
+      suggestionId?: string;
     }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }

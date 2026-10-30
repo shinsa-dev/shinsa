@@ -81,8 +81,11 @@ export function sendTaskMessage(task: Task, hint: MessageHint, text: string) {
 
 export interface MessageStatusLine {
   text: string;
-  tone: 'quiet' | 'refused';
+  tone: 'quiet' | 'notice' | 'refused';
 }
+
+const SPLIT_OFF_TEXT =
+  'Not sent to the agent: it reads as work for another task. Make it a task or keep it here under Suggested tasks on the Overview.';
 
 export function describeMessageStatus({
   status,
@@ -90,6 +93,11 @@ export function describeMessageStatus({
 }: Pick<HumanMessage, 'status' | 'reason'>): MessageStatusLine | null {
   if (status === 'noted') return { text: 'Noted. It needs no reply.', tone: 'quiet' };
   if (status === 'undelivered') return { text: `Not delivered. ${reason ?? ''}`.trim(), tone: 'refused' };
+  if (status === 'split_off') return { text: SPLIT_OFF_TEXT, tone: 'notice' };
+  if (status === 'made_task') return { text: 'Made into a task of its own.', tone: 'quiet' };
+  if (status === 'split_off_dismissed') {
+    return { text: 'Suggested as a separate task, then dismissed.', tone: 'quiet' };
+  }
   return null;
 }
 

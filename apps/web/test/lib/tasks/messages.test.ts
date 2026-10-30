@@ -118,4 +118,19 @@ describe('describeMessageStatus', () => {
       tone: 'refused',
     });
   });
+
+  it('says where a message read as another task’s work went, and what became of it', () => {
+    expect(describeMessageStatus({ status: 'split_off' })).toEqual({
+      text: 'Not sent to the agent: it reads as work for another task. Make it a task or keep it here under Suggested tasks on the Overview.',
+      tone: 'notice',
+    });
+    expect(describeMessageStatus({ status: 'made_task' })).toEqual({
+      text: 'Made into a task of its own.',
+      tone: 'quiet',
+    });
+    expect(describeMessageStatus({ status: 'split_off_dismissed' })).toEqual({
+      text: 'Suggested as a separate task, then dismissed.',
+      tone: 'quiet',
+    });
+  });
 });

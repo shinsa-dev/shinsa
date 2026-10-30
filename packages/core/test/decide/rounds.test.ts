@@ -290,6 +290,12 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     expect(harness.task(taskId).activity.at(-1)?.text).toBe(
       'Suggested a separate task: Also redesign the billing page'
     );
+    expect(harness.task(taskId).activity.at(-2)).toMatchObject({
+      kind: 'round',
+      text: 'Asked for work that belongs in another task',
+      detail: 'Also redesign the billing page',
+      suggestionId: suggestion?.id,
+    });
     harness.send({ type: 'suggestion.keep', taskId, suggestionId: suggestion?.id ?? '' });
     const task = harness.task(taskId);
     expect(task.suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 1 });

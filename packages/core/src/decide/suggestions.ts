@@ -35,6 +35,7 @@ export function hasRoomForSuggestion(task: Task) {
 export function suggestSplitOff(
   decider: Decider,
   taskId: string,
+  suggestionId: string,
   request: string,
   title: string | null,
   why: string | null
@@ -43,7 +44,7 @@ export function suggestSplitOff(
     type: 'task.suggested',
     taskId,
     suggestion: {
-      id: decider.context.newId(),
+      id: suggestionId,
       runId: null,
       title: title?.trim() || resolveRoundTitle(request),
       request,

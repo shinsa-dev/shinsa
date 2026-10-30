@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Activity, ChatEntry } from '@shinsa/core';
+import type { Activity, ChatEntry, TaskSuggestion } from '@shinsa/core';
 import {
   listFollowUpMessages,
   listHumanMessages,
@@ -133,6 +133,68 @@ describe('listHumanMessages', () => {
       { at: 3, text: 'More?', status: 'undelivered', reason: 'This task is finished.' },
       { at: 4, text: 'Answer this', status: 'delivering' },
     ]);
+  });
+});
+
+describe('a message read as work for another task', () => {
+  function splitOff(at: number, text: string, suggestionId: string) {
+    return activity({
+      at,
+      kind: 'round',
+      text: 'Asked for work that belongs in another task',
+      detail: text,
+      suggestionId,
+    });
+  }
+
+  function suggestion(id: string, overrides: Partial<TaskSuggestion>): TaskSuggestion {
+    return {
+      id,
+      runId: null,
+      title: id,
+      request: id,
+      why: 'It is its own goal.',
+      waitsOnThis: false,
+      status: 'open',
+      createdTaskId: null,
+      suggestedAt: NOW,
+      splitOff: true,
+      ...overrides,
+    };
+  }
+
+  it('stays in the chat with what became of its suggestion, and a kept one shows only as the copy it sent', () => {
+    const task = createTask({
+      id: 't',
+      activity: [
+        splitOff(1, 'Stage the docs', 's1'),
+        splitOff(2, 'Redo billing', 's2'),
+        splitOff(3, 'Rename the page', 's3'),
+        splitOff(4, 'Commit the skills', 's4'),
+        splitOff(5, 'Lost', 'gone'),
+        activity({ at: 6, kind: 'round', text: 'Asked for more work in this task', detail: 'Add search' }),
+        activity({ at: 7, kind: 'message', detail: 'Commit the skills' }),
+      ],
+      suggestions: [
+        suggestion('s1', {}),
+        suggestion('s2', { status: 'accepted', createdTaskId: 't2' }),
+        suggestion('s3', { status: 'dismissed' }),
+        suggestion('s4', { status: 'dismissed', keptRound: 1 }),
+      ],
+    });
+    expect(listHumanMessages(task)).toEqual([
+      { at: 1, text: 'Stage the docs', status: 'split_off' },
+      { at: 2, text: 'Redo billing', status: 'made_task' },
+      { at: 3, text: 'Rename the page', status: 'split_off_dismissed' },
+      { at: 7, text: 'Commit the skills' },
+    ]);
+  });
+
+  it('belongs to the run it was sent during, like a message that was only noted', () => {
+    const run = createRun({ id: 'a', taskId: 't', startedAt: 100, endedAt: 200 });
+    const later = createRun({ id: 'b', taskId: 't', startedAt: 300 });
+    const message = { at: 250, text: 'Stage the docs', status: 'split_off' as const };
+    expect(resolveRunMessages([run, later], [message]).byRun.get('a')).toEqual([message]);
   });
 });
 

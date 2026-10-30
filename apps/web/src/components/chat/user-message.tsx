@@ -9,7 +9,7 @@ import { type SettlingPhase, useSettling } from '@/hooks/use-settling.ts';
 import { canOpenAttachment, canPlayAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
-import { describeMessageStatus, isDelivering } from '@/lib/tasks/messages.ts';
+import { describeMessageStatus, isDelivering, type MessageStatusLine } from '@/lib/tasks/messages.ts';
 
 const CLAMP_LINES = 12;
 
@@ -90,18 +90,17 @@ export function MessageAttachments({
   );
 }
 
+const STATUS_TONE: Record<MessageStatusLine['tone'], string> = {
+  quiet: 'text-fg-2',
+  notice: 'text-amber-text',
+  refused: 'text-red-text',
+};
+
 function MessageStatus(message: Pick<HumanMessage, 'status' | 'reason'>) {
   const line = describeMessageStatus(message);
   if (!line) return null;
   return (
-    <span
-      className={cn(
-        'max-w-4/5 px-1 text-right text-2xs',
-        line.tone === 'refused' ? 'text-red-text' : 'text-fg-2'
-      )}
-    >
-      {line.text}
-    </span>
+    <span className={cn('max-w-4/5 px-1 text-right text-2xs', STATUS_TONE[line.tone])}>{line.text}</span>
   );
 }
 

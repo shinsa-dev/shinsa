@@ -453,6 +453,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       kind: 'round',
       text: NEW_WORK_TEXT[event.kind],
       detail: event.text,
+      ...(event.suggestionId ? { suggestionId: event.suggestionId } : {}),
     });
     return;
   }
