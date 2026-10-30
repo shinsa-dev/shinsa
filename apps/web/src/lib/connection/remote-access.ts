@@ -16,6 +16,8 @@ const EMPTY: RemoteAccessView = { snapshot: null, failure: null };
 
 let view: RemoteAccessView = EMPTY;
 
+let pending: Promise<void> | null = null;
+
 function publish(next: RemoteAccessView) {
   view = next;
   signal.publish();
@@ -26,15 +28,20 @@ export function selectRemoteAccess() {
 }
 
 export function resetRemoteAccess() {
+  pending = null;
   publish(EMPTY);
 }
 
-export async function refreshRemoteAccess() {
-  try {
-    publish({ snapshot: await requestJson<RemoteSnapshot>('/api/remote'), failure: null });
-  } catch (error) {
-    publish({ ...view, failure: describeFailure(error) });
-  }
+export function refreshRemoteAccess() {
+  pending ??= requestJson<RemoteSnapshot>('/api/remote')
+    .then(
+      (snapshot) => publish({ snapshot, failure: null }),
+      (error: unknown) => publish({ ...view, failure: describeFailure(error) })
+    )
+    .then(() => {
+      pending = null;
+    });
+  return pending;
 }
 
 async function act(path: string, body: unknown = {}) {

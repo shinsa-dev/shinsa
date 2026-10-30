@@ -52,6 +52,12 @@ describe('remote access on this Mac', () => {
     });
   });
 
+  it('shares one read between callers that ask at once', async () => {
+    answerSnapshot('GET /api/remote', createRemoteSnapshot());
+    await Promise.all([refreshRemoteAccess(), refreshRemoteAccess()]);
+    expect(sent.filter((entry) => entry.path === '/api/remote')).toHaveLength(1);
+  });
+
   it('sends each action to its route and keeps the snapshot it answers with', async () => {
     const paused = createRemoteSnapshot({ enabled: false });
     for (const path of ['/pair', '/pair/cancel', '/enable', '/disable', '/remove', '/devices/remove'])
