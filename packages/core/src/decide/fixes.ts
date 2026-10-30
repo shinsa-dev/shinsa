@@ -97,16 +97,18 @@ function listAgentEvidence(decider: Decider, task: Task) {
     .sort((a, b) => a.attachedAt - b.attachedAt);
 }
 
+type FixOptions = { base?: string | null; commentsOnly?: boolean };
+
 export function startFix(
   decider: Decider,
   taskId: string,
   reason: FixReason,
   prompt: string,
   signature: string | null,
-  base: string | null = null
+  { base = null, commentsOnly = false }: FixOptions = {}
 ) {
   const task = decider.task(taskId);
-  const stalled = countFixRepeats(task, reason, signature);
+  const stalled = commentsOnly ? 0 : countFixRepeats(task, reason, signature);
   const stop = reason === 'you' ? null : resolveFixStop(decider, task, stalled);
   if (stop && reason === 'review') {
     escalateReview(decider, taskId, stop.reason);
@@ -124,7 +126,7 @@ export function startFix(
     reason,
     signature,
     stalled,
-    treeHash: task.treeHash ?? null,
+    treeHash: commentsOnly ? null : (task.treeHash ?? null),
   });
   decider.stage(taskId, 'fixing', resolveFixStageReason(reason, base));
   const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));

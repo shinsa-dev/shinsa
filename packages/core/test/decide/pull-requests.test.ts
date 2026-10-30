@@ -524,6 +524,57 @@ describe('watching the pull request', () => {
     expect(harness.task(taskId).pullRequestWatch).toMatchObject({ stopped: null, wakes: 0 });
   });
 
+  test('new comments answered with no change to the code are progress, never a stall', () => {
+    const { harness, taskId } = shipping();
+    for (let round = 0; round < 5; round += 1) {
+      record(harness, taskId, { checks: 'pending' }, [
+        {
+          ...REMARK,
+          id: `bot${round}`,
+          author: 'maple-review-bot',
+          createdAt: `2026-10-02T12:0${round}:00Z`,
+        },
+      ]);
+      expect(harness.task(taskId).stage).toBe('fixing');
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'Nothing to fix.',
+        treeHash: 'same-tree',
+      });
+      pushed(harness, taskId);
+    }
+    expect(harness.task(taskId)).toMatchObject({ fixRounds: 5, stalledFixes: 0 });
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('comment rounds that changed no code never count against a failing check on the same tree', () => {
+    const { harness, taskId } = shipping();
+    const fixOnSameTree = () => {
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'Nothing to fix.',
+        treeHash: 'same-tree',
+      });
+      pushed(harness, taskId);
+    };
+    for (let round = 0; round < 3; round += 1) {
+      record(harness, taskId, { checks: 'pending' }, [
+        { ...REMARK, id: `bot${round}`, createdAt: `2026-10-02T12:0${round}:00Z` },
+      ]);
+      fixOnSameTree();
+    }
+    record(harness, taskId, { checks: 'failing' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', stalledFixes: 0 });
+    fixOnSameTree();
+    record(harness, taskId, { checks: 'failing', headSha: 'head-2' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', stalledFixes: 1 });
+    fixOnSameTree();
+    record(harness, taskId, { checks: 'failing', headSha: 'head-3' });
+    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+  });
+
   test('a clean pull request restarts a stopped watch and opens the merge gate', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, { checks: 'pending' });
