@@ -7323,7 +7323,8 @@ readings on a shelf.
 - One reading per row, 40px (`SETTING_ROW`): the label over "Resets in 3h" (`text-2xs text-fg-2`, the exact time on
   hover), a usage bar `w-24 shrink-0 sm:w-40`, and the percentage `w-9 text-right`.
 - Without readings the row holds the server's detail as a muted line ("No usage reported yet." before the first
-  read).
+  read). With readings, a detail (why the last reading is kept: a login that needs refreshing, the provider asking
+  for fewer reads) is a muted row after them.
 - A resource listed twice shows once; a muted empty row after the list says which copy is used.
 - A provider Shinsa does not manage itself uses the same block: its plan in `fg-2` or, without one, its state
   ("Signed in with ChatGPT", "Not signed in", "Not installed", "Too old for Shinsa"), and, on its shelf when there
