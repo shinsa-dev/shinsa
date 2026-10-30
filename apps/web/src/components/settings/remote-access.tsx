@@ -54,7 +54,7 @@ function EnrollmentView({ enrollment }: { enrollment: RemoteEnrollment }) {
   );
 }
 
-function AddDeviceDialog({
+function AddBrowserDialog({
   control,
   onCreate,
 }: {
@@ -76,7 +76,7 @@ function AddDeviceDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a device'}</DialogTitle>
+          <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a browser'}</DialogTitle>
           <DialogDescription>
             {enrollment
               ? 'Scan this on the phone, or open the link in the browser you are adding, and sign in with GitHub.'
@@ -234,14 +234,14 @@ function RemoteDialogs({
 }) {
   const { value } = dialog;
   if (value?.kind === 'add')
-    return <AddDeviceDialog control={dialog.control} onCreate={actions.createEnrollment} />;
+    return <AddBrowserDialog control={dialog.control} onCreate={actions.createEnrollment} />;
   if (value?.kind === 'forget')
     return (
       <ConfirmDialog
         control={dialog.control}
         title={`Forget ${value.device.name}?`}
         body='It can no longer open this Mac from app.shinsa.dev, and any page it has open closes. Add it again to use it.'
-        action='Forget device'
+        action='Forget browser'
         onConfirm={() =>
           void requestWithToast(
             () => actions.forgetDevice(value.device.publicKey),
@@ -255,7 +255,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title='Remove remote access?'
-        body='This Mac leaves app.shinsa.dev, its tunnel is deleted and every added device is forgotten. You can turn it on again later.'
+        body='This Mac leaves app.shinsa.dev, its tunnel is deleted and every added browser is forgotten. You can turn it on again later.'
         action='Remove remote access'
         onConfirm={() => void requestWithToast(actions.remove, 'Remote access is removed.')}
       />
@@ -286,7 +286,7 @@ export function RemoteAccessGroup({
             icon='IconPlusMedium'
             onClick={() => dialog.show({ kind: 'add' })}
           >
-            Add device
+            Add browser
           </Button>
         ) : undefined
       }
@@ -302,7 +302,7 @@ export function RemoteAccessGroup({
       )}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
-          None yet. Add device sets up the phone or browser you use away from this Mac.
+          None yet. Add browser sets up the phone or computer browser you use away from this Mac.
         </SettingsEmpty>
       )}
       {snapshot?.devices.map((device) => (

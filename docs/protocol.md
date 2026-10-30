@@ -1227,7 +1227,7 @@ arrived, never from the page.
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
 `machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`) and `devices` (`RemoteDevice`: `publicKey`,
-`name`, `enrolledAt`, `lastSeenAt`); `RemoteEnrollment` is the `url`, `name` and `expiresAt` Add device answers.
+`name`, `enrolledAt`, `lastSeenAt`); `RemoteEnrollment` is the `url`, `name` and `expiresAt` Add browser answers.
 
 ## Where it lives
 

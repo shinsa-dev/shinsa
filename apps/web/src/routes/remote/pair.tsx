@@ -45,7 +45,7 @@ export function PairPage({
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCheckCircle2' tone='blue' title={`${state.name} is paired`}>
           Your Mac finishes setting up in a few seconds. To use it from this browser, add the browser on the
-          Mac: Settings, Remote access, Add device.
+          Mac: Settings, Remote access, Add browser.
         </RemoteHero>
         <Button className='w-full' nativeButton={false} render={<a href={REMOTE_PATHS.app} />}>
           Open Shinsa

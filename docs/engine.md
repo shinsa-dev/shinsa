@@ -2320,7 +2320,7 @@ The dashboard has an origin of its own, apart from the marketing site on shinsa.
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
   `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired Mac is refused
   (`remote_paired`): remove it first.
-- **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
+- **Devices** (`Remote.createEnrollment`): Add browser, or `shinsa remote enroll <name>`, makes a one-time enrollment
   secret for a named device (60 characters at most) and answers its link,
   `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>`; the device it enrolls takes that name. `shinsa
   remote forget-device <key>` removes one.
@@ -2330,7 +2330,7 @@ The dashboard has an origin of its own, apart from the marketing site on shinsa.
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): the Mac's name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used and Forget, and Add device: you name the device, and the one-time link
+  added devices with when each was last used and Forget, and Add browser: you name the device, and the one-time link
   shows as a QR code to scan with a phone, with Copy and Add this browser for the browser in front of you. It reads
   `GET /api/remote` when Settings opens and every 2 seconds while pairing or connecting. The remote build leaves the
   section out, since every change to it is refused from off the Mac.

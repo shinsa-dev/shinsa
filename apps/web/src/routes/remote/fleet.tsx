@@ -27,7 +27,7 @@ function NoMachinePage({ machines }: { machines: string[] }) {
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconKey1' title='Add this browser to your Mac'>
-        {`${machines.join(', ')} ${machines.length === 1 ? 'is' : 'are'} paired, but this browser has no key for ${machines.length === 1 ? 'it' : 'them'} yet. On the Mac, open Settings, Remote access, choose Add device and open its link here.`}
+        {`${machines.join(', ')} ${machines.length === 1 ? 'is' : 'are'} paired, but this browser has no key for ${machines.length === 1 ? 'it' : 'them'} yet. On the Mac, open Settings, Remote access, choose Add browser and open its link here.`}
       </RemoteHero>
     </section>
   );

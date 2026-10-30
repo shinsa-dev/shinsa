@@ -10,7 +10,7 @@ import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 const MACHINES_DESCRIPTION =
-  'Every Mac you turned remote access on for. The ones added in this browser share this one dashboard; each task shows its Mac. To add a browser, choose Add device in Settings, Remote access on that Mac.';
+  'Every Mac you turned remote access on for. The ones added in this browser share this one dashboard; each task shows its Mac. To add a browser, choose Add browser in Settings, Remote access on that Mac.';
 
 function MachineList({
   rows,

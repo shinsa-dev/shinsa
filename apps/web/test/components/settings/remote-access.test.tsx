@@ -46,7 +46,7 @@ describe('Settings → Remote access', () => {
 
   it('turns remote access on from the Off state', async () => {
     const actions = renderGroup(createRemoteSnapshot({ paired: false, status: 'off', owner: null }));
-    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add browser' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
     await waitFor(() => expect(actions.pair).toHaveBeenCalled());
   });
@@ -90,7 +90,7 @@ describe('Settings → Remote access', () => {
     renderGroup(createRemoteSnapshot({ status: 'revoked' }));
     expect(screen.getByText('Removed')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add browser' })).toBeNull();
   });
 
   it('lists the devices and forgets one after a confirmation', async () => {
@@ -101,7 +101,7 @@ describe('Settings → Remote access', () => {
     );
     expect(screen.getByText('iPhone')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Forget' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Forget device' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Forget browser' }));
     await waitFor(() => expect(actions.forgetDevice).toHaveBeenCalledWith('dev-1'));
   });
 
@@ -109,7 +109,7 @@ describe('Settings → Remote access', () => {
     const actions = renderGroup(createRemoteSnapshot());
     expect(screen.getByText('Phones and browsers that can reach Studio')).toBeTruthy();
     expect(screen.getByText(/None yet/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Add device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add browser' }));
     const make = await screen.findByRole('button', { name: 'Make link' });
     expect(make.hasAttribute('disabled')).toBe(true);
     fireEvent.change(screen.getByLabelText('Device name'), { target: { value: ' iPhone ' } });
