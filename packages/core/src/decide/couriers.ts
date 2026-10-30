@@ -21,9 +21,18 @@ function assertCanWait(run: Run) {
   );
 }
 
+function assertOneOrder(command: CommandOf<'agent.create_task'>) {
+  if (!command.thisWaits || !command.afterThis) return;
+  throw new DomainError(
+    'dependency_cycle',
+    'Set this_task_waits or after_this, not both: two tasks cannot each wait for the other to merge.'
+  );
+}
+
 interface SpawnOptions {
   parent: boolean;
   forkOf?: string;
+  waitsOn?: string[];
 }
 
 function spawnTask(
@@ -43,6 +52,7 @@ function spawnTask(
       priority: source.priority,
       origin: source.origin,
       ...(options.forkOf ? { forkOf: options.forkOf } : {}),
+      ...(options.waitsOn ? { waitsOn: options.waitsOn } : {}),
     },
     { createdBy: creator, ...(parent ? { parentTaskId: source.id, shape: 'change' as const } : {}) }
   );
@@ -55,13 +65,18 @@ function waitOn(decider: Decider, task: Task, ids: string[]) {
 export function createCourierTask(decider: Decider, command: CommandOf<'agent.create_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'create_task');
   if (selectCreated(decider, task, command.requestKey)) return;
+  assertOneOrder(command);
   if (command.thisWaits) assertCanWait(run);
   const createdId = spawnTask(
     decider,
     command.repoId ? { ...task, repoId: command.repoId } : task,
     command.request,
     { kind: 'courier', taskId: task.id, runId: run.id, requestKey: command.requestKey },
-    { parent: false, ...(command.forkOf ? { forkOf: command.forkOf } : {}) }
+    {
+      parent: false,
+      ...(command.forkOf ? { forkOf: command.forkOf } : {}),
+      ...(command.afterThis ? { waitsOn: [task.id] } : {}),
+    }
   );
   if (command.thisWaits) waitOn(decider, decider.task(task.id), [createdId]);
 }

@@ -163,6 +163,10 @@ export const ORCHESTRATION_TOOL_SPECS = {
             'A task to fork, by id or handle (this one included): the new task starts from its conversation.',
         },
         this_task_waits: { type: 'boolean' },
+        after_this: {
+          type: 'boolean',
+          description: 'The new task waits until this one merges, then starts.',
+        },
         client_request_id: CLIENT_REQUEST_ID,
       },
       required: ['request'],
@@ -388,6 +392,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       repoId: resolveRepoId(call.state(), source, request.repository),
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
+      afterThis: request.afterThis,
     },
     resolveCommandId(call, 'create_task', request.requestKey)
   );
