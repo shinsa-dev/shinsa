@@ -2186,6 +2186,47 @@ tools and T3's MCP toolkits.
   message it sends to a task with an open gate is kept for that task's next agent, never delivered into the gate
   (Gates → What a message does, above).
 
+## Remote access
+
+Reaching this machine from any browser at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
+devices enrolled at the Mac. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
+core's `remote/` (`packages/core/CLAUDE.md`). The machine side is `apps/engine/src/remote/`:
+
+- **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
+  on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
+  `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, and the enrolled devices (public key, name,
+  enrolled and last seen). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
+- **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
+  `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
+- **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
+  `data/bin/cloudflared-<version>`, checked against its pinned SHA-256 before it is unpacked or made executable. The
+  connector (`connector.ts`) runs `cloudflared tunnel --no-autoupdate run --url <engine URL>` with the tunnel token in
+  `TUNNEL_TOKEN`, never in its arguments (a process list shows arguments), and counts it up once it prints
+  `Registered tunnel connection` (30 s at most).
+- **The supervisor** (`TunnelSupervisor`, Kanna's timings): connect, heartbeat with the engine's URL and version, ping
+  `https://<tunnel host>/health` every 30 seconds and heartbeat every fourth ping; three failed pings in a row, or
+  `cloudflared` exiting, restart it, every second for the first minute of a failure streak, then after 2, 4, 10 and 30
+  seconds. A revoked machine gives up for good and forgets its credentials. Turning it off marks the instance
+  offline, capped at 2 seconds. It comes up with the engine when `remote.json` says enabled, and goes down before
+  the terminals do at shutdown.
+- **The tunnel entry point** (`guard.ts`, `http/server.ts`): a request with `cf-connecting-ip`, which Cloudflare
+  stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
+  before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
+  `GET /remote`; everything else, and everything while remote access is off, is 404. `/remote` needs an Origin of
+  app.shinsa.dev (403) and a valid connect token in `?token=` (401): an HMAC with the connect key over the instance,
+  the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
+  off the endpoint; trust rests on the handshake.
+- **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
+  enrolled is refused unless the hello carries a proof made with a live enrollment secret (`Enrollments`: 32 random
+  bytes, 10 minutes, one use, at most five at once), which enrolls it. Both sides derive one AES-GCM key per
+  direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
+  fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
+  and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
+  routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
+  handshake did. A remote socket's command that is local only (`isLocalOnlyCommand`: a human-only setting or
+  repository field, binding an account) is answered with `local_only`. Removing a device closes its channels; turning
+  remote access off or a revocation closes all of them.
+
 ## Who can change Shinsa
 
 Shinsa is a local server for one person, and every agent runs as that person, on that machine, with a shell. There
@@ -2194,7 +2235,10 @@ agent with a shell can already run `gh pr merge` or `git push` without asking Sh
 plainly what protects what.
 
 - **The address.** `shinsa engine` binds to `127.0.0.1` (`SHINSA_HOST` changes it), so nothing off the machine
-  reaches it.
+  reaches it, except through remote access when you turn it on: then a tunnel request sees only health, webhooks and
+  the sealed channel, and the channel's keys are what let it in (Remote access, above). Those keys live in
+  `remote.json`, which an agent's shell could read like any of your files; what they unlock from off the machine is
+  only what an agent on it can already reach.
 - **Other websites.** `http/guard.ts` refuses a Host that is not loopback, `SHINSA_HOST` or `SHINSA_ALLOWED_HOSTS`
   (DNS rebinding), an Origin from anywhere else and `Sec-Fetch-Site: cross-site`, an `/api` request other than a GET
   or HEAD that is not `application/json` (so no cross-site form or `text/plain` post is ever "simple"; 415) and a
@@ -4017,6 +4061,9 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  serve.pid and serve.log (The agent loop → Compaction and fast mode)
     ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
     │                  the log)
+    ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
+    │                  (mode 600; never in the log; Remote access, above)
+    ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
     │                  and boot time (One server per data directory, below)
@@ -4029,7 +4076,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
   directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
-  command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_WEB_DIR` serves
+  command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_REMOTE_ORIGIN` points remote access at
+  another app.shinsa.dev (a local `wrangler dev`). `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no

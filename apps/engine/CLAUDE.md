@@ -160,6 +160,14 @@ src/
 ├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
 │                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
+├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
+│                        credentials, the enrolled devices), control.ts (ControlClient for app.shinsa.dev, RevokedError),
+│                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
+│                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
+│                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
+│                        enrollments.ts (one-time enrollment secrets), channel.ts (RemoteChannel: the handshake, sealed
+│                        frames, the app socket and HTTP inside), index.ts (Remote: wires them, markRemoteRequest and
+│                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
 │                        MCP sign-ins
 ├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): what

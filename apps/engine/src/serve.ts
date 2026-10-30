@@ -36,6 +36,15 @@ import { describeError, log } from './log/index.ts';
 import { type AccountSource, type CommandRunner, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
 import {
+  ControlClient,
+  createCloudflaredConnector,
+  installCloudflared,
+  REMOTE_FILE,
+  Remote,
+  resolveCloudflaredAsset,
+  type StartConnector,
+} from './remote/index.ts';
+import {
   createDiscoverer,
   createLoginResolver,
   type Discoverer,
@@ -51,7 +60,12 @@ import {
 } from './runtime/index.ts';
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
-import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
+import {
+  ATTACHMENT_REQUEST_LIMIT_BYTES,
+  EventLog,
+  EvidenceStore,
+  resolveStateVersion,
+} from './store/index.ts';
 import { ServiceRefiner, Terminals, type TerminalsOptions } from './terminals/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
@@ -83,6 +97,7 @@ export interface ShinsaOptions {
   extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
   versions?: VersionsOptions;
   terminals?: Pick<TerminalsOptions, 'spawn' | 'readForeground' | 'env'>;
+  remoteConnect?: StartConnector;
   byService?: boolean;
   exit?: (code: number) => void;
 }
@@ -148,6 +163,22 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     readOnly: config.inspect,
     ...options.terminals,
   });
+  const remote = new Remote({
+    path: join(config.dataDir, REMOTE_FILE),
+    control: new ControlClient({ origin: config.remoteOrigin }),
+    connect:
+      options.remoteConnect ??
+      createCloudflaredConnector({
+        binary: () =>
+          installCloudflared({
+            dataDir: config.dataDir,
+            asset: resolveCloudflaredAsset(process.platform, process.arch),
+          }),
+      }),
+    localUrl: () => address.url,
+    version: instance.version,
+    maxBodyBytes: ATTACHMENT_REQUEST_LIMIT_BYTES,
+  });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
     services: terminals,
@@ -189,6 +220,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     runs,
     briefings,
     terminals,
+    remote,
     inbox,
     quick,
     classify,
@@ -246,6 +278,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     resolveLogin: services.resolveLogin,
     classify: services.classify,
     workspaces: services.runs.workspaces,
+    remote: services.remote,
     restarter: createLaunchdRestarter(engine, {
       byService: options.byService ?? false,
       drain: services.runs,
@@ -270,6 +303,7 @@ async function startWork(services: Services) {
   await services.runs.recover();
   await effects.recover();
   services.inbox.start();
+  services.remote.start();
   services.briefings.schedule();
   services.extensions.syncSnapshot();
   void services.extensions.syncUsage();
@@ -312,6 +346,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       services.schedules.stop();
       services.accounts.stop();
       services.versions.stop();
+      await services.remote.stop();
       await services.terminals.stop();
       for (const clock of services.clocks) clock.stop();
       await services.effects.stop();

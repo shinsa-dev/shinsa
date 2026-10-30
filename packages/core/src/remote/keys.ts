@@ -6,6 +6,8 @@ const RAW_PUBLIC_KEY_BYTES = 65;
 
 const FINGERPRINT_BYTES = 10;
 
+type WebKey = Exclude<Awaited<ReturnType<typeof crypto.subtle.exportKey>>, ArrayBuffer>;
+
 export async function serializePublicKey(key: CryptoKey) {
   return serializeBase64Url(new Uint8Array(await crypto.subtle.exportKey('raw', key)));
 }
@@ -26,7 +28,7 @@ export async function serializePrivateKey(key: CryptoKey) {
 
 export async function parsePrivateKey(text: string) {
   try {
-    return await crypto.subtle.importKey('jwk', JSON.parse(text) as JsonWebKey, REMOTE_KEY_ALGORITHM, false, [
+    return await crypto.subtle.importKey('jwk', JSON.parse(text) as WebKey, REMOTE_KEY_ALGORITHM, false, [
       'deriveBits',
     ]);
   } catch {

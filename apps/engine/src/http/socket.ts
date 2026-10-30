@@ -3,13 +3,16 @@ import {
   type ClientMessage,
   DomainError,
   isSurface,
+  LOCAL_ONLY_CODE,
+  parseUserCommand,
+  type RequestOrigin,
+  resolveLocalOnlyRefusal,
   resolveStatePatch,
   type ServerMessage,
   type Surface,
   serializeState,
   type UserCommand,
 } from '@shinsa/core';
-import type { ServerWebSocket } from 'bun';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
@@ -22,9 +25,15 @@ export interface SocketData {
   kind: 'hub';
   transcripts: Map<string, () => void>;
   surface: Surface | null;
+  origin: RequestOrigin;
 }
 
-type Socket = ServerWebSocket<SocketData>;
+export interface HubSocket {
+  data: SocketData;
+  send: (payload: string) => unknown;
+}
+
+type Socket = HubSocket;
 
 function send(socket: Socket, message: ServerMessage) {
   socket.send(JSON.stringify(message));
@@ -74,6 +83,15 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | null {
     return { type: 'transcript.unsubscribe', runId: fields.runId };
   }
   return null;
+}
+
+function resolveCommandRefusal(origin: RequestOrigin, command: unknown) {
+  if (origin === 'local') return null;
+  try {
+    return resolveLocalOnlyRefusal(origin, parseUserCommand(command));
+  } catch {
+    return null;
+  }
 }
 
 export function createSocketHub(
@@ -137,6 +155,11 @@ export function createSocketHub(
         syncSurfaces();
         return;
       case 'command': {
+        const refusal = resolveCommandRefusal(socket.data.origin, message.command);
+        if (refusal) {
+          send(socket, { type: 'ack', id: message.id, error: { code: LOCAL_ONLY_CODE, message: refusal } });
+          return;
+        }
         try {
           await dispatchUserCommand(engine, message.command, message.id, classify);
           send(socket, { type: 'ack', id: message.id, error: null });
