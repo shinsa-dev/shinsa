@@ -118,4 +118,8 @@ How Shinsa works inside is in [`docs/`](docs): start with [`docs/spec.md`](docs/
 
 ## License
 
-[MIT](LICENSE)
+Copyright © 2026 Christo Todorov. Shinsa is free software under the [GNU AGPL v3](LICENSE): use it, change it and run it
+however you like, at home or inside your company. If you share a modified Shinsa, or offer it to others over a
+network, you share its source under the same licence.
+
+The name Shinsa and its logo are not covered by the licence: a fork needs a name and logo of its own.

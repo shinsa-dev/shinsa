@@ -131,7 +131,7 @@ export const features: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'IconGithub',
     title: 'Open source',
-    text: 'MIT licensed and free. Read every line, run it, change it.',
+    text: 'Free and open source under the AGPL. Read every line, run it, change it.',
   },
 ];
 
