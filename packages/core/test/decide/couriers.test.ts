@@ -99,7 +99,7 @@ describe('a courier task', () => {
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);
     expect(() => courier(harness, planner.id, { thisWaits: true })).toThrow(
-      'Only a task that is building can wait on a task it creates.'
+      'Only a task that is building can wait on a task it creates. Create it with this_task_waits once you build, or now with after_this'
     );
     expect(courier(harness, planner.id)).toHaveLength(1);
   });

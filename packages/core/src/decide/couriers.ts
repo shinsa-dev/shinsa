@@ -17,7 +17,7 @@ function assertCanWait(run: Run) {
   if (run.purpose === 'build' || run.purpose === 'fix') return;
   throw new DomainError(
     'cannot_wait',
-    'Only a task that is building can wait on a task it creates. Create it without this_task_waits and say how the two relate in your hand-over.'
+    'Only a task that is building can wait on a task it creates. Create it with this_task_waits once you build, or now with after_this when it should merge after this task; otherwise create it without either and say how the two relate in your hand-over.'
   );
 }
 
