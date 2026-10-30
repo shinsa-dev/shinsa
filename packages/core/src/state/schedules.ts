@@ -1,4 +1,4 @@
-import { SCHEDULE_LIMITS, type Schedule } from '../domain/index.ts';
+import { SCHEDULE_LIMITS, type Schedule, type SourceReport } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { removeEntry, writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
@@ -43,11 +43,25 @@ export function describeSchedule(state: ShinsaState, scheduleId: string) {
   return name ? `the schedule “${name}”` : 'a schedule';
 }
 
-function describeStarted(state: ShinsaState, event: EventOf<'task.created'>, scheduleId: string) {
-  const schedule = describeSchedule(state, scheduleId);
-  if (!event.sourceReport) return `Started by ${schedule}`;
-  const author = event.sourceReport.author ? ` by ${event.sourceReport.author}` : '';
-  return `Filed by ${schedule} from a report${author} in ${event.sourceReport.server}`;
+function describeReportAuthor(report: SourceReport) {
+  return report.author ? ` by ${report.author}` : '';
+}
+
+function describeWatchdog(state: ShinsaState, taskId: string, watchdogId: string) {
+  const title = state.tasks[taskId]?.watchdogs?.find((watchdog) => watchdog.id === watchdogId)?.title;
+  return title ? `the watchdog “${title}”` : 'a watchdog';
+}
+
+function describeStarted(state: ShinsaState, event: EventOf<'task.created'>) {
+  const report = event.sourceReport;
+  if (event.scheduleId) {
+    const schedule = describeSchedule(state, event.scheduleId);
+    if (!report) return `Started by ${schedule}`;
+    return `Filed by ${schedule} from a report${describeReportAuthor(report)} in ${report.server}`;
+  }
+  if (!report?.watchdogId || !event.createdBy) return null;
+  const watchdog = describeWatchdog(state, event.createdBy.taskId, report.watchdogId);
+  return `Filed by ${watchdog} from a report${describeReportAuthor(report)} in ${report.server}`;
 }
 
 function recordFiled(state: ShinsaState, event: EventOf<'task.created'>, title: string) {
@@ -64,13 +78,11 @@ function recordFiled(state: ShinsaState, event: EventOf<'task.created'>, title: 
 
 export function applyScheduledTask(state: ShinsaState, event: EventOf<'task.created'>) {
   const task = state.tasks[event.taskId];
-  const scheduleId = event.scheduleId;
-  if (!task || !scheduleId) return;
-  const text = describeStarted(state, event, scheduleId);
+  const text = describeStarted(state, event);
+  if (!task || text === null) return;
   writeEntry(state, 'tasks', event.taskId, {
     ...task,
-    scheduleId,
-    ...(event.sourceReport ? { sourceReport: event.sourceReport } : {}),
+    ...(event.scheduleId ? { scheduleId: event.scheduleId } : {}),
     activity: task.activity.map((entry, index) =>
       index === 0 ? { ...entry, actor: 'shinsa', text } : entry
     ),

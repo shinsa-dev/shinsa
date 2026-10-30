@@ -31,7 +31,6 @@ import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting } from './dependencies.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
-import { fileReport, reportIntake } from './intake.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -57,6 +56,7 @@ import {
   recordUpdateConflict,
   recordUploads,
 } from './pull-requests.ts';
+import { fileReport, reportRead } from './reads.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
@@ -109,7 +109,6 @@ import {
   connectWatchdog,
   fireWatchdog,
   removeWatchSource,
-  reportWatch,
   stopWatchdog,
   syncWatchdogs,
   writeWatchSource,
@@ -347,10 +346,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeWatchSource(decider, command);
     case 'watch_source.remove':
       return removeWatchSource(decider, command);
-    case 'agent.report_watch':
-      return reportWatch(decider, command);
-    case 'agent.report_intake':
-      return reportIntake(decider, command);
+    case 'agent.report_read':
+      return reportRead(decider, command);
     case 'agent.file_report':
       return fileReport(decider, command);
   }

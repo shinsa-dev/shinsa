@@ -1,4 +1,5 @@
 import { type DownloadBucket, type DownloadCache, respond } from './download.ts';
+import { isOpenPage, respondOpen } from './open.ts';
 
 interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
@@ -11,11 +12,14 @@ function selectEdgeCache(): DownloadCache | null {
 }
 
 export default {
-  fetch: (request: Request, env: Env) =>
-    respond(request, {
+  fetch: (request: Request, env: Env) => {
+    if (isOpenPage(new URL(request.url).pathname))
+      return respondOpen(request, (open) => env.ASSETS.fetch(open));
+    return respond(request, {
       bucket: env.DOWNLOADS ?? null,
       fetch: (url, init) => fetch(url, init),
       cache: selectEdgeCache(),
       assets: (assetRequest) => env.ASSETS.fetch(assetRequest),
-    }),
+    });
+  },
 };

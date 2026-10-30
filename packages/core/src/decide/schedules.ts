@@ -24,11 +24,11 @@ import {
   closeWatchHome,
   createWatchHome,
   findProjectSource,
-  isIntakeBusy,
   selectProjectSource,
   startIntake,
 } from './intake.ts';
 import { assertNotWatchHome, messageTask } from './messages.ts';
+import { isReadBusy } from './reads.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 import { findOpenWatchSuggestion, suggestWatch, type WatchSuggestionInput } from './watch-suggestions.ts';
@@ -607,7 +607,7 @@ function recordRun(
 
 function isScheduleBusy(decider: Decider, schedule: Schedule) {
   if (!schedule.source || schedule.target.kind !== 'task') return false;
-  return isIntakeBusy(decider, decider.task(schedule.target.taskId));
+  return isReadBusy(decider, decider.task(schedule.target.taskId));
 }
 
 function resolveFollowing(schedule: Schedule, now: number) {

@@ -2,15 +2,13 @@ import {
   type ChangeProposalInput,
   COMPOSABLE_STEPS,
   type DeliveringStep,
-  PROTOCOL_LIMITS,
   SCHEDULE_LIMITS,
   SHAPE_LIMITS,
   type ShinsaEvent,
   STEP_SCHEMA,
   validateDelivery,
-  validateIntakeReport,
+  validateReadReport,
   validateReshape,
-  validateWatchReport,
 } from '@shinsa/core';
 import { assertProtocol, HANDED_OVER } from '../handover.ts';
 import type { ProcessToolCall } from './process.ts';
@@ -93,57 +91,25 @@ export const SHAPE_TOOL_SPECS = {
       required: ['outcome'],
     },
   },
-  report_watch: {
-    name: 'report_watch',
+  report_read: {
+    name: 'report_read',
     description:
-      'Report a watchdog check, then stop without restating it: what you looked at and whether the shipped change is healthy. An issue becomes a new task forked from this one, so its agent starts from this conversation.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        live: {
-          type: 'boolean',
-          description:
-            'Only for a watchdog waiting for production: true once the change is live there (then also check it), false while it is not.',
-        },
-        healthy: {
-          type: 'boolean',
-          description:
-            'True when nothing is wrong with what the watchdog watches. Not needed while live is false.',
-        },
-        summary: limitedText(
-          'What you looked at and what you saw, with the numbers.',
-          PROTOCOL_LIMITS.watchSummary
-        ),
-        issue: {
-          type: 'object',
-          description: 'Only when healthy is false: the issue the change caused.',
-          properties: {
-            title: limitedText('The issue in a few words.', PROTOCOL_LIMITS.watchIssueTitle),
-            request: limitedText(
-              'The fix as the human would ask for it, with the evidence: what broke, where and since when.',
-              PROTOCOL_LIMITS.watchIssueRequest
-            ),
-          },
-          required: ['title', 'request'],
-        },
-      },
-      required: ['summary'],
-    },
-  },
-  report_intake: {
-    name: 'report_intake',
-    description:
-      'Report a read of an automation’s data source, then stop without restating it: what you read, the tasks you filed with `file_report` and what you skipped.',
+      'End a read of a data source, for an automation or a watchdog, then stop without restating it: what you read, the tasks you filed with `file_report` and what you skipped.',
     inputSchema: {
       type: 'object',
       properties: {
         summary: limitedText(
-          'What you read, what you filed and what you skipped, with the counts.',
-          SCHEDULE_LIMITS.intakeSummary
+          'What you read, what you filed and what you skipped, with the counts and the numbers.',
+          SCHEDULE_LIMITS.readSummary
         ),
         reached: {
           type: 'boolean',
           description: `False when the source still failed after ${SCHEDULE_LIMITS.readAttempts} tries, so the next read covers this one's time again. True when left out.`,
+        },
+        live: {
+          type: 'boolean',
+          description:
+            'Only for a watchdog waiting for production: true once the change is live there (then also check it), false while it is not.',
         },
       },
       required: ['summary'],
@@ -201,14 +167,9 @@ export async function handleShapeTool(name: string, input: Record<string, unknow
     await call.dispatch({ type: 'agent.deliver', runId, attemptId, step, body, ...withProposal(proposal) });
     return HANDED_OVER;
   }
-  if (name === 'report_watch') {
-    const watch = assertProtocol(validateWatchReport(input));
-    await call.dispatch({ type: 'agent.report_watch', runId, attemptId, ...watch });
-    return HANDED_OVER;
-  }
-  if (name === 'report_intake') {
-    const intake = assertProtocol(validateIntakeReport(input));
-    await call.dispatch({ type: 'agent.report_intake', runId, attemptId, ...intake });
+  if (name === 'report_read') {
+    const read = assertProtocol(validateReadReport(input));
+    await call.dispatch({ type: 'agent.report_read', runId, attemptId, ...read });
     return HANDED_OVER;
   }
   if (name === 'reshape_task') {

@@ -39,6 +39,43 @@ function Sized() {
   );
 }
 
+type Rect = { left: number; top: number; width: number; height: number };
+
+function stubRect(element: Element, { left, top, width, height }: Rect) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }),
+  });
+}
+
+function Measured({
+  root: rootBox,
+  item,
+}: {
+  root: Rect & { layout: { width: number; height: number } };
+  item: Rect;
+}) {
+  const root = React.useRef<HTMLDivElement>(null);
+  const indicator = useAnimatedIndicator(root);
+  const measureRoot = (element: HTMLDivElement | null) => {
+    root.current = element;
+    if (!element) return;
+    place(element, { offsetWidth: rootBox.layout.width, offsetHeight: rootBox.layout.height, scrollTop: 20 });
+    Object.defineProperty(element, 'clientLeft', { configurable: true, get: () => 1 });
+    Object.defineProperty(element, 'clientTop', { configurable: true, get: () => 1 });
+    stubRect(element, rootBox);
+  };
+  const measureItem = (element: HTMLDivElement | null) => {
+    if (element) stubRect(element, item);
+  };
+  return (
+    <div ref={measureRoot}>
+      <div ref={indicator} data-testid='indicator' />
+      <div ref={measureItem} data-highlighted='' />
+    </div>
+  );
+}
+
 function setup(ui: React.ReactElement) {
   const view = render(ui);
   return { ...view, indicator: view.getByTestId('indicator'), root: view.getByTestId('root') };
@@ -307,5 +344,34 @@ describe('useAnimatedIndicator', () => {
   it('does nothing without an indicator to move', () => {
     const view = render(<List bare>{items()}</List>);
     expect(view.getByTestId('a').hasAttribute('data-indicator-here')).toBe(false);
+  });
+  it('covers a row of a fractional height exactly, never rounding past its edge', () => {
+    const view = render(
+      <Measured
+        root={{ left: 280, top: 570.75, width: 720, height: 183.375, layout: { width: 720, height: 183 } }}
+        item={{ left: 285, top: 706.53125, width: 710, height: 42.59375 }}
+      />
+    );
+    const indicator = view.getByTestId('indicator');
+    expect(indicator.style.width).toBe('710px');
+    expect(indicator.style.height).toBe('42.59375px');
+    expect(indicator.style.transform).toBe(
+      'translate(4px, 154.78125px) scale(1, 1) scale(var(--hl-press-scale, 1))'
+    );
+  });
+
+  it("undoes the root's scale while a popup zooms open", () => {
+    const view = render(
+      <Measured
+        root={{ left: 105, top: 52.5, width: 190, height: 95, layout: { width: 200, height: 100 } }}
+        item={{ left: 109.75, top: 62, width: 171, height: 22.8 }}
+      />
+    );
+    const indicator = view.getByTestId('indicator');
+    expect(indicator.style.width).toBe('180px');
+    expect(indicator.style.height).toBe('24px');
+    expect(indicator.style.transform).toBe(
+      'translate(4px, 29px) scale(1, 1) scale(var(--hl-press-scale, 1))'
+    );
   });
 });

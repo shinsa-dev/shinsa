@@ -36,7 +36,7 @@ src/
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours), update-log.ts
 │                   (the updater log, `~/Library/Logs/<app>/updater.log`)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
-                    updateBadge, notify, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
+                    updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
                     onWindowState, onUpdate) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
 static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
@@ -61,6 +61,13 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   `apps/web/src/lib/desktop.ts`, from `window.shinsaDesktop`), and while it is connected the server tells every other
   page, browser tabs and Floaty, to stay quiet: no sound and no notification, while the count in the title and
   Floaty's tags stay (`docs/engine.md` → The socket). Nothing in `main/` decides this; it follows from the preload bridge being there.
+- **macOS decides whether anything shows.** Banners and the Dock badge appear only while System Settings →
+  Notifications allows Shinsa; once you deny it (or dismiss the first prompt), macOS takes notifications without
+  showing them and never asks again, and Electron has no way to read that setting. So Settings → Notifications in the
+  app always has a macOS notifications row whose Open settings sends `shinsa:notification-settings`, and main opens
+  that pane for `APP_ID` (`resolveNotificationSettingsUrl` in `lib/notice.ts`). When Electron reports a notification
+  `failed`, `notifications.ts` tells the page on `shinsa:notify-failed` and the page shows a toast with the same
+  action. Signed builds only: an unsigned dev build delivers no notifications at all.
 - **The icon** follows macOS's 1024px grid: a light 824px squircle (continuous corners of about 185px) inset 100px,
   with room for its shadow, and the Shinsa mark from `packages/ui/src/components/logo.tsx` in near-black at 488px,
   centred, on every channel. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from

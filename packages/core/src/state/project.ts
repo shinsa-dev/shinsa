@@ -923,6 +923,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'watchdog.live':
     case 'watchdog.missed':
     case 'watchdog.checked':
+    case 'watchdog.report_linked':
     case 'watchdog.ended':
     case 'watch_source.written':
     case 'watch_source.removed':

@@ -2,10 +2,13 @@ import { Button } from '@shinsa/ui/components/button';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useDesktopConnected } from '@/lib/connection/socket.ts';
-import { isPageQuiet } from '@/lib/desktop.ts';
+import { isDesktop, isPageQuiet, openDesktopNotificationSettings } from '@/lib/desktop.ts';
 import {
   HANDLED_BY_APP,
+  MACOS_NOTIFICATIONS,
+  MACOS_NOTIFICATIONS_HINT,
   needsTestNotification,
+  OPEN_MACOS_SETTINGS,
   TEST_BOTH,
   TEST_SOUND,
   testNotifications,
@@ -37,8 +40,9 @@ export function NotificationGroup({
       </SettingsGroup>
     );
   }
+  const desktop = isDesktop();
   return (
-    <SettingsGroup title='Notifications'>
+    <SettingsGroup title='Notifications' description={desktop ? MACOS_NOTIFICATIONS_HINT : undefined}>
       <SettingRow title='Play a sound'>
         <SelectField<AlertPreference>
           label='Play a sound'
@@ -71,6 +75,13 @@ export function NotificationGroup({
           onValueChange={(notify) => onChange({ notify })}
         />
       </SettingRow>
+      {desktop && (
+        <SettingRow title={MACOS_NOTIFICATIONS}>
+          <Button variant='secondary' onClick={openDesktopNotificationSettings}>
+            {OPEN_MACOS_SETTINGS}
+          </Button>
+        </SettingRow>
+      )}
     </SettingsGroup>
   );
 }

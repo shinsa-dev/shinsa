@@ -27,7 +27,8 @@ export interface ScheduleSource {
 }
 
 export interface SourceReport {
-  scheduleId: string;
+  scheduleId: string | null;
+  watchdogId: string | null;
   server: string;
   reportId: string | null;
   link: string | null;
@@ -119,7 +120,7 @@ export const SCHEDULE_LIMITS = {
   secretLabel: 80,
   secretReason: 300,
   detail: 300,
-  intakeSummary: 1_000,
+  readSummary: 1_000,
   readAttempts: 3,
   reportTitle: 100,
   reportRequest: 2_000,

@@ -15,7 +15,7 @@ describe('settings tabs', () => {
       'General',
       'Statistics',
       'Agents',
-      'Agent usage',
+      'Agent Usage',
       'Projects',
       'Integrations',
       'Automations',

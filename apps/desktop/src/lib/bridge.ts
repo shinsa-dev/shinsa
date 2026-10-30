@@ -31,6 +31,8 @@ export interface DesktopStart {
 export interface DesktopBridge extends DesktopStart {
   updateBadge: (count: number) => void;
   notify: (notice: DesktopNotice) => void;
+  openNotificationSettings: () => void;
+  onNotifyFailed: (listener: () => void) => () => void;
   installUpdate: () => void;
   checkForUpdates: () => void;
   applyUpdateChannel: (channel: UpdateChannel) => void;
@@ -44,6 +46,8 @@ export const CHANNELS = {
   start: 'shinsa:start',
   badge: 'shinsa:badge',
   notify: 'shinsa:notify',
+  notifyFailed: 'shinsa:notify-failed',
+  notificationSettings: 'shinsa:notification-settings',
   navigate: 'shinsa:navigate',
   windowState: 'shinsa:window-state',
   update: 'shinsa:update',

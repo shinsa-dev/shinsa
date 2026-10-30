@@ -46,7 +46,8 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
     nextCheckAt: NOW + 6 * HOUR_MS,
     runId: null,
     checks: [{ at: NOW, healthy: true, summary: 'Fine.' }],
-    forkTaskId: null,
+    forkTaskIds: [],
+    linkedTaskIds: [],
     endedAt: null,
     ...overrides,
   };
@@ -55,7 +56,8 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
 describe('describing a watchdog', () => {
   it('says how often it checks and where it stands in each status', () => {
     const fork = createTask({ id: 'f', handle: 'SW-9' });
-    const state = createShinsaState({ tasks: [fork] });
+    const second = createTask({ id: 'g', handle: 'SW-10' });
+    const state = createShinsaState({ tasks: [fork, second] });
     expect(describeWatchdogSchedule(createWatchdog())).toBe(
       'First check after 6 h, then up to every 6 h, for 48 h'
     );
@@ -90,17 +92,39 @@ describe('describing a watchdog', () => {
     expect(
       summary({
         status: 'tripped',
-        forkTaskId: 'f',
+        forkTaskIds: ['f'],
         checks: [{ at: NOW, healthy: false, summary: 'Errors in Safari.' }],
       })
     ).toBe('Errors in Safari. Filed [SW-9](shinsa://task/f) to fix it.');
+    expect(
+      summary({
+        status: 'tripped',
+        forkTaskIds: ['f', 'gone', 'g'],
+        checks: [{ at: NOW, healthy: false, summary: 'Two errors.' }],
+      })
+    ).toBe('Two errors. Filed [SW-9](shinsa://task/f) and [SW-10](shinsa://task/g) to fix it.');
+    expect(
+      summary({
+        status: 'tripped',
+        linkedTaskIds: ['g'],
+        checks: [{ at: NOW, healthy: false, summary: 'Errors in Safari.' }],
+      })
+    ).toBe('Errors in Safari. Already filed as [SW-10](shinsa://task/g).');
+    expect(
+      summary({
+        status: 'tripped',
+        forkTaskIds: ['f'],
+        linkedTaskIds: ['g', 'gone'],
+        checks: [{ at: NOW, healthy: false, summary: 'Two errors.' }],
+      })
+    ).toBe('Two errors. Filed [SW-9](shinsa://task/f) to fix it. Already filed as [SW-10](shinsa://task/g).');
     expect(summary({ status: 'tripped', checks: [] })).toBe('Found an issue.');
     expect(summary({ status: 'stopped' })).toBe('Stopped after 1 check.');
     const meta = (overrides: Partial<Watchdog>) => describeWatchdogMeta(createWatchdog(overrides), NOW);
     expect(meta({})).toBe('31 h left · 1 check');
     expect(meta({ endsAt: null })).toBe('1 h left · 1 check');
-    expect(meta({ status: 'needs_source' })).toBe('Not started');
-    expect(meta({ status: 'awaiting_production' })).toBe('Not started');
+    expect(meta({ status: 'needs_source' })).toBeNull();
+    expect(meta({ status: 'awaiting_production' })).toBeNull();
     expect(meta({ status: 'passed', checks: [] })).toBe('0 checks');
     expect(WATCHDOG_STATUS.tripped).toEqual({ label: 'Found an issue', tone: 'red' });
   });

@@ -55,7 +55,7 @@ export type ScheduleAgentCommand =
       timeZone: string;
     }
   | { type: 'agent.delete_schedule'; runId: string; scheduleId: string }
-  | { type: 'agent.report_intake'; runId: string; summary: string; reached: boolean }
+  | { type: 'agent.report_read'; runId: string; summary: string; reached: boolean; live?: boolean | null }
   | ({ type: 'agent.file_report'; runId: string } & ReportFiling);
 
 export type ScheduleSystemCommand =

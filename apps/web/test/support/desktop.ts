@@ -9,6 +9,8 @@ export function installDesktop(windowState: WindowState = 'window') {
   const stateListeners = new Set<(state: WindowState) => void>();
   const updateListeners = new Set<(update: DesktopUpdate) => void>();
   const updateCalls: string[] = [];
+  const failedListeners = new Set<() => void>();
+  let settingsOpened = 0;
   const channels: UpdateChannel[] = [];
   const bridge: DesktopBridge = {
     version: '0.0.0',
@@ -18,6 +20,13 @@ export function installDesktop(windowState: WindowState = 'window') {
     windowState,
     updateBadge: (count) => badges.push(count),
     notify: (notice) => notices.push(notice),
+    openNotificationSettings: () => {
+      settingsOpened += 1;
+    },
+    onNotifyFailed: (listener) => {
+      failedListeners.add(listener);
+      return () => failedListeners.delete(listener);
+    },
     installUpdate: () => updateCalls.push('install'),
     checkForUpdates: () => updateCalls.push('check'),
     applyUpdateChannel: (channel) => channels.push(channel),
@@ -42,6 +51,11 @@ export function installDesktop(windowState: WindowState = 'window') {
     notices,
     updateCalls,
     channels,
+    settingsOpened: () => settingsOpened,
+    failNotice: () => {
+      for (const listener of failedListeners) listener();
+    },
+    failedListeners: () => failedListeners.size,
     changeUpdate: (update: DesktopUpdate) => {
       for (const listener of updateListeners) listener(update);
     },

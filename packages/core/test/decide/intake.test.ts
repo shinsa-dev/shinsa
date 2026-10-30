@@ -77,13 +77,13 @@ function fire(harness: Harness) {
   return only(harness);
 }
 
-function reportIntake(
+function reportRead(
   harness: Harness,
   taskId: string,
   summary = 'Read 12 messages; nothing new.',
   reached = true
 ) {
-  return harness.send({ type: 'agent.report_intake', runId: harness.activeRun(taskId).id, summary, reached });
+  return harness.send({ type: 'agent.report_read', runId: harness.activeRun(taskId).id, summary, reached });
 }
 
 describe('a schedule that reads a data source', () => {
@@ -308,11 +308,11 @@ describe('an intake turn', () => {
     expect(prompt).toContain('No read has finished yet');
   });
 
-  test('report_intake ends the turn and the task rests again; the next read starts from the last one', () => {
+  test('report_read ends the turn and the task rests again; the next read starts from the last one', () => {
     const { harness, taskId } = createIntake();
     fire(harness);
     const runId = harness.activeRun(taskId).id;
-    reportIntake(harness, taskId);
+    reportRead(harness, taskId);
     expect(harness.state.runs[runId]).toMatchObject({
       outcome: 'completed',
       summary: 'Read 12 messages; nothing new.',
@@ -330,13 +330,13 @@ describe('an intake turn', () => {
     const { harness, taskId } = createIntake();
     fire(harness);
     const finished = only(harness).runs.at(-1)?.at ?? 0;
-    reportIntake(harness, taskId);
+    reportRead(harness, taskId);
     fire(harness);
     const runId = harness.activeRun(taskId).id;
     expect(readRunInstruction(harness.activeRun(taskId))).toContain(
       `${SCHEDULE_LIMITS.readAttempts} tries in all`
     );
-    reportIntake(harness, taskId, 'slack timed out three times.', false);
+    reportRead(harness, taskId, 'slack timed out three times.', false);
     expect(harness.state.runs[runId]).toMatchObject({
       outcome: 'failed',
       summary: 'slack timed out three times.',
@@ -367,7 +367,7 @@ describe('an intake turn', () => {
     fire(harness);
     crash();
     expect(harness.task(taskId).recoveries).toBe(1);
-    reportIntake(harness, taskId);
+    reportRead(harness, taskId);
     fire(harness);
     expect(harness.task(taskId).recoveries).toBe(0);
     const first = harness.activeRun(taskId).id;
@@ -380,7 +380,7 @@ describe('an intake turn', () => {
     const { harness, taskId } = createIntake();
     fire(harness);
     const finished = only(harness).runs.at(-1)?.at ?? 0;
-    reportIntake(harness, taskId);
+    reportRead(harness, taskId);
     fire(harness);
     harness.send({
       type: 'run.end',
@@ -457,15 +457,15 @@ describe('an intake turn', () => {
     expect(schedule.runs.at(-1)?.detail).toBe('Its data source was removed from the project.');
   });
 
-  test('report_intake needs a summary within its limit, and only an intake turn may call it', () => {
+  test('report_read needs a summary within its limit, and only an intake turn may call it', () => {
     const { harness, taskId } = createIntake();
     fire(harness);
-    expect(refusal(() => reportIntake(harness, taskId, '  ')).code).toBe('summary_required');
-    expect(
-      refusal(() => reportIntake(harness, taskId, 'x'.repeat(SCHEDULE_LIMITS.intakeSummary + 1))).code
-    ).toBe('summary_too_long');
+    expect(refusal(() => reportRead(harness, taskId, '  ')).code).toBe('summary_required');
+    expect(refusal(() => reportRead(harness, taskId, 'x'.repeat(SCHEDULE_LIMITS.readSummary + 1))).code).toBe(
+      'summary_too_long'
+    );
     const builder = createTask(harness);
-    expect(refusal(() => reportIntake(harness, builder)).code).toBe('wrong_step');
+    expect(refusal(() => reportRead(harness, builder)).code).toBe('wrong_step');
   });
 });
 
@@ -513,6 +513,7 @@ describe('filing reports from an intake turn', () => {
     });
     expect(filed.sourceReport).toEqual({
       scheduleId: only(harness).id,
+      watchdogId: null,
       server: 'slack',
       reportId: '1730200000.000100',
       link: 'https://superwall.slack.com/archives/C1/p1730200000000100',
@@ -607,19 +608,19 @@ describe('filing reports from an intake turn', () => {
     expect(refusal(() => fileReport(harness, taskId)).code).toBe('schedule_not_found');
   });
 
-  test('the next read lists the reports it filed last, newest first', () => {
+  test('the next read lists the reports filed last from its source, newest first', () => {
     const { harness, taskId } = createIntake();
     fire(harness);
     fileReport(harness, taskId);
     harness.advance(MINUTE);
     fileReport(harness, taskId, { reportId: 'r2', link: null, title: 'Dark mode toggle is missing' });
-    reportIntake(harness, taskId, 'Filed 2.');
+    reportRead(harness, taskId, 'Filed 2.');
     fire(harness);
     const [first, second] = listFiled(harness);
     const prompt = readRunInstruction(harness.activeRun(taskId));
     expect(prompt).toContain(
       [
-        'The reports it filed last, newest first:',
+        'The reports filed last from this source, newest first:',
         `- ${second?.handle} “Dark mode toggle is missing”: r2`,
         `- ${first?.handle} “Paywall editor loses unsaved changes”: https://superwall.slack.com/archives/C1/p1730200000000100`,
       ].join('\n')
@@ -672,7 +673,7 @@ describe('a watch over its cost limit', () => {
     for (let read = 0; read < 2; read += 1) {
       fire(harness);
       harness.send({ type: 'run.meter', runId: harness.activeRun(taskId).id, usage });
-      reportIntake(harness, taskId);
+      reportRead(harness, taskId);
     }
     fire(harness);
     const gate = harness.openGate(taskId);
@@ -680,7 +681,7 @@ describe('a watch over its cost limit', () => {
     expect(fire(harness).runs.at(-1)).toMatchObject({ outcome: 'skipped' });
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
     expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'intake' });
-    reportIntake(harness, taskId);
+    reportRead(harness, taskId);
     expect(fire(harness).runs.at(-1)).toMatchObject({ outcome: 'sent' });
   });
 
@@ -694,7 +695,7 @@ describe('a watch over its cost limit', () => {
       runId: harness.activeRun(taskId).id,
       usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 2 },
     });
-    reportIntake(harness, taskId);
+    reportRead(harness, taskId);
     fire(harness);
     return { ...intake, gateId: harness.openGate(taskId).id };
   }

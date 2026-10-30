@@ -56,7 +56,7 @@ describe('Settings tabs', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent)
-    ).toEqual(['General', 'Statistics', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
+    ).toEqual(['General', 'Statistics', 'Agents', 'Agent Usage', 'Projects', 'Integrations', 'Automations']);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
     for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
       expect(screen.getByText(section)).toBeTruthy();

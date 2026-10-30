@@ -60,6 +60,11 @@ describe('usage', () => {
       { key: 'per-pull-request', label: 'Tokens per pull request', value: '600k', detail: 'Over 4 merged' },
     ]);
     expect(listUsageTiles(range).at(-1)).toMatchObject({ value: 'None', detail: 'No pull requests merged' });
+    const large = {
+      ...stats,
+      total: { ...stats.total, usage: line({ tokens: 3_337_200_000, knownUsd: 15_400, runs: 9 }) },
+    };
+    expect(listUsageTiles(large).slice(0, 2)).toMatchObject([{ value: '3.3B' }, { value: '$15.4K' }]);
     expect(formatPercent(null)).toBe('None');
   });
 

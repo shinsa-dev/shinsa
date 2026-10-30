@@ -193,14 +193,19 @@ not chat text.
 - **Watchdogs after the merge.** You cannot verify everything before a merge. The Agent writes watchdogs for a change
   whose effects only real traffic shows: each reads a data source (an MCP server the project lists: traces, logs,
   analytics, support messages) for a window once the change is live (72 hours by default), checking soon after and less
-  often as it holds up, as a read-only turn of the task's own conversation, and an issue it finds becomes a new task
-  forked from this one. Where the merge is not the release, a watchdog starts only once the change is live in
+  often as it holds up, as a read-only turn of the task's own conversation. A check reads its source the way a watch
+  does: each thing wrong it finds is filed as a report, a new task forked from this one that quotes it, deduped
+  against every report the project already filed. Where the merge is not the release, a watchdog starts only once the change is live in
   production. The agent sets each one's schedule from what the change needs; Settings → Agents → Watchdogs holds the
   defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
   connecting (`docs/engine.md` → Watchdogs).
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
   `docs/engine.md` → Forking a task).
+- **Work across repositories.** A task works in one repository and ships one pull request. A change that also needs
+  another repository of the project is a second task its agent files there, forked from the first and ordered with
+  `this_task_waits` or `after_this`, so each pull request merges in the order the change needs (`docs/engine.md` →
+  Work across repositories).
 - Nothing in it approves a gate, merges or commits to the default branch on its own.
 
 ### Focus
@@ -310,7 +315,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
   past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
-  used the most. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
+  used the most. Counts and costs stay compact as they grow (15.4k, 3.3B, 1.2T tokens; $12.34, then $15.4K): token
+  counts everywhere drop a trailing `.0` and move up a unit rather than read 1000k, and costs keep cents under $1,000. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
   changed come from GitHub's pull request read (`changes`), so pull requests merged before it show none. Quick calls
   (triage, briefings, titles) are not metered, and tokens are counted per run, not per turn or tool call.
 - **Fast mode only on credits you have.** Agents run at standard speed unless you pick Fast. Fast

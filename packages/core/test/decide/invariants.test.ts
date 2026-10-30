@@ -1238,6 +1238,7 @@ describe('decide under random command sequences', () => {
         'budget gate',
         'configuration gate',
         'courier task',
+        'courier waiting on its task',
         'delivered result',
         'escalated review',
         'gate after the merge',

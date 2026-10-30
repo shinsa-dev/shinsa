@@ -421,12 +421,8 @@ describe('resolveRunningLabel', () => {
 });
 
 describe('resolveGroupPhrase', () => {
-  it('names a watchdog check the agent reported', () => {
-    expect(resolveGroupPhrase(['report_watch'])).toBe('Reported the watchdog check');
-  });
-
-  it('names a read of a data source the agent reported', () => {
-    expect(resolveGroupPhrase(['report_intake'])).toBe('Reported what the watch found');
+  it('names a read of a data source the agent reported, for a watch or a watchdog', () => {
+    expect(resolveGroupPhrase(['report_read'])).toBe('Reported what it read');
   });
 
   it('counts each kind of step in the order it first appeared', () => {

@@ -9,7 +9,7 @@ export {
 export {
   type ReportFilingRequest,
   type ScheduleRequest,
-  validateIntakeReport,
+  validateReadReport,
   validateReportFiling,
   validateScheduleRequest,
   validateSecretRequest,

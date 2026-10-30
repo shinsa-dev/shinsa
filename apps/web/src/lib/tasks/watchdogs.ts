@@ -1,4 +1,5 @@
 import {
+  describeList,
   HOUR_MS,
   isTaskClosed,
   listActiveWatchdogs,
@@ -46,7 +47,7 @@ export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
   switch (watchdog.status) {
     case 'needs_source':
     case 'awaiting_production':
-      return 'Not started';
+      return null;
     case 'watching':
       return `${formatHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
     case 'passed':
@@ -58,6 +59,13 @@ export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
 
 function describeLastCheck(watchdog: Watchdog) {
   return watchdog.checks.at(-1)?.summary ?? null;
+}
+
+function listTaskLinks(state: ShinsaState, taskIds: readonly string[]) {
+  return taskIds.flatMap((id) => {
+    const task = state.tasks[id];
+    return task ? [`[${task.handle ?? task.title}](shinsa://task/${task.id})`] : [];
+  });
 }
 
 export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, now: number) {
@@ -77,9 +85,11 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
     case 'passed':
       return `Held up for ${formatMinutes(watchdog.forMinutes)} with nothing wrong.`;
     case 'tripped': {
-      const fork = watchdog.forkTaskId ? state.tasks[watchdog.forkTaskId] : undefined;
-      const filed = fork ? ` Filed [${fork.handle ?? fork.title}](shinsa://task/${fork.id}) to fix it.` : '';
-      return `${last ?? 'Found an issue.'}${filed}`;
+      const filed = listTaskLinks(state, watchdog.forkTaskIds);
+      const linked = listTaskLinks(state, watchdog.linkedTaskIds);
+      const filedText = filed.length > 0 ? ` Filed ${describeList(filed)} to fix it.` : '';
+      const linkedText = linked.length > 0 ? ` Already filed as ${describeList(linked)}.` : '';
+      return `${last ?? 'Found an issue.'}${filedText}${linkedText}`;
     }
     case 'stopped':
       return `Stopped after ${formatCount(watchdog.checks.length, 'check', 'checks')}.`;

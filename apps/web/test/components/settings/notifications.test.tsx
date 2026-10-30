@@ -89,4 +89,29 @@ describe('Settings → Notifications', () => {
       stopFakeServer();
     }
   });
+
+  it('in the app, points at macOS notification settings; a browser tab has no such row', () => {
+    const view = render(
+      <TooltipProvider>
+        <NotificationSettings />
+      </TooltipProvider>
+    );
+    expect(screen.queryByText('macOS notifications')).toBeNull();
+    view.unmount();
+    const desktop = installDesktop();
+    try {
+      render(
+        <TooltipProvider>
+          <NotificationSettings />
+        </TooltipProvider>
+      );
+      expect(
+        screen.getByText('Banners and the Dock badge only show while macOS allows notifications for Shinsa.')
+      ).toBeDefined();
+      fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+      expect(desktop.settingsOpened()).toBe(1);
+    } finally {
+      desktop.restore();
+    }
+  });
 });

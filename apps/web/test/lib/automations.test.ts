@@ -56,6 +56,7 @@ describe('a watch’s page', () => {
     createdAt: NOW,
     sourceReport: {
       scheduleId: 's1',
+      watchdogId: null,
       server: 'slack',
       reportId: '1',
       link: null,

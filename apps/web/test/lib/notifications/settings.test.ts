@@ -2,13 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { TEST_NOTIFICATION } from '@/lib/notifications/browser.ts';
 import {
   BLOCKED,
+  NOTIFY_BLOCKED,
   needsTestNotification,
+  OPEN_MACOS_SETTINGS,
+  showNotifyBlocked,
   testNotifications,
   UNSUPPORTED,
   updateNotifications,
 } from '@/lib/notifications/settings.ts';
 import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { installDesktop } from '../../support/desktop.ts';
 import { installAudio, installNotifications } from '../../support/notifications.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
@@ -81,5 +85,23 @@ describe('testing the sound and notifications', () => {
     blocked.restore();
     expect(await testNotifications({ ...preferences, notify: 'always' })).toBe(false);
     expect(toasts.error.mock.calls.map(([message]) => message)).toEqual([BLOCKED, UNSUPPORTED]);
+  });
+});
+
+describe('when macOS blocks a notification', () => {
+  it('says so once, with an action that opens macOS notification settings', () => {
+    const desktop = installDesktop();
+    try {
+      showNotifyBlocked();
+      const [message, options] = toasts.error.mock.calls[0] ?? [];
+      expect(message).toBe(NOTIFY_BLOCKED);
+      expect(options?.id).toBe('notify-blocked');
+      const action = options?.action as { label: string; onClick: () => void };
+      expect(action.label).toBe(OPEN_MACOS_SETTINGS);
+      action.onClick();
+      expect(desktop.settingsOpened()).toBe(1);
+    } finally {
+      desktop.restore();
+    }
   });
 });

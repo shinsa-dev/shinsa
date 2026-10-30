@@ -36,6 +36,7 @@ const state = createShinsaState({
       title: 'Editor loses edits',
       sourceReport: {
         scheduleId: 'w',
+        watchdogId: null,
         server: 'slack',
         reportId: '1',
         link: null,

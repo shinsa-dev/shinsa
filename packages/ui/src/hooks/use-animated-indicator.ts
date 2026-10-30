@@ -7,6 +7,47 @@ const PRESS_INSET = { x: 1, y: 0.5 };
 type Box = { left: number; top: number; width: number; height: number };
 
 /**
+ * Walks the offsetParent chain up to `root` for the item's position in layout
+ * coords. offset* values are whole pixels, so this is only the fallback for a
+ * root that has no layout box to measure against.
+ */
+function walkOffsets(el: HTMLElement, root: HTMLElement): Box {
+  let left = 0;
+  let top = 0;
+  let current: HTMLElement | null = el;
+  while (current && current !== root) {
+    left += current.offsetLeft;
+    top += current.offsetTop;
+    const next = current.offsetParent as HTMLElement | null;
+    if (!next || !root.contains(next)) break;
+    current = next;
+  }
+  return { left, top, width: el.offsetWidth, height: el.offsetHeight };
+}
+
+/**
+ * The item's box in the root's layout coords, to the sub-pixel: rows of a
+ * fractional height (two lines of text, say) would otherwise round the
+ * indicator past their edge. Dividing by the root's scale undoes a popup's
+ * open/close transform (zoom-in-95 etc.), which would otherwise land the
+ * indicator mid-item, and the root's scroll offset keeps the box in the
+ * scrolled content the indicator is positioned in.
+ */
+function measureItem(el: HTMLElement, root: HTMLElement): Box {
+  if (!root.offsetWidth || !root.offsetHeight) return walkOffsets(el, root);
+  const rootRect = root.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  const scaleX = Math.abs(rootRect.width - root.offsetWidth) < 1 ? 1 : rootRect.width / root.offsetWidth;
+  const scaleY = Math.abs(rootRect.height - root.offsetHeight) < 1 ? 1 : rootRect.height / root.offsetHeight;
+  return {
+    left: (rect.left - rootRect.left) / scaleX - root.clientLeft + root.scrollLeft,
+    top: (rect.top - rootRect.top) / scaleY - root.clientTop + root.scrollTop,
+    width: rect.width / scaleX,
+    height: rect.height / scaleY,
+  };
+}
+
+/**
  * Attaches a sliding indicator to any container whose items expose a
  * boolean-ish attribute (e.g. `data-highlighted`, `data-active`). Pure
  * imperative DOM — no React re-renders on hover/active change.
@@ -112,21 +153,7 @@ export function useAnimatedIndicator<T extends HTMLElement>(
         else indicator.removeAttribute('data-variant');
       }
 
-      // Walk the offsetParent chain up to `root` for the item's position in
-      // layout coords. offset* instead of getBoundingClientRect avoids
-      // measurement drift during the popup's open/close transforms
-      // (zoom-in-95 etc.), which would otherwise land the indicator mid-item.
-      let left = 0;
-      let top = 0;
-      let current: HTMLElement | null = el;
-      while (current && current !== root) {
-        left += current.offsetLeft;
-        top += current.offsetTop;
-        const next = current.offsetParent as HTMLElement | null;
-        if (!next || !root.contains(next)) break;
-        current = next;
-      }
-      target = { left, top, width: el.offsetWidth, height: el.offsetHeight };
+      target = measureItem(el, root);
 
       if (!hasAppeared) {
         hasAppeared = true;

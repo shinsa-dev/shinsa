@@ -1,4 +1,5 @@
 import type { ShinsaState } from '@shinsa/core';
+import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { TaskLink } from '@/components/links/task.tsx';
@@ -22,7 +23,7 @@ function ListPanel({
   return (
     <div className={cn(STAT_PANEL, 'flex min-w-0 flex-col')}>
       <div className='flex h-9 shrink-0 items-center gap-3 px-3'>
-        <span className='min-w-0 flex-1 truncate font-medium text-fg-4 text-xs'>{title}</span>
+        <Truncate className='flex-1 font-medium text-fg-4 text-xs'>{title}</Truncate>
         {aside}
       </div>
       <div className='flex flex-col divide-y divide-border border-border border-t'>{children}</div>
@@ -32,9 +33,10 @@ function ListPanel({
 
 function TaskTitle({ state, taskId, title }: { state: ShinsaState; taskId: string; title: string }) {
   const task = state.tasks[taskId];
+  if (!task) return <Truncate className='flex-1 text-fg-4 text-xs'>{title}</Truncate>;
   return (
     <span className='min-w-0 flex-1 truncate text-fg-4 text-xs'>
-      {task ? <TaskLink state={state} task={task} /> : title}
+      <TaskLink state={state} task={task} />
     </span>
   );
 }
@@ -46,7 +48,7 @@ export function Breakdown({ title, rows }: { title: string; rows: BreakdownRow[]
       {rows.map((row) => (
         <div key={row.key} className='flex flex-col gap-1.5 px-3 py-2'>
           <div className='flex items-baseline gap-2'>
-            <span className='min-w-0 flex-1 truncate text-fg-4 text-xs'>{row.label}</span>
+            <Truncate className='flex-1 text-fg-4 text-xs'>{row.label}</Truncate>
             <span className={TOKEN_TEXT}>{row.tokens}</span>
           </div>
           <div className='h-1 overflow-hidden rounded-full bg-bg-a2'>

@@ -8,10 +8,12 @@ import {
   isDesktop,
   isPageQuiet,
   notifyDesktop,
+  openDesktopNotificationSettings,
   readDesktopChannel,
   readDesktopUpdate,
   resolveSurface,
   selectDesktopBuild,
+  subscribeDesktopNotifyFailed,
   subscribeDesktopUpdate,
   updateDesktopBadge,
 } from '@/lib/desktop.ts';
@@ -34,6 +36,8 @@ describe('in a browser', () => {
     stop();
     updateDesktopBadge(3);
     expect(notifyDesktop(NOTICE)).toBe(false);
+    openDesktopNotificationSettings();
+    subscribeDesktopNotifyFailed(() => undefined)();
   });
 
   it('is a browser surface, quiet while the desktop app is connected', () => {
@@ -77,6 +81,20 @@ describe('in the desktop app', () => {
     expect(notifyDesktop(NOTICE)).toBe(true);
     expect(fake.badges).toEqual([2]);
     expect(fake.notices).toEqual([NOTICE]);
+  });
+
+  it('opens macOS notification settings and hears when macOS refuses a notification', () => {
+    fake = installDesktop();
+    openDesktopNotificationSettings();
+    expect(fake.settingsOpened()).toBe(1);
+    let failures = 0;
+    const stop = subscribeDesktopNotifyFailed(() => {
+      failures += 1;
+    });
+    fake.failNotice();
+    expect(failures).toBe(1);
+    stop();
+    expect(fake.failedListeners()).toBe(0);
   });
 });
 

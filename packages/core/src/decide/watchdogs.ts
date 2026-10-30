@@ -4,11 +4,11 @@ import {
   DomainError,
   HOUR_MS,
   isTaskClosed,
-  isTaskResting,
   isWatchdogActive,
   isWatchdogScheduled,
   listActiveWatchdogs,
   MINUTE_MS,
+  type Run,
   resolveCurrentRound,
   resolveWatchdogDefaults,
   selectWatchingRun,
@@ -19,14 +19,12 @@ import {
 } from '../domain/index.ts';
 import { resolveAgentPrompt, resolveWatchPrompt } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
-import type { WatchdogSource, WatchdogSpec, WatchIssue } from '../report/types.ts';
+import type { WatchdogSource, WatchdogSpec } from '../report/types.ts';
 import { listChangedIds } from '../state/draft.ts';
-import { listLiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
-import { findCurrentRun } from './runs.ts';
+import { isReadBusy, listSourceFiledTasks, type ReadReport } from './reads.ts';
 import { resolveRestingStage } from './shapes.ts';
-import { createTask } from './tasks.ts';
 import { isWatchSuggestible, removeSourceSuggestions } from './watch-suggestions.ts';
 
 function selectWatchdog(task: Task, watchdogId: string) {
@@ -95,7 +93,8 @@ function createWatchdog(decider: Decider, spec: WatchdogSpec, round: number): Wa
     armedAt: now,
     runId: null,
     checks: [],
-    forkTaskId: null,
+    forkTaskIds: [],
+    linkedTaskIds: [],
     endedAt: null,
   };
 }
@@ -153,18 +152,18 @@ export function syncWatchdogs(decider: Decider) {
 }
 
 function startCheck(decider: Decider, task: Task, watchdog: Watchdog, guidance: string | null) {
+  if (task.recoveries > 0) decider.emit({ type: 'task.recovered', taskId: task.id, recoveries: 0 });
   decider.stage(task.id, 'watching', `checking the watchdog “${watchdog.title}”`);
   const hint = guidance ? `\n\nThe human added: ${guidance}` : '';
-  const prompt = resolveAgentPrompt(`${resolveWatchPrompt(task, watchdog, decider.context.now)}${hint}`);
+  const filed = listSourceFiledTasks(decider, task.projectId ?? null, watchdog.source?.server ?? '');
+  const prompt = resolveAgentPrompt(
+    `${resolveWatchPrompt(task, watchdog, decider.context.now, filed)}${hint}`
+  );
   const run = decider.startRun(decider.task(task.id), 'agent', prompt, {
     purpose: 'watch',
     resumeFrom: decider.taskSession(task.id, 'agent'),
   });
   decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.id, runId: run.id });
-}
-
-function canCheckNow(decider: Decider, task: Task) {
-  return isTaskResting(task) && listLiveRuns(decider.state, task.id).length === 0;
 }
 
 export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire'>) {
@@ -174,7 +173,7 @@ export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire
   if (watchdog.nextCheckAt !== command.dueAt || isTaskClosed(task)) return;
   const now = decider.context.now;
   const late = watchdog.endsAt !== null && command.dueAt > watchdog.endsAt;
-  if (!canCheckNow(decider, task) && late) {
+  if (isReadBusy(decider, task) && late) {
     decider.emit({
       type: 'watchdog.missed',
       taskId: task.id,
@@ -184,7 +183,7 @@ export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire
     });
     return;
   }
-  if (!canCheckNow(decider, task)) {
+  if (isReadBusy(decider, task)) {
     decider.emit({
       type: 'watchdog.deferred',
       taskId: task.id,
@@ -194,28 +193,6 @@ export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire
     return;
   }
   startCheck(decider, task, watchdog, null);
-}
-
-function forkIssue(decider: Decider, task: Task, watchdog: Watchdog, runId: string, issue: WatchIssue) {
-  const request = [
-    issue.title,
-    '',
-    issue.request,
-    '',
-    `Found by the watchdog “${watchdog.title}” of ${task.handle ?? task.title} after its change merged.`,
-  ].join('\n');
-  return createTask(
-    decider,
-    {
-      type: 'task.create',
-      request,
-      repoId: task.repoId,
-      priority: task.priority,
-      origin: task.origin,
-      forkOf: task.id,
-    },
-    { createdBy: { kind: 'watchdog', taskId: task.id, runId, requestKey: watchdog.id } }
-  );
 }
 
 function resolveNextGapMinutes(watchdog: Watchdog) {
@@ -287,53 +264,107 @@ function startLiveWindow(decider: Decider, task: Task, watchdog: Watchdog) {
   return findWatchdog(decider.task(task.id), watchdog.id);
 }
 
-function resolveCheckedWatchdog(
-  decider: Decider,
-  task: Task,
-  found: Watchdog,
-  command: CommandOf<'agent.report_watch'>
-) {
-  if (found.status !== 'awaiting_production') return found;
-  if (command.live === undefined || command.live === null) {
+function listFiledTaskIds(decider: Decider, watchdog: Watchdog) {
+  return Object.values(decider.state.tasks)
+    .filter((candidate) => candidate.sourceReport?.watchdogId === watchdog.id)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((candidate) => candidate.id);
+}
+
+function hasFoundReports(filed: readonly string[], watchdog: Watchdog) {
+  return filed.length > 0 || watchdog.linkedTaskIds.length > 0;
+}
+
+function resolveLive(read: ReadReport, found: boolean) {
+  if (found && read.live === false) {
+    throw new DomainError(
+      'live_filed',
+      'You filed a report on the change, so it is live in production. Set `live` true.'
+    );
+  }
+  const live = read.live ?? (found ? true : null);
+  if (live === null && read.reached) {
     throw new DomainError(
       'live_required',
       'This watchdog waits for the change to reach production. Report `live`: true once it is live there, false while it is not.'
     );
   }
-  if (!command.live) return null;
-  return startLiveWindow(decider, task, found);
+  return live;
 }
 
-export function reportWatch(decider: Decider, command: CommandOf<'agent.report_watch'>) {
-  const { run, task } = findCurrentRun(decider, command.runId, 'report_watch');
-  const found = selectWatchingRun(task, run.id);
-  if (!found) throw new DomainError('watchdog_not_found', 'No watchdog waits on this check. End your turn.');
-  const watchdog = resolveCheckedWatchdog(decider, task, found, command);
-  if (!watchdog) {
-    awaitProduction(decider, task, run.id);
-    return;
-  }
-  const now = decider.context.now;
-  const check = { at: now, healthy: command.healthy, summary: command.summary };
-  const issue = command.issue;
-  const forkTaskId = issue ? forkIssue(decider, task, watchdog, run.id, issue) : null;
-  const nextCheckAt = issue ? null : resolveNextCheckAt(watchdog, now);
+function recordTrip(decider: Decider, task: Task, watchdog: Watchdog, summary: string, filed: string[]) {
   decider.emit({
     type: 'watchdog.checked',
     taskId: task.id,
     watchdogId: watchdog.id,
-    check,
-    status: issue ? 'tripped' : nextCheckAt === null ? 'passed' : 'watching',
-    nextCheckAt,
-    forkTaskId,
+    check: { at: decider.context.now, healthy: false, summary },
+    status: 'tripped',
+    nextCheckAt: null,
+    forkTaskIds: filed,
   });
-  decider.endRun(
-    run,
-    'completed',
-    issue ? `Found an issue: ${issue.title}` : 'The watchdog found nothing wrong.'
-  );
+}
+
+function recordMiss(decider: Decider, task: Task, watchdog: Watchdog, reason: string) {
+  decider.emit({
+    type: 'watchdog.missed',
+    taskId: task.id,
+    watchdogId: watchdog.id,
+    reason,
+    nextCheckAt: resolveNextCheckAt(watchdog, decider.context.now),
+  });
+}
+
+function describeTripRun(filed: readonly string[], watchdog: Watchdog) {
+  if (filed.length > 0) return `Filed ${describeCount(filed.length, 'report')} on the change.`;
+  return `Found ${describeCount(watchdog.linkedTaskIds.length, 'report')} on the change already filed.`;
+}
+
+function recordCheck(decider: Decider, task: Task, run: Run, watchdog: Watchdog, read: ReadReport) {
+  const filed = listFiledTaskIds(decider, watchdog);
+  if (hasFoundReports(filed, watchdog)) {
+    recordTrip(decider, task, watchdog, read.summary, filed);
+    decider.endRun(run, 'completed', describeTripRun(filed, watchdog));
+    return 'checked a watchdog';
+  }
+  if (!read.reached) {
+    recordMiss(decider, task, watchdog, read.summary);
+    decider.endRun(run, 'failed', read.summary);
+    return 'could not check a watchdog';
+  }
+  const now = decider.context.now;
+  const nextCheckAt = resolveNextCheckAt(watchdog, now);
+  decider.emit({
+    type: 'watchdog.checked',
+    taskId: task.id,
+    watchdogId: watchdog.id,
+    check: { at: now, healthy: true, summary: read.summary },
+    status: nextCheckAt === null ? 'passed' : 'watching',
+    nextCheckAt,
+    forkTaskIds: [],
+  });
+  decider.endRun(run, 'completed', 'The watchdog found nothing wrong.');
+  return 'checked a watchdog';
+}
+
+function resolveCheckedWatchdog(decider: Decider, task: Task, found: Watchdog, read: ReadReport) {
+  if (found.status !== 'awaiting_production') return found;
+  const live = resolveLive(read, hasFoundReports(listFiledTaskIds(decider, found), found));
+  if (live === null) return found;
+  if (!live) return null;
+  return startLiveWindow(decider, task, found);
+}
+
+export function endWatchCheck(decider: Decider, task: Task, run: Run, read: ReadReport) {
+  const found = selectWatchingRun(task, run.id);
+  if (!found) throw new DomainError('watchdog_not_found', 'No watchdog waits on this check. End your turn.');
+  const watchdog = resolveCheckedWatchdog(decider, task, found, read);
+  if (!watchdog) {
+    awaitProduction(decider, task, run.id);
+    return;
+  }
+  const reason = recordCheck(decider, task, run, watchdog, read);
   decider.progressed(task.id);
-  settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'checked a watchdog');
+  settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), reason);
 }
 
 export function moveWatchCheck(decider: Decider, from: string, to: string) {
@@ -347,13 +378,9 @@ export function missWatchCheck(decider: Decider, runId: string, reason: string) 
   const task = decider.task(decider.state.runs[runId]?.taskId ?? '');
   const watchdog = selectWatchingRun(task, runId);
   if (!watchdog) return false;
-  decider.emit({
-    type: 'watchdog.missed',
-    taskId: task.id,
-    watchdogId: watchdog.id,
-    reason,
-    nextCheckAt: resolveNextCheckAt(watchdog, decider.context.now),
-  });
+  const filed = listFiledTaskIds(decider, watchdog);
+  if (hasFoundReports(filed, watchdog)) recordTrip(decider, task, watchdog, reason, filed);
+  else recordMiss(decider, task, watchdog, reason);
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'could not check a watchdog');
   return true;
 }

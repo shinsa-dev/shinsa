@@ -51,7 +51,6 @@ import type {
   WatchdogSourceRequest,
   WatchdogSpec,
   WatchdogStart,
-  WatchReport,
 } from './types.ts';
 
 export const PROTOCOL_LIMITS = {
@@ -94,9 +93,6 @@ export const PROTOCOL_LIMITS = {
   watchdogMaxGapHours: WATCHDOG_SETTING_LIMITS.maxGapHours,
   watchdogForHours: WATCHDOG_SETTING_LIMITS.hours,
   watchdogProductionCheck: 400,
-  watchSummary: 600,
-  watchIssueTitle: 80,
-  watchIssueRequest: 2_000,
   disagreements: 8,
   disagreement: 280,
   goal: 300,
@@ -1056,34 +1052,6 @@ function readSteps(reader: Reader, value: unknown) {
   return reader
     .list(value, 'steps', COMPOSABLE_STEPS.length, 1)
     .map((step, index) => reader.pick(step, `steps[${index}]`, PIPELINE_STEP_NAMES));
-}
-
-export function validateWatchReport(input: Record<string, unknown>): Validation<WatchReport> {
-  const reader = new Reader();
-  const live = isGiven(input.live) ? reader.flag(input.live, 'live') : null;
-  const issue = isGiven(input.issue) ? reader.record(input.issue, 'issue') : null;
-  const healthy = live === false || reader.flag(input.healthy, 'healthy');
-  if (live === false) {
-    if (issue)
-      reader.errors.push('A change that is not live in production yet has no issue. Leave issue out.');
-  } else if (input.healthy === undefined)
-    reader.errors.push('healthy is required: true when nothing is wrong.');
-  else if (healthy && issue) {
-    reader.errors.push('A healthy check has no issue. Leave issue out, or set healthy to false.');
-  } else if (!healthy && !issue) {
-    reader.errors.push('An unhealthy check needs issue: a title and the request for the task that fixes it.');
-  }
-  return reader.result({
-    live,
-    healthy,
-    summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.watchSummary),
-    issue: issue
-      ? {
-          title: reader.text(issue.title, 'issue.title', PROTOCOL_LIMITS.watchIssueTitle),
-          request: reader.text(issue.request, 'issue.request', PROTOCOL_LIMITS.watchIssueRequest),
-        }
-      : null,
-  });
 }
 
 export function validateReshape(input: Record<string, unknown>): Validation<ReshapeHandOver> {

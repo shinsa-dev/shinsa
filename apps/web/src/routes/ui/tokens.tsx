@@ -43,8 +43,8 @@ const ICON_PAIRS = ['text-fg-1', 'text-fg-2', 'text-fg-3', 'text-fg-4', 'text-re
 
 const ICON_SIZES: { size: IconSize; text: string; label: string }[] = [
   { size: 'sm', text: 'text-xs', label: 'sm · 14 · 12–13px text, 22/24 controls' },
-  { size: 'md', text: 'text-sm', label: 'md · 16 · 14px+ text, 26/30 controls' },
-  { size: 'lg', text: 'text-base', label: 'lg · 20 · empty states, full-page waits' },
+  { size: 'md', text: 'text-sm', label: 'md · 16 · 14px+ text, 26/30 controls, full-page waits' },
+  { size: 'lg', text: 'text-base', label: 'lg · 20 · empty states' },
 ];
 
 const ALPHAS = [
