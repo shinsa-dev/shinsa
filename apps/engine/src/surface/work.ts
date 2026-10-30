@@ -49,7 +49,7 @@ export const WORK_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['suggestions', 'accept'],
-    summary: 'Add a suggested task to the roadmap.',
+    summary: 'Add a suggested task as a task of its own.',
     command: 'suggestion.accept',
     fields: [
       TASK_FIELD,

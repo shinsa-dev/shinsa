@@ -844,7 +844,7 @@ Every task agent's tool: `suggestions_list` (reads).
 
 #### shinsa suggestions accept
 
-Add a suggested task to the roadmap.
+Add a suggested task as a task of its own.
 
 ```
 shinsa suggestions accept <task> <suggestion> [--after-this] [--json]

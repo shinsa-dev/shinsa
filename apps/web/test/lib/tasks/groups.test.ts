@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import type { Gate, Task } from '@shinsa/core';
 import {
-  describeRoadmapCounts,
+  describeTaskCounts,
   describeWaitsOn,
   listOpenTaskChoices,
-  listRoadmapSections,
+  listTaskGroupSections,
   orderChains,
-  ROADMAP_GROUP,
-  ROADMAP_GROUPS,
-  resolveRoadmapGroup,
-  selectRoadmapGroup,
-} from '@/lib/tasks/roadmap.ts';
+  resolveTaskGroup,
+  selectTaskGroup,
+  TASK_GROUP,
+  TASK_GROUPS,
+} from '@/lib/tasks/groups.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 function waiting(id: string, waitsOn: string[], overrides: Partial<Task> = {}) {
@@ -21,14 +21,14 @@ function chainOf(tasks: Task[], section: Task[] = tasks) {
   return orderChains(createShinsaState({ tasks }), section).map(({ task, depth }) => `${task.id}:${depth}`);
 }
 
-describe('resolveRoadmapGroup', () => {
+describe('resolveTaskGroup', () => {
   function groupFor(gate: Partial<Gate>, task: Partial<Task> = {}) {
     const subject = createTask({ id: 't', ...task });
     const state = createShinsaState({
       tasks: [subject],
       gates: [createGate({ id: 'g', taskId: 't', ...gate })],
     });
-    return resolveRoadmapGroup(state, subject);
+    return resolveTaskGroup(state, subject);
   }
 
   it('files each open decision under what you do at it', () => {
@@ -53,7 +53,7 @@ describe('resolveRoadmapGroup', () => {
         createGate({ id: 'failure', taskId: 't', type: 'failure' }),
       ],
     });
-    expect(resolveRoadmapGroup(state, subject)).toBe('paused');
+    expect(resolveTaskGroup(state, subject)).toBe('paused');
   });
 
   it('files a proposed change as a decision of its own, and an investigation at work as in progress', () => {
@@ -81,16 +81,16 @@ describe('resolveRoadmapGroup', () => {
     const merging = createTask({ id: 'merging', stage: 'shipping', waitsOn: ['base'] });
     const released = waiting('released', ['gone']);
     const state = createShinsaState({ tasks: [base, blocked, merging, released] });
-    expect(resolveRoadmapGroup(state, base)).toBe('working');
-    expect(resolveRoadmapGroup(state, blocked)).toBe('waiting');
-    expect(resolveRoadmapGroup(state, merging)).toBe('waiting');
-    expect(resolveRoadmapGroup(state, released)).toBe('working');
+    expect(resolveTaskGroup(state, base)).toBe('working');
+    expect(resolveTaskGroup(state, blocked)).toBe('waiting');
+    expect(resolveTaskGroup(state, merging)).toBe('waiting');
+    expect(resolveTaskGroup(state, released)).toBe('working');
   });
 });
 
-describe('ROADMAP_GROUPS', () => {
+describe('TASK_GROUPS', () => {
   it('lists the sections in to-do order with Done and Cancelled collapsed', () => {
-    expect(ROADMAP_GROUPS.map((group) => group.title)).toEqual([
+    expect(TASK_GROUPS.map((group) => group.title)).toEqual([
       'Ready to merge',
       'Changes to review',
       'Plan to approve',
@@ -103,28 +103,28 @@ describe('ROADMAP_GROUPS', () => {
       'Done',
       'Cancelled',
     ]);
-    expect(ROADMAP_GROUPS.filter((group) => !group.defaultOpen).map((group) => group.key)).toEqual([
+    expect(TASK_GROUPS.filter((group) => !group.defaultOpen).map((group) => group.key)).toEqual([
       'done',
       'cancelled',
     ]);
   });
 
   it('carries the status tones', () => {
-    expect(ROADMAP_GROUP.answer.tone).toBe('blue');
-    expect(ROADMAP_GROUP.paused.tone).toBe('orange');
-    expect(ROADMAP_GROUP.review.tone).toBe('amber');
-    expect(ROADMAP_GROUP.plan.tone).toBe('purple');
-    expect(ROADMAP_GROUP.merge.tone).toBe('green');
-    expect(ROADMAP_GROUP.working.tone).toBe('blue');
-    expect(ROADMAP_GROUP.waiting.tone).toBe('neutral');
+    expect(TASK_GROUP.answer.tone).toBe('blue');
+    expect(TASK_GROUP.paused.tone).toBe('orange');
+    expect(TASK_GROUP.review.tone).toBe('amber');
+    expect(TASK_GROUP.plan.tone).toBe('purple');
+    expect(TASK_GROUP.merge.tone).toBe('green');
+    expect(TASK_GROUP.working.tone).toBe('blue');
+    expect(TASK_GROUP.waiting.tone).toBe('neutral');
   });
 });
 
-describe('selectRoadmapGroup', () => {
+describe('selectTaskGroup', () => {
   it('finds a section by key and returns null for anything else', () => {
-    expect(selectRoadmapGroup('done')?.title).toBe('Done');
-    expect(selectRoadmapGroup('later')).toBeNull();
-    expect(selectRoadmapGroup(null)).toBeNull();
+    expect(selectTaskGroup('done')?.title).toBe('Done');
+    expect(selectTaskGroup('later')).toBeNull();
+    expect(selectTaskGroup(null)).toBeNull();
   });
 });
 
@@ -277,7 +277,7 @@ describe('listOpenTaskChoices', () => {
   });
 });
 
-describe('listRoadmapSections', () => {
+describe('listTaskGroupSections', () => {
   const tasks = [
     createTask({ id: 'old', title: 'Old work', createdAt: NOW - 90_000 }),
     createTask({ id: 'new', title: 'New work', createdAt: NOW - 10_000 }),
@@ -300,9 +300,9 @@ describe('listRoadmapSections', () => {
     gates: [createGate({ id: 'g', taskId: 'review', type: 'review' })],
   });
 
-  function ids(status: Parameters<typeof listRoadmapSections>[2], search = '') {
+  function ids(status: Parameters<typeof listTaskGroupSections>[2], search = '') {
     return Object.fromEntries(
-      listRoadmapSections(state, search, status).map(({ group, entries }) => [
+      listTaskGroupSections(state, search, status).map(({ group, entries }) => [
         group.key,
         entries.map(({ task, depth }) => (depth ? `${task.id}:${depth}` : task.id)),
       ])
@@ -337,20 +337,20 @@ describe('listRoadmapSections', () => {
   });
 });
 
-describe('listRoadmapSections search by repository', () => {
+describe('listTaskGroupSections search by repository', () => {
   it('finds a task by its repository name, so a repository chip’s Show its tasks lists them', () => {
     const state = createShinsaState({
       tasks: [createTask({ id: 'web', repoId: 'paywall-next' }), createTask({ id: 'other' })],
       repos: [createRepo({ id: 'paywall-next' })],
     });
-    const working = listRoadmapSections(state, 'paywall-next', 'working')[0]?.entries.map(
+    const working = listTaskGroupSections(state, 'paywall-next', 'working')[0]?.entries.map(
       ({ task }) => task.id
     );
     expect(working).toEqual(['web']);
   });
 });
 
-describe('describeRoadmapCounts', () => {
+describe('describeTaskCounts', () => {
   it('counts open tasks and finished ones, leaving cancelled tasks and watch homes out of both', () => {
     const state = createShinsaState({
       tasks: [
@@ -363,7 +363,7 @@ describe('describeRoadmapCounts', () => {
         createTask({ id: 'rested', stage: 'done', watchHome: true }),
       ],
     });
-    expect(describeRoadmapCounts(state)).toBe('2 open · 2 done');
-    expect(describeRoadmapCounts(createShinsaState({}))).toBe('0 open · 0 done');
+    expect(describeTaskCounts(state)).toBe('2 open · 2 done');
+    expect(describeTaskCounts(createShinsaState({}))).toBe('0 open · 0 done');
   });
 });

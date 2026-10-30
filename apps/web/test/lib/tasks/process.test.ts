@@ -47,11 +47,11 @@ describe('process actions', () => {
     expect(spies.sent.mock.calls).toEqual([
       [
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false },
-        'Added to the roadmap. It starts now.',
+        'Added the task. It starts now.',
       ],
       [
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true },
-        'Added to the roadmap. It starts after this task merges.',
+        'Added the task. It starts after this task merges.',
       ],
       [{ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' }, 'Dismissed.'],
       [

@@ -27,9 +27,7 @@ export function acceptSuggestion(task: Task, suggestion: TaskSuggestion, start: 
       suggestionId: suggestion.id,
       waitsOnThis: start === 'after',
     },
-    start === 'after'
-      ? 'Added to the roadmap. It starts after this task merges.'
-      : 'Added to the roadmap. It starts now.'
+    start === 'after' ? 'Added the task. It starts after this task merges.' : 'Added the task. It starts now.'
   );
 }
 

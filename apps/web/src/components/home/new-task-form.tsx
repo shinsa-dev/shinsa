@@ -27,7 +27,7 @@ import {
   resolveShownProject,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
-import { listOpenTaskChoices } from '@/lib/tasks/roadmap.ts';
+import { listOpenTaskChoices } from '@/lib/tasks/groups.ts';
 
 const PRIORITY_ITEMS = listNewTaskPriorities();
 

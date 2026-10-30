@@ -6,7 +6,7 @@ import { HeroDemo } from '../components/demos/hero';
 import { KindsDemo } from '../components/demos/kinds';
 import { LoopDemo } from '../components/demos/loop';
 import { ReviewDemo } from '../components/demos/review';
-import { RoadmapDemo } from '../components/demos/roadmap';
+import { TasksDemo } from '../components/demos/tasks';
 import { Toasts } from '../components/demos/toasts';
 import DemoWindow from '../components/layout/DemoWindow.astro';
 import Section from '../components/layout/Section.astro';
@@ -46,9 +46,9 @@ const guarded = await listGuardedCommands();
       <CodeDemo client:visible={{ rootMargin: '400px' }} />
     </DemoWindow>
   </Section>
-  <Section copy={sections.roadmap}>
+  <Section copy={sections.tasks}>
     <DemoWindow width={1080} height={684} narrow={644} reserve={283}>
-      <RoadmapDemo client:visible={{ rootMargin: '400px' }} />
+      <TasksDemo client:visible={{ rootMargin: '400px' }} />
     </DemoWindow>
   </Section>
   <Section copy={sections.loop}>

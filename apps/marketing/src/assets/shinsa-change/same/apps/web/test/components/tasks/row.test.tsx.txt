@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { RoadmapRow } from '@/components/roadmap/row.tsx';
-import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
+import { TaskListRow } from '@/components/tasks/row.tsx';
+import type { TaskGroupKey } from '@/lib/tasks/groups.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
@@ -24,10 +24,10 @@ const STATE = createShinsaState({
   ],
 });
 
-function renderRow(task: Task, group: RoadmapGroupKey, depth = 0, state: ShinsaState = STATE) {
+function renderRow(task: Task, group: TaskGroupKey, depth = 0, state: ShinsaState = STATE) {
   return render(
     <TooltipProvider>
-      <RoadmapRow state={state} task={task} group={group} depth={depth} />
+      <TaskListRow state={state} task={task} group={group} depth={depth} />
     </TooltipProvider>
   );
 }

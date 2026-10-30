@@ -76,7 +76,7 @@ describe('listQueueSections', () => {
     ]);
   });
 
-  it('borrows the roadmap title, icon and tone for the middle sections', () => {
+  it('borrows the task group title, icon and tone for the middle sections', () => {
     const [, working, waiting] = sectionsFor();
     expect(working).toMatchObject({ icon: 'IconRobot', tone: 'blue', startsCollapsed: false });
     expect(waiting).toMatchObject({ icon: 'IconHourglass', tone: 'neutral', startsCollapsed: true });

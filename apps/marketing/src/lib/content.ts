@@ -36,8 +36,8 @@ export const sections = {
     title: 'An IDE in every task.',
     text: 'The Code tab is a full editor, not a diff viewer: the changes side by side, a file tree, ⌘P to any file, search across the repository, at any commit. Edit a line and it saves to the task’s working copy, so you rarely need to open your own editor. Shinsa still makes every commit.',
   },
-  roadmap: {
-    id: 'roadmap',
+  tasks: {
+    id: 'tasks',
     title: 'Many agents at once. One list for you.',
     text: 'Every task runs on its own agent, in its own worktree and branch. A task that depends on another waits until it merges. You work down one list, in the order things need you.',
   },

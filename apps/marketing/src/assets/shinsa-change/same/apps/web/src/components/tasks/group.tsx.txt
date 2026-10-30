@@ -3,16 +3,16 @@ import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import type { ChainEntry, RoadmapGroup } from '@/lib/tasks/roadmap.ts';
-import { RoadmapRow } from './row.tsx';
+import type { ChainEntry, TaskGroup } from '@/lib/tasks/groups.ts';
+import { TaskListRow } from './row.tsx';
 
-export function RoadmapSection({
+export function TaskGroupSection({
   group,
   entries,
   state,
   defaultOpen,
 }: {
-  group: RoadmapGroup;
+  group: TaskGroup;
   entries: ChainEntry[];
   state: ShinsaState;
   defaultOpen: boolean;
@@ -35,7 +35,7 @@ export function RoadmapSection({
       </button>
       {open &&
         entries.map((entry) => (
-          <RoadmapRow
+          <TaskListRow
             key={entry.task.id}
             state={state}
             task={entry.task}

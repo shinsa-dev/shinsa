@@ -2,7 +2,7 @@ import type { Gate, Queue, QueuedGate, ShinsaState, Task } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { orderChains, ROADMAP_GROUP } from '@/lib/tasks/roadmap.ts';
+import { orderChains, TASK_GROUP } from '@/lib/tasks/groups.ts';
 import type { Route } from '@/router.ts';
 
 export type QueueItem =
@@ -35,7 +35,7 @@ function createGroupSection(
   items: QueueItem[],
   empty: string | null
 ): QueueSection {
-  const group = ROADMAP_GROUP[key];
+  const group = TASK_GROUP[key];
   return {
     key,
     title: group.title,

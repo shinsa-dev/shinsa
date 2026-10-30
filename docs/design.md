@@ -237,7 +237,7 @@ Only these, and they win over anything below:
    Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
    and Waiting on another task (in chain order, collapsed). Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
-   title, icon and tone from the All tasks roadmap (`lib/tasks/roadmap.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
+   title, icon and tone from All tasks' groups (`lib/tasks/groups.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
    20px gate or stage tile, title, status line and age. **A row is a small overview card on two lines**, so you can tell
    where a task is without opening it: the title, then one summary line (`RowSummary`,
@@ -461,7 +461,7 @@ Only these, and they win over anything below:
       box. Status labels say what waits on you the same way: Plan to approve, **Changes to
       review** (never the bare "Ready for review"), Ready to merge, and a merged task with post-merge steps left
       **Post-merge · 2 steps left** in amber (`IconChecklist`) until each is ticked: that is its open Post-merge
-      gate, so Home, the rail and the roadmap read it like any other gate.
+      gate, so Home, the rail and All tasks read it like any other gate.
     - **Steps around the merge** (`components/review/merge-steps.tsx`, `lib/review/merge-steps.ts`; `docs/engine.md` →
       Steps around the merge, since 2026-10-26). What the agent left for you that needs a person or production access
       (a variable or secret to set, a migration or deploy to run, a flag to flip) is a checklist, never prose: each
@@ -520,7 +520,7 @@ Only these, and they win over anything below:
     - **The whole header is the trigger** (`DisclosureHeader`, `components/layout/surface/disclosure-header.tsx`,
       since 2026-10-25). Every collapsible header folds from a click anywhere on it: Overview and Review panels,
       change snippets, the live card's row, a delegation's spawn card, a round's row, Home's sections, the compact
-      queue's sections, the roadmap's groups and Settings' folding blocks. A header with nothing interactive in it
+      queue's sections, All tasks' groups and Settings' folding blocks. A header with nothing interactive in it
       is one `<button>` with `aria-expanded` (inside its `h2` or `figcaption` when it has one). A header that holds
       its own controls (a link, Stop, a select) takes the click on the header element itself, its controls sit in
       `DisclosureAction`, which stops the click from reaching the header, and the chevron is the one focusable
@@ -563,7 +563,7 @@ Only these, and they win over anything below:
       repository (its folder, the place the agent works, in its project's colour) its path, project and default
       branch; several related tasks list as links. A task with no
       repository (a greeting, a general question) has no repository fact at all, and no branch; nothing in the web
-      assumes `task.repoId` is set (the roadmap row's hint reads "No repository").
+      assumes `task.repoId` is set (the All tasks row's hint reads "No repository").
       Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/status/priority-icon.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
     - **The Checks list** (`components/checks/checks-list.tsx`, built by `resolveChecksView` in
       `lib/tasks/checks.ts`, since 2026-10-27) is one list in two stages, a bonus that shows what was checked and never
@@ -601,7 +601,7 @@ Only these, and they win over anything below:
       bar (see 10), one step brighter than a secondary button's rest: `fg-3` (secondary), not `fg-2` (muted), opening the compact queue (current task highlighted, every section: Needs you,
       In progress and Waiting on another task, all within the focus project) in a popover.
     - **The handle.** A task's handle (`SW-142`, its project's key and a number) is how people name it: the facts
-      row starts with it (a click copies it and toasts "Copied"), roadmap rows, queue rows, ⌘K rows and a task link's preview card show
+      row starts with it (a click copies it and toasts "Copied"), All tasks rows, queue rows, ⌘K rows and a task link's preview card show
       it in `tabular-nums` `fg-2`, ⌘K finds a task by it, and the tab reads "SW-142 Fix login · Shinsa" on its page.
       Task URLs use it (`/tasks/SW-142`), built only by `resolveTaskPath`; `/tasks/<id>` and a handle in any case
       still open the task (core's `selectTaskByReference`) and are replaced by the canonical URL. Until triage gives
@@ -620,7 +620,7 @@ Only these, and they win over anything below:
       (`TONE_TEXT`) at 70%; the label stays `fg-2`, and a working agent adds the pulse after it.
     - **No kind of task in the facts.** The task itself shows what kind it is (its steps, its Overview, the
       composer's hint), so the facts row does not name it. The kind is still Shinsa's and the agent's to decide:
-      no menu, composer select or ⌘K command changes it, and the roadmap row keeps its label and steps.
+      no menu, composer select or ⌘K command changes it, and the All tasks row keeps its label and steps.
     - **Each fact says why, once.** What triage decided has no line of its own: the facts row shows each value once and
       its tooltip says why (`resolveTriageWhy` in `lib/tasks/triage.ts`): "Shinsa chose this: …" while it is Shinsa's
       pick and "You changed this. Shinsa chose “normal priority”: …" once you changed it. The priority's why is its
@@ -889,7 +889,7 @@ Only these, and they win over anything below:
       which project it belongs to (`RepoIcon` in `components/links/repo.tsx`, `resolveProjectInk` in
       `lib/projects.ts`, the same ink as the dot), plain `fg-2` when the repository has no project. Where the
       repository is a place it is `IconGithub` with a remote and `IconFolder1` without (`resolveRepoIcon`): a task
-      link's hover card, the roadmap's Repository column (its tooltip names the project, "Superwall project") and a
+      link's hover card, All tasks' Repository column (its tooltip names the project, "Superwall project") and a
       repository link (`RepoChip`). Where it is a folder something works in, it is always `IconFolder1`: the task's
       facts row, an MCP server's "Only in ‹repo›" choice and the Terminal page's Repositories (a menu row's icon takes
       the ink through `resolveProjectMark`).
@@ -981,8 +981,8 @@ Only these, and they win over anything below:
       the same line (`group-hover:` pairs with `group-active:`, unless it only reveals something
       from `opacity-0`). The lint checks that an `active:` is there, not that its value matches.
 
-16. **All tasks is the roadmap.** `routes/tasks.tsx` (rows in `components/roadmap/`) lists every task in
-    to-do order, grouped by `resolveRoadmapGroup` (`lib/tasks/roadmap.ts`): Ready to merge, Changes to review, Plan to
+16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
+    to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
     approve, Needs your answer, Paused, In progress, Waiting on another task, Done and Cancelled
     (both collapsed). Each section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
@@ -1310,7 +1310,7 @@ Only these, and they win over anything below:
     - **No strip until the steps are settled.** While triage has not chosen the kind of task, or the agent of a
       task Shinsa shaped can still change its steps (core `resolveShapeState`: `triage` or `agent`), the card's
       footer is one neutral line, a `Spinner` and "Working out the steps", with why in its tooltip
-      (`TaskTrack` in `progress-track.tsx`), and the facts row names no kind yet (the roadmap row shows the dotted
+      (`TaskTrack` in `progress-track.tsx`), and the facts row names no kind yet (the All tasks row shows the dotted
       circle, "Kind not chosen yet"). A task that becomes a plain answer never flashes the plan-to-merge strip.
     - **The stage strip follows the pipeline** (core `resolveTaskProgress`): Find the repository when it does not
       start with a plan and the task has a repository or its steps need one (an answer or research with no
@@ -1782,7 +1782,7 @@ Only these, and they win over anything below:
       here."
     - **MCPs** (`mcp-servers.tsx`): the header has a secondary icon button "Check all MCPs" and Add MCP.
       A config Shinsa could not read is a quiet warning row first. MCPs are grouped by status, each group a quiet
-      folding block (`FoldingBlock` in `group.tsx`, laid out like the roadmap's group headers: a 32px header with the
+      folding block (`FoldingBlock` in `group.tsx`, laid out like All tasks' group headers: a 32px header with the
       group's icon at `size='sm'` in its tone and no background, the title, the count right after it in `fg-2`, and
       the section chevron at the far right, 9px from the end like from the top and bottom; so the status icons sit in the column of the rows' own chevrons below
       them) over its shelf, in this order: Connected (green, `IconApiConnection`),
@@ -1855,7 +1855,7 @@ Only these, and they win over anything below:
       ("Round 2: Explain what it can do"), then one line with the round icon as a 16px `StatusTile` and the status in
       its tone ("In progress") and, muted at the right, when it started or ended in sentence case ("Started just
       now", "Finished 2h ago", "Stopped 1d ago"; `describeRoundTime`, `resolveRoundFact`). The handle itself stays per
-      task and still copies alone. Roadmap, queue and Home rows, a task link's preview card and ⌘K read "SW-14 ·
+      task and still copies alone. All tasks, queue and Home rows, a task link's preview card and ⌘K read "SW-14 ·
       round 3" (`resolveHandleText`). The now card's eyebrow is one sentence-case fact per segment: "Building · Round
       2 of 3 · Agent · Started just now".
     - **The chat is one conversation; a round only marks where it starts.** Nothing folds and nothing boxes a
@@ -2877,15 +2877,15 @@ Only these, and they win over anything below:
       entry to the end and the oldest fall off. `useDisclosureSet(prefix, marked)` is the same store for a tree,
       one entry per folder (the Code tab's file and changes trees).
     - **Stable ids from what it shows.** `createDisclosureId(scope, …parts)` joins a scope (`task`, `home`,
-      `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:`, never an array index:
+      `queue`, `services`, `tasks`, `settings`, `ui`) and parts with `:`, never an array index:
       `task:<taskId>:review:card:<point>` (the point's kind and a hash of its place and text,
       `resolveReviewItemIdentity`), `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`
       (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`, `task:<taskId>:evidence:panel:earlier`,
       `task:<taskId>:chat:tool:<callKey>` (the chat's rows under `DisclosureScope`, `useDisclosureScope`),
       `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`,
-      `services:project:<id>`, `roadmap:group:<group>`, `settings:mcp:server:<id>`, and `ui:…` for `/ui`.
+      `services:project:<id>`, `tasks:group:<group>`, `settings:mcp:server:<id>`, and `ui:…` for `/ui`.
     - **Required.** Every collapsible primitive (`Panel`, `CompactSection`, `WideSection`, `FoldingBlock`,
-      `RoadmapSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`, `UserMessage`, `TestingPanel`,
+      `TaskGroupSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`, `UserMessage`, `TestingPanel`,
       `MergeStepsPanel`, `EvidencePanel`) takes a `persistId`; `DisclosureHeader` takes the `disclosure` the hook
       returns, never its own open state. A fold that should be forgotten says why, `notPersisted('…')`: a finding
       card (it never folds) and a search's result groups (new with every query). Popovers, menus and dialogs are
@@ -2915,7 +2915,7 @@ Only these, and they win over anything below:
     - **A project's data sources** are rows under its repositories in Settings → Projects (`IconRadar`): the server,
       what it holds, the repositories it covers ("every repository"), "added by an agent" when one did, and a remove
       button.
-    - **Fork into a new task** is a task action (the task menu, a roadmap row's menu, ⌘K) on every task but a cancelled
+    - **Fork into a new task** is a task action (the task menu, an All tasks row's menu, ⌘K) on every task but a cancelled
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
 

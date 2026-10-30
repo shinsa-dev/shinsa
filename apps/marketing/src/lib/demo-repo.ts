@@ -98,7 +98,7 @@ const NORTHWIND: Repository = {
 const SHINSA: Repository = {
   base: '4e0c7a91d2b85f3e6a1c9d7b0f2e4a6c8b1d3f5e',
   head: 'b7d24e9f1a3c5e7b9d0f2a4c6e8b1d3f5a7c9e0b',
-  branch: 'feat/tinted-roadmap-icons',
+  branch: 'feat/tinted-task-icons',
   commits: [
     {
       sha: 'b7d24e9f1a3c5e7b9d0f2a4c6e8b1d3f5a7c9e0b',

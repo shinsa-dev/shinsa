@@ -127,7 +127,7 @@ the evidence the plan asks for, those checks run by Shinsa, an independent agent
 an operation needs a plan you approved and states its impact, and one that runs after a merge
 asks you again on the merged commit before it runs. A question, research or an investigation
 gets none of it. Core checks every composition and every plan against the schema and the rules
-and hands a broken one back to the agent to fix (`docs/engine.md` → Steps and gates). The roadmap, the stage strip and the kind of task on the Overview show
+and hands a broken one back to the agent to fix (`docs/engine.md` → Steps and gates). All tasks, the stage strip and the kind of task on the Overview show
 the composed steps. An answer, investigation or report can propose a
 change; it becomes one only with your OK (a gate: Make it a change, or keep it as it is). Every
 shape change is an event in the task's activity. The kind is Shinsa's: nothing changes it after
@@ -265,7 +265,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   preview URL with `{port}` in it: each task's run gets a free port of its own, and an Open button wherever it runs
   takes you to that run, so before the review the task's agent leaves the services that show its change running and
   attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
-- **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
+- **All tasks.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
   that handle several parents), then done and cancelled, collapsed. Priority then age
   inside each section. This is the page to open each day and work down. A task can be told to
@@ -507,7 +507,7 @@ Built and verified end to end against a scratch repository:
 - **Next:** an Electron desktop app around `shinsa engine` (the old Shinsa's `apps/desktop` shape),
   dev-server previews in review, the PR half against a real GitHub repository.
 
-### Third pass (2026-10-22): the roadmap
+### Third pass (2026-10-22): everything starts
 
 - **Everything starts.** Tasks without a dependency are planned, built and checked at once, each on
   its own agent; the "Hold new work" and "Agents at once" settings are gone. Low priority work still runs and
@@ -517,7 +517,7 @@ Built and verified end to end against a scratch repository:
   them are merged or done, from the updated default branch. Several tasks can wait on the same
   one. A cancelled parent pauses its waiting dependents with a
   clear note.
-- **All tasks is the roadmap**, in to-do order with status-coloured sections; Home's queue, the
+- **All tasks lists every task** in to-do order with status-coloured sections; Home's queue, the
   sidebar and ⌘K use the same sections, tones and order. Paused is orange everywhere now, so it
   never reads as a review.
 
@@ -548,7 +548,7 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
   never resets them.
 - **Questions offer choices**, and a newer message of yours makes an older question historical.
 - **Ask mode** answers a question about a repository without a worktree, plan or pull request.
-- **Agents suggest tasks** you add to the roadmap, optionally after the current task.
+- **Agents suggest tasks** you add as tasks of their own, optionally after the current task.
 - **The setup is verified before any agent starts**; missing pieces are their own gate.
 
 ### The harness plan, WS1–WS7 (2026-10-23)
@@ -698,7 +698,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **One surface, two ways in.** Every command Shinsa takes from you has a command-line path and a
   tool for every task agent, generated from one list of specs; a test fails when core gains a command
   without one. `shinsa command <type>` sends any command by its type as a fallback.
-- **Task agents read and file across the roadmap.** Every working agent can read another task
+- **Task agents read and file across every task.** Every working agent can read another task
   (`read_task`), create tasks, schedule work and suggest tasks; the reviewer now files tasks
   and schedules too.
 

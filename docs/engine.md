@@ -73,7 +73,7 @@ Besides its hand-over tool, every working role can ask (`ask`; never the reviewe
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), see the
 other open work in its repository (`list_repository_work`, Other work in the repository, below), suggest
 tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
-and the Agent and the investigator can wait (`wait_for`). So every task agent can read across the roadmap, file a
+and the Agent and the investigator can wait (`wait_for`). So every task agent can read across every task, file a
 task, schedule work and suggest tasks, while its hand-over stays its own. Which role may call which tool is one
 table, `listCallableToolNames` in `packages/core/src/domain/tools.ts`: `decide` refuses a call the run's role does not
 have, and each prompt's house rules name only the tools the agent has, and never repeat what a tool's own description
@@ -326,7 +326,7 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
 - **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
   is not told about the source.
-- **Forking from the web.** Fork into a new task (the task menu, a roadmap row's menu and ⌘K, on every task but a
+- **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
   cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
   sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
   into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
@@ -895,7 +895,7 @@ folds in `state/shapes.ts`).
   pipeline back (an answer that became a change reads as a change).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the roadmap row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
@@ -1020,7 +1020,7 @@ be changed from a plan.
 
 ## Scheduling
 
-Shinsa is a roadmap: everything you ask for is worked on as soon as it can be, and only the order
+Everything you ask for is worked on as soon as it can be, and only the order
 in which finished work reaches you is managed.
 
 - **No dependency, no waiting.** A new task is classified, gets its worktree and starts planning
@@ -1782,7 +1782,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   schedules write --source <server> --project <project>`, or accepting a suggested watch, below) creates its home
   (`createWatchHome`): a task marked `watchHome`, with no handle, no triage and no agent, resting at once (`done`,
   "waiting for its first read"). A watch never takes a target of its own (`source_target`), and a schedule that
-  starts or messages a task cannot become one (`source_change`). A home is on no list: the roadmap, the queue, Home,
+  starts or messages a task cannot become one (`source_change`). A home is on no list: All tasks, the queue, Home,
   ⌘K, references, `find_tasks` and `shinsa tasks list` leave it out (`isWatchHome`, in `isInFocus` and each list); it
   takes no message and is no other schedule's target (`watch_home`), and a redelivered message to it is dropped.
   Deleting the watch cancels its home (`closeWatchHome`), at rest or mid-read. A fire never messages the home, which
@@ -1817,7 +1817,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
   `routes/automation.tsx`), laid out like a task page: its text as the description, a facts row (its type, on or
   paused, the integration, the project in its own colour, when it runs, the next and last run and how many tasks it
-  filed, `listAutomationFacts`), the tasks it filed in the roadmap's own rows, and an Activity log of every run, newest
+  filed, `listAutomationFacts`), the tasks it filed in All tasks' own rows, and an Activity log of every run, newest
   first, drawn by the task page's own entry (`ActivityEntry`): a title for the outcome ("Filed 1 task", "No new
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog

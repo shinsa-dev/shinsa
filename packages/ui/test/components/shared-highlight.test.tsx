@@ -47,7 +47,7 @@ describe('the shared highlight', () => {
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>Move to</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              <DropdownMenuItem>Roadmap</DropdownMenuItem>
+              <DropdownMenuItem>Backlog</DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuContent>

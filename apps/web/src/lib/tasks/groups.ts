@@ -13,7 +13,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
 
-export type RoadmapGroupKey =
+export type TaskGroupKey =
   | 'merge'
   | 'review'
   | 'plan'
@@ -26,8 +26,8 @@ export type RoadmapGroupKey =
   | 'done'
   | 'cancelled';
 
-export interface RoadmapGroup {
-  key: RoadmapGroupKey;
+export interface TaskGroup {
+  key: TaskGroupKey;
   title: string;
   icon: IconName;
   tone: Tone;
@@ -39,7 +39,7 @@ export interface ChainEntry {
   depth: number;
 }
 
-export const ROADMAP_GROUPS: RoadmapGroup[] = [
+export const TASK_GROUPS: TaskGroup[] = [
   { key: 'merge', title: 'Ready to merge', icon: 'IconMerged', tone: 'green', defaultOpen: true },
   { key: 'review', title: 'Changes to review', icon: 'IconEyeOpen', tone: 'amber', defaultOpen: true },
   { key: 'plan', title: 'Plan to approve', icon: 'IconFileText', tone: 'purple', defaultOpen: true },
@@ -65,12 +65,12 @@ export const ROADMAP_GROUPS: RoadmapGroup[] = [
   { key: 'cancelled', title: 'Cancelled', icon: 'IconCircleX', tone: 'neutral', defaultOpen: false },
 ];
 
-export const ROADMAP_GROUP = Object.fromEntries(ROADMAP_GROUPS.map((group) => [group.key, group])) as Record<
-  RoadmapGroupKey,
-  RoadmapGroup
+export const TASK_GROUP = Object.fromEntries(TASK_GROUPS.map((group) => [group.key, group])) as Record<
+  TaskGroupKey,
+  TaskGroup
 >;
 
-export function resolveRoadmapGroup(state: ShinsaState, task: Task): RoadmapGroupKey {
+export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
   const gate = selectLeadGate(state, task);
@@ -150,11 +150,11 @@ export function listOpenTaskChoices(state: ShinsaState, task: Task | null) {
     .sort(compareTasks);
 }
 
-export function selectRoadmapGroup(value: string | null) {
-  return ROADMAP_GROUPS.find((group) => group.key === value) ?? null;
+export function selectTaskGroup(value: string | null) {
+  return TASK_GROUPS.find((group) => group.key === value) ?? null;
 }
 
-function orderRoadmapGroup(state: ShinsaState, key: RoadmapGroupKey, tasks: Task[]): ChainEntry[] {
+function orderTaskGroup(state: ShinsaState, key: TaskGroupKey, tasks: Task[]): ChainEntry[] {
   if (key === 'waiting') return orderChains(state, tasks);
   const sorted =
     key === 'done' || key === 'cancelled'
@@ -168,21 +168,20 @@ function matchesSearch(state: ShinsaState, task: Task, needle: string) {
   return `${task.title} ${task.request} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
 }
 
-export function listRoadmapSections(state: ShinsaState, search: string, status: RoadmapGroupKey | null) {
+export function listTaskGroupSections(state: ShinsaState, search: string, status: TaskGroupKey | null) {
   const needle = search.trim().toLowerCase();
-  const grouped = new Map<RoadmapGroupKey, Task[]>(ROADMAP_GROUPS.map((group) => [group.key, []]));
+  const grouped = new Map<TaskGroupKey, Task[]>(TASK_GROUPS.map((group) => [group.key, []]));
   for (const task of Object.values(state.tasks)) {
     if (isWatchHome(task)) continue;
-    if (!needle || matchesSearch(state, task, needle))
-      grouped.get(resolveRoadmapGroup(state, task))?.push(task);
+    if (!needle || matchesSearch(state, task, needle)) grouped.get(resolveTaskGroup(state, task))?.push(task);
   }
-  return ROADMAP_GROUPS.filter((group) => status === null || group.key === status).map((group) => ({
+  return TASK_GROUPS.filter((group) => status === null || group.key === status).map((group) => ({
     group,
-    entries: orderRoadmapGroup(state, group.key, grouped.get(group.key) ?? []),
+    entries: orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
   }));
 }
 
-export function describeRoadmapCounts(state: ShinsaState) {
+export function describeTaskCounts(state: ShinsaState) {
   const tasks = Object.values(state.tasks).filter((task) => !isWatchHome(task));
   const open = tasks.filter((task) => !isTaskSettled(task)).length;
   const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;

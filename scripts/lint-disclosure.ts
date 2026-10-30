@@ -7,7 +7,7 @@ export const COLLAPSIBLE_PRIMITIVES = new Set([
   'CompactSection',
   'WideSection',
   'FoldingBlock',
-  'RoadmapSection',
+  'TaskGroupSection',
   'ChangeSnippet',
   'ReviewNote',
   'ExpandRow',

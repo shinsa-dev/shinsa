@@ -12,9 +12,9 @@ import { ActivityEntry } from '@/components/overview/activity-row.tsx';
 import { PausedCard, QuestionCard } from '@/components/overview/now-card.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
-import { FILED_COLUMNS, RoadmapRow } from '@/components/roadmap/row.tsx';
 import { createScheduleActions, ScheduleMenu } from '@/components/settings/schedules.tsx';
 import { FACT } from '@/components/task/fact.ts';
+import { FILED_COLUMNS, TaskListRow } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
   type AutomationFact,
@@ -29,7 +29,7 @@ import {
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeNextRun } from '@/lib/schedules.ts';
-import { resolveRoadmapGroup } from '@/lib/tasks/roadmap.ts';
+import { resolveTaskGroup } from '@/lib/tasks/groups.ts';
 
 function FactLabel({ fact }: { fact: AutomationFact }) {
   if (fact.at === null) return fact.label;
@@ -100,11 +100,11 @@ function TasksPanel({ state, schedule }: { state: ShinsaState; schedule: Schedul
             <span className='text-right'>Updated</span>
           </div>
           {tasks.map((task) => (
-            <RoadmapRow
+            <TaskListRow
               key={task.id}
               state={state}
               task={task}
-              group={resolveRoadmapGroup(state, task)}
+              group={resolveTaskGroup(state, task)}
               depth={0}
               columns={FILED_COLUMNS}
             />
