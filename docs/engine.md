@@ -3979,7 +3979,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   twice. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
   removed): a login of its own before a shared one, then the default account, then the one listed first. The other
   is a duplicate. It is left out of the snapshot's `accounts` and listed in its `duplicates` (`{ id, email, keptId
-  }`, a line under the accounts in Settings → Agent usage and an info log the first time), its usage is not read,
+  }`, an info log the first time; Settings shows nothing for it), its usage is not read,
   and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the kept account, and the
   kept account is the default when the duplicate is. Shinsa never signs a duplicate out, which could revoke the
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.

@@ -191,7 +191,7 @@ describe('usage limits', () => {
     const limited: UsageRead = {
       ok: false,
       reason: 'limited',
-      detail: 'Claude asked Shinsa to read usage less often.',
+      detail: 'Rate limited by Claude.',
       retryAfterMs: 30_000,
     };
     const { limits, asked, clock } = createLimits([limited, limited, { ok: true, windows: [SESSION] }]);
@@ -202,7 +202,7 @@ describe('usage limits', () => {
     clock.now += 1;
     await limits.refresh(['a'], true);
     expect(asked).toHaveLength(2);
-    expect(limits.snapshot('a').detail).toBe('Claude asked Shinsa to read usage less often.');
+    expect(limits.snapshot('a').detail).toBe('Rate limited by Claude.');
 
     const longer = createLimits([
       { ...limited, retryAfterMs: 10 * 60_000 },

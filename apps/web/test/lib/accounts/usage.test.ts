@@ -263,13 +263,24 @@ describe('a Claude account’s header in Agent usage', () => {
       status: { label: 'Paused', tone: 'neutral', until: null },
       checkedAt: NOW - 60_000,
       retryAt: null,
+      reason: null,
     });
     expect(resolveAccountHeader(createAccount({ id: 'b', plan: null }), 'opus', NOW).detail).toBeNull();
     const throttled = createAccount({
       id: 'c',
-      usage: { status: 'ok', windows: [], detail: null, checkedAt: NOW, source: 'read', retryAt: NOW + HOUR },
+      usage: {
+        status: 'ok',
+        windows: [],
+        detail: 'Rate limited by Claude.',
+        checkedAt: NOW,
+        source: 'read',
+        retryAt: NOW + HOUR,
+      },
     });
-    expect(resolveAccountHeader(throttled, 'opus', NOW).retryAt).toBe(NOW + HOUR);
+    expect(resolveAccountHeader(throttled, 'opus', NOW)).toMatchObject({
+      retryAt: NOW + HOUR,
+      reason: 'Rate limited by Claude.',
+    });
   });
 });
 

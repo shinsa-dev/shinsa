@@ -97,6 +97,7 @@ describe('a provider’s header in Agent usage', () => {
       status: { label: 'Out of usage', tone: 'red', until: NOW + 60_000 },
       checkedAt: NOW - 60_000,
       retryAt: null,
+      reason: null,
     });
     expect(
       resolveProviderHeader(login({ status: 'signed_in', usage: { ...usage, retryAt: NOW + 60_000 } }), NOW)

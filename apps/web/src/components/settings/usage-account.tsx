@@ -16,7 +16,7 @@ export function UsageAccountBlock({
   menu: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const { checkedAt, retryAt } = header;
+  const { checkedAt, retryAt, reason } = header;
   return (
     <SettingsBlock
       header={
@@ -33,7 +33,11 @@ export function UsageAccountBlock({
           </div>
           {checkedAt !== null && (
             <span className='hidden shrink-0 text-2xs text-fg-2 sm:inline'>
-              <TimeAgo at={checkedAt} text={(now) => describeUsageChecked(checkedAt, retryAt, now)} />
+              <TimeAgo
+                at={checkedAt}
+                text={(now) => describeUsageChecked(checkedAt, retryAt, now)}
+                {...(reason ? { detail: reason } : {})}
+              />
             </span>
           )}
           {menu}

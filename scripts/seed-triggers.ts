@@ -65,7 +65,7 @@ export function writeAccountFiles(data: string) {
           window('session', 'session', '5-hour limit', 3, 4 * HOUR),
           window('weekly_all', 'weekly', 'Weekly · All models', 12, 6 * 24 * HOUR),
         ]),
-        detail: 'Claude asked Shinsa to read usage less often.',
+        detail: 'Rate limited by Claude.',
         checkedAt: NOW - 3 * HOUR,
         retryAt: NOW + 12 * MINUTE,
       },

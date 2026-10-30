@@ -7,6 +7,7 @@ import * as connectionAccounts from '@/lib/connection/accounts.ts';
 import { closeSignIn, useSignInDialog } from '@/lib/connection/accounts.ts';
 import { createAccount, createProviderLogin, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { findTooltipText } from '../../support/hover.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 
@@ -203,7 +204,7 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
   });
 
-  it('says why the last reading is kept when it cannot be read again, under its windows', () => {
+  it('says why the last reading is kept in the tooltip of when it was read, never as a row under its windows', async () => {
     const expired = 'The login needs refreshing. It refreshes the next time an agent runs on this account.';
     renderAccounts(
       createSnapshot({
@@ -222,8 +223,8 @@ describe('the Accounts settings', () => {
       })
     );
     expect(screen.getByText('42%')).toBeTruthy();
-    expect(screen.getByText(expired)).toBeTruthy();
-    expect(screen.getByText('Updated 3h ago')).toBeTruthy();
+    expect(screen.queryByText(expired)).toBeNull();
+    expect(await findTooltipText(screen.getByText('Updated 3h ago'))).toContain(expired);
   });
 
   it('refreshes the usage of every account from one button in the section header', async () => {

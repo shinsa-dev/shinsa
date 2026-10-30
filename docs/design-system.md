@@ -7318,14 +7318,14 @@ readings on a shelf.
   `fg-2`, a `Badge size='sm'` "Default" (`ms-0.5`) when it is the default, and only when something is wrong a status
   in its tone ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red, from the moment a
   window hits 100%). Then at the right "Updated 2m ago" (`text-2xs text-fg-2`, a live relative time, `hidden
-  sm:inline`; "Updated 3h ago · next read in 12m" while the provider asks for fewer reads) and the `•••` menu.
+  sm:inline`; "Updated 3h ago · next read in 12m" while the provider rate limits the reads, with the reason, "Rate
+  limited by Claude.", as a muted second line of its tooltip) and the `•••` menu.
 - Blocks sit 6px apart in the card, in the user's order (the menu has Move up / Move down).
 - One reading per row, 40px (`SETTING_ROW`): the label over "Resets in 3h" (`text-2xs text-fg-2`, the exact time on
   hover), a usage bar `w-24 shrink-0 sm:w-40`, and the percentage `w-9 text-right`.
 - Without readings the row holds the server's detail as a muted line ("No usage reported yet." before the first
-  read). With readings, a detail (why the last reading is kept: a login that needs refreshing, the provider asking
-  for fewer reads) is a muted row after them.
-- A resource listed twice shows once; a muted empty row after the list says which copy is used.
+  read). With readings the detail is never a row; it is the reason in the Updated tooltip.
+- A resource listed twice shows once, with no row about the other copy.
 - A provider Shinsa does not manage itself uses the same block: its plan in `fg-2` or, without one, its state
   ("Signed in with ChatGPT", "Not signed in", "Not installed", "Too old for Shinsa"), and, on its shelf when there
   is something to do, a row with the fix as inline markdown and a `CopyButton` for its command. Its menu offers only

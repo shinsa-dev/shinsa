@@ -1388,8 +1388,9 @@ Only these, and they win over anything below:
       ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red through `TimeAgo` as soon as a
       window is at 100%: a reset later today says how long, one on a later day its moment, "Out of usage until Sat
       2:00 AM"), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
-      reading counts, and while Claude asks for fewer reads it adds when the next one happens: "Updated 3h ago · next
-      read in 12m") and a
+      reading counts, and while Claude rate limits the reads it adds when the next one happens: "Updated 3h ago · next
+      read in 12m"; its tooltip adds the server's reason under the time, "Rate limited by Claude." or a login that
+      needs refreshing) and a
       `•••` click menu (`OptionsTrigger`, the one trigger every `•••` menu uses): Set as default, Sign in again,
       Move up / Move down, Leave out of new work / Use for new work, Switch accounts at (a submenu: Use the
       setting (90%), 80/90/95/98%, Other… which opens a dialog for any whole percentage) and Remove behind the
@@ -1397,12 +1398,11 @@ Only these, and they win over anything below:
       is never signed out). Under it, on the block's shelf, one 40px row per usage window: label over "Resets in 3h" (`ResetTime`, the
       exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
       `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
-      muted line, "No usage reported yet." before the first read, and with windows a detail (why the last reading
-      is kept: a login that needs refreshing, Claude asking for fewer reads) is a muted row after them. An account that still runs on your Claude Code
+      muted line, "No usage reported yet." before the first read; with windows the detail is never a row, only the
+      Updated tooltip's reason. An account that still runs on your Claude Code
       login or a copy of claude-swap's (`docs/engine.md` → A shared login) reads "Needs sign-in" and a muted
       `SettingsEmpty` row after the accounts says why and to sign in to it again from its menu
-      (`describeSharedLogin`). A login in your accounts twice shows once; after the accounts, a muted
-      `SettingsEmpty` row says Shinsa runs it from one copy (`describeDuplicate`).
+      (`describeSharedLogin`). A login in your accounts twice shows once, with no row about the other copy.
       Every provider with a sign-in of its own (Codex today) follows in the same `UsageAccountBlock`
       (`ProviderLoginBlock` in `providers.tsx`; the header from `resolveProviderHeader`, Claude's from
       `resolveAccountHeader`), so its row reads like an account's: the provider and its account (`AccountName`,

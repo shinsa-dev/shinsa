@@ -54,5 +54,6 @@ export function resolveProviderHeader(login: ProviderLogin, now: number): UsageA
     status: resolveProviderStatus(login, now),
     checkedAt: login.usage?.checkedAt ?? null,
     retryAt: login.usage?.retryAt ?? null,
+    reason: login.usage?.detail ?? null,
   };
 }

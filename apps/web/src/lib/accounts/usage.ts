@@ -58,6 +58,7 @@ export interface UsageAccountHeader {
   status: AccountStatus | null;
   checkedAt: number | null;
   retryAt: number | null;
+  reason: string | null;
 }
 
 export function resolveUsageTone(percent: number): Tone {
@@ -219,5 +220,6 @@ export function resolveAccountHeader(
     status: resolveAccountStatus(account, model, now),
     checkedAt: account.usage.checkedAt,
     retryAt: account.usage.retryAt ?? null,
+    reason: account.usage.detail,
   };
 }

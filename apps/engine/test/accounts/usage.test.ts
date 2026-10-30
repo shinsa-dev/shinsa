@@ -208,7 +208,7 @@ describe('requestUsage', () => {
     expect(await requestUsage('t', limited.requestHttp)).toEqual({
       ok: false,
       reason: 'limited',
-      detail: 'Claude asked Shinsa to read usage less often.',
+      detail: 'Rate limited by Claude.',
       retryAfterMs: 30_000,
     });
     for (const header of [{}, { 'retry-after': 'later' }, { 'retry-after': '0' }]) {

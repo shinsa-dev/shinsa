@@ -161,7 +161,7 @@ export async function requestUsage(
     return {
       ok: false,
       reason: 'limited',
-      detail: 'Claude asked Shinsa to read usage less often.',
+      detail: 'Rate limited by Claude.',
       retryAfterMs: readRetryAfter(response),
     };
   }
