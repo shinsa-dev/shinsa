@@ -2,6 +2,7 @@ import {
   type Attention,
   type Gate,
   type GateType,
+  isHeldInBacklog,
   listActiveRuns,
   type ShinsaState,
   selectLeadGate,
@@ -104,6 +105,8 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (gate?.type === 'post_merge') return { label: describePostMergeStatus(task), tone: 'amber' };
   const before = gate?.type === 'merge' ? describePreMergeStatus(task) : null;
   if (before) return { label: before, tone: 'amber' };
+  if (gate && isHeldInBacklog(state, gate))
+    return { label: TASK_GROUP.backlog.title, tone: TASK_GROUP.backlog.tone };
   if (gate) return resolveGateStatus(gate);
   if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
@@ -147,6 +150,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
 
 export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName {
   const gate = selectLeadGate(state, task);
+  if (gate && isHeldInBacklog(state, gate)) return TASK_GROUP.backlog.icon;
   if (gate) return resolveGateGlyph(gate).icon;
   if (isWatchedTask(task)) return 'IconRadar';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
@@ -160,7 +164,7 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
 
 export function resolveTaskGlyph(state: ShinsaState, task: Task): Glyph {
   const gate = selectLeadGate(state, task);
-  if (gate) return resolveGateGlyph(gate);
+  if (gate && !isHeldInBacklog(state, gate)) return resolveGateGlyph(gate);
   const group = TASK_GROUP[resolveTaskGroup(state, task)];
   if (group.key === 'working') return { icon: STAGE_ICON[task.stage] ?? group.icon, tone: group.tone };
   if (group.key === 'done' && task.stage === 'merged') return { icon: 'IconMerged', tone: group.tone };

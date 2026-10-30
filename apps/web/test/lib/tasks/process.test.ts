@@ -42,6 +42,7 @@ describe('process actions', () => {
     const suggestion = { id: 's', title: 'Retry', why: 'Flaky', waitsOnThis: true, status: 'open' as const };
     await acceptSuggestion(task, suggestion as never, 'now');
     await acceptSuggestion(task, { ...suggestion, waitsOnThis: false } as never, 'after');
+    await acceptSuggestion(task, suggestion as never, 'backlog');
     await dismissSuggestion(task, suggestion as never);
     await keepSuggestion(task, suggestion as never);
     expect(spies.sent.mock.calls).toEqual([
@@ -52,6 +53,10 @@ describe('process actions', () => {
       [
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true },
         'Added the task. It starts after this task merges.',
+      ],
+      [
+        { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, backlog: true },
+        'Added to the backlog. It plans now and builds when you start it.',
       ],
       [{ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' }, 'Dismissed.'],
       [

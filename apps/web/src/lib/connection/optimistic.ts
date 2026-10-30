@@ -12,7 +12,9 @@ const OPTIMISTIC_COMMANDS = new Set<UserCommand['type']>([
   'suggestion.dismiss',
   'task.cancel',
   'task.complete',
+  'task.move_to_backlog',
   'task.prioritize',
+  'task.remove_from_backlog',
   'task.wait_on',
   'usage_wait.change',
 ]);

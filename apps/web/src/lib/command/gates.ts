@@ -23,6 +23,7 @@ import {
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
 import { describeMergeBlock, listTimedSteps, MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
 import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
+import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import {
   type AnswerExtras,
   replyToGate,
@@ -193,7 +194,7 @@ function listPlanCommands(task: Task, gate: Gate): Command[] {
     {
       kind: 'run',
       id: `${id}.approve`,
-      label: 'Approve the plan',
+      label: task.backlog ? describePlanCard(task).approve : 'Approve the plan',
       icon: 'IconCheckmark1',
       keywords: ['spec', 'go ahead', 'build', 'accept'],
       run: () => void replyToGate(gate, resolvePlanReply(task), null, { planVersion: task.plan?.version }),

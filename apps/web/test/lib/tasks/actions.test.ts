@@ -41,6 +41,17 @@ describe('listTaskActions', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([]);
   });
 
+  it('offers Move to the backlog before building starts, and Back to Needs you once it is there', () => {
+    expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
+      ['fork'],
+      ['moveToBacklog'],
+      ['restart', 'complete', 'cancel'],
+    ]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'awaiting_plan', backlog: { at: 1 } }))[1]).toEqual([
+      'removeFromBacklog',
+    ]);
+  });
+
   it('labels every action with its icon', () => {
     expect(TASK_ACTION.cancel).toEqual({ label: 'Cancel task', icon: 'IconCircleX' });
     expect(TASK_ACTION.branch.label).toBe('Copy branch name');
@@ -98,6 +109,15 @@ describe('runTaskAction', () => {
       [{ type: 'task.retry', taskId: 'full' }, 'Restarted.'],
       [{ type: 'task.complete', taskId: 'full' }, 'Marked done.'],
       [{ type: 'task.cancel', taskId: 'full' }, 'Cancelled.'],
+    ]);
+  });
+
+  it('moves a task into the backlog and back to Needs you', () => {
+    runTaskAction(FULL, 'moveToBacklog');
+    runTaskAction(FULL, 'removeFromBacklog');
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'task.move_to_backlog', taskId: 'full' }, 'Moved to the backlog.'],
+      [{ type: 'task.remove_from_backlog', taskId: 'full' }, 'Moved back to Needs you.'],
     ]);
   });
 });

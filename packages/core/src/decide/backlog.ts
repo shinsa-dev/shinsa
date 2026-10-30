@@ -1,48 +1,24 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
+  BACKLOG_REFUSAL_TEXT,
+  canWaitInBacklog,
   DomainError,
-  isTaskSettled,
   needsWorktree,
-  resolveInquiryStep,
+  resolveBacklogRefusal,
   resolveTaskPipeline,
   type Task,
-  type TaskStage,
 } from '../domain/index.ts';
 import { resolveBacklogStart } from '../prompts/index.ts';
 import type { Decider } from './decider.ts';
 import { startAfterPlan } from './shapes.ts';
 import { requestWorkspace } from './workspaces.ts';
 
-const BEFORE_BUILD: ReadonlySet<TaskStage> = new Set<TaskStage>([
-  'triage',
-  'waiting_on_tasks',
-  'planning',
-  'awaiting_plan',
-]);
-
 export const BACKLOG_REASON = 'in the backlog';
 export const PLAN_READY_REASON = 'plan ready for you';
 
-export function canWaitInBacklog(task: Task) {
-  const pipeline = resolveTaskPipeline(task);
-  return pipeline.includes('plan') && resolveInquiryStep(pipeline) === null;
-}
-
 function assertBacklogFits(task: Task) {
-  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
-  if (!canWaitInBacklog(task)) {
-    throw new DomainError(
-      'backlog_inquiry',
-      'Only work that builds or runs an operation waits in the backlog. A question, research or an investigation starts at once.'
-    );
-  }
-  const started = task.plan?.approvedAt || task.phaseReports.length > 0 || !BEFORE_BUILD.has(task.stage);
-  if (started) {
-    throw new DomainError(
-      'backlog_started',
-      'This task has started building, so it cannot move to the backlog. Cancel it, or let it finish.'
-    );
-  }
+  const refusal = resolveBacklogRefusal(task);
+  if (refusal) throw new DomainError(refusal, BACKLOG_REFUSAL_TEXT[refusal]);
 }
 
 function hasOpenPlanGate(decider: Decider, taskId: string) {

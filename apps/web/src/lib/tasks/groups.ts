@@ -2,6 +2,7 @@ import {
   compareTasks,
   isAgentQuestion,
   isDependencyOf,
+  isHeldInBacklog,
   isPausingGate,
   isTaskSettled,
   isWatchHome,
@@ -23,6 +24,7 @@ export type TaskGroupKey =
   | 'paused'
   | 'working'
   | 'waiting'
+  | 'backlog'
   | 'done'
   | 'cancelled';
 
@@ -61,6 +63,7 @@ export const TASK_GROUPS: TaskGroup[] = [
     tone: 'neutral',
     defaultOpen: true,
   },
+  { key: 'backlog', title: 'Backlog', icon: 'IconArchive', tone: 'neutral', defaultOpen: true },
   { key: 'done', title: 'Done', icon: 'IconCheckCircle2', tone: 'purple', defaultOpen: false },
   { key: 'cancelled', title: 'Cancelled', icon: 'IconCircleX', tone: 'neutral', defaultOpen: false },
 ];
@@ -74,6 +77,7 @@ export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
   const gate = selectLeadGate(state, task);
+  if (gate && isHeldInBacklog(state, gate)) return 'backlog';
   if (gate) {
     if (isPausingGate(gate)) return 'paused';
     if (gate.type === 'proposal') return 'change';
@@ -83,7 +87,8 @@ export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
     if (gate.type === 'review') return 'review';
     return 'plan';
   }
-  return listWaitsOn(state, task).length > 0 ? 'waiting' : 'working';
+  if (listWaitsOn(state, task).length > 0) return 'waiting';
+  return task.backlog ? 'backlog' : 'working';
 }
 
 export function describeWaitsOn(waitsOn: Task[]) {

@@ -1,6 +1,17 @@
-import { resolveTaskProject, type ShinsaState, serializeAttachments } from '@shinsa/core';
+import { type ShinsaState, serializeAttachments, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import {
+  Command,
+  CommandEmpty,
+  CommandHint,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@shinsa/ui/components/command';
+import { Icon } from '@shinsa/ui/components/icon';
+import { Popover, PopoverContent } from '@shinsa/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shinsa/ui/components/select';
+import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { AttachButton, AttachmentChips, useFileDrop } from '@/components/chat/attachment-chips.tsx';
@@ -16,7 +27,6 @@ import {
   AUTO_CHOICES,
   createNewTaskCommand,
   describeNewTask,
-  isWaitingStart,
   listNewTaskPriorities,
   listNewTaskProjects,
   listNewTaskStarts,
@@ -25,17 +35,14 @@ import {
   NO_PROJECT,
   resolveProjectChoice,
   resolveShownProject,
+  resolveStartChoice,
+  toggleAfterTask,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
 import { listOpenTaskChoices } from '@/lib/tasks/groups.ts';
+import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
 
 const PRIORITY_ITEMS = listNewTaskPriorities();
-
-function listProjectTasks(state: ShinsaState, project: string) {
-  return listOpenTaskChoices(state, null).filter(
-    (task) => (resolveTaskProject(state, task) ?? NO_PROJECT) === project
-  );
-}
 
 function ProjectField({
   items,
@@ -72,13 +79,89 @@ function ProjectField({
 function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices) {
   const project = state ? resolveProjectChoice(state, chosen.project) : 'auto';
   const shownProject = state ? resolveShownProject(state, project) : NO_PROJECT;
-  const startItems = listNewTaskStarts(state ? listProjectTasks(state, shownProject) : []);
-  const choices: NewTaskChoices = {
-    ...chosen,
-    project,
-    start: startItems.some((item) => item.value === chosen.start) ? chosen.start : 'auto',
-  };
-  return { choices, shownProject, startItems };
+  const open = state ? listOpenTaskChoices(state, null) : [];
+  const choices: NewTaskChoices = { ...chosen, project, ...resolveStartChoice(chosen, open) };
+  return { choices, shownProject, open };
+}
+
+function AfterTaskList({
+  state,
+  open,
+  after,
+  onToggle,
+}: {
+  state: ShinsaState;
+  open: Task[];
+  after: string[];
+  onToggle: (taskId: string) => void;
+}) {
+  return (
+    <Command>
+      <CommandInput placeholder='Search open tasks' aria-label='Search open tasks' />
+      <CommandList>
+        <CommandEmpty>No open task matches.</CommandEmpty>
+        {open.map((task) => (
+          <CommandItem
+            key={task.id}
+            value={`${task.handle ?? ''} ${task.title} ${task.id}`}
+            icon={resolveTaskMenuIcon(state, task)}
+            onSelect={() => onToggle(task.id)}
+          >
+            <Truncate className='min-w-0 flex-1'>{task.title}</Truncate>
+            {task.handle && <CommandHint className='shrink-0'>{task.handle}</CommandHint>}
+            <Icon
+              name='IconCheckmark1Small'
+              className={cn('shrink-0 text-primary', !after.includes(task.id) && 'invisible')}
+            />
+          </CommandItem>
+        ))}
+      </CommandList>
+    </Command>
+  );
+}
+
+function StartField({
+  state,
+  open,
+  choices,
+  onChoose,
+}: {
+  state: ShinsaState | null;
+  open: Task[];
+  choices: NewTaskChoices;
+  onChoose: (part: Partial<NewTaskChoices>) => void;
+}) {
+  const [picking, setPicking] = React.useState(false);
+  const anchor = React.useRef<HTMLSpanElement>(null);
+  return (
+    <span ref={anchor} className='flex min-w-0'>
+      <SelectField
+        label='When to start'
+        size='sm'
+        variant='ghost'
+        align='start'
+        items={listNewTaskStarts(open, choices.after)}
+        value={choices.start}
+        onValueChange={(start) => {
+          if (start === 'after') setPicking(true);
+          else onChoose({ start, after: [] });
+        }}
+        className='min-w-0 max-w-64'
+      />
+      {state && (
+        <Popover open={picking} onOpenChange={setPicking}>
+          <PopoverContent anchor={anchor} align='start' className='w-80 overflow-hidden p-0'>
+            <AfterTaskList
+              state={state}
+              open={open}
+              after={choices.after}
+              onToggle={(taskId) => onChoose(toggleAfterTask(choices.after, taskId))}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
+    </span>
+  );
 }
 
 export function NewTaskFields({
@@ -90,7 +173,7 @@ export function NewTaskFields({
   chosen: NewTaskChoices;
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
-  const { choices, shownProject, startItems } = resolveForm(state, chosen);
+  const { choices, shownProject, open } = resolveForm(state, chosen);
   return (
     <>
       {state && (
@@ -100,16 +183,7 @@ export function NewTaskFields({
           onValueChange={(project) => onChoose({ project })}
         />
       )}
-      <SelectField
-        label='When to start'
-        size='sm'
-        variant='ghost'
-        align='start'
-        items={startItems}
-        value={choices.start}
-        onValueChange={(start) => onChoose({ start })}
-        className='min-w-0 max-w-64'
-      />
+      <StartField state={state} open={open} choices={choices} onChoose={onChoose} />
       <SelectField
         label='Priority'
         size='sm'
@@ -133,7 +207,7 @@ export function NewTaskForm() {
   const attachments = useAttachments();
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(request, attachments.drafts, busy);
-  const copy = describeNewTask(isWaitingStart(choices.start));
+  const copy = describeNewTask(choices.start);
   const choose = (part: Partial<NewTaskChoices>) => setChosen((current) => ({ ...current, ...part }));
   useNewTaskRequest((draft) => {
     if (draft) setRequest(draft);

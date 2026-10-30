@@ -65,6 +65,14 @@ describe('resolveTaskGroup', () => {
     expect(groupFor({ type: 'operation' }, { stage: 'awaiting_operation' })).toBe('operation');
   });
 
+  it('files a backlog task under Backlog while it plans and while its plan waits, but a failure still pauses it', () => {
+    const backlog = { backlog: { at: 1 } };
+    expect(groupFor({ type: 'plan' }, backlog)).toBe('backlog');
+    expect(groupFor({ type: 'failure' }, backlog)).toBe('paused');
+    const planning = createTask({ id: 'p', stage: 'planning', ...backlog });
+    expect(resolveTaskGroup(createShinsaState({ tasks: [planning] }), planning)).toBe('backlog');
+  });
+
   it('ignores answered gates', () => {
     expect(groupFor({ type: 'review', status: 'answered' })).toBe('working');
   });
@@ -100,6 +108,7 @@ describe('TASK_GROUPS', () => {
       'Paused',
       'In progress',
       'Waiting on another task',
+      'Backlog',
       'Done',
       'Cancelled',
     ]);
@@ -320,6 +329,7 @@ describe('listTaskGroupSections', () => {
       paused: [],
       working: ['high', 'old', 'new'],
       waiting: ['waiter', 'next:1'],
+      backlog: [],
       done: ['done', 'merged'],
       cancelled: ['gone'],
     });
