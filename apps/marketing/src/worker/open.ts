@@ -9,7 +9,7 @@ export function isOpenPage(pathname: string) {
   return pathname.replace(/\/+$/, '') === '/open';
 }
 
-export function rewriteOpenPage(response: Response, search: string) {
+function rewriteOpenPage(response: Response, search: string) {
   const header = resolvePendingHeader(search);
   const rewriter = new HTMLRewriter()
     .on('[data-open-title]', { element: (element) => void element.setInnerContent(header.title) })
