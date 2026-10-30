@@ -3925,6 +3925,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   login, below) and gets one when you sign in to it again. The list is `accounts.json` beside the folders
   (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, addedAt, paused,
   switchAt }] }`, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
+  An account's `plan` comes from the `account` notice a run reports (the SDK's `accountInfo()`, which carries
+  Claude's current name for the plan, "Claude Ultra"); the keychain login's `subscriptionType` and `claude auth
+  status` only fill a plan that is missing, since they can lag behind a rename ("max"). `resolvePlanLabel` (core)
+  writes either form the same way.
   Every command Shinsa runs for an account (a run, a sign-in, a status check) gets its environment from
   `resolveAccountEnv` (`accounts/paths.ts`).
 - **Shared settings.** A new folder gets a `.claude.json` with `mcpServers`, `projects`, `theme`, `autoUpdates`,

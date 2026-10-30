@@ -1,6 +1,12 @@
 import { capitalise } from '../chat/text.ts';
 
-const PLAN_LABEL: Record<string, string> = { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' };
+const PLAN_LABEL: Record<string, string> = {
+  max: 'Max',
+  ultra: 'Ultra',
+  pro: 'Pro',
+  team: 'Team',
+  enterprise: 'Enterprise',
+};
 
 export function resolvePlanLabel(plan: string | null) {
   if (!plan) return null;

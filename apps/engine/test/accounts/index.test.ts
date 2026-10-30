@@ -1202,6 +1202,37 @@ describe('what runs report back', () => {
     expect(world.accounts.store.list()).toEqual([]);
   });
 
+  test('the plan a run reports wins; the login and auth status only fill a missing one', async () => {
+    const world = createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 25);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({
+        attempts: [
+          {
+            attemptId: 'a1',
+            provider: 'claude',
+            model: null,
+            resumed: false,
+            handoff: null,
+            startedAt: 1,
+            account: { id: account.id, email: account.email },
+          },
+        ],
+      });
+    });
+    world.accounts.onNotice('run-1', {
+      kind: 'account',
+      email: 'a@example.com',
+      organization: null,
+      plan: 'Claude Ultra',
+    });
+    await world.accounts.refresh();
+    expect(world.accounts.store.find(account.id).plan).toBe('Claude Ultra');
+    world.accounts.store.update(account.id, { plan: null });
+    await world.accounts.limits.refresh([account.id], true);
+    expect(world.accounts.store.find(account.id).plan).toBe('max');
+  });
+
   test('usage that cannot be read keeps what was known and says why', async () => {
     const world = createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 25);
