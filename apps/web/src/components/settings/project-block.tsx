@@ -7,7 +7,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { SuggestedWatchRow } from '@/components/automations/suggested-watch.tsx';
+import { SuggestedSourceWatchRow } from '@/components/automations/suggested-watch.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
@@ -287,7 +287,7 @@ export function ProjectBlock({
                 />
               }
             />
-            {suggestion && <SuggestedWatchRow state={state} suggestion={suggestion} withProject={false} />}
+            {suggestion && <SuggestedSourceWatchRow suggestion={suggestion} />}
           </React.Fragment>
         );
       })}

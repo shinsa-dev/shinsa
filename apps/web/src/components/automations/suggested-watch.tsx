@@ -1,5 +1,6 @@
 import type { ShinsaState, WatchSuggestion } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -37,16 +38,53 @@ export function SuggestedWatchButtons({
       >
         Add the watch
       </Button>
-      <Hint label='Dismiss the suggested watch'>
+      {primary ? (
         <Button
           variant='secondary'
-          size='icon-sm'
-          icon='IconCrossSmall'
-          aria-label='Dismiss the suggested watch'
+          size='sm'
+          loading={busy === 'dismiss'}
           disabled={busy !== null}
           onClick={() => void run('dismiss', () => actions.dismiss(suggestion))}
-        />
+        >
+          Cancel
+        </Button>
+      ) : (
+        <Hint label='Dismiss the suggested watch'>
+          <Button
+            variant='secondary'
+            size='icon-sm'
+            icon='IconCrossSmall'
+            aria-label='Dismiss the suggested watch'
+            disabled={busy !== null}
+            onClick={() => void run('dismiss', () => actions.dismiss(suggestion))}
+          />
+        </Hint>
+      )}
+    </div>
+  );
+}
+
+export function SuggestedSourceWatchRow({
+  suggestion,
+  actions,
+}: {
+  suggestion: WatchSuggestion;
+  actions?: WatchSuggestionActions;
+}) {
+  return (
+    <div className={cn(SETTING_ROW, 'gap-2')}>
+      <Hint label={SUGGESTED_HINT}>
+        <span className='grid size-3.5 shrink-0 place-items-center'>
+          <Icon size='sm' name='IconLightbulbGlow' />
+        </span>
       </Hint>
+      <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
+        <Truncate className='min-w-0 text-fg-4 text-xs'>{suggestion.text}</Truncate>
+        <Truncate className='min-w-0 shrink-[2] text-2xs text-fg-2'>
+          {describeSuggestionDetail(suggestion, null)}
+        </Truncate>
+      </span>
+      <SuggestedWatchButtons suggestion={suggestion} {...(actions ? { actions } : {})} />
     </div>
   );
 }
@@ -72,7 +110,7 @@ export function SuggestedWatchRow({
           label='Suggested watch'
           detail={SUGGESTED_HINT}
         />
-        <div className='flex min-w-0 flex-1 flex-col gap-px'>
+        <div className='flex min-w-0 flex-1 flex-col'>
           <span className='selectable text-fg-4 text-xs'>{suggestion.text}</span>
           <Truncate className='text-2xs text-fg-2'>
             {describeSuggestionDetail(

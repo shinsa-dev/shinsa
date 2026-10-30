@@ -115,7 +115,7 @@ export function ScheduleRow({
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 items-center gap-2.5'>
         <StatusTile {...look} label={type} detail={look.hint} />
-        <div className='flex min-w-0 flex-1 flex-col gap-px'>
+        <div className='flex min-w-0 flex-1 flex-col'>
           <Truncate className='text-fg-4 text-xs'>{schedule.name}</Truncate>
           <Truncate className='text-2xs text-fg-2'>{describeScheduleSummary(state, schedule)}</Truncate>
         </div>

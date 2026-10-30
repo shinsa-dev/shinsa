@@ -431,7 +431,7 @@ describe('Settings → Projects', () => {
 });
 
 describe('a suggested watch under its integration', () => {
-  it('shows the open suggestion right below the integration it reads, without the project', () => {
+  it('shows the open suggestion as one row right below the integration it reads, without the project', () => {
     const project = {
       ...SUPERWALL,
       watchSources: [
@@ -445,8 +445,11 @@ describe('a suggested watch under its integration', () => {
     });
     renderProjects(state);
     const suggestion = screen.getByText('File a task for each new bug in #feedback.');
-    const row = suggestion.closest('div.flex.min-w-0.flex-1')?.parentElement?.parentElement;
+    const row = suggestion.closest('span.flex.min-w-0.flex-1')?.parentElement;
     expect(row?.previousElementSibling?.textContent).toContain('slack');
+    expect(row?.textContent).toBe(
+      'File a task for each new bug in #feedback.slack · every hourAdd the watch'
+    );
     expect(screen.getByText('slack · every hour')).toBeDefined();
     expect(screen.getAllByRole('button', { name: 'Add the watch' })).toHaveLength(1);
   });

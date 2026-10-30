@@ -240,7 +240,7 @@ describe('HandoverCard for a watch an agent suggests', () => {
     );
   }
 
-  it('waits for you with Add the watch and Dismiss, which send the commands', async () => {
+  it('waits for you with Add the watch and Cancel, which send the commands', async () => {
     pushSuggestion({ id: 's1' });
     const view = renderCard(call('set_schedule', args), task);
     expect(view.getByText('Suggested a watch')).toBeTruthy();
@@ -248,7 +248,8 @@ describe('HandoverCard for a watch an agent suggests', () => {
     expect(view.getByText('slack · every hour')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Add the watch' }));
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-    fireEvent.click(view.getByRole('button', { name: 'Dismiss the suggested watch' }));
+    expect(view.queryByRole('button', { name: 'Dismiss the suggested watch' })).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
     expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
       { type: 'watch_suggestion.accept', suggestionId: 's1' },
       { type: 'watch_suggestion.dismiss', suggestionId: 's1' },
