@@ -9,7 +9,7 @@ import {
 } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
 
-export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped';
+export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped' | 'cancelled';
 
 export interface Step {
   key: string;
@@ -41,6 +41,7 @@ export const STEP_STATUS_LABEL: Record<StepStatus, string> = {
   current: 'In progress',
   waiting: 'Waiting on you',
   pending: 'Not started',
+  cancelled: 'Cancelled',
 };
 
 export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
@@ -49,6 +50,7 @@ export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
   current: 'blue',
   waiting: 'amber',
   pending: 'neutral',
+  cancelled: 'neutral',
 };
 
 const CONFLICT_FIXES: ReadonlySet<FixReason | null> = new Set(['conflict', 'update']);

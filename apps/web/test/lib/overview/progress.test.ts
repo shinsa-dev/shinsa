@@ -197,6 +197,7 @@ describe('isStepReached', () => {
     expect(isStepReached(step('current'))).toBe(false);
     expect(isStepReached(step('waiting'))).toBe(false);
     expect(isStepReached(step('pending'))).toBe(false);
+    expect(isStepReached(step('cancelled'))).toBe(false);
   });
 });
 
@@ -208,6 +209,7 @@ describe('STEP_STATUS_LABEL', () => {
       current: 'In progress',
       waiting: 'Waiting on you',
       pending: 'Not started',
+      cancelled: 'Cancelled',
     });
   });
 });

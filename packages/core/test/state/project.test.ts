@@ -279,3 +279,29 @@ describe('applying the process events', () => {
     expect(state.gates.g?.verdicts).toHaveLength(1);
   });
 });
+
+describe('cancelling', () => {
+  function stageTask(
+    taskId: string,
+    state: ReturnType<typeof createHarness>['state'],
+    stage: 'cancelled' | 'planning'
+  ) {
+    return applyEvent(state, {
+      type: 'task.staged',
+      taskId,
+      stage,
+      reason: stage,
+      seq: state.seq + 1,
+      at: NOW,
+    }).tasks[taskId];
+  }
+
+  test('a cancelled task keeps the stage it stopped at, once, and forgets it when it moves on', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(stageTask(taskId, harness.state, 'planning')).not.toHaveProperty('cancelledFrom');
+    expect(stageTask(taskId, harness.state, 'cancelled')?.cancelledFrom).toBe('planning');
+    expect(stageTask(taskId, harness.state, 'cancelled')?.cancelledFrom).toBe('planning');
+    expect(stageTask(taskId, harness.state, 'planning')?.cancelledFrom).toBeNull();
+  });
+});

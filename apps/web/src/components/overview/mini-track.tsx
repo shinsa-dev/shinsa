@@ -8,6 +8,7 @@ const MINI_DOT: Record<Exclude<StepStatus, 'current'>, string> = {
   skipped: 'border border-dashed border-fg-2',
   waiting: 'bg-amber-4',
   pending: 'border border-bg-a3',
+  cancelled: 'border border-fg-2',
 };
 
 function MiniDot({ status }: { status: StepStatus }) {
