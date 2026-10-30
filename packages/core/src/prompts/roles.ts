@@ -1,6 +1,9 @@
+import { describeCount } from '../chat/text.ts';
 import {
+  DAY_MS,
   type Evidence,
   type EvidenceItem,
+  HOUR_MS,
   hasStep,
   isComposedByAgent,
   isLaterRound,
@@ -194,6 +197,16 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+function describeWait(waitedMs: number) {
+  if (waitedMs >= DAY_MS) return describeCount(Math.floor(waitedMs / DAY_MS), 'day');
+  if (waitedMs >= HOUR_MS) return describeCount(Math.floor(waitedMs / HOUR_MS), 'hour');
+  return 'less than an hour';
+}
+
+export function resolveBacklogStart(waitedMs: number) {
+  return `\n\nThis plan waited in the backlog for ${describeWait(waitedMs)} before the human started it, and the worktree now holds the latest default branch. Before you build, check that the plan still fits the code. Where it no longer does, adapt it as you build and record what you changed as a judgement call.`;
 }
 
 export function resolvePhaseInstruction(

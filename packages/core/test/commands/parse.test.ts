@@ -129,6 +129,7 @@ describe('parseUserCommand', () => {
           origin: '/code/app',
           waitsOn: ['t1'],
           forkOf: 't0',
+          backlog: true,
         },
         {
           type: 'task.create',
@@ -139,6 +140,7 @@ describe('parseUserCommand', () => {
           origin: '/code/app',
           waitsOn: ['t1'],
           forkOf: 't0',
+          backlog: true,
         },
       ],
       [
@@ -148,6 +150,14 @@ describe('parseUserCommand', () => {
       [
         { type: 'task.wait_on', taskId: 't1', waitsOn: [] },
         { type: 'task.wait_on', taskId: 't1', waitsOn: [] },
+      ],
+      [
+        { type: 'task.move_to_backlog', taskId: 't1' },
+        { type: 'task.move_to_backlog', taskId: 't1' },
+      ],
+      [
+        { type: 'task.remove_from_backlog', taskId: 't1' },
+        { type: 'task.remove_from_backlog', taskId: 't1' },
       ],
       [
         { type: 'task.cancel', taskId: 't1' },
@@ -389,6 +399,21 @@ describe('parseUserCommand for the process commands', () => {
     expect(
       parseUserCommand({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true })
     ).toEqual({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true });
+    expect(
+      parseUserCommand({
+        type: 'suggestion.accept',
+        taskId: 't',
+        suggestionId: 's',
+        waitsOnThis: false,
+        backlog: true,
+      })
+    ).toEqual({
+      type: 'suggestion.accept',
+      taskId: 't',
+      suggestionId: 's',
+      waitsOnThis: false,
+      backlog: true,
+    });
     expect(parseUserCommand({ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' })).toEqual({
       type: 'suggestion.dismiss',
       taskId: 't',

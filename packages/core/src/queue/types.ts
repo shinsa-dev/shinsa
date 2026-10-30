@@ -15,6 +15,7 @@ export interface Queue {
   later: QueuedGate[];
   working: Task[];
   waiting: Task[];
+  backlog: Task[];
 }
 
 export interface QueueStep {

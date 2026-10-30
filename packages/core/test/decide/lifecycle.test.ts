@@ -92,6 +92,12 @@ describe('planning', () => {
         proposePlan(harness, taskId);
         return { harness, taskId };
       },
+      backlog: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness, { backlog: true });
+        proposePlan(harness, taskId);
+        return { harness, taskId };
+      },
       asks_approval: (approvePlans) => {
         const harness = withApproval(approvePlans);
         const taskId = createTask(harness);

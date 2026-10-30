@@ -91,6 +91,7 @@ export function startPlanning(decider: Decider, taskId: string, feedback: string
 const PLAN_GATE_TEST: Record<PlanGateReason, (task: Task) => boolean> = {
   operates: (task) => hasStep(task, 'operate'),
   plan_first: (task) => task.planFirst,
+  backlog: (task) => Boolean(task.backlog),
   asks_approval: (task) => task.plan?.document?.approval === true,
   large: isLargePlan,
   revised: (task) => (task.plan?.version ?? 0) > 1,

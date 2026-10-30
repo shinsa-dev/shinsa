@@ -11,6 +11,7 @@ import {
 import { resolveHumanFixPrompt, resolveVerdictFixPrompt } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
+import { startFromBacklog } from './backlog.ts';
 import { startEditsChecks } from './checks.ts';
 import { answerConfiguration } from './config.ts';
 import { acknowledgeBudget } from './costs.ts';
@@ -202,7 +203,8 @@ function answerDecision(
     const version = decider.task(taskId).plan?.version ?? 1;
     decider.emit({ type: 'plan.approved', taskId, version });
     if (response?.trim()) decider.emit({ type: 'plan.answered', taskId, answers: response.trim() });
-    startAfterPlan(decider, taskId);
+    if (decider.task(taskId).backlog) startFromBacklog(decider, taskId);
+    else startAfterPlan(decider, taskId);
     return;
   }
   if (gate.type === 'review') {
