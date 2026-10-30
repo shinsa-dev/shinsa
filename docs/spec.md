@@ -78,10 +78,10 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
             mergeable ──[GATE: merge]──► merged ─► settled (worktree cleaned)
 ```
 
-- **Plan approval decides the plan gate.** It is off by default (Settings → Agents → Engine, Approve
-  plans): building starts as soon as the plan is written. With it on, a large task stops at the plan gate
-  (triage sizes new features, changes across several areas, UI flows, the data model and anything
-  ambiguous as large), and so does any plan the agent revised. A task you ask for plan first
+- **Plan approval decides the plan gate.** Settings → Agents → Engine, Approve plans has three choices. When
+  you ask, the default: building starts as soon as the plan is written. Large plans: a plan with more than 3
+  phases or 6 files stops at the plan gate, judged from the plan itself rather than from the request, and so
+  does any plan the agent revised. Always: every plan stops there. A task you ask for plan first
   (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
   that runs an operation or a plan that asks for your approval, whatever the setting says (`docs/engine.md` → A
   task's path).
@@ -237,10 +237,10 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   does not navigate. The project defaults to the focus project; When to start and Priority default
   to Auto, and picking one overrides what Shinsa would decide. The kind of task is not asked: the
   classifier and the agent decide it.
-- **Attachments.** Home's composer and every task composer take files and images: the paperclip, a
-  paste or a drop. Each shows as a chip above the text while it uploads and can be removed; a
-  message can be attachments alone. The chat shows them as thumbnails and file chips, and the agent
-  gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
+- **Attachments.** Home's composer, every task composer and a question's answer box take files and
+  images: the paperclip, a paste or a drop. Each shows as a chip above the text while it uploads and
+  can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
+  and file chips, an answer's under the question it answers, and the agent gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
   say in the chat what to change), Review (§5), Merge, Question, a proposed change.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
@@ -992,9 +992,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 ## 11. Open questions
 
 1. **Plan gate threshold.** Today: `shinsa do --plan-first` and `shinsa import` always stop at the plan gate, and
-   with Settings → Agents → Engine, Approve plans on (off by default), large tasks and revised plans stop too; triage
-   sizes new features, UI flows and data model changes as large. Should some of them stop at the plan gate
-   even with plan approval off?
+   with Settings → Agents → Engine, Approve plans on Large plans, plans of more than 3 phases or 6 files and
+   revised plans stop too, and on Always every plan does. Are 3 phases and 6 files the right line?
 2. **Learning from you.** Your past corrections (in Kanna transcripts) could seed the rules skills
    and the ranking of decisions. Worth a dedicated pass once the PR loop has run against GitHub.
 3. **Local review.** The review gate opens the worktree in your editor or a terminal. Should it also

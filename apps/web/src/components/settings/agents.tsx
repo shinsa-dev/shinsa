@@ -266,7 +266,7 @@ export function AgentSettings({ settings }: { settings: Settings }) {
             label='Approve plans'
             items={PLAN_ITEMS}
             value={resolvePlanValue(settings)}
-            onValueChange={(value) => void updateSettings({ approvePlans: value === 'large' })}
+            onValueChange={(approvePlans) => void updateSettings({ approvePlans })}
           />
         </SettingRow>
         <SettingRow title='Automatic fix rounds'>

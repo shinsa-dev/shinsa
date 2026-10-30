@@ -1,3 +1,4 @@
+import { resolveCurrentRound, type Task } from '../domain/index.ts';
 import type { EventOf } from '../events/index.ts';
 import { describeSuggestionSettled } from './activity.ts';
 import type { ShinsaState } from './project.ts';
@@ -37,9 +38,14 @@ export function applySuggestionSettled(state: ShinsaState, event: EventOf<'sugge
   record(state, event.taskId, event.at, {
     actor: 'you',
     kind: 'suggestion',
-    text:
-      event.keptRound === undefined
-        ? describeSuggestionSettled(event.status, suggestion.title)
-        : `Kept “${suggestion.title}” in this task as round ${event.keptRound}`,
+    text: describeSettled(task, suggestion.title, event),
   });
+}
+
+function describeSettled(task: Task, title: string, event: EventOf<'suggestion.settled'>) {
+  if (event.keptRound === undefined) return describeSuggestionSettled(event.status, title);
+  if (event.keptRound === resolveCurrentRound(task).number) {
+    return `Kept “${title}” in this task and sent it to the agent`;
+  }
+  return `Kept “${title}” in this task as round ${event.keptRound}`;
 }

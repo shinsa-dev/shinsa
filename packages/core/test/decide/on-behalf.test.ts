@@ -198,7 +198,7 @@ describe('acting for the human', () => {
 
   test('a message to a task that waits for you is left for its next agent, and closes no gate', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
@@ -223,7 +223,7 @@ describe('acting for the human', () => {
     const harness = createHarness();
     const repoId = registerRepo(harness);
     const settings: Required<Pick<Settings, (typeof HUMAN_ONLY_SETTINGS)[number]>> = {
-      approvePlans: true,
+      approvePlans: 'always',
       mergeMethod: 'rebase',
       taskBudgetUsd: 5,
       taskUsageLimit: 50,
@@ -259,9 +259,9 @@ describe('acting for the human', () => {
       expect(() => actOnBehalf(harness, command)).toThrow('Only the human changes');
       expect(harness.events).toHaveLength(before);
     }
-    expect(() => actOnBehalf(harness, { type: 'settings.change', patch: { approvePlans: true } })).toThrow(
-      'Only the human changes the settings approvePlans. Tell them what you would change and why.'
-    );
+    expect(() =>
+      actOnBehalf(harness, { type: 'settings.change', patch: { approvePlans: 'always' } })
+    ).toThrow('Only the human changes the settings approvePlans. Tell them what you would change and why.');
     expect(() =>
       actOnBehalf(harness, {
         type: 'repo.update',
@@ -280,9 +280,9 @@ describe('acting for the human', () => {
     });
     actOnBehalf(harness, { type: 'repo.update', repoId, patch: { defaultBranch: 'develop' } });
     expect(harness.state.repos[repoId]?.defaultBranch).toBe('develop');
-    harness.send({ type: 'settings.change', patch: { approvePlans: true, mergeMethod: 'rebase' } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always', mergeMethod: 'rebase' } });
     harness.send({ type: 'repo.update', repoId, patch: { checkCommands: ['bun test'] } });
-    expect(harness.state.settings).toMatchObject({ approvePlans: true, mergeMethod: 'rebase' });
+    expect(harness.state.settings).toMatchObject({ approvePlans: 'always', mergeMethod: 'rebase' });
     expect(harness.state.repos[repoId]?.checkCommands).toEqual(['bun test']);
   });
 });
@@ -466,7 +466,7 @@ describe('the summary of each action', () => {
     harness.send({ type: 'task.message', taskId, text: 'Rename the settings page.', kind: 'separate_task' });
     const split = harness.task(taskId).suggestions?.find((suggestion) => suggestion.splitOff)?.id ?? '';
     actOnBehalf(harness, { type: 'suggestion.keep', taskId, suggestionId: split });
-    expect(lastAction(harness).summary).toBe('Kept a split-off of “Fix tab group scroll” as its next round');
+    expect(lastAction(harness).summary).toBe('Kept a split-off in “Fix tab group scroll”');
   });
 
   test('names what it did to a task waiting for a usage limit', () => {

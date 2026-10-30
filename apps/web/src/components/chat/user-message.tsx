@@ -2,6 +2,7 @@ import { type ChatAttachment, splitMessageAttachments } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { FileCard } from '@/components/chat/file-card.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
+import { SplitOffCard } from '@/components/chat/split-off-card.tsx';
 import { ATTACHMENT_CORNER } from '@/components/layout/surface/card.ts';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
@@ -9,7 +10,7 @@ import { type SettlingPhase, useSettling } from '@/hooks/use-settling.ts';
 import { canOpenAttachment, canPlayAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
-import { describeMessageStatus, isDelivering } from '@/lib/tasks/messages.ts';
+import { describeMessageStatus, isDelivering, type MessageStatusLine } from '@/lib/tasks/messages.ts';
 
 const CLAMP_LINES = 12;
 
@@ -34,11 +35,18 @@ function FileChip({
   );
 }
 
-function Files({ files }: { files: ChatAttachment[] }) {
+const ALIGN = {
+  start: 'justify-start',
+  end: 'max-w-4/5 justify-end',
+};
+
+type AttachmentAlign = keyof typeof ALIGN;
+
+function Files({ files, align }: { files: ChatAttachment[]; align: AttachmentAlign }) {
   const viewer = useImageViewer();
   const videos = files.filter(canPlayAttachment);
   return (
-    <div className='flex max-w-4/5 flex-wrap justify-end gap-2'>
+    <div className={cn('flex flex-wrap gap-2', ALIGN[align])}>
       {files.map((attachment, index) => {
         const at = videos.indexOf(attachment);
         return (
@@ -58,35 +66,41 @@ function Files({ files }: { files: ChatAttachment[] }) {
   );
 }
 
-function Attachments({ attachments }: { attachments: ChatAttachment[] }) {
+export function MessageAttachments({
+  attachments,
+  align = 'end',
+  size = 'lg',
+}: {
+  attachments: ChatAttachment[];
+  align?: AttachmentAlign;
+  size?: 'sm' | 'lg';
+}) {
   const { images, files } = splitAttachments(attachments);
   return (
     <>
       {images.length > 0 && (
         <ImageStrip
           images={images.map((attachment) => ({ src: attachment.url, caption: attachment.name }))}
-          size='lg'
+          size={size}
           corner={ATTACHMENT_CORNER}
-          className='max-w-4/5 justify-end'
+          className={ALIGN[align]}
         />
       )}
-      {files.length > 0 && <Files files={files} />}
+      {files.length > 0 && <Files files={files} align={align} />}
     </>
   );
 }
+
+const STATUS_TONE: Record<MessageStatusLine['tone'], string> = {
+  quiet: 'text-fg-2',
+  refused: 'text-red-text',
+};
 
 function MessageStatus(message: Pick<HumanMessage, 'status' | 'reason'>) {
   const line = describeMessageStatus(message);
   if (!line) return null;
   return (
-    <span
-      className={cn(
-        'max-w-4/5 px-1 text-right text-2xs',
-        line.tone === 'refused' ? 'text-red-text' : 'text-fg-2'
-      )}
-    >
-      {line.text}
-    </span>
+    <span className={cn('max-w-4/5 px-1 text-right text-2xs', STATUS_TONE[line.tone])}>{line.text}</span>
   );
 }
 
@@ -108,11 +122,12 @@ export function UserMessage({
   attachments = [],
   status,
   reason,
+  splitOff,
 }: {
   persistId: DisclosurePersistId;
   text: string;
   attachments?: ChatAttachment[];
-} & Pick<HumanMessage, 'status' | 'reason'>) {
+} & Pick<HumanMessage, 'status' | 'reason' | 'splitOff'>) {
   const { open: expanded, toggle } = useDisclosure(persistId, false);
   const delivery = useSettling(isDelivering({ status }));
   const split = splitMessageAttachments(text);
@@ -122,7 +137,7 @@ export function UserMessage({
   const long = body.split('\n').length > CLAMP_LINES || body.length > CLAMP_CHARACTERS;
   return (
     <div data-message data-delivery={delivery ?? undefined} className='flex min-w-0 flex-col items-end gap-2'>
-      <Attachments attachments={shown} />
+      <MessageAttachments attachments={shown} />
       {body && (
         <div className='relative min-w-0 max-w-4/5'>
           <div className={cn(BUBBLE, 'selectable')}>
@@ -145,6 +160,7 @@ export function UserMessage({
       )}
       {delivery === 'active' && <span className='sr-only'>Sending</span>}
       <MessageStatus status={status} reason={reason} />
+      {splitOff && <SplitOffCard reference={splitOff} />}
     </div>
   );
 }

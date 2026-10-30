@@ -574,7 +574,7 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
     commands.push({
       type: 'settings.change',
       patch: {
-        approvePlans: chance(random, 0.5),
+        approvePlans: pick(random, ['when_asked', 'large', 'always'] as const) ?? 'when_asked',
         maxFixRounds: pick(random, [null, 1, 3]) ?? null,
         agentModels: chance(random, 0.5) ? { answerer: 'sonnet' } : {},
         agentProviders: chance(random, 0.3) ? { answerer: 'codex' } : {},
@@ -726,7 +726,7 @@ function listProcessUserCommands(state: ShinsaState, random: Random): ShinsaComm
   const commands: ShinsaCommand[] = [
     { type: 'task.create', request: 'How does it work?', repoId: 'repo', mode: 'ask' },
     budgetLimits(pick(random, [null, 2, 5]) ?? null),
-    { type: 'settings.change', patch: { approvePlans: true } },
+    { type: 'settings.change', patch: { approvePlans: 'always' } },
   ];
   for (const gate of listOpenGates(state)) {
     const task = state.tasks[gate.taskId];

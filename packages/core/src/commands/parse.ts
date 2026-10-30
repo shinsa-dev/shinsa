@@ -15,7 +15,13 @@ import type {
   WebhookEncoding,
   WebhookSignature,
 } from '../domain/schedules.ts';
-import { COMPACTION_MODES, MERGE_METHODS, SETTINGS_KEYS, type Settings } from '../domain/settings.ts';
+import {
+  COMPACTION_MODES,
+  MERGE_METHODS,
+  PLAN_APPROVALS,
+  SETTINGS_KEYS,
+  type Settings,
+} from '../domain/settings.ts';
 import { TASK_SHAPES, type TaskShape } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
 import type {
@@ -323,7 +329,7 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('delegationLimit' in fields) patch.delegationLimit = readNullableInteger(fields, 'delegationLimit');
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
-  if ('approvePlans' in fields) patch.approvePlans = readBoolean(fields, 'approvePlans');
+  if ('approvePlans' in fields) patch.approvePlans = readChoice(fields, 'approvePlans', PLAN_APPROVALS);
   if ('agentModels' in fields) patch.agentModels = readRoleIds(fields.agentModels, 'agentModels');
   if ('agentProviders' in fields) {
     patch.agentProviders = readRoleIds(fields.agentProviders, 'agentProviders');

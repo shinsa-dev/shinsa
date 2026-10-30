@@ -133,7 +133,7 @@ const WALKTHROUGH_PARTS = {
   steps: {
     type: 'array',
     description:
-      'What the human must do around the merge that needs a person or production access, which no agent can do from the worktree: an environment variable or secret to set, a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files) and list only the rest. The merge waits until the human ticks every pre-merge step; a post-merge step opens only once the pull request merged. Leave it out when there is nothing.',
+      'What the human must do around the merge that needs a person or production access, which no agent can do from the worktree: an environment variable or secret to set, a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files) and list only the rest. Never a step to stage, commit, push or open a pull request: Shinsa ships this repository, and work in another repository is a task you file with `create_task`. The merge waits until the human ticks every pre-merge step; a post-merge step opens only once the pull request merged. Leave it out when there is nothing.',
     maxItems: L.mergeSteps,
     items: {
       type: 'object',
@@ -356,7 +356,7 @@ export const TOOL_SPECS = {
         approval: {
           type: 'boolean',
           description:
-            'True asks the human to approve the plan before anything is built or run, even when Approve plans is off. Set it when the change is risky.',
+            'True asks the human to approve the plan before anything is built or run, at every Approve plans setting: on When you ask, and on Large plans even when the plan is small. Set it when the change is risky.',
         },
         operation: textList(
           'Only for a task that both changes code and runs an operation: the operation’s steps in order, each with how to check it worked. Leave it out otherwise.',

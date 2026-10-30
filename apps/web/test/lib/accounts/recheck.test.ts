@@ -81,6 +81,32 @@ describe('re-checking usage while it is on screen', () => {
     expect(server.pending).toHaveLength(2);
   });
 
+  it('re-checks on its own with the light read, and a refresh you ask for reads everything', async () => {
+    const asked: string[] = [];
+    const answer = (kind: string) => () => {
+      asked.push(kind);
+      return Promise.resolve(null);
+    };
+    const { page } = createPage();
+    const recheck = createUsageRecheck({
+      refresh: answer('refresh'),
+      read: answer('read'),
+      intervalMs: 20,
+      page,
+    });
+    const stop = recheck.watch();
+    expect(asked).toEqual(['read']);
+    await until(() => asked.length === 2);
+    expect(asked).toEqual(['read', 'read']);
+    stop();
+    expect(await recheck.check()).toEqual({ ok: true });
+    expect(asked.at(-1)).toBe('refresh');
+    recheck.reset();
+    const again = recheck.watch();
+    expect(asked.at(-1)).toBe('read');
+    again();
+  });
+
   it('opening again right after a check does not ask twice, and a failed check says why', async () => {
     const server = createServer();
     const { page } = createPage();

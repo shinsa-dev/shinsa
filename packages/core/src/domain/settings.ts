@@ -16,6 +16,14 @@ export const COMPACTION_MODES: ReadonlySet<CompactionMode> = new Set<CompactionM
 
 const DEFAULT_COMPACTION: CompactionMode = 'eunoe_compact';
 
+export type PlanApproval = 'when_asked' | 'large' | 'always';
+
+export const PLAN_APPROVALS: ReadonlySet<PlanApproval> = new Set<PlanApproval>([
+  'when_asked',
+  'large',
+  'always',
+]);
+
 export interface Settings {
   defaultProvider: string;
   defaultModel: string | null;
@@ -23,7 +31,7 @@ export interface Settings {
   delegationLimit?: number | null;
   mergeMethod: MergeMethod;
   attentionLimit?: number;
-  approvePlans?: boolean;
+  approvePlans?: PlanApproval;
   agentModels?: Partial<Record<AgentRole, string>>;
   agentProviders?: Partial<Record<AgentRole, string>>;
   agentFastModes?: Partial<Record<AgentRole, boolean>>;
@@ -110,7 +118,7 @@ const DEFAULT_SETTINGS: Settings = {
   delegationLimit: null,
   mergeMethod: 'squash',
   attentionLimit: DEFAULT_ATTENTION_LIMIT,
-  approvePlans: false,
+  approvePlans: 'when_asked',
   agentModels: {},
   agentProviders: {},
   agentFastModes: {},

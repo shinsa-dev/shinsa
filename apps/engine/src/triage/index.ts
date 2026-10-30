@@ -97,10 +97,10 @@ const LARGE_HINT =
 
 const SIZE_QUESTION: ChoiceQuestion = {
   type: 'choice',
-  instructions: 'How much agreement does the work need before building starts?',
+  instructions: 'How big is the work?',
   criteria: {
     small: 'a contained fix or change with an obvious approach',
-    large: 'a new feature, a change across several areas, a UI flow, the data model, or anything ambiguous',
+    large: 'a new feature, a change across several areas, the data model, or anything ambiguous',
   },
 };
 

@@ -385,10 +385,11 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
-   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise, with
-   Settings → Agents → Engine, Approve plans on (`approvePlans`, off by default), a large task's plan or a revised
-   plan waits there (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once
-   when it does not. A decision
+   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise Settings → Agents →
+   Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
+   large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
+   does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
+   not. The size is the plan's, never triage's guess from the request. A decision
    only the human can make is asked with `ask` before planning finishes.
 3. **Build.** Each phase is a run of its own on the session that planned it, now able to edit. Its prompt is short
    (`resolvePhaseInstruction`: "Phase 1 is committed. Now build phase 2 of 3: …" and how to hand it over), since the
@@ -616,10 +617,16 @@ them in the order they need:
 ```
 
 - **The Agent is taught it.** A fresh run's project context (`resolveProjectContext`, `prompts/project.ts`) adds a
-  short guide when the task has a repository and the project has another (`describeCrossRepositoryWork`): read the
-  other repository at its path, never change files outside its own worktree, file the other part with `create_task`
-  in that repository and forked from this task, set the order, and link it in the plan and hand-over. A project with
-  one repository never gets the guide. The guide sits in the brief, the user turn, so the session's cached prefix
+  short guide when the task has a repository and the project has another, or has folders that may hold one
+  (`describeCrossRepositoryWork`): read the other repository at its path, never edit, stage or commit in another
+  checkout, file the other part with `create_task` in that repository and forked from this task, set the order, never
+  hand you a step to commit, push or open a pull request there, and link it in the plan and hand-over. A project with
+  one repository and no folders never gets the guide.
+- **A repository in the project's folders is registered when named.** `create_task`'s `repository` is a registered
+  repository's name or, failing that, the folder name of a git repository directly inside one of the task's project
+  folders (`upsertProjectFolderRepo` in `repos/index.ts`, through `OrchestrationCall.registerRepo`): it is registered
+  into that project the way triage registers one (`upsertRepo`), and the new task works there. A name found in
+  neither is refused with the repositories Shinsa knows. The guide sits in the brief, the user turn, so the session's cached prefix
   does not change (Caching).
 - **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
   merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
@@ -651,7 +658,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   something to be done that has not been done is a new round (on a resting task a correction to finished work is one).
   You override it by saying what the message is (`shinsa tasks message --as new_round`, an agent's `tasks_message`
   with `as`), which skips the classifier. A new round sent that way without a `shape`, and a suggestion kept as the
-  next round (`suggestion.keep` without one), still gets its kind of task: the server asks the classifier the same
+  next round of a resting task (`suggestion.keep` without one), still gets its kind of task: the server asks the classifier the same
   shape question (`resolveRoundShape` in `triage/message.ts`, the task's rounds as context) before it dispatches, and
   the answer travels on the command like a classified message's, so replay never asks again. Only when the model is
   off or gives no usable answer does the round fall back to `change`.
@@ -660,7 +667,10 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   and a round whose work is finished and waits for your review or your merge (stage `awaiting_review` or
   `awaiting_merge`; the prompt's Now line says so). In the last, anything about that round is `feedback`: a change
   to it, something to run or start so you can try it ("start the dev server so I can test the UI"), something to
-  check, or a question about it; only the next piece of work, a code change of its own, is `new_round`.
+  check, or a question about it; only the next piece of work, a code change of its own, is `new_round`. In every
+  form, a message about the round's own work (its files, its steps around the merge, the part it needs in another
+  repository) is never `separate_task`, even when it names another checkout: pasting a step's paths and branches
+  back to the agent is feedback, not another goal.
 - **Where you decide, a message is always the gate's reply.** At a plan gate, a review gate, an agent's question, your
   OK, an operation gate, a failure, Sign in or setup gate, and while planning with no agent running, the composer's
   words say what sending does (What a message does, below), and that is what it does: the classifier is not asked
@@ -698,7 +708,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   question (`SHAPE_QUESTION`), read as the request of a new task with the earlier rounds as its context, and the round
   takes that preset's steps: "how many ended up in Archive?" is an answer round, "open a pull request for it" a change,
   "move the old checkout under Archive instead" an operation. Only a round with no shape (`--as new_round` with none, or a
-  suggested task kept as the next round) starts as a change, which its Agent may reshape. A round whose kind needs
+  suggested task kept on a resting task) starts as a change, which its Agent may reshape. A round whose kind needs
   code on a task with no repository binds one as it starts (A task without a repository, above).
 - **Accepted at once, routed after.** A message you write is accepted before anything is classified
   (`routeUserCommand` on the socket and `POST /api/commands`): it becomes `message.receive`, which core checks and keeps
@@ -806,9 +816,17 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   Conflicts).
 - **Splitting off.** When an idea does not belong in the task, it is suggested as a separate task through the existing
   suggested tasks: the classifier's `separate_task` records one (`splitOff`, from Shinsa), and a working agent can
-  mark its own `suggest_tasks` entry `split_off`. You make it a task (`suggestion.accept`) or decline and keep it in the
-  chat (`suggestion.keep`, with an optional `shape`), which queues it as the next round of that kind (asked of the
-  classifier when it is left out, above).
+  mark its own `suggest_tasks` entry `split_off`. A split-off message stays in the chat: its `task.messaged` carries
+  the suggestion's id (`suggestionId`, also on its activity entry), so the chat shows the suggested task as a card
+  under the bubble, where you keep it or make it a task (`listSplitOffs` in `lib/chat/timeline.ts`, `SplitOffCard`;
+  `docs/design.md`, 9), and the
+  Overview lists Suggested tasks right under the now card. You make it a task (`suggestion.accept`) or decline and keep it in the
+  chat (`suggestion.keep`), which sends its request now, as if you had typed it (`keepSuggestion` in
+  `decide/messages.ts`, through `sendMessages`): to an open round as `feedback`, so it steers a working agent, asks
+  for the change at the review gate and sends the work back at the merge gate, never queued for after the merge; to a
+  resting task as a new round that starts at once, of the kind its optional `shape` names (asked of the classifier
+  when it is left out, above, and only then). The suggestion settles as dismissed with `keptRound`, the round it went
+  to ("Kept “‹title›” in this task and sent it to the agent", or "… as round 3" for a new round).
 - **When a task is done.** After a merge the task stays open: it rests, with no run, gate or worktree, and its chat
   takes the next round. You mark it done (`task.complete`, which closes it: `closedAt`), or an agent does when the work
   is complete and nothing is open. Core refuses `task.complete` while an earlier round's pull request is still open
@@ -1066,7 +1084,10 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   open; Stop waiting clears them all and releases the task at once. Waiting added to a task that
   is still planning cancels the planning run and puts it back to waiting (it plans again after the
   release). Once building has started, a new dependency only holds the merge gate until every
-  task it waits on merges: the work is not thrown away.
+  task it waits on merges: the work is not thrown away. This is how a change whose other part lives in another
+  repository locks its merge to that part (`create_task` with `this_task_waits`, Work across repositories): the
+  pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
+  on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
 - **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
   branch; only a task's own rounds stack (Rounds, above).
 
@@ -1084,8 +1105,8 @@ no way to push without the hook; Pushing the branch, below). `configuration` mea
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
-first or a plan that asks for `approval`; with Approve plans on, also for a large task or a revised plan. Nothing else
-waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+first or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
+6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
@@ -1214,9 +1235,14 @@ has production access, and none should, so the Agent hands these over as steps f
 names the thing, a `detail` with where and how, and the exact `command` when the step is one; `docs/protocol.md` →
 Hand-overs). The last phase's instruction (`resolvePhaseInstruction`) and the handover skill ask for them: everything
 the Agent can do inside the repository it does itself (code, tests, docs, `.env.example`, the migration file); a step
-names its variable and where to set it, never a secret's value. A fix that changes them sends the whole new list in its
+names its variable and where to set it, never a secret's value. Shipping code is never your step: a step whose command
+stages, commits, pushes, or opens or merges a pull request (`git add`, `git commit`, `git push`, also with `-C`, and
+`gh pr create` or `merge`) is refused with the hand-over (`readMergeSteps` in `report/validate.ts`), since Shinsa ships
+this repository and work in another one is a task the Agent files with `create_task` (Where agents work → Work
+across repositories). A fix that changes them sends the whole new list in its
 `walkthrough` revision. The reviewer's brief lists them (`describeMergeStepsForReview`) and asks it to check the list
-is complete: a variable the code reads that no step names, or a step an agent could have done, is a finding.
+is complete: a variable the code reads that no step names, a step an agent could have done, or one that ships code
+anywhere is a finding.
 
 You tick a step once you did it (`merge_step.tick`, human-only: core refuses it on your behalf, and its spec,
 `shinsa merges tick`, is `humanOnly`); `merge_step.ticked` keeps the step's key in `Task.mergeStepsDone`. A step's key
@@ -2592,7 +2618,9 @@ truth, and a snapshot only saves replaying it.
   Logs from before a watchdog filed through `file_report` (log version 9, `WATCHDOG_READS_LOG_VERSION`) have a
   watchdog's one `forkTaskId` on `watchdog.armed` and `watchdog.checked`, which becomes `forkTaskIds` (that task, or
   none), an armed watchdog without `linkedTaskIds` (set to none), and `task.created` reports without `watchdogId`, which is set to `null`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 9) marks the log so
+  Logs from before Approve plans had three choices (log version 10, `PLAN_APPROVAL_LOG_VERSION`) have
+  `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 10) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
@@ -2784,7 +2812,8 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
 `git/conventional.ts` (`COMMIT_TYPES`: feat, fix, chore, refactor, docs, perf, test):
 
 - **Branches** are `<type>/<kebab-slug>`. Triage asks the classifier for one and accepts only that form
-  (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one; a later round's branch
+  (`BRANCH_PATTERN`), else it falls back to `feat/` for a large task and `fix/` for a small one (the size triage
+  guesses only picks this prefix; the plan gate reads the plan's own size); a later round's branch
   is the first one plus `-round-<n>`, and core's last resort is `chore/shinsa-task`.
 - **Commits.** A phase commits as `<type>: <phase title>`, its type the branch's prefix (`resolveCommitType`, `feat`
   when the prefix is not a type), its subject lower-cased, never repeating the type, and cut at a word to at most 72
@@ -3030,7 +3059,8 @@ names: a provider adapter maps into it, and the web renders only it. Each entry 
 
 ### Attachments
 
-You can attach files and images to a new task's request and to any message in a task. The web uploads each file as
+You can attach files and images to a new task's request, to any message in a task and to your answer to a question
+(the answer box on its card, `AnswerBox`). The web uploads each file as
 it is picked, pasted or dropped: `POST /api/attachments` with `{ name, mimeType, data }` (`data` in base64, since the
 guard takes JSON bodies only) writes it to `<data>/attachments/<UUIDv7>/<safe file name>` (`AttachmentStore`, 25 MB a
 file; this route alone takes a body up to the base64 of that, every other one stays at 8 MB) and answers with a
@@ -3043,7 +3073,7 @@ to the request or message, one `<attachment kind display_name mime_type size_byt
 path a message takes (a steer, the wake queue, a gate reply, planning, a fix, a new round, a new task) carries them
 without a field of its own. The agent reads `path`, the absolute file, with its own tools (Claude's Read shows it an
 image). `splitMessageAttachments` takes the block back out wherever text is shown, preferring `url`, so the page
-renders thumbnails and file chips instead of markup, and `resolveRoundTitle` skips it (a round of attachments
+renders thumbnails and file chips instead of markup (an answered question's card too, through `resolveAskAnswer`), and `resolveRoundTitle` skips it (a round of attachments
 alone is titled by their names). The same parser reads the attachment blocks of imported Kanna transcripts. Nothing
 removes an upload when its task goes.
 
@@ -3130,8 +3160,11 @@ and any provider that writes markdown can use them. `packages/core/src/chat/refe
 | Branch | `shinsa://branch/<name>` | the branch chip |
 
 `listReferenceSpans` also finds bare `shinsa://` URLs, quoted exact task titles, exact titles of 12
-characters or more and a bare `#N` that exactly one pull request has; code spans, fences and
-other links are left alone. `linkReferences` rewrites those into links before markdown renders.
+characters or more and a bare `#N` that exactly one pull request of the text's repository has
+(`ReferenceOptions.repo`: the web passes the open task's repository, so a `superwall` task's `#16`
+never links `shinsa#16`, and with no repository a bare `#N` stays plain); a `shinsa://pr/<n>` with no
+repository resolves in the open task's repository too. Code spans, fences and other links are left
+alone. `linkReferences` rewrites those into links before markdown renders.
 Anything that does not parse or resolve renders as its plain label. Agents learn the syntax from
 `REFERENCE_RULES` in every role's house rules (`prompts/rules.ts`), each prompt links its own task, and
 the `find_tasks` tool (`serializeTaskReferences`) returns tasks as ready links with status,
@@ -3917,6 +3950,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   login, below) and gets one when you sign in to it again. The list is `accounts.json` beside the folders
   (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, addedAt, paused,
   switchAt }] }`, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
+  An account's `plan` comes from the `account` notice a run reports (the SDK's `accountInfo()`, which carries
+  Claude's current name for the plan, "Claude Ultra"); the keychain login's `subscriptionType` and `claude auth
+  status` only fill a plan that is missing, since they can lag behind a rename ("max"). `resolvePlanLabel` (core)
+  writes either form the same way.
   Every command Shinsa runs for an account (a run, a sign-in, a status check) gets its environment from
   `resolveAccountEnv` (`accounts/paths.ts`).
 - **Shared settings.** A new folder gets a `.claude.json` with `mcpServers`, `projects`, `theme`, `autoUpdates`,
@@ -3967,7 +4004,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   twice. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
   removed): a login of its own before a shared one, then the default account, then the one listed first. The other
   is a duplicate. It is left out of the snapshot's `accounts` and listed in its `duplicates` (`{ id, email, keptId
-  }`, a line under the accounts in Settings → Agent usage and an info log the first time), its usage is not read,
+  }`, an info log the first time; Settings shows nothing for it), its usage is not read,
   and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the kept account, and the
   kept account is the default when the duplicate is. Shinsa never signs a duplicate out, which could revoke the
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.
@@ -3979,12 +4016,18 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   codenames are dropped. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
-  token keeps the last reading and says the login refreshes on the next run. Readings are cached for 60 s and kept
+  token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`
+  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Readings are cached for 60 s and kept
   in `data/usage-limits.json` (read back marked `source: 'cache'`); a failed read never erases a reading, only
-  replaces its detail; a 429 backs off at least 5 minutes. Pushed rate-limit notices from a run land on the account
-  its attempt ran on (a rejected window counts as 100%). Usage is read at start, every 5 minutes, on a lease that
+  replaces its detail; a 429 backs off at least 5 minutes, or as long as its `retry-after` asks, even when forced:
+  the reading carries the end of the back-off as `retryAt` (kept on disk, so a restart honours it, and cleared by
+  the next read that works or fails otherwise) so the web can say when the next read happens. Pushed rate-limit notices from a run land on the account
+  its attempt ran on (a rejected window counts as 100%) and count as a reading: `checkedAt` moves to the push. Usage is read at start, every 5 minutes, on a lease that
   finds a stale reading, at each attempt's start (a reading under a minute old is used as is) and end (fresh), on
-  every fast mode check, and fresh after a sign-in, an import or a refresh.
+  every fast mode check, and fresh after a sign-in, an import or a refresh. `POST /api/accounts/refresh` with
+  `{ scope: 'usage' }` is the web's automatic re-check: it reads only readings over a minute old, Claude's and the
+  providers', without checking sign-ins or imports; without it (Refresh usage, `shinsa accounts refresh`) everything
+  is read again, fresh.
 - **Leasing an account** (`pickAccount` in core `accounts/pick.ts`, so the web's usage glance names the same account
   the server picks, through `selectNextAccount`). Before each attempt the supervisor asks the broker for an account,
   only for a provider whose capabilities include `accounts`. A run bound to an account always gets it, and so does
@@ -4332,7 +4375,7 @@ into hidden folders, `node_modules`, `Library`, caches, build output or media fo
 ```
 
 **`POST /api/onboarding/setup`** with `{ roots: string[]; defaultModel?: string | null; mergeMethod?: 'squash' |
-'merge' | 'rebase'; approvePlans?: boolean }`: saves the folders to `config.json` and the defaults as a
+'merge' | 'rebase'; approvePlans?: 'when_asked' | 'large' | 'always' }`: saves the folders to `config.json` and the defaults as a
 `settings.change` event, then answers like `GET /api/onboarding`. Folders may start with `~/`; each must be an
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
@@ -4367,7 +4410,8 @@ The web's setup is a short run of steps the server keeps (`apps/engine/src/onboa
 ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
 discovered folders with their repository counts, several at once, and any other folder by its path), `projects`
 (the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
-default model, from the provider's catalog, or each role's own; the merge method; plan approval for large tasks),
+default model, from the provider's catalog, or each role's own; the merge method; plan approval: large plans first, the
+recommended pick, every plan first, or start building),
 `accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
 bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
 the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.
@@ -4547,7 +4591,9 @@ started. `problems` lists every event row the engine skipped at boot:
 or an event `applyEvent` threw on). Replay never stops at a damaged row: every later event is still applied, the
 problem is logged as an error, and new events are numbered after the last row in the table. The web reads it on
 start and after every reconnect (`lib/connection/health.ts`) and, while `ok` is false, shows a banner saying how many
-entries were skipped, each listed under Details, until it is dismissed for the session (`docs/design.md`, 27). A
+entries were skipped, each listed under Details, until it is dismissed. A dismissal is kept in the page's
+localStorage (`shinsa.health-dismissed`) as the skipped entries it hid, so the same damaged rows, skipped again at
+every start, never show the banner again; a different set (new damage) does (`docs/design.md`, 27). A
 transcript line torn by a crash is shown as an error entry,
 and the next line is never glued onto it (`readChatEntries`).
 
@@ -4696,7 +4742,7 @@ following a file through its watch and the check every second, both triggered by
     merges every round, every step of every round resumes the first Agent session); a round shipped as a stacked pull request
     (its own branch and pull request based on the first, the stack merged top down); a new round after a merge from
     fresh main on a new branch; feedback steering the agent and a new idea queued, through the typed decision; a
-    split-off the classifier suggests, declined and kept in the chat as the next round; a restart mid-round that
+    split-off the classifier suggests, declined and kept in the chat, reaching the working agent at once; a restart mid-round that
     resumes the round's Agent on its session;
   - `prompt-cache.test.ts`: the real Claude adapter over a scripted SDK that models the provider's prompt cache from
     what the adapter sends (tools listed, system prompt, settings): a change round with a failed check and its fix,

@@ -19,13 +19,19 @@ import {
 } from '@shinsa/core';
 import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
 
-type MessageStatus = 'delivering' | 'noted' | 'undelivered';
+type MessageStatus = 'delivering' | 'noted' | 'undelivered' | 'split_off';
+
+export interface SplitOffReference {
+  taskId: string;
+  suggestionId: string;
+}
 
 export interface HumanMessage {
   at: number;
   text: string;
   status?: MessageStatus;
   reason?: string;
+  splitOff?: SplitOffReference;
 }
 
 export interface ToolCall {
@@ -43,7 +49,7 @@ export type TimelineItem =
   | { kind: 'instructions'; key: string; at: number; text: string; first: boolean }
   | ({ kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[] } & Pick<
       HumanMessage,
-      'status' | 'reason'
+      'status' | 'reason' | 'splitOff'
     >)
   | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
   | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
@@ -114,6 +120,19 @@ function listMessagesOf(task: Task, kinds: readonly string[]): HumanMessage[] {
     });
 }
 
+function isShownSplitOff(task: Task, suggestionId: string) {
+  const suggestion = task.suggestions?.find((candidate) => candidate.id === suggestionId);
+  return suggestion !== undefined && suggestion.keptRound === undefined;
+}
+
+function listSplitOffs(task: Task): HumanMessage[] {
+  return task.activity.flatMap((entry) => {
+    const { suggestionId, detail } = entry;
+    if (entry.actor !== 'you' || !suggestionId || !detail || !isShownSplitOff(task, suggestionId)) return [];
+    return [{ at: entry.at, text: detail, status: 'split_off', splitOff: { taskId: task.id, suggestionId } }];
+  });
+}
+
 function listUndelivered(task: Task): HumanMessage[] {
   return task.activity.flatMap((entry) => {
     if (!entry.undelivered) return [];
@@ -138,7 +157,12 @@ function listUnsent(sending: HumanMessage[], landed: HumanMessage[]) {
 
 export function listHumanMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {
   const routing = (task.inbox ?? []).map(({ at, text }) => ({ at, text, status: 'delivering' as const }));
-  const landed = [...listMessagesOf(task, ['asked', 'message']), ...listUndelivered(task), ...routing];
+  const landed = [
+    ...listMessagesOf(task, ['asked', 'message']),
+    ...listSplitOffs(task),
+    ...listUndelivered(task),
+    ...routing,
+  ];
   const unsent = listUnsent(sending, landed).map(({ at, text }) => ({
     at,
     text,
@@ -157,7 +181,7 @@ export function listFollowUpMessages(task: Task, sending: HumanMessage[] = []): 
 }
 
 function isUnanswered(message: HumanMessage) {
-  return message.status === 'noted' || message.status === 'undelivered';
+  return message.status !== undefined && message.status !== 'delivering';
 }
 
 function selectMessageOwner(runs: Run[], message: HumanMessage) {
@@ -378,7 +402,7 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
   for (const [index, part] of mergeByTime(entries, messages).entries()) {
     if (part.type === 'human') {
       builder.group = null;
-      const { at, text, status, reason } = part.message;
+      const { at, text, status, reason, splitOff } = part.message;
       builder.items.push({
         kind: 'human',
         key: `human-${at}-${index}`,
@@ -387,6 +411,7 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
         attachments: [],
         ...(status ? { status } : {}),
         ...(reason ? { reason } : {}),
+        ...(splitOff ? { splitOff } : {}),
       });
     } else if (!isSubagentEvent(part.entry)) {
       applyEntry(builder, part.entry);

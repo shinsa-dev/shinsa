@@ -40,11 +40,11 @@ const PROBLEM_KIND: Record<LogProblem['kind'], string> = {
   unappliable: 'Not applied',
 };
 
+const DISMISSED_KEY = 'shinsa.health-dismissed';
+
 const signal = createSignal();
 
 let health: ServerHealth | null = null;
-
-let dismissed: string | null = null;
 
 function publish() {
   signal.publish();
@@ -67,8 +67,12 @@ function resolveProblemsKey(problems: LogProblem[]) {
   return problems.map((problem) => `${problem.seq}:${problem.kind}`).join(',');
 }
 
+function readDismissedKey() {
+  return localStorage.getItem(DISMISSED_KEY);
+}
+
 export function dismissHealth() {
-  dismissed = resolveProblemsKey(health?.problems ?? []);
+  localStorage.setItem(DISMISSED_KEY, resolveProblemsKey(health?.problems ?? []));
   publish();
 }
 
@@ -110,6 +114,6 @@ export function useServerHealth() {
 export function useHealthBanner() {
   React.useEffect(() => watchHealth(), []);
   const current = React.useSyncExternalStore(signal.subscribe, () => health);
-  const dismissedKey = React.useSyncExternalStore(signal.subscribe, () => dismissed);
+  const dismissedKey = React.useSyncExternalStore(signal.subscribe, readDismissedKey);
   return React.useMemo(() => resolveHealthBanner(current, dismissedKey), [current, dismissedKey]);
 }

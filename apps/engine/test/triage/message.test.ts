@@ -99,6 +99,9 @@ describe('reading what a message asks for', () => {
     );
     expect(call?.prompt).toContain('Now: round 1 is in progress, building.');
     expect(call?.prompt).toContain('A round of this task is in progress. What is this message?');
+    expect(call?.prompt).toContain(
+      'including its files, its steps around the merge and what it needs in other repositories'
+    );
     expect(call?.prompt).toContain('Message:\nAlso add search');
   });
 
@@ -136,6 +139,12 @@ describe('reading what a message asks for', () => {
         `"feedback": about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script)`
       );
       expect(read).toContain('not something needed to try or finish this round');
+      expect(read).toContain(
+        'its files, its steps around the merge and what it needs in other repositories (even when the message names another checkout)'
+      );
+      expect(read).toContain(
+        `"separate_task": asks for work toward another goal, which belongs in a task of its own; a message about this task's own work, its files, its steps or the parts it needs in other repositories is not this, even when it names another repository or checkout`
+      );
     }
   );
 
@@ -342,7 +351,7 @@ describe('a round that starts without a kind of task', () => {
   });
 
   test('a suggestion kept as the next round is shaped from its request', async () => {
-    const { engine, taskId } = await openEngine();
+    const { engine, taskId } = await restAfterOperation();
     const suggestionId = await suggest(engine, taskId);
     const asked: string[] = [];
     await routeUserCommand(
@@ -355,8 +364,17 @@ describe('a round that starts without a kind of task', () => {
     expect(lastPipeline(engine, taskId)).toEqual([...SHAPE_PIPELINES.investigate]);
   });
 
-  test('a suggestion kept with a kind, a closed one or an unknown one never asks', async () => {
+  test('a suggestion kept while the round is open goes to it, so it never asks', async () => {
     const { engine, taskId } = await openEngine();
+    const suggestionId = await suggest(engine, taskId);
+    await routeUserCommand(engine, { type: 'suggestion.keep', taskId, suggestionId }, null, using(notAsked));
+    const task = engine.state.tasks[taskId] ?? createTask();
+    expect(task.suggestions?.at(-1)).toMatchObject({ status: 'dismissed', keptRound: 1 });
+    expect(resolveTaskRounds(task)).toHaveLength(1);
+  });
+
+  test('a suggestion kept with a kind, a closed one or an unknown one never asks', async () => {
+    const { engine, taskId } = await restAfterOperation();
     const shaped = await suggest(engine, taskId);
     const never = using(notAsked);
     await routeUserCommand(

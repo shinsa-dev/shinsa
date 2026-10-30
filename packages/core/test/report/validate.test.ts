@@ -311,6 +311,49 @@ describe('the steps around the merge', () => {
   });
 });
 
+describe('a step that ships code', () => {
+  const REFUSAL =
+    "stages, commits, pushes or opens a pull request, which is never the human's step. Shinsa commits and pushes this repository; file work in another repository with `create_task` instead.";
+
+  function errorsOfCommands(commands: string[]) {
+    return errorsOf(
+      validatePhaseHandOver({
+        summary: 'Done.',
+        walkthrough: {
+          approach: 'Read once.',
+          flow: 'read → render',
+          steps: commands.map((command, index) => ({
+            when: 'pre_merge',
+            kind: 'other',
+            title: `Step ${index}`,
+            detail: 'In the sibling checkout.',
+            command,
+          })),
+        },
+      })
+    );
+  }
+
+  test('is refused when its command stages, commits, pushes or opens or merges a pull request', () => {
+    const commands = [
+      'git -C ../docs add content/docs/cli.mdx && git -C ../skills add SKILL.md',
+      'git commit -m "docs: agent login"',
+      'git push origin main',
+      ['gh', 'pr', 'create', '--fill'].join(' '),
+      ['gh', 'pr', 'merge', '12'].join(' '),
+    ];
+    expect(errorsOfCommands(commands)).toEqual(
+      commands.map((_, index) => `walkthrough.steps[${index}].command ${REFUSAL}`)
+    );
+  });
+
+  test('keeps a step whose command only reads, closes a pull request or deploys', () => {
+    expect(
+      errorsOfCommands(['git log -3', 'gh pr close 16 --comment "Superseded."', 'bunx wrangler deploy'])
+    ).toEqual([]);
+  });
+});
+
 describe('how to test the change', () => {
   const WALKTHROUGH = { approach: 'Read once.', flow: 'read → render' };
 

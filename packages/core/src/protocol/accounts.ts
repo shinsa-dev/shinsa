@@ -26,6 +26,7 @@ export interface AccountUsage {
   checkedAt: number | null;
   source: UsageSource | null;
   fastMode?: FastModeAvailability;
+  retryAt?: number;
 }
 
 export interface AccountSummary {

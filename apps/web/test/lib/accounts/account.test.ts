@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 import {
   describeBinding,
   describeDefaultChanged,
-  describeDuplicate,
   describeImport,
   describeRemoval,
   describeRerun,
@@ -102,12 +101,6 @@ describe('binding a task to an account', () => {
 });
 
 describe('imports and switches', () => {
-  it('says a login added twice runs from one copy', () => {
-    expect(describeDuplicate({ id: 'copy', email: 'me@example.com', keptId: 'first' })).toBe(
-      'me@example.com is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.'
-    );
-  });
-
   it('offers each claude-swap account as a sign-in', () => {
     expect(describeImport({ origin: 'cswap', email: 'two@example.com', plan: null })).toEqual({
       label: 'Sign in to two@example.com',

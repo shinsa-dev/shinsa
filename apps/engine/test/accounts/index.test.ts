@@ -1202,6 +1202,37 @@ describe('what runs report back', () => {
     expect(world.accounts.store.list()).toEqual([]);
   });
 
+  test('the plan a run reports wins; the login and auth status only fill a missing one', async () => {
+    const world = createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 25);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({
+        attempts: [
+          {
+            attemptId: 'a1',
+            provider: 'claude',
+            model: null,
+            resumed: false,
+            handoff: null,
+            startedAt: 1,
+            account: { id: account.id, email: account.email },
+          },
+        ],
+      });
+    });
+    world.accounts.onNotice('run-1', {
+      kind: 'account',
+      email: 'a@example.com',
+      organization: null,
+      plan: 'Claude Ultra',
+    });
+    await world.accounts.refresh();
+    expect(world.accounts.store.find(account.id).plan).toBe('Claude Ultra');
+    world.accounts.store.update(account.id, { plan: null });
+    await world.accounts.limits.refresh([account.id], true);
+    expect(world.accounts.store.find(account.id).plan).toBe('max');
+  });
+
   test('usage that cannot be read keeps what was known and says why', async () => {
     const world = createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 25);
@@ -1214,6 +1245,38 @@ describe('what runs report back', () => {
     expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
     world.accounts.store.remove(account.id);
     expect(await world.accounts.limits.refresh([account.id], true)).toBeUndefined();
+  });
+
+  test('a login whose token has expired is not sent to Claude, and says it refreshes on the next run', async () => {
+    const world = createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 25);
+    world.usage.set('token-a@example.com', windows(70, 25));
+    const read = world.accounts.limits;
+    world.advance(HOUR);
+    await read.refresh([account.id], true);
+    expect(world.accounts.snapshot().accounts[0]?.usage).toMatchObject({
+      detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
+    });
+    expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
+    world.login(account.configDir, 'token-a@example.com');
+    await read.refresh([account.id], true);
+    expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(70);
+  });
+
+  test('a usage-only refresh reads stale usage without checking sign-ins, and inspect mode refuses it', async () => {
+    const world = createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 25);
+    world.usage.set('token-a@example.com', windows(70, 25));
+    const statusChecks = () => world.calls.filter((call) => call.command[1] === 'auth').length;
+    const checks = statusChecks();
+    await world.accounts.refreshUsage();
+    expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
+    world.advance(2 * 60_000);
+    const snapshot = await world.accounts.refreshUsage();
+    expect(snapshot.accounts[0]?.usage.windows[0]?.usedPercent).toBe(70);
+    expect(statusChecks()).toBe(checks);
+    const inspected = createWorld({ root: world.root, inspect: true });
+    await expect(inspected.accounts.refreshUsage()).rejects.toMatchObject({ code: 'inspect_read_only' });
   });
 
   test('a stale reading is refreshed when an attempt is leased', async () => {

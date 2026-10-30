@@ -1,4 +1,4 @@
-import { serializeAttachments } from '@shinsa/core';
+import { resolveAnsweredReply, serializeAttachments } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ChatLine, DetailRail, ExpandRow, FoldLine } from '@/components/chat/chat-line.tsx';
@@ -285,9 +285,14 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
           </div>
         </div>
       </Specimen>
-      <Specimen label='Hand-over cards · one header: a question you answered, the steps set, and a hand-over that failed for good (the only red)'>
+      <Specimen label='Hand-over cards · one header: a question you answered, one answered with files, the steps set, and a hand-over that failed for good (the only red)'>
         <div className='flex w-full max-w-xl flex-col gap-4'>
           <HandoverCard call={calls.ask} run={run} live={false} />
+          <HandoverCard
+            call={{ ...calls.ask, key: 'ask-files', callId: 'ask-files', result: ANSWER_WITH_FILES }}
+            run={run}
+            live={false}
+          />
           <HandoverCard call={calls.reshape} run={run} live={false} />
           <HandoverCard call={calls.failed} run={run} live={false} />
         </div>
@@ -312,6 +317,28 @@ export function ChatSpecimens() {
 const SAMPLE_SCREENSHOT = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#f4f4f5"/><rect width="320" height="36" fill="#e4e4e7"/><rect x="16" y="12" width="80" height="12" rx="3" fill="#a1a1aa"/><rect x="16" y="28" width="120" height="16" rx="3" fill="#3b82f6"/><rect x="16" y="64" width="288" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="88" width="220" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="112" width="250" height="12" rx="3" fill="#d4d4d8"/></svg>'
 )}`;
+
+const ANSWER_WITH_FILES = resolveAnsweredReply(
+  serializeAttachments('Group them, like on this screen. The full list is attached.', [
+    {
+      kind: 'image',
+      name: 'projects.png',
+      url: SAMPLE_SCREENSHOT,
+      path: '/Users/you/Desktop/projects.png',
+      mimeType: 'image/png',
+      size: 48_213,
+    },
+    {
+      kind: 'file',
+      name: 'repositories.txt',
+      url: '/api/attachments/sample/repositories.txt',
+      path: '/Users/you/Desktop/repositories.txt',
+      mimeType: 'text/plain',
+      size: 1_204,
+    },
+  ]),
+  false
+);
 
 const DELIVERY_REPLAY_MS = 2_400;
 

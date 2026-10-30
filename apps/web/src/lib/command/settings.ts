@@ -3,6 +3,7 @@ import {
   type AgentProviderInfo,
   type CompactionMode,
   listAgentProviders,
+  type PlanApproval,
   type Repo,
   resolveCompaction,
   resolveIdleCompaction,
@@ -302,7 +303,7 @@ function listAttentionChoices(settings: Settings, notifications: NotificationPre
 function listWorkflowChoices(settings: Settings): Command[] {
   const choices = [
     settingChoice('plans', 'Approve plans', PLAN_ITEMS, resolvePlanValue(settings), (value) =>
-      patchSettings({ approvePlans: value === 'large' })
+      patchSettings({ approvePlans: value as PlanApproval })
     ),
     settingChoice(
       'fix-rounds',

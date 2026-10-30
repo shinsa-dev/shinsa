@@ -82,7 +82,7 @@ describe('ranking decisions', () => {
 
   test('a paused task and a plan to approve say why they need you', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const planned = createTask(harness, { request: 'Plan me', size: 'large' });
     proposePlan(harness, planned);
     const paused = createTask(harness, { request: 'Pause me' });

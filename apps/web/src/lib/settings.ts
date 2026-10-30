@@ -7,6 +7,7 @@ import {
   describeUsd,
   type FastModeAvailability,
   listAgentProviders,
+  type PlanApproval,
   RUN_AGENT_ROLE,
   type RunRole,
   resolveAgentFastMode,
@@ -149,9 +150,10 @@ export function listAttentionItems(settings: Settings): SettingItem<string>[] {
   return limits.map(createAttentionItem);
 }
 
-export const PLAN_ITEMS: SettingItem<string>[] = [
-  { value: 'never', label: 'When you ask', icon: 'IconArrowRight' },
-  { value: 'large', label: 'Large tasks', icon: 'IconCheckCircle2' },
+export const PLAN_ITEMS: SettingItem<PlanApproval>[] = [
+  { value: 'when_asked', label: 'When you ask', icon: 'IconArrowRight' },
+  { value: 'large', label: 'Large plans', icon: 'IconCheckCircle2' },
+  { value: 'always', label: 'Always', icon: 'IconShieldCheck' },
 ];
 
 export const FIX_ROUND_ITEMS: SettingItem<string>[] = [
@@ -344,7 +346,7 @@ export function resolveAttentionValue(settings: Settings) {
 }
 
 export function resolvePlanValue(settings: Settings) {
-  return settings.approvePlans ? 'large' : 'never';
+  return settings.approvePlans ?? 'when_asked';
 }
 
 export function resolveFixRoundValue(settings: Settings) {

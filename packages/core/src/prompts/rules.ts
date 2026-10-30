@@ -8,7 +8,7 @@ export const REFERENCE_RULES = [
   '- a pull request: [#4531](shinsa://pr/<repository>#4531), shown with its checks and conflicts and opening GitHub;',
   "- a file of this task: [session.ts](shinsa://file/src/chat/session.ts#L12-L20), opening it in the task's changes;",
   '- a repository or a branch: [paywall-next](shinsa://repo/paywall-next), [feat/x](shinsa://branch/feat/x).',
-  'Use only ids you were given or got from `find_tasks`; never guess one. A quoted exact task title and a bare #number of a known pull request are linked too.',
+  "Use only ids you were given or got from `find_tasks`; never guess one. A quoted exact task title is linked too, and so is a bare #number of a known pull request in your task's own repository; for a pull request in any other repository, write the link with its repository.",
 ].join('\n');
 
 const INTRO =

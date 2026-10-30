@@ -335,8 +335,9 @@ Only these, and they win over anything below:
    toggled a section yourself it opens when it holds the task on screen; after that your choice
    wins everywhere (`queue:section:<section>`, `resolveSectionId` with `resolveSectionDefault` from `lib/queue.ts`, 40). A section is
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
-   (37), and the queue popover is `COMPACT_POPOVER` (320px, as tall as its content up to the room under the button,
-   then it scrolls) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   (37), and the queue popover is `QUEUE_POPOVER` (`COMPACT_POPOVER`, as tall as its content up to the room under the button,
+   then it scrolls, and at least 320px wide, growing just enough to fit its widest status and step track, never past the
+   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
    sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since
@@ -380,8 +381,16 @@ Only these, and they win over anything below:
      starts, its message joins the chat under its round's divider as your bubble, delivering, then settles. Several
      messages routed together are one round, so one row, delivered together.
    Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
-   one the classifier read as needing nothing (no agent runs for it), or "Not delivered. ‹reason›" in
-   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`).
+   one the classifier read as needing nothing (no agent runs for it), "Not delivered. ‹reason›" in
+   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`), or, for
+   one read as another task's work (a split-off), its suggested task as a card under the bubble (`SplitOffCard`,
+   `components/chat/split-off-card.tsx`): a reply to the bubble, so it sits on the agent's side, full width like a
+   hand-over card and not under the bubble's right edge, its line "Suggested as a separate
+   task" with `IconLightbulbGlow` and its state at the right ("Not sent to the agent", "Made into a task" or
+   "Dismissed", `describeSplitOffState`). While open its body is the Overview's suggested-task row (`SuggestionRow`:
+   title over why, When to start, Keep it here and Make it a task), so you decide in the chat; once made a task it
+   links that task (`TaskLink`), once dismissed it shows the title and why with no buttons. A kept one leaves the
+   chat, since keeping sends it again as your message.
    Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
    Queued messages).
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
@@ -464,7 +473,14 @@ Only these, and they win over anything below:
       `run` in a task does; nothing runs on its own. A list opens with its title (Pre-merge steps, Post-merge steps) and how far it is ("1 of 2 done",
       "All done") at the right. A tick is `merge_step.tick`; the box waits for the server and a refusal is a toast. A
       post-merge step cannot be ticked before the pull request merged: its box is disabled and its tooltip
-      says so. The merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
+      says so. **A task the merge waits on is a pre-merge row too**: "Merges after ‹task› finishes", the task's title a
+      link, its kind "Linked task" with `IconHourglass`, after the agent's steps; you never tick it (its box is
+      disabled, its tooltip "Ticks itself once that task finishes", then "That task finished") and it is ticked as
+      soon as that task settles, as the merge hold reads it (`listOpenBlockers`): merged, marked done, or cancelled,
+      which reads "No longer waits for ‹task›: it was cancelled" (`listMergeWaits` in `lib/review/merge-steps.ts`,
+      from `Task.waitsOn`).
+      The review gate's now card lists Pre-merge steps when the merge waits on a task, so you see the hold before
+      you approve; the merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
       gate, a now card titled "Merged. 2 steps left to do." that lists Post-merge steps
       (`components/overview/merge-steps-card.tsx`, the gate's card in `now-card.tsx`); while a later round works, the
       steps an earlier round left show in a Post-merge steps panel under the now card (`routes/task/overview.tsx`).
@@ -1150,7 +1166,7 @@ Only these, and they win over anything below:
       movement clock; in a pick-one list it rests on your pick and slides back to it when the pointer leaves. The first
       list takes focus when the step opens: the arrows, Home and End move the highlight (`aria-activedescendant`) and
       Enter or Space picks, so setup runs from the keyboard alone; these keys belong to the list, not the page (10).
-    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Large tasks, each a
+    - **Defaults** are three pick-one lists on one step (`OnboardingDefaults`): Model, Merging and Plans, each a
       `SectionLabel` over its list card, 16px apart. The recommended choice of each starts picked, so one Continue
       keeps them all; a click only moves that list's mark, and nothing is sent until Continue.
     - **Projects** (`OnboardingProjects`) are one card of the projects Shinsa suggests, all kept: a row each with a
@@ -1390,8 +1406,12 @@ Only these, and they win over anything below:
       Claude account is a `UsageAccountBlock` (`usage-account.tsx`, a `SettingsBlock`: 15, Cards), in order, 6px
       apart: a 32px header row with the account
       named with its provider (`AccountName`, medium: "Claude · a@b.com"), the plan (`fg-2`), a `Badge` "Default", and only when something is wrong a status in its tone
-      ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage until 3:40 PM" red through `TimeAgo` as soon as a
-      window is at 100%), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up) and a
+      ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red through `TimeAgo` as soon as a
+      window is at 100%: a reset later today says how long, one on a later day its moment, "Out of usage until Sat
+      2:00 AM"), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
+      reading counts, and while Claude rate limits the reads it adds when the next one happens: "Updated 3h ago · next
+      read in 12m"; its tooltip adds the server's reason under the time, "Rate limited by Claude." or a login that
+      needs refreshing) and a
       `•••` click menu (`OptionsTrigger`, the one trigger every `•••` menu uses): Set as default, Sign in again,
       Move up / Move down, Leave out of new work / Use for new work, Switch accounts at (a submenu: Use the
       setting (90%), 80/90/95/98%, Other… which opens a dialog for any whole percentage) and Remove behind the
@@ -1399,11 +1419,11 @@ Only these, and they win over anything below:
       is never signed out). Under it, on the block's shelf, one 40px row per usage window: label over "Resets in 3h" (`ResetTime`, the
       exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
       `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
-      muted line, "No usage reported yet." before the first read. An account that still runs on your Claude Code
+      muted line, "No usage reported yet." before the first read; with windows the detail is never a row, only the
+      Updated tooltip's reason. An account that still runs on your Claude Code
       login or a copy of claude-swap's (`docs/engine.md` → A shared login) reads "Needs sign-in" and a muted
       `SettingsEmpty` row after the accounts says why and to sign in to it again from its menu
-      (`describeSharedLogin`). A login in your accounts twice shows once; after the accounts, a muted
-      `SettingsEmpty` row says Shinsa runs it from one copy (`describeDuplicate`).
+      (`describeSharedLogin`). A login in your accounts twice shows once, with no row about the other copy.
       Every provider with a sign-in of its own (Codex today) follows in the same `UsageAccountBlock`
       (`ProviderLoginBlock` in `providers.tsx`; the header from `resolveProviderHeader`, Claude's from
       `resolveAccountHeader`), so its row reads like an account's: the provider and its account (`AccountName`,
@@ -1481,7 +1501,7 @@ Only these, and they win over anything below:
       away: the task waits as "Waiting for usage: pauses for you at 3:40 PM" and its failure gate opens at the
       reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
       rows, without Other….
-    - **Settings → Agents → Engine** is titles-only rows: Approve plans, Automatic fix rounds, Delegations at once
+    - **Settings → Agents → Engine** is titles-only rows: Approve plans (When you ask, Large plans, Always), Automatic fix rounds, Delegations at once
       (No limit, the default, or 2, 4, 8 or 16 at once, a stored number not in the list added in order, and
       Custom…, which opens a dialog for any whole number of 1 or more; `delegationLimit`, `docs/engine.md` →
       Delegation) and Merge with. ⌘K's Change a setting has the same rows, without Custom….
@@ -1536,7 +1556,9 @@ Only these, and they win over anything below:
     - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
       Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
       in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
-      hidden; a hidden page that comes back reads again when the last read is a minute old. Every read, Refresh usage
+      hidden; a hidden page that comes back reads again when the last read is a minute old. These automatic reads
+      ask for usage only (`{ scope: 'usage' }`: readings over a minute old, no sign-in checks); Refresh usage reads
+      everything again. Every read, Refresh usage
       and the Sign in card's check included, goes through one request: a read already on its way is shared, never
       sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
       of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
@@ -1688,7 +1710,8 @@ Only these, and they win over anything below:
       page), a 14px orange `IconExclamationTriangle`, one `fg-3` sentence ("Shinsa skipped 2 damaged entries in its
       log at start. Everything else loaded."), a quiet "Details" that opens an `InfoPopover` ("Damaged log entries",
       then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
-      `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
+      `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it across reloads and restarts (localStorage),
+      until the skipped entries change.
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
       banner, the same `CARD` row, shown only in the desktop app and only when you must act: the orange triangle
       and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
@@ -1874,8 +1897,9 @@ Only these, and they win over anything below:
       (Waiting to start) and its request as soon as one is queued. A merged task keeps its composer: "Ask for the next piece of work. It
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
     - **A split-off is a suggested task's row** in Suggested tasks with Make it a task (outline) and Keep it here
-      (secondary, in Dismiss's place); keeping it queues the next round ("Kept in this task. It starts as the next
-      round."). ⌘K offers "Keep “‹title›” in this task" and, per round whose shipping can change, "Ship round 4 as a
+      (secondary, in Dismiss's place); keeping it sends it to this task now, as a message to the open round or a new
+      round of a resting task ("Kept in this task. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
+      ("The agent takes it now") and, per round whose shipping can change, "Ship round 4 as a
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
 
@@ -2409,7 +2433,8 @@ Only these, and they win over anything below:
         How it's built, after How it works.
       - **Pre-merge steps** and **Post-merge steps**: the steps around the merge as checklists (Steps around the
         merge, 12), each panel's count beside its title; you
-        tick them here as on the Overview.
+        tick them here as on the Overview. Pre-merge also shows when the agent left no pre-merge step but the merge
+        waits on a task, with that task's row.
       - **Agent review**: one panel with the reviewer's summary in its own words, what it found and "A signal for you,
         never the approval.", then each finding's card (`rounded-lg`, nested) with Fix / Dismiss at a review gate, the
         shared `FindingVerdictChoice` (`components/review/verdict-choice.tsx`) the Overview's finding verdicts and the

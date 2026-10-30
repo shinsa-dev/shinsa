@@ -3,6 +3,8 @@ import {
   DomainError,
   MERGE_METHODS,
   type OnboardingStatus,
+  PLAN_APPROVALS,
+  type PlanApproval,
   type RootSuggestions,
   type Settings,
 } from '@shinsa/core';
@@ -61,10 +63,10 @@ function resolveDefaults(fields: JsonObject): Partial<Settings> {
     patch.mergeMethod = fields.mergeMethod as Settings['mergeMethod'];
   }
   if (fields.approvePlans !== undefined) {
-    if (typeof fields.approvePlans !== 'boolean') {
-      throw new DomainError('plans_invalid', 'Say yes or no to approving plans.');
+    if (!PLAN_APPROVALS.has(fields.approvePlans as PlanApproval)) {
+      throw new DomainError('plans_invalid', 'Approve plans when you ask, for large plans or always.');
     }
-    patch.approvePlans = fields.approvePlans;
+    patch.approvePlans = fields.approvePlans as PlanApproval;
   }
   return patch;
 }

@@ -276,7 +276,8 @@ describe('Change a setting', () => {
     const sections = listSettingsSections({ ...settings, taskBudgetUsd: 2 }, MODELS, DEFAULT_PREFERENCES);
     pick(sections, 'settings.attention', '3');
     pick(sections, 'settings.plans', 'large');
-    pick(sections, 'settings.plans', 'never');
+    pick(sections, 'settings.plans', 'always');
+    pick(sections, 'settings.plans', 'when_asked');
     pick(sections, 'settings.fix-rounds', '5');
     pick(sections, 'settings.fix-rounds', 'endless');
     pick(sections, 'settings.delegation-limit', '8');
@@ -299,8 +300,9 @@ describe('Change a setting', () => {
     pick(sections, 'settings.speed.agent', 'off');
     expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
       [{ type: 'settings.change', patch: { attentionLimit: 3 } }, 'Saved.'],
-      [{ type: 'settings.change', patch: { approvePlans: true } }, 'Saved.'],
-      [{ type: 'settings.change', patch: { approvePlans: false } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { approvePlans: 'large' } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { approvePlans: 'always' } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { approvePlans: 'when_asked' } }, 'Saved.'],
       [{ type: 'settings.change', patch: { maxFixRounds: 5 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { maxFixRounds: null } }, 'Saved.'],
       [{ type: 'settings.change', patch: { delegationLimit: 8 } }, 'Saved.'],
