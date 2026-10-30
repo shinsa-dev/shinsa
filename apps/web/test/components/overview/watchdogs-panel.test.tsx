@@ -27,7 +27,7 @@ function watchdog(overrides: Partial<Watchdog>): Watchdog {
     nextCheckAt: NOW + 6 * HOUR_MS,
     runId: null,
     checks: [{ at: NOW, healthy: true, summary: 'p95 is 210 ms.' }],
-    forkTaskId: null,
+    forkTaskIds: [],
     endedAt: null,
     ...overrides,
   };
@@ -105,7 +105,7 @@ describe('the watchdogs panel', () => {
   });
 
   it('links the task a watchdog filed when it found an issue', async () => {
-    renderPanel([watchdog({ status: 'tripped', forkTaskId: 'fork' })]);
+    renderPanel([watchdog({ status: 'tripped', forkTaskIds: ['fork'] })]);
     const row = rowOf('Checkout latency');
     await waitFor(() =>
       expect(row.querySelector('a[data-task="fork"]')?.getAttribute('href')).toBe('/tasks/SW-46')

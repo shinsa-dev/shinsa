@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Task } from '@shinsa/core';
+import type { Task, Watchdog } from '@shinsa/core';
 import { formatMoment } from '@/lib/format/time.ts';
 import {
   describePullRequestFact,
@@ -85,7 +85,8 @@ describe('forks', () => {
 
 describe('resolveReportFact', () => {
   const report = {
-    scheduleId: 's-read',
+    scheduleId: 's-read' as string | null,
+    watchdogId: null as string | null,
     server: 'composio-slack',
     reportId: '1730120000.1234',
     link: 'https://acme.slack.com/archives/C1/p1730120000',
@@ -114,8 +115,12 @@ describe('resolveReportFact', () => {
       byline: `Ana Ruiz · ${formatMoment(NOW - 2 * 60 * 60_000, NOW)}`,
       text: report.text,
       link: report.link,
-      automation: 'Support reports',
-      watchId: 's-read',
+      filedBy: {
+        label: 'Filed by the automation',
+        value: 'Support reports',
+        watchId: 's-read',
+        watchedTaskId: null,
+      },
     });
   });
 
@@ -127,13 +132,36 @@ describe('resolveReportFact', () => {
     expect(resolveReportFact(createShinsaState({ tasks: [task] }), task, NOW)).toMatchObject({
       byline: 'yesterday',
       link: null,
-      automation: null,
-      watchId: null,
+      filedBy: null,
     });
     const bare = { ...task, sourceReport: { ...report, author: null, postedAt: null, link: null } };
     expect(resolveReportFact(createShinsaState({ tasks: [bare] }), bare, NOW)).toMatchObject({
       byline: null,
       link: null,
     });
+  });
+
+  it('names the watchdog that filed it and opens the shipped task, and survives a stopped or missing one', () => {
+    const shipped = createTask({
+      id: 'shipped',
+      handle: 'SW-2',
+      watchdogs: [{ id: 'w1', title: 'Docs errors in Safari' } as Watchdog],
+    });
+    const fromWatchdog = { ...report, scheduleId: null, watchdogId: 'w1', server: 'maple' };
+    const task = createTask({ id: 't', forkOf: 'shipped', sourceReport: fromWatchdog });
+    const state = createShinsaState({ tasks: [shipped, task] });
+    expect(resolveReportFact(state, task, NOW)).toMatchObject({
+      label: 'Reported in maple',
+      filedBy: {
+        label: 'Filed by the watchdog',
+        value: 'Docs errors in Safari',
+        watchId: null,
+        watchedTaskId: 'shipped',
+      },
+    });
+    const gone = { ...task, sourceReport: { ...fromWatchdog, watchdogId: 'w2' } };
+    expect(resolveReportFact(state, gone, NOW)?.filedBy).toBeNull();
+    const orphan = { ...task, forkOf: null };
+    expect(resolveReportFact(state, orphan, NOW)?.filedBy).toBeNull();
   });
 });

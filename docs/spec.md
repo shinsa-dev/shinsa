@@ -193,8 +193,9 @@ not chat text.
 - **Watchdogs after the merge.** You cannot verify everything before a merge. The Agent writes watchdogs for a change
   whose effects only real traffic shows: each reads a data source (an MCP server the project lists: traces, logs,
   analytics, support messages) for a window once the change is live (72 hours by default), checking soon after and less
-  often as it holds up, as a read-only turn of the task's own conversation, and an issue it finds becomes a new task
-  forked from this one. Where the merge is not the release, a watchdog starts only once the change is live in
+  often as it holds up, as a read-only turn of the task's own conversation. A check reads its source the way a watch
+  does: each thing wrong it finds is filed as a report, a new task forked from this one that quotes it, deduped
+  against every report the project already filed. Where the merge is not the release, a watchdog starts only once the change is live in
   production. The agent sets each one's schedule from what the change needs; Settings → Agents → Watchdogs holds the
   defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
   connecting (`docs/engine.md` → Watchdogs).

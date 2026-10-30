@@ -1,4 +1,5 @@
 import {
+  describeList,
   HOUR_MS,
   isTaskClosed,
   listActiveWatchdogs,
@@ -77,8 +78,9 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
     case 'passed':
       return `Held up for ${formatMinutes(watchdog.forMinutes)} with nothing wrong.`;
     case 'tripped': {
-      const fork = watchdog.forkTaskId ? state.tasks[watchdog.forkTaskId] : undefined;
-      const filed = fork ? ` Filed [${fork.handle ?? fork.title}](shinsa://task/${fork.id}) to fix it.` : '';
+      const forks = watchdog.forkTaskIds.flatMap((id) => state.tasks[id] ?? []);
+      const links = forks.map((fork) => `[${fork.handle ?? fork.title}](shinsa://task/${fork.id})`);
+      const filed = links.length > 0 ? ` Filed ${describeList(links)} to fix it.` : '';
       return `${last ?? 'Found an issue.'}${filed}`;
     }
     case 'stopped':
