@@ -23,7 +23,7 @@ import {
 import type { HubSocket } from '../http/socket.ts';
 import { describeError, log } from '../log/index.ts';
 
-export const CHANNEL_REQUEST_ORIGIN = 'http://remote.shinsa.internal';
+const CHANNEL_REQUEST_ORIGIN = 'http://remote.shinsa.internal';
 
 const MAX_OPEN_REQUESTS = 32;
 
@@ -36,7 +36,7 @@ export interface ChannelPeer {
   close: (code: number, reason: string) => void;
 }
 
-export interface ChannelHub {
+interface ChannelHub {
   open: (socket: HubSocket) => void;
   close: (socket: HubSocket) => void;
   message: (socket: HubSocket, raw: string) => void;

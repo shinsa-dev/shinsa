@@ -20,10 +20,6 @@ export function createKeyPair() {
   return crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>;
 }
 
-export interface TestTransport {
-  send: (data: string | Bytes) => void;
-}
-
 export interface HandshakeStart {
   hello: string;
   finish: (welcome: string) => Promise<TestSession>;

@@ -17,33 +17,14 @@ import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
 import { RemoteStore } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
-export { CHANNEL_REQUEST_ORIGIN, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
-export {
-  CLOUDFLARED_VERSION,
-  installCloudflared,
-  resolveCloudflaredAsset,
-  resolveCloudflaredPath,
-} from './cloudflared.ts';
+export { type ChannelPeer, RemoteChannel } from './channel.ts';
 export { createInstalledConnector } from './connector.ts';
-export { ControlClient, ControlError, RevokedError } from './control.ts';
-export { ENROLLMENT_TTL_MS, Enrollments } from './enrollments.ts';
-export {
-  isTunnelRequest,
-  resolveChannelOriginRefusal,
-  resolveTunnelRoute,
-  type TunnelRoute,
-} from './guard.ts';
+export { ControlClient } from './control.ts';
+export { Enrollments } from './enrollments.ts';
+export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
 export { resolveLocalOnlyRoute } from './local-only.ts';
-export { PAIR_POLL_MS, type PairingView } from './pairing.ts';
-export { REMOTE_FILE, type RemoteDevice, type RemoteFile, RemoteStore, readRemoteFile } from './store.ts';
-export {
-  resolveRestartDelay,
-  type StartConnector,
-  TUNNEL_TIMINGS,
-  type TunnelStatus,
-  TunnelSupervisor,
-  type TunnelTimings,
-} from './supervisor.ts';
+export { REMOTE_FILE, RemoteStore } from './store.ts';
+export { type StartConnector, TunnelSupervisor } from './supervisor.ts';
 
 const remoteRequests = new WeakSet<Request>();
 

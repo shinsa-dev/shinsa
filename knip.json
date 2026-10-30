@@ -6,7 +6,7 @@
       "entry": ["scripts/*.ts", "scripts/perf/*.ts", "scripts/seed-media/*.ts", "scripts/screenshots/*.ts"]
     },
     "apps/web": {
-      "entry": ["test/**/*.test.{ts,tsx}"],
+      "entry": ["test/**/*.test.{ts,tsx}", "src/remote-sw.ts"],
       "ignoreDependencies": ["tailwindcss"]
     },
     "packages/ui": {

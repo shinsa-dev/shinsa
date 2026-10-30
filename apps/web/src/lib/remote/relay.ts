@@ -1,6 +1,6 @@
-export const RELAY_REQUEST = 'shinsa-remote-request';
+const RELAY_REQUEST = 'shinsa-remote-request';
 
-export const RELAYED_PREFIX = '/api/';
+const RELAYED_PREFIX = '/api/';
 
 interface RelayedRequest {
   type: typeof RELAY_REQUEST;

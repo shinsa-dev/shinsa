@@ -1,6 +1,6 @@
 import { REMOTE_PATHS } from '@shinsa/core';
 
-export interface ControlCall {
+interface ControlCall {
   path: string;
   token: string | null;
   body: unknown;

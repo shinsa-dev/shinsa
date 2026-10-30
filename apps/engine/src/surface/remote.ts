@@ -18,7 +18,7 @@ function describeDevice(device: RemoteDevice) {
   return `  ${device.name} (${describeSeen(device.lastSeenAt)}) ${device.publicKey}`;
 }
 
-export function formatRemote(snapshot: RemoteSnapshot) {
+function formatRemote(snapshot: RemoteSnapshot) {
   if (snapshot.pairing)
     return `Pairing ${snapshot.machineName}: finish signing in at ${snapshot.pairing.url} (code ${snapshot.pairing.claimCode}).`;
   if (!snapshot.paired)

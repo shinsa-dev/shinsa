@@ -68,7 +68,7 @@ function readDevices(value: unknown): RemoteDevice[] {
   });
 }
 
-export function createRemoteFile(): RemoteFile {
+function createRemoteFile(): RemoteFile {
   return { version: 1, machine: null, credentials: null, owner: null, enabled: false, devices: [] };
 }
 

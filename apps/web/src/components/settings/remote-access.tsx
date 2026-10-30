@@ -54,7 +54,7 @@ function EnrollmentView({ enrollment }: { enrollment: RemoteEnrollment }) {
   );
 }
 
-export function AddDeviceDialog({
+function AddDeviceDialog({
   control,
   onCreate,
 }: {
