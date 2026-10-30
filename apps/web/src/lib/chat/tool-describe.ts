@@ -36,7 +36,7 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'reshape_task',
 ]);
 
-export function isWatchSuggestionCall(tool: ChatTool) {
+function isWatchSuggestionCall(tool: ChatTool) {
   return (
     tool.kind === 'shinsa' &&
     tool.name === 'set_schedule' &&

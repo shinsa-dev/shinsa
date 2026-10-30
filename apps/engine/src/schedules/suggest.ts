@@ -2,7 +2,7 @@ import { SCHEDULE_LIMITS } from '@shinsa/core';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
 
-export interface WatchWording {
+interface WatchWording {
   name: string | null;
   text: string | null;
 }
