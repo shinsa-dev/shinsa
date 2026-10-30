@@ -601,6 +601,36 @@ same files:
   prompt-cache prefix does not change (`test/e2e/prompt-cache.test.ts` steers an Agent mid-turn and checks it). Limit:
   the files an agent edits during a turn count only once its hand-over commits them.
 
+### Work across repositories
+
+A task works in one repository and ships one pull request, whatever its project holds. A change that needs code in
+two repositories of a project (an endpoint in the server and the SDK call that uses it) is two tasks, one per
+repository, linked and ordered, so each has its own worktree, checks, review and pull request, and GitHub merges
+them in the order they need:
+
+```
+ this task (server)                      the other part (sdk)
+ plan ─► build ─► review ─► merge ──────► starts, forked from this
+      │                                   task's conversation
+      └─ create_task {repository: sdk, fork_from: this, after_this}
+```
+
+- **The Agent is taught it.** A fresh run's project context (`resolveProjectContext`, `prompts/project.ts`) adds a
+  short guide when the task has a repository and the project has another (`describeCrossRepositoryWork`): read the
+  other repository at its path, never change files outside its own worktree, file the other part with `create_task`
+  in that repository and forked from this task, set the order, and link it in the plan and hand-over. A project with
+  one repository never gets the guide. The guide sits in the brief, the user turn, so the session's cached prefix
+  does not change (Caching).
+- **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
+  merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
+  (`cannot_wait`, whose message points a planner at its first phase or at `after_this`). `after_this` makes the new
+  task wait on this one (the other part uses what this task adds); any run may set it, since it never holds this
+  task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`).
+- **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
+  of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
+  task merged, so it holds this task's whole build and review and its fork note says the code is on the default
+  branch.
+
 ## Rounds
 
 One task fits both ways of working: a huge chat that grows one goal until it is right ("MCP v2" over weeks, new ideas
@@ -1848,9 +1878,11 @@ and the run supervisor.
   wait (no process is listening any more), then claims again, so results reach a resumed parent by
   steer or wake exactly once.
 - **Couriers and decomposition (Paperclip).** `create_task` makes a self-contained task for work
-  that belongs elsewhere (its `request`), optionally in another repository, with `this_task_waits` making this
-  task wait on it (a blocker, not just a parent link; only an Agent run that builds or fixes may wait, others are
-  refused with `cannot_wait`); it is exactly-once per `client_request_id`.
+  that belongs elsewhere (its `request`), optionally in another repository (Where agents work → Work across
+  repositories), with `this_task_waits` making this task wait on it (a blocker, not just a parent link; only an Agent
+  run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
+  task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
+  as Shinsa's); setting both is refused (`dependency_cycle`). It is exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
