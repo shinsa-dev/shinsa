@@ -1,5 +1,8 @@
-import type { RemoteSnapshot } from '@shinsa/core';
+import type { RemoteInstance, RemoteSnapshot, ShinsaState, WireState } from '@shinsa/core';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
+import { NO_ENTRIES, type ShinsaConnection } from '@/lib/connection/socket.ts';
+import { Fleet } from '@/lib/remote/fleet.ts';
+import type { RemoteServices } from '@/lib/remote/services.ts';
 
 const HOUR_MS = 3_600_000;
 
@@ -43,7 +46,7 @@ export function createSampleRemote(now: number) {
         devices: [],
         pairing: {
           claimCode: 'K7PQM2XD',
-          url: 'https://app.shinsa.dev/pair?code=K7PQM2XD',
+          url: 'https://shinsa.dev/app/pair?code=K7PQM2XD',
           expiresAt: now + 9 * 60_000,
         },
       },
@@ -66,8 +69,101 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
     createEnrollment: (name) =>
       Promise.resolve({
         name,
-        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
+        url: 'https://shinsa.dev/app/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
         expiresAt: now + 10 * 60_000,
       }),
   };
+}
+
+const SAMPLE_MACS: RemoteInstance[] = [
+  {
+    id: 'k3x9',
+    name: 'Studio',
+    fingerprint: '3f9a 01c2 7b4e 9d10 aa52',
+    online: true,
+    lastSeenAt: null,
+    createdAt: 0,
+  },
+  {
+    id: 'p7m2',
+    name: 'MacBook Air',
+    fingerprint: '8c21 44de 0f9b 13a7 6e05',
+    online: false,
+    lastSeenAt: null,
+    createdAt: 0,
+  },
+  {
+    id: 'w4t8',
+    name: 'Office mini',
+    fingerprint: 'b702 5e18 c3d9 4f61 2a8e',
+    online: true,
+    lastSeenAt: null,
+    createdAt: 0,
+  },
+];
+
+export function createSampleMachineServices(now: number): RemoteServices {
+  const refuse = () => Promise.reject(new Error('This is a sample. Nothing changes here.'));
+  const macs = SAMPLE_MACS.map((mac) =>
+    mac.online ? { ...mac, lastSeenAt: now } : { ...mac, lastSeenAt: now - 26 * HOUR_MS }
+  );
+  const added = new Set(['k3x9', 'p7m2']);
+  return {
+    dashboard: {
+      readSession: refuse,
+      listInstances: () => Promise.resolve(macs),
+      requestConnect: refuse,
+      removeInstance: refuse,
+      readPair: refuse,
+      approvePair: refuse,
+      signOut: refuse,
+    },
+    devices: {
+      selectDevice: (id) =>
+        Promise.resolve(
+          added.has(id)
+            ? { instanceId: id, machineKey: 'key', keys: {} as CryptoKeyPair, enrolledAt: 0 }
+            : null
+        ),
+      writeDevice: refuse,
+      removeDevice: refuse,
+    },
+    worker: {} as ServiceWorkerContainer,
+  };
+}
+
+function createStaticConnection(state: ShinsaState): ShinsaConnection {
+  const snapshot = { state: state as unknown as WireState, status: 'open' as const };
+  const quiet = () => () => undefined;
+  return {
+    start: () => undefined,
+    subscribe: quiet,
+    snapshot: () => snapshot,
+    subscribeTranscripts: quiet,
+    selectTranscript: () => NO_ENTRIES,
+    watchTranscript: () => () => undefined,
+    subscribeAccounts: quiet,
+    selectAccounts: () => null,
+    replaceAccounts: () => undefined,
+    subscribeSurfaces: quiet,
+    isDesktopConnected: () => false,
+    subscribeTerminals: quiet,
+    selectTerminals: () => null,
+    replaceTerminals: () => undefined,
+    selectMachine: () => null,
+    command: () => Promise.reject(new Error('This is a sample. Nothing changes here.')),
+    reset: () => undefined,
+    flush: () => undefined,
+  };
+}
+
+export function createSampleFleet(parts: { name: string; state: ShinsaState }[]) {
+  return new Fleet(
+    parts.map((part, index) => ({
+      id: `mac-${index}`,
+      name: part.name,
+      connection: createStaticConnection(part.state),
+      fetch: () => Promise.reject(new Error('This is a sample. Nothing is sent.')),
+    }))
+  );
 }

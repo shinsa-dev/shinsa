@@ -15,9 +15,9 @@ import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
 
-type ConnectionStatus = 'connecting' | 'open' | 'closed';
+export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
-interface Snapshot {
+export interface Snapshot {
   state: WireState | null;
   status: ConnectionStatus;
 }
@@ -36,7 +36,33 @@ interface TranscriptChunk {
 
 type Scheduler = (flush: () => void) => void;
 
-interface ConnectionOptions {
+export interface MachineView {
+  id: string;
+  name: string;
+}
+
+export interface ShinsaConnection {
+  start: () => void;
+  subscribe: (listener: () => void) => () => void;
+  snapshot: () => Snapshot;
+  subscribeTranscripts: (listener: () => void) => () => void;
+  selectTranscript: (runId: string) => ChatEntry[];
+  watchTranscript: (runId: string) => () => void;
+  subscribeAccounts: (listener: () => void) => () => void;
+  selectAccounts: () => AccountsSnapshot | null;
+  replaceAccounts: (accounts: AccountsSnapshot | null) => void;
+  subscribeSurfaces: (listener: () => void) => () => void;
+  isDesktopConnected: () => boolean;
+  subscribeTerminals: (listener: () => void) => () => void;
+  selectTerminals: () => TerminalsSnapshot | null;
+  replaceTerminals: (terminals: TerminalsSnapshot) => void;
+  selectMachine: (id: string) => MachineView | null;
+  command: (command: UserCommand) => Promise<void>;
+  reset: () => void;
+  flush: () => void;
+}
+
+export interface ConnectionOptions {
   openSocket: () => WebSocket;
   retry: (reconnect: () => void, delayMs: number) => void;
   surface?: () => Surface;
@@ -49,23 +75,16 @@ const MAX_RESENDS = 2;
 
 const HIDDEN_FRAME_MS = 32;
 
-const NO_ENTRIES: ChatEntry[] = [];
+export const NO_ENTRIES: ChatEntry[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
-let socketOpener: (() => WebSocket) | null = null;
-
-export function replaceSocketOpener(open: (() => WebSocket) | null) {
-  socketOpener = open;
-}
-
 function openShinsaSocket() {
-  if (socketOpener) return socketOpener();
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   return new WebSocket(`${protocol}://${location.host}/ws`);
 }
 
-function retryLater(reconnect: () => void, delayMs: number) {
+export function retryLater(reconnect: () => void, delayMs: number) {
   setTimeout(reconnect, delayMs);
 }
 
@@ -89,7 +108,7 @@ function mergeTranscript(entries: ChatEntry[], chunk: TranscriptChunk): ChatEntr
   return fresh.length === 0 ? entries : [...entries, ...fresh];
 }
 
-export class Connection {
+export class Connection implements ShinsaConnection {
   #socket: WebSocket | null = null;
   #snapshot: Snapshot = { state: null, status: 'connecting' };
   #confirmed: WireState | null = null;
@@ -167,6 +186,8 @@ export class Connection {
   }
 
   isDesktopConnected = () => this.#desktopConnected;
+
+  selectMachine = (_id: string): MachineView | null => null;
 
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
@@ -388,7 +409,17 @@ export class Connection {
   }
 }
 
-export const connection = new Connection();
+const localConnection = new Connection();
+
+export let connection: ShinsaConnection = localConnection;
+
+export function replaceConnection(next: ShinsaConnection | null) {
+  connection = next ?? localConnection;
+}
+
+export function useMachine(id: string | null) {
+  return useSyncExternalStore(connection.subscribe, () => (id ? connection.selectMachine(id) : null));
+}
 
 export function useConnection() {
   return useSyncExternalStore(connection.subscribe, connection.snapshot);

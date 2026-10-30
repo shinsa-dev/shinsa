@@ -1,11 +1,11 @@
 import type { RemoteSession } from '@shinsa/core';
+import { REMOTE_PATHS } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Logo } from '@shinsa/ui/components/logo';
 import type * as React from 'react';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { type DashboardClient, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
-import { MACHINES_PATH } from '@/lib/remote/mode.ts';
 
 export function RemoteShell({
   session,
@@ -20,7 +20,7 @@ export function RemoteShell({
   return (
     <div className='flex min-h-dvh flex-col bg-background text-fg-3'>
       <header className='flex h-11 shrink-0 items-center gap-2 px-3.5 sm:px-5'>
-        <a href={MACHINES_PATH} className='flex items-center gap-1.5 font-medium text-fg-4 text-sm'>
+        <a href={REMOTE_PATHS.app} className='flex items-center gap-1.5 font-medium text-fg-4 text-sm'>
           <span className='grid size-5 shrink-0 place-items-center'>
             <Logo className='size-3.25' />
           </span>
@@ -34,7 +34,7 @@ export function RemoteShell({
               variant='secondary'
               size='sm'
               onClick={() => {
-                void dashboard.signOut().then(() => location.assign(MACHINES_PATH));
+                void dashboard.signOut().then(() => location.assign(REMOTE_PATHS.app));
               }}
             >
               Sign out

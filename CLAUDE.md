@@ -21,7 +21,7 @@ apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4, laid out lik
 apps/desktop/     → @shinsa/desktop Shinsa for Mac, how Shinsa runs: carries the compiled engine, registers it as a launchd
                                     job, shows its interface, and adds the Dock badge, notifications, `shinsa://` links,
                                     the menu and its own updates. See apps/desktop/CLAUDE.md
-apps/cloud/       → @shinsa/cloud   The Worker on app.shinsa.dev that remote access runs through: GitHub sign-in,
+apps/cloud/       → @shinsa/cloud   The Worker on shinsa.dev/app that remote access runs through: GitHub sign-in,
                                     pairing, each machine's Cloudflare tunnel, connect tokens, webhooks, the web app's
                                     remote build. Holds no task state and can read none. See apps/cloud/CLAUDE.md
 apps/marketing/   → @shinsa/marketing The one-page site: Astro, static, whose demos are the web app's own components on

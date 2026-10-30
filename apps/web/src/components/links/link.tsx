@@ -1,7 +1,7 @@
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { navigate } from '@/router.ts';
+import { navigate, withRouteBase } from '@/router.ts';
 
 const LINK_UNDERLINE =
   'underline decoration-transparent underline-offset-3 group-hover/link:decoration-fg-a3 group-active/link:decoration-fg-a3';
@@ -53,7 +53,7 @@ export function InAppLink({
   return (
     <a
       data-smart
-      href={path}
+      href={withRouteBase(path)}
       {...props}
       onClick={(event) => {
         onClick?.(event);

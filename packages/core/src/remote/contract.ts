@@ -1,4 +1,6 @@
-export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
+export const REMOTE_APP_ORIGIN = 'https://shinsa.dev';
+
+export const REMOTE_APP_BASE = '/app';
 
 export const REMOTE_TUNNEL_DOMAIN = 'shinsa.dev';
 
@@ -9,20 +11,21 @@ export const REMOTE_CONNECT_PARAM = 'token';
 export const REMOTE_ENGINE_HOOK_PREFIX = '/api/hooks/';
 
 export const REMOTE_PATHS = {
-  pairStart: '/__remote/pair/start',
-  pairPoll: '/__remote/pair/poll',
-  pairPage: '/pair',
-  enrollPage: '/enroll',
-  heartbeat: '/__remote/machine/heartbeat',
-  offline: '/__remote/machine/offline',
-  machineRemove: '/__remote/machine/remove',
-  session: '/__remote/session',
-  signIn: '/__remote/sign-in',
-  signInCallback: '/__remote/sign-in/callback',
-  signOut: '/__remote/sign-out',
-  instances: '/__remote/instances',
-  pairs: '/__remote/pairs',
-  hooks: '/hooks/',
+  app: `${REMOTE_APP_BASE}/`,
+  pairStart: `${REMOTE_APP_BASE}/__remote/pair/start`,
+  pairPoll: `${REMOTE_APP_BASE}/__remote/pair/poll`,
+  pairPage: `${REMOTE_APP_BASE}/pair`,
+  enrollPage: `${REMOTE_APP_BASE}/enroll`,
+  heartbeat: `${REMOTE_APP_BASE}/__remote/machine/heartbeat`,
+  offline: `${REMOTE_APP_BASE}/__remote/machine/offline`,
+  machineRemove: `${REMOTE_APP_BASE}/__remote/machine/remove`,
+  session: `${REMOTE_APP_BASE}/__remote/session`,
+  signIn: `${REMOTE_APP_BASE}/__remote/sign-in`,
+  signInCallback: `${REMOTE_APP_BASE}/__remote/sign-in/callback`,
+  signOut: `${REMOTE_APP_BASE}/__remote/sign-out`,
+  instances: `${REMOTE_APP_BASE}/__remote/instances`,
+  pairs: `${REMOTE_APP_BASE}/__remote/pairs`,
+  hooks: `${REMOTE_APP_BASE}/hooks/`,
 } as const;
 
 export interface PairStartRequest {

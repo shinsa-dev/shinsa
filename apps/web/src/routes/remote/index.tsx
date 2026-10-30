@@ -1,7 +1,7 @@
-import type { RemoteSession } from '@shinsa/core';
+import { REMOTE_PATHS, type RemoteSession } from '@shinsa/core';
 import * as React from 'react';
-import { createDashboardClient, type DashboardClient } from '@/lib/remote/dashboard.ts';
-import { createDeviceStore, type DeviceStore } from '@/lib/remote/devices.ts';
+import { createDashboardClient } from '@/lib/remote/dashboard.ts';
+import { createDeviceStore } from '@/lib/remote/devices.ts';
 import { createIndexedStore } from '@/lib/remote/indexed-store.ts';
 import {
   type RemoteView,
@@ -9,17 +9,11 @@ import {
   selectEnrollFragment,
   stashEnrollFragment,
 } from '@/lib/remote/mode.ts';
+import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
 import { EnrollPage } from './enroll.tsx';
-import { InstanceApp } from './instance.tsx';
-import { MachinesPage } from './machines.tsx';
+import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
 import { RemoteLoading, RemoteShell, SignInPrompt } from './shell.tsx';
-
-export interface RemoteServices {
-  dashboard: DashboardClient;
-  devices: DeviceStore;
-  worker: ServiceWorkerContainer;
-}
 
 export function createRemoteServices(): RemoteServices {
   return {
@@ -30,16 +24,16 @@ export function createRemoteServices(): RemoteServices {
 }
 
 function resolveReturnPath(view: RemoteView) {
-  if (view.kind === 'enroll') return '/enroll';
+  if (view.kind === 'enroll') return REMOTE_PATHS.enrollPage;
   return `${location.pathname}${location.search}`;
 }
 
 export function RemoteRoot({ services, app }: { services: RemoteServices; app: React.ReactNode }) {
   const [view] = React.useState(() => {
-    const resolved = resolveRemoteView(location, sessionStorage);
+    const resolved = resolveRemoteView(location);
     if (resolved.kind === 'enroll' && location.hash) {
       stashEnrollFragment(sessionStorage, location.hash);
-      history.replaceState(null, '', '/enroll');
+      history.replaceState(null, '', REMOTE_PATHS.enrollPage);
     }
     return resolved;
   });
@@ -71,26 +65,22 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
             devices={services.devices}
           />
         );
-      case 'machines':
-        return <MachinesPage dashboard={services.dashboard} devices={services.devices} />;
-      case 'instance':
+      case 'app':
         return null;
     }
   })();
-  if (view.kind === 'instance' && session?.user)
-    return (
-      <InstanceApp
-        instanceId={view.instanceId}
-        dashboard={services.dashboard}
-        devices={services.devices}
-        worker={services.worker}
-      >
-        {app}
-      </InstanceApp>
-    );
-  return (
+  const shell = (inner: React.ReactNode) => (
     <RemoteShell session={session} dashboard={services.dashboard}>
-      {content}
+      {inner}
     </RemoteShell>
   );
+  if (view.kind === 'app' && session?.user && !failure)
+    return (
+      <RemoteServicesContext.Provider value={services}>
+        <FleetApp services={services} shell={shell}>
+          {app}
+        </FleetApp>
+      </RemoteServicesContext.Provider>
+    );
+  return shell(content);
 }

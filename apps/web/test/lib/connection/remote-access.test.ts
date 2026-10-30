@@ -57,7 +57,7 @@ describe('remote access on this Mac', () => {
     for (const path of ['/pair', '/pair/cancel', '/enable', '/disable', '/remove', '/devices/remove'])
       answerSnapshot(`POST /api/remote${path}`, paused);
     answers['POST /api/remote/devices/enroll'] = () =>
-      Response.json({ url: 'https://app.shinsa.dev/enroll#a.b.c', name: 'iPhone', expiresAt: 1 });
+      Response.json({ url: 'https://shinsa.dev/app/enroll#a.b.c', name: 'iPhone', expiresAt: 1 });
     await REMOTE_ACCESS_ACTIONS.pair();
     await REMOTE_ACCESS_ACTIONS.cancelPairing();
     await REMOTE_ACCESS_ACTIONS.resume();

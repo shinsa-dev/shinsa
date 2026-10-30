@@ -137,6 +137,15 @@ describe('the project choice', () => {
     ]);
   });
 
+  it('names the Mac of each project when the dashboard spans several', () => {
+    const machine = (id: string) => (id === 'p2' ? { name: 'Laptop' } : { name: 'Studio' });
+    expect(listNewTaskProjects(state, machine).map((item) => item.label)).toEqual([
+      'No project',
+      'Basket on Laptop',
+      'Superwall on Studio',
+    ]);
+  });
+
   it('shows the focus project until you pick, and No project without a focus', () => {
     const focused = { ...state, focus: { projectId: 'p1', until: null } };
     expect(resolveShownProject(focused, 'auto')).toBe('p1');

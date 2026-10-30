@@ -11,9 +11,9 @@ import {
 } from './http.ts';
 import type { CloudWorld } from './world.ts';
 
-const SESSION_COOKIE = '__Host-shinsa_session';
+const SESSION_COOKIE = '__Secure-shinsa_session';
 
-const OAUTH_COOKIE = '__Host-shinsa_oauth';
+const OAUTH_COOKIE = '__Secure-shinsa_oauth';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -52,7 +52,7 @@ export async function respondSession(request: Request, world: CloudWorld) {
 }
 
 function resolveReturnPath(value: string | null) {
-  if (!value?.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/';
+  if (!value?.startsWith(REMOTE_PATHS.app) || value.includes('\\')) return REMOTE_PATHS.app;
   return value;
 }
 
@@ -127,7 +127,7 @@ export async function respondSignInCallback(request: Request, url: URL, world: C
   const token = createToken();
   await world.store.createSession(await resolveTokenHash(token), user.id, now + SESSION_TTL_MS);
   const headers = new Headers({
-    location: resolveReturnPath(decodeURIComponent(encodedReturn ?? '/')),
+    location: resolveReturnPath(decodeURIComponent(encodedReturn ?? REMOTE_PATHS.app)),
     'cache-control': 'no-store',
   });
   headers.append('set-cookie', serializeCookie(SESSION_COOKIE, token, SESSION_TTL_MS / 1000));

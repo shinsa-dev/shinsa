@@ -334,7 +334,7 @@ describe('the remote service', () => {
     });
     expect(remote.tunnelHost).toBe('t-k3x9.shinsa.dev');
     expect(await remote.verifyConnect(null)).toBeNull();
-    plane.answers.set('/__remote/machine/heartbeat', () => new Response('', { status: 401 }));
+    plane.answers.set('/app/__remote/machine/heartbeat', () => new Response('', { status: 401 }));
     remote.start();
     const deadline = performance.now() + 2_000;
     while (remote.snapshot().paired && performance.now() < deadline) await Bun.sleep(1);
@@ -383,7 +383,7 @@ describe('pairing this Mac', () => {
       Response.json({
         claimCode: 'K7PQ',
         pollSecret: 'poll',
-        url: 'https://app.shinsa.dev/pair?code=K7PQ',
+        url: 'https://shinsa.dev/app/pair?code=K7PQ',
         expiresAt: Date.now() + 60_000,
       })
     );
@@ -395,10 +395,10 @@ describe('pairing this Mac', () => {
     const started = await readSnapshot(await local('/api/remote/pair', {}));
     expect(started.pairing).toEqual({
       claimCode: 'K7PQ',
-      url: 'https://app.shinsa.dev/pair?code=K7PQ',
+      url: 'https://shinsa.dev/app/pair?code=K7PQ',
       expiresAt: expect.any(Number),
     });
-    expect(opened).toEqual(['https://app.shinsa.dev/pair?code=K7PQ']);
+    expect(opened).toEqual(['https://shinsa.dev/app/pair?code=K7PQ']);
     const startCall = plane.calls.find((call) => call.path === REMOTE_PATHS.pairStart);
     expect(startCall?.body).toEqual({ name: 'Studio', publicKey: started.machineKey, version: '1' });
     expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');
@@ -444,7 +444,7 @@ describe('managing remote access on the Mac', () => {
     expect(remote.resolveHookUrl('s1', 'tok')).toBeNull();
     expect((await readSnapshot(await local('/api/remote/enable', {}))).enabled).toBe(true);
     await until('tunnel restarted', () => connectors.length === 2);
-    expect(remote.resolveHookUrl('s1', 'tok')).toBe(`${plane.origin}/hooks/k3x9/s1/tok`);
+    expect(remote.resolveHookUrl('s1', 'tok')).toBe(`${plane.origin}/app/hooks/k3x9/s1/tok`);
     plane.answers.set(REMOTE_PATHS.machineRemove, () => new Response('', { status: 500 }));
     const removed = await readSnapshot(await local('/api/remote/remove', {}));
     expect(removed).toMatchObject({ paired: false, enabled: false, devices: [] });
@@ -468,7 +468,7 @@ describe('managing remote access on the Mac', () => {
     };
     expect(enrollment.name).toBe('iPhone');
     const machine = await remote.store.resolveMachineKey();
-    expect(enrollment.url.startsWith(`${remote.appOrigin}/enroll#`)).toBe(true);
+    expect(enrollment.url.startsWith(`${remote.appOrigin}/app/enroll#`)).toBe(true);
     const fragment = parseEnrollFragment(new URL(enrollment.url).hash);
     expect(fragment).toMatchObject({ instanceId: 'k3x9', machineKey: machine.publicKey });
     const channel = await openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey);
@@ -542,7 +542,7 @@ describe('naming and opening', () => {
   });
 
   test('opens a page with the system opener and reports when it fails', async () => {
-    await openRemoteUrl('https://app.shinsa.dev/pair', createTempDir());
+    await openRemoteUrl('https://shinsa.dev/app/pair', createTempDir());
     await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
   });
 });

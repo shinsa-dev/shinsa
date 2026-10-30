@@ -12,6 +12,7 @@ import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
@@ -70,7 +71,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <AttentionSettings settings={state.settings} />
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
-          {!isRemoteBuild() && <RemoteAccessSettings />}
+          {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
           <UpdateSettings />
           <SetupSettings />
         </>

@@ -39,7 +39,7 @@ describe('pairing a machine', () => {
     const harness = createHarness();
     const { start } = await startPair(harness);
     expect(start.claimCode).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
-    expect(start.url).toBe(`https://app.shinsa.dev/pair?code=${start.claimCode}`);
+    expect(start.url).toBe(`https://shinsa.dev/app/pair?code=${start.claimCode}`);
     expect(start.expiresAt).toBe(harness.clock.now + PAIR_TTL_MS);
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
   });

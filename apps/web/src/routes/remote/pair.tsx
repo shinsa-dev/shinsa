@@ -1,10 +1,10 @@
 import type { PairView } from '@shinsa/core';
+import { REMOTE_PATHS } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { SettingRow, SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import { MACHINES_PATH } from '@/lib/remote/mode.ts';
 import { RemoteLoading } from './shell.tsx';
 
 type PairState =
@@ -47,8 +47,8 @@ export function PairPage({
           description='Your Mac finishes setting up its tunnel in a few seconds. To use it from this browser, add the browser on the Mac: Settings, Remote access, Add device.'
         />
         <div className='flex'>
-          <Button nativeButton={false} variant='outline' render={<a href={MACHINES_PATH} />}>
-            Show your machines
+          <Button nativeButton={false} variant='outline' render={<a href={REMOTE_PATHS.app} />}>
+            Open Shinsa
           </Button>
         </div>
       </section>

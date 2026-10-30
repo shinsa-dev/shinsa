@@ -8,11 +8,13 @@ import {
   type Settings,
   type ShinsaState,
 } from '@shinsa/core';
+import { Card } from '@shinsa/ui/components/card';
 import * as React from 'react';
 import { type AccountActions, AccountsGroup } from '@/components/settings/accounts.tsx';
 import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
+import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
@@ -22,14 +24,22 @@ import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedul
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
+import { TaskFacts } from '@/components/task/facts.tsx';
 import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
+import { replaceConnection } from '@/lib/connection/socket.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
+import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
-import { createSampleRemote, createSampleRemoteActions } from './sample-remote.ts';
+import {
+  createSampleFleet,
+  createSampleMachineServices,
+  createSampleRemote,
+  createSampleRemoteActions,
+} from './sample-remote.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
@@ -298,6 +308,39 @@ function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }
   );
 }
 
+function FleetFactsSpecimen({ now }: { now: number }) {
+  const [fleet] = React.useState(() => {
+    const studio = createSampleTask(now, {
+      id: 'fleet-studio',
+      title: 'Fix the scroll in tab groups',
+      handle: 'WEB-14',
+    });
+    const laptop = createSampleTask(now, {
+      id: 'fleet-laptop',
+      title: 'Add search to the docs',
+      handle: 'DOC-3',
+    });
+    const next = createSampleFleet([
+      { name: 'Studio', state: createSampleState({ tasks: [studio] }) },
+      { name: 'MacBook Air', state: createSampleState({ tasks: [laptop] }) },
+    ]);
+    replaceConnection(next);
+    return next;
+  });
+  React.useEffect(() => {
+    replaceConnection(fleet);
+    return () => replaceConnection(null);
+  }, [fleet]);
+  const state = fleet.snapshot().state as unknown as ShinsaState;
+  return (
+    <Card>
+      {Object.values(state.tasks).map((task) => (
+        <TaskFacts key={task.id} state={state} task={task} />
+      ))}
+    </Card>
+  );
+}
+
 export function SettingsSpecimens() {
   const [now] = React.useState(Date.now);
   const [{ state, schedules }] = React.useState(() => createScheduleScene(now));
@@ -308,6 +351,7 @@ export function SettingsSpecimens() {
   const [memory] = React.useState(() => createMemoryScene(now));
   const [remote] = React.useState(() => createSampleRemote(now));
   const [remoteActions] = React.useState(() => createSampleRemoteActions(now));
+  const [machines] = React.useState(() => createSampleMachineServices(now));
   const settings = createSettings();
   return (
     <>
@@ -318,6 +362,16 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
+      <Specimen label='MachinesSettings · on shinsa.dev/app: every Mac of the account, two in this dashboard'>
+        <div className='w-full max-w-xl'>
+          <RemoteServicesContext.Provider value={machines}>
+            <MachinesSettings />
+          </RemoteServicesContext.Provider>
+        </div>
+      </Specimen>
+      <Specimen label='TaskFacts · on shinsa.dev/app with several Macs, each task shows the Mac it runs on'>
+        <FleetFactsSpecimen now={now} />
+      </Specimen>
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>
         <div className='w-full max-w-xl'>
           <MemorySettings state={memory} actions={SAMPLE_MEMORY_ACTIONS} />

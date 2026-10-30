@@ -173,7 +173,7 @@ export class TunnelSupervisor {
 
   #revoke(generation: number) {
     if (!this.#isCurrent(generation)) return;
-    log.warn('[Remote] app.shinsa.dev removed this Mac; remote access is off');
+    log.warn('[Remote] shinsa.dev/app removed this Mac; remote access is off');
     this.#halt();
     this.#credentials = null;
     this.#updateStatus('revoked');

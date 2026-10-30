@@ -124,7 +124,7 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     init: RequestInit & { session?: string; sameOrigin?: boolean } = {}
   ): Promise<Response> {
     const headers = new Headers(init.headers);
-    if (init.session) headers.set('cookie', `__Host-shinsa_session=${init.session}`);
+    if (init.session) headers.set('cookie', `__Secure-shinsa_session=${init.session}`);
     if (init.sameOrigin) headers.set('origin', REMOTE_APP_ORIGIN);
     return respond(new Request(`${REMOTE_APP_ORIGIN}${path}`, { ...init, headers }), world);
   }
@@ -148,14 +148,14 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
   async function signIn(login = 'mona', id = 42) {
     const code = `code-${login}-${id}`;
     GITHUB_USERS.set(code, { id, login });
-    const start = await call('/__remote/sign-in?return=/instances');
+    const start = await call('/app/__remote/sign-in?return=/app/');
     const state = new URL(start.headers.get('location') ?? '').searchParams.get('state') ?? '';
     const oauth = (start.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
-    const done = await call(`/__remote/sign-in/callback?code=${code}&state=${state}`, {
+    const done = await call(`/app/__remote/sign-in/callback?code=${code}&state=${state}`, {
       headers: { cookie: oauth },
     });
     const cookie =
-      done.headers.getSetCookie().find((value) => value.startsWith('__Host-shinsa_session=')) ?? '';
+      done.headers.getSetCookie().find((value) => value.startsWith('__Secure-shinsa_session=')) ?? '';
     return cookie.split(';')[0]?.split('=')[1] ?? '';
   }
 

@@ -38,6 +38,7 @@ import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
+import { useMachine } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
@@ -90,6 +91,19 @@ function HandleFact({ task }: { task: Task }) {
       >
         {task.handle}
       </button>
+    </Hint>
+  );
+}
+
+function MachineFact({ task }: { task: Task }) {
+  const machine = useMachine(task.id);
+  if (!machine) return null;
+  return (
+    <Hint label='The Mac this task runs on'>
+      <span className={FACT}>
+        <Icon size='sm' name='IconServer' />
+        <span className='truncate'>{machine.name}</span>
+      </span>
     </Hint>
   );
 }
@@ -485,6 +499,7 @@ export function TaskFacts({
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
+      <MachineFact task={task} />
       <RoundFact task={task} />
       <StatusFact state={state} task={task} />
       <RepoFact state={state} task={task} />

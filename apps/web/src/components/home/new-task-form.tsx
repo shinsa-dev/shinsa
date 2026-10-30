@@ -10,7 +10,7 @@ import { ProjectOption } from '@/components/status/project-dot.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { useConnection } from '@/lib/connection/socket.ts';
+import { connection, useConnection } from '@/lib/connection/socket.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import {
   AUTO_CHOICES,
@@ -95,7 +95,7 @@ export function NewTaskFields({
     <>
       {state && (
         <ProjectField
-          items={listNewTaskProjects(state)}
+          items={listNewTaskProjects(state, connection.selectMachine)}
           value={shownProject}
           onValueChange={(project) => onChoose({ project })}
         />

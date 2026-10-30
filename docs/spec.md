@@ -360,8 +360,9 @@ notifications, `shinsa://` links, the `shinsa` command and its own updates (`doc
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
-Remote access: Settings → General → Remote access pairs this Mac with app.shinsa.dev through GitHub sign-in and adds
-the browsers and phones that may reach it (`docs/engine.md` → Remote access; what is still to come is
+Remote access: Settings → General → Remote access pairs this Mac with shinsa.dev/app through GitHub sign-in and adds
+the browsers and phones that may reach it; shinsa.dev/app is one dashboard over every Mac a browser was added to, each
+task showing its Mac (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
@@ -398,7 +399,7 @@ the browsers and phones that may reach it (`docs/engine.md` → Remote access; w
   mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
-  opens your machine from one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
+  opens your machines as one dashboard at one URL, shinsa.dev/app, behind GitHub sign-in, through a Cloudflare tunnel the
   machine dials out, end to end encrypted to devices enrolled at the Mac; the cloud holds no state
   (`docs/plans/remote-plan.md`).
 

@@ -3,10 +3,10 @@ import {
   clearEnrollFragment,
   isRemoteBuild,
   resolveRemoteView,
-  selectChosenInstance,
+  SERVICE_WORKER_PATH,
+  SERVICE_WORKER_SCOPE,
   selectEnrollFragment,
   stashEnrollFragment,
-  writeChosenInstance,
 } from '@/lib/remote/mode.ts';
 
 const FRAGMENT = '#k3x9.machine-key.secret_1';
@@ -18,33 +18,20 @@ describe('the remote page’s mode', () => {
     expect(isRemoteBuild()).toBe(false);
   });
 
-  it('shows the pair page, the enroll page, your machines, or the machine you chose', () => {
-    sessionStorage.clear();
-    expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ' }, sessionStorage)).toEqual({
+  it('shows the pair page, the enroll page, or the one dashboard of every Mac, all under /app', () => {
+    expect(resolveRemoteView({ pathname: '/app/pair', search: '?code=K7PQ' })).toEqual({
       kind: 'pair',
       claimCode: 'K7PQ',
     });
-    expect(resolveRemoteView({ pathname: '/pair', search: '' }, sessionStorage)).toEqual({
+    expect(resolveRemoteView({ pathname: '/app/pair', search: '' })).toEqual({
       kind: 'pair',
       claimCode: null,
     });
-    expect(resolveRemoteView({ pathname: '/enroll', search: '' }, sessionStorage)).toEqual({
-      kind: 'enroll',
-    });
-    expect(resolveRemoteView({ pathname: '/tasks', search: '' }, sessionStorage)).toEqual({
-      kind: 'machines',
-    });
-    writeChosenInstance(sessionStorage, 'k3x9');
-    expect(selectChosenInstance(sessionStorage)).toBe('k3x9');
-    expect(resolveRemoteView({ pathname: '/tasks', search: '' }, sessionStorage)).toEqual({
-      kind: 'instance',
-      instanceId: 'k3x9',
-    });
-    expect(resolveRemoteView({ pathname: '/machines', search: '' }, sessionStorage)).toEqual({
-      kind: 'machines',
-    });
-    writeChosenInstance(sessionStorage, null);
-    expect(selectChosenInstance(sessionStorage)).toBeNull();
+    expect(resolveRemoteView({ pathname: '/app/enroll', search: '' })).toEqual({ kind: 'enroll' });
+    expect(resolveRemoteView({ pathname: '/app/tasks/LOC-1', search: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: '/app/', search: '' })).toEqual({ kind: 'app' });
+    expect(SERVICE_WORKER_PATH).toBe('/app/sw.js');
+    expect(SERVICE_WORKER_SCOPE).toBe('/app/');
   });
 
   it('keeps an enrollment link through the GitHub sign-in, and only a valid one', () => {

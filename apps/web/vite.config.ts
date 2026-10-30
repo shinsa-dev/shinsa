@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   ...(REMOTE
     ? {
+        base: '/app/',
         build: {
           outDir: 'dist-remote',
           rollupOptions: {

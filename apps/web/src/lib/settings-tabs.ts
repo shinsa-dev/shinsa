@@ -1,5 +1,5 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
-import { isRemoteBuild } from '@/lib/remote/mode.ts';
+import { isRemoteBuild, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
@@ -31,7 +31,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
       'Attention',
       'Notifications',
       'Context',
-      ...(isRemoteBuild() ? [] : [REMOTE_ACCESS_SECTION]),
+      isRemoteBuild() ? MACHINES_SECTION : REMOTE_ACCESS_SECTION,
       'Setup',
       UPDATES_SECTION,
     ],

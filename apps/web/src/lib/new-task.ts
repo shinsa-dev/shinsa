@@ -94,14 +94,20 @@ export interface NewTaskProjectItem {
   color: string;
 }
 
-export function listNewTaskProjects(state: ShinsaState): NewTaskProjectItem[] {
+export function listNewTaskProjects(
+  state: ShinsaState,
+  selectMachine: (id: string) => { name: string } | null = () => null
+): NewTaskProjectItem[] {
   return [
     { value: NO_PROJECT, label: 'No project', color: 'gray' },
-    ...listProjects(state).map((project) => ({
-      value: project.id,
-      label: project.name,
-      color: project.color,
-    })),
+    ...listProjects(state).map((project) => {
+      const machine = selectMachine(project.id);
+      return {
+        value: project.id,
+        label: machine ? `${project.name} on ${machine.name}` : project.name,
+        color: project.color,
+      };
+    }),
   ];
 }
 

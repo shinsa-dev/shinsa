@@ -1,3 +1,4 @@
+import { REMOTE_APP_BASE } from '@shinsa/core';
 export class CloudError extends Error {
   readonly code: string;
   readonly status: number;
@@ -70,7 +71,7 @@ export function readCookie(request: Request, name: string) {
 }
 
 export function serializeCookie(name: string, value: string, maxAgeSeconds: number) {
-  return `${name}=${value}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`;
+  return `${name}=${value}; Path=${REMOTE_APP_BASE}; Max-Age=${maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`;
 }
 
 export function readBearer(request: Request) {

@@ -7,13 +7,16 @@ import {
   RouteScope,
   replaceRoute,
   resolveCanonicalTaskPath,
+  resolveRouteBase,
   resolveRouteTaskId,
   resolveTaskPath,
   resolveTaskTarget,
+  stripRouteBase,
   updateSearchParams,
   useRoute,
   useRouteTaskId,
   useSearchParam,
+  withRouteBase,
 } from '@/router.ts';
 import { createShinsaState, createTask } from './support/state.ts';
 
@@ -222,5 +225,26 @@ describe('RouteScope', () => {
     act(() => navigate('/settings'));
     expect(scoped.result.current).toEqual([{ name: 'task', reference: 'SW-1' }, 't1']);
     expect(renderHook(() => useRoute()).result.current).toEqual({ name: 'settings' });
+  });
+});
+
+describe('the base path of the remote build', () => {
+  it('reads it from the build, without a trailing slash', () => {
+    expect(resolveRouteBase({ BASE_URL: '/app/' })).toBe('/app');
+    expect(resolveRouteBase({ BASE_URL: '/' })).toBe('');
+    expect(resolveRouteBase({})).toBe('');
+  });
+
+  it('takes it off a page address and puts it on an app path once', () => {
+    expect(stripRouteBase('/app/tasks/LOC-1', '/app')).toBe('/tasks/LOC-1');
+    expect(stripRouteBase('/app', '/app')).toBe('/');
+    expect(stripRouteBase('/elsewhere', '/app')).toBe('/elsewhere');
+    expect(stripRouteBase('/tasks', '')).toBe('/tasks');
+    expect(withRouteBase('/tasks/LOC-1', '/app')).toBe('/app/tasks/LOC-1');
+    expect(withRouteBase('/app/tasks', '/app')).toBe('/app/tasks');
+    expect(withRouteBase('/app?tab=1', '/app')).toBe('/app?tab=1');
+    expect(withRouteBase('/app', '/app')).toBe('/app');
+    expect(withRouteBase('https://github.com', '/app')).toBe('https://github.com');
+    expect(withRouteBase('/tasks', '')).toBe('/tasks');
   });
 });

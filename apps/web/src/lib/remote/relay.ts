@@ -148,9 +148,10 @@ export function serveRelayedRequests(
 
 export async function startServiceWorker(
   container: Pick<ServiceWorkerContainer, 'register' | 'ready' | 'controller' | 'addEventListener'>,
-  url: string
+  url: string,
+  scope: string
 ) {
-  await container.register(url, { scope: '/', type: 'module' });
+  await container.register(url, { scope, type: 'module' });
   await container.ready;
   if (container.controller) return;
   await new Promise<void>((resolve) => {

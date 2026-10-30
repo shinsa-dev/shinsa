@@ -8,7 +8,7 @@ import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts
 const START = {
   claimCode: 'K7PQ',
   pollSecret: 'poll',
-  url: 'https://app.shinsa.dev/pair',
+  url: 'https://shinsa.dev/app/pair',
   expiresAt: 10_000,
 };
 
@@ -65,7 +65,7 @@ describe('pairing', () => {
     warn.mockRestore();
   });
 
-  test('ends when app.shinsa.dev says the code expired, or once its time is up', async () => {
+  test('ends when shinsa.dev/app says the code expired, or once its time is up', async () => {
     const answered = startPairing();
     answerPolls(answered.plane, { status: 'expired' });
     expect(await answered.pairing.done).toEqual({ status: 'expired' });

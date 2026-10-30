@@ -232,7 +232,7 @@ export class Remote {
     try {
       await this.control.requestRemoval(credentials.machineToken);
     } catch (error) {
-      log.warn('[Remote] app.shinsa.dev did not confirm the removal', { error: describeError(error) });
+      log.warn('[Remote] shinsa.dev/app did not confirm the removal', { error: describeError(error) });
     }
     this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, devices: [] }));
     this.#publish();

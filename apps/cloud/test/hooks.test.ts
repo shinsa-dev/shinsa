@@ -34,17 +34,17 @@ function answerTunnel(harness: Harness, answer: () => Response | Promise<Respons
   );
 }
 
-describe('webhooks through app.shinsa.dev', () => {
+describe('webhooks through shinsa.dev/app', () => {
   test('forwards the delivery to the machine’s tunnel as it came, without cookies or Cloudflare headers', async () => {
     const harness = createHarness();
     const instanceId = await pairInstance(harness);
     answerTunnel(harness, () => Response.json({ delivery: 'd1' }, { status: 202 }));
-    const delivered = await harness.call(`/hooks/${instanceId}/schedule-1/token-1?source=maple`, {
+    const delivered = await harness.call(`/app/hooks/${instanceId}/schedule-1/token-1?source=maple`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'x-maple-signature': 'sig',
-        cookie: '__Host-shinsa_session=secret',
+        cookie: '__Secure-shinsa_session=secret',
         'cf-connecting-ip': '1.2.3.4',
       },
       body: '{"alert":"down"}',
@@ -66,7 +66,7 @@ describe('webhooks through app.shinsa.dev', () => {
     const harness = createHarness();
     const instanceId = await pairInstance(harness);
     answerTunnel(harness, () => new Response('ok'));
-    const delivered = await harness.call(`/hooks/${instanceId}/schedule-1/token-1`);
+    const delivered = await harness.call(`/app/hooks/${instanceId}/schedule-1/token-1`);
     expect(delivered.status).toBe(200);
     expect(delivered.headers.get('content-type')).toBe('text/plain');
     expect(harness.calls.at(-1)?.body).toBe('');
@@ -76,19 +76,21 @@ describe('webhooks through app.shinsa.dev', () => {
     const harness = createHarness();
     const instanceId = await pairInstance(harness);
     answerTunnel(harness, () => new Response('Argo Tunnel error', { status: 530 }));
-    const offline = await harness.call(`/hooks/${instanceId}/s/t`, { method: 'POST', body: 'x' });
+    const offline = await harness.call(`/app/hooks/${instanceId}/s/t`, { method: 'POST', body: 'x' });
     expect(offline.status).toBe(503);
     expect(offline.headers.get('retry-after')).toBe('60');
     harness.handlers.length = 0;
     answerTunnel(harness, () => Promise.reject(new Error('network')));
-    expect((await harness.call(`/hooks/${instanceId}/s/t`, { method: 'POST', body: 'x' })).status).toBe(503);
+    expect((await harness.call(`/app/hooks/${instanceId}/s/t`, { method: 'POST', body: 'x' })).status).toBe(
+      503
+    );
   });
 
   test('refuses an unknown machine or a body over 1 MB', async () => {
     const harness = createHarness();
-    expect((await harness.call('/hooks/nobody/s/t', { method: 'POST', body: 'x' })).status).toBe(404);
+    expect((await harness.call('/app/hooks/nobody/s/t', { method: 'POST', body: 'x' })).status).toBe(404);
     const instanceId = await pairInstance(harness);
-    const big = await harness.call(`/hooks/${instanceId}/s/t`, {
+    const big = await harness.call(`/app/hooks/${instanceId}/s/t`, {
       method: 'POST',
       body: new Uint8Array(HOOK_BODY_LIMIT_BYTES + 1),
     });

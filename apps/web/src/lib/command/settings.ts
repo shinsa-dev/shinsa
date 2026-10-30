@@ -97,7 +97,7 @@ import {
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
-import { navigate } from '@/router.ts';
+import { navigate, stripRouteBase } from '@/router.ts';
 
 const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] = [
   { title: 'Attention', icon: 'IconInboxEmpty', keywords: ['decisions', 'queue'] },
@@ -205,7 +205,8 @@ const SAVED = 'Saved.';
 export function openSettingsSection(title: string) {
   const tab = resolveSectionTab(title);
   const onTab =
-    location.pathname === '/settings' && resolveSettingsTab(readTabParam(), location.hash) === tab;
+    stripRouteBase(location.pathname) === '/settings' &&
+    resolveSettingsTab(readTabParam(), location.hash) === tab;
   const section = onTab ? document.getElementById(resolveSectionId(title)) : null;
   if (section) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
   else navigate(resolveSettingsPath(tab, title));

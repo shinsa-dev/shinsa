@@ -12,11 +12,12 @@ import { act, renderHook } from '@testing-library/react';
 import {
   Connection,
   connection,
-  replaceSocketOpener,
+  replaceConnection,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
   useConnection,
   useDesktopConnected,
+  useMachine,
   useTranscript,
 } from '@/lib/connection/socket.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
@@ -694,17 +695,17 @@ describe('the shared connection', () => {
     timeout.mockRestore();
   });
 
-  it('opens the socket a remote page put in place, until it is taken away', () => {
-    const opened: FakeSocket[] = [];
-    replaceSocketOpener(() => {
-      const socket = new FakeSocket();
-      opened.push(socket);
-      return socket as unknown as WebSocket;
-    });
-    const subject = new Connection();
-    subject.start();
-    expect(opened).toHaveLength(1);
-    replaceSocketOpener(null);
+  it('uses the connection a remote page put in place, with the Mac of each task, until it is taken away', () => {
+    const local = connection;
+    const machine = { id: 'm2', name: 'Laptop' };
+    const fleet = { ...local, selectMachine: (id: string) => (id === 'task-1' ? machine : null) };
+    replaceConnection(fleet);
+    expect(connection).toBe(fleet);
+    expect(renderHook(() => useMachine('task-1')).result.current).toBe(machine);
+    expect(renderHook(() => useMachine(null)).result.current).toBeNull();
+    replaceConnection(null);
+    expect(connection).toBe(local);
+    expect(connection.selectMachine('task-1')).toBeNull();
   });
 
   it('sends commands through the shared connection', async () => {

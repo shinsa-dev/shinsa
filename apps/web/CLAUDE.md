@@ -12,7 +12,7 @@ themes, from sample data.
 src/
 ├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and a
 │                        `?layout=` override before the first paint
-├── remote-sw.ts         The remote build's service worker (/sw.js): hands the page's /api/ requests to the page
+├── remote-sw.ts         The remote build's service worker (/app/sw.js, scope /app/): hands the page's /api/ requests to the page
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
 │                        /onboarding until setup is complete, resolveOnboardingRedirect), the frame (AppFrame for Cards and
 │                        Sidebar, or setup's own OnboardingShell on /onboarding, which has no ⌘K)
@@ -21,7 +21,9 @@ src/
 │                        (lib/kept-views.ts, docs/design.md 35); starts the connection unless the route is /ui
 ├── router.ts            The pushState router: parseRoute, navigate, replaceRoute, updateSearchParams,
 │                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built);
-│                        RouteScope renders a subtree at a fixed route (the site's demos)
+│                        RouteScope renders a subtree at a fixed route (the site's demos); the build's base path
+│                        (`/app` in the remote build, from BASE_URL) is taken off the address and put on every path
+│                        it pushes and every in-app link (stripRouteBase, withRouteBase)
 ├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (in the Mac app
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
@@ -29,10 +31,10 @@ src/
 │   │                    automation's own page at /automations/<id>, laid out like a task page: facts row, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed in roadmap rows, an Activity log of its runs), onboarding.tsx
 │   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar;
 │   │                    in the remote build, a note that terminals stay on the Mac)
-│   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
+│   ├── remote/          The remote build's own pages on shinsa.dev/app (docs/engine.md → Remote access): index.tsx
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header, sign-in),
-│   │                    machines.tsx, pair.tsx, enroll.tsx, instance.tsx (InstanceApp: the channel and the
-│   │                    service worker, then the app)
+│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every Mac this browser was added to joined
+│   │                    into one Fleet, the service worker, then the app; or every Mac and how to add this browser)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -126,13 +128,17 @@ src/
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
-    ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the chosen machine, the
-    │                    enrollment link kept through sign-in), dashboard.ts (app.shinsa.dev's /__remote/ routes),
+    ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
+    │                    scope, the enrollment link kept through sign-in), dashboard.ts (shinsa.dev/app's
+    │                    /app/__remote/ routes), fleet.ts (Fleet: every Mac's connection as one, the merged state, which
+    │                    Mac owns each id, commands, transcripts and requests sent to their Mac), services.ts (the
+    │                    remote services and their context, for Settings → Machines),
     │                    devices.ts and indexed-store.ts (this browser's key per machine, in IndexedDB),
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (enrollDevice), machines.ts (a machine's row)
+    │                    enroll.ts (enrollDevice), machines.ts (a Mac's row, the rows of the account, a Mac as a
+    │                    fleet member)
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
     │                    patches applied once per frame, acks, transcripts from the position held (every followed
     │                    run plus the 24 read last, TRANSCRIPT_CACHE_LIMIT), whether the desktop app is connected,

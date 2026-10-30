@@ -94,7 +94,7 @@ src/
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
-  worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
+  worker/                   The Worker in front of the assets: index.ts hands /app to the remote dashboard (app.ts) and wires Cloudflare's globals and the R2 bucket
                             into download.ts, which answers the download paths (tested in test/worker/ at 100%,
                             `bun run test`)
 ```
@@ -149,8 +149,12 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 `bun run deploy:preview` (`wrangler preview`) on every other branch. A preview is its own copy of the Worker on
 workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
 preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
-is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download` and
-`/download/*` (`assets.run_worker_first`); every other request is a plain static asset hit.
+is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download`,
+`/download/*`, `/app` and `/app/*` (`assets.run_worker_first`); every other request is a plain static asset hit.
+`/app` is the remote dashboard (`docs/engine.md` → Remote access): `src/worker/app.ts` hands it, as it came, to the
+`shinsa-cloud` Worker (`apps/cloud`) through the `CLOUD` service binding, sends `www.shinsa.dev/app` to
+`shinsa.dev/app`, and answers 503 while the binding is missing. Deploy `shinsa-cloud` before the first deploy that
+binds it.
 
 The downloads are served from Cloudflare R2, so they never wait on GitHub and have no request limit and no egress fee.
 The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in `wrangler.jsonc`), bound as

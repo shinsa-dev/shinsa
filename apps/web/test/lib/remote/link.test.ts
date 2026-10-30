@@ -60,11 +60,11 @@ describe('the link to a remote Mac', () => {
     const { mac, link } = await createLink({ respond: () => new Response('ok') });
     const first = link.openSocket();
     await waitFor(() => expect(first.readyState).toBe(1));
-    const answer = await link.fetch(new Request('https://app.shinsa.dev/api/tasks?x=1'));
+    const answer = await link.fetch(new Request('https://shinsa.dev/api/tasks?x=1'));
     expect(await answer.text()).toBe('ok');
     expect(mac.sockets).toHaveLength(1);
     const posted = await link.fetch(
-      new Request('https://app.shinsa.dev/api/commands', { method: 'POST', body: '{"type":"x"}' })
+      new Request('https://shinsa.dev/api/commands', { method: 'POST', body: '{"type":"x"}' })
     );
     expect(posted.status).toBe(200);
     const second = link.openSocket();
