@@ -24,7 +24,7 @@ export {
   resolveCloudflaredAsset,
   resolveCloudflaredPath,
 } from './cloudflared.ts';
-export { createCloudflaredConnector } from './connector.ts';
+export { createInstalledConnector } from './connector.ts';
 export { ControlClient, ControlError, RevokedError } from './control.ts';
 export { ENROLLMENT_TTL_MS, Enrollments } from './enrollments.ts';
 export {

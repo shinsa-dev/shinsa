@@ -37,12 +37,10 @@ import { type AccountSource, type CommandRunner, Onboarding } from './onboarding
 import { createProjectChanges } from './projects/routes.ts';
 import {
   ControlClient,
-  createCloudflaredConnector,
-  installCloudflared,
+  createInstalledConnector,
   openRemoteUrl,
   REMOTE_FILE,
   Remote,
-  resolveCloudflaredAsset,
   resolveMachineName,
   type StartConnector,
 } from './remote/index.ts';
@@ -158,15 +156,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
   const remote = new Remote({
     path: join(config.dataDir, REMOTE_FILE),
     control: new ControlClient({ origin: config.remoteOrigin }),
-    connect:
-      options.remoteConnect ??
-      createCloudflaredConnector({
-        binary: () =>
-          installCloudflared({
-            dataDir: config.dataDir,
-            asset: resolveCloudflaredAsset(process.platform, process.arch),
-          }),
-      }),
+    connect: options.remoteConnect ?? createInstalledConnector(config.dataDir),
     localUrl: () => address.url,
     version: instance.version,
     maxBodyBytes: ATTACHMENT_REQUEST_LIMIT_BYTES,

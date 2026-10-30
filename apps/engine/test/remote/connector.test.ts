@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createCloudflaredConnector } from '../../src/remote/connector.ts';
+import { createCloudflaredConnector, createInstalledConnector } from '../../src/remote/connector.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function writeFake(script: string) {
@@ -37,5 +37,10 @@ describe('the cloudflared connector', () => {
     const fake = writeFake('exec sleep 30');
     const connect = createCloudflaredConnector({ binary: () => Promise.resolve(fake.path), timeoutMs: 50 });
     await expect(connect('t', 'http://127.0.0.1:1')).rejects.toThrow('did not connect');
+  });
+
+  test('installs cloudflared for this computer before it connects, and says when there is no build for it', async () => {
+    const connect = createInstalledConnector(createTempDir(), 'win32', 'x64');
+    await expect(connect('t', 'http://127.0.0.1:1')).rejects.toThrow('no build for this computer');
   });
 });

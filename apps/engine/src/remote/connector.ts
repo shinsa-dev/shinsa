@@ -1,3 +1,4 @@
+import { installCloudflared, resolveCloudflaredAsset } from './cloudflared.ts';
 import type { TunnelConnector } from './supervisor.ts';
 
 const CONNECTED_PATTERN = /Registered tunnel connection/;
@@ -36,13 +37,13 @@ export function createCloudflaredConnector(options: CloudflaredConnectorOptions)
         stop();
         reject(new Error('cloudflared did not connect within 30 seconds.'));
       }, options.timeoutMs ?? CONNECT_TIMEOUT_MS);
-      void watchOutput(child.stderr, (text) => {
+      const reading = watchOutput(child.stderr, (text) => {
         tail = `${tail}${text}`.slice(-OUTPUT_TAIL_CHARS);
         if (!CONNECTED_PATTERN.test(tail)) return;
         clearTimeout(timer);
         resolve();
       });
-      void child.exited.then((code) => {
+      void Promise.all([child.exited, reading]).then(([code]) => {
         clearTimeout(timer);
         reject(new Error(`cloudflared stopped with code ${code}: ${tail.trim().split('\n').at(-1) ?? ''}`));
       });
@@ -50,4 +51,10 @@ export function createCloudflaredConnector(options: CloudflaredConnectorOptions)
     await connected;
     return { exited: child.exited, stop };
   };
+}
+
+export function createInstalledConnector(dataDir: string, platform = process.platform, arch = process.arch) {
+  return createCloudflaredConnector({
+    binary: () => installCloudflared({ dataDir, asset: resolveCloudflaredAsset(platform, arch) }),
+  });
 }
