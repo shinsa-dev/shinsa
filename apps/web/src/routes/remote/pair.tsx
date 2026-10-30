@@ -2,10 +2,9 @@ import type { PairView } from '@shinsa/core';
 import { REMOTE_PATHS } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
-import { SettingRow, SettingsCard } from '@/components/settings/group.tsx';
+import { SETTING_ROW, SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import { RemoteLoading } from './shell.tsx';
+import { RemoteHero, RemoteLoading } from './shell.tsx';
 
 type PairState =
   | { kind: 'loading' }
@@ -35,56 +34,55 @@ export function PairPage({
   if (state.kind === 'loading') return <RemoteLoading label='Reading the pairing request' />;
   if (state.kind === 'failed')
     return (
-      <section className='flex flex-col gap-4'>
-        <PageHeading title='This Mac cannot be paired' description={state.message} />
+      <section className='flex flex-col items-center gap-6 pt-4'>
+        <RemoteHero icon='IconCircleX' tone='red' title='This Mac cannot be paired'>
+          {state.message}
+        </RemoteHero>
       </section>
     );
   if (state.kind === 'approved')
     return (
-      <section className='flex flex-col gap-4'>
-        <PageHeading
-          title={`${state.name} is paired`}
-          description='Your Mac finishes setting up its tunnel in a few seconds. To use it from this browser, add the browser on the Mac: Settings, Remote access, Add device.'
-        />
-        <div className='flex'>
-          <Button nativeButton={false} variant='outline' render={<a href={REMOTE_PATHS.app} />}>
-            Open Shinsa
-          </Button>
-        </div>
+      <section className='flex flex-col items-center gap-6 pt-4'>
+        <RemoteHero icon='IconCheckCircle2' tone='blue' title={`${state.name} is paired`}>
+          Your Mac finishes setting up in a few seconds. To use it from this browser, add the browser on the
+          Mac: Settings, Remote access, Add device.
+        </RemoteHero>
+        <Button className='w-full' nativeButton={false} render={<a href={REMOTE_PATHS.app} />}>
+          Open Shinsa
+        </Button>
       </section>
     );
   const { view } = state;
   return (
-    <section className='flex flex-col gap-4'>
-      <PageHeading
-        title={`Pair ${view.name} with your account`}
-        description='Only approve this if you just turned remote access on yourself. Check that the fingerprint matches the one your Mac shows in Settings.'
-      />
-      <SettingsCard>
-        <SettingRow title='Machine'>
-          <span className='text-fg-3 text-xs'>{view.name}</span>
-        </SettingRow>
-        <SettingRow title='Fingerprint'>
-          <span className='font-mono text-fg-3 text-xs'>{view.fingerprint}</span>
-        </SettingRow>
-        <SettingRow title='Code'>
-          <span className='font-mono text-fg-3 text-xs'>{view.claimCode}</span>
-        </SettingRow>
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon='IconMacbook' title={`Pair ${view.name} with your account`}>
+        Approve only if you just turned on remote access on this Mac yourself.
+      </RemoteHero>
+      <SettingsCard className='w-full'>
+        <div className='flex flex-col items-center gap-1 px-3 py-4'>
+          <span className='font-medium font-mono text-2xl text-fg-4 tracking-[0.2em]'>{view.claimCode}</span>
+          <span className='text-center text-2xs text-fg-2'>
+            Your Mac shows this code in Settings, Remote access.
+          </span>
+        </div>
+        <div className={`${SETTING_ROW} border-border border-t`}>
+          <span className='flex-1 text-fg-2 text-xs'>Mac key</span>
+          <span className='font-mono text-2xs text-fg-3'>{view.fingerprint}</span>
+        </div>
       </SettingsCard>
-      <div>
-        <Button
-          loading={state.kind === 'approving'}
-          onClick={() => {
-            setState({ kind: 'approving', view });
-            dashboard.approvePair(view.claimCode).then(
-              (approved) => setState({ kind: 'approved', name: approved.name }),
-              (error: unknown) => setState({ kind: 'failed', message: (error as Error).message })
-            );
-          }}
-        >
-          Approve
-        </Button>
-      </div>
+      <Button
+        className='w-full'
+        loading={state.kind === 'approving'}
+        onClick={() => {
+          setState({ kind: 'approving', view });
+          dashboard.approvePair(view.claimCode).then(
+            (approved) => setState({ kind: 'approved', name: approved.name }),
+            (error: unknown) => setState({ kind: 'failed', message: (error as Error).message })
+          );
+        }}
+      >
+        Approve
+      </Button>
     </section>
   );
 }

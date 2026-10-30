@@ -1,5 +1,8 @@
 import { Button } from '@shinsa/ui/components/button';
+import { Icon } from '@shinsa/ui/components/icon';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { TONE_FILL, TONE_TEXT } from '@/lib/format/tone.ts';
 import { listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
 import { MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
@@ -21,11 +24,23 @@ export function MachineList({
   return (
     <div className='flex flex-col divide-y divide-border'>
       {rows.map((row) => (
-        <div key={row.instance.id} className={SETTING_ROW}>
+        <div key={row.instance.id} className={`${SETTING_ROW} gap-3 py-2.5`}>
+          <span className='corner-superellipse/1.125 grid size-8 shrink-0 place-items-center rounded-control-sm bg-bg-a2 text-fg-3'>
+            <Icon name='IconMacbook' size='md' />
+          </span>
           <div className='flex min-w-0 flex-1 flex-col gap-px'>
-            <span className='truncate text-fg-4 text-xs'>{row.instance.name}</span>
-            <span className='truncate text-2xs text-fg-2'>
-              {row.status} · {row.access}
+            <span className='truncate font-medium text-fg-4 text-xs'>{row.instance.name}</span>
+            <span className='flex min-w-0 items-center gap-1.5 text-2xs text-fg-2'>
+              <span
+                aria-hidden
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  TONE_FILL[row.instance.online ? 'green' : 'neutral']
+                )}
+              />
+              <span className={cn('shrink-0', row.instance.online && TONE_TEXT.green)}>{row.status}</span>
+              <span aria-hidden>·</span>
+              <span className='truncate'>{row.access}</span>
             </span>
           </div>
           <Button

@@ -133,7 +133,7 @@ describe('the remote dashboard', () => {
     });
     expect(await screen.findByText('Add this browser to a Mac')).toBeTruthy();
     expect(await screen.findByText(/Not added in this browser/)).toBeTruthy();
-    expect(screen.getByText('mona')).toBeTruthy();
+    expect(screen.queryByText('mona')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
     expect(removed).toEqual(['k3x9']);

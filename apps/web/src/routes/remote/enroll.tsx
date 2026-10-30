@@ -1,12 +1,32 @@
 import { REMOTE_PATHS, resolveKeyFingerprint } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
-import { SettingRow, SettingsCard } from '@/components/settings/group.tsx';
+import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { type EnrollInput, enrollDevice } from '@/lib/remote/enroll.ts';
 import { clearEnrollFragment } from '@/lib/remote/mode.ts';
+import { RemoteHero } from './shell.tsx';
+
+const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [
+  {
+    icon: 'IconKey1',
+    title: 'A key made for this browser',
+    detail: 'It stays on this device and cannot be copied out of it.',
+  },
+  {
+    icon: 'IconShieldCheck',
+    title: 'Encrypted end to end',
+    detail: 'Only this browser and your Mac can read what passes between them.',
+  },
+  {
+    icon: 'IconLock',
+    title: 'Once per browser',
+    detail: 'After this, signing in with GitHub is all it takes.',
+  },
+];
 
 type EnrollState = { kind: 'ready' } | { kind: 'enrolling' } | { kind: 'failed'; message: string };
 
@@ -41,23 +61,29 @@ export function EnrollPage({
       </section>
     );
   return (
-    <section className='flex flex-col gap-4'>
-      <PageHeading
-        title='Add this browser to your Mac'
-        description='This browser makes its own key, kept on this device only, and your Mac remembers it. Everything between them is encrypted end to end, so shinsa.dev/app and Cloudflare cannot read it.'
-      />
-      <SettingsCard>
-        <SettingRow title='Mac fingerprint'>
-          <span className='font-mono text-fg-3 text-xs'>{fingerprint ?? '…'}</span>
-        </SettingRow>
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon='IconMacbook' title='Add this browser to your Mac'>
+        Once it is added, this browser opens Shinsa on your Mac from anywhere.
+      </RemoteHero>
+      <SettingsCard className='w-full'>
+        {ENROLL_POINTS.map((point) => (
+          <div key={point.title} className='flex gap-3 px-2.5 py-2'>
+            <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
+            <div className='flex min-w-0 flex-col gap-px'>
+              <span className='text-fg-4 text-xs'>{point.title}</span>
+              <span className='text-pretty text-2xs text-fg-2'>{point.detail}</span>
+            </div>
+          </div>
+        ))}
       </SettingsCard>
       {state.kind === 'failed' && (
-        <p role='alert' className='text-destructive text-xs'>
+        <p role='alert' className='w-full text-destructive text-xs'>
           {state.message}
         </p>
       )}
-      <div>
+      <div className='flex w-full flex-col items-center gap-2'>
         <Button
+          className='w-full'
           loading={state.kind === 'enrolling'}
           onClick={() => {
             setState({ kind: 'enrolling' });
@@ -72,6 +98,9 @@ export function EnrollPage({
         >
           Add this browser
         </Button>
+        <p className='text-2xs text-fg-2'>
+          Mac key <span className='font-mono'>{fingerprint ?? '…'}</span>
+        </p>
       </div>
     </section>
   );

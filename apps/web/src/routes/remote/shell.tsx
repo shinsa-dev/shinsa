@@ -1,10 +1,13 @@
 import type { RemoteSession } from '@shinsa/core';
 import { REMOTE_PATHS } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Logo } from '@shinsa/ui/components/logo';
+import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
+import { TONE_SURFACE, type Tone } from '@/lib/format/tone.ts';
 import { type DashboardClient, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
 
 export function RemoteShell({
@@ -28,18 +31,15 @@ export function RemoteShell({
         </a>
         <span className='flex-1' />
         {user && (
-          <>
-            <span className='truncate text-fg-2 text-xs'>{user.login}</span>
-            <Button
-              variant='secondary'
-              size='sm'
-              onClick={() => {
-                void dashboard.signOut().then(() => location.assign(REMOTE_PATHS.app));
-              }}
-            >
-              Sign out
-            </Button>
-          </>
+          <Button
+            variant='secondary'
+            size='sm'
+            onClick={() => {
+              void dashboard.signOut().then(() => location.assign(REMOTE_PATHS.app));
+            }}
+          >
+            Sign out
+          </Button>
         )}
       </header>
       <main className='mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 pt-10 pb-16'>{children}</main>
@@ -73,5 +73,34 @@ export function SignInPrompt({ returnPath, error }: { returnPath: string; error:
         </Button>
       </div>
     </section>
+  );
+}
+
+export function RemoteHero({
+  icon,
+  tone = 'neutral',
+  title,
+  children,
+}: {
+  icon: IconName;
+  tone?: Tone;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className='flex flex-col items-center gap-3 text-center'>
+      <span
+        className={cn(
+          'corner-superellipse/1.125 grid size-10 place-items-center rounded-control',
+          TONE_SURFACE[tone]
+        )}
+      >
+        <Icon name={icon} size='lg' />
+      </span>
+      <div className='flex flex-col gap-1'>
+        <h1 className='text-balance font-medium text-fg-4 text-lg'>{title}</h1>
+        <p className='text-pretty text-fg-2 text-xs'>{children}</p>
+      </div>
+    </div>
   );
 }

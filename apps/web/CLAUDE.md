@@ -32,7 +32,7 @@ src/
 │   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar;
 │   │                    in the remote build, a note that terminals stay on the Mac)
 │   ├── remote/          The remote build's own pages on shinsa.dev/app (docs/engine.md → Remote access): index.tsx
-│   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header, sign-in),
+│   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
 │   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every Mac this browser was added to joined
 │   │                    into one Fleet, the service worker, then the app; or every Mac and how to add this browser)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
