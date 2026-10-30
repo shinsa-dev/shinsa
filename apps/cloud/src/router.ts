@@ -1,4 +1,4 @@
-import { parseRemoteHookPath, REMOTE_APP_BASE, REMOTE_PATHS } from '@shinsa/core';
+import { parseRemoteHookPath, REMOTE_PATHS } from '@shinsa/core';
 import { createStore, type Database } from './database.ts';
 import { respondHook } from './hooks.ts';
 import { applySecurityHeaders, CloudError, respondError, respondJson } from './http.ts';
@@ -107,7 +107,7 @@ const ROUTES: Route[] = [
   },
 ];
 
-const API_PREFIX = `${REMOTE_APP_BASE}/__remote/`;
+const API_PREFIX = '/__remote/';
 
 function respondCallbackFailure(error: CloudError) {
   return new Response(null, {
@@ -123,7 +123,7 @@ function describeFailure(error: unknown) {
   if (error instanceof CloudError && error.status < 500) return error;
   recordFailure('[Cloud] Request failed', { error });
   if (error instanceof CloudError) return error;
-  return new CloudError('server_error', 'Something went wrong on shinsa.dev/app. Try again.', 500);
+  return new CloudError('server_error', 'Something went wrong on app.shinsa.dev. Try again.', 500);
 }
 
 async function respondApi(request: Request, url: URL, world: CloudWorld) {
@@ -141,18 +141,8 @@ async function respondApi(request: Request, url: URL, world: CloudWorld) {
   return respondError(new CloudError('not_found', 'No such endpoint.', 404));
 }
 
-function resolveAssetRequest(request: Request, url: URL) {
-  const inner = new URL(url);
-  inner.pathname = url.pathname.slice(REMOTE_APP_BASE.length);
-  return new Request(inner, request);
-}
-
 export async function respond(request: Request, world: CloudWorld) {
   const url = new URL(request.url);
-  if (url.pathname === REMOTE_APP_BASE)
-    return new Response(null, { status: 308, headers: { location: `${REMOTE_PATHS.app}${url.search}` } });
-  if (!url.pathname.startsWith(REMOTE_PATHS.app))
-    return respondError(new CloudError('not_found', 'No such page.', 404));
   if (url.pathname.startsWith(API_PREFIX)) return applySecurityHeaders(await respondApi(request, url, world));
   const hook = parseRemoteHookPath(url.pathname);
   if (hook) {
@@ -164,7 +154,7 @@ export async function respond(request: Request, world: CloudWorld) {
   }
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return respondJson({ error: { code: 'method_not_allowed', message: 'Only GET is served here.' } }, 405);
-  return applySecurityHeaders(await world.assets(resolveAssetRequest(request, url)));
+  return applySecurityHeaders(await world.assets(request));
 }
 
 export interface CloudBindings {

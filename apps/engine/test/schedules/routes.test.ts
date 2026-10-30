@@ -46,13 +46,13 @@ async function readJson(response: Response) {
 }
 
 describe('webhook settings', () => {
-  test('shows the stable shinsa.dev/app URL while remote access is on', async () => {
+  test('shows the stable app.shinsa.dev URL while remote access is on', async () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
-    const { call } = setUp(world, (id, hook) => `https://shinsa.dev/app/hooks/k3x9/${id}/${hook}`);
+    const { call } = setUp(world, (id, hook) => `https://app.shinsa.dev/hooks/k3x9/${id}/${hook}`);
     const shown = await readJson(await call('GET', `/api/schedules/${schedule.id}/webhook`));
     const token = world.secrets.selectHook(schedule.id)?.token;
-    expect(shown.url).toBe(`https://shinsa.dev/app/hooks/k3x9/${schedule.id}/${token}`);
+    expect(shown.url).toBe(`https://app.shinsa.dev/hooks/k3x9/${schedule.id}/${token}`);
   });
 
   test('shows the URL and whether a secret is set, and sets or clears it', async () => {

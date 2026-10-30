@@ -1,41 +1,33 @@
 import * as React from 'react';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
-import { SettingsCard } from '@/components/settings/group.tsx';
-import { MachineList, useMachineRows } from '@/components/settings/machines.tsx';
 import { replaceConnection } from '@/lib/connection/socket.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { createFleetMember, listMachineRows } from '@/lib/remote/machines.ts';
 import { SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
-import { RemoteLoading } from './shell.tsx';
+import { RemoteHero, RemoteLoading } from './shell.tsx';
 
 type FleetState =
   | { kind: 'starting' }
-  | { kind: 'empty' }
+  | { kind: 'empty'; machines: string[] }
   | { kind: 'ready' }
   | { kind: 'failed'; title: string; message: string };
 
-function NoMachinePage() {
-  const { rows, failure, remove } = useMachineRows();
+function NoMachinePage({ machines }: { machines: string[] }) {
+  if (machines.length === 0)
+    return (
+      <section className='flex flex-col items-center gap-6 pt-4'>
+        <RemoteHero icon='IconMacbook' title='No Mac yet'>
+          Turn on remote access on the Mac that runs Shinsa: Settings, Remote access, Turn on. It shows up
+          here once you approve it.
+        </RemoteHero>
+      </section>
+    );
   return (
-    <section className='flex flex-col gap-4'>
-      <PageHeading
-        title='Add this browser to a Mac'
-        description='Your dashboard shows the tasks of every Mac this browser is added to. On a Mac, open Settings, Remote access, choose Add device and open its link here.'
-      />
-      {failure && (
-        <p role='alert' className='text-destructive text-xs'>
-          {failure}
-        </p>
-      )}
-      {rows ? (
-        <SettingsCard>
-          <MachineList rows={rows} onRemove={remove} />
-        </SettingsCard>
-      ) : (
-        <RemoteLoading label='Reading your Macs' />
-      )}
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon='IconKey1' title='Add this browser to your Mac'>
+        {`${machines.join(', ')} ${machines.length === 1 ? 'is' : 'are'} paired, but this browser has no key for ${machines.length === 1 ? 'it' : 'them'} yet. On the Mac, open Settings, Remote access, choose Add device and open its link here.`}
+      </RemoteHero>
     </section>
   );
 }
@@ -61,7 +53,7 @@ export function FleetApp({
         );
         if (!live) return;
         if (added.length === 0) {
-          setState({ kind: 'empty' });
+          setState({ kind: 'empty', machines: rows.map((row) => row.instance.name) });
           return;
         }
         let fleet: Fleet | null = null;
@@ -108,9 +100,15 @@ export function FleetApp({
     case 'starting':
       return shell(<RemoteLoading label='Connecting to your Macs' />);
     case 'empty':
-      return shell(<NoMachinePage />);
+      return shell(<NoMachinePage machines={state.machines} />);
     case 'failed':
-      return shell(<PageHeading title={state.title} description={state.message} />);
+      return shell(
+        <section className='flex flex-col items-center gap-6 pt-4'>
+          <RemoteHero icon='IconCircleX' tone='red' title={state.title}>
+            {state.message}
+          </RemoteHero>
+        </section>
+      );
     case 'ready':
       return children;
   }

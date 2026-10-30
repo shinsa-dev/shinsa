@@ -1164,25 +1164,25 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 
 ## Remote access
 
-Everything the engine, the web app and the Worker on shinsa.dev/app share for remote access is in
+Everything the engine, the web app and the Worker on app.shinsa.dev share for remote access is in
 `packages/core/src/remote/` (how it behaves is `docs/engine.md` → Remote access). It uses WebCrypto only, and key
 pairs and secrets come from the caller, so core stays free of randomness.
 
 **The wire contract** (`contract.ts`, append-only: a paired machine updates on its own schedule and the Worker deploys
 on merge, so a path or field is never renamed or removed, only optional fields added):
 
-| Path on shinsa.dev (`REMOTE_PATHS`, all under `REMOTE_APP_BASE`, `/app`) | Who calls it | What it does |
+| Path on app.shinsa.dev (`REMOTE_PATHS`) | Who calls it | What it does |
 | --- | --- | --- |
-| `POST /app/__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
-| `POST /app/__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
-| `GET /app/__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
-| `POST /app/__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port; a 401 means revoked |
-| `GET /app/__remote/session`, `/app/__remote/sign-in`, `POST /app/__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
-| `GET /app/__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
-| `/app/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
+| `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
+| `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
+| `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
+| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port; a 401 means revoked |
+| `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
+| `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
+| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
-`resolveTunnelHost`), `connectKey`. The enrollment link is `https://shinsa.dev/app/enroll#<instance>.<machine
+`resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
 key>.<secret>` (`resolveEnrollUrl`, `parseEnrollFragment`): everything after `#` stays in the browser.
 
 **Connect tokens** (`connect-token.ts`): `<payload>.<signature>`, base64url, the payload `{ i: instance, u: GitHub

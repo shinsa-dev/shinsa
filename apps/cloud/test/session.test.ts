@@ -5,18 +5,18 @@ import { createHarness, readJson } from './harness.ts';
 describe('signing in with GitHub', () => {
   test('sends you to GitHub with a state, and back to where you were with a session', async () => {
     const harness = createHarness();
-    const start = await harness.call('/app/__remote/sign-in?return=/app/pair?code=ABCD');
+    const start = await harness.call('/__remote/sign-in?return=/pair?code=ABCD');
     expect(start.status).toBe(302);
     const location = new URL(start.headers.get('location') ?? '');
     expect(location.origin + location.pathname).toBe('https://github.com/login/oauth/authorize');
     expect(location.searchParams.get('client_id')).toBe('client-id');
     expect(location.searchParams.get('redirect_uri')).toBe(
-      'https://shinsa.dev/app/__remote/sign-in/callback'
+      'https://app.shinsa.dev/__remote/sign-in/callback'
     );
     expect(start.headers.get('set-cookie')).toContain('HttpOnly; Secure; SameSite=Lax');
     const session = await harness.signIn('mona', 42);
     expect(session.length).toBeGreaterThan(20);
-    const answer = await readJson<RemoteSession>(await harness.call('/app/__remote/session', { session }));
+    const answer = await readJson<RemoteSession>(await harness.call('/__remote/session', { session }));
     expect(answer.user).toEqual({ id: '42', login: 'mona', avatarUrl: null });
   });
 
@@ -31,20 +31,20 @@ describe('signing in with GitHub', () => {
   test('keeps the return path on this site', async () => {
     const harness = createHarness();
     for (const unsafe of ['//evil.dev', 'https://evil.dev', '/\\evil.dev']) {
-      const start = await harness.call(`/app/__remote/sign-in?return=${encodeURIComponent(unsafe)}`);
-      expect(start.headers.get('set-cookie')).toMatch(/^__Secure-shinsa_oauth=[\w-]+\.%2Fapp%2F;/);
+      const start = await harness.call(`/__remote/sign-in?return=${encodeURIComponent(unsafe)}`);
+      expect(start.headers.get('set-cookie')).toMatch(/^__Secure-shinsa_oauth=[\w-]+\.%2F;/);
     }
   });
 
   test('refuses a callback whose state does not match, and says so on the page', async () => {
     const harness = createHarness();
-    const done = await harness.call('/app/__remote/sign-in/callback?code=x&state=forged', {
+    const done = await harness.call('/__remote/sign-in/callback?code=x&state=forged', {
       headers: { cookie: '__Secure-shinsa_oauth=real./' },
     });
     expect(done.status).toBe(302);
-    expect(done.headers.get('location')).toBe('/app/?sign_in_error=sign_in_failed');
-    const missing = await harness.call('/app/__remote/sign-in/callback?code=x&state=forged');
-    expect(missing.headers.get('location')).toBe('/app/?sign_in_error=sign_in_failed');
+    expect(done.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
+    const missing = await harness.call('/__remote/sign-in/callback?code=x&state=forged');
+    expect(missing.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
   });
 
   test('refuses when GitHub refuses the code or does not say who you are', async () => {
@@ -54,18 +54,18 @@ describe('signing in with GitHub', () => {
         ? new Response('not json', { status: 400 })
         : new Response('', { status: 599 })
     );
-    const start = await harness.call('/app/__remote/sign-in');
+    const start = await harness.call('/__remote/sign-in');
     const state = new URL(start.headers.get('location') ?? '').searchParams.get('state');
     const cookie = (start.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
-    const refused = await harness.call(`/app/__remote/sign-in/callback?code=x&state=${state}`, {
+    const refused = await harness.call(`/__remote/sign-in/callback?code=x&state=${state}`, {
       headers: { cookie },
     });
-    expect(refused.headers.get('location')).toBe('/app/?sign_in_error=sign_in_failed');
+    expect(refused.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
     harness.handlers.length = 0;
-    const unknown = await harness.call(`/app/__remote/sign-in/callback?code=nobody&state=${state}`, {
+    const unknown = await harness.call(`/__remote/sign-in/callback?code=nobody&state=${state}`, {
       headers: { cookie },
     });
-    expect(unknown.headers.get('location')).toBe('/app/?sign_in_error=sign_in_failed');
+    expect(unknown.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
   });
 
   test('lets in only the GitHub accounts on the list', async () => {
@@ -84,12 +84,12 @@ describe('signing in with GitHub', () => {
 
   test('says nobody is signed in without a session or with an expired one', async () => {
     const harness = createHarness();
-    expect(await readJson<RemoteSession>(await harness.call('/app/__remote/session'))).toEqual({
+    expect(await readJson<RemoteSession>(await harness.call('/__remote/session'))).toEqual({
       user: null,
     });
     const session = await harness.signIn();
     harness.clock.now += 31 * 24 * 60 * 60 * 1000;
-    expect(await readJson<RemoteSession>(await harness.call('/app/__remote/session', { session }))).toEqual({
+    expect(await readJson<RemoteSession>(await harness.call('/__remote/session', { session }))).toEqual({
       user: null,
     });
   });
@@ -97,13 +97,13 @@ describe('signing in with GitHub', () => {
   test('signs out only from this site, and forgets the session', async () => {
     const harness = createHarness();
     const session = await harness.signIn();
-    const crossSite = await harness.post('/app/__remote/sign-out', {}, { session, sameOrigin: false });
+    const crossSite = await harness.post('/__remote/sign-out', {}, { session, sameOrigin: false });
     expect(crossSite.status).toBe(403);
-    const out = await harness.post('/app/__remote/sign-out', {}, { session });
+    const out = await harness.post('/__remote/sign-out', {}, { session });
     expect(out.headers.get('set-cookie')).toContain('Max-Age=0');
-    expect(await readJson<RemoteSession>(await harness.call('/app/__remote/session', { session }))).toEqual({
+    expect(await readJson<RemoteSession>(await harness.call('/__remote/session', { session }))).toEqual({
       user: null,
     });
-    expect((await harness.post('/app/__remote/sign-out', {})).status).toBe(200);
+    expect((await harness.post('/__remote/sign-out', {})).status).toBe(200);
   });
 });

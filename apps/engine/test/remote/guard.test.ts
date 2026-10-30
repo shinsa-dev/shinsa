@@ -28,13 +28,13 @@ describe('the tunnel guard', () => {
     expect(route('/')).toBeNull();
   });
 
-  test('opens the channel only from shinsa.dev', () => {
+  test('opens the channel only from app.shinsa.dev', () => {
     expect(
-      resolveChannelOriginRefusal(request('/remote', { headers: { origin: 'https://shinsa.dev' } }))
+      resolveChannelOriginRefusal(request('/remote', { headers: { origin: 'https://app.shinsa.dev' } }))
     ).toBeNull();
     expect(
       resolveChannelOriginRefusal(request('/remote', { headers: { origin: 'https://evil.dev' } }))
-    ).toContain('shinsa.dev');
+    ).toContain('app.shinsa.dev');
     expect(resolveChannelOriginRefusal(request('/remote'))).not.toBeNull();
   });
 });

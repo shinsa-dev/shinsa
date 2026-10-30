@@ -11,8 +11,8 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 
 ## Decisions
 
-1. **One URL per login: `https://shinsa.dev/app`.** Everyone opens the same address and signs in. It is a path of
-   the site, not a subdomain: the site's Worker hands `/app` to the dashboard's Worker. Kanna gives each
+1. **One URL per login: `https://app.shinsa.dev`.** Everyone opens the same address and signs in. It is one fixed
+   subdomain with the app at its root, an origin of its own apart from the marketing site. Kanna gives each
    machine its own subdomain (`‹sub›.kanna.sh`); Shinsa never does. A machine's tunnel host exists only as plumbing
    the browser connects to after sign-in, never as an address you type or share.
 2. **Machines are a first-class part of one dashboard.** There is nothing to open: the dashboard is the same whether
@@ -21,7 +21,7 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    A new task runs on the Mac of the project you pick. Settings → Machines lists every Mac with its status and
    Remove.
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
-   that is what creates the instance and its tunnel. On shinsa.dev/app, GitHub sign-in shows your instances. An
+   that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
    instance belongs to one GitHub account and is never shared.
 4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
    named tunnel; no inbound port is ever opened.
@@ -32,13 +32,13 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    with keys only those two hold. A browser is trusted once, by scanning a QR the Mac shows; a GitHub account alone
    opens nothing.
 7. **Webhooks get a stable public URL through the hosted side**:
-   `https://shinsa.dev/app/hooks/‹instance›/‹schedule›/‹token›`, forwarded to the machine's tunnel. Outside
+   `https://app.shinsa.dev/hooks/‹instance›/‹schedule›/‹token›`, forwarded to the machine's tunnel. Outside
    services (Maple alerts, GitHub, Stripe) call it; the URL does not change when the tunnel does.
 
 ## The pieces
 
 ```
-browser on shinsa.dev/app ──HTTPS──► Worker (apps/cloud, D1)   sign-in, instances,
+browser on app.shinsa.dev ──HTTPS──► Worker (apps/cloud, D1)   sign-in, instances,
         │                                  │                    pairing, connect tokens,
         │ wss + connect token              │ Cloudflare API     webhooks, the web build
         ▼                                  ▼
@@ -48,16 +48,11 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 
 ## Risks
 
-- **The code's origin is trusted.** The web app's JavaScript comes from shinsa.dev/app through Cloudflare. Whoever
+- **The code's origin is trusted.** The web app's JavaScript comes from app.shinsa.dev through Cloudflare. Whoever
   controls that deploy, or Cloudflare acting against you, could serve code that sends keys away. Browser E2E cannot
   remove this; it protects against reading traffic, not against altered code. An installed app would.
-- **The dashboard shares its origin with the marketing site.** shinsa.dev/app and every page of shinsa.dev are one
-  origin, so a script running on any marketing page runs where the enrolled device keys (IndexedDB), the session
-  cookie's same-origin requests and `/app/__remote/instances/<id>/connect` are. The keys are non-extractable, so such a
-  script could not copy them out, but while the page is open it could use them to open a channel and act on your
-  Macs. So the marketing site stays static and first-party: no third-party script, analytics, embed or user content,
-  and its Worker runs only for `/download` and `/app` (`apps/marketing/CLAUDE.md`). Moving the dashboard to its own
-  origin (a subdomain) removes this risk, at the cost of the second URL you chose not to have.
+- **The dashboard has its own origin.** app.shinsa.dev is not shinsa.dev, so nothing the marketing site runs can
+  reach the enrolled device keys (IndexedDB), the session cookie or `/__remote/instances/<id>/connect`.
 - **A second public entry point.** The request class is decided once, first, from `cf-connecting-ip`, and every route
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.

@@ -32,11 +32,21 @@ async function readError(response: Response) {
     const message =
       typeof body.error?.message === 'string'
         ? body.error.message
-        : `shinsa.dev/app answered ${response.status}.`;
+        : `app.shinsa.dev answered ${response.status}.`;
     return new DashboardError(code, message, response.status);
   } catch {
-    return new DashboardError('failed', `shinsa.dev/app answered ${response.status}.`, response.status);
+    return new DashboardError('failed', `app.shinsa.dev answered ${response.status}.`, response.status);
   }
+}
+
+const SIGN_IN_ERRORS: Record<string, string> = {
+  sign_in_refused:
+    'This GitHub account cannot use this Shinsa. Sign in with the account your Mac is paired with.',
+  sign_in_failed: 'GitHub did not finish the sign-in. Try again.',
+};
+
+export function describeSignInError(code: string) {
+  return SIGN_IN_ERRORS[code] ?? 'Signing in did not work. Try again.';
 }
 
 export function resolveSignInUrl(returnPath: string) {
@@ -53,7 +63,7 @@ export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(i
         ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}),
       });
     } catch {
-      throw new DashboardError('offline', 'Couldn’t reach shinsa.dev/app.', 0);
+      throw new DashboardError('offline', 'Couldn’t reach app.shinsa.dev.', 0);
     }
     if (!response.ok) throw await readError(response);
     return (await response.json()) as T;

@@ -52,7 +52,8 @@ export async function respondSession(request: Request, world: CloudWorld) {
 }
 
 function resolveReturnPath(value: string | null) {
-  if (!value?.startsWith(REMOTE_PATHS.app) || value.includes('\\')) return REMOTE_PATHS.app;
+  if (!value?.startsWith(REMOTE_PATHS.app) || value.startsWith('//') || value.includes('\\'))
+    return REMOTE_PATHS.app;
   return value;
 }
 

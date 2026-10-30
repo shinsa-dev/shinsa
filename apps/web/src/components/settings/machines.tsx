@@ -12,7 +12,7 @@ import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 const MACHINES_DESCRIPTION =
   'Every Mac you turned remote access on for. The ones added in this browser share this one dashboard; each task shows its Mac. To add a browser, choose Add device in Settings, Remote access on that Mac.';
 
-export function MachineList({
+function MachineList({
   rows,
   onRemove,
 }: {
@@ -57,7 +57,7 @@ export function MachineList({
   );
 }
 
-export function useMachineRows() {
+function useMachineRows() {
   const services = React.useContext(RemoteServicesContext);
   const [rows, setRows] = React.useState<MachineRow[] | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);

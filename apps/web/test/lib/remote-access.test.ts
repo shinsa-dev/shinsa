@@ -23,7 +23,7 @@ describe('remote access words', () => {
         paired: false,
         pairing: {
           claimCode: 'K7PQ',
-          url: 'https://shinsa.dev/app/pair?code=K7PQ',
+          url: 'https://app.shinsa.dev/pair?code=K7PQ',
           expiresAt: NOW + 600_000,
         },
       }),
@@ -42,12 +42,12 @@ describe('remote access words', () => {
     expect(describeRemoteStatus(createRemoteSnapshot(), NOW)).toEqual({
       label: 'Connected',
       tone: 'green',
-      detail: 'Signed in as mona. Open it at shinsa.dev/app.',
+      detail: 'Signed in as mona. Open it at app.shinsa.dev.',
     });
     expect(describeRemoteStatus(createRemoteSnapshot({ owner: null, status: 'starting' }), NOW)).toEqual({
       label: 'Connecting',
       tone: 'amber',
-      detail: 'Signed in. Open it at shinsa.dev/app.',
+      detail: 'Signed in. Open it at app.shinsa.dev.',
     });
   });
 
@@ -72,7 +72,7 @@ describe('remote access words', () => {
 
   it('draws the link as a square QR code on white, one black cell per dark module', () => {
     const image = decodeURIComponent(
-      resolveQrImage('https://shinsa.dev/app/enroll#k3x9.key.secret').replace(
+      resolveQrImage('https://app.shinsa.dev/enroll#k3x9.key.secret').replace(
         'data:image/svg+xml;charset=utf-8,',
         ''
       )

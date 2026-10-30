@@ -8,7 +8,7 @@ import { createHarness } from './harness.ts';
 describe('the router', () => {
   test('serves the web app with a strict content security policy', async () => {
     const harness = createHarness();
-    const page = await harness.call('/app/tasks/LOC-1');
+    const page = await harness.call('/tasks/LOC-1');
     expect(await page.text()).toBe('asset /tasks/LOC-1');
     const policy = page.headers.get('content-security-policy') ?? '';
     expect(policy).toContain("script-src 'self'");
@@ -20,22 +20,12 @@ describe('the router', () => {
 
   test('refuses anything but GET outside the API and webhooks', async () => {
     const harness = createHarness();
-    expect((await harness.call('/app/tasks', { method: 'POST' })).status).toBe(405);
-  });
-
-  test('answers only under /app, sending the bare path to its folder', async () => {
-    const harness = createHarness();
-    const bare = await harness.call('/app?sign_in_error=x');
-    expect(bare.status).toBe(308);
-    expect(bare.headers.get('location')).toBe('/app/?sign_in_error=x');
-    expect((await harness.call('/')).status).toBe(404);
-    expect((await harness.call('/download')).status).toBe(404);
-    expect((await harness.call('/application')).status).toBe(404);
+    expect((await harness.call('/tasks', { method: 'POST' })).status).toBe(405);
   });
 
   test('answers 404 for an unknown endpoint or method under the API', async () => {
     const harness = createHarness();
-    expect((await harness.call('/app/__remote/nothing')).status).toBe(404);
+    expect((await harness.call('/__remote/nothing')).status).toBe(404);
     expect((await harness.call(REMOTE_PATHS.session, { method: 'POST' })).status).toBe(404);
   });
 
@@ -63,7 +53,7 @@ describe('the router', () => {
     });
     expect(failed.status).toBe(500);
     expect(await failed.json()).toEqual({
-      error: { code: 'server_error', message: 'Something went wrong on shinsa.dev/app. Try again.' },
+      error: { code: 'server_error', message: 'Something went wrong on app.shinsa.dev. Try again.' },
     });
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
@@ -73,7 +63,7 @@ describe('the router', () => {
     const harness = createHarness();
     const logged = spyOn(console, 'error').mockImplementation(() => undefined);
     harness.db.sqlite.exec('DROP TABLE instances');
-    expect((await harness.call('/app/hooks/a/b/c', { method: 'POST', body: 'x' })).status).toBe(500);
+    expect((await harness.call('/hooks/a/b/c', { method: 'POST', body: 'x' })).status).toBe(500);
     logged.mockRestore();
   });
 });
@@ -93,7 +83,7 @@ describe('the helpers', () => {
 
   test('reads the Worker’s settings with defaults', () => {
     expect(resolveCloudConfig({})).toEqual({
-      origin: 'https://shinsa.dev',
+      origin: 'https://app.shinsa.dev',
       githubClientId: '',
       githubClientSecret: '',
       cloudflareAccountId: '',

@@ -305,7 +305,7 @@ describe('startShinsa', () => {
     expect(codes).toEqual([75]);
   });
 
-  test('a paired Mac starts its tunnel to the engine and gives webhooks their shinsa.dev/app URL', async () => {
+  test('a paired Mac starts its tunnel to the engine and gives webhooks their app.shinsa.dev URL', async () => {
     const root = createTempDir();
     const config = createTestConfig(root);
     mkdirSync(config.dataDir, { recursive: true });
@@ -353,7 +353,7 @@ describe('startShinsa', () => {
     if (written?.type !== 'schedule.written') throw new Error('no schedule');
     const webhook = await fetch(`${shinsa.url}/api/schedules/${written.schedule.id}/webhook`);
     expect(((await webhook.json()) as { url: string }).url).toStartWith(
-      `${config.remoteOrigin}/app/hooks/k3x9/${written.schedule.id}/`
+      `${config.remoteOrigin}/hooks/k3x9/${written.schedule.id}/`
     );
   });
 

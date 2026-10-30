@@ -34,7 +34,6 @@ export {
   type PairView,
   parseEnrollFragment,
   parseRemoteHookPath,
-  REMOTE_APP_BASE,
   REMOTE_APP_ORIGIN,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,

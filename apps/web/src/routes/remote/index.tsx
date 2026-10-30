@@ -25,7 +25,10 @@ export function createRemoteServices(): RemoteServices {
 
 function resolveReturnPath(view: RemoteView) {
   if (view.kind === 'enroll') return REMOTE_PATHS.enrollPage;
-  return `${location.pathname}${location.search}`;
+  const search = new URLSearchParams(location.search);
+  search.delete('sign_in_error');
+  const query = search.toString();
+  return query ? `${location.pathname}?${query}` : location.pathname;
 }
 
 export function RemoteRoot({ services, app }: { services: RemoteServices; app: React.ReactNode }) {

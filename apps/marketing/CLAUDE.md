@@ -99,10 +99,9 @@ src/
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
-  worker/                   The Worker in front of the assets: index.ts hands /app to the remote dashboard (app.ts) and wires
-                            Cloudflare's globals and the R2 bucket into download.ts, which answers the download paths,
-                            and open.ts, which writes the open page's tab title from the query with HTMLRewriter (tested
-                            in test/worker/ at 100%,
+  worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
+                            into download.ts, which answers the download paths, and open.ts, which writes the open
+                            page's tab title from the query with HTMLRewriter (tested in test/worker/ at 100%,
                             `bun run test`)
 ```
 
@@ -135,7 +134,7 @@ key skill phrase, not a changed rule.
 
 It is served as `text/markdown; charset=utf-8`: Wrangler already types `.md` that way, and `public/_headers` says so
 for `/design.md` in case that ever changes (a static endpoint's own headers are not kept in a static build, and the
-Worker runs only for the download paths, `/app` and `/open`, which sets its own two headers). `bun run preview` (Astro's static server) sends `text/markdown` without the
+Worker runs only for the download paths and `/open`, which sets its own two headers). `bun run preview` (Astro's static server) sends `text/markdown` without the
 charset; `bunx wrangler dev` serves `dist` as production does.
 
 ## Rules
@@ -157,21 +156,9 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
 preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
 is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download`,
-`/download/*`, `/open`, `/app` and `/app/*` (`assets.run_worker_first`); every other request is a plain static asset
-hit. `bun run preview` serves `/open` without the Worker, so its tab keeps the generic title; `bunx wrangler dev`
+`/download/*` and `/open` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
+preview` serves `/open` without the Worker, so its tab keeps the generic title; `bunx wrangler dev`
 after a build shows it as production does.
-`/app` is the remote dashboard (`docs/engine.md` → Remote access). On `shinsa.dev` the `shinsa-cloud` Worker's own
-routes `shinsa.dev/app` and `shinsa.dev/app/*` answers it before this Worker runs; otherwise `src/worker/app.ts` hands it, as it came, to the
-`shinsa-cloud` Worker (`apps/cloud`) through the `CLOUD` service binding, sends `www.shinsa.dev/app` to
-`shinsa.dev/app`, and answers 503 while the binding is missing. Only the production deploy carries the binding: a
-preview has none (`previews` leaves it out), so a branch builds whether or not `shinsa-cloud` exists and its `/app`
-answers 503. `shinsa-cloud` must exist before this Worker deploys on `main` (a deploy naming a missing service fails),
-so deploy it before the change that adds the binding merges.
-
-The site shares its origin with the dashboard at `/app`, which keeps each browser's device keys and session there
-(`docs/plans/remote-plan.md` → Risks). So nothing on the site may run code from anywhere else: no third-party script,
-analytics, tag, embed or iframe, and no content a visitor or anyone outside the repository writes. The Worker runs only
-for `/download`, `/open` and `/app`.
 
 The downloads are served from Cloudflare R2, so they never wait on GitHub and have no request limit and no egress fee.
 The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in `wrangler.jsonc`), bound as

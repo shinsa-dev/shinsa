@@ -46,7 +46,7 @@ export function createSampleRemote(now: number) {
         devices: [],
         pairing: {
           claimCode: 'K7PQM2XD',
-          url: 'https://shinsa.dev/app/pair?code=K7PQM2XD',
+          url: 'https://app.shinsa.dev/pair?code=K7PQM2XD',
           expiresAt: now + 9 * 60_000,
         },
       },
@@ -69,7 +69,7 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
     createEnrollment: (name) =>
       Promise.resolve({
         name,
-        url: 'https://shinsa.dev/app/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
+        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
         expiresAt: now + 10 * 60_000,
       }),
   };

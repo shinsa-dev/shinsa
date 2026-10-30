@@ -12,7 +12,6 @@ import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
-  REMOTE_APP_BASE,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
   REMOTE_PATHS,
@@ -192,7 +191,7 @@ function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
 }
 
 function respondStatic(pathname: string) {
-  const relative = pathname.slice(REMOTE_APP_BASE.length).replace(/^\/+/, '');
+  const relative = pathname.replace(/^\/+/, '');
   const file = Bun.file(join(REMOTE_WEB, relative));
   if (relative && !relative.includes('..') && existsSync(join(REMOTE_WEB, relative)) && file.size > 0)
     return new Response(file);
@@ -206,11 +205,11 @@ function respondIndex(machines: Machine[]) {
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     ...machines.map((machine) => [
       `Add this browser to ${machine.name} (a fresh one-time link)`,
-      `/enroll/${machine.id}`,
+      `/__preview/enroll/${machine.id}`,
     ]),
     ['The merged dashboard of every Mac this browser was added to', REMOTE_PATHS.app],
-    ['All tasks, each with its Mac', `${REMOTE_APP_BASE}/tasks`],
-    ['Settings, with Machines', `${REMOTE_APP_BASE}/settings`],
+    ['All tasks, each with its Mac', '/tasks'],
+    ['Settings, with Machines', '/settings'],
     ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
     ...machines.map((machine) => [
       `${machine.name}'s own app on the Mac: Settings, Remote access`,
@@ -232,7 +231,7 @@ async function respondConnect(machine: Machine) {
     expiresAt,
   });
   return Response.json({
-    url: `ws://${HOST}:${PORT}/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
+    url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
     expiresAt,
   });
 }
@@ -302,14 +301,14 @@ async function main() {
     hostname: HOST,
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/') return respondIndex(machines);
-      const enroll = /^\/enroll\/([a-z]+)$/.exec(url.pathname);
+      if (url.pathname === '/__preview') return respondIndex(machines);
+      const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {
         const enrollment = await enrolling.remote.createEnrollment('This browser');
         return Response.redirect(enrollment.url, 302);
       }
-      const tunnel = /^\/tunnel\/([a-z]+)$/.exec(url.pathname);
+      const tunnel = /^\/__preview\/tunnel\/([a-z]+)$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {
         const token = url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '';
@@ -317,11 +316,8 @@ async function main() {
           return undefined;
         return new Response('Upgrade failed', { status: 400 });
       }
-      if (url.pathname.startsWith(`${REMOTE_APP_BASE}/__remote/`))
-        return respondDashboard(request, url, machines);
-      if (url.pathname === REMOTE_APP_BASE || url.pathname.startsWith(`${REMOTE_APP_BASE}/`))
-        return respondStatic(url.pathname);
-      return Response.redirect(`${ORIGIN}/`, 302);
+      if (url.pathname.startsWith('/__remote/')) return respondDashboard(request, url, machines);
+      return respondStatic(url.pathname);
     },
     websocket: {
       open: openUpstream,
@@ -336,7 +332,7 @@ async function main() {
       },
     },
   });
-  console.info(`Remote access preview: ${ORIGIN}/`);
+  console.info(`Remote access preview: ${ORIGIN}/__preview`);
   for (const machine of machines)
     console.info(`${machine.name}'s own app: http://${HOST}:${machine.port}/settings`);
 }

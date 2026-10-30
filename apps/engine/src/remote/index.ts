@@ -63,7 +63,12 @@ export interface RemoteOptions {
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
 
 export function resolveMachineName(name = hostname()) {
-  return name.replace(/\.local$/i, '') || 'Mac';
+  const bare = name.replace(/\.local$/i, '');
+  if (!bare) return 'Mac';
+  if (bare !== bare.toUpperCase()) return bare;
+  return bare
+    .toLowerCase()
+    .replace(/(^|[\s-])(\p{L})/gu, (_, gap: string, letter: string) => gap + letter.toUpperCase());
 }
 
 export async function openRemoteUrl(url: string, cwd: string) {
@@ -217,7 +222,7 @@ export class Remote {
     try {
       await this.control.requestRemoval(credentials.machineToken);
     } catch (error) {
-      log.warn('[Remote] shinsa.dev/app did not confirm the removal', { error: describeError(error) });
+      log.warn('[Remote] app.shinsa.dev did not confirm the removal', { error: describeError(error) });
     }
     this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, devices: [] }));
     this.#publish();

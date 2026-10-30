@@ -11,7 +11,7 @@ function createClient(answer: (path: string, init: RequestInit | undefined) => R
 }
 
 describe('the dashboard client', () => {
-  it('calls each route of shinsa.dev/app with the right method', async () => {
+  it('calls each route of app.shinsa.dev with the right method', async () => {
     const { client, calls } = createClient(() => Response.json({ ok: true }));
     await client.readSession();
     await client.listInstances();
@@ -21,13 +21,13 @@ describe('the dashboard client', () => {
     await client.approvePair('K7PQ');
     await client.signOut();
     expect(calls).toEqual([
-      { path: '/app/__remote/session', method: 'GET', body: undefined },
-      { path: '/app/__remote/instances', method: 'GET', body: undefined },
-      { path: '/app/__remote/instances/k3x9/connect', method: 'POST', body: '{}' },
-      { path: '/app/__remote/instances/k3x9/remove', method: 'POST', body: '{}' },
-      { path: '/app/__remote/pairs/K7PQ', method: 'GET', body: undefined },
-      { path: '/app/__remote/pairs/K7PQ/approve', method: 'POST', body: '{}' },
-      { path: '/app/__remote/sign-out', method: 'POST', body: '{}' },
+      { path: '/__remote/session', method: 'GET', body: undefined },
+      { path: '/__remote/instances', method: 'GET', body: undefined },
+      { path: '/__remote/instances/k3x9/connect', method: 'POST', body: '{}' },
+      { path: '/__remote/instances/k3x9/remove', method: 'POST', body: '{}' },
+      { path: '/__remote/pairs/K7PQ', method: 'GET', body: undefined },
+      { path: '/__remote/pairs/K7PQ/approve', method: 'POST', body: '{}' },
+      { path: '/__remote/sign-out', method: 'POST', body: '{}' },
     ]);
   });
 
@@ -47,7 +47,7 @@ describe('the dashboard client', () => {
     const odd = createClient(() => Response.json({ error: { code: 1 } }, { status: 500 }));
     await expect(odd.client.listInstances()).rejects.toMatchObject({
       code: 'failed',
-      message: 'shinsa.dev/app answered 500.',
+      message: 'app.shinsa.dev answered 500.',
     });
     const html = createClient(() => new Response('<html>', { status: 502 }));
     await expect(html.client.listInstances()).rejects.toMatchObject({ code: 'failed', status: 502 });
@@ -57,7 +57,7 @@ describe('the dashboard client', () => {
 
   it('builds the sign-in link back to where you were', () => {
     expect(decodeURIComponent(resolveSignInUrl('/pair?code=K7PQ'))).toBe(
-      '/app/__remote/sign-in?return=/pair?code=K7PQ'
+      '/__remote/sign-in?return=/pair?code=K7PQ'
     );
   });
 

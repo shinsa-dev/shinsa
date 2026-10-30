@@ -161,13 +161,13 @@ src/
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
 │                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
-│                        credentials, the enrolled devices), control.ts (ControlClient for shinsa.dev/app, RevokedError),
+│                        credentials, the enrolled devices), control.ts (ControlClient for app.shinsa.dev, RevokedError),
 │                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
 │                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
 │                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
 │                        enrollments.ts (one-time enrollment secrets, each for a named device), channel.ts
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
-│                        (Pairing: polling shinsa.dev/app until GitHub sign-in claims the instance), local-only.ts
+│                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)

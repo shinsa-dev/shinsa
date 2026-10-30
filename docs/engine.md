@@ -1731,7 +1731,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   (`/api/hooks/<id>/<token>`, `secrets.json`), outside the host guard so services can reach it. The token is
   created when the schedule is written (and for any webhook schedule without one, on every state change), so
   showing the URL never writes. With remote access on, the URL is the stable
-  `https://shinsa.dev/app/hooks/<instance>/<id>/<token>`, which reaches this machine through its tunnel (Remote
+  `https://app.shinsa.dev/hooks/<instance>/<id>/<token>`, which reaches this machine through its tunnel (Remote
   access, below). Otherwise it is this machine's own address (`http://<host>:<port>`, from `SHINSA_HOST` and
   `SHINSA_PORT` or `config.json`), which a service on the internet cannot reach as it is: turn on remote access, or
   run a tunnel of your own to that port and give the sender its address with the same `/api/hooks/<id>/<token>`
@@ -2275,19 +2275,18 @@ tools and T3's MCP toolkits.
 
 ## Remote access
 
-Reaching this machine from any browser at `https://shinsa.dev/app`, behind GitHub sign-in, end to end encrypted to
+Reaching this machine from any browser at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
 devices enrolled at the Mac. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
-core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on shinsa.dev/app that signs you in, pairs
+core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
 machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
-The dashboard shares the shinsa.dev origin with the marketing site, so that site stays static and first-party
-(`docs/plans/remote-plan.md` → Risks). The machine side is `apps/engine/src/remote/`:
+The dashboard has an origin of its own, apart from the marketing site on shinsa.dev. The machine side is `apps/engine/src/remote/`:
 
 - **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
-  on first use), the credentials shinsa.dev/app gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
+  on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
   `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, and the enrolled devices (public key, name,
   enrolled and last seen). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
 - **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
-  `SHINSA_REMOTE_ORIGIN` (shinsa.dev/app by default). A 401 to a call made with the machine token is `RevokedError`.
+  `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
 - **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
   `data/bin/cloudflared-<version>`, checked against its pinned SHA-256 before it is unpacked or made executable. The
   connector (`connector.ts`) runs `cloudflared tunnel --no-autoupdate run --url <engine URL>` with the tunnel token in
@@ -2303,8 +2302,8 @@ The dashboard shares the shinsa.dev origin with the marketing site, so that site
   stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
   before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
   `GET /remote`; everything else, and everything while remote access is off, is 404. `/remote` needs an Origin of
-  shinsa.dev/app (403) and a valid connect token in `?token=` (401): an HMAC with the connect key over the instance,
-  the GitHub user and an expiry at most 60 seconds out, minted by shinsa.dev/app. The token only keeps random traffic
+  app.shinsa.dev (403) and a valid connect token in `?token=` (401): an HMAC with the connect key over the instance,
+  the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
   off the endpoint; trust rests on the handshake.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
   enrolled is refused unless the hello carries a proof made with a live enrollment secret (`Enrollments`: 32 random
@@ -2315,18 +2314,18 @@ The dashboard shares the shinsa.dev origin with the marketing site, so that site
   routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
   handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
 - **Pairing** (`pairing.ts`, `Remote.startPairing`): Settings → Remote access → Turn on, or `shinsa remote pair`,
-  makes the machine's key if it has none, asks shinsa.dev/app for a claim code with the machine's name (its host name
-  without `.local`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
+  makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
+  without `.local`, an all-capitals one such as `MAC` written `Mac`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
   where you sign in with GitHub and approve. The engine polls every 2 seconds with a poll secret that never leaves it,
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
   `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired Mac is refused
   (`remote_paired`): remove it first.
 - **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
   secret for a named device (60 characters at most) and answers its link,
-  `https://shinsa.dev/app/enroll#<instance>.<machine key>.<secret>`; the device it enrolls takes that name. `shinsa
+  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>`; the device it enrolls takes that name. `shinsa
   remote forget-device <key>` removes one.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
-  channel, keeping the pairing; `enable` starts it again; `remove` tells shinsa.dev/app (a failure there is only
+  channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired Mac (`remote_not_paired`).
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): the Mac's name and status (Off, Waiting for sign-in with the code and Open
@@ -2346,16 +2345,15 @@ The dashboard shares the shinsa.dev origin with the marketing site, so that site
   programs, opening a task on the Mac and restarting the engine; terminals and services are refused even to read.
   Everything else, closing gates included, is you, as on the Mac.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
-  `https://shinsa.dev/app/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
-  `hookUrl`), which shinsa.dev/app forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
+  `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
+  `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
   machine's own address, as before.
 - **The hosted web app** (`apps/web/src/lib/remote/`, `routes/remote/`; `bun run --cwd apps/web build:remote` writes
-  `apps/web/dist-remote` with the base path `/app/`, which `apps/cloud` serves): the same web app built with
-  `VITE_SHINSA_REMOTE=1`, on `https://shinsa.dev/app`. `apps/cloud` owns the routes `shinsa.dev/app` and `shinsa.dev/app/*`, which runs
-  before the marketing Worker's custom domain, and the marketing Worker also hands `/app` to it through a service
-  binding (`apps/marketing/src/worker/app.ts`), so there is one origin and no subdomain; `www.shinsa.dev/app` redirects there. Its own pages are sign in with GitHub, the pairing approval
-  (`/app/pair?code=`: the machine's name and key fingerprint to compare with Settings) and adding this browser
-  (`/app/enroll#…`: the fragment is kept in `sessionStorage` through the GitHub sign-in and taken out of the address
+  `apps/web/dist-remote`, which `apps/cloud` serves): the same web app built with `VITE_SHINSA_REMOTE=1`, at the root
+  of `https://app.shinsa.dev`, the custom domain of `apps/cloud`. Its own pages are sign in with GitHub (a failed
+  sign-in's code said in words), the pairing approval
+  (`/pair?code=`: the machine's name and key fingerprint to compare with Settings) and adding this browser
+  (`/enroll#…`: the fragment is kept in `sessionStorage` through the GitHub sign-in and taken out of the address
   bar at once). Adding a browser makes a P-256 key pair that cannot be exported, kept in IndexedDB (`shinsa-remote`)
   with the machine key pinned from the link, and proves the one-time secret in its first handshake.
 - **One dashboard over every Mac** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every Mac
@@ -2367,7 +2365,7 @@ The dashboard shares the shinsa.dev origin with the marketing site, so that site
   (`resolveCommandOwner`), a request to the Mac that owns an id in its path or query (`resolveRequestOwner`), a
   transcript to the Mac of its run; the rest goes to the first Mac. With more than one Mac, a task shows its Mac in
   its facts row and on the roadmap, and the new-task project picker names each project's Mac, so picking a project
-  picks the Mac a new task runs on (no project: the first Mac). A service worker (`/app/sw.js`, scope `/app/`, from
+  picks the Mac a new task runs on (no project: the first Mac). A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right Mac and streams the answer back (`relay.ts`). A dropped channel closes that Mac's socket and
   its connection's retry opens a fresh channel with a new token. A Mac that refuses this browser's key is forgotten
@@ -4232,7 +4230,7 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  serve.pid and serve.log (The agent loop → Compaction and fast mode)
     ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
     │                  the log)
-    ├── remote.json    Remote access: the machine's key, its credentials from shinsa.dev/app and the enrolled devices
+    ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
     │                  (mode 600; never in the log; Remote access, above)
     ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
@@ -4248,7 +4246,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
   directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
   command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_REMOTE_ORIGIN` points remote access at
-  another shinsa.dev/app (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
+  another app.shinsa.dev (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.

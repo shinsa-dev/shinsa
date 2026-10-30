@@ -18,20 +18,20 @@ describe('the remote page’s mode', () => {
     expect(isRemoteBuild()).toBe(false);
   });
 
-  it('shows the pair page, the enroll page, or the one dashboard of every Mac, all under /app', () => {
-    expect(resolveRemoteView({ pathname: '/app/pair', search: '?code=K7PQ' })).toEqual({
+  it('shows the pair page, the enroll page, or the one dashboard of every Mac, all at the root', () => {
+    expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ' })).toEqual({
       kind: 'pair',
       claimCode: 'K7PQ',
     });
-    expect(resolveRemoteView({ pathname: '/app/pair', search: '' })).toEqual({
+    expect(resolveRemoteView({ pathname: '/pair', search: '' })).toEqual({
       kind: 'pair',
       claimCode: null,
     });
-    expect(resolveRemoteView({ pathname: '/app/enroll', search: '' })).toEqual({ kind: 'enroll' });
-    expect(resolveRemoteView({ pathname: '/app/tasks/LOC-1', search: '' })).toEqual({ kind: 'app' });
-    expect(resolveRemoteView({ pathname: '/app/', search: '' })).toEqual({ kind: 'app' });
-    expect(SERVICE_WORKER_PATH).toBe('/app/sw.js');
-    expect(SERVICE_WORKER_SCOPE).toBe('/app/');
+    expect(resolveRemoteView({ pathname: '/enroll', search: '' })).toEqual({ kind: 'enroll' });
+    expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: '/', search: '' })).toEqual({ kind: 'app' });
+    expect(SERVICE_WORKER_PATH).toBe('/sw.js');
+    expect(SERVICE_WORKER_SCOPE).toBe('/');
   });
 
   it('keeps an enrollment link through the GitHub sign-in, and only a valid one', () => {

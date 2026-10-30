@@ -16,7 +16,7 @@ function start() {
 }
 
 describe('the control-plane client', () => {
-  test('defaults to shinsa.dev/app', () => {
+  test('defaults to app.shinsa.dev', () => {
     expect(new ControlClient().origin).toBe(REMOTE_APP_ORIGIN);
   });
 

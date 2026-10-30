@@ -5,10 +5,10 @@ import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Logo } from '@shinsa/ui/components/logo';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
+import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { TONE_SURFACE, type Tone } from '@/lib/format/tone.ts';
-import { type DashboardClient, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
+import { type DashboardClient, describeSignInError, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
 
 export function RemoteShell({
   session,
@@ -55,22 +55,54 @@ export function RemoteLoading({ label }: { label: string }) {
   );
 }
 
+const SIGN_IN_POINTS: { icon: IconName; title: string; detail: string }[] = [
+  {
+    icon: 'IconMacbook',
+    title: 'Every Mac in one place',
+    detail: 'Each Mac you turn remote access on for shows up here, with all its tasks.',
+  },
+  {
+    icon: 'IconShieldCheck',
+    title: 'Encrypted end to end',
+    detail: 'Only your Mac and the browsers you add on it can read your work.',
+  },
+  {
+    icon: 'IconKey1',
+    title: 'Added once per browser',
+    detail: 'The first time, your Mac gives this browser its own key.',
+  },
+];
+
 export function SignInPrompt({ returnPath, error }: { returnPath: string; error: string | null }) {
   return (
-    <section className='flex flex-col gap-4'>
-      <PageHeading
-        title='Sign in to reach your Mac'
-        description='Use the GitHub account you paired your Mac with. Each browser also has to be added on the Mac once before it can open anything.'
-      />
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
+        Reach the Shinsa on your Mac from any browser. Use the GitHub account you paired your Mac with.
+      </RemoteHero>
+      <SettingsCard className='w-full'>
+        {SIGN_IN_POINTS.map((point) => (
+          <div key={point.title} className='flex gap-3 px-2.5 py-2'>
+            <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
+            <div className='flex min-w-0 flex-col gap-px'>
+              <span className='text-fg-4 text-xs'>{point.title}</span>
+              <span className='text-pretty text-2xs text-fg-2'>{point.detail}</span>
+            </div>
+          </div>
+        ))}
+      </SettingsCard>
       {error && (
-        <p role='alert' className='text-destructive text-xs'>
-          Signing in did not work ({error}). Try again.
+        <p role='alert' className='w-full text-pretty text-destructive text-xs'>
+          {describeSignInError(error)}
         </p>
       )}
-      <div className='flex'>
-        <Button nativeButton={false} render={<a href={resolveSignInUrl(returnPath)} />}>
+      <div className='flex w-full flex-col items-center gap-2'>
+        <Button className='w-full' nativeButton={false} render={<a href={resolveSignInUrl(returnPath)} />}>
+          <Icon name='IconGithub' />
           Sign in with GitHub
         </Button>
+        <p className='text-center text-2xs text-fg-2'>
+          No Mac yet? Open Shinsa on your Mac, then Settings, Remote access, and turn it on.
+        </p>
       </div>
     </section>
   );

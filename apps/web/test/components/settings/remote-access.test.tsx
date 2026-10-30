@@ -6,7 +6,7 @@ import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 
-const ENROLL_URL = 'https://shinsa.dev/app/enroll#k3x9.machine-key.secret_1';
+const ENROLL_URL = 'https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1';
 
 function createActions() {
   const snapshot = () => Promise.resolve(createRemoteSnapshot());
@@ -57,14 +57,14 @@ describe('Settings → Remote access', () => {
         paired: false,
         pairing: {
           claimCode: 'K7PQ',
-          url: 'https://shinsa.dev/app/pair?code=K7PQ',
+          url: 'https://app.shinsa.dev/pair?code=K7PQ',
           expiresAt: Date.now() + 1e5,
         },
       })
     );
     expect(screen.getByText('Waiting for sign-in')).toBeTruthy();
     expect(screen.getByText('Open sign-in').closest('a')?.getAttribute('href')).toBe(
-      'https://shinsa.dev/app/pair?code=K7PQ'
+      'https://app.shinsa.dev/pair?code=K7PQ'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(actions.cancelPairing).toHaveBeenCalled());
@@ -80,13 +80,13 @@ describe('Settings → Remote access', () => {
     await waitFor(() => expect(connected.remove).toHaveBeenCalled());
   });
 
-  it('offers Resume when paused, and neither when shinsa.dev/app removed the Mac', async () => {
+  it('offers Resume when paused, and neither when app.shinsa.dev removed the Mac', async () => {
     const paused = renderGroup(createRemoteSnapshot({ enabled: false }));
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(paused.resume).toHaveBeenCalled());
   });
 
-  it('when removed at shinsa.dev/app, offers only Remove and no new devices', () => {
+  it('when removed at app.shinsa.dev, offers only Remove and no new devices', () => {
     renderGroup(createRemoteSnapshot({ status: 'revoked' }));
     expect(screen.getByText('Removed')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();

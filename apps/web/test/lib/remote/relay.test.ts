@@ -28,11 +28,15 @@ function createPage(respond: (request: Request) => Promise<Response>) {
 
 describe('the service worker relay', () => {
   it('relays only this site’s /api requests', () => {
-    expect(isRelayedRequest(new Request('https://shinsa.dev/api/tasks'), 'https://shinsa.dev')).toBe(true);
-    expect(isRelayedRequest(new Request('https://shinsa.dev/app/assets/a.js'), 'https://shinsa.dev')).toBe(
+    expect(isRelayedRequest(new Request('https://app.shinsa.dev/api/tasks'), 'https://app.shinsa.dev')).toBe(
+      true
+    );
+    expect(
+      isRelayedRequest(new Request('https://app.shinsa.dev/assets/a.js'), 'https://app.shinsa.dev')
+    ).toBe(false);
+    expect(isRelayedRequest(new Request('https://other.dev/api/tasks'), 'https://app.shinsa.dev')).toBe(
       false
     );
-    expect(isRelayedRequest(new Request('https://other.dev/api/tasks'), 'https://shinsa.dev')).toBe(false);
   });
 
   it('hands a request to the page and streams the page’s answer back', async () => {
@@ -151,20 +155,18 @@ describe('starting the service worker', () => {
 
   it('registers it for the dashboard’s path and goes on at once when it already controls the page', async () => {
     const { container, registered } = createContainer(true);
-    await startServiceWorker(container as unknown as ServiceWorkerContainer, '/app/sw.js', '/app/');
-    expect(registered).toEqual(['/app/sw.js /app/']);
+    await startServiceWorker(container as unknown as ServiceWorkerContainer, '/sw.js', '/');
+    expect(registered).toEqual(['/sw.js /']);
   });
 
   it('waits for it to take control of a page it does not control yet', async () => {
     const { container, target } = createContainer(false);
     let started = false;
-    const starting = startServiceWorker(
-      container as unknown as ServiceWorkerContainer,
-      '/app/sw.js',
-      '/app/'
-    ).then(() => {
-      started = true;
-    });
+    const starting = startServiceWorker(container as unknown as ServiceWorkerContainer, '/sw.js', '/').then(
+      () => {
+        started = true;
+      }
+    );
     await Bun.sleep(1);
     expect(started).toBe(false);
     target.dispatchEvent(new Event('controllerchange'));

@@ -35,17 +35,17 @@ describe('shinsa remote', () => {
     expect(off.text).toContain('`shinsa remote pair`');
     const pairing = {
       ...OFF,
-      pairing: { claimCode: 'K7PQ', url: 'https://shinsa.dev/app/pair', expiresAt: 1 },
+      pairing: { claimCode: 'K7PQ', url: 'https://app.shinsa.dev/pair', expiresAt: 1 },
     };
     const started = await runSpec(createFakeClient({ '/api/remote/pair': pairing }), ['remote', 'pair']);
     expect(started.text).toBe(
-      'Pairing Studio: finish signing in at https://shinsa.dev/app/pair (code K7PQ).'
+      'Pairing Studio: finish signing in at https://app.shinsa.dev/pair (code K7PQ).'
     );
     const on = await runSpec(createFakeClient({ '/api/remote': ON }), ['remote', 'status']);
     expect(on.text).toBe(
       [
         'Remote access is connected for Studio, signed in as mona.',
-        'Open it at https://shinsa.dev/app.',
+        'Open it at https://app.shinsa.dev.',
         'Enrolled devices:',
         '  iPhone (last used 2026-10-30T00:00:00.000Z) dev-1',
         '  iPad (never used) dev-2',
@@ -65,7 +65,7 @@ describe('shinsa remote', () => {
       '/api/remote/remove': OFF,
       '/api/remote/devices/remove': ON,
       '/api/remote/devices/enroll': {
-        url: 'https://shinsa.dev/app/enroll#k3x9.key.secret',
+        url: 'https://app.shinsa.dev/enroll#k3x9.key.secret',
         name: 'iPhone',
         expiresAt: 1,
       },
@@ -75,7 +75,7 @@ describe('shinsa remote', () => {
     await runSpec(fake, ['remote', 'forget-device', 'dev-1']);
     const enrolled = await runSpec(fake, ['remote', 'enroll', 'iPhone']);
     expect(enrolled.text).toBe(
-      'Open this link on iPhone within 10 minutes. It works once:\nhttps://shinsa.dev/app/enroll#k3x9.key.secret'
+      'Open this link on iPhone within 10 minutes. It works once:\nhttps://app.shinsa.dev/enroll#k3x9.key.secret'
     );
     expect(fake.posts).toEqual([
       { path: '/api/remote/enable', body: {} },

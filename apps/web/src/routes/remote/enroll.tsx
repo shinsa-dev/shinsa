@@ -2,7 +2,6 @@ import { REMOTE_PATHS, resolveKeyFingerprint } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import * as React from 'react';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
@@ -48,16 +47,19 @@ export function EnrollPage({
   }, [link]);
   if (!link)
     return (
-      <section className='flex flex-col gap-4'>
-        <PageHeading
-          title='This link cannot add a browser'
-          description='It is incomplete or was already used. On your Mac, open Settings, Remote access and choose Add device for a new one.'
-        />
-        <div className='flex'>
-          <Button nativeButton={false} variant='outline' render={<a href={REMOTE_PATHS.app} />}>
-            Open Shinsa
-          </Button>
-        </div>
+      <section className='flex flex-col items-center gap-6 pt-4'>
+        <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a browser'>
+          It is incomplete or was already used. On your Mac, open Settings, Remote access and choose Add
+          device for a new one.
+        </RemoteHero>
+        <Button
+          className='w-full'
+          variant='secondary'
+          nativeButton={false}
+          render={<a href={REMOTE_PATHS.app} />}
+        >
+          Open Shinsa
+        </Button>
       </section>
     );
   return (

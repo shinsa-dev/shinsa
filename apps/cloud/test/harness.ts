@@ -148,10 +148,10 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
   async function signIn(login = 'mona', id = 42) {
     const code = `code-${login}-${id}`;
     GITHUB_USERS.set(code, { id, login });
-    const start = await call('/app/__remote/sign-in?return=/app/');
+    const start = await call('/__remote/sign-in?return=/');
     const state = new URL(start.headers.get('location') ?? '').searchParams.get('state') ?? '';
     const oauth = (start.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
-    const done = await call(`/app/__remote/sign-in/callback?code=${code}&state=${state}`, {
+    const done = await call(`/__remote/sign-in/callback?code=${code}&state=${state}`, {
       headers: { cookie: oauth },
     });
     const cookie =
