@@ -1,4 +1,5 @@
 import { ChartTooltip } from '@shinsa/ui/components/chart-tooltip';
+import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { listChartTicks, resolveNearestIndex, resolvePointShare } from '@/lib/stats/chart.ts';
@@ -25,7 +26,7 @@ export function ChartPanel({
   return (
     <div className={cn(STAT_PANEL, 'flex min-w-0 flex-col gap-3 px-3 pt-2.5 pb-2')}>
       <div className='flex min-h-5 items-center justify-between gap-3'>
-        <span className='truncate font-medium text-fg-4 text-xs'>{title}</span>
+        <Truncate className='font-medium text-fg-4 text-xs'>{title}</Truncate>
         {aside && <span className='flex shrink-0 items-center gap-3 text-2xs text-fg-2'>{aside}</span>}
       </div>
       {children}

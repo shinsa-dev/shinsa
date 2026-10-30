@@ -53,7 +53,6 @@ export function ShippingGraph({ year }: { year: Stats }) {
   const grid = React.useMemo(() => resolveShippingGrid(year.days), [year.days]);
   const [hovered, setHovered] = React.useState<HoveredCell | null>(null);
   const board = React.useRef<HTMLDivElement>(null);
-  const today = year.days.at(-1)?.day;
   const columns = {
     gap: CELL_GAP,
     gridTemplateColumns: `2rem repeat(${grid.weeks.length}, minmax(0, 1fr))`,
@@ -108,7 +107,6 @@ export function ShippingGraph({ year }: { year: Stats }) {
                 className={cn(
                   'aspect-square rounded-xs',
                   cell ? LEVEL_FILL[cell.level] : 'invisible',
-                  cell?.day === today && 'ring-1 ring-fg-4',
                   cell && hovered?.cell.day === cell.day && 'ring-1 ring-fg-4'
                 )}
                 onPointerEnter={cell ? (event) => show(cell, event.currentTarget) : undefined}
