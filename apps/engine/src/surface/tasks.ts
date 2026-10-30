@@ -128,6 +128,7 @@ async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['r
     ...(await buildProjectChoice(client, values)),
     ...(values.priority ? { priority: values.priority as (typeof TASK_PRIORITIES)[number] } : {}),
     ...(values.planFirst ? { planFirst: true } : {}),
+    ...(values.backlog ? { backlog: true } : {}),
     ...(values.ask ? { mode: 'ask' as const } : {}),
     ...(waitsOn.length > 0 ? { waitsOn } : {}),
     ...(forkOf ? { forkOf } : {}),
@@ -242,6 +243,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
         name: 'planFirst',
         kind: 'boolean',
         description: 'Wait for you to approve the plan before building.',
+      },
+      {
+        name: 'backlog',
+        kind: 'boolean',
+        description: 'Plan it now and keep it in the backlog until you start building it.',
       },
       {
         name: 'ask',
@@ -495,6 +501,28 @@ export const TASK_SPECS: SurfaceSpec[] = [
       waitsOn: [],
     }),
     done: () => 'It no longer waits on other tasks.',
+  }),
+  defineCommand({
+    path: ['tasks', 'move-to-backlog'],
+    summary: 'Keep a task in the backlog: its plan waits there until you start building it.',
+    command: 'task.move_to_backlog',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.move_to_backlog',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Moved to the backlog.',
+  }),
+  defineCommand({
+    path: ['tasks', 'remove-from-backlog'],
+    summary: 'Take a task out of the backlog: its plan waits for you in Needs you.',
+    command: 'task.remove_from_backlog',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.remove_from_backlog',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Moved back to Needs you.',
   }),
   defineCommand({
     path: ['tasks', 'bind'],

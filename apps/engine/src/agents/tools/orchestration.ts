@@ -169,6 +169,11 @@ export const ORCHESTRATION_TOOL_SPECS = {
           description:
             'The new task waits until this one is finished (merged, or done when it ships no pull request), then starts.',
         },
+        backlog: {
+          type: 'boolean',
+          description:
+            'The new task triages and plans, then waits in the human’s backlog until they start building it. Only when the human asked to keep it for later.',
+        },
         client_request_id: CLIENT_REQUEST_ID,
       },
       required: ['request'],
@@ -402,6 +407,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,
+      backlog: request.backlog,
     },
     resolveCommandId(call, 'create_task', request.requestKey)
   );

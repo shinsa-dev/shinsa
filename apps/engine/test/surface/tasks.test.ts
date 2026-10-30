@@ -275,6 +275,12 @@ describe('tasks create', () => {
     ]);
   });
 
+  test('--backlog creates a task that plans and waits in the backlog', async () => {
+    const fake = createFakeClient(TASKS);
+    await runSpec(fake, ['tasks', 'create', 'add search', '--backlog']);
+    expect(fake.sent).toEqual([{ type: 'task.create', request: 'add search', repoId: null, backlog: true }]);
+  });
+
   test('an unknown repository or account is refused before anything is sent', async () => {
     const fake = createFakeClient(TASKS);
     await expect(runSpec(fake, ['tasks', 'create', 'x', '--repo', 'web'])).rejects.toThrow(
@@ -347,6 +353,16 @@ describe('the task commands', () => {
       ['tasks', 'stop-waiting', 'fix'],
       { type: 'task.wait_on', taskId: 'task-123', waitsOn: [] },
       'It no longer waits on other tasks.',
+    ],
+    [
+      ['tasks', 'move-to-backlog', 'fix'],
+      { type: 'task.move_to_backlog', taskId: 'task-123' },
+      'Moved to the backlog.',
+    ],
+    [
+      ['tasks', 'remove-from-backlog', 'fix'],
+      { type: 'task.remove_from_backlog', taskId: 'task-123' },
+      'Moved back to Needs you.',
     ],
     [
       ['tasks', 'bind', 'fix', 'any'],
