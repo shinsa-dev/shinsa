@@ -3,6 +3,7 @@ import type { Task, TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
@@ -360,5 +361,21 @@ describe('the checks fact', () => {
     );
     expect(screen.getByText('#9')).toBeTruthy();
     expect(screen.queryByText(/checks? passed|Running/)).toBeNull();
+  });
+});
+
+describe('the pull request fact', () => {
+  it('colours the number in the pull request’s tone, red while its checks fail', () => {
+    const view = renderFacts(
+      createTask({
+        id: 't',
+        handle: 'SW-7',
+        pullRequest: createPullRequest({ number: 43, checks: 'failing' }),
+      })
+    );
+    expect(screen.getByText('#43').className).toContain(TONE_TEXT.red);
+    view.unmount();
+    renderFacts(createTask({ id: 't', handle: 'SW-7', pullRequest: createPullRequest({ number: 43 }) }));
+    expect(screen.getByText('#43').className).toContain(TONE_TEXT.green);
   });
 });
