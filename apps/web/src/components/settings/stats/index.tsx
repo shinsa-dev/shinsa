@@ -1,7 +1,8 @@
-import { MINUTE_MS, resolveStats, type ShinsaState } from '@shinsa/core';
+import { MINUTE_MS, resolveProjectStatsSource, resolveStats, type ShinsaState } from '@shinsa/core';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
+import { selectFocus } from '@/lib/focus.ts';
 import {
   DEFAULT_STATS_RANGE,
   parseDayKey,
@@ -47,24 +48,34 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
   const [range] = useStatsRange();
   const minute = useMinute();
   const day = resolveDayKey(minute * MINUTE_MS);
+  const focus = selectFocus(state);
+  const projectId = focus?.id ?? null;
+  const source = React.useMemo(
+    () => resolveProjectStatsSource(state, projectId),
+    [state.tasks, state.runs, state.repos, projectId]
+  );
   const year = React.useMemo(
-    () => resolveStats(state, resolveYearWindow(parseDayKey(day).getTime())),
-    [state.tasks, state.runs, day]
+    () => resolveStats(source, resolveYearWindow(parseDayKey(day).getTime())),
+    [source, day]
   );
   const stats = React.useMemo(
     () =>
-      resolveStats(state, resolveStatsWindow(parseDayKey(day).getTime(), range, resolveFirstActivity(state))),
-    [state.tasks, state.runs, day, range]
+      resolveStats(
+        source,
+        resolveStatsWindow(parseDayKey(day).getTime(), range, resolveFirstActivity(source))
+      ),
+    [source, day, range]
   );
+  const scope = focus && <span className='font-normal'>Only {focus.name}, the project in focus</span>;
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';
   return (
     <>
-      <SettingsGroup title={SHIPPING_SECTION} className='gap-1.5'>
+      <SettingsGroup title={SHIPPING_SECTION} action={scope} className='gap-1.5'>
         <StatTiles tiles={listShippingTiles(stats, year)} />
         <ShippingGraph year={year} />
         <ShippingChart days={stats.days} aside={rangeLabel} />
       </SettingsGroup>
-      <SettingsGroup title={USAGE_SECTION} className='gap-1.5'>
+      <SettingsGroup title={USAGE_SECTION} action={scope} className='gap-1.5'>
         <StatTiles tiles={listUsageTiles(stats)} />
         <UsageChart days={stats.days} />
         <div className='grid gap-1.5 md:grid-cols-3'>

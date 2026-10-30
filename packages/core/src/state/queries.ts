@@ -113,7 +113,7 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
   return false;
 }
 
-export function resolveTaskProject(state: ShinsaState, task: Task) {
+export function resolveTaskProject(state: Pick<ShinsaState, 'repos'>, task: Task) {
   if (task.projectId) return task.projectId;
   if (!task.repoId) return null;
   return state.repos[task.repoId]?.projectId ?? null;
