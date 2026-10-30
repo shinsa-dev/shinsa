@@ -163,7 +163,29 @@ describe('reacting to the pull request', () => {
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('failure');
     expect(gate.body).toBe(
-      'The same problems came back after 2 fix rounds. Steer the agent in the chat, or retry.'
+      'The pull request’s failing checks, open threads or conflict came back after 2 fix rounds. Steer the agent in the chat, or retry.'
+    );
+  });
+
+  test('a conflict that stays while its fixes change nothing names the conflict when it stops', () => {
+    const { harness, taskId } = shipping();
+    for (let round = 0; round < 4; round += 1) {
+      harness.send({
+        type: 'pull_request.record',
+        taskId,
+        pullRequest: pullRequest({ mergeable: false, checks: 'pending', headSha: `head-${round}` }),
+      });
+      if (harness.task(taskId).stage !== 'fixing') break;
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'Tried.',
+        treeHash: 'same-tree',
+      });
+      pushed(harness, taskId);
+    }
+    expect(harness.openGate(taskId).body).toBe(
+      'The conflict with the base branch came back after 2 fix rounds. Steer the agent in the chat, or retry.'
     );
   });
 
