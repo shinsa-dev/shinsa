@@ -4,6 +4,7 @@ import {
   describeReference,
   isReferenceHref,
   resolveCatalog,
+  resolveReferenceRepo,
   selectBranchTask,
   selectPullRequestTask,
   selectRepo,
@@ -85,10 +86,27 @@ describe('selectPullRequestTask', () => {
     expect(selectPullRequestTask(state, 'app', 30, null)).toBeNull();
   });
 
-  it('falls back to the scoped task when the number alone is ambiguous', () => {
+  it('takes a reference with no repository in the scoped task’s repository', () => {
     expect(selectPullRequestTask(state, null, 12, null)).toBeNull();
     expect(selectPullRequestTask(state, null, 12, 'in-web')?.id).toBe('in-web');
     expect(selectPullRequestTask(state, null, 12, 'no-repo')).toBeNull();
+    expect(selectPullRequestTask(state, null, 30, 'in-app')).toBeNull();
+  });
+});
+
+describe('resolveReferenceRepo', () => {
+  const repos = [createRepo({ id: 'app', name: 'app' })];
+  const inApp = createTask({ id: 'in-app', repoId: 'app' });
+  const noRepo = createTask({ id: 'no-repo' });
+  const lost = createTask({ id: 'lost', repoId: 'gone' });
+  const state = createShinsaState({ tasks: [inApp, noRepo, lost], repos });
+
+  it('names the scoped task’s repository, or none', () => {
+    expect(resolveReferenceRepo(state, 'in-app')).toBe('app');
+    expect(resolveReferenceRepo(state, 'no-repo')).toBeNull();
+    expect(resolveReferenceRepo(state, 'lost')).toBeNull();
+    expect(resolveReferenceRepo(state, 'missing')).toBeNull();
+    expect(resolveReferenceRepo(state, null)).toBeNull();
   });
 });
 
