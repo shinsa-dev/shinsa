@@ -1350,6 +1350,8 @@ describe('decide under random command sequences', () => {
       }
       expect(actions).toBeGreaterThan(0);
       expect([...reached].sort()).toEqual([
+        'accepted watch suggestion',
+        'dismissed watch suggestion',
         'intake turn',
         'reported intake',
         'reviewer schedule',

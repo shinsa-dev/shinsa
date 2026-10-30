@@ -42,3 +42,4 @@ export {
   selectTaskByReference,
 } from './queries.ts';
 export { listSchedules } from './schedules.ts';
+export { listOpenWatchSuggestions, listWatchSuggestions } from './watch-suggestions.ts';

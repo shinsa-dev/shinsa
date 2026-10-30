@@ -27,6 +27,7 @@ import { settleTask } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { resolveRestingStage } from './shapes.ts';
 import { createTask } from './tasks.ts';
+import { removeSourceSuggestions } from './watch-suggestions.ts';
 
 function selectWatchdog(task: Task, watchdogId: string) {
   return (task.watchdogs ?? []).find((watchdog) => watchdog.id === watchdogId) ?? null;
@@ -428,6 +429,7 @@ export function removeWatchSource(decider: Decider, command: CommandOf<'watch_so
   const project = decider.state.projects[command.projectId];
   if (!project) throw new DomainError('project_not_found', `No project ${command.projectId}`);
   if (!(project.watchSources ?? []).some((source) => source.server === command.server)) return;
+  removeSourceSuggestions(decider, project.id, command.server);
   decider.emit({ type: 'watch_source.removed', projectId: project.id, server: command.server });
 }
 

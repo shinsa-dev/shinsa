@@ -69,6 +69,7 @@ import {
   recordSessionLost,
 } from './runs.ts';
 import {
+  acceptWatchSuggestion,
   deliverSchedule,
   enableSchedule,
   failSchedule,
@@ -103,6 +104,7 @@ import {
   triageTask,
   waitOnTasks,
 } from './tasks.ts';
+import { dismissWatchSuggestion, recordWatchSuggestion } from './watch-suggestions.ts';
 import {
   connectWatchdog,
   fireWatchdog,
@@ -327,6 +329,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return deliverSchedule(decider, command);
     case 'schedule.fail':
       return failSchedule(decider, command);
+    case 'watch_suggestion.record':
+      return recordWatchSuggestion(decider, command);
+    case 'watch_suggestion.accept':
+      return acceptWatchSuggestion(decider, command);
+    case 'watch_suggestion.dismiss':
+      return dismissWatchSuggestion(decider, command);
     case 'run.compact':
       return recordCompaction(decider, command);
     case 'watchdog.stop':

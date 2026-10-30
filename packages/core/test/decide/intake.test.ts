@@ -178,7 +178,7 @@ describe('a schedule that reads a data source', () => {
     ).toHaveLength(0);
   });
 
-  test('an agent’s watch reads an integration of its task’s project in a home of its own, never in its task', () => {
+  test('an agent’s watch, once accepted, reads an integration of its task’s project in a home of its own', () => {
     const { harness, projectId } = createProject();
     const taskId = createTask(harness);
     harness.send({
@@ -194,6 +194,9 @@ describe('a schedule that reads a data source', () => {
       maxRuns: null,
       timeZone: 'UTC',
     });
+    expect(harness.state.schedules).toEqual({});
+    const [suggestion] = Object.values(harness.state.watchSuggestions);
+    harness.send({ type: 'watch_suggestion.accept', suggestionId: suggestion?.id ?? '' });
     const schedule = only(harness);
     expect(schedule.source).toEqual({ projectId, server: 'slack' });
     const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
