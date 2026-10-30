@@ -57,7 +57,9 @@ describe('the tools each agent gets', () => {
         expect(isHandOverTool(tool)).toBe(true);
       }
     }
-    expect(tools.filter(isHandOverTool).sort()).toEqual(Object.values(PURPOSE_HAND_OVERS).flat().sort());
+    expect(tools.filter(isHandOverTool).sort()).toEqual(
+      [...new Set(Object.values(PURPOSE_HAND_OVERS).flat())].sort()
+    );
   });
 
   test('every role of the task’s session is served one tool list, so a role switch keeps the cached prefix', () => {

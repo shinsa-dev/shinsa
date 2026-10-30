@@ -31,7 +31,7 @@ export type WatchdogEventBody =
       check: WatchdogCheck;
       status: WatchdogStatus;
       nextCheckAt: number | null;
-      forkTaskId: string | null;
+      forkTaskIds: string[];
     }
   | { type: 'watchdog.ended'; taskId: string; watchdogId: string }
   | { type: 'watch_source.written'; projectId: string; source: WatchSource }

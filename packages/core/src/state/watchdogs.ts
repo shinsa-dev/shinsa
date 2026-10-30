@@ -1,3 +1,4 @@
+import { describeList } from '../chat/text.ts';
 import { WATCHDOG_LIMITS, type Watchdog } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { writeEntry } from './draft.ts';
@@ -57,24 +58,30 @@ function applyArmed(state: ShinsaState, event: EventOf<'watchdog.armed'>) {
   });
 }
 
+function describeFiled(state: ShinsaState, taskIds: readonly string[]) {
+  const names = taskIds.flatMap((id) => {
+    const task = state.tasks[id];
+    return task ? [task.handle ?? task.title] : [];
+  });
+  return names.length > 0 ? ` and filed ${describeList(names)}` : '';
+}
+
 function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
   const next = updateWatchdog(state, event, (watchdog) => ({
     status: event.status,
     nextCheckAt: event.nextCheckAt,
     runId: null,
     checks: [...watchdog.checks, event.check].slice(-WATCHDOG_LIMITS.checksKept),
-    forkTaskId: event.forkTaskId,
+    forkTaskIds: event.forkTaskIds,
     endedAt: event.status === 'watching' ? null : event.at,
   }));
   if (!next) return;
-  const forked = event.forkTaskId ? state.tasks[event.forkTaskId] : undefined;
-  const found = forked ? ` and filed ${forked.handle ?? forked.title}` : '';
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'watchdog',
     text: event.check.healthy
       ? `The watchdog “${next.title}” found nothing wrong`
-      : `The watchdog “${next.title}” found an issue${found}`,
+      : `The watchdog “${next.title}” found an issue${describeFiled(state, event.forkTaskIds)}`,
     detail: event.check.summary,
   });
 }

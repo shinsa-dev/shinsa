@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  type CommandOf,
   type DomainError,
   HOUR_MS,
   listActiveRuns,
@@ -82,8 +83,7 @@ function handOver(harness: Harness, taskId: string, watchdogs: WatchdogSpec[]) {
   });
 }
 
-function mergeWith(watchdogs: WatchdogSpec[] = [LATENCY]) {
-  const harness = createHarness();
+function mergeIn(harness: Harness, watchdogs: WatchdogSpec[] = [LATENCY]) {
   const taskId = createTask(harness);
   handOver(harness, taskId, watchdogs);
   harness.send({ type: 'checks.record', taskId, results: PASSING });
@@ -96,7 +96,12 @@ function mergeWith(watchdogs: WatchdogSpec[] = [LATENCY]) {
   approve(harness, taskId);
   pushed(harness, taskId);
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
-  return { harness, taskId };
+  return taskId;
+}
+
+function mergeWith(watchdogs: WatchdogSpec[] = [LATENCY]) {
+  const harness = createHarness();
+  return { harness, taskId: mergeIn(harness, watchdogs) };
 }
 
 function watchdog(harness: Harness, taskId: string, index = 0): Watchdog {
@@ -116,19 +121,47 @@ function fire(harness: Harness, taskId: string, index = 0) {
   });
 }
 
-function report(
+const SLOW_SAFARI = 'https://maple.dev/q/checkout-p95-safari';
+
+function fileIssue(harness: Harness, taskId: string, filing: Partial<CommandOf<'agent.file_report'>> = {}) {
+  return harness.send({
+    type: 'agent.file_report',
+    runId: harness.activeRun(taskId).id,
+    title: 'Checkout is slow in Safari',
+    request: 'Fix the cache miss on Safari that makes checkout take 1.8 s.',
+    reportId: null,
+    link: SLOW_SAFARI,
+    author: null,
+    postedAt: null,
+    text: 'p95 of POST /checkout is 1.8 s in Safari since the merge.',
+    forkOf: null,
+    repoId: null,
+    ...filing,
+  });
+}
+
+function endCheck(
   harness: Harness,
   taskId: string,
-  healthy: boolean,
-  issue: { title: string; request: string } | null = null
+  summary: string,
+  read: { reached?: boolean; live?: boolean } = {}
 ) {
   return harness.send({
-    type: 'agent.report_watch',
+    type: 'agent.report_read',
     runId: harness.activeRun(taskId).id,
-    healthy,
-    summary: healthy ? 'p95 is 210 ms, errors 0.2%.' : 'p95 is 1.8 s in Safari since the merge.',
-    issue,
+    summary,
+    reached: read.reached ?? true,
+    live: read.live ?? null,
   });
+}
+
+function report(harness: Harness, taskId: string, healthy: boolean) {
+  if (!healthy) fileIssue(harness, taskId);
+  return endCheck(
+    harness,
+    taskId,
+    healthy ? 'p95 is 210 ms, errors 0.2%.' : 'p95 is 1.8 s in Safari since the merge.'
+  );
 }
 
 function projectOf(harness: Harness, taskId: string) {
@@ -306,44 +339,157 @@ describe('a watch check', () => {
     expect(deferred.nextCheckAt).toBe(harness.now + 15 * MINUTE_MS);
   });
 
-  test('an issue files a task forked from this one, with the issue as its request', () => {
+  test('a report it files forks the shipped task, and the check that filed it trips the watchdog', () => {
     const { harness, taskId } = mergeWith();
+    harness.send({ type: 'task.prioritize', taskId, priority: 'high' });
     fire(harness, taskId);
     const run = harness.activeRun(taskId);
-    report(harness, taskId, false, {
-      title: 'Checkout is slow in Safari',
-      request: 'Fix the cache miss on Safari that makes checkout take 1.8 s.',
-    });
+    report(harness, taskId, false);
     const tripped = watchdog(harness, taskId);
-    expect(tripped.status).toBe('tripped');
-    const forked = harness.task(tripped.forkTaskId ?? '');
+    expect(tripped).toMatchObject({ status: 'tripped', nextCheckAt: null, runId: null });
+    expect(tripped.checks).toEqual([
+      { at: expect.any(Number), healthy: false, summary: 'p95 is 1.8 s in Safari since the merge.' },
+    ]);
+    expect(tripped.forkTaskIds).toHaveLength(1);
+    const forked = harness.task(tripped.forkTaskIds[0] ?? '');
     expect(forked).toMatchObject({
       forkOf: taskId,
       repoId: harness.task(taskId).repoId,
-      createdBy: { kind: 'watchdog', taskId, runId: run.id, requestKey: tripped.id },
+      priority: 'high',
+      createdBy: { kind: 'watchdog', taskId, runId: run.id, requestKey: SLOW_SAFARI },
+      sourceReport: {
+        scheduleId: null,
+        watchdogId: tripped.id,
+        server: 'maple',
+        reportId: null,
+        link: SLOW_SAFARI,
+        author: null,
+        postedAt: null,
+        text: 'p95 of POST /checkout is 1.8 s in Safari since the merge.',
+      },
     });
     expect(forked.request).toContain('Fix the cache miss on Safari');
-    expect(forked.request).toContain('Found by the watchdog “Checkout latency”');
+    expect(forked.request).toContain(`Reported in maple (${SLOW_SAFARI}):`);
+    expect(forked.activity[0]?.text).toBe('Filed by the watchdog “Checkout latency” from a report in maple');
     expect(harness.task(taskId).stage).toBe('merged');
-    expect(
-      harness.task(taskId).activity.some((entry) => entry.text.includes('found an issue and filed'))
-    ).toBe(true);
+    expect(harness.state.runs[run.id]).toMatchObject({
+      outcome: 'completed',
+      summary: 'Filed 1 report on the change.',
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      `The watchdog “Checkout latency” found an issue and filed ${forked.handle}`
+    );
+  });
+
+  test('a report filed from the same source before, by a watch or a watchdog, is refused', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    fileIssue(harness, taskId);
+    const again = refusal(() => fileIssue(harness, taskId, { title: 'Safari checkout again' }));
+    expect(again.code).toBe('report_filed');
+    expect(again.message).toContain('“Checkout is slow in Safari”');
+    fileIssue(harness, taskId, { link: null, reportId: 'err-42', title: 'Checkout throws in Firefox' });
+    expect(refusal(() => fileIssue(harness, taskId, { link: null, reportId: 'err-42' })).code).toBe(
+      'report_filed'
+    );
+    endCheck(harness, taskId, 'Two issues since the merge.');
+    expect(watchdog(harness, taskId).forkTaskIds).toHaveLength(2);
+  });
+
+  test('a filing needs the report’s id or link and its text, forks only this task and stays in its project', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    expect(refusal(() => fileIssue(harness, taskId, { link: ' ', reportId: null })).code).toBe(
+      'report_unnamed'
+    );
+    expect(refusal(() => fileIssue(harness, taskId, { text: ' ' })).code).toBe('report_empty');
+    const other = createTask(harness);
+    expect(refusal(() => fileIssue(harness, taskId, { forkOf: other })).code).toBe('fork_watchdog');
+    expect(refusal(() => fileIssue(harness, taskId, { repoId: 'elsewhere' })).code).toBe('repo_project');
+    fileIssue(harness, taskId, { forkOf: taskId });
+    endCheck(harness, taskId, 'Slow in Safari.');
+    expect(harness.task(watchdog(harness, taskId).forkTaskIds[0] ?? '').forkOf).toBe(taskId);
+  });
+
+  test('a source still unreachable after its tries is a missed check, and the next one stays on schedule', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    const run = harness.activeRun(taskId);
+    expect(readInstruction(run)).toContain('3 tries in all');
+    endCheck(harness, taskId, 'maple timed out three times.', { reached: false });
+    expect(harness.state.runs[run.id]).toMatchObject({
+      outcome: 'failed',
+      summary: 'maple timed out three times.',
+    });
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'watching',
+      runId: null,
+      checks: [],
+      nextCheckAt: harness.now + 6 * HOUR_MS,
+    });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'merged',
+      stageReason: 'could not check a watchdog',
+    });
+  });
+
+  test('a check that gives up after it filed a report still trips the watchdog', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    fileIssue(harness, taskId);
+    harness.send({
+      type: 'run.end',
+      runId: harness.activeRun(taskId).id,
+      outcome: 'failed',
+      summary: 'The agent could not start.',
+      failure: {
+        class: 'setup_failed',
+        message: 'The agent could not start.',
+        code: 'spawn_failed',
+        retryable: null,
+        resetAt: null,
+      },
+    });
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'tripped',
+      checks: [{ healthy: false, summary: 'The agent could not start.' }],
+    });
+  });
+
+  test('its prompt is a read of the source since the last check, with the reports filed from it', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    report(harness, taskId, true);
+    const checkedAt = harness.now;
+    fire(harness, taskId);
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toContain('What to look for: p95 of POST /checkout stays under 400 ms');
+    expect(prompt).toContain(`Look only at what arrived since ${new Date(checkedAt).toISOString()}.`);
+    expect(prompt).toContain('Every task you file forks this one');
+    expect(prompt).toContain('call `report_read` with a `summary`');
+    fileIssue(harness, taskId);
+    endCheck(harness, taskId, 'Slow in Safari.');
+    const forked = harness.task(watchdog(harness, taskId).forkTaskIds[0] ?? '');
+    const later = mergeIn(harness);
+    fire(harness, later);
+    expect(readInstruction(harness.activeRun(later))).toContain(
+      [
+        'The reports filed last from this source, newest first:',
+        `- ${forked.handle} “${forked.title}”: ${SLOW_SAFARI}`,
+      ].join('\n')
+    );
   });
 
   test('a report with no watchdog waiting on it is refused', () => {
     const { harness, taskId } = mergeWith();
     fire(harness, taskId);
-    const run = harness.activeRun(taskId);
     harness.replay({
       type: 'watchdog.ended',
       taskId,
       watchdogId: watchdog(harness, taskId).id,
     });
-    expect(
-      refusal(() =>
-        harness.send({ type: 'agent.report_watch', runId: run.id, healthy: true, summary: 'ok', issue: null })
-      ).code
-    ).toBe('watchdog_not_found');
+    expect(refusal(() => fileIssue(harness, taskId)).code).toBe('watchdog_not_found');
+    expect(refusal(() => endCheck(harness, taskId, 'ok')).code).toBe('watchdog_not_found');
   });
 
   test('a message while it checks steers it, and a retry starts the check again', () => {
@@ -466,14 +612,12 @@ const RELEASED: WatchdogSpec = {
 };
 
 function reportLive(harness: Harness, taskId: string, live: boolean) {
-  return harness.send({
-    type: 'agent.report_watch',
-    runId: harness.activeRun(taskId).id,
-    live,
-    healthy: true,
-    summary: live ? 'Live in production; p95 is 210 ms.' : 'Production still runs the previous release.',
-    issue: null,
-  });
+  return endCheck(
+    harness,
+    taskId,
+    live ? 'Live in production; p95 is 210 ms.' : 'Production still runs the previous release.',
+    { live }
+  );
 }
 
 describe('a watchdog’s schedule', () => {
@@ -598,6 +742,28 @@ describe('a watchdog that starts on production', () => {
     expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
       'The change is live in production, so the watchdog “Checkout latency” started watching'
     );
+  });
+
+  test('a report filed while it waits counts as live, and saying not live after one is refused', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    fire(harness, taskId);
+    fileIssue(harness, taskId);
+    expect(refusal(() => reportLive(harness, taskId, false)).code).toBe('live_filed');
+    endCheck(harness, taskId, 'Live, and checkout is slow in Safari.');
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'tripped',
+      startedAt: harness.now,
+      checks: [{ healthy: false }],
+    });
+  });
+
+  test('a source it cannot reach while it waits is a missed check, and it keeps waiting', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    fire(harness, taskId);
+    endCheck(harness, taskId, 'Vercel did not answer.', { reached: false });
+    const waiting = watchdog(harness, taskId);
+    expect(waiting).toMatchObject({ status: 'awaiting_production', runId: null, checks: [] });
+    expect(waiting.nextCheckAt).toBeGreaterThanOrEqual(harness.now + 30 * MINUTE_MS);
   });
 
   test('stops waiting after a week without reaching production', () => {

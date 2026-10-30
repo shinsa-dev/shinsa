@@ -144,18 +144,6 @@ export interface WatchdogSpec {
   productionCheck: string | null;
 }
 
-export interface WatchIssue {
-  title: string;
-  request: string;
-}
-
-export interface WatchReport {
-  live: boolean | null;
-  healthy: boolean;
-  summary: string;
-  issue: WatchIssue | null;
-}
-
 export interface ReportWalkthrough {
   approach: string;
   flow: string;
