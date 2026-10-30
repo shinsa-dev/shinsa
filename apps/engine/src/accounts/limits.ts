@@ -23,11 +23,6 @@ const LIMITED_BACKOFF_MS = 5 * 60_000;
 
 const NO_WINDOWS = 'Claude reports no usage limits for this account.';
 
-interface Entry {
-  usage: AccountUsage;
-  backoffUntil: number | null;
-}
-
 function resolvePushedPercent(notice: RateLimitNotice) {
   if (notice.status === 'rejected') return 100;
   if (notice.utilization === null) return null;
@@ -38,14 +33,14 @@ export function createUnknownUsage(): AccountUsage {
   return { status: 'unknown', windows: [], detail: null, checkedAt: null, source: null };
 }
 
-function readCache(path: string): Map<string, Entry> {
-  const entries = new Map<string, Entry>();
+function readCache(path: string): Map<string, AccountUsage> {
+  const entries = new Map<string, AccountUsage>();
   if (!existsSync(path)) return entries;
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as { accounts?: Record<string, AccountUsage> };
     for (const [id, usage] of Object.entries(parsed.accounts ?? {})) {
       if (!Array.isArray(usage?.windows)) continue;
-      entries.set(id, { usage: { ...usage, source: 'cache' }, backoffUntil: null });
+      entries.set(id, { ...usage, source: 'cache' });
     }
   } catch (error) {
     log.warn('[Accounts] The usage cache could not be read; starting without it', {
@@ -58,7 +53,7 @@ function readCache(path: string): Map<string, Entry> {
 
 export class UsageLimits {
   readonly #options: UsageLimitsOptions;
-  readonly #entries: Map<string, Entry>;
+  readonly #entries: Map<string, AccountUsage>;
   readonly #reading = new Map<string, Promise<void>>();
   readonly #listeners = new Set<() => void>();
 
@@ -79,17 +74,17 @@ export class UsageLimits {
   }
 
   snapshot(accountId: string): AccountUsage {
-    return this.#entries.get(accountId)?.usage ?? createUnknownUsage();
+    return this.#entries.get(accountId) ?? createUnknownUsage();
   }
 
-  #store(accountId: string, entry: Entry) {
-    this.#entries.set(accountId, entry);
+  #store(accountId: string, usage: AccountUsage) {
+    this.#entries.set(accountId, usage);
     this.#persist();
     for (const listener of this.#listeners) listener();
   }
 
   #persist() {
-    const accounts = Object.fromEntries([...this.#entries].map(([id, entry]) => [id, entry.usage]));
+    const accounts = Object.fromEntries(this.#entries);
     try {
       writeJsonFile(this.#options.path, { version: 1, accounts });
     } catch (error) {
@@ -104,7 +99,7 @@ export class UsageLimits {
   }
 
   isFresh(accountId: string) {
-    const checkedAt = this.#entries.get(accountId)?.usage.checkedAt ?? null;
+    const checkedAt = this.#entries.get(accountId)?.checkedAt ?? null;
     return checkedAt !== null && this.#now - checkedAt < (this.#options.ttlMs ?? USAGE_TTL_MS);
   }
 
@@ -113,8 +108,8 @@ export class UsageLimits {
   }
 
   #refreshOne(accountId: string, force: boolean) {
-    const entry = this.#entries.get(accountId);
-    if (entry?.backoffUntil && entry.backoffUntil > this.#now) return Promise.resolve();
+    const retryAt = this.#entries.get(accountId)?.retryAt;
+    if (retryAt !== undefined && retryAt > this.#now) return Promise.resolve();
     if (!force && this.isFresh(accountId)) return Promise.resolve();
     const running = this.#reading.get(accountId);
     if (running) return running;
@@ -138,32 +133,28 @@ export class UsageLimits {
 
   async #read(accountId: string) {
     const result = await this.#attempt(accountId);
-    const previous = this.#entries.get(accountId)?.usage ?? createUnknownUsage();
+    const { retryAt: _retryAt, ...previous } = this.#entries.get(accountId) ?? createUnknownUsage();
     const now = this.#now;
     if (result.ok) {
       const found = result.windows.length > 0;
       const fastMode = result.fastMode ?? previous.fastMode;
       this.#store(accountId, {
-        usage: {
-          status: found ? 'ok' : 'unavailable',
-          windows: result.windows,
-          detail: found ? null : (this.#options.emptyDetail ?? NO_WINDOWS),
-          checkedAt: now,
-          source: 'read',
-          ...(fastMode ? { fastMode } : {}),
-        },
-        backoffUntil: null,
+        status: found ? 'ok' : 'unavailable',
+        windows: result.windows,
+        detail: found ? null : (this.#options.emptyDetail ?? NO_WINDOWS),
+        checkedAt: now,
+        source: 'read',
+        ...(fastMode ? { fastMode } : {}),
       });
       return;
     }
-    const backoff = result.reason === 'limited' ? Math.max(result.retryAfterMs ?? 0, LIMITED_BACKOFF_MS) : 0;
     this.#store(accountId, {
-      usage: {
-        ...previous,
-        status: previous.windows.length > 0 ? previous.status : 'unavailable',
-        detail: result.detail,
-      },
-      backoffUntil: backoff > 0 ? now + backoff : null,
+      ...previous,
+      status: previous.windows.length > 0 ? previous.status : 'unavailable',
+      detail: result.detail,
+      ...(result.reason === 'limited'
+        ? { retryAt: now + Math.max(result.retryAfterMs ?? 0, LIMITED_BACKOFF_MS) }
+        : {}),
     });
   }
 
@@ -171,8 +162,7 @@ export class UsageLimits {
     if (!notice.limit) return;
     const table = this.#options.windows ?? KEYED_WINDOWS;
     const id = table[notice.limit]?.id ?? resolveWindowId(notice.limit);
-    const entry = this.#entries.get(accountId);
-    const previous = entry?.usage ?? createUnknownUsage();
+    const previous = this.#entries.get(accountId) ?? createUnknownUsage();
     const known = previous.windows.find((candidate) => candidate.id === id);
     const keyed = table[notice.limit];
     if (!known && !keyed) return;
@@ -185,8 +175,12 @@ export class UsageLimits {
       ? previous.windows.map((candidate) => (candidate.id === id ? window : candidate))
       : [...previous.windows, window];
     this.#store(accountId, {
-      usage: { ...previous, status: 'ok', windows, detail: null, source: 'push' },
-      backoffUntil: entry?.backoffUntil ?? null,
+      ...previous,
+      status: 'ok',
+      windows,
+      detail: null,
+      checkedAt: this.#now,
+      source: 'push',
     });
   }
 }

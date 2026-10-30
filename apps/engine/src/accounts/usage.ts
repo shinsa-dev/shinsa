@@ -36,6 +36,13 @@ export const PROVIDER_WINDOWS: Record<string, KeyedWindow> = {
   seven_day: { id: 'seven_day', kind: 'weekly', label: 'Weekly limit', model: null },
 };
 
+export const EXPIRED_READ: UsageRead = {
+  ok: false,
+  reason: 'expired',
+  detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
+  retryAfterMs: null,
+};
+
 const LIMIT_KINDS: Record<string, string> = { session: 'five_hour', weekly_all: 'seven_day' };
 
 function isFields(value: unknown): value is Fields {
@@ -149,14 +156,7 @@ export async function requestUsage(
       retryAfterMs: null,
     };
   }
-  if (response.status === UNAUTHORIZED) {
-    return {
-      ok: false,
-      reason: 'expired',
-      detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
-      retryAfterMs: null,
-    };
-  }
+  if (response.status === UNAUTHORIZED) return EXPIRED_READ;
   if (response.status === TOO_MANY_REQUESTS) {
     return {
       ok: false,

@@ -3987,12 +3987,18 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   codenames are dropped. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
-  token keeps the last reading and says the login refreshes on the next run. Readings are cached for 60 s and kept
+  token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`
+  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Readings are cached for 60 s and kept
   in `data/usage-limits.json` (read back marked `source: 'cache'`); a failed read never erases a reading, only
-  replaces its detail; a 429 backs off at least 5 minutes. Pushed rate-limit notices from a run land on the account
-  its attempt ran on (a rejected window counts as 100%). Usage is read at start, every 5 minutes, on a lease that
+  replaces its detail; a 429 backs off at least 5 minutes, or as long as its `retry-after` asks, even when forced:
+  the reading carries the end of the back-off as `retryAt` (kept on disk, so a restart honours it, and cleared by
+  the next read that works or fails otherwise) so the web can say when the next read happens. Pushed rate-limit notices from a run land on the account
+  its attempt ran on (a rejected window counts as 100%) and count as a reading: `checkedAt` moves to the push. Usage is read at start, every 5 minutes, on a lease that
   finds a stale reading, at each attempt's start (a reading under a minute old is used as is) and end (fresh), on
-  every fast mode check, and fresh after a sign-in, an import or a refresh.
+  every fast mode check, and fresh after a sign-in, an import or a refresh. `POST /api/accounts/refresh` with
+  `{ scope: 'usage' }` is the web's automatic re-check: it reads only readings over a minute old, Claude's and the
+  providers', without checking sign-ins or imports; without it (Refresh usage, `shinsa accounts refresh`) everything
+  is read again, fresh.
 - **Leasing an account** (`pickAccount` in core `accounts/pick.ts`, so the web's usage glance names the same account
   the server picks, through `selectNextAccount`). Before each attempt the supervisor asks the broker for an account,
   only for a provider whose capabilities include `accounts`. A run bound to an account always gets it, and so does

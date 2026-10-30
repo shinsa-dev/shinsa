@@ -1216,6 +1216,38 @@ describe('what runs report back', () => {
     expect(await world.accounts.limits.refresh([account.id], true)).toBeUndefined();
   });
 
+  test('a login whose token has expired is not sent to Claude, and says it refreshes on the next run', async () => {
+    const world = createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 25);
+    world.usage.set('token-a@example.com', windows(70, 25));
+    const read = world.accounts.limits;
+    world.advance(HOUR);
+    await read.refresh([account.id], true);
+    expect(world.accounts.snapshot().accounts[0]?.usage).toMatchObject({
+      detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
+    });
+    expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
+    world.login(account.configDir, 'token-a@example.com');
+    await read.refresh([account.id], true);
+    expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(70);
+  });
+
+  test('a usage-only refresh reads stale usage without checking sign-ins, and inspect mode refuses it', async () => {
+    const world = createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 25);
+    world.usage.set('token-a@example.com', windows(70, 25));
+    const statusChecks = () => world.calls.filter((call) => call.command[1] === 'auth').length;
+    const checks = statusChecks();
+    await world.accounts.refreshUsage();
+    expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
+    world.advance(2 * 60_000);
+    const snapshot = await world.accounts.refreshUsage();
+    expect(snapshot.accounts[0]?.usage.windows[0]?.usedPercent).toBe(70);
+    expect(statusChecks()).toBe(checks);
+    const inspected = createWorld({ root: world.root, inspect: true });
+    await expect(inspected.accounts.refreshUsage()).rejects.toMatchObject({ code: 'inspect_read_only' });
+  });
+
   test('a stale reading is refreshed when an attempt is leased', async () => {
     const world = createWorld({ registry: true });
     await addAccount(world, 'a@example.com', 25);

@@ -23,7 +23,7 @@ export function createAccountRoutes(accounts: Accounts): ApiRoute[] {
       pattern: /^\/api\/accounts$/,
       respond: () => Promise.resolve(Response.json(accounts.snapshot())),
     },
-    post('/refresh', () => accounts.refresh()),
+    post('/refresh', (fields) => (fields.scope === 'usage' ? accounts.refreshUsage() : accounts.refresh())),
     post('/login', (fields) => accounts.startLogin(readAccountId(fields))),
     post('/login/code', (fields) => accounts.submitLoginCode(fields.loginId, fields.code)),
     post('/login/cancel', (fields) => accounts.cancelLogin(fields.loginId)),

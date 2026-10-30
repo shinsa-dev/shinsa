@@ -223,6 +223,68 @@ describe('usage limits', () => {
     expect(unsaid.asked).toHaveLength(1);
   });
 
+  test('a 429 keeps when the next read may happen on the reading, and a read that works clears it', async () => {
+    const limited: UsageRead = {
+      ok: false,
+      reason: 'limited',
+      detail: 'slow down',
+      retryAfterMs: 53 * 60_000,
+    };
+    const { limits, clock } = createLimits([
+      { ok: true, windows: [SESSION] },
+      limited,
+      { ok: true, windows: [SESSION] },
+    ]);
+    await limits.refresh(['a']);
+    clock.now += 2 * 60 * 60_000;
+    await limits.refresh(['a'], true);
+    expect(limits.snapshot('a')).toEqual({
+      status: 'ok',
+      windows: [SESSION],
+      detail: 'slow down',
+      checkedAt: 1_000,
+      source: 'read',
+      retryAt: clock.now + 53 * 60_000,
+    });
+    clock.now += 53 * 60_000;
+    await limits.refresh(['a'], true);
+    expect(limits.snapshot('a')).toEqual({
+      status: 'ok',
+      windows: [SESSION],
+      detail: null,
+      checkedAt: clock.now,
+      source: 'read',
+    });
+  });
+
+  test('another failure after a 429 drops the old back-off', async () => {
+    const { limits, asked, clock } = createLimits([
+      { ok: false, reason: 'limited', detail: 'slow down', retryAfterMs: null },
+      { ok: false, reason: 'failed', detail: 'Claude answered 503.', retryAfterMs: null },
+      { ok: true, windows: [SESSION] },
+    ]);
+    await limits.refresh(['a']);
+    clock.now += 5 * 60_000;
+    await limits.refresh(['a'], true);
+    expect(limits.snapshot('a').retryAt).toBeUndefined();
+    await limits.refresh(['a'], true);
+    expect(asked).toHaveLength(3);
+  });
+
+  test('a back-off survives a restart', async () => {
+    const limited: UsageRead = { ok: false, reason: 'limited', detail: 'slow down', retryAfterMs: null };
+    const first = createLimits([{ ok: true, windows: [SESSION] }, limited]);
+    await first.limits.refresh(['a']);
+    await first.limits.refresh(['a'], true);
+    const second = createLimits([{ ok: true, windows: [SESSION] }], { path: first.path });
+    expect(second.limits.snapshot('a').retryAt).toBe(1_000 + 5 * 60_000);
+    await second.limits.refresh(['a'], true);
+    expect(second.asked).toHaveLength(0);
+    second.clock.now += 5 * 60_000;
+    await second.limits.refresh(['a'], true);
+    expect(second.asked).toHaveLength(1);
+  });
+
   test('the last readings come back from disk, marked as cached', async () => {
     const first = createLimits([{ ok: true, windows: [SESSION] }]);
     await first.limits.refresh(['a']);
@@ -294,15 +356,16 @@ describe('usage limits', () => {
 });
 
 describe('pushed rate limits', () => {
-  test('a pushed utilization updates the window it names and keeps the read reset time when none is pushed', async () => {
-    const { limits } = createLimits([{ ok: true, windows: [SESSION, FABLE] }]);
+  test('a pushed utilization updates the window it names, moves the time it was checked and keeps the read reset time when none is pushed', async () => {
+    const { limits, clock } = createLimits([{ ok: true, windows: [SESSION, FABLE] }]);
     await limits.refresh(['a']);
+    clock.now += 2 * 60 * 60_000;
     limits.recordPush('a', createNotice({ limit: 'weekly:fable', utilization: 0.5 }));
     expect(limits.snapshot('a')).toEqual({
       status: 'ok',
       windows: [SESSION, { ...FABLE, usedPercent: 50 }],
       detail: null,
-      checkedAt: 1_000,
+      checkedAt: clock.now,
       source: 'push',
     });
     limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: 2, resetsAt: 12_000 }));
@@ -338,7 +401,7 @@ describe('pushed rate limits', () => {
         },
       ],
       detail: null,
-      checkedAt: null,
+      checkedAt: 1_000,
       source: 'push',
     });
   });
@@ -371,5 +434,6 @@ describe('pushed rate limits', () => {
     await limits.refresh(['a'], true);
     expect(asked).toHaveLength(1);
     expect(limits.snapshot('a').windows.map((window) => window.usedPercent)).toEqual([100]);
+    expect(limits.snapshot('a').retryAt).toBe(1_000 + 5 * 60_000);
   });
 });
