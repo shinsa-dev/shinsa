@@ -49,7 +49,7 @@ const CANCEL_REASON: Record<string, string> = {
   'cancelled by you': 'you cancelled the task',
 };
 
-export function describeCancelled(task: Task) {
+function describeCancelled(task: Task) {
   const step = selectCancelledStep(resolveSteps(resolveTaskProgress(task)));
   if (!step) return SETTLED_TITLE.cancelled ?? '';
   const reason = CANCEL_REASON[task.stageReason] ?? task.stageReason;
