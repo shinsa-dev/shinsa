@@ -38,6 +38,7 @@ export interface CourierRequest {
   repository: string | null;
   forkFrom: string | null;
   thisTaskWaits: boolean;
+  afterThis: boolean;
 }
 
 export interface SplitRequest {
@@ -103,6 +104,7 @@ export function validateCourierTask(input: Record<string, unknown>): Validation<
     repository: reader.optionalText(input.repository, 'repository', DELEGATION_LIMITS.name),
     forkFrom: reader.optionalText(input.fork_from, 'fork_from', DELEGATION_LIMITS.name),
     thisTaskWaits: reader.flag(input.this_task_waits, 'this_task_waits'),
+    afterThis: reader.flag(input.after_this, 'after_this'),
   });
 }
 
