@@ -34,12 +34,12 @@ function StepMark({ status }: { status: StepStatus }) {
   }
   if (status === 'skipped') {
     return (
-      <Icon size='sm' name='IconCircleDotted' aria-label={STEP_STATUS_LABEL.skipped} className='text-fg-2' />
+      <Icon size='sm' name='IconCircleDotted' ariaLabel={STEP_STATUS_LABEL.skipped} className='text-fg-2' />
     );
   }
   if (status === 'cancelled') {
     return (
-      <Icon size='sm' name='IconCircleX' aria-label={STEP_STATUS_LABEL.cancelled} className='text-fg-3' />
+      <Icon size='sm' name='IconCircleX' ariaLabel={STEP_STATUS_LABEL.cancelled} className='text-fg-3' />
     );
   }
   if (status === 'current') {

@@ -30,7 +30,7 @@ describe('ProgressTrack', () => {
     const plan = within(track.getByText('Plan').closest('li') as HTMLElement);
     const checks = within(track.getByText('Checks').closest('li') as HTMLElement);
     expect(plan.getByLabelText('Done')).toBeTruthy();
-    expect(checks.getByLabelText('Skipped')).toBeTruthy();
+    expect(checks.getByRole('img', { name: 'Skipped' })).toBeTruthy();
     expect(checks.queryByLabelText('Done')).toBeNull();
   });
 
@@ -43,7 +43,7 @@ describe('ProgressTrack', () => {
     expect(
       within(track.getByText('Pull request').closest('li') as HTMLElement).getByLabelText('Done')
     ).toBeTruthy();
-    expect(merge.getByLabelText('Cancelled')).toBeTruthy();
+    expect(merge.getByRole('img', { name: 'Cancelled' })).toBeTruthy();
     expect(merge.queryByLabelText('Done')).toBeNull();
   });
 
