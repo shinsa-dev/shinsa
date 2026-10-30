@@ -51,6 +51,14 @@ describe('isHandover', () => {
     }
     expect(isHandover({ kind: 'other', name: 'ask', args: {} })).toBe(false);
   });
+
+  it('shows a new watch an agent suggests as a card, never a schedule it sets or changes', () => {
+    const schedule = (args: Record<string, unknown>) =>
+      isHandover({ kind: 'shinsa', name: 'set_schedule', args });
+    expect(schedule({ source: 'slack', message: 'Bugs.' })).toBe(true);
+    expect(schedule({ source: 'slack', schedule_id: 'w1' })).toBe(false);
+    expect(schedule({ message: 'Nightly.' })).toBe(false);
+  });
 });
 
 describe('resolveGroupKey', () => {
@@ -294,6 +302,9 @@ describe('describeTool', () => {
     const shinsa = (name: Extract<ChatTool, { kind: 'shinsa' }>['name'], args = {}) =>
       line({ kind: 'shinsa', name, args });
     expect(shinsa('set_schedule', { name: 'Nightly sync' })).toBe('Set a schedule: Nightly sync');
+    expect(shinsa('set_schedule', { name: 'Bugs in #feedback', source: 'slack' })).toBe(
+      'Suggested a watch: Bugs in #feedback'
+    );
     expect(shinsa('set_schedule', { message: 'Sync the docs\nThen report' })).toBe(
       'Set a schedule: Sync the docs'
     );

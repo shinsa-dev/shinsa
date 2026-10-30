@@ -1,4 +1,4 @@
-import { listSchedules, type Schedule, type ShinsaState } from '@shinsa/core';
+import { listOpenWatchSuggestions, listSchedules, type Schedule, type ShinsaState } from '@shinsa/core';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -6,9 +6,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@shinsa/ui/components/dropdown-menu';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
+import { SuggestedWatchRow } from '@/components/automations/suggested-watch.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
@@ -29,7 +31,7 @@ import {
   updateScheduleEnabled,
 } from '@/lib/schedules.ts';
 import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
-import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 export interface ScheduleActions {
   enable: (schedule: Schedule, enabled: boolean) => Promise<unknown>;
@@ -145,10 +147,25 @@ export function createScheduleActions(state: ShinsaState): ScheduleActions {
 
 export function ScheduleSettings({ state }: { state: ShinsaState }) {
   const schedules = listSchedules(state);
+  const suggestions = listOpenWatchSuggestions(state);
   const actions = createScheduleActions(state);
   return (
     <SettingsGroup title='Automations'>
-      {schedules.length === 0 && (
+      {suggestions.length > 0 && (
+        <SettingsBlock
+          header={
+            <>
+              <Icon size='sm' name='IconLightbulbGlow' className='text-fg-2' />
+              <span className='font-medium text-fg-4 text-xs'>Suggested watches</span>
+            </>
+          }
+        >
+          {suggestions.map((suggestion) => (
+            <SuggestedWatchRow key={suggestion.id} state={state} suggestion={suggestion} withProject />
+          ))}
+        </SettingsBlock>
+      )}
+      {schedules.length === 0 && suggestions.length === 0 && (
         <SettingsEmpty>
           Ask an agent for a schedule, a trigger or a watch, in the home chat or any task, and it shows up
           here.

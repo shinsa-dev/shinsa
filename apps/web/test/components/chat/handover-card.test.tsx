@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ChatTool, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
-import { createRun, createTask } from '../../support/state.ts';
+import { spyOnCommands } from '../../support/commands.ts';
+import { createWatchSuggestion } from '../../support/schedules.ts';
+import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function call(
   name: Extract<ChatTool, { kind: 'shinsa' }>['name'],
@@ -205,5 +208,65 @@ describe('HandoverCard for the process tools', () => {
     const diagnosed = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs **dry**.' }));
     expect(diagnosed.getByText('Reported the diagnosis')).toBeTruthy();
     expect(diagnosed.getByText('dry')).toBeTruthy();
+  });
+});
+
+describe('HandoverCard for a watch an agent suggests', () => {
+  const args = {
+    name: 'Bugs in #feedback',
+    message: 'File a task for each new bug in #feedback.',
+    source: 'slack',
+  };
+  const task = createTask({ id: 't' });
+  let spies: ReturnType<typeof spyOnCommands>;
+
+  beforeEach(() => {
+    startFakeServer();
+    spies = spyOnCommands();
+  });
+
+  afterEach(() => {
+    spies.restore();
+    stopFakeServer();
+  });
+
+  function pushSuggestion(overrides: Parameters<typeof createWatchSuggestion>[0]) {
+    const suggestion = createWatchSuggestion({
+      origin: { kind: 'agent', taskId: 't', runId: 'r' },
+      ...overrides,
+    });
+    pushState(
+      createShinsaState({ tasks: [task], patch: { watchSuggestions: { [suggestion.id]: suggestion } } })
+    );
+  }
+
+  it('waits for you with Add the watch and Dismiss, which send the commands', async () => {
+    pushSuggestion({ id: 's1' });
+    const view = renderCard(call('set_schedule', args), task);
+    expect(view.getByText('Suggested a watch')).toBeTruthy();
+    expect(view.getByText('Waits for you')).toBeTruthy();
+    expect(view.getByText('slack · every hour')).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Add the watch' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    fireEvent.click(view.getByRole('button', { name: 'Dismiss the suggested watch' }));
+    expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'watch_suggestion.accept', suggestionId: 's1' },
+      { type: 'watch_suggestion.dismiss', suggestionId: 's1' },
+    ]);
+  });
+
+  it('once added, links to the watch and offers no buttons', () => {
+    pushSuggestion({ id: 's1', status: 'accepted', scheduleId: 'w1' });
+    const view = renderCard(call('set_schedule', args), task);
+    expect(view.getByText('Added')).toBeTruthy();
+    expect(view.getByRole('link', { name: 'Open the watch' }).getAttribute('href')).toBe('/automations/w1');
+    expect(view.queryByRole('button', { name: 'Add the watch' })).toBeNull();
+  });
+
+  it('says so when the suggestion is gone, naming the integration from the call', () => {
+    pushState(createShinsaState({ tasks: [task] }));
+    const view = renderCard(call('set_schedule', args), task);
+    expect(view.getByText('No longer open')).toBeTruthy();
+    expect(view.getByText('slack')).toBeTruthy();
   });
 });
