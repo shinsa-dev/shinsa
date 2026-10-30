@@ -18,6 +18,7 @@ import { startServer } from '../../src/http/index.ts';
 import { log } from '../../src/log/index.ts';
 import {
   ControlClient,
+  createUrlOpener,
   openRemoteUrl,
   Remote,
   type RemoteSnapshot,
@@ -544,5 +545,6 @@ describe('naming and opening', () => {
   test('opens a page with the system opener and reports when it fails', async () => {
     await openRemoteUrl('https://shinsa.dev/app/pair', createTempDir());
     await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
+    await expect(createUrlOpener(createTempDir())('fail')).rejects.toThrow();
   });
 });

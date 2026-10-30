@@ -38,7 +38,7 @@ import { createProjectChanges } from './projects/routes.ts';
 import {
   ControlClient,
   createInstalledConnector,
-  openRemoteUrl,
+  createUrlOpener,
   REMOTE_FILE,
   Remote,
   resolveMachineName,
@@ -161,7 +161,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     version: instance.version,
     maxBodyBytes: ATTACHMENT_REQUEST_LIMIT_BYTES,
     machineName: resolveMachineName(),
-    openUrl: options.openRemoteUrl ?? ((url) => openRemoteUrl(url, config.userHome)),
+    openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,

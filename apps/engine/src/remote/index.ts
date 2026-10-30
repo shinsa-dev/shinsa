@@ -70,6 +70,10 @@ export async function openRemoteUrl(url: string, cwd: string) {
   await runCommandOrThrow(['open', url], cwd);
 }
 
+export function createUrlOpener(cwd: string) {
+  return (url: string) => openRemoteUrl(url, cwd);
+}
+
 export async function requestHealth(url: string) {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });

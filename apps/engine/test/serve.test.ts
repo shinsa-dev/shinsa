@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountsSnapshot } from '@shinsa/core';
 import { Cswap } from '../src/accounts/cswap.ts';
@@ -20,6 +20,7 @@ import {
   selectLockHolder,
 } from '../src/instance/index.ts';
 import { log } from '../src/log/index.ts';
+import { REMOTE_FILE } from '../src/remote/index.ts';
 import { EffectRunner, Engine } from '../src/runtime/index.ts';
 import { type Shinsa, startShinsa } from '../src/serve.ts';
 import { EventLog, resolveStateVersion } from '../src/store/index.ts';
@@ -302,6 +303,58 @@ describe('startShinsa', () => {
     expect(await response.json()).toEqual({ restarting: true });
     await until('the restart to exit', () => codes.length === 1);
     expect(codes).toEqual([75]);
+  });
+
+  test('a paired Mac starts its tunnel to the engine and gives webhooks their shinsa.dev/app URL', async () => {
+    const root = createTempDir();
+    const config = createTestConfig(root);
+    mkdirSync(config.dataDir, { recursive: true });
+    writeFileSync(
+      join(config.dataDir, REMOTE_FILE),
+      JSON.stringify({
+        version: 1,
+        machine: null,
+        owner: 'mona',
+        enabled: true,
+        devices: [],
+        credentials: {
+          instanceId: 'k3x9',
+          machineToken: 'm',
+          tunnelToken: 't',
+          tunnelHost: 't-k3x9.shinsa.dev',
+          connectKey: 'c',
+        },
+      })
+    );
+    const localUrls: string[] = [];
+    const shinsa = await startShinsa(config, {
+      models,
+      remoteConnect: (_token, localUrl) => {
+        localUrls.push(localUrl);
+        return Promise.reject(new Error('No tunnel in tests.'));
+      },
+    });
+    started.push(shinsa);
+    await until('the tunnel to start', () => localUrls.length > 0);
+    expect(localUrls[0]).toBe(shinsa.url);
+    const events = await shinsa.engine.dispatch({
+      type: 'schedule.write',
+      scheduleId: null,
+      name: 'Alerts',
+      text: 'Look at the alert.',
+      trigger: { kind: 'webhook', signature: null, replayKey: null },
+      target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
+      source: null,
+      enabled: null,
+      maxRuns: null,
+      timeZone: 'UTC',
+    });
+    const written = events.find((event) => event.type === 'schedule.written');
+    if (written?.type !== 'schedule.written') throw new Error('no schedule');
+    const webhook = await fetch(`${shinsa.url}/api/schedules/${written.schedule.id}/webhook`);
+    expect(((await webhook.json()) as { url: string }).url).toStartWith(
+      `${config.remoteOrigin}/app/hooks/k3x9/${written.schedule.id}/`
+    );
   });
 
   test('the default model catalog is used when none is given', async () => {
