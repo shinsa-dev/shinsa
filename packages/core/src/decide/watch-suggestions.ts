@@ -32,13 +32,18 @@ function wasSuggested(decider: Decider, projectId: string, server: string) {
   );
 }
 
+function isSameOrigin(left: WatchSuggestion['origin'], right: WatchSuggestion['origin']) {
+  if (left.kind === 'source' || right.kind === 'source') return left.kind === right.kind;
+  return left.taskId === right.taskId;
+}
+
 function selectSameOpen(decider: Decider, input: WatchSuggestionInput) {
   return (
     listOpenWatchSuggestions(decider.state, input.projectId).find(
       (suggestion) =>
         suggestion.server === input.server &&
         suggestion.text === input.text &&
-        suggestion.origin.kind === input.origin.kind
+        isSameOrigin(suggestion.origin, input.origin)
     ) ?? null
   );
 }

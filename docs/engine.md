@@ -1753,8 +1753,9 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 - **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
   in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
   pauses, resumes and deletes them. A new watch an agent writes is a suggested watch for you to accept (below).
-  Triage reads a request to set up an automation as a question with no repository (the `answer` shape's meaning and
-  the no-repository rule in `apps/engine/src/triage/`, which name “watch #feedback for bugs, hourly”), so asking for a
+  Triage reads a request to set up a Shinsa automation as a question with no repository (the `answer` shape's meaning
+  and the no-repository rule in `apps/engine/src/triage/`, which name “watch #feedback for bugs, hourly” and keep a
+  cron job or a scheduler in a repository a change), so asking for a
   watch from Home leaves one thing to approve: the suggested watch, with no plan, review or pull request.
 - **Suggested watches** (`domain/schedules.ts` `WatchSuggestion`, `decide/watch-suggestions.ts`,
   `state/watch-suggestions.ts`). A suggested watch is a `schedule.write` with `source` waiting for you, in
@@ -1773,7 +1774,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   - **An agent asks for a watch.** `set_schedule {source}` with no `schedule_id`, and a new sourced `schedule.write`
     sent on your behalf (`schedules_write`), are checked like any watch (the integration, the message, the trigger,
     no target) and recorded as a suggestion from that task (in its activity, “Suggested the watch “…””) instead of a
-    live watch; the same open suggestion again records nothing, and an eleventh open one is refused
+    live watch; the same open suggestion again from the same task records nothing (another task asking for it gets
+    one of its own), and an eleventh open one is refused
     (`suggestion_limit`). The tool's reply says it starts only once you accept it. A watch an agent set before this
     still takes its changes in place.
   Accepting (`watch_suggestion.accept`, human-only: core refuses it on your behalf; `shinsa schedules accept`) writes

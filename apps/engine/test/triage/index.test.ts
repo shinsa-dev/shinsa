@@ -210,10 +210,14 @@ describe('the branch triage names', () => {
       return Promise.resolve(null as T);
     };
     await resolveTriage(stateWith(), newTask(), LOCAL, ask);
-    expect(calls[0]?.system).toContain('a request to set up an automation');
+    expect(calls[0]?.system).toContain('a request to set up a Shinsa automation');
+    expect(calls[0]?.system).toContain('rather than code such as a cron job in a repository');
     expect(calls[0]?.system).toContain('“watch #feedback for bugs, hourly”');
     expect(SHAPE_QUESTION.criteria.answer).toContain(
-      'a request to set up an automation (a schedule, a trigger or a watch of an integration) that its agent sets or suggests'
+      'so a cron job or a scheduler in a repository is a change'
+    );
+    expect(SHAPE_QUESTION.criteria.answer).toContain(
+      'a request to set up a Shinsa automation (a schedule, a trigger or a watch of an integration) that its agent sets or suggests'
     );
   });
 });

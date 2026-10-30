@@ -245,6 +245,21 @@ describe('a watch an agent sets', () => {
     expect(suggestions(harness)).toHaveLength(1);
   });
 
+  test('asked for the same watch from two tasks, each task gets its own suggestion', () => {
+    const { harness } = createProject();
+    const first = createTask(harness);
+    const second = createTask(harness);
+    requestSchedule(harness, first);
+    requestSchedule(harness, second);
+    expect(suggestions(harness).map((suggestion) => suggestion.origin)).toEqual([
+      { kind: 'agent', taskId: first, runId: harness.activeRun(first).id },
+      { kind: 'agent', taskId: second, runId: harness.activeRun(second).id },
+    ]);
+    expect(harness.task(second).activity.at(-1)?.text).toBe('Suggested the watch “Feedback bugs”');
+    record(harness);
+    expect(suggestions(harness)).toHaveLength(2);
+  });
+
   test('is checked like any watch before it is suggested', () => {
     const { harness } = createProject();
     const taskId = createTask(harness);

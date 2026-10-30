@@ -82,7 +82,7 @@ const TRIAGE_SYSTEM = [
   'Return {"title": string, "repo": string, "branch": string} and one field for each decision listed after the request.',
   `title: what will be done, imperative, sentence case, at most ${TITLE_LIMIT} characters, no trailing period.`,
   `repo: the exact name of the repository the work belongs in, or "${NO_REPOSITORY}".`,
-  `Answer "${NO_REPOSITORY}" when the request needs no repository: a greeting, small talk, a general question, a question about the state Shinsa keeps (its tasks, projects or settings, or what it knows) rather than code, a request to set up an automation (a schedule, a trigger or a watch of an integration such as “watch #feedback for bugs, hourly”), or planning that names no code.`,
+  `Answer "${NO_REPOSITORY}" when the request needs no repository: a greeting, small talk, a general question, a question about the state Shinsa keeps (its tasks, projects or settings, or what it knows) rather than code, a request to set up a Shinsa automation (a schedule, a trigger or a watch of an integration such as “watch #feedback for bugs, hourly”) rather than code such as a cron job in a repository, or planning that names no code.`,
   REPOSITORY_RULE,
   `branch: <type>/<short-kebab-slug>, type one of ${COMMIT_TYPES.join(', ')}, the conventional commit type of the work.`,
   'The decisions: answer each only with its options.',
