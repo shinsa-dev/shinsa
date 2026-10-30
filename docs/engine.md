@@ -62,7 +62,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; what a watchdog check found (`report_watch`); in the home of a watch, what a read filed (`file_report`, `report_intake`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -1305,12 +1305,13 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   (`resolveProductionPrompt`). Each costs a turn of the task's whole session, so they back off: the next one comes
   after as long as the watchdog has already waited, at least 30 minutes (`productionPollMinutes`) and at most 6 hours
   (`productionPollMaxMinutes`), about 30 turns in a week rather than one every half hour. One answer counts for every
-  watchdog of the task that waits for production, since they wait for the same change: `report_watch {live: false}`
+  watchdog of the task that waits for production, since they wait for the same change: `report_read {live: false}`
   asks again later for all of them (`watchdog.deferred`), and `live: true` starts every one's window then
   (`watchdog.live`), with that turn's check as the first of the one that asked. A change that is not live within a week
   of `awaitingSince` (`productionWaitHours`; for a watchdog that waited for a data source first, a week from when you
   connected it) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves out `live` is refused
-  (`live_required`).
+  (`live_required`), unless it filed a report, which says the change is live; one that filed a report with `live:
+  false` is refused (`live_filed`). An unreached read (`reached: false`) leaves it waiting.
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
   `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
   slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the
@@ -1319,17 +1320,32 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   live run (a later round at work), defers it 15 minutes (`watchdog.deferred`), so a check never shares the session
   with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
   (`isReadOnlyRun`), in the repository itself, resuming the task's session (`Decider.taskSession`), so it knows what
-  shipped; its prompt (`resolveWatchPrompt`) names the watchdog, its check, its source and its last checks. It hands
-  over with `report_watch {healthy, summary, issue?}` (`validateWatchReport`; `PURPOSE_HAND_OVERS.watch`).
-- **What a check leads to.** A healthy check is kept (`watchdog.checked`, the last 20), and the next one is due an
-  interval later; when that would fall past the window, the watchdog passes. An issue trips it: Shinsa files a new
-  task forked from this one (`createdBy: {kind: 'watchdog'}`, its request the issue's title and request and which
-  watchdog found it), so the fix starts from this conversation and goes through every gate. Either way the task rests
-  again (`merged`). A check run that fails or ends without `report_watch` is recovered like any run (its nudged or
-  resumed run takes the check over, `watchdog.checking`), but where any other run would open a failure gate, the check
-  gives up instead (`missWatchCheck`, `watchdog.missed` with the reason): no gate, the task rests again, and the next
-  check is due an interval later; when that falls past the window, the watchdog stops (`stopped`, never `passed`,
-  since its last check never ran). One broken check never freezes the watchdog or the task's other watchdogs. A message while it checks steers it, and Retry at `watching` starts it again.
+  shipped. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
+  change: its prompt (`resolveWatchPrompt`, on the skeleton both share, `resolveReadPrompt` in `prompts/reads.ts`)
+  names the watchdog, its check as what to look for, its source, what arrived since its last check (or since the
+  window started), its last checks and the last 10 tasks filed from that server in the project.
+- **What a check leads to.** Each thing wrong that the change caused is a report the agent files with `file_report`
+  (`decide/reads.ts`), as in a watch: the report's id or link, author, time and text, deduped against every task the
+  project has from that server, a watch's or a watchdog's. A report another watch or watchdog filed first is not filed
+  again: it is linked to this watchdog (`watchdog.report_linked`, into `linkedTaskIds`, apart from the forks it files) and counts for the check like one
+  it filed, so the watchdog never passes with the issue open; only a report this watchdog already holds is refused
+  (`report_filed`). A watchdog's filing always forks the shipped
+  task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
+  through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
+  `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
+  quotes the report ("Reported in <server> …"); its Reported in fact names the watchdog and opens the shipped task.
+  The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
+  kept (`watchdog.checked`, the last 20), and the next one is due an interval later; when that would fall past the
+  window, the watchdog passes. One that filed or linked a report trips it (`tripped`, `forkTaskIds` the forks it
+  filed, `linkedTaskIds` the tasks a watch or another watchdog filed first), and the watchdog stops. A source the agent cannot reach after 3 tries ends with `reached: false`: the check is missed
+  (`watchdog.missed` with its summary, the run failed) and the next one is due an interval later, as for a check that
+  cannot run. Either way the task rests again (`merged`). A check run that fails or ends without `report_read` is
+  recovered like any run (its nudged or resumed run takes the check over, `watchdog.checking`), but where any other
+  run would open a failure gate, the check gives up instead (`missWatchCheck`): when it already filed a report it
+  trips, otherwise it is missed (`watchdog.missed` with the reason): no gate, the task rests again, and the next check
+  is due an interval later; when that falls past the window, the watchdog stops (`stopped`, never `passed`, since its
+  last check never ran). One broken check never freezes the watchdog or the task's other watchdogs. A message while
+  it checks steers it, and Retry at `watching` starts it again.
 - **You stop them.** `watchdog.stop` (Stop on the Overview, `shinsa watchdogs stop`) ends one, and its check if it is
   running. Marking the task done or cancelling it stops every active one; an agent cannot mark a task done while one
   is watching or waits for a source (`task_open`). While one is active the merged task's status reads Watching and its
@@ -1734,7 +1750,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   → Automations says it): a **Schedule** runs at a time (once, every N minutes, daily) and starts or messages a
   task; a **Trigger** runs when its webhook is called; a **Watch** reads one of its project's integrations
   (`source`) and files a task for each new report in it, on a clock or a webhook.
-- **A watch reads in a home of its own** (`decide/intake.ts`, `prompts/intake.ts`). `Schedule.source`
+- **A watch reads in a home of its own** (`decide/intake.ts`, `prompts/intake.ts`; what it shares with a watchdog check in `decide/reads.ts` and `prompts/reads.ts`). `Schedule.source`
   (`ScheduleSource`: `projectId`, `server`) names an integration the project uses (Watchdogs, above), and one the
   project does not use is refused (`source_not_found`). Writing one (`schedule.write` with `source`, `shinsa
   schedules write --source <server> --project <project>`, or an agent's `set_schedule {source}`) creates its home
@@ -1747,26 +1763,26 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   would start a round: it starts a read, a turn of its session like a watchdog check (purpose `intake`, read-only,
   stage `watching` with "reading <server> for the automation “…”", in the task's scratch folder). Its prompt
   (`resolveIntakePrompt`) names the integration and what it holds, the schedule's message as what to look for,
-  where to read from (`Schedule.lastReadAt`: the start of the last read that finished with `report_intake`, so a
+  where to read from (`Schedule.lastReadAt`: the start of the last read that finished with `report_read`, so a
   read that failed never moves it; the schedule's creation until one has, `schedule.read`) and the last 10 tasks it
   filed with their links. A home that is still reading skips the fire ("The task was at work, so this read was
   skipped."), and an integration removed from the project stops the watch (`target_gone`).
 - **Each new report becomes a task.** In a read the agent calls `file_report` (`agent.file_report`, refused in any
-  other run, `wrong_step`): a `title`, the `request`, the report's `report_id` or `link` (one is required,
+  run but a read or a watchdog check, `wrong_step`): a `title`, the `request`, the report's `report_id` or `link` (one is required,
   `report_unnamed`), `author`, `posted_at`, its `text`, and optionally `repository` and `fork_from`. Shinsa creates a
   task in the project (triage picks the repository unless one is named, which must be one of the project's,
   `repo_project`) whose request is the title, the request and
   the report quoted with who wrote it and when; it keeps the report as `Task.sourceReport` (`SourceReport`:
-  `scheduleId`, `server`, `reportId`, `link`, `author`, `postedAt`, `text`), with `scheduleId` and `createdBy
-  {kind: 'intake'}`. With `fork_from` it is a fork of the task that shipped the feature (Forking a task), so its
+  `scheduleId`, `watchdogId`, `server`, `reportId`, `link`, `author`, `postedAt`, `text`; a watch's sets
+  `scheduleId`, a watchdog's `watchdogId`), with `Task.scheduleId` and `createdBy {kind: 'intake'}`. With `fork_from` it is a fork of the task that shipped the feature (Forking a task), so its
   agent starts from that conversation; the watch's home itself is refused (`fork_intake`). A report the project
-  already has a task for, from the same server with the same id or link, is refused (`report_filed`, naming that
-  task), whether that task is open, done or cancelled: dedupe reads the filed tasks themselves, so it holds when
-  the schedule is deleted and written again. The read ends with `report_intake {summary}` (at most 1,000
+  already has a task for, from the same server with the same id or link, whether a watch or a watchdog filed it, is
+  refused (`report_filed`, naming that task), whether that task is open, done or cancelled: dedupe reads the filed tasks themselves, so it holds when
+  the schedule is deleted and written again. The read ends with `report_read {summary}` (at most 1,000
   characters) and the task rests again. A source that errors or times out is tried again by the agent, 3 tries in
   all (`SCHEDULE_LIMITS.readAttempts`, in the prompt); still failing, it reports `reached: false`, which ends the read
   as not finished (the run fails with its summary, "could not reach a data source") without moving
-  `lastReadAt`, so the next read covers the same time. A read that fails or ends without `report_intake` is
+  `lastReadAt`, so the next read covers the same time. A read that fails or ends without `report_read` is
   recovered like any run, once per read (each read starts with the home's recoveries at 0, so a crash in an earlier
   read never makes a later one give up at once); where another run would open a failure gate, the read gives up
   instead (`missIntakeRead`): the task rests and the next fire reads again. The filed task's activity says which automation filed it from whose report, and the
@@ -2536,7 +2552,10 @@ truth, and a snapshot only saves replaying it.
   Logs from before a schedule could read a data source (log version 8, `SCHEDULE_SOURCE_LOG_VERSION`) have
   `schedule.written` events without `source` or `lastReadAt`; both are set to `null`, so an old schedule reads nothing
   and has never finished a read.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 8) marks the log so
+  Logs from before a watchdog filed through `file_report` (log version 9, `WATCHDOG_READS_LOG_VERSION`) have a
+  watchdog's one `forkTaskId` on `watchdog.armed` and `watchdog.checked`, which becomes `forkTaskIds` (that task, or
+  none), an armed watchdog without `linkedTaskIds` (set to none), and `task.created` reports without `watchdogId`, which is set to `null`.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 9) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,

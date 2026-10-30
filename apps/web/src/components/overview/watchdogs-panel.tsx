@@ -90,6 +90,7 @@ function WatchdogRow({
   const { busy, run } = useBusy<'stop'>();
   const status = WATCHDOG_STATUS[watchdog.status];
   const active = isWatchdogActive(watchdog);
+  const meta = describeWatchdogMeta(watchdog, now);
   return (
     <li className='flex flex-col gap-2 py-2.5 first:pt-0 last:pb-0'>
       <div className='flex items-start gap-3'>
@@ -111,9 +112,7 @@ function WatchdogRow({
                 description={`${describeWatchdogSchedule(watchdog)}${watchdog.source ? ` · ${watchdog.source.server}` : ''}`}
               />
             </InfoPopover>
-            <span className='ml-auto shrink-0 text-2xs text-fg-2 tabular-nums'>
-              {describeWatchdogMeta(watchdog, now)}
-            </span>
+            {meta && <span className='shrink-0 text-fg-2 tabular-nums'>{meta}</span>}
           </div>
           <Markdown text={describeWatchdogSummary(state, watchdog, now)} className='text-fg-3 text-xs' />
         </div>

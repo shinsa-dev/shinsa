@@ -74,6 +74,7 @@ describe('describing a schedule', () => {
   it('a watch shows its type, the integration it watches and the tasks it filed', () => {
     const report = (scheduleId: string) => ({
       scheduleId,
+      watchdogId: null,
       server: 'slack',
       reportId: null,
       link: 'https://example.slack.com/p1',

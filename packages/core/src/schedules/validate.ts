@@ -161,14 +161,19 @@ export function validateScheduleRequest(
   });
 }
 
-export function validateIntakeReport(
+function readOptionalFlag(reader: Reader, value: unknown, name: string) {
+  if (value === undefined || value === null) return null;
+  return reader.flag(value, name);
+}
+
+export function validateReadReport(
   input: Record<string, unknown>
-): Validation<{ summary: string; reached: boolean }> {
+): Validation<{ summary: string; reached: boolean; live: boolean | null }> {
   const reader = new Reader();
   return reader.result({
-    summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.intakeSummary),
-    reached:
-      input.reached === undefined || input.reached === null ? true : reader.flag(input.reached, 'reached'),
+    summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.readSummary),
+    reached: readOptionalFlag(reader, input.reached, 'reached') ?? true,
+    live: readOptionalFlag(reader, input.live, 'live'),
   });
 }
 

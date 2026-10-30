@@ -56,7 +56,7 @@ import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
-import { navigate, resolveAutomationPath, resolveTaskPath } from '@/router.ts';
+import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
 function FactPopover({
   trigger,
@@ -396,7 +396,9 @@ function RelatedFact({
 function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
   const report = resolveReportFact(state, task);
   if (!report) return null;
-  const watchId = report.watchId;
+  const filedBy = report.filedBy;
+  const watchId = filedBy?.watchId ?? null;
+  const watchedTaskId = filedBy?.watchedTaskId ?? null;
   return (
     <FactPopover
       className='max-w-72'
@@ -413,14 +415,20 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
           {report.text}
         </blockquote>
       </InfoSection>
-      {report.automation && (
+      {filedBy && (
         <InfoSection>
-          <InfoRow icon='IconArrowsRepeat' label='Filed by the automation' value={report.automation} />
+          <InfoRow icon='IconArrowsRepeat' label={`${filedBy.label} “${filedBy.value}”`} />
         </InfoSection>
       )}
       {report.link && <InfoAction label='Open the report' href={report.link} />}
       {watchId && (
         <InfoAction label='Open the watch' onClick={() => navigate(resolveAutomationPath(watchId))} />
+      )}
+      {watchedTaskId && (
+        <InfoAction
+          label='Open the shipped task'
+          onClick={() => navigate(resolveTaskPath(resolveTaskTarget(state, watchedTaskId)))}
+        />
       )}
     </FactPopover>
   );

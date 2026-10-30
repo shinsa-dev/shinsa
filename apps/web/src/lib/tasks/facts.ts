@@ -1,4 +1,4 @@
-import type { ShinsaState, Task } from '@shinsa/core';
+import type { ShinsaState, SourceReport, Task } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
 
@@ -38,17 +38,30 @@ function isWebLink(link: string | null): link is string {
   return link !== null && /^https?:\/\//i.test(link);
 }
 
+function resolveFiledBy(state: ShinsaState, task: Task, report: SourceReport) {
+  const schedule = report.scheduleId ? state.schedules[report.scheduleId] : undefined;
+  if (schedule)
+    return {
+      label: 'Filed by the automation',
+      value: schedule.name,
+      watchId: schedule.id,
+      watchedTaskId: null,
+    };
+  const watched = report.watchdogId && task.forkOf ? state.tasks[task.forkOf] : undefined;
+  const watchdog = watched?.watchdogs?.find((candidate) => candidate.id === report.watchdogId);
+  if (!watched || !watchdog) return null;
+  return { label: 'Filed by the watchdog', value: watchdog.title, watchId: null, watchedTaskId: watched.id };
+}
+
 export function resolveReportFact(state: ShinsaState, task: Task, now = Date.now()) {
   const report = task.sourceReport;
   if (!report) return null;
   const byline = [report.author, describePostedAt(report.postedAt, now)].filter(Boolean).join(' · ');
-  const watch = state.schedules[report.scheduleId] ?? null;
   return {
     label: `Reported in ${report.server}`,
     byline: byline || null,
     text: report.text,
     link: isWebLink(report.link) ? report.link : null,
-    automation: watch?.name ?? null,
-    watchId: watch?.id ?? null,
+    filedBy: resolveFiledBy(state, task, report),
   };
 }

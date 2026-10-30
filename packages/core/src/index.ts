@@ -117,7 +117,6 @@ export {
   validateSplit,
   validateSuggestions,
   validateWait,
-  validateWatchReport,
   WATCHDOG_STARTS,
 } from './report/index.ts';
 export type * from './report/types.ts';

@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { join } from 'node:path';
+import { handleScheduleTool } from '../../src/schedules/tools.ts';
+import { SecretStore } from '../../src/secrets/store.ts';
 import type { AgentContext } from './harness.ts';
 import { World } from './harness.ts';
 
@@ -33,7 +36,19 @@ function writePhase(phase: number, walkthrough: Record<string, unknown> | null) 
 }
 
 async function merged() {
-  world = await World.create();
+  world = await World.create({
+    supervise: (current) => {
+      const context = {
+        secrets: new SecretStore(join(current.root, 'secrets.json')),
+        baseUrl: () => 'http://localhost',
+        timeZone: 'UTC',
+        now: Date.now,
+      };
+      return {
+        schedules: { handleTool: (name, input, call) => handleScheduleTool(name, input, call, context) },
+      };
+    },
+  });
   const w = world;
   w.agents.queue(
     'build',
@@ -62,7 +77,7 @@ async function fire(w: World, taskId: string) {
 }
 
 describe('watchdogs after a merge', () => {
-  test('a check is a read-only turn of the task’s session in the repository, and an issue files a forked task', async () => {
+  test('a check is a read-only turn of the task’s session in the repository, and a report it files becomes a forked task', async () => {
     const { w, taskId } = await merged();
     expect(w.task(taskId).watchdogs?.[0]).toMatchObject({ title: 'Greeting renders', status: 'watching' });
     const agentSession = w.agents.of('plan')[0]?.sessionId;
@@ -76,20 +91,25 @@ describe('watchdogs after a merge', () => {
     await w.untilStage(taskId, 'merged');
 
     w.agents.queue('watch', async (agent) => {
-      await agent.call('report_watch', {
-        healthy: false,
-        summary: 'Errors since the merge.',
-        issue: {
-          title: 'Greeting fails in Safari',
-          request: 'Fix the greeting in Safari: it throws on load.',
-        },
+      await agent.call('file_report', {
+        title: 'Greeting fails in Safari',
+        request: 'Fix the greeting in Safari: it throws on load.',
+        report_id: 'err-42',
+        link: 'https://maple.dev/errors/42',
+        text: 'TypeError: greeting is undefined (Safari 18, 37 events since the merge)',
       });
+      await agent.call('report_read', { summary: 'One new error since the merge; filed it.' });
     });
     await fire(w, taskId);
     await w.until('the tripped watchdog', () => w.task(taskId).watchdogs?.[0]?.status === 'tripped');
-    const forkId = w.task(taskId).watchdogs?.[0]?.forkTaskId ?? '';
-    expect(w.task(forkId)).toMatchObject({ forkOf: taskId });
+    const [forkId = ''] = w.task(taskId).watchdogs?.[0]?.forkTaskIds ?? [];
+    expect(w.task(forkId)).toMatchObject({
+      forkOf: taskId,
+      createdBy: { kind: 'watchdog', taskId },
+      sourceReport: { server: 'maple', reportId: 'err-42', scheduleId: null },
+    });
     expect(w.task(forkId).request).toContain('Fix the greeting in Safari');
+    expect(w.task(forkId).request).toContain('Reported in maple');
     await w.until('the fork to plan', () => w.agents.sessions.some((session) => session.fork));
     const forked = w.agents.sessions.find((session) => session.fork);
     expect(forked?.resume).toBe(agentSession);

@@ -39,7 +39,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
     );
     const intake: ShinsaCommand[] =
       run.purpose === 'intake'
-        ? [{ type: 'agent.report_intake', runId: run.id, summary: 'Read it; nothing new.', reached: true }]
+        ? [{ type: 'agent.report_read', runId: run.id, summary: 'Read it; nothing new.', reached: true }]
         : [];
     return [
       ...intake,

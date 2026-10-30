@@ -32,8 +32,7 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'report_diagnosis',
   'submit_report',
   'report_outcome',
-  'report_watch',
-  'report_intake',
+  'report_read',
   'reshape_task',
 ]);
 
@@ -140,8 +139,7 @@ type PlainShinsaTool =
   | 'report_diagnosis'
   | 'submit_report'
   | 'report_outcome'
-  | 'report_watch'
-  | 'report_intake'
+  | 'report_read'
   | 'delegation_status'
   | 'delegation_cancel'
   | 'list_schedules'
@@ -159,8 +157,7 @@ const PLAIN_SHINSA: Record<PlainShinsaTool, { icon: IconName; verb: string }> = 
   report_diagnosis: { icon: 'IconSend', verb: 'Reported the diagnosis' },
   submit_report: { icon: 'IconSend', verb: 'Wrote the report' },
   report_outcome: { icon: 'IconSend', verb: 'Reported the outcome' },
-  report_watch: { icon: 'IconSend', verb: 'Reported the watchdog check' },
-  report_intake: { icon: 'IconSend', verb: 'Reported what the watch found' },
+  report_read: { icon: 'IconSend', verb: 'Reported what it read' },
   delegation_status: { icon: 'IconAgents', verb: 'Checked a delegation' },
   delegation_cancel: { icon: 'IconCircleX', verb: 'Stopped a delegation' },
   list_schedules: { icon: 'IconClock', verb: 'Listed the schedules' },
@@ -424,8 +421,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   report_diagnosis: () => 'reported the diagnosis',
   submit_report: () => 'wrote the report',
   report_outcome: () => 'reported the outcome',
-  report_watch: () => 'reported the watchdog check',
-  report_intake: () => 'reported what the watch found',
+  report_read: () => 'reported what it read',
   reshape_task: () => 'changed the kind of task',
   delegate_task: (count) => `started ${formatCount(count, 'delegation', 'delegations')}`,
   delegation_status: (count) => (count === 1 ? 'checked a delegation' : `checked delegations ${count} times`),
