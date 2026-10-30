@@ -101,7 +101,7 @@ function MachineFact({ task }: { task: Task }) {
   return (
     <Hint label='The Mac this task runs on'>
       <span className={FACT}>
-        <Icon size='sm' name='IconServer' />
+        <Icon size='sm' name='IconMacbook' />
         <span className='truncate'>{machine.name}</span>
       </span>
     </Hint>
