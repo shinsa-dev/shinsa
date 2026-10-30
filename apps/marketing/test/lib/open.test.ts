@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
-import { readReviewFragment, resolveTaskInvite } from '../../src/lib/open';
+import { openTask } from '../../src/lib/content';
+import {
+  readReviewFragment,
+  resolveDocumentTitle,
+  resolveInviteHeader,
+  resolveTaskInvite,
+} from '../../src/lib/open';
 
 function encode(value: unknown) {
   return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
@@ -32,6 +38,22 @@ describe('resolveTaskInvite', () => {
     expect(resolveTaskInvite('?task=../settings')).toBeNull();
     expect(resolveTaskInvite('?task=javascript:alert(1)')).toBeNull();
     expect(resolveTaskInvite(`?task=${'a'.repeat(65)}`)).toBeNull();
+  });
+});
+
+describe('resolveDocumentTitle', () => {
+  test('names the task by its handle and title, or as a task without a handle', () => {
+    expect(
+      resolveDocumentTitle({ link: 'shinsa://task/id-1', handle: 'LOC-28', title: 'Fix the tabs' })
+    ).toBe('LOC-28: Fix the tabs · Shinsa');
+    expect(resolveDocumentTitle({ link: 'shinsa://task/id-1', handle: null, title: 'Fix the tabs' })).toBe(
+      'Task: Fix the tabs · Shinsa'
+    );
+  });
+
+  test('keeps the page title when the link names no task or no title', () => {
+    expect(resolveDocumentTitle(null)).toBeNull();
+    expect(resolveDocumentTitle({ link: 'shinsa://task/id-1', handle: 'LOC-28', title: null })).toBeNull();
   });
 });
 
@@ -69,5 +91,31 @@ describe('readReviewFragment', () => {
     for (const cut of [1, 10, Math.floor(whole.length / 2), whole.length - 1]) {
       expect(await readReviewFragment(`#review=${whole.slice(0, cut)}`)).toBeNull();
     }
+  });
+});
+
+describe('resolveInviteHeader', () => {
+  test('fills the header from the link before the review is read', () => {
+    expect(resolveInviteHeader('?task=id-1&handle=LOC-28&title=Fix+the+tabs')).toEqual({
+      title: 'Fix the tabs',
+      description: '',
+      handle: 'LOC-28',
+      link: 'shinsa://task/id-1',
+    });
+    expect(resolveInviteHeader('?task=id-1')).toEqual({
+      title: openTask.untitled,
+      description: '',
+      handle: '',
+      link: 'shinsa://task/id-1',
+    });
+  });
+
+  test('says the link leads nowhere when it names no task', () => {
+    expect(resolveInviteHeader('')).toEqual({
+      title: openTask.missingTitle,
+      description: openTask.missing,
+      handle: '',
+      link: null,
+    });
   });
 });

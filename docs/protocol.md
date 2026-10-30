@@ -68,7 +68,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
-| courier | A new task an agent files for work that belongs elsewhere (`create_task`), optionally making its own task wait on it | `TaskCreator.kind: 'courier'` | a task |
+| courier | A new task an agent files for work that belongs elsewhere (`create_task`), such as the part of a change in another repository, optionally making its own task wait on it (`this_task_waits`) or waiting on its own task (`after_this`) | `TaskCreator.kind: 'courier'` | a task |
 | memory | The rules you keep for every later agent, for every project or one; an agent proposes one with `remember` and only you keep it (`docs/engine.md` → Memory) | `MemoryEntry`, `state.memories`, `MEMORY_LIMITS` | Memory, "rule" |
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
@@ -820,7 +820,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it or forked from a task (`forkOf`) |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`) or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch, from a home of its own |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |

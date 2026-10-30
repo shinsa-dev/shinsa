@@ -88,7 +88,14 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...lineage,
   });
-  if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by: 'you' });
+  if (waitsOn.length > 0) {
+    decider.emit({
+      type: 'task.waits_on_changed',
+      taskId,
+      waitsOn,
+      by: lineage.createdBy ? 'shinsa' : 'you',
+    });
+  }
   decider.run({ kind: 'task.triage', taskId });
   return taskId;
 }

@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { Task } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, proposePlan, registerRepo } from '../harness.ts';
+import {
+  createHarness,
+  createTask,
+  type Harness,
+  proposePlan,
+  readyWorktree,
+  registerRepo,
+  shipAndMerge,
+} from '../harness.ts';
 
 function building() {
   const harness = createHarness();
@@ -16,7 +24,14 @@ function created(harness: Harness, before: Set<string>): Task[] {
 function courier(
   harness: Harness,
   runId: string,
-  options: { key?: string; request?: string; repoId?: string | null; thisWaits?: boolean } = {}
+  options: {
+    key?: string;
+    request?: string;
+    repoId?: string | null;
+    thisWaits?: boolean;
+    afterThis?: boolean;
+    forkOf?: string;
+  } = {}
 ) {
   const before = new Set(Object.keys(harness.state.tasks));
   harness.send({
@@ -26,6 +41,8 @@ function courier(
     request: options.request ?? 'Add the same banner to the settings page in the admin app.',
     repoId: options.repoId ?? null,
     thisWaits: options.thisWaits ?? false,
+    afterThis: options.afterThis ?? false,
+    ...(options.forkOf ? { forkOf: options.forkOf } : {}),
   });
   return created(harness, before);
 }
@@ -83,9 +100,87 @@ describe('a courier task', () => {
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);
     expect(() => courier(harness, planner.id, { thisWaits: true })).toThrow(
-      'Only a task that is building can wait on a task it creates.'
+      'Only a task that is building can wait on a task it creates. Create it with this_task_waits once you build, or now with after_this'
     );
     expect(courier(harness, planner.id)).toHaveLength(1);
+  });
+
+  test('can wait for this task to merge, set by Shinsa, while this task keeps building', () => {
+    const { harness, taskId } = building();
+    const [task] = courier(harness, harness.activeRun(taskId).id, { afterThis: true, forkOf: taskId });
+    expect(task).toMatchObject({ waitsOn: [taskId], forkOf: taskId, auto: { start: false } });
+    expect(task?.activity.find((entry) => entry.kind === 'stage')?.actor).toBe('shinsa');
+    expect(harness.task(taskId)).toMatchObject({ waitsOn: [], stage: 'building' });
+  });
+
+  test('waiting for this task, starts only once this task merges', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const [task] = courier(harness, harness.activeRun(taskId).id, { afterThis: true });
+    const createdId = task?.id ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId: createdId,
+      title: 'Use the new endpoint',
+      repoId: harness.task(taskId).repoId,
+      size: 'small',
+      branch: 'feat/use-endpoint',
+      waitsOn: [],
+    });
+    expect(harness.task(createdId).stage).toBe('waiting_on_tasks');
+    shipAndMerge(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(harness.task(createdId).stage).not.toBe('waiting_on_tasks');
+  });
+
+  test('waiting for an investigation, starts once it hands over its diagnosis, with no merge', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    harness.send({ type: 'task.create', request: 'Why does the export hang?', repoId });
+    const taskId = Object.keys(harness.state.tasks)[0] ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: 'Find why the export hangs',
+      repoId,
+      size: 'small',
+      branch: 'fix/export',
+      waitsOn: [],
+      shape: 'investigate',
+    });
+    readyWorktree(harness, taskId);
+    const investigator = harness.activeRun(taskId);
+    expect(investigator.role).toBe('investigator');
+    const [task] = courier(harness, investigator.id, { afterThis: true });
+    const createdId = task?.id ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId: createdId,
+      title: 'Stream the export',
+      repoId,
+      size: 'small',
+      branch: 'fix/stream-export',
+      waitsOn: [],
+    });
+    expect(harness.task(createdId).stage).toBe('waiting_on_tasks');
+    harness.send({ type: 'agent.deliver', runId: investigator.id, step: 'investigate', body: 'It buffers.' });
+    expect(harness.task(taskId).stage).toBe('done');
+    expect(harness.task(createdId).stage).not.toBe('waiting_on_tasks');
+  });
+
+  test('a planning task can file a task that waits for it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const [task] = courier(harness, harness.activeRun(taskId).id, { afterThis: true });
+    expect(task?.waitsOn).toEqual([taskId]);
+    expect(harness.task(taskId).stage).toBe('planning');
+  });
+
+  test('refuses waiting both ways', () => {
+    const { harness, taskId } = building();
+    expect(() =>
+      courier(harness, harness.activeRun(taskId).id, { thisWaits: true, afterThis: true })
+    ).toThrow('Set this_task_waits or after_this, not both');
   });
 });
 

@@ -601,6 +601,38 @@ same files:
   prompt-cache prefix does not change (`test/e2e/prompt-cache.test.ts` steers an Agent mid-turn and checks it). Limit:
   the files an agent edits during a turn count only once its hand-over commits them.
 
+### Work across repositories
+
+A task works in one repository and ships one pull request, whatever its project holds. A change that needs code in
+two repositories of a project (an endpoint in the server and the SDK call that uses it) is two tasks, one per
+repository, linked and ordered, so each has its own worktree, checks, review and pull request, and GitHub merges
+them in the order they need:
+
+```
+ this task (server)                      the other part (sdk)
+ plan ─► build ─► review ─► merge ──────► starts, forked from this
+      │                                   task's conversation
+      └─ create_task {repository: sdk, fork_from: this, after_this}
+```
+
+- **The Agent is taught it.** A fresh run's project context (`resolveProjectContext`, `prompts/project.ts`) adds a
+  short guide when the task has a repository and the project has another (`describeCrossRepositoryWork`): read the
+  other repository at its path, never change files outside its own worktree, file the other part with `create_task`
+  in that repository and forked from this task, set the order, and link it in the plan and hand-over. A project with
+  one repository never gets the guide. The guide sits in the brief, the user turn, so the session's cached prefix
+  does not change (Caching).
+- **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
+  merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
+  (`cannot_wait`, whose message points a planner at its first phase or at `after_this`). `after_this` makes the new
+  task wait on this one (the other part uses what this task adds); any run may set it, since it never holds this
+  task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`). A wait ends
+  when the task waited on is finished, merged or done (`isTaskComplete`), so a task that ships no pull request
+  releases its waiters too: an answer, research or investigation settles as done when it hands over (or when you
+  veto its proposal), an operation when it ends, and one whose proposal you approve becomes a change that merges.
+- **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
+  of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
+  task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
+
 ## Rounds
 
 One task fits both ways of working: a huge chat that grows one goal until it is right ("MCP v2" over weeks, new ideas
@@ -1864,9 +1896,11 @@ and the run supervisor.
   wait (no process is listening any more), then claims again, so results reach a resumed parent by
   steer or wake exactly once.
 - **Couriers and decomposition (Paperclip).** `create_task` makes a self-contained task for work
-  that belongs elsewhere (its `request`), optionally in another repository, with `this_task_waits` making this
-  task wait on it (a blocker, not just a parent link; only an Agent run that builds or fixes may wait, others are
-  refused with `cannot_wait`); it is exactly-once per `client_request_id`.
+  that belongs elsewhere (its `request`), optionally in another repository (Where agents work → Work across
+  repositories), with `this_task_waits` making this task wait on it (a blocker, not just a parent link; only an Agent
+  run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
+  task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
+  as Shinsa's); setting both is refused (`dependency_cycle`). It is exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
@@ -2414,8 +2448,15 @@ changes costs one call.
   (a fresh-class failure), so `run.prompt` holds the brief and `run.rolePrompt` the short form.
 - A fix loop stops with "not making progress" when the same failures come back after two fix
   rounds (checks by the ids of the checks that block, the pull request by the names of its failing CI checks, the
-  ids of its unresolved review threads and a conflict). New comments alone key nothing: they have
-  their own limit, ten updates in a row that bring only comments (The pull request watch, below).
+  ids of its unresolved review threads and a conflict), or after two rounds that left the code as it was
+  (the fingerprint's tree). This is what stops an agent that cannot fix a failure under "until clean". New
+  comments alone key nothing, by signature or by tree: a pull request fix started only by them, with no
+  failing check, open thread or conflict (`commentsOnly`, from `reactToWatch`), counts no repeats and
+  records no tree, so an agent that answers a bot's comment with nothing to fix is never stopped for it,
+  and those rounds never count against a later failure. Comments have their own limit, ten updates in a
+  row that bring only comments (The pull request watch, below). The gate names what came back: the
+  failing checks, the pull request's failing checks, open threads or conflict, the conflict with the
+  base branch, or what the pre-push hook found (`STALLED_FIX_SUBJECT`).
   `maxFixRounds` caps the automatic rounds; "until clean" (the default, `null`) has no cap and keeps
   going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead
   (Review rounds escalate to you, above).
@@ -2741,8 +2782,13 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   Shinsa where the tabs sit, and the shared facts, `TaskSharedFacts`), the app's own Review tab scrolling under it, opened by a card
   naming the pull request (its number when known and the task's handle) and its title, with Open in Shinsa (a button
   that opens `shinsa://task/<id>` in the Mac app) as the main button and the download beside it, in place of the
-  app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data it shows the
-  task's handle and title and the same two buttons. The data is a compact copy of the review (`serializeReviewPayload`,
+  app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data the same
+  header shows the task's handle and title and the same two buttons, with no Review tab; a link that names no task
+  gets the header "This link does not lead to a review" with Download alone. The data rides in the fragment,
+  which the browser never sends, so the page can only be drawn in the browser: until its script has read the
+  fragment the page shows one small spinner and nothing else, then the whole page appears in one paint, so nothing
+  arrives in pieces. The site's Worker serves `/open` (`apps/marketing/src/worker/open.ts`) and writes only the tab's
+  title from the query before the page is sent. The data is a compact copy of the review (`serializeReviewPayload`,
   `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
   task page's header shows that are not private (the status, as its stage once the pull request is open: shipping,
   ready to merge, merged or done; the repository's name and GitHub slug, the branch, the changed-line coverage and when
@@ -2856,7 +2902,8 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   every push.
 - **Ten comment-only updates in a row stop the watch** (`PULL_REQUEST_WATCH_WAKE_LIMIT`). A head
   that moves, or any check or conflict news, resets the count, so this only stops a chatty bot
-  looping a fix. The watch stops (`stopped: 'comment_limit'`) and a failure gate says so.
+  looping a fix. The watch stops (`stopped: 'comment_limit'`) and a failure gate says so. It is the
+  only limit on comment-only fixes: they never count toward "not making progress" (Recovery, above).
 - **One read of a task at a time.** The watch effect, the periodic sync and the sync after a push
   queue behind each other per task, so an older read is never recorded after a newer one. A read
   stopped by a cancel or a shutdown records nothing and does not count as failed.

@@ -139,7 +139,7 @@ export function SurfaceSpecimens() {
       >
         <Specimen label='spinner'>
           <Spinner />
-          <Spinner size='lg' className='text-fg-2' />
+          <Spinner size='md' className='text-fg-2' />
           <Button disabled>
             <Spinner />
             Saving…

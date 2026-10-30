@@ -29,6 +29,10 @@ function chance(random: Random, odds: number) {
   return random() < odds;
 }
 
+function resolveCourierOrder(draw: number) {
+  return { thisWaits: draw < 0.3, afterThis: draw >= 0.2 && draw < 0.5 };
+}
+
 const KEYS = ['k1', 'k2', 'k3', 'k4'];
 
 function listParentCommands(state: ShinsaState, run: Run, random: Random): ShinsaCommand[] {
@@ -108,7 +112,7 @@ function listTaskCommands(task: Task, run: Run, random: Random): ShinsaCommand[]
       requestKey: `c-${pick(random, KEYS)}`,
       request: 'Carry the same change to the admin app.',
       repoId: null,
-      thisWaits: chance(random, 0.3),
+      ...resolveCourierOrder(random()),
     },
     {
       type: 'agent.split_task',
@@ -227,6 +231,9 @@ export function listDelegationMarks(state: ShinsaState) {
 export function listCreatedTaskMarks(state: ShinsaState) {
   return Object.values(state.tasks).flatMap((task) => [
     task.createdBy?.kind === 'courier' ? 'courier task' : null,
+    task.createdBy?.kind === 'courier' && task.waitsOn.includes(task.createdBy.taskId)
+      ? 'courier waiting on its task'
+      : null,
     (task.splits?.length ?? 0) > 0 ? 'split plan' : null,
   ]);
 }

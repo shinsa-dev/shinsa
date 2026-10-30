@@ -142,7 +142,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task on the roadmap for work outside this one, for example the same change in another repository. It starts at once and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from for follow-up work on what a task did, such as a bug in a change it shipped: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits only when this task cannot be merged before that one.',
+      'Create a new task on the roadmap for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -163,6 +163,11 @@ export const ORCHESTRATION_TOOL_SPECS = {
             'A task to fork, by id or handle (this one included): the new task starts from its conversation.',
         },
         this_task_waits: { type: 'boolean' },
+        after_this: {
+          type: 'boolean',
+          description:
+            'The new task waits until this one is finished (merged, or done when it ships no pull request), then starts.',
+        },
         client_request_id: CLIENT_REQUEST_ID,
       },
       required: ['request'],
@@ -388,6 +393,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       repoId: resolveRepoId(call.state(), source, request.repository),
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
+      afterThis: request.afterThis,
     },
     resolveCommandId(call, 'create_task', request.requestKey)
   );

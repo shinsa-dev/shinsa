@@ -36,6 +36,14 @@ function createBasket(harness: Harness) {
   return { projectId: Object.keys(harness.state.projects)[0] ?? '', server };
 }
 
+const GUIDE = [
+  'Each task works in one repository and ships one pull request. When this change also needs code in another of these repositories:',
+  '- Read that repository at its path to settle what the two sides share (an endpoint, a type, an SDK call). Change files only in your own worktree.',
+  '- File the other part with `create_task`: `repository` set to it, `fork_from` set to this task so its agent starts from this conversation, and a request that says exactly what it changes there.',
+  '- Set the order. `after_this` when the other part uses what this task adds, so it starts once this task is finished. `this_task_waits` when this task needs the other part merged first; it is refused while you plan, so file that part in your first phase.',
+  '- Say so in your plan and hand-over, and link the task for the human.',
+];
+
 describe('the project context', () => {
   test('names the project, its key, description, repositories in order with the task’s own marked, and folders', () => {
     const harness = createHarness();
@@ -50,6 +58,7 @@ describe('the project context', () => {
       '- ios-sdk: /code/basket/ios-sdk',
       '- server: /code/server (this task works here)',
       'Its folders (every repository in them belongs to it): /code/basket',
+      ...GUIDE,
     ]);
   });
 
@@ -60,7 +69,8 @@ describe('the project context', () => {
     const kanna = registerRepo(harness, 'kanna', null);
     const taskId = createTask(harness, { repoId: kanna });
     const lines = resolveProjectContext(harness.state, { ...harness.task(taskId), projectId }).split('\n');
-    expect(lines.at(-1)).toBe('This task works in kanna (/code/kanna), a repository outside the project.');
+    expect(lines).toContain('This task works in kanna (/code/kanna), a repository outside the project.');
+    expect(lines.slice(-GUIDE.length)).toEqual(GUIDE);
     expect(lines).toContain('- server: /code/server');
   });
 
@@ -75,6 +85,21 @@ describe('the project context', () => {
       '',
       'This task belongs to the project Notes (tasks NOT-1, NOT-2 and so on). When the human says "the project", "the app" or "the server", they mean this project\'s repositories, so you do not need to ask which one.',
     ]);
+  });
+
+  test('teaches cross-repository work only when another repository is there to work in', () => {
+    const harness = createHarness();
+    harness.send({ type: 'project.write', project: { name: 'Solo', color: 'blue' } });
+    const solo = registerRepo(harness, 'solo', 'Solo');
+    const taskId = createTask(harness, { repoId: solo });
+    const single = resolveProjectContext(harness.state, harness.task(taskId));
+    expect(single).toContain('- solo: /code/solo (this task works here)');
+    expect(single).not.toContain(GUIDE[0]);
+    registerRepo(harness, 'sdk', 'Solo');
+    expect(resolveProjectContext(harness.state, harness.task(taskId))).toContain(GUIDE.join('\n'));
+    expect(resolveProjectContext(harness.state, { ...harness.task(taskId), repoId: null })).not.toContain(
+      GUIDE[0]
+    );
   });
 
   test('is empty for a task without a project, and for a project that is gone', () => {
