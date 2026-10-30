@@ -41,6 +41,7 @@ async function merged() {
       const context = {
         secrets: new SecretStore(join(current.root, 'secrets.json')),
         baseUrl: () => 'http://localhost',
+        hookUrl: () => null,
         timeZone: 'UTC',
         now: Date.now,
       };
