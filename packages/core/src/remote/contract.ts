@@ -1,0 +1,122 @@
+export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
+
+export const REMOTE_TUNNEL_DOMAIN = 'shinsa.dev';
+
+export const REMOTE_CHANNEL_PATH = '/remote';
+
+export const REMOTE_CONNECT_PARAM = 'token';
+
+export const REMOTE_ENGINE_HOOK_PREFIX = '/api/hooks/';
+
+export const REMOTE_PATHS = {
+  pairStart: '/__remote/pair/start',
+  pairPoll: '/__remote/pair/poll',
+  pairPage: '/pair',
+  enrollPage: '/enroll',
+  heartbeat: '/__remote/machine/heartbeat',
+  offline: '/__remote/machine/offline',
+  machineRemove: '/__remote/machine/remove',
+  session: '/__remote/session',
+  signIn: '/__remote/sign-in',
+  signInCallback: '/__remote/sign-in/callback',
+  signOut: '/__remote/sign-out',
+  instances: '/__remote/instances',
+  hooks: '/hooks/',
+} as const;
+
+export interface PairStartRequest {
+  name: string;
+  publicKey: string;
+  version: string;
+}
+
+export interface PairStartResponse {
+  claimCode: string;
+  pollSecret: string;
+  url: string;
+  expiresAt: number;
+}
+
+export interface PairPollRequest {
+  claimCode: string;
+  pollSecret: string;
+}
+
+export interface MachineCredentials {
+  instanceId: string;
+  machineToken: string;
+  tunnelToken: string;
+  tunnelHost: string;
+  connectKey: string;
+}
+
+export type PairPollResponse =
+  | { status: 'pending' }
+  | { status: 'expired' }
+  | { status: 'claimed'; credentials: MachineCredentials; owner: string };
+
+export interface HeartbeatRequest {
+  localUrl: string;
+  version: string;
+}
+
+export interface HeartbeatResponse {
+  ok: true;
+}
+
+export interface RemoteInstance {
+  id: string;
+  name: string;
+  fingerprint: string;
+  online: boolean;
+  lastSeenAt: number | null;
+  createdAt: number;
+}
+
+export interface RemoteSession {
+  user: { id: string; login: string; avatarUrl: string | null } | null;
+}
+
+export interface ConnectResponse {
+  url: string;
+  expiresAt: number;
+}
+
+export function resolveTunnelHost(instanceId: string) {
+  return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;
+}
+
+export function resolveInstanceConnectPath(instanceId: string) {
+  return `${REMOTE_PATHS.instances}/${encodeURIComponent(instanceId)}/connect`;
+}
+
+export function resolveInstancePath(instanceId: string) {
+  return `${REMOTE_PATHS.instances}/${encodeURIComponent(instanceId)}`;
+}
+
+export function resolveRemoteHookUrl(instanceId: string, scheduleId: string, token: string) {
+  return `${REMOTE_APP_ORIGIN}${REMOTE_PATHS.hooks}${[instanceId, scheduleId, token].map(encodeURIComponent).join('/')}`;
+}
+
+export function parseRemoteHookPath(pathname: string) {
+  if (!pathname.startsWith(REMOTE_PATHS.hooks)) return null;
+  const parts = pathname.slice(REMOTE_PATHS.hooks.length).split('/');
+  if (parts.length !== 3 || parts.some((part) => part === '')) return null;
+  const [instanceId, scheduleId, token] = parts as [string, string, string];
+  return { instanceId, enginePath: `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}` };
+}
+
+export function serializeEnrollFragment(instanceId: string, machineKey: string, secret: string) {
+  return [instanceId, machineKey, secret].join('.');
+}
+
+export function parseEnrollFragment(fragment: string) {
+  const parts = fragment.replace(/^#/, '').split('.');
+  if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
+  const [instanceId, machineKey, secret] = parts as [string, string, string];
+  return { instanceId, machineKey, secret };
+}
+
+export function resolveEnrollUrl(instanceId: string, machineKey: string, secret: string) {
+  return `${REMOTE_APP_ORIGIN}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(instanceId, machineKey, secret)}`;
+}
