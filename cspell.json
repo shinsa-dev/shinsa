@@ -4,6 +4,8 @@
   "ignorePaths": ["**/node_modules/**", "**/dist/**", "packages/ui/src/components/icon/paths.ts"],
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_"],
   "words": [
+    "ECDH",
+    "HKDF",
     "gtimeout",
     "gitdir",
     "commondir",

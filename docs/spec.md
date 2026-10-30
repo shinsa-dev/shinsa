@@ -360,7 +360,7 @@ notifications, `shinsa://` links, the `shinsa` command and its own updates (`doc
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
 Planned, not built: signing with a Developer ID, the hosted dashboard, other providers (Cursor), and dev-server and
 simulator previews per worktree.
-Remote access (deferred): `docs/plans/remote-plan.md`.
+Remote access (being built): `docs/plans/remote-plan.md`.
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -395,9 +395,10 @@ Remote access (deferred): `docs/plans/remote-plan.md`.
   Shinsa's own transcripts; an agent that needs one later, or that you name one to ("use the Maple MCP"), loads it
   mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
-- **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access, deferred
-  until the desktop app replaces Kanna and the IDE, is planned through a Cloudflare tunnel under a Shinsa domain,
-  with a phone surface without code views; Tailscale was the alternative considered (`docs/plans/remote-plan.md`).
+- **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access, being
+  built, opens your machine from one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
+  machine dials out, end to end encrypted to devices enrolled at the Mac; the cloud holds no state
+  (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
 
