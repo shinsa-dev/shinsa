@@ -45,13 +45,13 @@ function resolveRowProgress(task: Task, status: string) {
 export function RowSummary({
   state,
   task,
-  activity = true,
+  detail = true,
 }: {
   state: ShinsaState;
   task: Task;
-  activity?: boolean;
+  detail?: boolean;
 }) {
-  const [run] = !activity || selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
+  const [run] = selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
   const status = resolveRowStatus(state, task);
   const { track, note } = resolveRowProgress(task, status.label);
   return (
@@ -61,9 +61,11 @@ export function RowSummary({
         <span className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</span>
       </span>
       {track}
-      <span className='flex min-w-0 flex-1 contain-inline-size'>
-        {run ? <LiveActivity run={run} fallback={note} /> : note && <Truncate>{note}</Truncate>}
-      </span>
+      {detail && (
+        <span className='flex min-w-0 flex-1 contain-inline-size'>
+          {run ? <LiveActivity run={run} fallback={note} /> : note && <Truncate>{note}</Truncate>}
+        </span>
+      )}
     </span>
   );
 }

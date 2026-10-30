@@ -250,14 +250,14 @@ Only these, and they win over anything below:
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
    over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
-   and shows in full in a tooltip), on Home's rows only: the rail and the Needs you popover have no room for it
-   (`RowSummary`'s `activity`, on for the wide queue); otherwise the current
+   and shows in full in a tooltip); otherwise the current
    step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
-   ("Pre-merge · 1 step left"), and nothing more. The
+   ("Pre-merge · 1 step left"), and nothing more. That text after the dots is on Home's rows only: the rail and the
+   Needs you popover end at the dots (`RowSummary`'s `detail`, on for the wide queue). The
    queue rows carry no now line or stage reason: the status and the dots already say it, and a static
    description only repeats them. While the steps can still change (triage, or the agent planning
    before its plan) a spinner stands in for the dots, followed by the planning agent's latest action or
-   "Working out the steps". The guide above is a short summary of
+   "Working out the steps" (on Home; the rail and the popover show the spinner alone). The guide above is a short summary of
    these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Needs you, In progress, Recently finished
@@ -339,7 +339,7 @@ Only these, and they win over anything below:
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
    (37), and the queue popover is `QUEUE_POPOVER` (`COMPACT_POPOVER`, as tall as its content up to the room under the button,
    then it scrolls, and at least 320px wide, growing just enough to fit its widest status and step track, never past the
-   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both, and its rows leave out the agent's latest action) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both, and its rows end at the step dots) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
    sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since

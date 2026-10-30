@@ -256,7 +256,7 @@ describe('a row’s summary line', () => {
     expect(row(/Build the export/).textContent).toContain('Running bun test apps/web');
   });
 
-  it('names the current step instead of the agent’s action in the compact queue', () => {
+  it('shows nothing after the steps in the compact queue', () => {
     renderQueue({
       variant: 'compact',
       state: createShinsaState({
@@ -272,12 +272,12 @@ describe('a row’s summary line', () => {
         description: null,
       }),
     ]);
-    expect(row(/Build the export/).textContent).not.toContain('Running bun test apps/web');
-    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+    expect(row(/Build the export/).textContent).toBe('Build the exportBuilding');
   });
 
   it('names the current step until the agent has done anything', () => {
     renderQueue({
+      variant: 'wide',
       state: createShinsaState({
         tasks: [BUILDING],
         runs: [createRun({ id: 'run-quiet', taskId: 'build', purpose: 'build' })],
@@ -288,6 +288,7 @@ describe('a row’s summary line', () => {
 
   it('names the current step’s count when no agent runs, and nothing when it has none', () => {
     renderQueue({
+      variant: 'wide',
       state: createShinsaState({
         tasks: [
           BUILDING,
@@ -296,7 +297,8 @@ describe('a row’s summary line', () => {
       }),
     });
     expect(row(/Build the export/).textContent).toContain('Build 1/2');
-    expect(row(/Fresh task/).textContent).toBe('Fresh taskBuilding');
+    expect(row(/Fresh task/).textContent).toStartWith('Fresh taskBuilding');
+    expect(row(/Fresh task/).textContent).not.toContain('Build ');
     expect(
       within(row(/Fresh task/))
         .getByRole('img', { name: /^Step/ })
@@ -306,6 +308,7 @@ describe('a row’s summary line', () => {
 
   it('names the step instead of the agent’s action while it waits on you', () => {
     renderQueue({
+      variant: 'wide',
       state: createShinsaState({
         tasks: [BUILDING],
         runs: [createRun({ id: 'run-ask', taskId: 'build', purpose: 'build' })],
@@ -330,8 +333,8 @@ describe('a row’s summary line', () => {
   });
 
   it('says the steps are still being worked out while triage shapes the task', () => {
-    writeDisclosure(createDisclosureId('queue', 'section', 'waiting'), true);
     renderQueue({
+      variant: 'wide',
       state: createShinsaState({
         tasks: [
           createTask({
