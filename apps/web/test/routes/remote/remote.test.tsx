@@ -117,20 +117,20 @@ describe('the remote dashboard', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('Couldn’t reach app.shinsa.dev.');
   });
 
-  it('asks to add this browser to the paired Macs, or to pair one first', async () => {
+  it('asks to add this browser to the paired machines, or to pair one first', async () => {
     const { unmount } = renderRoot('/', { devices: createDevices() });
-    expect(await screen.findByText('Add this browser to your Mac')).toBeTruthy();
+    expect(await screen.findByText('Add this browser to your machine')).toBeTruthy();
     expect(screen.getByText(/Studio is paired/)).toBeTruthy();
     expect(screen.queryByText('mona')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     unmount();
     renderRoot('/', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
-    expect(await screen.findByText('No Mac yet')).toBeTruthy();
+    expect(await screen.findByText('No machine yet')).toBeTruthy();
     expect(screen.getByText('Encrypted end to end')).toBeTruthy();
   });
 
-  it('opens one dashboard over every Mac this browser was added to, and gives the page back when it leaves', async () => {
+  it('opens one dashboard over every machine this browser was added to, and gives the page back when it leaves', async () => {
     const local = connection;
     const view = renderRoot('/tasks', { devices: createDevices(DEVICE) });
     expect(await screen.findByText('The app')).toBeTruthy();
@@ -141,16 +141,16 @@ describe('the remote dashboard', () => {
     expect(local).toBeInstanceOf(Connection);
   });
 
-  it('says when this browser cannot reach your Macs', async () => {
+  it('says when this browser cannot reach your machines', async () => {
     const worker = createWorker();
     Object.assign(worker, { register: () => Promise.reject(new Error('Service workers are off.')) });
     const { unmount } = renderRoot('/', { devices: createDevices(DEVICE), worker });
-    expect(await screen.findByText('This browser cannot reach your Macs')).toBeTruthy();
+    expect(await screen.findByText('This browser cannot reach your machines')).toBeTruthy();
     unmount();
     renderRoot('/', {
       dashboard: createDashboard({ listInstances: () => Promise.reject(new Error('Signed out.')) }),
     });
-    expect(await screen.findByText('This browser cannot reach your Macs')).toBeTruthy();
+    expect(await screen.findByText('This browser cannot reach your machines')).toBeTruthy();
   });
 
   it('keeps the enrollment link out of the address bar and out of the sign-in redirect', async () => {
@@ -168,12 +168,12 @@ describe('the remote dashboard', () => {
     expect(await screen.findByText('Pair Studio with your account')).toBeTruthy();
     unmount();
     renderRoot(`/enroll#k3x9.${MACHINE_KEY}.secret_1`);
-    expect(await screen.findByText('Add this browser to your Mac')).toBeTruthy();
+    expect(await screen.findByText('Add this browser to your machine')).toBeTruthy();
   });
 });
 
-describe('the Macs in Settings', () => {
-  it('lists every Mac with whether it is in this dashboard, and removes one', async () => {
+describe('the machines in Settings', () => {
+  it('lists every machine with whether it is in this dashboard, and removes one', async () => {
     const devices = createDevices(DEVICE);
     render(
       <RemoteServicesContext.Provider
@@ -187,7 +187,7 @@ describe('the Macs in Settings', () => {
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
   });
 
-  it('says when the Macs cannot be read, and waits without the remote services', async () => {
+  it('says when the machines cannot be read, and waits without the remote services', async () => {
     const { unmount } = render(
       <RemoteServicesContext.Provider
         value={{
@@ -212,7 +212,7 @@ describe('the Macs in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(await screen.findByText(/No Mac yet/)).toBeTruthy();
+    expect(await screen.findByText(/No machine yet/)).toBeTruthy();
   });
 });
 
@@ -275,17 +275,19 @@ describe('the enroll page', () => {
     expect(sessionStorage.getItem('shinsa.remote.enroll')).toBeNull();
   });
 
-  it('says why the Mac refused, and what to do with a link that cannot work', async () => {
+  it('says why the machine refused, and what to do with a link that cannot work', async () => {
     const { unmount } = render(
       <EnrollPage
         link={link}
         dashboard={createDashboard()}
         devices={createDevices()}
-        enroll={() => Promise.reject(new Error('This browser is not enrolled on this Mac.'))}
+        enroll={() => Promise.reject(new Error('This browser is not enrolled on this machine.'))}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: 'Add this browser' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('This browser is not enrolled on this Mac.');
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'This browser is not enrolled on this machine.'
+    );
     unmount();
     render(<EnrollPage link={null} dashboard={createDashboard()} devices={createDevices()} />);
     expect(screen.getByText('This link cannot add a browser')).toBeTruthy();

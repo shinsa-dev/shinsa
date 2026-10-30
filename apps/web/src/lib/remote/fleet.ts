@@ -1,8 +1,9 @@
-import type { UserCommand, WireState } from '@shinsa/core';
+import type { PlacementMachine, UserCommand, WireState } from '@shinsa/core';
 import {
   type ConnectionStatus,
   type MachineView,
   NO_ENTRIES,
+  NO_MACHINES,
   type ShinsaConnection,
   type Snapshot,
 } from '@/lib/connection/socket.ts';
@@ -131,6 +132,7 @@ export class Fleet implements ShinsaConnection {
   #inputs: Snapshot[] = [];
   #snapshot: Snapshot = { state: null, status: 'closed' };
   #owners: ReadonlyMap<string, string> = EMPTY_OWNERS;
+  #machines: PlacementMachine[] = NO_MACHINES;
   readonly #state = createSignal();
   readonly #transcripts = createSignal();
   readonly #accounts = createSignal();
@@ -178,6 +180,10 @@ export class Fleet implements ShinsaConnection {
     return this.#owners.get(id) ?? null;
   }
 
+  #nameOf(machineId: string) {
+    return this.#entries.find((entry) => entry.member.id === machineId)?.member.name ?? machineId;
+  }
+
   #memberOf(machineId: string | null) {
     const found = machineId ? this.#entries.find((entry) => entry.member.id === machineId) : undefined;
     return found?.member ?? this.#entries[0]?.member ?? null;
@@ -202,6 +208,10 @@ export class Fleet implements ShinsaConnection {
       return state ? [{ id: entry.member.id, state }] : [];
     });
     const merged = mergeFleetStates(parts);
+    this.#machines =
+      parts.length < 2
+        ? NO_MACHINES
+        : parts.map((part) => ({ id: part.id, name: this.#nameOf(part.id), state: part.state }));
     this.#owners = merged?.owners ?? EMPTY_OWNERS;
     replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {
@@ -245,17 +255,22 @@ export class Fleet implements ShinsaConnection {
     return this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
   };
 
-  command = (command: UserCommand) => {
+  listMachines = () => {
     this.snapshot();
-    const member = this.#memberOf(resolveCommandOwner(command, this.#owners));
-    if (!member) return Promise.reject(new Error('No Mac is connected.'));
+    return this.#machines;
+  };
+
+  command = (command: UserCommand, machineId?: string | null) => {
+    this.snapshot();
+    const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
+    if (!member) return Promise.reject(new Error('No machine is connected.'));
     return member.connection.command(command);
   };
 
   fetch = (request: Request) => {
     this.snapshot();
     const member = this.#memberOf(resolveRequestOwner(new URL(request.url), this.#owners));
-    if (!member) return Promise.reject(new Error('No Mac is connected.'));
+    if (!member) return Promise.reject(new Error('No machine is connected.'));
     return member.fetch(request);
   };
 

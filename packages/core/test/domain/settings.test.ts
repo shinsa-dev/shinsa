@@ -57,6 +57,7 @@ describe('the settings a command may change', () => {
       watchdogHours: 72,
       watchdogFirstCheckMinutes: 30,
       watchdogMaxGapHours: 6,
+      taskCapacity: null,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

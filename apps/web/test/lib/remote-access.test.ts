@@ -33,7 +33,7 @@ describe('remote access words', () => {
     expect(pairing.detail).toContain('K7PQ');
     expect(describeRemoteStatus(createRemoteSnapshot({ enabled: false }), NOW)).toMatchObject({
       label: 'Paused',
-      detail: 'Signed in as mona. Resume to reach this Mac again.',
+      detail: 'Signed in as mona. Resume to reach this machine again.',
     });
     expect(describeRemoteStatus(createRemoteSnapshot({ status: 'revoked' }), NOW)).toMatchObject({
       label: 'Removed',

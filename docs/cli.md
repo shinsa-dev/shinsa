@@ -1176,7 +1176,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity. |
 
 #### shinsa settings set
 
@@ -1190,7 +1190,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit. |
 | `<value>` | text, required | The new value. |
 
 ### projects
@@ -1982,7 +1982,7 @@ Every task agent's tool: `sources_remove`. Sends `watch_source.remove`.
 
 #### shinsa remote status
 
-Show whether this Mac can be reached from app.shinsa.dev, and its enrolled devices.
+Show whether this machine can be reached from app.shinsa.dev, and its enrolled devices.
 
 ```
 shinsa remote status [--json]
@@ -1992,7 +1992,7 @@ Every task agent's tool: `remote_status` (reads).
 
 #### shinsa remote pair
 
-Turn on remote access: sign in with GitHub in the browser to give this Mac its tunnel.
+Turn on remote access: sign in with GitHub in the browser to give this machine its tunnel.
 
 ```
 shinsa remote pair [--json]
@@ -2022,7 +2022,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote remove
 
-Remove this Mac from app.shinsa.dev and forget its tunnel and devices.
+Remove this machine from app.shinsa.dev and forget its tunnel and devices.
 
 ```
 shinsa remote remove [--json]
@@ -2032,7 +2032,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote enroll
 
-Make a one-time link that adds a phone or browser to this Mac.
+Make a one-time link that adds a phone or browser to this machine.
 
 ```
 shinsa remote enroll <name> [--json]

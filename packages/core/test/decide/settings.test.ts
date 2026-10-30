@@ -370,6 +370,19 @@ describe('settings', () => {
     }
   });
 
+  test('task capacity is a whole number of one or more, or no limit', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { taskCapacity: 6 } });
+    expect(harness.state.settings.taskCapacity).toBe(6);
+    harness.send({ type: 'settings.change', patch: { taskCapacity: null } });
+    expect(harness.state.settings.taskCapacity).toBeNull();
+    for (const taskCapacity of [0, 2.5]) {
+      expect(() => harness.send({ type: 'settings.change', patch: { taskCapacity } })).toThrow(
+        'Task capacity must be a whole number of 1 or more, or no limit.'
+      );
+    }
+  });
+
   test('accounts switch at a whole percentage from 1 to 100', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { accountSwitchAt: 95 } });

@@ -100,7 +100,7 @@ export class FakeMacSocket extends EventTarget {
     this.#queue = this.#queue
       .then(() => this.#receive(data))
       .catch(() => {
-        if (!this.#mac.options.tolerant) this.drop('The Mac could not open a frame.');
+        if (!this.#mac.options.tolerant) this.drop('The machine could not open a frame.');
       });
   }
 
@@ -152,7 +152,9 @@ export class FakeMacSocket extends EventTarget {
     let redeemed = false;
     if (hello.enroll !== null && secret) redeemed = await verifyEnrollProof(secret, hello.enroll, keys);
     if (!(mac.enrolled.has(hello.device) || redeemed)) {
-      this.deliver(JSON.stringify({ type: 'refused', reason: 'This browser is not enrolled on this Mac.' }));
+      this.deliver(
+        JSON.stringify({ type: 'refused', reason: 'This browser is not enrolled on this machine.' })
+      );
       return;
     }
     if (redeemed) mac.enrolled.add(hello.device);

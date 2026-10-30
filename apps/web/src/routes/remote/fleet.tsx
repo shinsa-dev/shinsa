@@ -17,8 +17,8 @@ function NoMachinePage({ machines }: { machines: string[] }) {
   if (machines.length === 0)
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
-        <RemoteHero icon='IconMacbook' title='No Mac yet'>
-          Turn on remote access on the Mac that runs Shinsa: Settings, Remote access, Turn on. It shows up
+        <RemoteHero icon='IconServer' title='No machine yet'>
+          Turn on remote access on the machine that runs Shinsa: Settings, Remote access, Turn on. It shows up
           here once you approve it.
         </RemoteHero>
         <RemoteBenefits />
@@ -26,8 +26,8 @@ function NoMachinePage({ machines }: { machines: string[] }) {
     );
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconKey1' title='Add this browser to your Mac'>
-        {`${machines.join(', ')} ${machines.length === 1 ? 'is' : 'are'} paired, but this browser has no key for ${machines.length === 1 ? 'it' : 'them'} yet. On the Mac, open Settings, Remote access, choose Add browser and open its link here.`}
+      <RemoteHero icon='IconKey1' title='Add this browser to your machine'>
+        {`${machines.join(', ')} ${machines.length === 1 ? 'is' : 'are'} paired, but this browser has no key for ${machines.length === 1 ? 'it' : 'them'} yet. On the machine, open Settings, Remote access, choose Add browser and open its link here.`}
       </RemoteHero>
     </section>
   );
@@ -67,8 +67,8 @@ export function FleetApp({
               if (fleet?.members.length === 0)
                 setState({
                   kind: 'failed',
-                  title: 'Your Macs no longer accept this browser',
-                  message: 'Add it again from Settings, Remote access on a Mac to use it here.',
+                  title: 'Your machines no longer accept this browser',
+                  message: 'Add it again from Settings, Remote access on a machine to use it here.',
                 });
             },
           })
@@ -87,7 +87,7 @@ export function FleetApp({
         if (live)
           setState({
             kind: 'failed',
-            title: 'This browser cannot reach your Macs',
+            title: 'This browser cannot reach your machines',
             message: `${(error as Error).message} Remote access needs a browser that runs service workers.`,
           });
       }
@@ -99,7 +99,7 @@ export function FleetApp({
   }, [services]);
   switch (state.kind) {
     case 'starting':
-      return shell(<RemoteLoading label='Connecting to your Macs' />);
+      return shell(<RemoteLoading label='Connecting to your machines' />);
     case 'empty':
       return shell(<NoMachinePage machines={state.machines} />);
     case 'failed':

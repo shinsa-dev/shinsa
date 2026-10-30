@@ -4,7 +4,14 @@ import { waitFor } from '@testing-library/react';
 import { Connection } from '@/lib/connection/socket.ts';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import type { EnrolledDevice } from '@/lib/remote/devices.ts';
-import { createFleetMember, describeMachine, listMachineRows } from '@/lib/remote/machines.ts';
+import {
+  createFleetMember,
+  describeMachine,
+  listMachineRows,
+  listTaskCapacityItems,
+  parseTaskCapacity,
+  resolveTaskCapacityValue,
+} from '@/lib/remote/machines.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
 const NOW = Date.UTC(2026, 9, 30, 12);
@@ -22,7 +29,7 @@ async function createDevice(machineKey: string): Promise<EnrolledDevice> {
   return { instanceId: STUDIO.id, machineKey, keys: await createKeyPair(), enrolledAt: 1 };
 }
 
-describe('a Mac in the dashboard', () => {
+describe('a machine in the dashboard', () => {
   it('says whether it is online and whether this browser has it in its dashboard', async () => {
     const device = await createDevice('key');
     expect(describeMachine(STUDIO, device, NOW)).toMatchObject({
@@ -42,7 +49,7 @@ describe('a Mac in the dashboard', () => {
     );
   });
 
-  it('lists every Mac of the account with this browser’s device for it', async () => {
+  it('lists every machine of the account with this browser’s device for it', async () => {
     const device = await createDevice('key');
     const rows = await listMachineRows(
       { listInstances: () => Promise.resolve([STUDIO, { ...STUDIO, id: 'm2', name: 'Laptop' }]) },
@@ -83,7 +90,7 @@ describe('a Mac in the dashboard', () => {
     await waitFor(() => expect(socket?.readyState).toBe(3));
   });
 
-  it('reports the Mac that no longer accepts this browser, and builds its own connection by default', async () => {
+  it('reports the machine that no longer accepts this browser, and builds its own connection by default', async () => {
     const mac = await FakeMac.create({ enrolled: [] });
     const device = await createDevice(mac.machineKey);
     const refused: string[] = [];
@@ -96,6 +103,17 @@ describe('a Mac in the dashboard', () => {
     });
     expect(member.connection).toBeInstanceOf(Connection);
     await expect(member.fetch(new Request('https://shinsa.dev/api/health'))).rejects.toThrow('not enrolled');
-    expect(refused).toEqual(['k3x9: This browser is not enrolled on this Mac.']);
+    expect(refused).toEqual(['k3x9: This browser is not enrolled on this machine.']);
+  });
+});
+
+describe('a machine’s task capacity', () => {
+  it('offers no limit and a few sizes, keeps a size set elsewhere, and reads a choice back', () => {
+    expect(listTaskCapacityItems(null).map((item) => item.value)).toEqual(['none', '2', '4', '8', '16']);
+    expect(listTaskCapacityItems(6).map((item) => item.label)).toContain('Up to 6 open tasks');
+    expect(resolveTaskCapacityValue(null)).toBe('none');
+    expect(resolveTaskCapacityValue(8)).toBe('8');
+    expect(parseTaskCapacity('none')).toBeNull();
+    expect(parseTaskCapacity('8')).toBe(8);
   });
 });

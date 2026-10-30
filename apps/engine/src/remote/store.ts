@@ -45,7 +45,7 @@ function readMachine(value: unknown): MachineKey | null {
 function readCredentials(value: unknown): MachineCredentials | null {
   if (!isFields(value)) return null;
   if (!CREDENTIAL_FIELDS.every((field) => typeof value[field] === 'string' && value[field] !== '')) {
-    log.warn('[Remote] remote.json is missing part of its credentials; pair this Mac again');
+    log.warn('[Remote] remote.json is missing part of its credentials; pair this machine again');
     return null;
   }
   const fields = value as Record<(typeof CREDENTIAL_FIELDS)[number], string>;

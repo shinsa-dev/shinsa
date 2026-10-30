@@ -1,4 +1,14 @@
-import type { ShinsaState, Task, TaskPriority, UserCommand } from '@shinsa/core';
+import {
+  describeCount,
+  type MachineLoad,
+  type PlacementMachine,
+  resolveMachineLoad,
+  resolvePlacement,
+  type ShinsaState,
+  type Task,
+  type TaskPriority,
+  type UserCommand,
+} from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import * as React from 'react';
 import { selectFocus } from '@/lib/focus.ts';
@@ -45,9 +55,15 @@ export interface NewTaskChoices {
   project: AutoChoice<string>;
   start: AutoChoice<'now' | string>;
   priority: AutoChoice<TaskPriority>;
+  machine: AutoChoice<string>;
 }
 
-export const AUTO_CHOICES: NewTaskChoices = { project: 'auto', start: 'auto', priority: 'auto' };
+export const AUTO_CHOICES: NewTaskChoices = {
+  project: 'auto',
+  start: 'auto',
+  priority: 'auto',
+  machine: 'auto',
+};
 
 const PLACEHOLDER = 'Describe the work or ask a question. Shinsa decides what kind of task it is.';
 
@@ -86,6 +102,7 @@ interface NewTaskItem<Value extends string> {
   value: Value;
   label: string;
   icon: MenuItemIcon;
+  hint?: string;
 }
 
 export interface NewTaskProjectItem {
@@ -134,4 +151,55 @@ export function listNewTaskStarts(open: Task[]): NewTaskItem<string>[] {
 
 export function isWaitingStart(start: string) {
   return start !== 'auto' && start !== 'now';
+}
+
+export function describeMachineLoad(load: Pick<MachineLoad, 'open' | 'capacity' | 'full'>) {
+  if (load.capacity === null) return describeCount(load.open, 'open task');
+  const share = `${load.open} of ${load.capacity} open tasks`;
+  return load.full ? `${share}, full` : share;
+}
+
+function selectChosenMachine(machines: PlacementMachine[], machine: AutoChoice<string>) {
+  return machine === 'auto' ? null : (machines.find((candidate) => candidate.id === machine) ?? null);
+}
+
+export function resolveNewTaskMachine(
+  machines: PlacementMachine[],
+  machine: AutoChoice<string>,
+  shownProject: string
+) {
+  if (machines.length < 2) return null;
+  return (
+    selectChosenMachine(machines, machine)?.id ??
+    resolvePlacement(machines, shownProject === NO_PROJECT ? null : shownProject)
+  );
+}
+
+export function listNewTaskMachines(
+  machines: PlacementMachine[],
+  placed: string | null
+): NewTaskItem<string>[] {
+  const automatic = machines.find((machine) => machine.id === placed);
+  return [
+    {
+      value: 'auto',
+      label: automatic ? `Automatic: ${automatic.name}` : 'Automatic',
+      icon: 'IconSparkle',
+    },
+    ...machines.map((machine) => ({
+      value: machine.id,
+      label: machine.name,
+      icon: 'IconServer' as const,
+      hint: describeMachineLoad(resolveMachineLoad(machine)),
+    })),
+  ];
+}
+
+export function isProjectOnMachine(
+  machines: PlacementMachine[],
+  machine: AutoChoice<string>,
+  project: string
+) {
+  const chosen = selectChosenMachine(machines, machine);
+  return !chosen || project === NO_PROJECT || project in chosen.state.projects;
 }

@@ -92,7 +92,7 @@ async function findLivePairSession(claimCode: string, world: CloudWorld): Promis
   if (!row || row.expires_at <= world.now())
     throw new CloudError(
       'pair_expired',
-      'This pairing code expired. Turn remote access on again on your Mac.',
+      'This pairing code expired. Turn remote access on again on your machine.',
       404
     );
   return row;
@@ -128,7 +128,7 @@ export async function respondPairApprove(request: Request, claimCode: string, wo
       503
     );
   if (!(await world.store.reservePairClaim(row.claim_code, user.login)))
-    throw new CloudError('pair_claimed', 'This Mac is already paired.', 409);
+    throw new CloudError('pair_claimed', 'This machine is already paired.', 409);
   const instanceId = createInstanceId();
   try {
     const tunnelHost = resolveTunnelHost(instanceId);

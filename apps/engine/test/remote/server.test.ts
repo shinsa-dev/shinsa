@@ -376,7 +376,7 @@ async function readError(response: Response) {
   return ((await response.json()) as { error: { code: string } }).error.code;
 }
 
-describe('pairing this Mac', () => {
+describe('pairing this machine', () => {
   test('starts with GitHub sign-in in the browser and starts the tunnel once the instance is claimed', async () => {
     const { remote, local, plane, opened, connectors } = await start({ paired: false });
     let polls = 0;
@@ -432,7 +432,7 @@ describe('pairing this Mac', () => {
   });
 });
 
-describe('managing remote access on the Mac', () => {
+describe('managing remote access on the machine', () => {
   test('pauses, resumes and removes the instance through its routes', async () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, local, plane, connectors } = await start();
@@ -536,9 +536,9 @@ describe('managing remote access on the Mac', () => {
 });
 
 describe('naming and opening', () => {
-  test('names the Mac after its host name without .local', () => {
+  test('names the machine after its host name without .local', () => {
     expect(resolveMachineName('Mona-MBP.local')).toBe('Mona-MBP');
-    expect(resolveMachineName('')).toBe('Mac');
+    expect(resolveMachineName('')).toBe('Machine');
     expect(resolveMachineName('MAC.local')).toBe('Mac');
     expect(resolveMachineName('STUDIO-MINI')).toBe('Studio-Mini');
     expect(resolveMachineName()).not.toBe('');

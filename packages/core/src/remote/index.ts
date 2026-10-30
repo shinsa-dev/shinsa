@@ -82,6 +82,13 @@ export {
   type RequestOrigin,
   resolveLocalOnlyRefusal,
 } from './local-only.ts';
+export {
+  type MachineLoad,
+  type PlacementMachine,
+  resolveMachineLoad,
+  resolvePlacement,
+  resolveProjectMachine,
+} from './placement.ts';
 export type {
   PairingView,
   RemoteDevice,

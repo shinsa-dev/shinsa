@@ -255,7 +255,8 @@ src/
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
 │                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts) and what stays
-│                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal). Key pairs and
+│                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
+│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,

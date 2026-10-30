@@ -366,9 +366,10 @@ notifications, `shinsa://` links, the `shinsa` command and its own updates (`doc
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
-Remote access: Settings → General → Remote access pairs this Mac with app.shinsa.dev through GitHub sign-in and adds
-the browsers and phones that may reach it; app.shinsa.dev is one dashboard over every Mac a browser was added to, each
-task showing its Mac (`docs/engine.md` → Remote access; what is still to come is
+Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
+the browsers and phones that may reach it; app.shinsa.dev is one dashboard over every machine a browser was added to, each
+task showing its machine, and with several machines New task places each task automatically (its project's machine, else
+the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
@@ -406,7 +407,7 @@ task showing its Mac (`docs/engine.md` → Remote access; what is still to come 
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
   opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the Mac; the cloud holds no state
+  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state
   (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase

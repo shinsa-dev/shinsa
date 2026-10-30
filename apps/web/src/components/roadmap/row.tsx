@@ -94,7 +94,7 @@ function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
           {project && machine && ' '}
           {machine && (
             <>
-              {machine.name} <TooltipLabel>Mac</TooltipLabel>
+              {machine.name} <TooltipLabel>Machine</TooltipLabel>
             </>
           )}
         </span>

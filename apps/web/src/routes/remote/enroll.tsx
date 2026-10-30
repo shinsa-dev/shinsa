@@ -18,7 +18,7 @@ const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [
   {
     icon: 'IconShieldCheck',
     title: 'Encrypted end to end',
-    detail: 'Only this browser and your Mac can read what passes between them.',
+    detail: 'Only this browser and your machine can read what passes between them.',
   },
   {
     icon: 'IconLock',
@@ -49,7 +49,7 @@ export function EnrollPage({
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a browser'>
-          It is incomplete or was already used. On your Mac, open Settings, Remote access and choose Add
+          It is incomplete or was already used. On your machine, open Settings, Remote access and choose Add
           browser for a new one.
         </RemoteHero>
         <Button
@@ -64,8 +64,8 @@ export function EnrollPage({
     );
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconMacbook' title='Add this browser to your Mac'>
-        Once it is added, this browser opens Shinsa on your Mac from anywhere.
+      <RemoteHero icon='IconServer' title='Add this browser to your machine'>
+        Once it is added, this browser opens Shinsa on your machine from anywhere.
       </RemoteHero>
       <SettingsCard className='w-full'>
         {ENROLL_POINTS.map((point) => (
@@ -101,7 +101,7 @@ export function EnrollPage({
           Add this browser
         </Button>
         <p className='text-2xs text-fg-2'>
-          Mac key: <span className='font-mono'>{fingerprint ?? '…'}</span>
+          Machine key: <span className='font-mono'>{fingerprint ?? '…'}</span>
         </p>
       </div>
     </section>

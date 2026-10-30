@@ -362,14 +362,14 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      <Specimen label='MachinesSettings · on app.shinsa.dev: every Mac of the account, two in this dashboard'>
+      <Specimen label='MachinesSettings · on app.shinsa.dev: every machine of the account, two in this dashboard'>
         <div className='w-full max-w-xl'>
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
           </RemoteServicesContext.Provider>
         </div>
       </Specimen>
-      <Specimen label='TaskFacts · on app.shinsa.dev with several Macs, each task shows the Mac it runs on'>
+      <Specimen label='TaskFacts · on app.shinsa.dev with several machines, each task shows the machine it runs on'>
         <FleetFactsSpecimen now={now} />
       </Specimen>
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>

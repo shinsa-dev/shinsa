@@ -34,7 +34,7 @@ import {
 import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 const DESCRIPTION =
-  'Reach this Mac from any browser at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each browser or phone is added here once.';
+  'Reach this machine from any browser at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each browser or phone is added here once.';
 
 function QrCode({ text }: { text: string }) {
   const image = React.useMemo(() => resolveQrImage(text), [text]);
@@ -240,7 +240,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Forget ${value.device.name}?`}
-        body='It can no longer open this Mac from app.shinsa.dev, and any page it has open closes. Add it again to use it.'
+        body='It can no longer open this machine from app.shinsa.dev, and any page it has open closes. Add it again to use it.'
         action='Forget browser'
         onConfirm={() =>
           void requestWithToast(
@@ -255,7 +255,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title='Remove remote access?'
-        body='This Mac leaves app.shinsa.dev, its tunnel is deleted and every added browser is forgotten. You can turn it on again later.'
+        body='This machine leaves app.shinsa.dev, its tunnel is deleted and every added browser is forgotten. You can turn it on again later.'
         action='Remove remote access'
         onConfirm={() => void requestWithToast(actions.remove, 'Remote access is removed.')}
       />
@@ -302,7 +302,7 @@ export function RemoteAccessGroup({
       )}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
-          None yet. Add browser sets up the phone or computer browser you use away from this Mac.
+          None yet. Add browser sets up the phone or computer browser you use away from this machine.
         </SettingsEmpty>
       )}
       {snapshot?.devices.map((device) => (

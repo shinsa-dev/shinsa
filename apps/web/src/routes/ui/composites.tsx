@@ -142,12 +142,21 @@ function ComposerSpecimen() {
     })
   );
   const [chosen, setChosen] = React.useState<NewTaskChoices>(AUTO_CHOICES);
+  const machines = [
+    { id: 'studio', name: 'Studio', state: { ...state, settings: { ...state.settings, taskCapacity: 8 } } },
+    {
+      id: 'build-box',
+      name: 'Build box',
+      state: { tasks: {}, projects: {}, settings: { taskCapacity: null } },
+    },
+  ];
   return (
     <div className={cn(CARD, 'w-full max-w-xl')}>
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
         <NewTaskFields
           state={state}
           chosen={chosen}
+          machines={machines}
           onChoose={(part) => setChosen((current) => ({ ...current, ...part }))}
         />
       </div>

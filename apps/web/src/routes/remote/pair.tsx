@@ -35,7 +35,7 @@ export function PairPage({
   if (state.kind === 'failed')
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
-        <RemoteHero icon='IconCircleX' tone='red' title='This Mac cannot be paired'>
+        <RemoteHero icon='IconCircleX' tone='red' title='This machine cannot be paired'>
           {state.message}
         </RemoteHero>
       </section>
@@ -44,8 +44,8 @@ export function PairPage({
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCheckCircle2' tone='blue' title={`${state.name} is paired`}>
-          Your Mac finishes setting up in a few seconds. To use it from this browser, add the browser on the
-          Mac: Settings, Remote access, Add browser.
+          Your machine finishes setting up in a few seconds. To use it from this browser, add the browser on
+          the machine: Settings, Remote access, Add browser.
         </RemoteHero>
         <Button className='w-full' nativeButton={false} render={<a href={REMOTE_PATHS.app} />}>
           Open Shinsa
@@ -55,14 +55,14 @@ export function PairPage({
   const { view } = state;
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconMacbook' title={`Pair ${view.name} with your account`}>
-        Approve only if you just turned on remote access on this Mac yourself.
+      <RemoteHero icon='IconServer' title={`Pair ${view.name} with your account`}>
+        Approve only if you just turned on remote access on this machine yourself.
       </RemoteHero>
       <SettingsCard className='w-full'>
         <div className='flex flex-col items-center gap-1 px-3 py-4'>
           <span className='font-medium font-mono text-2xl text-fg-4 tracking-[0.2em]'>{view.claimCode}</span>
           <span className='text-center text-2xs text-fg-2'>
-            Your Mac shows this code in Settings, Remote access.
+            Your machine shows this code in Settings, Remote access.
           </span>
         </div>
       </SettingsCard>
@@ -81,7 +81,7 @@ export function PairPage({
           Approve
         </Button>
         <p className='text-2xs text-fg-2'>
-          Mac key: <span className='font-mono'>{view.fingerprint}</span>
+          Machine key: <span className='font-mono'>{view.fingerprint}</span>
         </p>
       </div>
     </section>

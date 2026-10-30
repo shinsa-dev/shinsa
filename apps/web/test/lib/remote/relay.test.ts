@@ -43,7 +43,7 @@ describe('the service worker relay', () => {
     const seen: string[] = [];
     const { clients, stop } = createPage(async (request) => {
       seen.push(`${request.method} ${request.url} ${await request.text()}`);
-      return new Response('hello from the Mac', { status: 201, headers: { 'x-mac': '1' } });
+      return new Response('hello from the machine', { status: 201, headers: { 'x-mac': '1' } });
     });
     const response = await relayRequest(
       new Request('https://shinsa.dev/api/commands', { method: 'POST', body: 'payload' }),
@@ -52,15 +52,15 @@ describe('the service worker relay', () => {
     );
     expect(response.status).toBe(201);
     expect(response.headers.get('x-mac')).toBe('1');
-    expect(await response.text()).toBe('hello from the Mac');
+    expect(await response.text()).toBe('hello from the machine');
     expect(seen).toEqual(['POST https://shinsa.dev/api/commands payload']);
     const image = await relayRequest(new Request('https://shinsa.dev/api/evidence/a.png'), 'page', clients);
-    expect(await image.text()).toBe('hello from the Mac');
+    expect(await image.text()).toBe('hello from the machine');
     stop();
   });
 
-  it('answers 503 when no page sent it or the page could not reach the Mac', async () => {
-    const { clients } = createPage(() => Promise.reject(new Error('Couldn’t reach your Mac.')));
+  it('answers 503 when no page sent it or the page could not reach the machine', async () => {
+    const { clients } = createPage(() => Promise.reject(new Error('Couldn’t reach your machine.')));
     const orphan = await relayRequest(new Request('https://shinsa.dev/api/x'), '', clients);
     expect(orphan.status).toBe(503);
     const gone = await relayRequest(new Request('https://shinsa.dev/api/x'), 'closed-tab', clients);
@@ -68,12 +68,12 @@ describe('the service worker relay', () => {
     const failed = await relayRequest(new Request('https://shinsa.dev/api/x'), 'page', clients);
     expect(failed.status).toBe(503);
     expect(await failed.json()).toEqual({
-      error: { code: 'remote_unavailable', message: 'Couldn’t reach your Mac.' },
+      error: { code: 'remote_unavailable', message: 'Couldn’t reach your machine.' },
     });
     const { clients: thrown } = createPage(() => Promise.reject('no reason'));
     const unnamed = await relayRequest(new Request('https://shinsa.dev/api/x'), 'page', thrown);
     expect(((await unnamed.json()) as { error: { message: string } }).error.message).toBe(
-      'The request to your Mac failed.'
+      'The request to your machine failed.'
     );
   });
 
@@ -88,7 +88,7 @@ describe('the service worker relay', () => {
           new ReadableStream({
             start: (controller) => {
               controller.enqueue(new TextEncoder().encode('part'));
-              controller.error(new Error('The connection to your Mac broke.'));
+              controller.error(new Error('The connection to your machine broke.'));
             },
           })
         )

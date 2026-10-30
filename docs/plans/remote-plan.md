@@ -16,10 +16,12 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    machine its own subdomain (`‹sub›.kanna.sh`); Shinsa never does. A machine's tunnel host exists only as plumbing
    the browser connects to after sign-in, never as an address you type or share.
 2. **Machines are a first-class part of one dashboard.** There is nothing to open: the dashboard is the same whether
-   you have one Mac or 20. It connects to every Mac this browser was added to at once, each over its own sealed
-   channel, merges their tasks, queue and gates into one view, and shows each task's Mac on the task, as Kanna does.
-   A new task runs on the Mac of the project you pick. Settings → Machines lists every Mac with its status and
-   Remove.
+   you have one machine or 20. It connects to every machine this browser was added to at once, each over its own sealed
+   channel, merges their tasks, queue and gates into one view, and shows each task's machine on the task, as Kanna does.
+   A machine is a computer that runs the engine and the only place tasks run; a browser is only a way in. With two
+   machines or more, New task has a Machine picker: Automatic sends a task to the machine of its project, or with no
+   project to the one with the most room under its task capacity; picking one overrides it. Settings → Machines
+   lists every machine with its status, its open tasks, its task capacity and Remove.
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
    that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
    instance belongs to one GitHub account and is never shared.
@@ -27,9 +29,9 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    named tunnel; no inbound port is ever opened.
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
    your local engine and holds no state of its own. Nothing is copied to the cloud.
-6. **End to end encrypted, with each device enrolled at the Mac.** Cloudflare terminates TLS at its edge, so TLS alone
+6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed
-   with keys only those two hold. A browser is trusted once, by scanning a QR the Mac shows; a GitHub account alone
+   with keys only those two hold. A browser is trusted once, by scanning a QR the machine shows; a GitHub account alone
    opens nothing.
 7. **Webhooks get a stable public URL through the hosted side**:
    `https://app.shinsa.dev/hooks/‹instance›/‹schedule›/‹token›`, forwarded to the machine's tunnel. Outside
@@ -74,3 +76,6 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 - Push notifications on a phone, and a smaller phone surface.
 - Terminals over remote access.
 - Sharing an instance with another GitHub account.
+- Placement rules beyond the project and the task capacity: labels on a machine (macOS for simulators, a server for
+  benchmarks) that a project or a task asks for, and a machine's own engine on Linux and Windows.
+- Moving a task to another machine, and running one run of a task (a check, a delegation) on another machine.

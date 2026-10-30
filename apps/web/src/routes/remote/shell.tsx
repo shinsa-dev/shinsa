@@ -57,19 +57,19 @@ export function RemoteLoading({ label }: { label: string }) {
 
 const SIGN_IN_POINTS: { icon: IconName; title: string; detail: string }[] = [
   {
-    icon: 'IconMacbook',
-    title: 'Every Mac in one place',
-    detail: 'Each Mac you turn remote access on for shows up here, with all its tasks.',
+    icon: 'IconServer',
+    title: 'Every machine in one place',
+    detail: 'Each machine you turn remote access on for shows up here, with all its tasks.',
   },
   {
     icon: 'IconShieldCheck',
     title: 'Encrypted end to end',
-    detail: 'Only your Mac and the browsers you add on it can read your work.',
+    detail: 'Only your machine and the browsers you add on it can read your work.',
   },
   {
     icon: 'IconKey1',
     title: 'Added once per browser',
-    detail: 'The first time, your Mac gives this browser its own key.',
+    detail: 'The first time, your machine gives this browser its own key.',
   },
 ];
 
@@ -93,7 +93,8 @@ export function SignInPrompt({ returnPath, error }: { returnPath: string; error:
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
-        Reach the Shinsa on your Mac from any browser. Use the GitHub account you paired your Mac with.
+        Reach the Shinsa on your machine from any browser. Use the GitHub account you paired your machine
+        with.
       </RemoteHero>
       <RemoteBenefits />
       {error && (
@@ -107,7 +108,7 @@ export function SignInPrompt({ returnPath, error }: { returnPath: string; error:
           Sign in with GitHub
         </Button>
         <p className='text-center text-2xs text-fg-2'>
-          No Mac yet? Open Shinsa on your Mac, then Settings, Remote access, and turn it on.
+          No machine yet? Open Shinsa on your machine, then Settings, Remote access, and turn it on.
         </p>
       </div>
     </section>

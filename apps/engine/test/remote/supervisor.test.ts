@@ -198,7 +198,7 @@ describe('the tunnel supervisor', () => {
     world.supervisor.start(CREDENTIALS);
     await until(() => world.supervisor.status === 'connected');
     await world.supervisor.stop();
-    expect(warn).toHaveBeenCalledWith('[Remote] Could not mark this Mac offline', expect.anything());
+    expect(warn).toHaveBeenCalledWith('[Remote] Could not mark this machine offline', expect.anything());
     warn.mockRestore();
   });
 

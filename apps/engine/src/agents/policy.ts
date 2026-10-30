@@ -50,7 +50,7 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
     {
       pattern: /\bdata\/remote\.json\b/,
       reason:
-        'remote.json holds the keys for reaching this Mac from anywhere. Agents never read or change it; remote access is the human’s, in Settings.',
+        'remote.json holds the keys for reaching this machine from anywhere. Agents never read or change it; remote access is the human’s, in Settings.',
     },
     {
       pattern: /\bgh\s+pr\s+(merge|create)\b/,

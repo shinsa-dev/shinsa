@@ -39,7 +39,7 @@ function answerSnapshot(key: string, snapshot: RemoteSnapshot) {
   answers[key] = () => Response.json(snapshot);
 }
 
-describe('remote access on this Mac', () => {
+describe('remote access on this machine', () => {
   it('reads the snapshot, and keeps the last one with the failure when a read fails', async () => {
     answerSnapshot('GET /api/remote', createRemoteSnapshot());
     await refreshRemoteAccess();

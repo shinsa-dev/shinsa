@@ -42,14 +42,14 @@ function formatEnrollment(enrollment: RemoteEnrollment) {
 export const REMOTE_SPECS: SurfaceSpec[] = [
   defineRead<RemoteSnapshot>({
     path: ['remote', 'status'],
-    summary: 'Show whether this Mac can be reached from app.shinsa.dev, and its enrolled devices.',
+    summary: 'Show whether this machine can be reached from app.shinsa.dev, and its enrolled devices.',
     fields: [],
     request: () => '/api/remote',
     format: formatRemote,
   }),
   defineAction({
     path: ['remote', 'pair'],
-    summary: 'Turn on remote access: sign in with GitHub in the browser to give this Mac its tunnel.',
+    summary: 'Turn on remote access: sign in with GitHub in the browser to give this machine its tunnel.',
     humanOnly: true,
     fields: [],
     act: async (client) => {
@@ -79,7 +79,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'remove'],
-    summary: 'Remove this Mac from app.shinsa.dev and forget its tunnel and devices.',
+    summary: 'Remove this machine from app.shinsa.dev and forget its tunnel and devices.',
     humanOnly: true,
     fields: [],
     act: async (client) => {
@@ -89,7 +89,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'enroll'],
-    summary: 'Make a one-time link that adds a phone or browser to this Mac.',
+    summary: 'Make a one-time link that adds a phone or browser to this machine.',
     humanOnly: true,
     fields: [
       {

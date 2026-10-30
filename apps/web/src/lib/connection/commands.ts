@@ -24,8 +24,8 @@ export async function requestWithToast(request: () => Promise<unknown>, done?: D
   }
 }
 
-export function sendCommandWithToast(command: UserCommand, done?: string) {
-  return requestWithToast(() => sendCommand(command), done);
+export function sendCommandWithToast(command: UserCommand, done?: string, machineId?: string | null) {
+  return requestWithToast(() => sendCommand(command, machineId), done);
 }
 
 export function copyText(text: string) {

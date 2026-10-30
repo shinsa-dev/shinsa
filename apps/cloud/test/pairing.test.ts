@@ -44,7 +44,7 @@ describe('pairing a machine', () => {
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
   });
 
-  test('pairs a Mac once when two approvals race, making one tunnel', async () => {
+  test('pairs a machine once when two approvals race, making one tunnel', async () => {
     const harness = createHarness();
     const mona = await harness.signIn('mona', 42);
     const kai = await harness.signIn('kai', 43);
@@ -203,7 +203,7 @@ describe('pairing a machine', () => {
     expect(retried.status).toBe(200);
   });
 
-  test('pairs a Mac once when two approvals race, making one tunnel', async () => {
+  test('pairs a machine once when two approvals race, making one tunnel', async () => {
     const harness = createHarness();
     const mona = await harness.signIn('mona', 42);
     const kai = await harness.signIn('kai', 43);

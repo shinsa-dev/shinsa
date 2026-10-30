@@ -59,6 +59,7 @@ class FakeConnection implements ShinsaConnection {
     this.terminals = terminals;
   };
   selectMachine = () => null;
+  listMachines = () => [];
   command = (command: UserCommand) => {
     this.commands.push(command);
     return Promise.resolve();
@@ -106,8 +107,8 @@ function createFleet() {
   return { fleet, studio, laptop };
 }
 
-describe('merging the state of several Macs', () => {
-  it('links a task by its id when another Mac has a task with the same handle', () => {
+describe('merging the state of several machines', () => {
+  it('links a task by its id when another machine has a task with the same handle', () => {
     const studio = createMember('m1', 'Studio');
     const laptop = createMember('m2', 'Laptop');
     const fleet = new Fleet([studio.member, laptop.member]);
@@ -129,7 +130,7 @@ describe('merging the state of several Macs', () => {
     ).toEqual(new Set());
   });
 
-  it('puts every Mac’s tasks in one state, keeps the first Mac’s settings and knows who owns what', () => {
+  it('puts every machine’s tasks in one state, keeps the first machine’s settings and knows who owns what', () => {
     const { fleet } = createFleet();
     const { state } = fleet.snapshot();
     expect(Object.keys(state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
@@ -143,20 +144,20 @@ describe('merging the state of several Macs', () => {
     ]);
   });
 
-  it('hands back the one Mac’s state as it is, and nothing while no Mac has answered', () => {
+  it('hands back the one machine’s state as it is, and nothing while no machine has answered', () => {
     const only = createWire(1);
     expect(mergeFleetStates([{ id: 'm1', state: only }])?.state).toBe(only);
     expect(mergeFleetStates([])).toBeNull();
   });
 
-  it('is open when any Mac is, connecting while one still tries, and closed otherwise', () => {
+  it('is open when any machine is, connecting while one still tries, and closed otherwise', () => {
     expect(resolveFleetStatus(['closed', 'open'])).toBe('open');
     expect(resolveFleetStatus(['closed', 'connecting'])).toBe('connecting');
     expect(resolveFleetStatus(['closed'])).toBe('closed');
     expect(resolveFleetStatus([])).toBe('closed');
   });
 
-  it('keeps the same snapshot until a Mac sends something new, and tells its listeners when one does', () => {
+  it('keeps the same snapshot until a machine sends something new, and tells its listeners when one does', () => {
     const { fleet, studio } = createFleet();
     const first = fleet.snapshot();
     expect(fleet.snapshot()).toBe(first);
@@ -170,7 +171,7 @@ describe('merging the state of several Macs', () => {
     stop();
   });
 
-  it('shows no Mac on a task while there is only one Mac', () => {
+  it('shows no machine on a task while there is only one machine', () => {
     const studio = createMember('m1', 'Studio');
     const fleet = new Fleet([studio.member]);
     studio.connection.push({
@@ -181,7 +182,7 @@ describe('merging the state of several Macs', () => {
   });
 });
 
-describe('sending to the Mac that owns it', () => {
+describe('sending to the machine that owns it', () => {
   it('finds the owner of a command from any id it names, at any depth', () => {
     const owners = new Map([
       ['task-1', 'm2'],
@@ -206,7 +207,7 @@ describe('sending to the Mac that owns it', () => {
     expect(resolveRequestOwner(new URL('https://shinsa.dev/api/tasks/%E0%A4%A'), owners)).toBeNull();
   });
 
-  it('sends a command, a transcript and a request to the Mac that owns them, and the rest to the first Mac', async () => {
+  it('sends a command, a transcript and a request to the machine that owns them, and the rest to the first machine', async () => {
     const { fleet, studio, laptop } = createFleet();
     await fleet.command({ type: 'task.cancel', taskId: 'task-laptop' });
     await fleet.command({ type: 'settings.change', patch: {} });
@@ -222,7 +223,23 @@ describe('sending to the Mac that owns it', () => {
     expect(await (await fleet.fetch(new Request('https://shinsa.dev/api/health'))).text()).toBe('Studio');
   });
 
-  it('reads accounts and terminals from the first Mac, and is quiet while any Mac has its desktop app open', () => {
+  it('lists every machine with its own state once there are two, and sends a command to the machine named', async () => {
+    const { fleet, studio, laptop } = createFleet();
+    const machines = fleet.listMachines();
+    expect(machines.map((machine) => [machine.id, machine.name, Object.keys(machine.state.tasks)])).toEqual([
+      ['m1', 'Studio', ['task-studio']],
+      ['m2', 'Laptop', ['task-laptop']],
+    ]);
+    expect(fleet.listMachines()).toBe(machines);
+    await fleet.command({ type: 'task.create', request: 'Run it', repoId: null }, 'm2');
+    await fleet.command({ type: 'task.create', request: 'Run it', repoId: null });
+    expect(laptop.connection.commands.map((command) => command.type)).toEqual(['task.create']);
+    expect(studio.connection.commands.map((command) => command.type)).toEqual(['task.create']);
+    fleet.removeMember('m2');
+    expect(fleet.listMachines()).toEqual([]);
+  });
+
+  it('reads accounts and terminals from the first machine, and is quiet while any machine has its desktop app open', () => {
     const { fleet, studio, laptop } = createFleet();
     const accounts = { accounts: [] } as unknown as AccountsSnapshot;
     const terminals = { terminals: [] } as unknown as TerminalsSnapshot;
@@ -248,7 +265,7 @@ describe('sending to the Mac that owns it', () => {
     expect(heard).toBe(4);
   });
 
-  it('starts, flushes and resets every Mac, and drops one that no longer accepts this browser', async () => {
+  it('starts, flushes and resets every machine, and drops one that no longer accepts this browser', async () => {
     const { fleet, studio, laptop } = createFleet();
     fleet.start();
     fleet.flush();
@@ -262,10 +279,10 @@ describe('sending to the Mac that owns it', () => {
     fleet.close();
     expect(fleet.snapshot()).toEqual({ state: null, status: 'closed' });
     await expect(fleet.command({ type: 'settings.change', patch: {} })).rejects.toThrow(
-      'No Mac is connected.'
+      'No machine is connected.'
     );
     await expect(fleet.fetch(new Request('https://shinsa.dev/api/health'))).rejects.toThrow(
-      'No Mac is connected.'
+      'No machine is connected.'
     );
     expect(fleet.selectTranscript('run')).toEqual([]);
     expect(fleet.selectAccounts()).toBeNull();

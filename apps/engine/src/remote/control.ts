@@ -16,7 +16,7 @@ const OFFLINE_TIMEOUT_MS = 2_000;
 
 export class RevokedError extends Error {
   constructor() {
-    super('This Mac was removed from remote access. Turn remote access on again to pair it.');
+    super('This machine was removed from remote access. Turn remote access on again to pair it.');
     this.name = 'RevokedError';
   }
 }

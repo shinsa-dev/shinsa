@@ -3,6 +3,7 @@ import {
   applyStatePatch,
   type ChatEntry,
   type ClientMessage,
+  type PlacementMachine,
   type ServerMessage,
   type StatePatch,
   type Surface,
@@ -57,7 +58,8 @@ export interface ShinsaConnection {
   selectTerminals: () => TerminalsSnapshot | null;
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
   selectMachine: (id: string) => MachineView | null;
-  command: (command: UserCommand) => Promise<void>;
+  listMachines: () => PlacementMachine[];
+  command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
   flush: () => void;
 }
@@ -76,6 +78,8 @@ const MAX_RESENDS = 2;
 const HIDDEN_FRAME_MS = 32;
 
 export const NO_ENTRIES: ChatEntry[] = [];
+
+export const NO_MACHINES: PlacementMachine[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
@@ -188,6 +192,8 @@ export class Connection implements ShinsaConnection {
   isDesktopConnected = () => this.#desktopConnected;
 
   selectMachine = (_id: string): MachineView | null => null;
+
+  listMachines = (): PlacementMachine[] => NO_MACHINES;
 
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
@@ -417,6 +423,10 @@ export function replaceConnection(next: ShinsaConnection | null) {
   connection = next ?? localConnection;
 }
 
+export function useMachines() {
+  return useSyncExternalStore(connection.subscribe, connection.listMachines);
+}
+
 export function useMachine(id: string | null) {
   return useSyncExternalStore(connection.subscribe, () => (id ? connection.selectMachine(id) : null));
 }
@@ -439,6 +449,6 @@ export function useTranscript(runId: string | null) {
   );
 }
 
-export function sendCommand(command: UserCommand) {
-  return connection.command(command);
+export function sendCommand(command: UserCommand, machineId?: string | null) {
+  return connection.command(command, machineId);
 }

@@ -305,7 +305,7 @@ describe('startShinsa', () => {
     expect(codes).toEqual([75]);
   });
 
-  test('a paired Mac starts its tunnel to the engine and gives webhooks their app.shinsa.dev URL', async () => {
+  test('a paired machine starts its tunnel to the engine and gives webhooks their app.shinsa.dev URL', async () => {
     const root = createTempDir();
     const config = createTestConfig(root);
     mkdirSync(config.dataDir, { recursive: true });

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import type { PlacementMachine } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -65,7 +67,56 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  replaceConnection(null);
   stopFakeServer();
+});
+
+function connectTwoMachines() {
+  const local = connection;
+  const sent: [string, string | null | undefined][] = [];
+  const studio = { id: 'studio', name: 'Studio' };
+  const machines: PlacementMachine[] = [
+    {
+      ...studio,
+      state: {
+        tasks: { a: { stage: 'building' as const } },
+        projects: { p1: {}, p2: {} },
+        settings: { taskCapacity: 4 },
+      },
+    },
+    { id: 'box', name: 'Build box', state: { tasks: {}, projects: {}, settings: { taskCapacity: null } } },
+  ];
+  replaceConnection({
+    ...local,
+    listMachines: () => machines,
+    selectMachine: (id: string) => (id === 'p1' || id === 'p2' ? studio : null),
+    command: (command, machineId) => {
+      sent.push([command.type, machineId]);
+      return Promise.resolve();
+    },
+  });
+  return sent;
+}
+
+describe('NewTaskForm with several machines', () => {
+  it('shows no machine picker with one machine', () => {
+    renderForm();
+    expect(screen.queryByRole('combobox', { name: 'Machine' })).toBeNull();
+  });
+
+  it('places a task automatically, and on the machine you pick with only that machine’s projects', async () => {
+    const sent = connectTwoMachines();
+    renderForm();
+    expect(combobox('Machine').textContent).toBe('Automatic: Build box');
+    fireEvent.change(field(), { target: { value: 'Benchmark the build' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(sent).toEqual([['task.create', 'box']]));
+    await pick('Project', /Superwall on Studio/, /Superwall/);
+    expect(combobox('Machine').textContent).toBe('Automatic: Studio');
+    await pick('Machine', /Build box/, 'Build box');
+    expect(combobox('Project').textContent).toBe('No project');
+    expect(await listOptions('Project')).toEqual(['No project']);
+  });
 });
 
 function serveUploads() {

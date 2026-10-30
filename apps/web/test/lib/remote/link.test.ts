@@ -39,7 +39,7 @@ function listen(socket: WebSocket) {
   return events;
 }
 
-describe('the link to a remote Mac', () => {
+describe('the link to a remote machine', () => {
   it('gives the app a socket that opens on the channel and carries its messages', async () => {
     const { mac, link, connects } = await createLink();
     const socket = link.openSocket();
@@ -73,7 +73,7 @@ describe('the link to a remote Mac', () => {
     expect(first.readyState).toBe(3);
   });
 
-  it('reconnects after the channel drops, and closes the socket when the Mac refuses the device', async () => {
+  it('reconnects after the channel drops, and closes the socket when the machine refuses the device', async () => {
     const { mac, link, refusals } = await createLink();
     const socket = link.openSocket();
     const events = listen(socket);
@@ -87,8 +87,10 @@ describe('the link to a remote Mac', () => {
     link.close();
     const refused = link.openSocket();
     const refusedEvents = listen(refused);
-    await waitFor(() => expect(refusedEvents).toEqual(['close:This browser is not enrolled on this Mac.']));
-    expect(refusals).toEqual(['This browser is not enrolled on this Mac.']);
+    await waitFor(() =>
+      expect(refusedEvents).toEqual(['close:This browser is not enrolled on this machine.'])
+    );
+    expect(refusals).toEqual(['This browser is not enrolled on this machine.']);
   });
 
   it('drops a channel that a newer one replaced while it was opening', async () => {
@@ -116,7 +118,7 @@ describe('the link to a remote Mac', () => {
     expect(events).toEqual(['close:first']);
   });
 
-  it('reports a refusal only when the Mac refused', async () => {
+  it('reports a refusal only when the machine refused', async () => {
     const { link, refusals } = await createLink({ refuseOpen: true });
     await expect(link.resolveChannel()).rejects.toBeInstanceOf(ChannelError);
     expect(refusals).toEqual([]);

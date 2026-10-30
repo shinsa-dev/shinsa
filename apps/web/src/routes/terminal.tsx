@@ -361,8 +361,8 @@ export function TerminalPage({ state }: { state: ShinsaState }) {
       <div className='grid flex-1 place-items-center'>
         <EmptyState
           icon='IconConsole'
-          title='Terminals stay on your Mac'
-          description='A terminal is a shell on your Mac, so Shinsa only opens one there. Use it at your desk.'
+          title='Terminals stay on your machine'
+          description='A terminal is a shell on the machine that runs Shinsa, so it opens only there.'
         />
       </div>
     );

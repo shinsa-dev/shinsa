@@ -30,7 +30,7 @@ const ON: RemoteSnapshot = {
 };
 
 describe('shinsa remote', () => {
-  test('status says how to turn it on, how pairing goes, and who can reach this Mac', async () => {
+  test('status says how to turn it on, how pairing goes, and who can reach this machine', async () => {
     const off = await runSpec(createFakeClient({ '/api/remote': OFF }), ['remote', 'status']);
     expect(off.text).toContain('`shinsa remote pair`');
     const pairing = {

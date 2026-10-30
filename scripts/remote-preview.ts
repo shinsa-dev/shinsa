@@ -207,18 +207,18 @@ function respondIndex(machines: Machine[]) {
       `Add this browser to ${machine.name} (a fresh one-time link)`,
       `/__preview/enroll/${machine.id}`,
     ]),
-    ['The merged dashboard of every Mac this browser was added to', REMOTE_PATHS.app],
-    ['All tasks, each with its Mac', '/tasks'],
+    ['The merged dashboard of every machine this browser was added to', REMOTE_PATHS.app],
+    ['All tasks, each with its machine', '/tasks'],
     ['Settings, with Machines', '/settings'],
     ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
     ...machines.map((machine) => [
-      `${machine.name}'s own app on the Mac: Settings, Remote access`,
+      `${machine.name}'s own app on the machine: Settings, Remote access`,
       `http://${HOST}:${machine.port}/settings`,
     ]),
   ];
   const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this browser to each Mac first, then open the dashboard.</p><ol>${items}</ol></body>`,
+    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this browser to each machine first, then open the dashboard.</p><ol>${items}</ol></body>`,
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
 }

@@ -64,7 +64,7 @@ type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
 
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
-  if (!bare) return 'Mac';
+  if (!bare) return 'Machine';
   if (bare !== bare.toUpperCase()) return bare;
   return bare
     .toLowerCase()
@@ -148,7 +148,10 @@ export class Remote {
 
   async startPairing() {
     if (this.store.file.credentials)
-      throw new DomainError('remote_paired', 'This Mac is already paired. Remove it first to pair it again.');
+      throw new DomainError(
+        'remote_paired',
+        'This machine is already paired. Remove it first to pair it again.'
+      );
     if (this.#pairing) return this.#pairing.view;
     const machine = await this.store.resolveMachineKey();
     const start = await this.control.requestPairStart({
@@ -307,7 +310,7 @@ export class Remote {
   #closeChannels(match: (channel: RemoteChannel) => boolean) {
     for (const channel of [...this.#channels]) {
       if (!match(channel)) continue;
-      channel.fail('Remote access to this Mac changed.');
+      channel.fail('Remote access to this machine changed.');
       this.#channels.delete(channel);
     }
   }

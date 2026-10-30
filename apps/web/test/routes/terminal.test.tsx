@@ -67,11 +67,11 @@ const SHELL = createTerminal({ id: 'shell', title: 'fish' });
 const ENDED = createTerminal({ id: 'ended', title: 'bun test', status: 'exited', exitCode: 1 });
 
 describe('the terminal page', () => {
-  it('says terminals stay on the Mac in the remote build', () => {
+  it('says terminals stay on the machine in the remote build', () => {
     import.meta.env.VITE_SHINSA_REMOTE = '1';
     show(null);
     import.meta.env.VITE_SHINSA_REMOTE = undefined;
-    expect(screen.getByText('Terminals stay on your Mac')).toBeTruthy();
+    expect(screen.getByText('Terminals stay on your machine')).toBeTruthy();
   });
 
   it('waits for the engine’s list, and asks for a project when there is none', () => {

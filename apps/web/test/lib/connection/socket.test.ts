@@ -18,6 +18,7 @@ import {
   useConnection,
   useDesktopConnected,
   useMachine,
+  useMachines,
   useTranscript,
 } from '@/lib/connection/socket.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
@@ -695,12 +696,19 @@ describe('the shared connection', () => {
     timeout.mockRestore();
   });
 
-  it('uses the connection a remote page put in place, with the Mac of each task, until it is taken away', () => {
+  it('uses the connection a remote page put in place, with the machine of each task, until it is taken away', () => {
     const local = connection;
     const machine = { id: 'm2', name: 'Laptop' };
-    const fleet = { ...local, selectMachine: (id: string) => (id === 'task-1' ? machine : null) };
+    const machines = [{ id: 'm2', name: 'Laptop', state: { tasks: {}, projects: {}, settings: {} } }];
+    expect(renderHook(() => useMachines()).result.current).toEqual([]);
+    const fleet = {
+      ...local,
+      selectMachine: (id: string) => (id === 'task-1' ? machine : null),
+      listMachines: () => machines,
+    };
     replaceConnection(fleet);
     expect(connection).toBe(fleet);
+    expect(renderHook(() => useMachines()).result.current).toBe(machines);
     expect(renderHook(() => useMachine('task-1')).result.current).toBe(machine);
     expect(renderHook(() => useMachine(null)).result.current).toBeNull();
     replaceConnection(null);
@@ -711,7 +719,7 @@ describe('the shared connection', () => {
   it('sends commands through the shared connection', async () => {
     const command = spyOn(connection, 'command').mockResolvedValue(undefined);
     await sendCommand(COMMAND);
-    expect(command).toHaveBeenCalledWith(COMMAND);
+    expect(command).toHaveBeenCalledWith(COMMAND, undefined);
     command.mockRestore();
   });
 

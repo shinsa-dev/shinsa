@@ -99,9 +99,9 @@ function MachineFact({ task }: { task: Task }) {
   const machine = useMachine(task.id);
   if (!machine) return null;
   return (
-    <Hint label='The Mac this task runs on'>
+    <Hint label='The machine this task runs on'>
       <span className={FACT}>
-        <Icon size='sm' name='IconMacbook' />
+        <Icon size='sm' name='IconServer' />
         <span className='truncate'>{machine.name}</span>
       </span>
     </Hint>

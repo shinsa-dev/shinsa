@@ -31,7 +31,7 @@ describe('the /ui remote access samples', () => {
     });
   });
 
-  it('list three Macs, two of them added in this browser, and refuse every change', async () => {
+  it('list three machines, two of them added in this browser, and refuse every change', async () => {
     const { dashboard, devices } = createSampleMachineServices(NOW);
     const macs = await dashboard.listInstances();
     expect(macs.map((mac) => [mac.name, mac.online, mac.lastSeenAt])).toEqual([
@@ -44,7 +44,7 @@ describe('the /ui remote access samples', () => {
     await expect(dashboard.readSession()).rejects.toThrow(REFUSED);
   });
 
-  it('merge two Macs that never connect, send nothing, and keep every call quiet', async () => {
+  it('merge two machines that never connect, send nothing, and keep every call quiet', async () => {
     const fleet = createSampleFleet([
       { name: 'Studio', state: createState() },
       { name: 'Laptop', state: createState() },

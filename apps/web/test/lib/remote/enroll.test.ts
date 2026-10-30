@@ -7,8 +7,8 @@ import { createKeyPair, FakeMac } from './fake-mac.ts';
 
 const SECRET = serializeBase64Url(new Uint8Array(32).fill(9));
 
-describe('enrolling this browser on a Mac', () => {
-  it('makes a device key, proves the one-time secret and remembers the pinned Mac key', async () => {
+describe('enrolling this browser on a machine', () => {
+  it('makes a device key, proves the one-time secret and remembers the pinned machine key', async () => {
     const mac = await FakeMac.create({ enrollSecret: SECRET });
     const written: EnrolledDevice[] = [];
     const device = await enrollDevice(
@@ -34,7 +34,7 @@ describe('enrolling this browser on a Mac', () => {
     expect(mac.last.closedWith?.code).toBe(1000);
   });
 
-  it('remembers nothing when the Mac refuses the secret', async () => {
+  it('remembers nothing when the machine refuses the secret', async () => {
     const mac = await FakeMac.create({ enrollSecret: SECRET });
     const written: EnrolledDevice[] = [];
     const enrolling = enrollDevice(

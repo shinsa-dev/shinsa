@@ -2276,10 +2276,13 @@ tools and T3's MCP toolkits.
 ## Remote access
 
 Reaching this machine from any browser at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
-devices enrolled at the Mac. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
+devices enrolled at the machine. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
 core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
 machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
-The dashboard has an origin of its own, apart from the marketing site on shinsa.dev. The machine side is `apps/engine/src/remote/`:
+The dashboard has an origin of its own, apart from the marketing site on shinsa.dev. Two words keep the parts apart: a
+**machine** is a computer that runs the engine (a machine today; the engine itself needs nothing of macOS for this), the
+only place tasks run, each task on exactly one; a **browser** (or a phone's browser) is only a way in, enrolled on
+each machine it may reach, running nothing. The machine side is `apps/engine/src/remote/`:
 
 - **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
   on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
@@ -2318,7 +2321,7 @@ The dashboard has an origin of its own, apart from the marketing site on shinsa.
   without `.local`, an all-capitals one such as `MAC` written `Mac`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
   where you sign in with GitHub and approve. The engine polls every 2 seconds with a poll secret that never leaves it,
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
-  `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired Mac is refused
+  `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
 - **Devices** (`Remote.createEnrollment`): Add browser, or `shinsa remote enroll <name>`, makes a one-time enrollment
   secret for a named device (60 characters at most) and answers its link,
@@ -2326,24 +2329,24 @@ The dashboard has an origin of its own, apart from the marketing site on shinsa.
   remote forget-device <key>` removes one.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
-  logged) and forgets the credentials and every device. Each needs a paired Mac (`remote_not_paired`).
+  logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
-  `lib/connection/remote-access.ts`): the Mac's name and status (Off, Waiting for sign-in with the code and Open
+  `lib/connection/remote-access.ts`): the machine's name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
   added devices with when each was last used and Forget, and Add browser: you name the device, and the one-time link
   shows as a QR code to scan with a phone, with Copy and Add this browser for the browser in front of you. It reads
   `GET /api/remote` when Settings opens and every 2 seconds while pairing or connecting. The remote build leaves the
-  section out, since every change to it is refused from off the Mac.
+  section out, since every change to it is refused from off the machine.
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
   owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
   `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the Mac
+- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
   Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
   repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
   takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
   plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
-  programs, opening a task on the Mac and restarting the engine; terminals and services are refused even to read.
-  Everything else, closing gates included, is you, as on the Mac.
+  programs, opening a task on the machine and restarting the engine; terminals and services are refused even to read.
+  Everything else, closing gates included, is you, as on the machine.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
   `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
   `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
@@ -2356,24 +2359,35 @@ The dashboard has an origin of its own, apart from the marketing site on shinsa.
   (`/enroll#…`: the fragment is kept in `sessionStorage` through the GitHub sign-in and taken out of the address
   bar at once). Adding a browser makes a P-256 key pair that cannot be exported, kept in IndexedDB (`shinsa-remote`)
   with the machine key pinned from the link, and proves the one-time secret in its first handshake.
-- **One dashboard over every Mac** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every Mac
+- **One dashboard over every machine** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every machine
   of your account that this browser was added to joins one `Fleet`, each over its own sealed channel (`RemoteLink`,
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
-  (`replaceConnection`). Its state is every Mac's state merged (`mergeFleetStates`: tasks, runs, gates, projects,
+  (`replaceConnection`). Its state is every machine's state merged (`mergeFleetStates`: tasks, runs, gates, projects,
   repositories, evidence, schedules, memories and usage side by side, keyed by their ids; settings and focus from the
-  first Mac), and it remembers which Mac owns each id. A command goes to the Mac that owns an id it names
-  (`resolveCommandOwner`), a request to the Mac that owns an id in its path or query (`resolveRequestOwner`), a
-  transcript to the Mac of its run; the rest goes to the first Mac. With more than one Mac, a task shows its Mac in
-  its facts row and on the roadmap, and the new-task project picker names each project's Mac, so picking a project
-  picks the Mac a new task runs on (no project: the first Mac). A service worker (`/sw.js`, scope `/`, from
+  first machine), and it remembers which machine owns each id. A command goes to the machine that owns an id it names
+  (`resolveCommandOwner`), a request to the machine that owns an id in its path or query (`resolveRequestOwner`), a
+  transcript to the machine of its run; the rest goes to the first machine. With more than one machine, a task shows its machine in
+  its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
-  sends it to the right Mac and streams the answer back (`relay.ts`). A dropped channel closes that Mac's socket and
-  its connection's retry opens a fresh channel with a new token. A Mac that refuses this browser's key is forgotten
-  here and leaves the dashboard. A browser added to no Mac yet shows every Mac of the account with how to add it.
-  Settings → General → Machines lists every Mac (online or last seen, in this dashboard or not) with Remove. The
-  Terminal page says terminals stay on the Mac.
+  sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
+  its connection's retry opens a fresh channel with a new token. A machine that refuses this browser's key is forgotten
+  here and leaves the dashboard. A browser added to no machine yet shows every machine of the account with how to add it.
+  Settings → General → Machines lists every machine (online or last seen, in this dashboard or not) with Remove. The
+  Terminal page says terminals stay on the machine.
+- **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
+  New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. A
+  task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
+  Automatic follows two rules: a task in a project goes to the machine that holds the project (its repositories are on
+  that disk; `resolveProjectMachine`), and a task with no project goes to the machine with the most room
+  (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity passed over while another has
+  room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
+  number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
+  the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
+  steers placement: a machine still runs a task you send it when full. The fleet sends `task.create` to the chosen
+  machine (`ShinsaConnection.command`'s machine).
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
-  every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the Mac already
+  every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
 
 ## Who can change Shinsa

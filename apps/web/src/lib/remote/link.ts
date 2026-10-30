@@ -88,7 +88,7 @@ export class RemoteLink {
   #adopt(channel: RemoteChannel, connecting: Promise<RemoteChannel>) {
     if (this.#channel !== connecting) {
       channel.close();
-      throw new ChannelError('A newer connection to your Mac replaced this one.');
+      throw new ChannelError('A newer connection to your machine replaced this one.');
     }
     this.#current = channel;
     channel.subscribeClose(() => {

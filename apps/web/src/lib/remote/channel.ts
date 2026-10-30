@@ -88,12 +88,12 @@ export class RemoteChannel {
         .then(() => this.#receive(event.data))
         .catch((error: unknown) => {
           this.fail(
-            error instanceof ChannelError ? error : new ChannelError('The connection to your Mac broke.')
+            error instanceof ChannelError ? error : new ChannelError('The connection to your machine broke.')
           );
         });
     });
     socket.addEventListener('close', (event) => {
-      this.fail(new ChannelError(event.reason || 'The connection to your Mac closed.'));
+      this.fail(new ChannelError(event.reason || 'The connection to your machine closed.'));
     });
   }
 
@@ -114,14 +114,14 @@ export class RemoteChannel {
     const phase = this.#phase;
     if (phase.kind === 'closed') return;
     if (phase.kind === 'hello') {
-      if (typeof data !== 'string') throw new ChannelError('Your Mac answered without a handshake.');
+      if (typeof data !== 'string') throw new ChannelError('Your machine answered without a handshake.');
       await phase.finish(data);
       return;
     }
     const frame = toBytes(data);
-    if (!frame) throw new ChannelError('Your Mac sent an unsealed message.');
+    if (!frame) throw new ChannelError('Your machine sent an unsealed message.');
     const message = parseChannelMessage(decodeText(await phase.open(frame)));
-    if (!message) throw new ChannelError('Your Mac sent a message this page does not know.');
+    if (!message) throw new ChannelError('Your machine sent a message this page does not know.');
     this.#handle(message);
   }
 
@@ -144,7 +144,7 @@ export class RemoteChannel {
         this.#endResponse(message.id);
         return;
       default:
-        throw new ChannelError('Your Mac sent a message only a browser sends.');
+        throw new ChannelError('Your machine sent a message only a browser sends.');
     }
   }
 
@@ -175,12 +175,12 @@ export class RemoteChannel {
     if (!pending) return;
     this.#pending.delete(id);
     if (pending.stream) pending.stream.close();
-    else pending.reject(new ChannelError('Your Mac ended a request without answering it.'));
+    else pending.reject(new ChannelError('Your machine ended a request without answering it.'));
   }
 
   async send(message: ChannelMessage) {
     const phase = this.#phase;
-    if (phase.kind !== 'open') throw new ChannelError('The connection to your Mac is closed.');
+    if (phase.kind !== 'open') throw new ChannelError('The connection to your machine is closed.');
     const frame = await phase.seal(encodeText(serializeChannelMessage(message)));
     if (this.#phase.kind === 'open') this.#socket.send(frame);
   }
@@ -212,7 +212,7 @@ export class RemoteChannel {
   }
 
   async request(input: ChannelRequest): Promise<Response> {
-    if (!this.isOpen) throw new ChannelError('The connection to your Mac is closed.');
+    if (!this.isOpen) throw new ChannelError('The connection to your machine is closed.');
     this.#nextId += 1;
     const id = String(this.#nextId);
     const answer = Promise.withResolvers<Response>();
@@ -249,14 +249,14 @@ export class RemoteChannel {
   }
 
   close() {
-    this.fail(new ChannelError('The connection to your Mac was closed on this page.'));
+    this.fail(new ChannelError('The connection to your machine was closed on this page.'));
   }
 }
 
 function awaitOpen(socket: WebSocket) {
   return new Promise<void>((resolve, reject) => {
     socket.addEventListener('open', () => resolve(), { once: true });
-    socket.addEventListener('close', () => reject(new ChannelError('Couldn’t reach your Mac.')), {
+    socket.addEventListener('close', () => reject(new ChannelError('Couldn’t reach your machine.')), {
       once: true,
     });
   });
@@ -264,7 +264,7 @@ function awaitOpen(socket: WebSocket) {
 
 export async function openRemoteChannel(options: ChannelOptions): Promise<RemoteChannel> {
   const machinePublicKey = await parsePublicKey(options.machineKey);
-  if (!machinePublicKey) throw new ChannelError('The key this browser pinned for your Mac is not valid.');
+  if (!machinePublicKey) throw new ChannelError('The key this browser pinned for your machine is not valid.');
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
@@ -282,7 +282,7 @@ export async function openRemoteChannel(options: ChannelOptions): Promise<Remote
   const channel = new RemoteChannel(socket, async (opened, text) => {
     const welcome = parseServerHello(text);
     if (welcome?.type === 'refused') throw new ChannelError(welcome.reason, true);
-    if (!welcome) throw new ChannelError('Your Mac answered the handshake with something else.');
+    if (!welcome) throw new ChannelError('Your machine answered the handshake with something else.');
     const session = await deriveClientSession({
       keys: {
         machine: options.machineKey,

@@ -70,3 +70,28 @@ export function createFleetMember(
   };
   return { member, close: () => link.close() };
 }
+
+export const TASK_CAPACITY_TITLE = 'Task capacity';
+
+export const NO_TASK_CAPACITY = 'none';
+
+const TASK_CAPACITIES = [2, 4, 8, 16];
+
+export function listTaskCapacityItems(current: number | null) {
+  const values =
+    current === null || TASK_CAPACITIES.includes(current)
+      ? TASK_CAPACITIES
+      : [...TASK_CAPACITIES, current].sort((a, b) => a - b);
+  return [
+    { value: NO_TASK_CAPACITY, label: 'No limit' },
+    ...values.map((value) => ({ value: String(value), label: `Up to ${value} open tasks` })),
+  ];
+}
+
+export function resolveTaskCapacityValue(capacity: number | null) {
+  return capacity === null ? NO_TASK_CAPACITY : String(capacity);
+}
+
+export function parseTaskCapacity(value: string) {
+  return value === NO_TASK_CAPACITY ? null : Number(value);
+}

@@ -70,7 +70,7 @@ describe('Settings → Remote access', () => {
     await waitFor(() => expect(actions.cancelPairing).toHaveBeenCalled());
   });
 
-  it('pauses, resumes and removes a paired Mac, removal after a confirmation', async () => {
+  it('pauses, resumes and removes a paired machine, removal after a confirmation', async () => {
     const connected = renderGroup(createRemoteSnapshot());
     expect(screen.getByText('Connected')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
@@ -80,7 +80,7 @@ describe('Settings → Remote access', () => {
     await waitFor(() => expect(connected.remove).toHaveBeenCalled());
   });
 
-  it('offers Resume when paused, and neither when app.shinsa.dev removed the Mac', async () => {
+  it('offers Resume when paused, and neither when app.shinsa.dev removed the machine', async () => {
     const paused = renderGroup(createRemoteSnapshot({ enabled: false }));
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(paused.resume).toHaveBeenCalled());

@@ -32,16 +32,16 @@ export function describeRemoteStatus(snapshot: RemoteSnapshot, now = Date.now())
     return {
       label: 'Off',
       tone: 'neutral',
-      detail: 'Turn it on to sign in with GitHub. This Mac then shows up at app.shinsa.dev.',
+      detail: 'Turn it on to sign in with GitHub. This machine then shows up at app.shinsa.dev.',
     };
   const owner = snapshot.owner ? `Signed in as ${snapshot.owner}.` : 'Signed in.';
   if (snapshot.status === 'revoked')
     return {
       ...STATUS_VIEW.revoked,
-      detail: 'This Mac was removed at app.shinsa.dev. Remove it here, then turn remote access on again.',
+      detail: 'This machine was removed at app.shinsa.dev. Remove it here, then turn remote access on again.',
     };
   if (!snapshot.enabled)
-    return { label: 'Paused', tone: 'neutral', detail: `${owner} Resume to reach this Mac again.` };
+    return { label: 'Paused', tone: 'neutral', detail: `${owner} Resume to reach this machine again.` };
   return { ...STATUS_VIEW[snapshot.status], detail: `${owner} Open it at app.shinsa.dev.` };
 }
 

@@ -50,6 +50,13 @@ function assertSettings(patch: Partial<Settings>) {
   if (attention !== undefined && !isWholeBetween(attention, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError('settings_invalid', 'The attention limit must be a whole number of 1 or more.');
   }
+  const capacity = patch.taskCapacity;
+  if (capacity !== undefined && capacity !== null && !isWholeBetween(capacity, 1, Number.MAX_SAFE_INTEGER)) {
+    throw new DomainError(
+      'settings_invalid',
+      'Task capacity must be a whole number of 1 or more, or no limit.'
+    );
+  }
   const switchAt = patch.accountSwitchAt;
   if (switchAt !== undefined && !isWholeBetween(switchAt, 1, 100)) {
     throw new DomainError('settings_invalid', 'Switch accounts at a whole percentage from 1 to 100.');

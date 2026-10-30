@@ -3,13 +3,17 @@ import { act, renderHook } from '@testing-library/react';
 import {
   AUTO_CHOICES,
   createNewTaskCommand,
+  describeMachineLoad,
   describeNewTask,
+  isProjectOnMachine,
   isWaitingStart,
+  listNewTaskMachines,
   listNewTaskPriorities,
   listNewTaskProjects,
   listNewTaskStarts,
   NO_PROJECT,
   requestNewTask,
+  resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
   useNewTaskRequest,
@@ -81,7 +85,9 @@ describe('createNewTaskCommand', () => {
   });
 
   it('sends each part you picked, Start now as no tasks to wait on and No project as null', () => {
-    expect(createNewTaskCommand('Fix it', { project: 'p1', start: 'now', priority: 'urgent' })).toEqual({
+    expect(
+      createNewTaskCommand('Fix it', { project: 'p1', start: 'now', priority: 'urgent', machine: 'auto' })
+    ).toEqual({
       type: 'task.create',
       request: 'Fix it',
       repoId: null,
@@ -137,7 +143,7 @@ describe('the project choice', () => {
     ]);
   });
 
-  it('names the Mac of each project when the dashboard spans several', () => {
+  it('names the machine of each project when the dashboard spans several', () => {
     const machine = (id: string) => (id === 'p2' ? { name: 'Laptop' } : { name: 'Studio' });
     expect(listNewTaskProjects(state, machine).map((item) => item.label)).toEqual([
       'No project',
@@ -160,5 +166,49 @@ describe('the project choice', () => {
       NO_PROJECT,
       'auto',
     ]);
+  });
+});
+
+function createMachine(id: string, open: number, capacity: number | null, projects: string[] = []) {
+  return {
+    id,
+    name: id === 'studio' ? 'Studio' : 'Build box',
+    state: {
+      tasks: Object.fromEntries(
+        Array.from({ length: open }, (_, index) => [`${id}-${index}`, { stage: 'building' as const }])
+      ),
+      projects: Object.fromEntries(projects.map((project) => [project, {}])),
+      settings: { taskCapacity: capacity },
+    },
+  };
+}
+
+describe('the machine a new task runs on', () => {
+  const studio = createMachine('studio', 3, 4, ['p1']);
+  const box = createMachine('box', 1, null);
+
+  it('picks nothing with one machine, the project’s machine for a project, and the one with room otherwise', () => {
+    expect(resolveNewTaskMachine([studio], 'auto', 'p1')).toBeNull();
+    expect(resolveNewTaskMachine([studio, box], 'auto', 'p1')).toBe('studio');
+    expect(resolveNewTaskMachine([studio, box], 'auto', NO_PROJECT)).toBe('box');
+    expect(resolveNewTaskMachine([studio, box], 'studio', NO_PROJECT)).toBe('studio');
+    expect(resolveNewTaskMachine([studio, box], 'gone', NO_PROJECT)).toBe('box');
+  });
+
+  it('lists Automatic with the machine it chose, then each machine with its load', () => {
+    expect(listNewTaskMachines([studio, box], 'box')).toEqual([
+      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle' },
+      { value: 'studio', label: 'Studio', icon: 'IconServer', hint: '3 of 4 open tasks' },
+      { value: 'box', label: 'Build box', icon: 'IconServer', hint: '1 open task' },
+    ]);
+    expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
+    expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');
+  });
+
+  it('offers only the projects of a machine you picked', () => {
+    expect(isProjectOnMachine([studio, box], 'auto', 'p1')).toBe(true);
+    expect(isProjectOnMachine([studio, box], 'studio', 'p1')).toBe(true);
+    expect(isProjectOnMachine([studio, box], 'box', 'p1')).toBe(false);
+    expect(isProjectOnMachine([studio, box], 'box', NO_PROJECT)).toBe(true);
   });
 });

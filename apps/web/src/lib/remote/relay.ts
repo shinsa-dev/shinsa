@@ -126,7 +126,7 @@ async function answerRelayed(
   } catch (error) {
     port.postMessage({
       type: 'error',
-      message: error instanceof Error ? error.message : 'The request to your Mac failed.',
+      message: error instanceof Error ? error.message : 'The request to your machine failed.',
     });
   } finally {
     port.close();

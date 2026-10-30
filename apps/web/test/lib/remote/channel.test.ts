@@ -31,7 +31,7 @@ function readText(response: Response) {
   return response.text();
 }
 
-describe('the sealed channel to a Mac', () => {
+describe('the sealed channel to a machine', () => {
   it('opens a real WebSocket to the URL when the page gives no other', async () => {
     const RealWebSocket = globalThis.WebSocket;
     const mac = await FakeMac.create();
@@ -78,10 +78,13 @@ describe('the sealed channel to a Mac', () => {
     const stranger = await connect({ enrolled: [], enrollSecret: SECRET });
     const refusal = await stranger.opening.catch((error: unknown) => error);
     expect(refusal).toBeInstanceOf(ChannelError);
-    expect(refusal).toMatchObject({ refused: true, message: 'This browser is not enrolled on this Mac.' });
+    expect(refusal).toMatchObject({
+      refused: true,
+      message: 'This browser is not enrolled on this machine.',
+    });
   });
 
-  it('never opens against a Mac whose key is not the pinned one', async () => {
+  it('never opens against a machine whose key is not the pinned one', async () => {
     const impostor = await createKeyPair();
     const { opening } = await connect(
       { tolerant: true },
@@ -92,7 +95,7 @@ describe('the sealed channel to a Mac', () => {
     await expect(strict.opening).rejects.toBeInstanceOf(ChannelError);
   });
 
-  it('refuses a pinned key that is not a key, a welcome it cannot read, and a Mac it cannot reach', async () => {
+  it('refuses a pinned key that is not a key, a welcome it cannot read, and a machine it cannot reach', async () => {
     await expect((await connect({}, { machineKey: 'nope' })).opening).rejects.toThrow('not valid');
     await expect((await connect({ welcome: () => '{"type":"other"}' })).opening).rejects.toThrow(
       'something else'
@@ -127,7 +130,7 @@ describe('the sealed channel to a Mac', () => {
     expect(empty.status).toBe(204);
   });
 
-  it('aborts a request on the Mac and in the page, and fails open requests when the channel drops', async () => {
+  it('aborts a request on the machine and in the page, and fails open requests when the channel drops', async () => {
     const { mac, opening } = await connect();
     const channel = await opening;
     const controller = new AbortController();
@@ -146,9 +149,9 @@ describe('the sealed channel to a Mac', () => {
     channel.subscribeClose((error) => closes.push(error.message));
     const hanging = channel.request({ method: 'GET', path: '/api/slow', headers: [], body: null });
     await untilSent(mac, 2);
-    mac.last.drop('Mac went to sleep');
-    await expect(hanging).rejects.toThrow('Mac went to sleep');
-    expect(closes).toEqual(['Mac went to sleep']);
+    mac.last.drop('The machine went to sleep');
+    await expect(hanging).rejects.toThrow('The machine went to sleep');
+    expect(closes).toEqual(['The machine went to sleep']);
     await expect(channel.request({ method: 'GET', path: '/api', headers: [], body: null })).rejects.toThrow(
       'closed'
     );
@@ -171,7 +174,7 @@ describe('the sealed channel to a Mac', () => {
     await expect(reader.read()).rejects.toThrow('closed');
   });
 
-  it('refuses an end without a response, and closes on anything a Mac should not send', async () => {
+  it('refuses an end without a response, and closes on anything a machine should not send', async () => {
     const ended = await connect();
     const channel = await ended.opening;
     const answer = channel.request({ method: 'GET', path: '/api/x', headers: [], body: null });
