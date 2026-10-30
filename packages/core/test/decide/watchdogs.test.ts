@@ -381,7 +381,7 @@ describe('a watch check', () => {
     );
   });
 
-  test('a report filed from the same source before, by a watch or a watchdog, is refused', () => {
+  test('a report this watchdog filed before is refused when it files it again', () => {
     const { harness, taskId } = mergeWith();
     fire(harness, taskId);
     fileIssue(harness, taskId);
@@ -394,6 +394,51 @@ describe('a watch check', () => {
     );
     endCheck(harness, taskId, 'Two issues since the merge.');
     expect(watchdog(harness, taskId).forkTaskIds).toHaveLength(2);
+  });
+
+  test('a report a watch filed first counts for the check: it trips the watchdog and links that task', () => {
+    const { harness, taskId } = mergeWith();
+    const projectId = harness.task(taskId).projectId ?? '';
+    harness.send({
+      type: 'schedule.write',
+      scheduleId: null,
+      name: 'Checkout errors',
+      text: 'Slow or failing checkouts.',
+      trigger: { kind: 'interval', everyMinutes: 60 },
+      target: null,
+      source: { projectId, server: 'maple' },
+      enabled: null,
+      maxRuns: null,
+      timeZone: 'UTC',
+    });
+    const [schedule] = Object.values(harness.state.schedules);
+    const homeId = schedule?.target.kind === 'task' ? schedule.target.taskId : '';
+    harness.advance(60 * MINUTE_MS);
+    harness.send({ type: 'schedule.fire', scheduleId: schedule?.id ?? '', dueAt: schedule?.nextRunAt ?? 0 });
+    fileIssue(harness, homeId, { title: 'Safari checkout is slow' });
+    harness.send({
+      type: 'agent.report_read',
+      runId: harness.activeRun(homeId).id,
+      summary: 'Filed 1.',
+      reached: true,
+      live: null,
+    });
+    const [byWatch] = Object.values(harness.state.tasks).filter((task) => task.sourceReport?.scheduleId);
+    fire(harness, taskId);
+    fileIssue(harness, taskId);
+    expect(refusal(() => fileIssue(harness, taskId)).code).toBe('report_filed');
+    endCheck(harness, taskId, 'Safari checkout is slow; a watch filed it already.');
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'tripped',
+      forkTaskIds: [byWatch?.id],
+      checks: [{ healthy: false }],
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      `The watchdog “Checkout latency” found a report already filed as ${byWatch?.handle}`
+    );
+    expect(replayEventLog(harness.events).state.tasks[taskId]?.watchdogs).toEqual(
+      harness.task(taskId).watchdogs
+    );
   });
 
   test('a filing needs the report’s id or link and its text, forks only this task and stays in its project', () => {

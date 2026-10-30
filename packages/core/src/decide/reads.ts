@@ -7,6 +7,7 @@ import {
   type SourceReport,
   selectWatchingRun,
   type Task,
+  type Watchdog,
 } from '../domain/index.ts';
 import { resolveFiledRequest } from '../prompts/reads.ts';
 import { listLiveRuns } from '../state/queries.ts';
@@ -74,13 +75,28 @@ function resolveSourceReport(command: CommandOf<'agent.file_report'>, origin: Re
   };
 }
 
-function assertNotFiled(decider: Decider, task: Task, report: SourceReport) {
-  const filed = selectFiledTask(decider, task.projectId ?? null, report);
-  if (!filed) return;
+function refuseFiled(filed: Task): never {
   throw new DomainError(
     'report_filed',
     `This report was already filed as ${filed.handle ?? filed.id} “${filed.title}”. Skip it and go on.`
   );
+}
+
+function assertNotFiled(decider: Decider, task: Task, report: SourceReport) {
+  const filed = selectFiledTask(decider, task.projectId ?? null, report);
+  if (filed) refuseFiled(filed);
+}
+
+function linkFiledReport(decider: Decider, task: Task, watchdog: Watchdog, filed: Task) {
+  if (filed.sourceReport?.watchdogId === watchdog.id || watchdog.forkTaskIds.includes(filed.id)) {
+    refuseFiled(filed);
+  }
+  decider.emit({
+    type: 'watchdog.report_linked',
+    taskId: task.id,
+    watchdogId: watchdog.id,
+    reportTaskId: filed.id,
+  });
 }
 
 function assertRepoOfProject(decider: Decider, task: Task, repoId: string | null) {
@@ -138,12 +154,16 @@ function fileForWatchdog(decider: Decider, task: Task, run: Run, command: Comman
     watchdogId: watchdog.id,
     server: watchdog.source.server,
   });
-  assertNotFiled(decider, task, report);
   if (command.forkOf !== null && command.forkOf !== task.id) {
     throw new DomainError(
       'fork_watchdog',
       'A watchdog files forks of the task that shipped the change it watches. Leave `fork_from` out.'
     );
+  }
+  const filed = selectFiledTask(decider, task.projectId ?? null, report);
+  if (filed) {
+    linkFiledReport(decider, task, watchdog, filed);
+    return;
   }
   const repoId = command.repoId ?? task.repoId;
   assertRepoOfProject(decider, task, repoId);

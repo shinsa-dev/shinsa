@@ -1294,7 +1294,10 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   window started), its last checks and the last 10 tasks filed from that server in the project.
 - **What a check leads to.** Each thing wrong that the change caused is a report the agent files with `file_report`
   (`decide/reads.ts`), as in a watch: the report's id or link, author, time and text, deduped against every task the
-  project has from that server, a watch's or a watchdog's (`report_filed`). A watchdog's filing always forks the shipped
+  project has from that server, a watch's or a watchdog's. A report another watch or watchdog filed first is not filed
+  again: it is linked to this watchdog (`watchdog.report_linked`, into `forkTaskIds`) and counts for the check like one
+  it filed, so the watchdog never passes with the issue open; only a report this watchdog already holds is refused
+  (`report_filed`). A watchdog's filing always forks the shipped
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
   through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request

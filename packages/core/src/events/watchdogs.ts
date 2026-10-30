@@ -33,6 +33,7 @@ export type WatchdogEventBody =
       nextCheckAt: number | null;
       forkTaskIds: string[];
     }
+  | { type: 'watchdog.report_linked'; taskId: string; watchdogId: string; reportTaskId: string }
   | { type: 'watchdog.ended'; taskId: string; watchdogId: string }
   | { type: 'watch_source.written'; projectId: string; source: WatchSource }
   | { type: 'watch_source.removed'; projectId: string; server: string };

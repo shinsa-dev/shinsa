@@ -16,6 +16,7 @@ type WatchdogEvent = Extract<
       | 'watchdog.deferred'
       | 'watchdog.missed'
       | 'watchdog.checked'
+      | 'watchdog.report_linked'
       | 'watchdog.ended'
       | 'watch_source.written'
       | 'watch_source.removed';
@@ -83,6 +84,19 @@ function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
       ? `The watchdog “${next.title}” found nothing wrong`
       : `The watchdog “${next.title}” found an issue${describeFiled(state, event.forkTaskIds)}`,
     detail: event.check.summary,
+  });
+}
+
+function applyReportLinked(state: ShinsaState, event: EventOf<'watchdog.report_linked'>) {
+  const next = updateWatchdog(state, event, (watchdog) => ({
+    forkTaskIds: [...new Set([...watchdog.forkTaskIds, event.reportTaskId])],
+  }));
+  const report = state.tasks[event.reportTaskId];
+  if (!next || !report) return;
+  record(state, event.taskId, event.at, {
+    actor: 'agent',
+    kind: 'watchdog',
+    text: `The watchdog “${next.title}” found a report already filed as ${report.handle ?? report.title}`,
   });
 }
 
@@ -175,6 +189,9 @@ export function applyWatchdogEvent(state: ShinsaState, event: WatchdogEvent) {
       return;
     case 'watchdog.checked':
       applyChecked(state, event);
+      return;
+    case 'watchdog.report_linked':
+      applyReportLinked(state, event);
       return;
     case 'watchdog.ended':
       applyEnded(state, event);

@@ -261,10 +261,11 @@ function startLiveWindow(decider: Decider, task: Task, watchdog: Watchdog) {
 }
 
 function listFiledTaskIds(decider: Decider, watchdog: Watchdog) {
-  return Object.values(decider.state.tasks)
+  const filed = Object.values(decider.state.tasks)
     .filter((candidate) => candidate.sourceReport?.watchdogId === watchdog.id)
     .sort((a, b) => a.createdAt - b.createdAt)
     .map((candidate) => candidate.id);
+  return [...new Set([...watchdog.forkTaskIds, ...filed])];
 }
 
 function resolveLive(read: ReadReport, filed: readonly string[]) {
