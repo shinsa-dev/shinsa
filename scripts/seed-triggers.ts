@@ -80,6 +80,7 @@ function scheduleRun(
 function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'text' | 'trigger'>): Schedule {
   return {
     target: { kind: 'new_task', repoId: 'repo-paywall', priority: 'normal', mode: 'build' },
+    source: null,
     timeZone: 'Europe/Berlin',
     enabled: true,
     runCount: 0,
@@ -90,6 +91,7 @@ function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'te
     createdBy: { kind: 'agent', taskId: 'task-usage-wait', runId: 'task-usage-wait-run-0' },
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
     ...fields,
@@ -131,6 +133,25 @@ function listSchedules(): Schedule[] {
       },
       runCount: 2,
       runs: [scheduleRun('sent', 26 * HOUR)],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
+      id: 'schedule-support',
+      name: 'Support reports',
+      text: 'Bug reports and feature requests about the docs and the paywalls.',
+      trigger: { kind: 'interval', everyMinutes: 60 },
+      target: { kind: 'task', taskId: 'task-support-intake' },
+      source: { projectId: 'project-superwall', server: 'composio-slack' },
+      runCount: 48,
+      runs: [
+        scheduleRun('sent', 7 * HOUR),
+        scheduleRun('sent', 6 * HOUR),
+        scheduleRun('sent', 5 * HOUR),
+        scheduleRun('sent', 4 * HOUR),
+        scheduleRun('sent', 3 * HOUR),
+        scheduleRun('skipped', 2 * HOUR, 'The task was at work, so this read was skipped.'),
+        scheduleRun('sent', 55 * MINUTE),
+      ],
       createdBy: { kind: 'you' },
     }),
   ];

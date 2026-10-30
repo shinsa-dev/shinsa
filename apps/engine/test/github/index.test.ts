@@ -179,6 +179,13 @@ describe('serializePullRequest', () => {
     statusCheckRollup: null,
   };
 
+  test('it reads the lines added and removed and the files changed when GitHub gives them', () => {
+    expect(
+      serializePullRequest({ ...view, additions: 120, deletions: 30, changedFiles: 7 }, null, 5).changes
+    ).toEqual({ additions: 120, deletions: 30, changedFiles: 7 });
+    expect(serializePullRequest({ ...view, additions: 120 }, null, 5).changes).toBeNull();
+  });
+
   test('without details it maps states, mergeability and the rollup, and a change request counts once', () => {
     expect(serializePullRequest(view, null, 5)).toEqual({
       number: 1,
@@ -190,6 +197,7 @@ describe('serializePullRequest', () => {
       mergeable: null,
       headSha: null,
       mergeCommit: null,
+      changes: null,
       updatedAt: 5,
     });
     expect(serializePullRequest({ ...view, state: 'MERGED', mergeable: 'MERGEABLE' }, null, 5)).toMatchObject(

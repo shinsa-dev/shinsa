@@ -71,7 +71,7 @@ describe('describing a watchdog', () => {
     ).toBe('First check after 30 min, then up to every 6 h, for 72 h once live in production');
     const summary = (overrides: Partial<Watchdog>) =>
       describeWatchdogSummary(state, createWatchdog(overrides), NOW);
-    expect(summary({ status: 'needs_source' })).toBe('Starts once you connect a data source.');
+    expect(summary({ status: 'needs_source' })).toBe('Starts once you connect an integration.');
     expect(summary({ status: 'awaiting_production', checks: [] })).toBe(
       'Starts once the change is live in production.'
     );
@@ -114,7 +114,7 @@ describe('describing a watchdog', () => {
       stage: 'merged',
       watchdogs: [createWatchdog({ status: 'needs_source', endsAt: null })],
     });
-    expect(resolveWatchingReason(waiting, NOW)).toBe('1 watchdog · waiting for a data source');
+    expect(resolveWatchingReason(waiting, NOW)).toBe('1 watchdog · waiting for an integration');
     const released = createTask({
       id: 't',
       stage: 'merged',
@@ -156,10 +156,7 @@ describe('watchdog actions', () => {
         { type: 'watchdog.connect', taskId: 't', watchdogId: 'w', server: ' posthog ', data: 'Events' },
         'Connected posthog. The watchdog starts watching.',
       ],
-      [
-        { type: 'watch_source.remove', projectId: 'p', server: 'maple' },
-        'Removed maple from the data sources.',
-      ],
+      [{ type: 'watch_source.remove', projectId: 'p', server: 'maple' }, 'Removed maple from the project.'],
     ] as never);
   });
 });

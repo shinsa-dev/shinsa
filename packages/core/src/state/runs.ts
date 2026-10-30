@@ -39,7 +39,14 @@ const QUIET: RunSilence = { since: null, snoozedUntil: null, dismissed: false };
 
 const TOP_LEVEL_ROLES: readonly RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
 
-const RUN_PURPOSES: readonly (RunPurpose | undefined)[] = ['plan', 'build', 'fix', 'operate', 'watch'];
+const RUN_PURPOSES: readonly (RunPurpose | undefined)[] = [
+  'plan',
+  'build',
+  'fix',
+  'operate',
+  'watch',
+  'intake',
+];
 
 function assertRunShape(run: Run) {
   const delegated = isDelegatedRun(run);

@@ -1679,6 +1679,40 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 
 Do: one sentence of what will happen in the description. Don't: put a form in it, add a third button, or style the action by hand.
 
+#### AreaChart
+
+**For:** a count over time where the shape matters more than each value: pull requests merged per day or per week on Settings → Statistics. One series, in the accent.
+
+**Not for:** several series (a stacked bar per day, as the token chart draws), a single number (a stat tile), or a part of a whole.
+
+**Wraps:** a plain `<svg aria-hidden>` that draws the data only; the caller computes the path data (`resolveAreaGeometry` in `apps/web/src/lib/stats/chart.ts`, a monotone curve that never overshoots a peak) and lays the grid, the crosshair, the point under the pointer and its `ChartTooltip` over it (`ChartPlot` in `apps/web/src/components/settings/stats/chart-plot.tsx`).
+
+**Props:**
+
+| Prop | Default | Notes |
+| --- | --- | --- |
+| `width`, `height` | required | The drawing's own units; the chart stretches to its box (`preserveAspectRatio='none'`). |
+| `line`, `area` | required | SVG path data for the line and the closed area under it. |
+| `className` | | The caller sizes it, usually `absolute inset-0` over its plot. |
+
+**Markup and classes:**
+
+- `<svg data-slot='area-chart'>`: `block size-full overflow-visible` + `className`.
+- The area: a vertical gradient of `--primary` from 24% to nothing at the baseline.
+- The line: 2px `stroke-primary`, round joins and caps, `vector-effect: non-scaling-stroke`, so it keeps its width however the chart stretches.
+
+**In Shinsa** the plot runs the full width of its panel: three dashed `border-border` grid lines (the top of a readable scale, its middle and 0, none stronger than the others) that fade out at both ends, the top value alone in a small label above the top right, up to five dates under it, and on hover a dashed `border-fg-1` crosshair and an 8px accent dot ringed in the card colour that glide to the next point (200ms ease-out), with a `ChartTooltip` above the point.
+
+#### ChartTooltip
+
+**For:** the readout a chart shows under the pointer: a day in the contribution graph, a point on an area chart, a bar of a stacked chart. **Not for:** anything with a trigger element (use `Hint` or `useTooltipTrigger`, which wait `TOOLTIP_DELAY`); a chart's readout follows the pointer at once.
+
+**Wraps:** a `div role='status'` the chart places itself, in pixels from its own top left corner (the chart's box is `relative`); it centres above its point and hugs an edge within 88px of it.
+
+**Parts:** `ChartTooltip` (`x`, `y`, `width`, children), `ChartTooltipTitle` (what the point is, `text-fg-2`), `ChartTooltipRow` (`swatch`: a short line key in the series' fill, `label`, and `value`, which leads in `font-medium text-fg-4 tabular-nums`).
+
+**Markup and classes:** the page tooltip's chip (`rounded-control border border-border bg-popover px-2 py-1.5 text-2xs text-fg-4`, `shadow-2`), `pointer-events-none`, 10px above its point. It fades in (`starting:opacity-0`) and glides from point to point (`left`, `top` and its edge shift ease over 200ms), so moving along a chart never jumps.
+
 #### Badge
 
 **For:** a short status or label chip: "Default" on an account, a project's key, "Recommended" on an option, a count, a check result ("1 failing"). Non-interactive by default. **Not for:** an action (use `Button`), a keyboard key (use `Kbd`), a long sentence.
@@ -5160,8 +5194,8 @@ spinner.
 - `ConnectionStatus`: nothing while connected; while reconnecting an amber `Pulse` in
   `grid size-5 place-items-center`, `role='status'`, `aria-label` and tooltip "Reconnecting".
 - `UpdateButtonView({ version, onClick })`: a primary `sm` Button "Update" entering with
-  `fade-in-0 zoom-in-95 animate-in duration-200`; tooltip "Shinsa ‹version› is ready. Only the app restarts: agents keep
-  working, and the engine moves to the new version once they hand over." `UpdateButton` shows it only once the desktop app has an update downloaded.
+  `fade-in-0 zoom-in-95 animate-in duration-200`; tooltip "Shinsa ‹version› is ready. The app restarts, then the engine follows
+  on its own and agents pick up where they were." `UpdateButton` shows it only once the desktop app has an update downloaded.
 
 #### HealthCard and EngineCard (the banner card)
 
@@ -5173,8 +5207,8 @@ app-level notice.
   `min-w-0 flex-1 text-fg-3`, a quiet "Details" trigger (`shrink-0 cursor-default text-fg-2 hover:text-fg-4 active:text-fg-4`)
   for a `w-80` `InfoPopover` (an `InfoHeader` and one `InfoRow` per problem with the orange warning icon), and a
   `secondary` `icon-xs` `IconCrossSmall` dismiss with its `Hint`.
-- `EngineCard({ banner, onAction })`: a 14px `IconExclamationTriangle` (`text-orange-text`) for a warning or
-  `IconArrowsRepeat` (`text-fg-2`), the text `min-w-0 flex-1 py-0.5 text-fg-3`, then one `sm` button per action, the
+- `EngineCard({ banner, onAction })`: a 14px `IconExclamationTriangle` (`text-orange-text`; it shows only when
+  you must act), the text `min-w-0 flex-1 py-0.5 text-fg-3`, then one `sm` button per action, the
   last `primary` and the others `secondary`, each `shrink-0`.
 
 ```tsx
@@ -6806,7 +6840,7 @@ Example: "(chevron) Worked for 3m · 14 steps" over the agent's final paragraph,
 #### Your message, and acting never moves you
 
 - Your message is its bubble: `corner-superellipse/1.125 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed` inside a `relative min-w-0 max-w-4/5` frame that also holds the delivery light, right-aligned (`flex flex-col items-end gap-2`), `whitespace-pre-wrap break-words`. Over 12 lines (or 1080 characters) it clamps to 12 with a "Show more"/"Show less" toggle (`px-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`).
-- Attachments sit above the bubble: images as a large thumbnail strip (`max-w-4/5 justify-end`), other files as chips (`CARD`, `h-10 max-w-64 gap-2 p-1 pr-3`, a 32px `rounded-lg bg-muted` icon box with a 16px icon, name `text-xs fg-4` over meta `text-2xs fg-2`, `gap-px`), wrapping `gap-2`.
+- Attachments sit above the bubble: images as a large thumbnail strip (`max-w-4/5 justify-end`), other files as chips (`CARD`, `h-10 max-w-64 gap-2 p-1 pr-3`, a 32px `rounded-lg bg-muted` icon box with a 16px icon, name `text-xs fg-4` over meta `text-2xs fg-2`, `gap-px`), wrapping `gap-2`. A video chip (`video/*`, or `.mp4`, `.m4v`, `.mov`, `.webm`) is a button that plays it in the image viewer, with `IconExpandSimple` on hover; other chips open a new tab with `IconArrowUpRight`. In the composer and the new task form, an image chip is a button too and opens the viewer over the draft's images.
 - Acting never moves you: approving, merging, answering, replying or cancelling stays on the page and confirms with a toast. There is no previous/next stepper; the queue and the command menu move between items.
 - A sent message shows at once, and while it is delivered (on its way to the server, then routed into the task) the bubble stays at full opacity and a blue light travels around its border: a 1px ring over the border (`message-delivery`), a conic gradient of `primary-4` (both themes) with a soft tail turning once every 2.4s, only `transform`. No text line. It fades in; when the message is delivered the light fades out over 400ms on the strong ease-out. Under reduced motion the ring is a still `primary-4` border. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
 - A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass; while round 2 waits for you it names what you do first: "Sends after you merge round 2.") over one row per message (`text-xs fg-3`, three lines at most, an up arrow, a pencil and a cross 1px apart). The arrow sends it now, to the round in progress, as a message; the pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
@@ -8950,7 +8984,7 @@ Mistakes that were made before and must not come back:
 | Error title | What happened | Yes when a sentence | "This page hit an error.", "This part of Shinsa hit an error." |
 | Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "“Base” was cancelled, so there is nothing to wait for.", "This task is finished. Start a new one." |
 | Failure decision | Title says what stopped; body says why and what Retry does | Title no, body yes | "Out of automatic fix rounds" |
-| Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. Only the app restarts: agents keep working, and the engine moves to the new version once they hand over." |
+| Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its own and agents pick up where they were." |
 | Disabled reason | Plain sentence | No | "Send your line comments to the agent or remove them first" |
 | Dialog title | Noun phrase or a question | Question ends "?", else none | "Add an MCP", "Edit api", "Remove project?" |
 | Dialog description | Full sentences | Yes | "Shinsa signs this account out. Runs on it move to the next account." |

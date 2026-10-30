@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   COMPOSABLE_STEPS,
+  SCHEDULE_LIMITS,
   SHAPE_LIMITS,
   type ShinsaCommand,
   type ShinsaEvent,
@@ -69,6 +70,31 @@ describe('the shape tools', () => {
         proposal: { request: 'Switch to option B.', why: 'It halves the build time.' },
       },
     ] as ShinsaCommand[]);
+  });
+
+  test('report_intake hands a read of a data source over, and refuses a summary over its limit', async () => {
+    const { sent, call } = createCall();
+    expect(await handleShapeTool('report_intake', { summary: 'Read 12 messages; filed 2.' }, call)).toBe(
+      HANDED_OVER
+    );
+    expect(sent).toEqual([
+      {
+        type: 'agent.report_intake',
+        runId: 'run-1',
+        attemptId: 'a-1',
+        summary: 'Read 12 messages; filed 2.',
+        reached: true,
+      },
+    ] as ShinsaCommand[]);
+    expect(SHAPE_TOOL_SPECS.report_intake.description).toContain('then stop');
+    await handleShapeTool('report_intake', { summary: 'slack timed out.', reached: false }, call);
+    expect(sent.at(-1)).toMatchObject({ type: 'agent.report_intake', reached: false });
+    await expect(
+      handleShapeTool('report_intake', { summary: 'Read it.', reached: 'no' }, call)
+    ).rejects.toThrow('reached');
+    await expect(
+      handleShapeTool('report_intake', { summary: 'x'.repeat(SCHEDULE_LIMITS.intakeSummary + 1) }, call)
+    ).rejects.toThrow('summary');
   });
 
   test('report_outcome hands the operation over, and never carries a proposal', async () => {

@@ -203,7 +203,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
     title: 'Set up projects, repositories and accounts',
     groups: [
       ['projects', 'Group repositories and folders into projects, with a key for task handles.'],
-      ['sources', 'List, add or remove the data sources a project’s watchdogs read.'],
+      ['sources', 'List, add or remove the data sources a project’s agents read.'],
       ['focus', 'Show only one project’s work, for a while or until you clear it.'],
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],
       ['folders', 'Choose the folders Shinsa searches for repositories.'],

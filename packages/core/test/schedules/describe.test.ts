@@ -55,4 +55,14 @@ describe('describing a target', () => {
       'Messages a task'
     );
   });
+
+  test('a watch names the integration it watches, never the home it reads in', () => {
+    const reading = {
+      target: { kind: 'task', taskId: 't' },
+      source: { projectId: 'p', server: 'slack' },
+    } as Schedule;
+    expect(describeScheduleTarget(reading, () => 'Read #feedback')).toBe(
+      'Watches slack and files a task for each new report'
+    );
+  });
 });

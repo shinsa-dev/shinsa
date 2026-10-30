@@ -10,9 +10,10 @@ import { TaskHeader } from '@/components/task/header.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { applyNowTarget, type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
+import { selectWatchOfHome } from '@/lib/automations.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
-import { replaceRoute, resolveCanonicalTaskPath } from '@/router.ts';
+import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
 import { CodeTab, prefetchCode, usePrefetchCode } from './lazy-code.tsx';
 import { OverviewTab } from './overview.tsx';
@@ -143,8 +144,10 @@ function CardsTaskPage({ state, task, view }: { state: ShinsaState; task: Task; 
   );
 }
 
-function useCanonicalPath(task: Task | null, segment: string) {
-  const path = task ? resolveCanonicalTaskPath(task, segment, location.search) : null;
+function useCanonicalPath(state: ShinsaState, task: Task | null, segment: string) {
+  const watch = task ? selectWatchOfHome(state, task.id) : null;
+  const canonical = task ? resolveCanonicalTaskPath(task, segment, location.search) : null;
+  const path = watch ? resolveAutomationPath(watch.id) : canonical;
   React.useEffect(() => {
     if (path) replaceRoute(path);
   }, [path]);
@@ -155,12 +158,13 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   const view = useTaskView(state, resolved?.id ?? taskId);
   const layout = useLayoutPreference();
   const { task } = view;
-  useCanonicalPath(task, taskId);
+  useCanonicalPath(state, task, taskId);
   usePrefetchCode(task, view.tabs, view.tab);
   usePrefetchTaskPage(state, task?.id ?? null);
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }
+  if (task.watchHome) return null;
   const Frame = layout === 'cards' ? CardsTaskPage : SidebarTaskPage;
   return (
     <ReviewDraftProvider enabled={view.reviewing} draftKey={view.draftKey}>

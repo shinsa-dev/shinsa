@@ -6,4 +6,11 @@ export {
   resolveNextRun,
   serializeTimeOfDay,
 } from './time.ts';
-export { type ScheduleRequest, validateScheduleRequest, validateSecretRequest } from './validate.ts';
+export {
+  type ReportFilingRequest,
+  type ScheduleRequest,
+  validateIntakeReport,
+  validateReportFiling,
+  validateScheduleRequest,
+  validateSecretRequest,
+} from './validate.ts';

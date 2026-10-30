@@ -11,6 +11,7 @@ import {
   type Schedule,
   type ScheduleCreator,
   type ScheduleRun,
+  type ScheduleSource,
   type ScheduleTarget,
   type ScheduleTrigger,
   type Task,
@@ -19,7 +20,15 @@ import { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun } from '../
 import { listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
-import { messageTask } from './messages.ts';
+import {
+  closeWatchHome,
+  createWatchHome,
+  findProjectSource,
+  isIntakeBusy,
+  selectProjectSource,
+  startIntake,
+} from './intake.ts';
+import { assertNotWatchHome, messageTask } from './messages.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -30,6 +39,8 @@ const HEADER_NAME = /^[A-Za-z0-9-]+$/;
 const PLACEHOLDER = /\{\{[^{}]+\}\}/;
 
 const STILL_LIVE = 'The last run was still going, so this one was skipped.';
+
+const INTAKE_BUSY = 'The task was at work, so this read was skipped.';
 
 interface Delivery {
   text: string;
@@ -125,6 +136,7 @@ function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task)
   const target = decider.state.tasks[input.taskId ?? task.id];
   if (!target)
     throw new DomainError('task_not_found', `No task ${input.taskId}. find_tasks lists the tasks.`);
+  assertNotWatchHome(target);
   if (isTaskClosed(target)) {
     throw new DomainError(
       'task_settled',
@@ -171,7 +183,7 @@ function resolveName(name: string | null, text: string) {
 
 type ScheduleBody = Pick<
   Schedule,
-  'name' | 'text' | 'trigger' | 'target' | 'enabled' | 'maxRuns' | 'timeZone'
+  'name' | 'text' | 'trigger' | 'target' | 'source' | 'enabled' | 'maxRuns' | 'timeZone'
 >;
 
 type ScheduleWrite = Pick<
@@ -211,19 +223,51 @@ function resolveMaxRuns(command: ScheduleWrite, existing: Schedule | null) {
   return maxRuns;
 }
 
+function resolveWrittenName(command: ScheduleWrite, existing: Schedule | null, text: string) {
+  const named = command.name?.trim() ? resolveName(command.name, text) : existing?.name;
+  return named ?? resolveName(null, text);
+}
+
+function assertSourceChange(source: ScheduleSource | null, existing: Schedule | null, targeted: boolean) {
+  if (!source) return;
+  if (targeted) {
+    throw new DomainError(
+      'source_target',
+      'A watch reads in a home of its own, never in a task. Leave the target out.'
+    );
+  }
+  if (existing && !existing.source) {
+    throw new DomainError(
+      'source_change',
+      'This automation starts or messages a task, so it cannot become a watch. Create a new one that reads the integration.'
+    );
+  }
+}
+
+function resolveSourceTarget(
+  decider: Decider,
+  command: ScheduleWrite,
+  existing: Schedule | null,
+  source: ScheduleSource
+) {
+  if (existing) return existing.target;
+  return createWatchHome(decider, source, resolveWrittenName(command, null, resolveText(command, null)));
+}
+
 function resolveWrittenBody(
   decider: Decider,
   command: ScheduleWrite,
   existing: Schedule | null,
-  target: ScheduleTarget
+  target: ScheduleTarget,
+  source: ScheduleSource | null
 ): ScheduleBody {
   const text = resolveText(command, existing);
-  const named = command.name?.trim() ? resolveName(command.name, text) : existing?.name;
   return {
-    name: named ?? resolveName(null, text),
+    name: resolveWrittenName(command, existing, text),
     text,
     trigger: resolveTrigger(command, existing, decider.context.now),
     target,
+    source,
     enabled: command.enabled ?? existing?.enabled ?? true,
     maxRuns: resolveMaxRuns(command, existing),
     timeZone: command.timeZone,
@@ -236,8 +280,37 @@ function resolveBody(
   task: Task,
   existing: Schedule | null
 ): ScheduleBody {
+  const source = resolveAgentSource(decider, command, task, existing);
+  assertSourceChange(source, existing, command.target !== null);
+  if (source)
+    return resolveWrittenBody(
+      decider,
+      command,
+      existing,
+      resolveSourceTarget(decider, command, existing, source),
+      source
+    );
   const target = command.target ? resolveTarget(decider, command.target, task) : existing?.target;
-  return resolveWrittenBody(decider, command, existing, target ?? { kind: 'task', taskId: task.id });
+  return resolveWrittenBody(decider, command, existing, target ?? { kind: 'task', taskId: task.id }, null);
+}
+
+function resolveAgentSource(
+  decider: Decider,
+  command: CommandOf<'agent.set_schedule'>,
+  task: Task,
+  existing: Schedule | null
+) {
+  const server = command.source?.trim();
+  if (!server) return existing?.source ?? null;
+  if (!task.projectId) {
+    throw new DomainError(
+      'project_required',
+      'This task belongs to no project, so it has no integration to watch. Ask the human to add one in Settings → Projects.'
+    );
+  }
+  const source = { projectId: task.projectId, server };
+  findProjectSource(decider, source);
+  return source;
 }
 
 function isNewTrigger(existing: Schedule | null, body: ScheduleBody) {
@@ -269,6 +342,7 @@ function createDraft(
     createdBy,
     lastTaskId: null,
     lastRunId: null,
+    lastReadAt: null,
     stopped: null,
     replayKeys: {},
   };
@@ -323,6 +397,7 @@ function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTa
   }
   const task = decider.state.tasks[target.taskId];
   if (!task) throw new DomainError('task_not_found', `No task ${target.taskId}.`);
+  assertNotWatchHome(task);
   if (isTaskClosed(task)) {
     throw new DomainError(
       'task_settled',
@@ -332,11 +407,25 @@ function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTa
   return target;
 }
 
-function selectWrittenTarget(
+function resolveUserSource(
   decider: Decider,
   command: CommandOf<'schedule.write'>,
   existing: Schedule | null
 ) {
+  if (!command.source) return existing?.source ?? null;
+  const source = { projectId: command.source.projectId, server: command.source.server.trim() };
+  findProjectSource(decider, source);
+  return source;
+}
+
+function selectWrittenTarget(
+  decider: Decider,
+  command: CommandOf<'schedule.write'>,
+  existing: Schedule | null,
+  source: ScheduleSource | null
+) {
+  assertSourceChange(source, existing, command.target !== null);
+  if (source) return resolveSourceTarget(decider, command, existing, source);
   if (command.target) return resolveUserTarget(decider, command.target);
   if (existing) return existing.target;
   throw new DomainError(
@@ -352,11 +441,13 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
     throw new DomainError('schedule_not_found', `No schedule ${command.scheduleId}.`);
   }
   if (!existing) assertScheduleRoom(decider, null);
+  const source = resolveUserSource(decider, command, existing);
   const body = resolveWrittenBody(
     decider,
     command,
     existing,
-    selectWrittenTarget(decider, command, existing)
+    selectWrittenTarget(decider, command, existing, source),
+    source
   );
   emitWritten(decider, existing, body, { kind: 'you' });
 }
@@ -365,6 +456,7 @@ export function removeOwnSchedule(decider: Decider, command: CommandOf<'agent.de
   const { task } = findCurrentRun(decider, command.runId, 'delete_schedule');
   const schedule = selectOwnSchedule(decider, command.scheduleId, task);
   decider.emit({ type: 'schedule.removed', scheduleId: schedule.id });
+  closeWatchHome(decider, schedule);
 }
 
 function describeStopped(schedule: Schedule) {
@@ -397,11 +489,16 @@ export function enableSchedule(decider: Decider, command: CommandOf<'schedule.en
 }
 
 export function removeSchedule(decider: Decider, command: CommandOf<'schedule.remove'>) {
-  if (!decider.state.schedules[command.scheduleId]) return;
-  decider.emit({ type: 'schedule.removed', scheduleId: command.scheduleId });
+  const schedule = decider.state.schedules[command.scheduleId];
+  if (!schedule) return;
+  decider.emit({ type: 'schedule.removed', scheduleId: schedule.id });
+  closeWatchHome(decider, schedule);
 }
 
 function selectGoneReason(decider: Decider, schedule: Schedule) {
+  if (schedule.source && !selectProjectSource(decider, schedule.source)) {
+    return 'Its data source was removed from the project.';
+  }
   const target = schedule.target;
   if (target.kind === 'new_task') {
     if (target.repoId !== null && !decider.state.repos[target.repoId]) return 'Its repository was removed.';
@@ -448,6 +545,11 @@ function recordRun(
   });
 }
 
+function isScheduleBusy(decider: Decider, schedule: Schedule) {
+  if (!schedule.source || schedule.target.kind !== 'task') return false;
+  return isIntakeBusy(decider, decider.task(schedule.target.taskId));
+}
+
 function resolveFollowing(schedule: Schedule, now: number) {
   return resolveNextRun(schedule.trigger, now, schedule.timeZone);
 }
@@ -468,6 +570,12 @@ function send(decider: Decider, schedule: Schedule, text: string) {
     );
     return { taskId, runId: null };
   }
+  if (schedule.source) {
+    return {
+      taskId: target.taskId,
+      runId: startIntake(decider, schedule, decider.task(target.taskId), text),
+    };
+  }
   messageTask(decider, { type: 'task.message', taskId: target.taskId, text }, schedule.id);
   return { taskId: target.taskId, runId: resolveLatestRun(decider, target.taskId) };
 }
@@ -484,6 +592,12 @@ function runSchedule(decider: Decider, schedule: Schedule, delivery: Delivery) {
   }
   if (delivery.skipWhenLive && isPreviousLive(decider, schedule)) {
     recordRun(decider, schedule, { outcome: 'skipped', taskId: null, detail: STILL_LIVE }, delivery, {
+      nextRunAt: resolveFollowing(schedule, now),
+    });
+    return;
+  }
+  if (isScheduleBusy(decider, schedule)) {
+    recordRun(decider, schedule, { outcome: 'skipped', taskId: null, detail: INTAKE_BUSY }, delivery, {
       nextRunAt: resolveFollowing(schedule, now),
     });
     return;

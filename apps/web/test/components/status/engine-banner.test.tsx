@@ -3,6 +3,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
+import { recordEngineFailure } from '@/lib/connection/engine.ts';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { installDesktop } from '../../support/desktop.ts';
 import { findTooltipText } from '../../support/hover.ts';
@@ -12,6 +13,7 @@ let desktop: ReturnType<typeof installDesktop> | null = null;
 let fake: ReturnType<typeof startFakeOnboarding> | null = null;
 
 afterEach(async () => {
+  act(() => recordEngineFailure(null));
   fake?.stop();
   fake = startFakeOnboarding({ 'GET /api/health': { answer: { ok: true, seq: 1, problems: [] } } });
   await act(() => refreshHealth());
@@ -44,23 +46,12 @@ function listRestarts() {
 }
 
 describe('the engine banner', () => {
-  it('restarts an older engine once, by itself, while no agent is mid-turn', async () => {
-    const view = await showEngine({ version: '0.4.0', protocol: 2 });
+  it('restarts an older engine once, by itself and without a banner, even while agents work', async () => {
+    const view = await showEngine({ version: '0.4.0', protocol: 2, busy: true, working: 3 });
     await waitFor(() => expect(listRestarts()).toEqual([{ when: 'now' }]));
-    expect(screen.getByText(/Restarting the engine into Shinsa 0.5.0/)).toBeTruthy();
+    expect(view.container.textContent).toBe('');
     view.rerender(<EngineBanner />);
     expect(listRestarts()).toEqual([{ when: 'now' }]);
-  });
-
-  it('lets you choose when agents are working and the protocol changed', async () => {
-    await showEngine({ version: '0.4.0', protocol: 1, busy: true }, { restarting: false });
-    expect(listRestarts()).toEqual([]);
-    const idle = screen.getByRole('button', { name: 'When agents hand over' });
-    expect(idle.className).toContain('before:bg-primary');
-    expect(screen.getByRole('button', { name: 'Restart now' }).className).not.toContain('before:bg-primary');
-    fireEvent.click(idle);
-    fireEvent.click(screen.getByRole('button', { name: 'Restart now' }));
-    await waitFor(() => expect(listRestarts()).toEqual([{ when: 'idle' }, { when: 'now' }]));
   });
 
   it('says what to do when the engine cannot restart itself', async () => {
@@ -97,7 +88,7 @@ describe('the update button', () => {
     expect(screen.queryByRole('button', { name: 'Update' })).toBeNull();
     act(() => desktop?.changeUpdate({ status: 'ready', version: '0.6.0' }));
     expect(await findTooltipText(screen.getByRole('button', { name: 'Update' }))).toBe(
-      'Shinsa 0.6.0 is ready. Only the app restarts: agents keep working, and the engine moves to the new version once they hand over.'
+      'Shinsa 0.6.0 is ready. The app restarts, then the engine follows on its own and agents pick up where they were.'
     );
     view.unmount();
     render(<UpdateButton />);

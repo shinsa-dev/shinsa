@@ -3,6 +3,7 @@ import {
   canResume,
   copyWebhookUrl,
   describeNextRun,
+  describeOpenTask,
   describeRemoval,
   describeScheduleSummary,
   describeScheduleWhat,
@@ -49,7 +50,17 @@ describe('describing a schedule', () => {
     expect(describeScheduleWhen(message)).toBe('Every hour');
     expect(describeScheduleWhat(state, message)).toBe('Messages “Nightly audit”');
     expect(describeScheduleWhat(state, createSchedule({ id: 's-2' }))).toBe('Starts a new task');
-    expect(describeScheduleSummary(state, message)).toBe('Messages “Nightly audit” · every hour');
+    expect(describeScheduleSummary(state, message)).toBe('Schedule · Messages “Nightly audit” · every hour');
+    expect(
+      describeScheduleSummary(
+        state,
+        createSchedule({ id: 'w', trigger: { kind: 'webhook', signature: null, replayKey: null } })
+      )
+    ).toBe('Trigger · Starts a new task · when its webhook is called');
+    expect(describeOpenTask(message)).toBe('Open the task');
+    expect(describeOpenTask({ ...message, source: { projectId: 'p', server: 'slack' } })).toBe(
+      'Open the watch'
+    );
     expect(
       [
         createSchedule({ id: 'a', trigger: { kind: 'once', at: NOW } }),
@@ -58,6 +69,40 @@ describe('describing a schedule', () => {
         HOOK,
       ].map(resolveScheduleIcon)
     ).toEqual(['IconHourglass', 'IconArrowsRepeat', 'IconClock', 'IconGlobe']);
+  });
+
+  it('a watch shows its type, the integration it watches and the tasks it filed', () => {
+    const report = (scheduleId: string) => ({
+      scheduleId,
+      server: 'slack',
+      reportId: null,
+      link: 'https://example.slack.com/p1',
+      author: null,
+      postedAt: null,
+      text: 'Broken.',
+    });
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'reader', title: 'Read #feedback' }),
+        createTask({ id: 'f-1', sourceReport: report('s-read') }),
+        createTask({ id: 'f-2', sourceReport: report('s-read') }),
+        createTask({ id: 'f-3', sourceReport: report('s-other') }),
+      ],
+    });
+    const reading = createSchedule({
+      id: 's-read',
+      target: { kind: 'task', taskId: 'reader' },
+      source: { projectId: 'p', server: 'slack' },
+    });
+    expect(describeScheduleSummary(state, reading)).toBe('Watch · slack · every hour · 2 tasks filed');
+    const fresh = createSchedule({
+      id: 's-fresh',
+      target: { kind: 'task', taskId: 'reader' },
+      source: { projectId: 'p', server: 'slack' },
+    });
+    expect(describeScheduleSummary(state, fresh)).toBe('Watch · slack · every hour · nothing filed yet');
+    const one = { ...state, tasks: { ...state.tasks, 'f-2': { ...createTask({ id: 'f-2' }) } } };
+    expect(describeScheduleSummary(one, reading)).toBe('Watch · slack · every hour · 1 task filed');
   });
 
   it('reads a daily time on the clock the rest of the app uses', () => {

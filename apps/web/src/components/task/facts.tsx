@@ -22,6 +22,7 @@ import { RepoDetails, RepoIcon } from '@/components/links/repo.tsx';
 import { TaskPopoverRows } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import {
+  InfoAction,
   InfoHeader,
   InfoLine,
   InfoPopover,
@@ -44,12 +45,18 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
-import { describePullRequestFact, describeStarted, listForkSources, listForks } from '@/lib/tasks/facts.ts';
+import {
+  describePullRequestFact,
+  describeStarted,
+  listForkSources,
+  listForks,
+  resolveReportFact,
+} from '@/lib/tasks/facts.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
-import { navigate, resolveTaskPath } from '@/router.ts';
+import { navigate, resolveAutomationPath, resolveTaskPath } from '@/router.ts';
 
 function FactPopover({
   trigger,
@@ -386,6 +393,39 @@ function RelatedFact({
   );
 }
 
+function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const report = resolveReportFact(state, task);
+  if (!report) return null;
+  const watchId = report.watchId;
+  return (
+    <FactPopover
+      className='max-w-72'
+      trigger={
+        <>
+          <Icon size='sm' name='IconBubbleText' />
+          <Truncate>{report.label}</Truncate>
+        </>
+      }
+    >
+      <InfoHeader title={report.label} description={report.byline} />
+      <InfoSection>
+        <blockquote className='max-h-48 overflow-y-auto whitespace-pre-wrap px-3 py-1.5 text-fg-3 text-xs'>
+          {report.text}
+        </blockquote>
+      </InfoSection>
+      {report.automation && (
+        <InfoSection>
+          <InfoRow icon='IconArrowsRepeat' label='Filed by the automation' value={report.automation} />
+        </InfoSection>
+      )}
+      {report.link && <InfoAction label='Open the report' href={report.link} />}
+      {watchId && (
+        <InfoAction label='Open the watch' onClick={() => navigate(resolveAutomationPath(watchId))} />
+      )}
+    </FactPopover>
+  );
+}
+
 function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waitsOn = listPendingDependencies(state, task);
   if (waitsOn.length === 0) return null;
@@ -465,6 +505,7 @@ export function TaskFacts({
         verb='Unblocks'
         tasks={listDependents(state, task.id)}
       />
+      <ReportFact state={state} task={task} />
       <RelatedFact state={state} icon='IconFork' verb='Forked from' tasks={listForkSources(state, task)} />
       <RelatedFact state={state} icon='IconFork' verb='Forked into' tasks={listForks(state, task)} />
     </div>

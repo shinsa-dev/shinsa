@@ -2,6 +2,7 @@ import {
   type ChatEntry,
   DomainError,
   isTaskSettled,
+  isWatchHome,
   listMemory,
   listMergeSteps,
   listOpenGates,
@@ -98,6 +99,7 @@ export function resolveTaskView(state: ShinsaState, task: Task, base: string) {
 }
 
 function isListed(state: ShinsaState, task: Task, filter: TaskFilter) {
+  if (isWatchHome(task)) return false;
   if (filter === 'all') return true;
   if (filter === 'settled') return isTaskSettled(task);
   if (isTaskSettled(task)) return false;

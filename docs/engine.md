@@ -51,7 +51,7 @@ cache (Sessions and the prompt cache, The agent loop).
 Phases stay checkpoints. `complete_phase` still commits the phase and moves the progress on, but the next phase is the
 same session's next turn with a short "Now build phase 2 of 3: …" instruction, not a new agent's full brief. Each turn
 is still a run of its own (its attempts, its account, its usage), so every run of a task shares one session, and an
-Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix`, `operate` or `watch`). Long
+Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix`, `operate`, `watch` or `intake`). Long
 tasks rely on compaction (eunoe's folds or Claude Code's, Compaction and fast mode below) to stay inside the window.
 
 Each role's provider (Claude or Codex) and model are set in Settings → Agents → Models: Task agents (Opus) and Quick
@@ -62,7 +62,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, and checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; what a watchdog check found (`report_watch`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; what a watchdog check found (`report_watch`); in the home of a watch, what a read filed (`file_report`, `report_intake`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -1246,12 +1246,15 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   window, and a production start with no `production_check`). The last phase's instruction lists the project's data sources for the repository
   (`describeWatchdogGuide`, in the user turn), the handover skill says when one is worth it, a fix revises them like
   `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
-- **Data sources live on the project.** `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
+- **Integrations a project uses live on the project.** A project lists the MCP servers from Integrations its agents
+  read, each with what it holds there; on screen and in the command line it is an integration, in code a
+  `WatchSource`. `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
   covers, none meaning every repository, `addedBy` `you` or `agent`), at most 20. A watchdog whose server the project
   does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
   repository finds it; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
   them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
-  connects one for you.
+  connects one for you. A watch reads one too, filing a task for each new report in it (Schedules and webhooks,
+  below).
 - **Armed by the merge.** After every command, `syncWatchdogs` looks at the tasks it changed: a round whose pull
   request merged with watchdogs in its walkthrough arms each once (`watchdog.armed`, keyed by the round). One with a
   source starts watching at once (`endsAt` the merge plus its window, `nextCheckAt` its first check in); one with a source
@@ -1646,7 +1649,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 
 - **A schedule is a trigger that sends a message**: it starts a new task (`new_task`, or an Ask task with
   `just_answer`) in the repository it was set from, or messages a task (`task_id`, the task it was set from by
-  default). Agents set
+  default), or watches one of its project's integrations and files a task for each new report (`source`, below). Agents set
   them up: `set_schedule`, `list_schedules` and `delete_schedule` (every working role;
   `agent.set_schedule` / `agent.delete_schedule`), each changing only its own task's. You, the command line
   (`shinsa schedules write`) and any task agent (its `schedules_write` tool) write any schedule with `schedule.write` (`createdBy: you` for a
@@ -1695,6 +1698,61 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   the values as they are because only its hash is kept, dedupes deliveries for a week (500 keys per schedule): a
   repeat answers 202 `duplicate` and starts nothing. A delivery is `schedule.deliver` with command id
   `webhook:<id>:<delivery>`; the answer is 202 with the delivery id.
+- **Automations have three types**, read from the schedule (`resolveAutomationType` in the web, each row of Settings
+  → Automations says it): a **Schedule** runs at a time (once, every N minutes, daily) and starts or messages a
+  task; a **Trigger** runs when its webhook is called; a **Watch** reads one of its project's integrations
+  (`source`) and files a task for each new report in it, on a clock or a webhook.
+- **A watch reads in a home of its own** (`decide/intake.ts`, `prompts/intake.ts`). `Schedule.source`
+  (`ScheduleSource`: `projectId`, `server`) names an integration the project uses (Watchdogs, above), and one the
+  project does not use is refused (`source_not_found`). Writing one (`schedule.write` with `source`, `shinsa
+  schedules write --source <server> --project <project>`, or an agent's `set_schedule {source}`) creates its home
+  (`createWatchHome`): a task marked `watchHome`, with no handle, no triage and no agent, resting at once (`done`,
+  "waiting for its first read"). A watch never takes a target of its own (`source_target`), and a schedule that
+  starts or messages a task cannot become one (`source_change`). A home is on no list: the roadmap, the queue, Home,
+  ⌘K, references, `find_tasks` and `shinsa tasks list` leave it out (`isWatchHome`, in `isInFocus` and each list); it
+  takes no message and is no other schedule's target (`watch_home`), and a redelivered message to it is dropped.
+  Deleting the watch cancels its home (`closeWatchHome`), at rest or mid-read. A fire never messages the home, which
+  would start a round: it starts a read, a turn of its session like a watchdog check (purpose `intake`, read-only,
+  stage `watching` with "reading <server> for the automation “…”", in the task's scratch folder). Its prompt
+  (`resolveIntakePrompt`) names the integration and what it holds, the schedule's message as what to look for,
+  where to read from (`Schedule.lastReadAt`: the start of the last read that finished with `report_intake`, so a
+  read that failed never moves it; the schedule's creation until one has, `schedule.read`) and the last 10 tasks it
+  filed with their links. A home that is still reading skips the fire ("The task was at work, so this read was
+  skipped."), and an integration removed from the project stops the watch (`target_gone`).
+- **Each new report becomes a task.** In a read the agent calls `file_report` (`agent.file_report`, refused in any
+  other run, `wrong_step`): a `title`, the `request`, the report's `report_id` or `link` (one is required,
+  `report_unnamed`), `author`, `posted_at`, its `text`, and optionally `repository` and `fork_from`. Shinsa creates a
+  task in the project (triage picks the repository unless one is named, which must be one of the project's,
+  `repo_project`) whose request is the title, the request and
+  the report quoted with who wrote it and when; it keeps the report as `Task.sourceReport` (`SourceReport`:
+  `scheduleId`, `server`, `reportId`, `link`, `author`, `postedAt`, `text`), with `scheduleId` and `createdBy
+  {kind: 'intake'}`. With `fork_from` it is a fork of the task that shipped the feature (Forking a task), so its
+  agent starts from that conversation; the watch's home itself is refused (`fork_intake`). A report the project
+  already has a task for, from the same server with the same id or link, is refused (`report_filed`, naming that
+  task), whether that task is open, done or cancelled: dedupe reads the filed tasks themselves, so it holds when
+  the schedule is deleted and written again. The read ends with `report_intake {summary}` (at most 1,000
+  characters) and the task rests again. A source that errors or times out is tried again by the agent, 3 tries in
+  all (`SCHEDULE_LIMITS.readAttempts`, in the prompt); still failing, it reports `reached: false`, which ends the read
+  as not finished (the run fails with its summary, "could not reach a data source") without moving
+  `lastReadAt`, so the next read covers the same time. A read that fails or ends without `report_intake` is
+  recovered like any run, once per read (each read starts with the home's recoveries at 0, so a crash in an earlier
+  read never makes a later one give up at once); where another run would open a failure gate, the read gives up
+  instead (`missIntakeRead`): the task rests and the next fire reads again. The filed task's activity says which automation filed it from whose report, and the
+  home's activity lists each task it filed. Settings → Automations starts each row with its type's tile, in the
+  type's colour (`AUTOMATION_TYPE_LOOK`: a schedule blue, a trigger orange, a watch purple), and shows a watch as
+  "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
+  `routes/automation.tsx`), laid out like a task page: its text as the description, a facts row (its type, on or
+  paused, the integration, the project in its own colour, when it runs, the next and last run and how many tasks it
+  filed, `listAutomationFacts`), the tasks it filed in the roadmap's own rows, and an Activity log of every run, newest
+  first, drawn by the task page's own entry (`ActivityEntry`): a title for the outcome ("Filed 1 task", "No new
+  reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
+  (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
+  check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
+  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
+  automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
+- **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
+  in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
+  pauses, resumes and deletes them.
 - **Secrets are one-use refs** (`request_secret {label, reason}`, `agent.request_secret`): the agent's run waits on a
   question gate with `secret: {label}`; you paste the value into a password field that posts to
   `/api/secrets/<gate>` (never a command), and the server keeps it in `secrets.json` (mode 600) and answers the gate
@@ -2432,7 +2490,12 @@ truth, and a snapshot only saves replaying it.
   events are types core no longer knows and replay as no-ops, and a `workspace.update` effect still open in the outbox
   is failed on restart without running ("Shinsa does not know this kind of effect; another version wrote it.",
   `reconcileAfterRestart`).
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 6) marks the log so
+  Logs from before review findings had three levels (log version 7, `FINDING_LEVELS_LOG_VERSION`) can have
+  `review.reported` findings of severity `suggestion`; each becomes `optional`.
+  Logs from before a schedule could read a data source (log version 8, `SCHEDULE_SOURCE_LOG_VERSION`) have
+  `schedule.written` events without `source` or `lastReadAt`; both are set to `null`, so an old schedule reads nothing
+  and has never finished a read.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 8) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
@@ -4405,7 +4468,7 @@ between turns; a held run does not count as busy. Shutdown marks each held run a
 command id `run.interrupt:<run>:0:<continuations>`), so the next engine starts it as a free shutdown continuation. After
 `RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
 restart that fails releases the held runs; it refuses with `restart_unsupported`
-unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
+unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live

@@ -9,7 +9,15 @@ export const DISCLOSURE_LIMIT = 600;
 
 export const DISCLOSURE_WRITE_DELAY_MS = 250;
 
-export type DisclosureScope = 'task' | 'home' | 'queue' | 'services' | 'roadmap' | 'settings' | 'ui';
+export type DisclosureScope =
+  | 'task'
+  | 'home'
+  | 'queue'
+  | 'services'
+  | 'roadmap'
+  | 'settings'
+  | 'automation'
+  | 'ui';
 
 declare const PERSISTED: unique symbol;
 

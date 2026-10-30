@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import type { ShinsaCommand } from '@shinsa/core';
+import { listActiveRuns, type ShinsaCommand } from '@shinsa/core';
 import { Schedules } from '../../src/schedules/index.ts';
 import { createWorld, startTask, type World } from './fixtures.ts';
 
@@ -67,6 +67,38 @@ describe('set_schedule', () => {
     });
     expect(reply).toContain('Every hour. Next run');
     expect(reply).toContain('It is paused. Starts a new task.');
+  });
+
+  test('a watch set by an agent reads in a home of its own and says what it watches', async () => {
+    const base = await createWorld();
+    await base.engine.dispatch({
+      type: 'repo.register',
+      repo: { name: 'web', path: '/code/web', defaultBranch: 'main', remote: null, checkCommands: [] },
+      projectName: 'Paywalls',
+    });
+    const repo = Object.values(base.engine.state.repos).find((candidate) => candidate.name === 'web');
+    const projectId = repo?.projectId ?? '';
+    const reader = await startTask(base.engine, repo?.id ?? '', base.dir, 'Read #feedback');
+    const world = { ...base, ...reader };
+    await world.engine.dispatch({
+      type: 'watch_source.write',
+      projectId,
+      server: 'slack',
+      data: 'The #feedback channel',
+      repoIds: [],
+    });
+    const { tool } = setUp(world);
+    const reply = await tool('set_schedule', {
+      message: 'Bug reports and feature requests.',
+      every_minutes: 60,
+      source: 'slack',
+    });
+    const schedule = only(world);
+    expect(schedule.source).toEqual({ projectId, server: 'slack' });
+    const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
+    expect(homeId).not.toBe(reader.taskId);
+    expect(world.engine.state.tasks[homeId]?.watchHome).toBe(true);
+    expect(reply).toEndWith('Watches slack and files a task for each new report.');
   });
 
   test('a message into another task names it', async () => {
@@ -247,5 +279,96 @@ describe('list_schedules and delete_schedule', () => {
     const world = await createWorld();
     const { schedules, call } = setUp(world);
     expect(schedules.handleTool('ask', {}, call)).toBeNull();
+  });
+});
+
+async function startIntakeRead(world: World) {
+  const engine = world.engine;
+  await engine.dispatch({
+    type: 'repo.register',
+    repo: { name: 'web', path: '/code/web', defaultBranch: 'main', remote: null, checkCommands: [] },
+    projectName: 'Paywalls',
+  });
+  const repo = Object.values(engine.state.repos).find((candidate) => candidate.name === 'web');
+  const projectId = repo?.projectId ?? '';
+  await engine.dispatch({
+    type: 'watch_source.write',
+    projectId,
+    server: 'slack',
+    data: 'The #feedback channel',
+    repoIds: [],
+  });
+  await engine.dispatch({
+    type: 'schedule.write',
+    scheduleId: null,
+    name: 'Feedback',
+    text: 'Bug reports.',
+    trigger: { kind: 'webhook', signature: null, replayKey: null },
+    target: null,
+    source: { projectId, server: 'slack' },
+    enabled: null,
+    maxRuns: null,
+    timeZone: 'UTC',
+  });
+  const schedule = Object.values(engine.state.schedules).find((candidate) => candidate.source !== null);
+  const taskId = schedule?.target.kind === 'task' ? schedule.target.taskId : '';
+  await engine.dispatch({
+    type: 'schedule.deliver',
+    scheduleId: schedule?.id ?? '',
+    deliveryId: 'd1',
+    text: 'A new message.',
+    replayKey: null,
+  });
+  return { taskId, runId: listActiveRuns(engine.state, taskId)[0]?.id ?? '' };
+}
+
+describe('file_report', () => {
+  const report = {
+    title: 'Editor loses edits',
+    request: 'Keep unsaved edits when the tab reloads.',
+    link: 'https://slack.com/p1',
+    text: 'I lost my edits.',
+  };
+
+  test('files the report as a task, a fork of the task it names by handle, in the repository it names', async () => {
+    const world = await createWorld();
+    const read = await startIntakeRead(world);
+    const { tool } = setUp({ ...world, runId: read.runId });
+    const shipped = world.engine.state.tasks[world.taskId];
+    const reply = await tool('file_report', {
+      ...report,
+      fork_from: shipped?.id,
+      repository: 'web',
+    });
+    const filed = Object.values(world.engine.state.tasks).find((task) => task.sourceReport);
+    expect(reply).toBe(`Filed ${filed?.handle} “${filed?.title}”. Go on with the next report.`);
+    expect(filed?.forkOf).toBe(world.taskId);
+    expect(filed?.repoId).toBe(
+      Object.values(world.engine.state.repos).find((repo) => repo.name === 'web')?.id ?? ''
+    );
+    await expect(tool('file_report', { ...report, report_id: 'p2', link: undefined })).resolves.toContain(
+      'Filed'
+    );
+    await expect(tool('file_report', report)).rejects.toThrow('This report was already filed as');
+  });
+
+  test('refuses a broken report, a task or repository it cannot find, and a call that files nothing', async () => {
+    const world = await createWorld();
+    const read = await startIntakeRead(world);
+    const { tool, call } = setUp({ ...world, runId: read.runId });
+    await expect(tool('file_report', { title: 'x' })).rejects.toThrow('report_id or link');
+    await expect(tool('file_report', { ...report, fork_from: 'LOC-999' })).rejects.toThrow(
+      'There is no task "LOC-999" to fork.'
+    );
+    await expect(tool('file_report', { ...report, repository: 'app' })).rejects.toThrow(
+      'The project has no repository "app". Its repositories: web.'
+    );
+    const silent = new Schedules(world.engine, world.secrets, {
+      baseUrl: () => '',
+      timeZone: 'UTC',
+      now: () => NOW,
+    });
+    const reply = silent.handleTool('file_report', report, { ...call, dispatch: async () => [] });
+    await expect(reply ?? Promise.resolve('')).rejects.toThrow('Nothing was filed.');
   });
 });

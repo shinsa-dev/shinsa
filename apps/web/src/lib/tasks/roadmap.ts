@@ -4,6 +4,7 @@ import {
   isDependencyOf,
   isPausingGate,
   isTaskSettled,
+  isWatchHome,
   listWaitsOn,
   type ShinsaState,
   selectLeadGate,
@@ -144,7 +145,7 @@ export function orderChains(state: ShinsaState, tasks: Task[]): ChainEntry[] {
 
 export function listOpenTaskChoices(state: ShinsaState, task: Task | null) {
   return Object.values(state.tasks)
-    .filter((candidate) => !isTaskSettled(candidate))
+    .filter((candidate) => !isTaskSettled(candidate) && !isWatchHome(candidate))
     .filter((candidate) => !task || !isDependencyOf(state, task.id, candidate.id))
     .sort(compareTasks);
 }
@@ -171,6 +172,7 @@ export function listRoadmapSections(state: ShinsaState, search: string, status: 
   const needle = search.trim().toLowerCase();
   const grouped = new Map<RoadmapGroupKey, Task[]>(ROADMAP_GROUPS.map((group) => [group.key, []]));
   for (const task of Object.values(state.tasks)) {
+    if (isWatchHome(task)) continue;
     if (!needle || matchesSearch(state, task, needle))
       grouped.get(resolveRoadmapGroup(state, task))?.push(task);
   }
@@ -181,7 +183,7 @@ export function listRoadmapSections(state: ShinsaState, search: string, status: 
 }
 
 export function describeRoadmapCounts(state: ShinsaState) {
-  const tasks = Object.values(state.tasks);
+  const tasks = Object.values(state.tasks).filter((task) => !isWatchHome(task));
   const open = tasks.filter((task) => !isTaskSettled(task)).length;
   const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;
   return `${open} open · ${done} done`;

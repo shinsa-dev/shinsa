@@ -146,12 +146,14 @@ export function PausedCard({
   gate,
   onOpen,
   onReply = (key) => replyToGate(gate, key),
+  cancelLabel = 'Cancel task',
 }: {
   state: ShinsaState;
   task: Task;
   gate: Gate;
   onOpen: (target: NowTarget, runId?: string) => void;
   onReply?: GateReplier;
+  cancelLabel?: string;
 }) {
   const { busy, run: act } = useBusy<GateReply>();
   const reply = (key: GateReply) => void act(key, () => onReply(key));
@@ -172,7 +174,7 @@ export function PausedCard({
       footer={
         <FooterNote note={RETRY_NOTE}>
           <QuietLink busy={busy !== null} onClick={() => reply('cancel')}>
-            Cancel task
+            {cancelLabel}
           </QuietLink>
         </FooterNote>
       }

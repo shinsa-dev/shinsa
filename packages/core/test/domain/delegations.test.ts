@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   isDelegatedRun,
   isReadOnlyRole,
+  isReadOnlyRun,
   type Run,
   type RunDelegation,
   resolveDelegationStatus,
@@ -48,6 +49,13 @@ describe('delegated runs', () => {
       true
     );
     expect(['builder', 'fixer', 'shipper'].some((role) => isReadOnlyRole(role as Run['role']))).toBe(false);
+  });
+
+  test('the agent is read-only while it plans, checks a watchdog or reads a data source, and edits otherwise', () => {
+    const readOnly = (purpose: Run['purpose']) => isReadOnlyRun({ role: 'agent', purpose });
+    expect(['plan', 'watch', 'intake'].every((purpose) => readOnly(purpose as Run['purpose']))).toBe(true);
+    expect(['build', 'fix', 'operate'].some((purpose) => readOnly(purpose as Run['purpose']))).toBe(false);
+    expect(isReadOnlyRun({ role: 'reviewer', purpose: undefined })).toBe(true);
   });
 
   test('a run is delegated when it carries a delegation', () => {

@@ -305,6 +305,14 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   compaction under the same setting, and the agents a Codex agent starts shown in its turn like
   Claude's subagents. Agent usage shows every connected provider in Settings and at a glance in the
   top bar.
+- **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
+  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). Shipping: pull requests merged, tasks finished, lines merged and the
+  shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
+  past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
+  input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
+  used the most. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
+  changed come from GitHub's pull request read (`changes`), so pull requests merged before it show none. Quick calls
+  (triage, briefings, titles) are not metered, and tokens are counted per run, not per turn or tool call.
 - **Fast mode only on credits you have.** Agents run at standard speed unless you pick Fast. Fast
   mode costs usage credits on a subscription, so Shinsa checks before each run whether the account
   has them, runs at standard speed (and says so in the chat) when it does not, and never turns
@@ -598,7 +606,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Schedules and webhooks start work for you.** An agent can set a schedule (once, every N minutes,
   daily at a time on chosen weekdays) or a webhook that starts a task or messages one. A machine
   that slept runs a missed schedule once, not once per slot; a run is skipped while the last one is
-  still open. Settings → Automations and ⌘K pause, resume and delete them. Webhooks are signed
+  still open. A watch reads one of a project's integrations (a Slack channel, a support inbox,
+  traces) on a clock or a webhook, out of sight, and files a task for each new report in it, with the report kept on the
+  task, forked from the task that shipped the feature it is about, and never filed twice.
+  Settings → Automations and ⌘K pause, resume and delete them. Webhooks are signed
   (HMAC), deduped by a replay key and rate limited, and what they carry reaches the agent framed as
   untrusted data.
 - **Secrets never touch the chat.** An agent asks for one (`request_secret`); you paste it into a

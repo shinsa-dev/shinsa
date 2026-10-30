@@ -10,6 +10,7 @@ import type {
   PipelineStep,
   PlanCheck,
   PlanDocument,
+  PullRequestChanges,
   Repo,
   ReportCheck,
   ReviewDisagreement,
@@ -17,7 +18,9 @@ import type {
   RunPurpose,
   RunRole,
   ShinsaEventInput,
+  SourceReport,
   TaskAuto,
+  TaskCreator,
   TaskPriority,
   TaskShape,
   TaskSize,
@@ -64,6 +67,7 @@ export interface SeedRun {
   purpose?: RunPurpose;
   fix?: FixReason;
   minutes: number;
+  afterMinutes?: number;
   summary: string;
   reply?: string;
   failed?: boolean;
@@ -88,6 +92,9 @@ export interface SeedTask {
   planFirst?: boolean;
   waitsOn?: string[];
   forkOf?: string;
+  createdBy?: TaskCreator;
+  sourceReport?: SourceReport;
+  watchHome?: boolean;
   worktreePath?: string;
   plan?: PlanDocument;
   verification?: PlanCheck[];
@@ -106,6 +113,7 @@ export interface SeedTask {
     comments?: number;
     mergeCommit?: string;
     ciRuns?: CiRun[];
+    changes?: PullRequestChanges;
   };
   merged?: boolean;
   note?: string;

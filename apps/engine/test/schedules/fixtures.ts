@@ -58,6 +58,7 @@ export async function addSchedule(
     text: options.text ?? 'Check the nightly build.',
     trigger,
     target: options.newTask ? { kind: 'new_task', priority: 'normal', mode: 'build' } : null,
+    source: null,
     enabled: null,
     maxRuns: options.maxRuns ?? null,
     timeZone: 'UTC',

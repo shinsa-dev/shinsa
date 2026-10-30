@@ -9,6 +9,7 @@ import {
   resolveTaskPipeline,
   resolveTaskRounds,
   SHAPE_PIPELINES,
+  type SourceReport,
   type Task,
   type TaskAuto,
   type TaskCreator,
@@ -55,6 +56,7 @@ interface TaskLineage {
   parentTaskId?: string;
   createdBy?: TaskCreator;
   scheduleId?: string;
+  sourceReport?: SourceReport;
   shape?: TaskShape;
 }
 

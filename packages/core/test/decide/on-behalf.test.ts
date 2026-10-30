@@ -46,6 +46,7 @@ function writeSchedule(harness: Harness, scheduleId: string | null, name: string
     text: 'Audit the dependencies.',
     trigger: { kind: 'interval', everyMinutes: scheduleId ? 90 : 60 },
     target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
+    source: null,
     enabled: null,
     maxRuns: null,
     timeZone: 'UTC',

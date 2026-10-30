@@ -111,6 +111,7 @@ describe('listMenuTasks', () => {
         createTask({ id: 'merged', stage: 'merged', updatedAt: 9 }),
         createTask({ id: 'new', updatedAt: 5 }),
         createTask({ id: 'cancelled', stage: 'cancelled', updatedAt: 2 }),
+        createTask({ id: 'home', stage: 'watching', watchHome: true, updatedAt: 10 }),
       ],
     });
     expect(listMenuTasks(state).map((task) => task.id)).toEqual(['new', 'old', 'merged', 'cancelled']);

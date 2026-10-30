@@ -258,6 +258,7 @@ describe('listOpenTaskChoices', () => {
     createTask({ id: 'grandchild', waitsOn: ['child'], stage: 'waiting_on_tasks' }),
     createTask({ id: 'merged', stage: 'merged' }),
     createTask({ id: 'cancelled', stage: 'cancelled' }),
+    createTask({ id: 'home', stage: 'watching', watchHome: true }),
   ];
   const state = createShinsaState({ tasks });
 
@@ -292,6 +293,7 @@ describe('listRoadmapSections', () => {
     }),
     createTask({ id: 'next', stage: 'waiting_on_tasks', waitsOn: ['waiter'], branch: 'feat/next-step' }),
     createTask({ id: 'review', title: 'Review me' }),
+    createTask({ id: 'home', stage: 'done', watchHome: true }),
   ];
   const state = createShinsaState({
     tasks,
@@ -349,7 +351,7 @@ describe('listRoadmapSections search by repository', () => {
 });
 
 describe('describeRoadmapCounts', () => {
-  it('counts open tasks and finished ones, leaving cancelled out of both', () => {
+  it('counts open tasks and finished ones, leaving cancelled tasks and watch homes out of both', () => {
     const state = createShinsaState({
       tasks: [
         createTask({ id: 'a' }),
@@ -357,6 +359,8 @@ describe('describeRoadmapCounts', () => {
         createTask({ id: 'c', stage: 'merged' }),
         createTask({ id: 'd', stage: 'done' }),
         createTask({ id: 'e', stage: 'cancelled' }),
+        createTask({ id: 'home', stage: 'watching', watchHome: true }),
+        createTask({ id: 'rested', stage: 'done', watchHome: true }),
       ],
     });
     expect(describeRoadmapCounts(state)).toBe('2 open · 2 done');

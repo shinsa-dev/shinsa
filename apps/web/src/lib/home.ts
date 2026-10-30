@@ -2,7 +2,7 @@ import {
   type Activity,
   capitalise,
   DAY_MS,
-  isInFocus,
+  isListedInFocus,
   isTaskComplete,
   type ShinsaState,
   type Task,
@@ -35,7 +35,7 @@ const PULL_REQUEST = /\b(?:(the|its)\s+)?(?:pull request|PR)\s+#\d+/gi;
 export function listRecentConversations(state: ShinsaState, now: number, shown: ReadonlySet<string>) {
   const latest: { task: Task; entry: Activity }[] = [];
   for (const task of Object.values(state.tasks)) {
-    if (shown.has(task.id) || !isInFocus(state, task, now)) continue;
+    if (shown.has(task.id) || !isListedInFocus(state, task, now)) continue;
     const entry = task.activity
       .filter((candidate) => candidate.actor === 'agent' && candidate.runId)
       .reduce<Activity | null>(
@@ -54,7 +54,7 @@ export function listRecentlyFinished(state: ShinsaState, now: number, shown: Rea
         !shown.has(task.id) &&
         isTaskComplete(task) &&
         now - task.stageChangedAt <= FINISHED_WINDOW_MS &&
-        isInFocus(state, task, now)
+        isListedInFocus(state, task, now)
     )
     .sort((a, b) => b.stageChangedAt - a.stageChangedAt)
     .slice(0, RECENT_LIMIT);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ChatAttachment } from '@shinsa/core';
 import {
   canOpenAttachment,
+  canPlayAttachment,
   describeAttachment,
   resolveFileGlyph,
   resolveFileType,
@@ -36,6 +37,20 @@ describe('splitAttachments', () => {
 
   it('is empty for no attachments', () => {
     expect(splitAttachments([])).toEqual({ images: [], files: [] });
+  });
+});
+
+describe('canPlayAttachment', () => {
+  it('plays videos the browser can load in the viewer, by type or by name', () => {
+    expect(canPlayAttachment({ name: 'clip', mimeType: 'video/mp4', url: '/api/a/clip' })).toBe(true);
+    expect(canPlayAttachment({ name: 'demo.MOV', mimeType: null, url: '/api/a/demo.MOV' })).toBe(true);
+    expect(canPlayAttachment({ name: 'far.mp4', mimeType: 'video/mp4', url: '/Users/me/far.mp4' })).toBe(
+      false
+    );
+    expect(canPlayAttachment({ name: 'notes', mimeType: null, url: '/api/a/notes' })).toBe(false);
+    expect(canPlayAttachment({ name: 'song.mp3', mimeType: 'audio/mpeg', url: '/api/a/song.mp3' })).toBe(
+      false
+    );
   });
 });
 

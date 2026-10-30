@@ -10,7 +10,7 @@ import {
 } from '@shinsa/core';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
-import { findTaskId, resolveOptionalRepoId } from './resolve.ts';
+import { findProjectId, findTaskId, resolveOptionalRepoId } from './resolve.ts';
 import { defineAction, defineCommand, defineRead, encode, readValue, type SurfaceSpec } from './spec.ts';
 
 const SCHEDULE_FIELD: FieldSpec = {
@@ -83,6 +83,19 @@ async function resolveTarget(client: SurfaceClient, values: Values): Promise<Sch
   };
 }
 
+async function resolveSource(client: SurfaceClient, values: Values) {
+  const server = readValue(values, 'source');
+  const project = readValue(values, 'project');
+  if (!server) {
+    if (project) throw new DomainError('schedule_invalid', 'Give --project only with --source.');
+    return null;
+  }
+  if (!project) {
+    throw new DomainError('schedule_invalid', 'Name the project whose data source it reads with --project.');
+  }
+  return { projectId: await findProjectId(client, project), server };
+}
+
 async function resolveTimeZone(client: SurfaceClient, values: Values) {
   const given = readValue(values, 'timeZone');
   if (given) return given;
@@ -109,7 +122,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
   defineCommand({
     path: ['schedules', 'write'],
     summary:
-      'Create a schedule, or change one with --id: it starts a new task or messages a task once, on an interval, daily or when its webhook is called.',
+      'Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily or when its webhook is called.',
     command: 'schedule.write',
     fields: [
       { name: 'id', kind: 'text', description: 'The schedule to change. Leave out to create one.' },
@@ -153,6 +166,17 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
       },
       { name: 'justAnswer', kind: 'boolean', description: 'With --new-task: only answer a question.' },
       { name: 'task', kind: 'text', description: 'Message this task on each run instead.' },
+      {
+        name: 'source',
+        kind: 'text',
+        description:
+          'Read this data source of the project (its server) on each run and file a task for each new report. Without --task, a task to read it in is created.',
+      },
+      {
+        name: 'project',
+        kind: 'text',
+        description: 'With --source: the project the data source belongs to.',
+      },
       { name: 'enabled', kind: 'boolean', description: 'false saves it paused.' },
       { name: 'maxRuns', kind: 'integer', description: 'Stop after this many runs.' },
       {
@@ -168,6 +192,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
       text: readValue(values, 'message') || null,
       trigger: resolveTrigger(values, Date.now()),
       target: await resolveTarget(client, values),
+      source: await resolveSource(client, values),
       enabled: typeof values.enabled === 'boolean' ? values.enabled : null,
       maxRuns: typeof values.maxRuns === 'number' ? values.maxRuns : null,
       timeZone: await resolveTimeZone(client, values),

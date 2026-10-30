@@ -909,6 +909,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'schedule.written':
     case 'schedule.removed':
     case 'schedule.fired':
+    case 'schedule.read':
       applyScheduleEvent(state, event);
       break;
     case 'watchdog.armed':

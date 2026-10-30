@@ -16,6 +16,7 @@ import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
+import { StatisticsRange, StatisticsSettings } from '@/components/settings/stats/index.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { VersionSettings } from '@/components/settings/versions.tsx';
@@ -71,6 +72,8 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <SetupSettings />
         </>
       );
+    case 'statistics':
+      return <StatisticsSettings state={state} />;
     case 'agents':
       return (
         <>
@@ -133,7 +136,14 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
     <PageScroll viewportRef={scroller}>
       <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
         <div className='flex flex-col gap-3'>
-          <PageHeading title={current.label} />
+          <div className='relative'>
+            <PageHeading title={current.label} />
+            {tab === 'statistics' && (
+              <div className='absolute top-1/2 right-0 -translate-y-1/2'>
+                <StatisticsRange />
+              </div>
+            )}
+          </div>
           <Choice<SettingsTabId>
             label='Settings sections'
             items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}

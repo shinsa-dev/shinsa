@@ -42,7 +42,7 @@ const STAGE_PURPOSE = new Map<unknown, RunPurpose>([
   ['operating', 'operate'],
 ]);
 
-const RUN_PURPOSES: readonly unknown[] = [...STAGE_PURPOSE.values()];
+const RUN_PURPOSES: readonly unknown[] = [...STAGE_PURPOSE.values(), 'watch', 'intake'];
 
 const INQUIRY_ROLES: readonly unknown[] = ['reviewer', 'answerer', 'investigator', 'researcher'];
 
@@ -67,6 +67,8 @@ const NO_GITBUTLER_LOG_VERSION = 6;
 
 const FINDING_LEVELS_LOG_VERSION = 7;
 
+const SCHEDULE_SOURCE_LOG_VERSION = 8;
+
 const GITBUTLER_EVENT_TYPES = [
   'repo.registered',
   'repo.updated',
@@ -83,6 +85,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < WATCH_CI_LOG_VERSION ? ['pull_request.watched'] : []),
     ...(version < NO_GITBUTLER_LOG_VERSION ? GITBUTLER_EVENT_TYPES : []),
     ...(version < FINDING_LEVELS_LOG_VERSION ? ['review.reported'] : []),
+    ...(version < SCHEDULE_SOURCE_LOG_VERSION ? ['schedule.written'] : []),
   ];
 }
 
@@ -132,6 +135,12 @@ function resolveReport(event: Payload) {
 function resolveRepo(event: Payload) {
   if (!isRecord(event.repo) || event.repo.workspace !== 'gitbutler') return event;
   return { ...event, repo: { ...event.repo, workspace: DEFAULT_WORKSPACE_MODE } };
+}
+
+function resolveSchedule(event: Payload) {
+  if (!isRecord(event.schedule) || ('source' in event.schedule && 'lastReadAt' in event.schedule))
+    return event;
+  return { ...event, schedule: { source: null, lastReadAt: null, ...event.schedule } };
 }
 
 function resolveGate(event: Payload) {
@@ -193,6 +202,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return { ...event, walkthrough: resolveWalkthrough(event.walkthrough) };
     case 'run.metered':
       return withoutKeys(event, ['weeklyPercent']);
+    case 'schedule.written':
+      return resolveSchedule(event);
     case 'pull_request.watched':
       if (!isRecord(event.watch) || 'ciAbsent' in event.watch) return event;
       return { ...event, watch: { ...event.watch, ciAbsent: false } };
