@@ -16,7 +16,7 @@ src/
 │                  GET to the assets with the security headers; createWorld
 ├── world.ts       CloudWorld (store, fetch, assets, now, config) and resolveCloudConfig from the Worker's environment
 ├── database.ts    The D1 queries (createStore) over the Database interface D1 and the tests' SQLite both meet
-├── session.ts     GitHub OAuth (sign-in, callback, sign-out), the session cookie, ALLOWED_GITHUB_LOGINS
+├── session.ts     GitHub OAuth (sign-in, callback, sign-out), the session cookie
 ├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
@@ -38,11 +38,11 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   audit. `/__remote/sign-in?return=<path>` sends you to GitHub with a random `state` and a PKCE `S256` challenge, the
   state and the verifier kept in a 10-minute `__Host-shinsa_oauth` cookie; the callback checks the state in constant
   time, redeems the code with the verifier (a code stolen from the redirect cannot be redeemed without it), reads who
-  you are from GitHub, refuses an account not in `ALLOWED_GITHUB_LOGINS` (logins or numeric GitHub ids; an empty or
-  missing list lets nobody in, so a deploy without it is closed), and sets `__Host-shinsa_session` (Path=/, HttpOnly,
+  you are from GitHub and sets `__Host-shinsa_session` (Path=/, HttpOnly,
   Secure, SameSite=Lax, 30 days). The `__Host-` prefix means no other host, a machine's `t-<id>.shinsa.dev`
-  included, can set or overwrite either cookie. D1 keeps only the SHA-256 of the session token, and every request
-  checks the list again, so taking an account off it ends its sessions at once. The return path is parsed against
+  included, can set or overwrite either cookie. D1 keeps only the SHA-256 of the session token.
+  Any GitHub account may sign in: an account owns only the machines it paired itself, and even its own machine opens
+  only to a browser that machine enrolled, so a stranger signed in sees an empty list and can reach nothing. The return path is parsed against
   this origin and kept only when it stays on it (a tab, a newline or a backslash cannot turn it into `//elsewhere`).
   A failed callback sends you to `/?sign_in_error=<code>`, which the sign-in page says in words.
 - **Pairing.** The machine posts its name and public key to `pair/start` (no account yet; at most 10 waiting pairings
@@ -79,8 +79,6 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone), and `ALLOWED_GITHUB_LOGINS`, the comma-separated GitHub logins or numeric ids that may sign in (an id survives a
-  rename; a login someone else can take once it is free). It is a
-  secret, not a `vars` entry, so `wrangler deploy` never overwrites it with an empty list.
+  the `shinsa.dev` zone).
 - The custom domain `app.shinsa.dev` is created by `wrangler deploy` (it needs the `shinsa.dev` zone on the same
   account). The GitHub OAuth app's callback URL must be exactly `https://app.shinsa.dev/__remote/sign-in/callback`.

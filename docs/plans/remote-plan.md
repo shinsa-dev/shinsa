@@ -56,8 +56,8 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 - **Machines' hosts are same-site with the dashboard.** `t-<id>.shinsa.dev` is served by whichever machine owns it,
   so the cookies carry the `__Host-` prefix (no other host can set or replace them) and every POST a page makes needs
   the dashboard's exact `Origin`; SameSite alone would not keep a sibling host out.
-- **Who can get in.** Sign-in is GitHub OAuth with PKCE, gated by `ALLOWED_GITHUB_LOGINS` (logins or numeric ids),
-  checked on every request. Even a signed-in account reaches no machine: the tunnel answers only the sealed channel,
+- **Who can get in.** Sign-in is GitHub OAuth with PKCE, open to any GitHub account: an account
+  lists only the machines it paired, and even a signed-in account reaches no machine: the tunnel answers only the sealed channel,
   which needs a device key that machine enrolled and proves the machine's own key, pinned from its QR.
 - **A second public entry point.** The request class is decided once, first, from `cf-connecting-ip`, and every route
   test runs as local and as remote.

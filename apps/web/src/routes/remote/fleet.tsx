@@ -5,7 +5,7 @@ import { createFleetMember, listMachineRows } from '@/lib/remote/machines.ts';
 import { SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
-import { RemoteHero, RemoteLoading } from './shell.tsx';
+import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
 type FleetState =
   | { kind: 'starting' }
@@ -21,6 +21,7 @@ function NoMachinePage({ machines }: { machines: string[] }) {
           Turn on remote access on the Mac that runs Shinsa: Settings, Remote access, Turn on. It shows up
           here once you approve it.
         </RemoteHero>
+        <RemoteBenefits />
       </section>
     );
   return (

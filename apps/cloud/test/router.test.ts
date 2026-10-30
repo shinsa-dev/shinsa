@@ -89,7 +89,6 @@ describe('the helpers', () => {
       cloudflareAccountId: '',
       cloudflareApiToken: '',
       tunnelZone: 'shinsa.dev',
-      allowedLogins: [],
     });
     expect(
       resolveCloudConfig({
@@ -99,7 +98,6 @@ describe('the helpers', () => {
         CLOUDFLARE_ACCOUNT_ID: 'account',
         CLOUDFLARE_API_TOKEN: 'token',
         TUNNEL_ZONE: 'example.dev',
-        ALLOWED_GITHUB_LOGINS: ' Mona , kai,',
       })
     ).toEqual({
       origin: 'http://localhost:5183',
@@ -108,7 +106,6 @@ describe('the helpers', () => {
       cloudflareAccountId: 'account',
       cloudflareApiToken: 'token',
       tunnelZone: 'example.dev',
-      allowedLogins: ['mona', 'kai'],
     });
   });
 });

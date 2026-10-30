@@ -100,12 +100,12 @@ const DEVICE: EnrolledDevice = {
 
 describe('the remote dashboard', () => {
   it('asks you to sign in with GitHub and says why a sign-in failed', async () => {
-    renderRoot('/?sign_in_error=sign_in_refused', {
+    renderRoot('/?sign_in_error=sign_in_failed', {
       dashboard: createDashboard({ readSession: () => Promise.resolve({ user: null }) }),
     });
     const link = (await screen.findByText('Sign in with GitHub')).closest('a') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('/__remote/sign-in?return=%2F');
-    expect(screen.getByRole('alert').textContent).toContain('cannot use this Shinsa');
+    expect(screen.getByRole('alert').textContent).toContain('GitHub did not finish the sign-in');
   });
 
   it('says when app.shinsa.dev cannot be reached', async () => {
@@ -127,6 +127,7 @@ describe('the remote dashboard', () => {
     unmount();
     renderRoot('/', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
     expect(await screen.findByText('No Mac yet')).toBeTruthy();
+    expect(screen.getByText('Encrypted end to end')).toBeTruthy();
   });
 
   it('opens one dashboard over every Mac this browser was added to, and gives the page back when it leaves', async () => {

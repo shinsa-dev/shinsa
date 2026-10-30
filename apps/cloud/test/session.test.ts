@@ -110,30 +110,15 @@ describe('signing in with GitHub', () => {
     expect(unknown.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
   });
 
-  test('lets in only the GitHub accounts on the list', async () => {
-    const harness = createHarness({ allowedLogins: ['mona'] });
-    expect(await harness.signIn('Mona', 1)).not.toBe('');
-    expect(await harness.signIn('kai', 2)).toBe('');
-    const rows = harness.db.sqlite.query('SELECT login FROM users').all() as { login: string }[];
-    expect(rows.map((row) => row.login)).toEqual(['Mona']);
-  });
-
-  test('ends a session as soon as its account leaves the list, and accepts an account by its numeric id', async () => {
-    const harness = createHarness({ allowedLogins: ['mona', '7'] });
-    const session = await harness.signIn('mona', 42);
-    const renamed = await harness.signIn('octo', 7);
-    expect(renamed).not.toBe('');
-    harness.world.config.allowedLogins = ['7'];
-    expect(await readJson<RemoteSession>(await harness.call('/__remote/session', { session }))).toEqual({
-      user: null,
-    });
-    expect((await harness.call('/__remote/instances', { session })).status).toBe(401);
-  });
-
-  test('lets nobody in while the list is empty, so a deploy without it is closed', async () => {
-    const harness = createHarness({ allowedLogins: [] });
-    expect(await harness.signIn('mona', 1)).toBe('');
-    expect(harness.db.sqlite.query('SELECT login FROM users').all()).toEqual([]);
+  test('lets any GitHub account in, and each one sees only its own machines', async () => {
+    const harness = createHarness();
+    const mona = await harness.signIn('Mona', 1);
+    const kai = await harness.signIn('kai', 2);
+    expect(mona).not.toBe('');
+    expect(kai).not.toBe('');
+    const rows = harness.db.sqlite.query('SELECT login FROM users ORDER BY id').all() as { login: string }[];
+    expect(rows.map((row) => row.login)).toEqual(['Mona', 'kai']);
+    expect(await readJson(await harness.call('/__remote/instances', { session: kai }))).toEqual([]);
   });
 
   test('says nobody is signed in without a session or with an expired one', async () => {

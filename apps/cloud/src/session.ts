@@ -31,16 +31,10 @@ interface GitHubUser {
   avatar_url?: string;
 }
 
-function isAllowedUser(user: Pick<UserRow, 'id' | 'login'>, world: CloudWorld) {
-  const { allowedLogins } = world.config;
-  return allowedLogins.includes(user.login.toLowerCase()) || allowedLogins.includes(user.id);
-}
-
 async function selectSessionUser(request: Request, world: CloudWorld) {
   const token = readCookie(request, SESSION_COOKIE);
   if (!token) return null;
-  const user = await world.store.selectSessionUser(await resolveTokenHash(token), world.now());
-  return user && isAllowedUser(user, world) ? user : null;
+  return world.store.selectSessionUser(await resolveTokenHash(token), world.now());
 }
 
 export async function findSessionUser(request: Request, world: CloudWorld) {
@@ -135,8 +129,6 @@ export async function respondSignInCallback(request: Request, url: URL, world: C
       400
     );
   const github = await requestGitHubUser(code, verifier, world);
-  if (!isAllowedUser({ id: String(github.id), login: github.login }, world))
-    throw new CloudError('sign_in_refused', `${github.login} cannot use this Shinsa dashboard.`, 403);
   const now = world.now();
   const user: UserRow = { id: String(github.id), login: github.login, avatar_url: github.avatar_url ?? null };
   await world.store.upsertUser(user, now);

@@ -73,23 +73,29 @@ const SIGN_IN_POINTS: { icon: IconName; title: string; detail: string }[] = [
   },
 ];
 
+export function RemoteBenefits() {
+  return (
+    <SettingsCard className='w-full'>
+      {SIGN_IN_POINTS.map((point) => (
+        <div key={point.title} className='flex gap-3 px-2.5 py-2'>
+          <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
+          <div className='flex min-w-0 flex-col gap-px'>
+            <span className='text-fg-4 text-xs'>{point.title}</span>
+            <span className='text-pretty text-2xs text-fg-2'>{point.detail}</span>
+          </div>
+        </div>
+      ))}
+    </SettingsCard>
+  );
+}
+
 export function SignInPrompt({ returnPath, error }: { returnPath: string; error: string | null }) {
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
         Reach the Shinsa on your Mac from any browser. Use the GitHub account you paired your Mac with.
       </RemoteHero>
-      <SettingsCard className='w-full'>
-        {SIGN_IN_POINTS.map((point) => (
-          <div key={point.title} className='flex gap-3 px-2.5 py-2'>
-            <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
-            <div className='flex min-w-0 flex-col gap-px'>
-              <span className='text-fg-4 text-xs'>{point.title}</span>
-              <span className='text-pretty text-2xs text-fg-2'>{point.detail}</span>
-            </div>
-          </div>
-        ))}
-      </SettingsCard>
+      <RemoteBenefits />
       {error && (
         <p role='alert' className='w-full text-pretty text-destructive text-xs'>
           {describeSignInError(error)}

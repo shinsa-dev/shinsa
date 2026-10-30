@@ -40,8 +40,6 @@ async function readError(response: Response) {
 }
 
 const SIGN_IN_ERRORS: Record<string, string> = {
-  sign_in_refused:
-    'This GitHub account cannot use this Shinsa. Sign in with the account your Mac is paired with.',
   sign_in_failed: 'GitHub did not finish the sign-in. Try again.',
 };
 
