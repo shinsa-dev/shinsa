@@ -385,7 +385,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
-   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise Settings → Agents →
+   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) or kept in the backlog (Scheduling → The backlog, below)
+   always waits at a plan gate; otherwise Settings → Agents →
    Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
@@ -959,7 +960,10 @@ The kind of task is always decided for you; when it starts and its priority are 
 them in the composer.
 
 - `task.create` records which were left to Shinsa (`auto: { shape, start, priority }`): the kind is Auto unless `mode` was
-  given, a field you leave out is Auto, and an explicit `waitsOn: []` is Start now. Schedules and accepted suggested tasks
+  given, a field you leave out is Auto, and an explicit `waitsOn: []` is Start now. The composer's When to start
+  has four choices: Auto start (triage may make it wait on open work it builds on), Start now (`waitsOn: []`), After
+  another task… (a searchable list of every open task in any project, several at once, `waitsOn: [ids]`) and Backlog
+  (`backlog: true`, The backlog, above). Triage never chooses the backlog. Schedules and accepted suggested tasks
   keep their own choices; a split plan's tasks are changes; a courier's task is Auto.
 - Triage answers each Auto part as a typed decision question with a short why: `shape`, `priority` (urgent, high, normal or
   low) and `waits_on` (the open tasks of the task's project, in any repository, listed with their repository and
@@ -1020,8 +1024,8 @@ be changed from a plan.
 
 ## Scheduling
 
-Everything you ask for is worked on as soon as it can be, and only the order
-in which finished work reaches you is managed.
+Everything you ask for is worked on as soon as it can be, unless you put it in the backlog (The backlog, below),
+and only the order in which finished work reaches you is managed.
 
 - **No dependency, no waiting.** A new task is classified, gets its worktree and starts planning
   at once, on its own agent, then builds, checks and lands at your review gate. How many
@@ -1042,8 +1046,10 @@ in which finished work reaches you is managed.
   OK, an operation and a secret rank as questions), paused (a failure, a setup to fix, a sign-in),
   then the oldest first), and the guide never leads with a low priority decision while anything else waits
   (`parseBriefing` drops such an answer; low ones go to the end of next).
-- **No hold.** New work is never parked while decisions pile up: holding the compute only delays work you asked
-  for, and priority already keeps finished work out of your way.
+- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up or usage runs
+  low: holding the compute only delays work you asked for, and priority already keeps finished work out of your way.
+  Work you want planned now and built later goes in the backlog, and only you (or an agent you asked) put it there;
+  triage never does.
 
 ### Dependencies
 
@@ -1091,6 +1097,40 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 - **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
   branch; only a task's own rounds stack (Rounds, above).
 
+### The backlog
+
+Work you want written down and planned, but not built yet, waits in the backlog: a status of a task, never a kind of
+task, so a backlog task keeps its kind, priority, handle and plan. Planning costs a small share of a task (about 4% of
+its usage in a measured log); building, checks, fixes and review are the rest, so a backlog task spends almost
+nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
+
+- **Putting work there.** `Task.backlog` (`{ at }`, or null) changes only through `task.backlog_changed` (`backlog`,
+  `cause`: `you`, `started` or `inquiry`). You file a task for the backlog with `task.create` `backlog: true` (the
+  composer's When to start → Backlog, `shinsa do --backlog`, `shinsa tasks create --backlog`, `create_task`'s
+  `backlog`), accept a suggested task into it (`suggestion.accept` `backlog: true`, `shinsa suggestions accept
+  --backlog`), or move one there (`task.move_to_backlog`, Move to the backlog in the task menu, a row's menu and ⌘K,
+  `shinsa tasks move-to-backlog`). Moving is refused, by `resolveBacklogRefusal`, for a settled task
+  (`task_settled`), for an answer, research or an investigation (`backlog_inquiry`: only work that builds or runs an
+  operation waits there, `canWaitInBacklog`) and once a plan was approved or building started (`backlog_started`).
+- **While there.** A backlog task is triaged, verified, gets its worktree and is planned like any other, then waits at
+  its plan gate, which always opens for it (`backlog` in `PLAN_GATE_RULE`), with the stage reason "in the backlog".
+  That gate is held (`isHeldInBacklog`): `resolveQueue` leaves it out of `ready` and lists the task in
+  `queue.backlog` instead, so it is not in Needs you, the queue button, Home, the guide, the Dock badge or a
+  notification. Any other gate on a backlog task (a question, a failure, setup to fix) reaches you as usual. A task
+  triage makes an inquiry leaves the backlog at once (`cause: inquiry`, "Started at once: questions, research and
+  investigations never wait in the backlog"). A backlog task can still wait on other tasks; it plans once they finish.
+- **Taking it out.** `task.remove_from_backlog` (Back to Needs you, `shinsa tasks remove-from-backlog`) clears it,
+  and its plan waits in Needs you as a plan to approve ("plan ready for you").
+- **Starting.** Approving the held plan (Start building, or Start the operation for an operation) is the start: the
+  task goes back to triage, `worktree.create` resets its worktree onto the freshly fetched default branch (planning
+  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingFromBacklog`,
+  `buildFromBacklog`) with `cause: started`. The first build prompt says how long the plan waited and that the
+  worktree now holds the latest default branch, and asks the Agent to check the plan still fits the code before it
+  builds (`resolveBacklogStart`). A task without a worktree starts building at once. A task that still waits on another
+  waits for it first, then builds without planning again.
+- **On your behalf.** Both moves are management commands an agent may send for you; the activity reads "Moved
+  ‹task› to the backlog" or "out of the backlog". Starting is a plan approval, which only you make.
+
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
@@ -1105,7 +1145,8 @@ no way to push without the hook; Pushing the branch, below). `configuration` mea
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
-first or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
+first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
+or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
@@ -1664,7 +1705,7 @@ checks it ran.
   open task, or one repeated in the call is dropped; a call that would leave more than ten open
   suggestions on the task is refused. Suggestions never start anything.
 - Accepting (`suggestion.accept`, `shinsa suggestions accept`) creates the task in the same repository, waiting on
-  this one when `waitsOnThis` is set, and links it; dismissing keeps it out of the way. A settled task keeps its
+  this one when `waitsOnThis` is set, or in the backlog when `backlog` is (Scheduling → The backlog), and links it; dismissing keeps it out of the way. A settled task keeps its
   suggested tasks so you can still accept them. On screen they are "Suggested tasks" ("Add the suggested task
   “‹title›”", "Dismiss the suggested task"). A follow-up is something else: a message to a finished answer,
   investigation or report.
@@ -1961,7 +2002,9 @@ and the run supervisor.
   repositories), with `this_task_waits` making this task wait on it (a blocker, not just a parent link; only an Agent
   run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
   task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
-  as Shinsa's); setting both is refused (`dependency_cycle`). It is exactly-once per `client_request_id`.
+  as Shinsa's); setting both is refused (`dependency_cycle`). `backlog` files it for the backlog (Scheduling → The
+  backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
+  exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command

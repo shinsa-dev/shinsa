@@ -983,7 +983,7 @@ Only these, and they win over anything below:
 
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
-    approve, Needs your answer, Paused, In progress, Waiting on another task, Done and Cancelled
+    approve, Needs your answer, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
     (both collapsed). Each section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
@@ -1008,9 +1008,24 @@ Only these, and they win over anything below:
       purple): a proposed change decides what gets built, like a plan, but it is not a plan yet.
     - **Operation to confirm** follows it (`IconConsole`, purple): a merged change whose operation waits for your
       OK on the merged code.
-17. **New tasks can wait.** Home's composer has a When to start select beside priority: Start now,
-    or "After ‹task›" for each open task of the project the composer shows. Picking one sends `waitsOn` with `task.create` and the
-    button reads Add instead of Start.
+    - **Backlog** comes after Waiting on another task (`IconArchive`, neutral, open): every task kept for later
+      (`Task.backlog`), planning or with its plan held (`isHeldInBacklog`). A held plan never reads as Plan to
+      approve: its status label and glyph are the Backlog group's (`resolveTaskStatus`, `resolveTaskMenuIcon`). Any
+      other gate on a backlog task (a question, a failure) sorts it by that gate, as on any task.
+    - **The backlog plan card.** A backlog task's plan on its Overview reads "Planned and kept in the backlog", with
+      Start building (Start the operation for an operation; the plan's approve, `startBacklog` in
+      `lib/tasks/gates.ts`) and Back to Needs you, and the note "Starting moves the worktree onto the latest default
+      branch first." (`describePlanCard` in `lib/tasks/backlog.ts`). A task's menu, its row's menu and ⌘K offer
+      Move to the backlog while `resolveBacklogRefusal` (core) allows it, and Back to Needs you on a backlog task
+      (`lib/tasks/actions.ts`). Accepting a suggested task offers Backlog beside Start now and After this task.
+17. **New tasks can wait.** Home's composer has a When to start select beside priority with four items, each with a
+    hint line (`listNewTaskStarts` in `lib/new-task.ts`): Auto start ("Now, or after work it builds on"), Start now
+    ("Now, even if related work is open"), After another task… ("When the tasks you pick finish") and Backlog ("Plans
+    now, builds when you start it", `IconArchive`). After another task… opens a popover beside the select with a
+    searchable list (`Command`) of every open task in any project, each row with its handle; you pick one or several
+    and the select reads "After ‹title›" or "After ‹title› and 2 more" (`describeAfterLabel`); it is disabled with
+    no open task. After sends `waitsOn` with `task.create`, Backlog sends `backlog: true`, and the button reads Add
+    instead of Start for either (`describeNewTask`).
     - **Auto is the default.** The composer's selects, in order Project, When to start and Priority, start on what
       Shinsa would pick. Project shows the focus project ("No project" without a focus) with its dot, then every
       project by name and No project; picking one sends `projectId` (`null` for No project), leaving it sends

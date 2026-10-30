@@ -83,8 +83,8 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
   phases or 6 files stops at the plan gate, judged from the plan itself rather than from the request, and so
   does any plan the agent revised. Always: every plan stops there. A task you ask for plan first
   (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
-  that runs an operation or a plan that asks for your approval, whatever the setting says (`docs/engine.md` → A
-  task's path).
+  in the backlog, a task that runs an operation or a plan that asks for your approval, whatever the setting says
+  (`docs/engine.md` → A task's path).
 - **Self-check** is everything that can be verified before you look: the checks the agent chose for the
   task, which Shinsa runs after each phase (a test file or folder, one package's type check, the linter on
   the changed paths; never the whole suite, which CI runs on the pull request), a review pass against the
@@ -267,10 +267,17 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
 - **All tasks.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
-  that handle several parents), then done and cancelled, collapsed. Priority then age
+  that handle several parents), the backlog, then done and cancelled, collapsed. Priority then age
   inside each section. This is the page to open each day and work down. A task can be told to
-  wait for others from here, from the task page and from ⌘K, and the new-task box can start a
-  request "after ‹task›".
+  wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
+  Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
+- **The backlog.** Work you want written down and planned now, but built later, waits in the backlog. It is
+  triaged (a clean title, the repository, the kind of task, a priority) and planned, which costs a small share of a
+  task, and then stops: its plan stays out of Needs you, the queue, the guide and the Dock badge, and shows in the
+  Backlog group of All tasks. Start building approves the plan, moves its worktree onto the latest default branch
+  and builds; Back to Needs you makes it a plan to approve. You put work there yourself (When to start → Backlog,
+  Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
+  Shinsa never decides it for you. Questions, research and investigations never wait there.
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and
@@ -988,6 +995,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **The pattern check.** The reviewer reads new code against the code around it: a helper re-implemented, or a new way
   of doing what the repository does one way, is a finding, blocking when the repository's rules name the pattern.
   This is the validation harness for now; a rule engine for patterns waits until a project needs one.
+
+### The backlog (2026-10-30)
+
+- **Planned now, built later.** "Everything starts" stays the rule, but usage is finite, so work you choose can wait
+  in the backlog after its plan: triage and planning are a small share of a task (about 4% of a measured log's
+  usage), building, checks, fixes and review the rest. It is manual only: triage never puts work there, and nothing
+  starts from it on its own; scheduling from a usage estimate waits for its own design.
+- **When to start has four choices**: Auto start, Start now, After another task… (now every open task, searchable,
+  several at once, whatever project the box shows) and Backlog.
+- **No roadmap.** The word named nothing Shinsa has; the page is All tasks, its sections are task groups, and the
+  backlog is the closest thing to a roadmap there is.
 
 ## 11. Open questions
 

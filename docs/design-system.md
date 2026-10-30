@@ -7073,7 +7073,8 @@ with a sticky header.
 
 - Order the sections by what needs the user first, finished work last. Shinsa's order: Ready to merge, Changes to
   review, Plan to approve, Change to approve, Operation to confirm, Needs your answer, Paused, In progress, Waiting
-  on another task, Done, Cancelled. Done and Cancelled start collapsed.
+  on another task, Backlog, Done, Cancelled. Done and Cancelled start collapsed. Work the user kept for later (a
+  backlog) sits after everything in motion and before finished work, and never reads as a decision.
 - A new kind of decision gets its own section, placed by what it decides, not merged into the nearest one (a
   proposed change decides what gets built, like a plan, but is not a plan yet, so it sits right after Plan to
   approve with its own icon and tone).
