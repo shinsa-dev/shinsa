@@ -4,10 +4,14 @@
  * padding, so each one is scaled so its glyph spans about 17 of the 24 units,
  * the optical size of a Central icon. Brand marks keep the brand's own artwork;
  * the priority glyphs, the search toggles (whole word, regular expression) and the
- * language marks Central lacks (Python, Go, Docker, a database) are drawn here.
+ * language marks Central lacks (Python, Go, Docker, a database) are drawn here, and
+ * the cancel mark: an X on the small check's footprint and stroke, so a cancelled
+ * step reads as the check's twin.
  * Referenced names are emitted into `paths.ts` by the generator.
  */
 export const CUSTOM_ICON_PATHS: Record<string, string> = {
+  IconCancelMark:
+    '<path d="M8 8L16 16M16 8L8 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   IconBuzzkit:
     '<g transform="scale(0.75)" fill="currentColor"><path d="M16 3.5c-4.97 0-8.5 3.8-8.5 8.75v4.1c0 1.1-.38 2.17-1.08 3.02l-1.5 1.83c-.9 1.1-.12 2.8 1.3 2.8h19.56c1.42 0 2.2-1.7 1.3-2.8l-1.5-1.83a4.77 4.77 0 0 1-1.08-3.02v-4.1C24.5 7.3 20.97 3.5 16 3.5Z"/><path d="M12.5 26.5a3.5 3.5 0 0 0 7 0h-7Z"/><path opacity="0.35" d="M26.75 6.25a1 1 0 0 1 1.4-.2 11.4 11.4 0 0 1 3.2 5.2 1 1 0 0 1-1.92.56 9.4 9.4 0 0 0-2.5-4.16 1 1 0 0 1-.18-1.4ZM5.25 6.25a1 1 0 0 0-1.4-.2 11.4 11.4 0 0 0-3.2 5.2 1 1 0 0 0 1.92.56 9.4 9.4 0 0 1 2.5-4.16 1 1 0 0 0 .18-1.4Z"/></g>',
   IconApple:

@@ -40,12 +40,7 @@ function StepMark({ status }: { status: StepStatus }) {
   if (status === 'cancelled') {
     return (
       <span className='grid size-4 shrink-0 place-items-center rounded-full bg-bg-a3'>
-        <Icon
-          size='sm'
-          name='IconCrossSmall'
-          ariaLabel={STEP_STATUS_LABEL.cancelled}
-          className='scale-70 text-fg-3'
-        />
+        <Icon size='sm' name='IconCancelMark' ariaLabel={STEP_STATUS_LABEL.cancelled} className='text-fg-3' />
       </span>
     );
   }

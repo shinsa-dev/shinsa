@@ -39,6 +39,7 @@ export const ICON_NAMES = [
   'IconCalendarClock',
   'IconCalenderSparkle',
   'IconCamera1',
+  'IconCancelMark',
   'IconChart3',
   'IconCheckCircle2',
   'IconCheckCircle2Filled',
@@ -383,6 +384,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconCamera1: {
     '3': '<g><path d="M3 17V9.93125C3 8.31236 4.31236 7 5.93125 7C6.91132 7 7.82654 6.51019 8.37019 5.69472L8.6094 5.3359C9.1658 4.5013 10.1025 4 11.1056 4H12.8944C13.8975 4 14.8342 4.5013 15.3906 5.3359L15.6298 5.69472C16.1735 6.51019 17.0887 7 18.0688 7C19.6876 7 21 8.31236 21 9.93124V17C21 18.6569 19.6569 20 18 20H6C4.34315 20 3 18.6569 3 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/><path d="M15 13C15 14.6569 13.6569 16 12 16C10.3431 16 9 14.6569 9 13C9 11.3431 10.3431 10 12 10C13.6569 10 15 11.3431 15 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/></g>',
+  },
+  IconCancelMark: {
+    '3': '<path d="M8 8L16 16M16 8L8 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   },
   IconChart3: {
     '3': '<g><path d="M5.665 13.7773C4.74545 13.7773 4 14.5228 4 15.4423V18.3346C4 19.2541 4.74545 19.9996 5.665 19.9996C6.58455 19.9996 7.33 19.2541 7.33 18.3346V15.4423C7.33 14.5228 6.58455 13.7773 5.665 13.7773Z" stroke="currentColor" stroke-width="2" stroke-linecap="square"/><path d="M11.995 9.33398C11.0755 9.33398 10.33 10.0794 10.33 10.999V18.3357C10.33 19.2552 11.0755 20.0007 11.995 20.0007C12.9146 20.0007 13.66 19.2552 13.66 18.3356V10.999C13.66 10.0794 12.9146 9.33398 11.995 9.33398Z" stroke="currentColor" stroke-width="2" stroke-linecap="square"/><path d="M18.335 4C17.4154 4 16.67 4.74545 16.67 5.665V18.335C16.67 19.2546 17.4154 20 18.335 20C19.2546 20 20 19.2546 20 18.335V5.665C20 4.74545 19.2546 4 18.335 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="square"/></g>',
