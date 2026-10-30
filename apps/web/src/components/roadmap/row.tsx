@@ -22,6 +22,7 @@ import { useMachine } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
+import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
@@ -94,7 +95,7 @@ function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
           {project && machine && ' '}
           {machine && (
             <>
-              {machine.name} <TooltipLabel>Machine</TooltipLabel>
+              {resolveMachineLabel(machine)} <TooltipLabel>machine</TooltipLabel>
             </>
           )}
         </span>

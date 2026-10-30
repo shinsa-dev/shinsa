@@ -6,23 +6,23 @@ import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { type EnrollInput, enrollDevice } from '@/lib/remote/enroll.ts';
-import { clearEnrollFragment } from '@/lib/remote/mode.ts';
-import { RemoteHero } from './shell.tsx';
+import { clearEnrollFragment, MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { RemoteBenefits, RemoteHero } from './shell.tsx';
 
 const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [
   {
     icon: 'IconKey1',
-    title: 'A key made for this browser',
+    title: 'A key made for this device',
     detail: 'It stays on this device and cannot be copied out of it.',
   },
   {
     icon: 'IconShieldCheck',
     title: 'Encrypted end to end',
-    detail: 'Only this browser and your machine can read what passes between them.',
+    detail: 'Only this device and your machine can read what passes between them.',
   },
   {
     icon: 'IconLock',
-    title: 'Once per browser',
+    title: 'Once per device',
     detail: 'After this, signing in with GitHub is all it takes.',
   },
 ];
@@ -48,10 +48,11 @@ export function EnrollPage({
   if (!link)
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
-        <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a browser'>
+        <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a device'>
           It is incomplete or was already used. On your machine, open Settings, Remote access and choose Add
-          browser for a new one.
+          device for a new one.
         </RemoteHero>
+        <RemoteBenefits />
         <Button
           className='w-full'
           variant='secondary'
@@ -64,8 +65,8 @@ export function EnrollPage({
     );
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconServer' title='Add this browser to your machine'>
-        Once it is added, this browser opens Shinsa on your machine from anywhere.
+      <RemoteHero icon={MACHINE_ICON} title='Add this device to your machine'>
+        Once it is added, this device opens Shinsa on your machine from anywhere.
       </RemoteHero>
       <SettingsCard className='w-full'>
         {ENROLL_POINTS.map((point) => (
@@ -98,7 +99,7 @@ export function EnrollPage({
             );
           }}
         >
-          Add this browser
+          Add this device
         </Button>
         <p className='text-2xs text-fg-2'>
           Machine key: <span className='font-mono'>{fingerprint ?? '…'}</span>

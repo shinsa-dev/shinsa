@@ -11,6 +11,7 @@ import {
   listTaskCapacityItems,
   parseTaskCapacity,
   resolveTaskCapacityValue,
+  serializePlacementRules,
 } from '@/lib/remote/machines.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
@@ -33,11 +34,16 @@ describe('a machine in the dashboard', () => {
   it('says whether it is online and whether this browser has it in its dashboard', async () => {
     const device = await createDevice('key');
     expect(describeMachine(STUDIO, device, NOW)).toMatchObject({
+      label: 'Studio',
       status: 'Online',
       access: 'In this dashboard',
       device,
     });
-    expect(describeMachine(STUDIO, null, NOW).access).toBe('Not added in this browser');
+    expect(describeMachine(STUDIO, null, NOW).access).toBe('Not added on this device');
+    expect(describeMachine(STUDIO, { ...device, onMachine: true }, NOW)).toMatchObject({
+      label: 'This machine',
+      access: 'Studio · In this dashboard',
+    });
   });
 
   it('says when it was last seen, or that it never connected', () => {
@@ -115,5 +121,7 @@ describe('a machine’s task capacity', () => {
     expect(resolveTaskCapacityValue(8)).toBe('8');
     expect(parseTaskCapacity('none')).toBeNull();
     expect(parseTaskCapacity('8')).toBe(8);
+    expect(serializePlacementRules(['iOS', 'benchmark'])).toBe('iOS, benchmark');
+    expect(serializePlacementRules(undefined)).toBe('');
   });
 });

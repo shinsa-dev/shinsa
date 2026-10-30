@@ -44,6 +44,7 @@ import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
+import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
@@ -101,8 +102,8 @@ function MachineFact({ task }: { task: Task }) {
   return (
     <Hint label='The machine this task runs on'>
       <span className={FACT}>
-        <Icon size='sm' name='IconServer' />
-        <span className='truncate'>{machine.name}</span>
+        <Icon size='sm' name={MACHINE_ICON} />
+        <span className='truncate'>{resolveMachineLabel(machine)}</span>
       </span>
     </Hint>
   );
@@ -508,7 +509,6 @@ export function TaskFacts({
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
-      <MachineFact task={task} />
       <RoundFact task={task} />
       <StatusFact state={state} task={task} />
       <RepoFact state={state} task={task} />
@@ -516,6 +516,7 @@ export function TaskFacts({
       <PullRequestFact state={state} task={task} />
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
+      <MachineFact task={task} />
       <TaskServicesFact state={state} task={task} />
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />

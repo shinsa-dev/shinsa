@@ -5,10 +5,12 @@ import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Logo } from '@shinsa/ui/components/logo';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { TONE_SURFACE, type Tone } from '@/lib/format/tone.ts';
 import { type DashboardClient, describeSignInError, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
+import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 
 export function RemoteShell({
   session,
@@ -57,19 +59,19 @@ export function RemoteLoading({ label }: { label: string }) {
 
 const SIGN_IN_POINTS: { icon: IconName; title: string; detail: string }[] = [
   {
-    icon: 'IconServer',
+    icon: MACHINE_ICON,
     title: 'Every machine in one place',
     detail: 'Each machine you turn remote access on for shows up here, with all its tasks.',
   },
   {
     icon: 'IconShieldCheck',
     title: 'Encrypted end to end',
-    detail: 'Only your machine and the browsers you add on it can read your work.',
+    detail: 'Only your machine and the devices you add on it can read your work.',
   },
   {
     icon: 'IconKey1',
-    title: 'Added once per browser',
-    detail: 'The first time, your machine gives this browser its own key.',
+    title: 'Added once per device',
+    detail: 'The first time, your machine gives this device its own key.',
   },
 ];
 
@@ -86,6 +88,28 @@ export function RemoteBenefits() {
         </div>
       ))}
     </SettingsCard>
+  );
+}
+
+export function RemoteSteps({ title, steps }: { title: string; steps: string[] }) {
+  return (
+    <SettingsCard className='w-full'>
+      <span className='px-2.5 pt-2 pb-1 text-2xs text-fg-2'>{title}</span>
+      {steps.map((step, index) => (
+        <div key={step} className='flex items-start gap-3 px-2.5 py-1.5'>
+          <StepNumber index={index} />
+          <span className='text-pretty pt-px text-fg-4 text-xs'>{step}</span>
+        </div>
+      ))}
+    </SettingsCard>
+  );
+}
+
+export function RemoteCheckAgain({ label = 'Check again' }: { label?: string }) {
+  return (
+    <Button className='w-full' onClick={() => location.reload()}>
+      {label}
+    </Button>
   );
 }
 

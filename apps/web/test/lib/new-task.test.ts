@@ -184,29 +184,55 @@ function createMachine(id: string, open: number, capacity: number | null, projec
 }
 
 describe('the machine a new task runs on', () => {
-  const studio = createMachine('studio', 3, 4, ['p1']);
-  const box = createMachine('box', 1, null);
+  const studio = { ...createMachine('studio', 3, 4, ['p1']), current: true };
+  const box = { ...createMachine('box', 1, null), current: false };
+  const ruled = {
+    ...box,
+    state: { ...box.state, settings: { taskCapacity: null, placementRules: ['benchmark'] } },
+  };
+  const auto = { machine: 'auto', project: 'auto' } as const;
 
-  it('picks nothing with one machine, the project’s machine for a project, and the one with room otherwise', () => {
-    expect(resolveNewTaskMachine([studio], 'auto', 'p1')).toBeNull();
-    expect(resolveNewTaskMachine([studio, box], 'auto', 'p1')).toBe('studio');
-    expect(resolveNewTaskMachine([studio, box], 'auto', NO_PROJECT)).toBe('box');
-    expect(resolveNewTaskMachine([studio, box], 'studio', NO_PROJECT)).toBe('studio');
-    expect(resolveNewTaskMachine([studio, box], 'gone', NO_PROJECT)).toBe('box');
+  it('picks nothing with one machine, the project you pick, a rule, then the focus project or the most room', () => {
+    expect(resolveNewTaskMachine([studio], auto, 'p1', '')).toBeNull();
+    expect(resolveNewTaskMachine([studio, box], auto, 'p1', '')).toEqual({ id: 'studio', rule: null });
+    expect(resolveNewTaskMachine([studio, box], auto, NO_PROJECT, '')).toEqual({ id: 'box', rule: null });
+    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'studio' }, NO_PROJECT, '')).toEqual({
+      id: 'studio',
+      rule: null,
+    });
+    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'gone' }, NO_PROJECT, '')).toEqual({
+      id: 'box',
+      rule: null,
+    });
+    expect(resolveNewTaskMachine([studio, ruled], auto, 'p1', 'Run the benchmark')).toEqual({
+      id: 'box',
+      rule: 'benchmark',
+    });
+    expect(resolveNewTaskMachine([studio, ruled], { ...auto, project: 'p1' }, 'p1', 'benchmark')).toEqual({
+      id: 'studio',
+      rule: null,
+    });
+    expect(
+      resolveNewTaskMachine([studio, ruled], { ...auto, project: NO_PROJECT }, NO_PROJECT, 'benchmark')
+    ).toEqual({
+      id: 'box',
+      rule: 'benchmark',
+    });
+    expect(resolveNewTaskMachine([], { ...auto, machine: 'x' }, NO_PROJECT, '')).toBeNull();
   });
 
-  it('lists Automatic with the machine it chose, then each machine with its load', () => {
-    expect(listNewTaskMachines([studio, box], 'box')).toEqual([
-      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle' },
-      { value: 'studio', label: 'Studio', icon: 'IconServer', hint: '3 of 4 open tasks' },
-      { value: 'box', label: 'Build box', icon: 'IconServer', hint: '1 open task' },
+  it('lists Automatic with the machine it chose and why, then each machine with its load, this one by that name', () => {
+    expect(listNewTaskMachines([studio, box], { id: 'box', rule: 'benchmark' })).toEqual([
+      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle', hint: 'for “benchmark”' },
+      { value: 'studio', label: 'This machine', icon: 'IconMacbookRemote', hint: '3 of 4 open tasks' },
+      { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
     ]);
     expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
     expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');
   });
 
-  it('offers only the projects of a machine you picked', () => {
-    expect(isProjectOnMachine([studio, box], 'auto', 'p1')).toBe(true);
+  it('offers only the projects of the machine a task goes to', () => {
+    expect(isProjectOnMachine([studio, box], null, 'p1')).toBe(true);
     expect(isProjectOnMachine([studio, box], 'studio', 'p1')).toBe(true);
     expect(isProjectOnMachine([studio, box], 'box', 'p1')).toBe(false);
     expect(isProjectOnMachine([studio, box], 'box', NO_PROJECT)).toBe(true);

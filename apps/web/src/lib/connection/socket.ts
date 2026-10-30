@@ -40,6 +40,11 @@ type Scheduler = (flush: () => void) => void;
 export interface MachineView {
   id: string;
   name: string;
+  current: boolean;
+}
+
+export interface MachineChoice extends PlacementMachine {
+  current: boolean;
 }
 
 export interface ShinsaConnection {
@@ -58,7 +63,7 @@ export interface ShinsaConnection {
   selectTerminals: () => TerminalsSnapshot | null;
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
   selectMachine: (id: string) => MachineView | null;
-  listMachines: () => PlacementMachine[];
+  listMachines: () => MachineChoice[];
   command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
   flush: () => void;
@@ -79,7 +84,7 @@ const HIDDEN_FRAME_MS = 32;
 
 export const NO_ENTRIES: ChatEntry[] = [];
 
-export const NO_MACHINES: PlacementMachine[] = [];
+export const NO_MACHINES: MachineChoice[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
@@ -193,7 +198,7 @@ export class Connection implements ShinsaConnection {
 
   selectMachine = (_id: string): MachineView | null => null;
 
-  listMachines = (): PlacementMachine[] => NO_MACHINES;
+  listMachines = (): MachineChoice[] => NO_MACHINES;
 
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;

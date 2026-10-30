@@ -4,7 +4,8 @@ import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import { RemoteHero, RemoteLoading } from './shell.tsx';
+import { MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
 type PairState =
   | { kind: 'loading' }
@@ -38,15 +39,25 @@ export function PairPage({
         <RemoteHero icon='IconCircleX' tone='red' title='This machine cannot be paired'>
           {state.message}
         </RemoteHero>
+        <RemoteBenefits />
+        <Button
+          className='w-full'
+          variant='secondary'
+          nativeButton={false}
+          render={<a href={REMOTE_PATHS.app} />}
+        >
+          Open Shinsa
+        </Button>
       </section>
     );
   if (state.kind === 'approved')
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCheckCircle2' tone='blue' title={`${state.name} is paired`}>
-          Your machine finishes setting up in a few seconds. To use it from this browser, add the browser on
-          the machine: Settings, Remote access, Add browser.
+          It finishes setting up in a few seconds. To use it from this device, add the device on the machine:
+          Settings, Remote access, Add device.
         </RemoteHero>
+        <RemoteBenefits />
         <Button className='w-full' nativeButton={false} render={<a href={REMOTE_PATHS.app} />}>
           Open Shinsa
         </Button>
@@ -55,7 +66,7 @@ export function PairPage({
   const { view } = state;
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconServer' title={`Pair ${view.name} with your account`}>
+      <RemoteHero icon={MACHINE_ICON} title={`Pair ${view.name} with your account`}>
         Approve only if you just turned on remote access on this machine yourself.
       </RemoteHero>
       <SettingsCard className='w-full'>

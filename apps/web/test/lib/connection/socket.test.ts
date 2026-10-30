@@ -698,8 +698,10 @@ describe('the shared connection', () => {
 
   it('uses the connection a remote page put in place, with the machine of each task, until it is taken away', () => {
     const local = connection;
-    const machine = { id: 'm2', name: 'Laptop' };
-    const machines = [{ id: 'm2', name: 'Laptop', state: { tasks: {}, projects: {}, settings: {} } }];
+    const machine = { id: 'm2', name: 'Laptop', current: false };
+    const machines = [
+      { id: 'm2', name: 'Laptop', current: false, state: { tasks: {}, projects: {}, settings: {} } },
+    ];
     expect(renderHook(() => useMachines()).result.current).toEqual([]);
     const fleet = {
       ...local,

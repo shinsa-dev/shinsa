@@ -1,6 +1,7 @@
-import type { PlacementMachine, UserCommand, WireState } from '@shinsa/core';
+import type { UserCommand, WireState } from '@shinsa/core';
 import {
   type ConnectionStatus,
+  type MachineChoice,
   type MachineView,
   NO_ENTRIES,
   NO_MACHINES,
@@ -13,6 +14,7 @@ import { replaceSharedHandles } from '@/router.ts';
 export interface FleetMember {
   id: string;
   name: string;
+  current?: boolean;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
 }
@@ -132,7 +134,7 @@ export class Fleet implements ShinsaConnection {
   #inputs: Snapshot[] = [];
   #snapshot: Snapshot = { state: null, status: 'closed' };
   #owners: ReadonlyMap<string, string> = EMPTY_OWNERS;
-  #machines: PlacementMachine[] = NO_MACHINES;
+  #machines: MachineChoice[] = NO_MACHINES;
   readonly #state = createSignal();
   readonly #transcripts = createSignal();
   readonly #accounts = createSignal();
@@ -151,7 +153,7 @@ export class Fleet implements ShinsaConnection {
     const { connection } = member;
     this.#entries.push({
       member,
-      view: { id: member.id, name: member.name },
+      view: { id: member.id, name: member.name, current: member.current === true },
       release: [
         connection.subscribe(() => this.#state.publish()),
         connection.subscribeTranscripts(() => this.#transcripts.publish()),
@@ -180,10 +182,6 @@ export class Fleet implements ShinsaConnection {
     return this.#owners.get(id) ?? null;
   }
 
-  #nameOf(machineId: string) {
-    return this.#entries.find((entry) => entry.member.id === machineId)?.member.name ?? machineId;
-  }
-
   #memberOf(machineId: string | null) {
     const found = machineId ? this.#entries.find((entry) => entry.member.id === machineId) : undefined;
     return found?.member ?? this.#entries[0]?.member ?? null;
@@ -205,13 +203,13 @@ export class Fleet implements ShinsaConnection {
     this.#inputs = inputs;
     const parts = this.#entries.flatMap((entry, index) => {
       const state = inputs[index]?.state;
-      return state ? [{ id: entry.member.id, state }] : [];
+      return state ? [{ id: entry.member.id, state, view: entry.view }] : [];
     });
     const merged = mergeFleetStates(parts);
     this.#machines =
       parts.length < 2
         ? NO_MACHINES
-        : parts.map((part) => ({ id: part.id, name: this.#nameOf(part.id), state: part.state }));
+        : parts.map((part) => ({ ...part.view, state: part.state }));
     this.#owners = merged?.owners ?? EMPTY_OWNERS;
     replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {

@@ -33,8 +33,9 @@ src/
 │   │                    in the remote build, a note that terminals stay on the machine)
 │   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
-│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this browser was added to joined
-│   │                    into one Fleet, the service worker, then the app; or every machine and how to add this browser)
+│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
+│   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
+│   │                    device, the benefits card and Check again)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -129,12 +130,12 @@ src/
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
-    │                    scope, the enrollment link kept through sign-in), dashboard.ts (app.shinsa.dev's
+    │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
     │                    machine owns each id, each machine's own state for placement (listMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
     │                    remote services and their context, for Settings → Machines),
-    │                    devices.ts and indexed-store.ts (this browser's key per machine, in IndexedDB),
+    │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),

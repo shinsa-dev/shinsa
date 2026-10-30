@@ -89,7 +89,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'enroll'],
-    summary: 'Make a one-time link that adds a phone or browser to this machine.',
+    summary: 'Make a one-time link that adds a device, a browser or a phone, to this machine.',
     humanOnly: true,
     fields: [
       {

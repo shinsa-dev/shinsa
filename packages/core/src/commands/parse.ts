@@ -324,6 +324,7 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
   if ('taskCapacity' in fields) patch.taskCapacity = readNullableInteger(fields, 'taskCapacity');
+  if ('placementRules' in fields) patch.placementRules = readList(fields, 'placementRules', readText);
   if ('approvePlans' in fields) patch.approvePlans = readBoolean(fields, 'approvePlans');
   if ('agentModels' in fields) patch.agentModels = readRoleIds(fields.agentModels, 'agentModels');
   if ('agentProviders' in fields) {

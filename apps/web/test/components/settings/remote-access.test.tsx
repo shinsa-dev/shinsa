@@ -4,6 +4,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
+import { resolveOnMachineUrl } from '@/lib/remote/mode.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 
 const ENROLL_URL = 'https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1';
@@ -46,7 +47,7 @@ describe('Settings → Remote access', () => {
 
   it('turns remote access on from the Off state', async () => {
     const actions = renderGroup(createRemoteSnapshot({ paired: false, status: 'off', owner: null }));
-    expect(screen.queryByRole('button', { name: 'Add browser' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
     await waitFor(() => expect(actions.pair).toHaveBeenCalled());
   });
@@ -90,7 +91,7 @@ describe('Settings → Remote access', () => {
     renderGroup(createRemoteSnapshot({ status: 'revoked' }));
     expect(screen.getByText('Removed')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add browser' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
   });
 
   it('lists the devices and forgets one after a confirmation', async () => {
@@ -101,15 +102,15 @@ describe('Settings → Remote access', () => {
     );
     expect(screen.getByText('iPhone')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Forget' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Forget browser' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Forget device' }));
     await waitFor(() => expect(actions.forgetDevice).toHaveBeenCalledWith('dev-1'));
   });
 
   it('adds a device: names it, then shows its one-time link as a QR code', async () => {
     const actions = renderGroup(createRemoteSnapshot());
-    expect(screen.getByText('Phones and browsers that can reach Studio')).toBeTruthy();
+    expect(screen.getByText('Devices that can reach this machine')).toBeTruthy();
     expect(screen.getByText(/None yet/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Add browser' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add device' }));
     const make = await screen.findByRole('button', { name: 'Make link' });
     expect(make.hasAttribute('disabled')).toBe(true);
     fireEvent.change(screen.getByLabelText('Device name'), { target: { value: ' iPhone ' } });
@@ -118,6 +119,6 @@ describe('Settings → Remote access', () => {
     expect(actions.createEnrollment).toHaveBeenCalledWith('iPhone');
     expect(screen.getByText('Add iPhone')).toBeTruthy();
     expect(screen.getByText(ENROLL_URL)).toBeTruthy();
-    expect(screen.getByText('Add this browser').closest('a')?.getAttribute('href')).toBe(ENROLL_URL);
+    expect(screen.getByText('Add this device').closest('a')?.getAttribute('href')).toBe(resolveOnMachineUrl(ENROLL_URL));
   });
 });

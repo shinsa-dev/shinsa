@@ -2275,7 +2275,7 @@ tools and T3's MCP toolkits.
 
 ## Remote access
 
-Reaching this machine from any browser at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
+Reaching this machine from any device at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
 devices enrolled at the machine. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
 core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
 machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
@@ -2323,18 +2323,22 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
   `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
-- **Devices** (`Remote.createEnrollment`): Add browser, or `shinsa remote enroll <name>`, makes a one-time enrollment
+- **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
   secret for a named device (60 characters at most) and answers its link,
   `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>`; the device it enrolls takes that name. `shinsa
-  remote forget-device <key>` removes one.
+  remote forget-device <key>` removes one. A device is a browser or a phone, a way in that runs nothing; a machine
+  runs the engine.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
-  `lib/connection/remote-access.ts`): the machine's name and status (Off, Waiting for sign-in with the code and Open
+  `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used and Forget, and Add browser: you name the device, and the one-time link
-  shows as a QR code to scan with a phone, with Copy and Add this browser for the browser in front of you. It reads
+  added devices with when each was last used and Forget, and Add device: you name the device, and the one-time link
+  shows as a QR code to scan with a phone, with Copy and Add this device for the browser in front of you. That link
+  carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
+  is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
+  wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. It reads
   `GET /api/remote` when Settings opens and every 2 seconds while pairing or connecting. The remote build leaves the
   section out, since every change to it is refused from off the machine.
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
@@ -2370,21 +2374,28 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
-  its connection's retry opens a fresh channel with a new token. A machine that refuses this browser's key is forgotten
-  here and leaves the dashboard. A browser added to no machine yet shows every machine of the account with how to add it.
-  Settings → General → Machines lists every machine (online or last seen, in this dashboard or not) with Remove. The
+  its connection's retry opens a fresh channel with a new token. A machine that refuses this device's key is forgotten
+  here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
+  the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
+  work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
+  Settings → General → Machines lists every machine with its status beside its name (online or last seen), whether it is
+  in this dashboard, and Remove; machines in the dashboard also show their open tasks, their task capacity and their
+  placement rules. Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
   New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
-  Automatic follows two rules: a task in a project goes to the machine that holds the project (its repositories are on
-  that disk; `resolveProjectMachine`), and a task with no project goes to the machine with the most room
-  (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity passed over while another has
-  room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
+  disk; `resolveProjectMachine`); then a placement rule: a machine's `placementRules`, words or phrases such as
+  `iOS`, `simulator` or `benchmark`, take a request that names one as a whole word in any case (`resolveRuleMachine`,
+  the first machine with a match; New task shows the rule beside Automatic); then the focus project's machine; then
+  the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
+  passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
-  steers placement: a machine still runs a task you send it when full. The fleet sends `task.create` to the chosen
+  steers placement: a machine still runs a task you send it when full. Placement rules are each machine's own setting
+  too (`placementRules`, at most 20 of 1 to 40 characters), typed comma-separated in Settings → Machines. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already

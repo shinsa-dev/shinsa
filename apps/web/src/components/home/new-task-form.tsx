@@ -15,7 +15,7 @@ import { ProjectOption } from '@/components/status/project-dot.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { connection, useConnection, useMachines } from '@/lib/connection/socket.ts';
+import { connection, type MachineChoice, useConnection, useMachines } from '@/lib/connection/socket.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import {
   AUTO_CHOICES,
@@ -77,37 +77,50 @@ function ProjectField({
   );
 }
 
-function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices, machines: PlacementMachine[]) {
+function resolveForm(
+  state: ShinsaState | null,
+  chosen: NewTaskChoices,
+  machines: MachineChoice[],
+  request: string
+) {
   const picked = state ? resolveProjectChoice(state, chosen.project) : 'auto';
   const shown = state ? resolveShownProject(state, picked) : NO_PROJECT;
-  const fits = isProjectOnMachine(machines, chosen.machine, shown);
-  const project = fits ? picked : NO_PROJECT;
+  const placement = resolveNewTaskMachine(
+    machines,
+    { machine: chosen.machine, project: picked },
+    shown,
+    request
+  );
+  const fits = isProjectOnMachine(machines, placement?.id ?? null, shown);
+  const project = fits || picked === 'auto' ? picked : NO_PROJECT;
   const shownProject = fits ? shown : NO_PROJECT;
   const startItems = listNewTaskStarts(state ? listProjectTasks(state, shownProject) : []);
-  const machine = resolveNewTaskMachine(machines, chosen.machine, shownProject);
   const choices: NewTaskChoices = {
     ...chosen,
     project,
     start: startItems.some((item) => item.value === chosen.start) ? chosen.start : 'auto',
   };
-  return { choices, shownProject, startItems, machine };
+  return { choices, shownProject, startItems, placement };
 }
 
 export function NewTaskFields({
   state,
   chosen,
   machines,
+  request = '',
   onChoose,
 }: {
   state: ShinsaState | null;
   chosen: NewTaskChoices;
-  machines: PlacementMachine[];
+  machines: MachineChoice[];
+  request?: string;
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
-  const { choices, shownProject, startItems, machine } = resolveForm(state, chosen, machines);
+  const { choices, shownProject, startItems, placement } = resolveForm(state, chosen, machines, request);
+  const pickedMachine = choices.machine === 'auto' ? null : choices.machine;
   const projects = state
     ? listNewTaskProjects(state, connection.selectMachine).filter((item) =>
-        isProjectOnMachine(machines, choices.machine, item.value)
+        isProjectOnMachine(machines, pickedMachine, item.value)
       )
     : [];
   return (
@@ -118,7 +131,7 @@ export function NewTaskFields({
           size='sm'
           variant='ghost'
           align='start'
-          items={listNewTaskMachines(machines, machine)}
+          items={listNewTaskMachines(machines, placement)}
           value={choices.machine}
           onValueChange={(next) => onChoose({ machine: next })}
           className='min-w-0 max-w-56'
@@ -161,7 +174,7 @@ export function NewTaskForm() {
   const [chosen, setChosen] = React.useState<NewTaskChoices>(AUTO_CHOICES);
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
-  const { choices, machine } = resolveForm(state, chosen, machines);
+  const { choices, placement } = resolveForm(state, chosen, machines, request);
   const attachments = useAttachments();
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(request, attachments.drafts, busy);
@@ -183,7 +196,7 @@ export function NewTaskForm() {
     const sent = await sendCommandWithToast(
       createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
       copy.done,
-      machine
+      placement?.id ?? null
     );
     setBusy(false);
     if (!sent) return;
@@ -211,7 +224,13 @@ export function NewTaskForm() {
       />
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
         <AttachButton attachments={attachments} />
-        <NewTaskFields state={state} chosen={chosen} machines={machines} onChoose={choose} />
+        <NewTaskFields
+          state={state}
+          chosen={chosen}
+          machines={machines}
+          request={request}
+          onChoose={choose}
+        />
         <span className='flex-1' />
         <Button size='sm' disabled={!ready} loading={busy} onClick={() => void submit()}>
           {copy.submit}

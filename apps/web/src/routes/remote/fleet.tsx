@@ -1,11 +1,12 @@
+import { describeList } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { createFleetMember, listMachineRows } from '@/lib/remote/machines.ts';
-import { SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
+import { MACHINE_ICON, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
-import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
+import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
 type FleetState =
   | { kind: 'starting' }
@@ -13,22 +14,40 @@ type FleetState =
   | { kind: 'ready' }
   | { kind: 'failed'; title: string; message: string };
 
+const PAIR_STEPS = [
+  'Open Shinsa on the machine that runs it.',
+  'Go to Settings, Remote access and choose Turn on.',
+  'Sign in with GitHub and approve the code it shows. The machine shows up here.',
+];
+
+function listAddDeviceSteps(machines: string[]) {
+  return [
+    `On ${describeList(machines)}, open Settings, Remote access.`,
+    'Choose Add device and give this one a name.',
+    'Scan the QR code with this device, or open its link here.',
+  ];
+}
+
 function NoMachinePage({ machines }: { machines: string[] }) {
   if (machines.length === 0)
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
-        <RemoteHero icon='IconServer' title='No machine yet'>
-          Turn on remote access on the machine that runs Shinsa: Settings, Remote access, Turn on. It shows up
-          here once you approve it.
+        <RemoteHero icon={MACHINE_ICON} title='No machine yet'>
+          Turn on remote access on the machine that runs Shinsa. It shows up here once you approve it.
         </RemoteHero>
+        <RemoteSteps title='Pair a machine' steps={PAIR_STEPS} />
         <RemoteBenefits />
+        <RemoteCheckAgain />
       </section>
     );
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconKey1' title='Add this browser to your machine'>
-        {`${machines.join(', ')} ${machines.length === 1 ? 'is' : 'are'} paired, but this browser has no key for ${machines.length === 1 ? 'it' : 'them'} yet. On the machine, open Settings, Remote access, choose Add browser and open its link here.`}
+      <RemoteHero icon='IconKey1' title='Add this device to your machine'>
+        {`${describeList(machines)} ${machines.length === 1 ? 'is' : 'are'} paired, but this device has no key for ${machines.length === 1 ? 'it' : 'them'} yet.`}
       </RemoteHero>
+      <RemoteSteps title='Add this device' steps={listAddDeviceSteps(machines)} />
+      <RemoteBenefits />
+      <RemoteCheckAgain />
     </section>
   );
 }
@@ -67,8 +86,9 @@ export function FleetApp({
               if (fleet?.members.length === 0)
                 setState({
                   kind: 'failed',
-                  title: 'Your machines no longer accept this browser',
-                  message: 'Add it again from Settings, Remote access on a machine to use it here.',
+                  title: 'Your machines no longer accept this device',
+                  message:
+                    'Add it again from Settings, Remote access on a machine, with Add device, to use it here.',
                 });
             },
           })
@@ -87,7 +107,7 @@ export function FleetApp({
         if (live)
           setState({
             kind: 'failed',
-            title: 'This browser cannot reach your machines',
+            title: 'This device cannot reach your machines',
             message: `${(error as Error).message} Remote access needs a browser that runs service workers.`,
           });
       }
@@ -108,6 +128,8 @@ export function FleetApp({
           <RemoteHero icon='IconCircleX' tone='red' title={state.title}>
             {state.message}
           </RemoteHero>
+          <RemoteBenefits />
+          <RemoteCheckAgain label='Try again' />
         </section>
       );
     case 'ready':

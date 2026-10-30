@@ -204,10 +204,14 @@ function respondIndex(machines: Machine[]) {
   const links = [
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     ...machines.map((machine) => [
-      `Add this browser to ${machine.name} (a fresh one-time link)`,
+      `Add this device to ${machine.name} (a fresh one-time link)`,
       `/__preview/enroll/${machine.id}`,
     ]),
-    ['The merged dashboard of every machine this browser was added to', REMOTE_PATHS.app],
+    ...machines.map((machine) => [
+      `Add this device to ${machine.name} as the machine it sits on (it shows as This machine)`,
+      `/__preview/enroll/${machine.id}?on=machine`,
+    ]),
+    ['The merged dashboard of every machine this device was added to', REMOTE_PATHS.app],
     ['All tasks, each with its machine', '/tasks'],
     ['Settings, with Machines', '/settings'],
     ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
@@ -218,7 +222,7 @@ function respondIndex(machines: Machine[]) {
   ];
   const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this browser to each machine first, then open the dashboard.</p><ol>${items}</ol></body>`,
+    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first, then open the dashboard.</p><ol>${items}</ol></body>`,
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
 }
@@ -306,7 +310,8 @@ async function main() {
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {
         const enrollment = await enrolling.remote.createEnrollment('This browser');
-        return Response.redirect(enrollment.url, 302);
+        const onMachine = url.searchParams.has('on');
+        return Response.redirect(onMachine ? enrollment.url.replace('#', '?on=machine#') : enrollment.url, 302);
       }
       const tunnel = /^\/__preview\/tunnel\/([a-z]+)$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);

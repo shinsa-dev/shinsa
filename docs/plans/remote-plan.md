@@ -16,12 +16,14 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    machine its own subdomain (`‹sub›.kanna.sh`); Shinsa never does. A machine's tunnel host exists only as plumbing
    the browser connects to after sign-in, never as an address you type or share.
 2. **Machines are a first-class part of one dashboard.** There is nothing to open: the dashboard is the same whether
-   you have one machine or 20. It connects to every machine this browser was added to at once, each over its own sealed
+   you have one machine or 20. It connects to every machine this device was added to at once, each over its own sealed
    channel, merges their tasks, queue and gates into one view, and shows each task's machine on the task, as Kanna does.
-   A machine is a computer that runs the engine and the only place tasks run; a browser is only a way in. With two
-   machines or more, New task has a Machine picker: Automatic sends a task to the machine of its project, or with no
-   project to the one with the most room under its task capacity; picking one overrides it. Settings → Machines
-   lists every machine with its status, its open tasks, its task capacity and Remove.
+   A machine is a computer that runs the engine and the only place tasks run; a device (a browser or a phone) is only
+   a way in. With two machines or more, New task has a Machine picker: Automatic sends a task to the machine of the
+   project you picked, then to a machine whose placement rule (such as `iOS` or `benchmark`) the request names, then
+   to the one with the most room under its task capacity; picking one overrides it. Settings → Machines lists every
+   machine with its status, its open tasks, its task capacity, its placement rules and Remove. On the machine a
+   device was added from, the dashboard calls that machine This machine.
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
    that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
    instance belongs to one GitHub account and is never shared.
@@ -76,6 +78,6 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 - Push notifications on a phone, and a smaller phone surface.
 - Terminals over remote access.
 - Sharing an instance with another GitHub account.
-- Placement rules beyond the project and the task capacity: labels on a machine (macOS for simulators, a server for
-  benchmarks) that a project or a task asks for, and a machine's own engine on Linux and Windows.
+- Placement rules a project or a kind of task asks for (macOS for simulators) beyond words in the request, and a
+  machine's own engine on Linux and Windows.
 - Moving a task to another machine, and running one run of a task (a check, a delegation) on another machine.

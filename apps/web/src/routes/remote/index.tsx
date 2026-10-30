@@ -35,7 +35,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
   const [view] = React.useState(() => {
     const resolved = resolveRemoteView(location);
     if (resolved.kind === 'enroll' && location.hash) {
-      stashEnrollFragment(sessionStorage, location.hash);
+      stashEnrollFragment(sessionStorage, location.hash, location.search);
       history.replaceState(null, '', REMOTE_PATHS.enrollPage);
     }
     return resolved;

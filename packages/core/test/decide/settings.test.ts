@@ -383,6 +383,21 @@ describe('settings', () => {
     }
   });
 
+  test('placement rules are a short list of words or phrases', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { placementRules: ['iOS', 'benchmark'] } });
+    expect(harness.state.settings.placementRules).toEqual(['iOS', 'benchmark']);
+    for (const placementRules of [
+      [' '],
+      ['x'.repeat(41)],
+      Array.from({ length: 21 }, (_, index) => `w${index}`),
+    ]) {
+      expect(() => harness.send({ type: 'settings.change', patch: { placementRules } })).toThrow(
+        'Placement rules are up to 20 words or phrases of 1 to 40 characters each.'
+      );
+    }
+  });
+
   test('accounts switch at a whole percentage from 1 to 100', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { accountSwitchAt: 95 } });

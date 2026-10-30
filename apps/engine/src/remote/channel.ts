@@ -161,7 +161,7 @@ export class RemoteChannel {
     const redeemed =
       !enrolled && hello.enroll !== null && (await this.#host.redeemEnrollment(hello.enroll, keys));
     if (!(enrolled || redeemed)) {
-      this.#refuse('This browser is not enrolled on this machine. Add it from Settings on the machine.');
+      this.#refuse('This device is not enrolled on this machine. Add it from Settings on the machine.');
       return;
     }
     const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [

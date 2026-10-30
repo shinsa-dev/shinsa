@@ -135,12 +135,12 @@ describe('merging the state of several machines', () => {
     const { state } = fleet.snapshot();
     expect(Object.keys(state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
     expect(state?.seq).toBe(10);
-    expect(fleet.selectMachine('task-laptop')).toEqual({ id: 'm2', name: 'Laptop' });
-    expect(fleet.selectMachine('task-studio')).toEqual({ id: 'm1', name: 'Studio' });
+    expect(fleet.selectMachine('task-laptop')).toEqual({ id: 'm2', name: 'Laptop', current: false });
+    expect(fleet.selectMachine('task-studio')).toEqual({ id: 'm1', name: 'Studio', current: false });
     expect(fleet.selectMachine('nothing')).toBeNull();
     expect(fleet.members).toEqual([
-      { id: 'm1', name: 'Studio' },
-      { id: 'm2', name: 'Laptop' },
+      { id: 'm1', name: 'Studio', current: false },
+      { id: 'm2', name: 'Laptop', current: false },
     ]);
   });
 
@@ -274,7 +274,7 @@ describe('sending to the machine that owns it', () => {
     expect(laptop.connection.calls).toEqual(['start', 'flush', 'reset']);
     fleet.removeMember('m2');
     fleet.removeMember('m2');
-    expect(fleet.members).toEqual([{ id: 'm1', name: 'Studio' }]);
+    expect(fleet.members).toEqual([{ id: 'm1', name: 'Studio', current: false }]);
     expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
     fleet.close();
     expect(fleet.snapshot()).toEqual({ state: null, status: 'closed' });

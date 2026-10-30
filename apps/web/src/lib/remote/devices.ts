@@ -11,6 +11,7 @@ export interface EnrolledDevice {
   machineKey: string;
   keys: CryptoKeyPair;
   enrolledAt: number;
+  onMachine?: true;
 }
 
 const DEVICE_PREFIX = 'device:';

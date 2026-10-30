@@ -12,7 +12,7 @@ describe('enrolling this browser on a machine', () => {
     const mac = await FakeMac.create({ enrollSecret: SECRET });
     const written: EnrolledDevice[] = [];
     const device = await enrollDevice(
-      { instanceId: 'k3x9', machineKey: mac.machineKey, secret: SECRET },
+      { instanceId: 'k3x9', machineKey: mac.machineKey, secret: SECRET, onMachine: true },
       {
         dashboard: {
           requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
@@ -29,7 +29,12 @@ describe('enrolling this browser on a machine', () => {
       }
     );
     expect(written).toEqual([device]);
-    expect(device).toMatchObject({ instanceId: 'k3x9', machineKey: mac.machineKey, enrolledAt: 42 });
+    expect(device).toMatchObject({
+      instanceId: 'k3x9',
+      machineKey: mac.machineKey,
+      enrolledAt: 42,
+      onMachine: true,
+    });
     expect(mac.enrolled.has(await serializePublicKey(device.keys.publicKey))).toBe(true);
     expect(mac.last.closedWith?.code).toBe(1000);
   });
@@ -38,7 +43,12 @@ describe('enrolling this browser on a machine', () => {
     const mac = await FakeMac.create({ enrollSecret: SECRET });
     const written: EnrolledDevice[] = [];
     const enrolling = enrollDevice(
-      { instanceId: 'k3x9', machineKey: mac.machineKey, secret: serializeBase64Url(new Uint8Array(32)) },
+      {
+        instanceId: 'k3x9',
+        machineKey: mac.machineKey,
+        secret: serializeBase64Url(new Uint8Array(32)),
+        onMachine: false,
+      },
       {
         dashboard: { requestConnect: () => Promise.resolve({ url: 'wss://x', expiresAt: 0 }) },
         devices: {

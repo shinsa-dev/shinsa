@@ -119,7 +119,7 @@ describe('the remote dashboard', () => {
 
   it('asks to add this browser to the paired machines, or to pair one first', async () => {
     const { unmount } = renderRoot('/', { devices: createDevices() });
-    expect(await screen.findByText('Add this browser to your machine')).toBeTruthy();
+    expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
     expect(screen.getByText(/Studio is paired/)).toBeTruthy();
     expect(screen.queryByText('mona')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -135,7 +135,7 @@ describe('the remote dashboard', () => {
     const view = renderRoot('/tasks', { devices: createDevices(DEVICE) });
     expect(await screen.findByText('The app')).toBeTruthy();
     expect(connection).toBeInstanceOf(Fleet);
-    expect((connection as Fleet).members).toEqual([{ id: 'k3x9', name: 'Studio' }]);
+    expect((connection as Fleet).members).toEqual([{ id: 'k3x9', name: 'Studio', current: false }]);
     view.unmount();
     expect(connection).toBe(local);
     expect(local).toBeInstanceOf(Connection);
@@ -145,12 +145,12 @@ describe('the remote dashboard', () => {
     const worker = createWorker();
     Object.assign(worker, { register: () => Promise.reject(new Error('Service workers are off.')) });
     const { unmount } = renderRoot('/', { devices: createDevices(DEVICE), worker });
-    expect(await screen.findByText('This browser cannot reach your machines')).toBeTruthy();
+    expect(await screen.findByText('This device cannot reach your machines')).toBeTruthy();
     unmount();
     renderRoot('/', {
       dashboard: createDashboard({ listInstances: () => Promise.reject(new Error('Signed out.')) }),
     });
-    expect(await screen.findByText('This browser cannot reach your machines')).toBeTruthy();
+    expect(await screen.findByText('This device cannot reach your machines')).toBeTruthy();
   });
 
   it('keeps the enrollment link out of the address bar and out of the sign-in redirect', async () => {
@@ -168,7 +168,7 @@ describe('the remote dashboard', () => {
     expect(await screen.findByText('Pair Studio with your account')).toBeTruthy();
     unmount();
     renderRoot(`/enroll#k3x9.${MACHINE_KEY}.secret_1`);
-    expect(await screen.findByText('Add this browser to your machine')).toBeTruthy();
+    expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
   });
 });
 
@@ -258,7 +258,7 @@ describe('the pair page', () => {
 });
 
 describe('the enroll page', () => {
-  const link = { instanceId: 'k3x9', machineKey: MACHINE_KEY, secret: 'secret_1' };
+  const link = { instanceId: 'k3x9', machineKey: MACHINE_KEY, secret: 'secret_1', onMachine: false };
 
   it('adds this browser and opens the machine', async () => {
     sessionStorage.setItem('shinsa.remote.enroll', 'x');
@@ -270,7 +270,7 @@ describe('the enroll page', () => {
         enroll={() => Promise.resolve({} as EnrolledDevice)}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add this browser' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add this device' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     expect(sessionStorage.getItem('shinsa.remote.enroll')).toBeNull();
   });
@@ -284,12 +284,12 @@ describe('the enroll page', () => {
         enroll={() => Promise.reject(new Error('This browser is not enrolled on this machine.'))}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add this browser' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add this device' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
       'This browser is not enrolled on this machine.'
     );
     unmount();
     render(<EnrollPage link={null} dashboard={createDashboard()} devices={createDevices()} />);
-    expect(screen.getByText('This link cannot add a browser')).toBeTruthy();
+    expect(screen.getByText('This link cannot add a device')).toBeTruthy();
   });
 });

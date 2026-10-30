@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { PlacementMachine } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
-import { connection, replaceConnection } from '@/lib/connection/socket.ts';
+import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -74,8 +73,8 @@ afterEach(() => {
 function connectTwoMachines() {
   const local = connection;
   const sent: [string, string | null | undefined][] = [];
-  const studio = { id: 'studio', name: 'Studio' };
-  const machines: PlacementMachine[] = [
+  const studio = { id: 'studio', name: 'Studio', current: false };
+  const machines: MachineChoice[] = [
     {
       ...studio,
       state: {
@@ -84,7 +83,12 @@ function connectTwoMachines() {
         settings: { taskCapacity: 4 },
       },
     },
-    { id: 'box', name: 'Build box', state: { tasks: {}, projects: {}, settings: { taskCapacity: null } } },
+    {
+      id: 'box',
+      name: 'Build box',
+      current: false,
+      state: { tasks: {}, projects: {}, settings: { taskCapacity: null, placementRules: ['benchmark'] } },
+    },
   ];
   replaceConnection({
     ...local,

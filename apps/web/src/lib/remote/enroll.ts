@@ -6,6 +6,7 @@ export interface EnrollInput {
   instanceId: string;
   machineKey: string;
   secret: string;
+  onMachine: boolean;
 }
 
 export interface EnrollOptions {
@@ -31,6 +32,7 @@ export async function enrollDevice(input: EnrollInput, options: EnrollOptions): 
     machineKey: input.machineKey,
     keys,
     enrolledAt: (options.now ?? Date.now)(),
+    ...(input.onMachine ? { onMachine: true } : {}),
   };
   await options.devices.writeDevice(device);
   return device;

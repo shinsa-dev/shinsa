@@ -14,6 +14,7 @@ import {
   selectFolderProject,
   WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
+import { isPlacementRulesValid, PLACEMENT_RULE_LIMITS } from '../remote/placement.ts';
 import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -55,6 +56,13 @@ function assertSettings(patch: Partial<Settings>) {
     throw new DomainError(
       'settings_invalid',
       'Task capacity must be a whole number of 1 or more, or no limit.'
+    );
+  }
+  const rules = patch.placementRules;
+  if (rules && !isPlacementRulesValid(rules)) {
+    throw new DomainError(
+      'settings_invalid',
+      `Placement rules are up to ${PLACEMENT_RULE_LIMITS.count} words or phrases of 1 to ${PLACEMENT_RULE_LIMITS.length} characters each.`
     );
   }
   const switchAt = patch.accountSwitchAt;

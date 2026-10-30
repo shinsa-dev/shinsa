@@ -24,6 +24,7 @@ import {
   useRemoteAccess,
 } from '@/lib/connection/remote-access.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
 import {
   describeDeviceSeen,
   describeEnrollmentExpiry,
@@ -34,7 +35,7 @@ import {
 import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 const DESCRIPTION =
-  'Reach this machine from any browser at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each browser or phone is added here once.';
+  'Reach this machine from any device at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once.';
 
 function QrCode({ text }: { text: string }) {
   const image = React.useMemo(() => resolveQrImage(text), [text]);
@@ -54,7 +55,7 @@ function EnrollmentView({ enrollment }: { enrollment: RemoteEnrollment }) {
   );
 }
 
-function AddBrowserDialog({
+function AddDeviceDialog({
   control,
   onCreate,
 }: {
@@ -76,11 +77,11 @@ function AddBrowserDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a browser'}</DialogTitle>
+          <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a device'}</DialogTitle>
           <DialogDescription>
             {enrollment
-              ? 'Scan this on the phone, or open the link in the browser you are adding, and sign in with GitHub.'
-              : 'Name the browser or phone you are adding. Shinsa makes a one-time link for it.'}
+              ? 'Scan this on the phone, or open the link on the device you are adding, and sign in with GitHub.'
+              : 'Name the device you are adding, a browser or a phone. Shinsa makes a one-time link for it.'}
           </DialogDescription>
         </DialogHeader>
         {enrollment ? (
@@ -111,9 +112,9 @@ function AddBrowserDialog({
               <Button
                 variant='secondary'
                 nativeButton={false}
-                render={<a href={enrollment.url} target='_blank' rel='noreferrer' />}
+                render={<a href={resolveOnMachineUrl(enrollment.url)} target='_blank' rel='noreferrer' />}
               >
-                Add this browser
+                Add this device
               </Button>
               <DialogClose render={<Button />}>Done</DialogClose>
             </>
@@ -145,7 +146,8 @@ function StatusRow({
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
         <div className='flex min-w-0 items-center gap-1.5 text-xs'>
-          <span className='shrink-0 text-fg-4'>{snapshot.machineName}</span>
+          <span className='shrink-0 text-fg-4'>{THIS_MACHINE}</span>
+          <span className='min-w-0 truncate text-fg-2'>{snapshot.machineName}</span>
           <span className={cn('shrink-0', TONE_TEXT[status.tone])}>{status.label}</span>
         </div>
         <Truncate className='text-2xs text-fg-2'>{status.detail}</Truncate>
@@ -234,14 +236,14 @@ function RemoteDialogs({
 }) {
   const { value } = dialog;
   if (value?.kind === 'add')
-    return <AddBrowserDialog control={dialog.control} onCreate={actions.createEnrollment} />;
+    return <AddDeviceDialog control={dialog.control} onCreate={actions.createEnrollment} />;
   if (value?.kind === 'forget')
     return (
       <ConfirmDialog
         control={dialog.control}
         title={`Forget ${value.device.name}?`}
         body='It can no longer open this machine from app.shinsa.dev, and any page it has open closes. Add it again to use it.'
-        action='Forget browser'
+        action='Forget device'
         onConfirm={() =>
           void requestWithToast(
             () => actions.forgetDevice(value.device.publicKey),
@@ -255,7 +257,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title='Remove remote access?'
-        body='This machine leaves app.shinsa.dev, its tunnel is deleted and every added browser is forgotten. You can turn it on again later.'
+        body='This machine leaves app.shinsa.dev, its tunnel is deleted and every added device is forgotten. You can turn it on again later.'
         action='Remove remote access'
         onConfirm={() => void requestWithToast(actions.remove, 'Remote access is removed.')}
       />
@@ -286,7 +288,7 @@ export function RemoteAccessGroup({
             icon='IconPlusMedium'
             onClick={() => dialog.show({ kind: 'add' })}
           >
-            Add browser
+            Add device
           </Button>
         ) : undefined
       }
@@ -297,12 +299,12 @@ export function RemoteAccessGroup({
       )}
       {canAdd && (
         <p className={`mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 ${ROW_INSET}`}>
-          Phones and browsers that can reach {snapshot.machineName}
+          Devices that can reach this machine
         </p>
       )}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
-          None yet. Add browser sets up the phone or computer browser you use away from this machine.
+          None yet. Add device sets up the phone or browser you use away from this machine.
         </SettingsEmpty>
       )}
       {snapshot?.devices.map((device) => (

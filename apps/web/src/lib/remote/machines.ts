@@ -6,10 +6,12 @@ import type { DashboardClient } from './dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from './link.ts';
+import { resolveMachineLabel } from './mode.ts';
 
 export interface MachineRow {
   instance: RemoteInstance;
   device: EnrolledDevice | null;
+  label: string;
   status: string;
   access: string;
 }
@@ -21,11 +23,14 @@ export function describeMachine(
 ): MachineRow {
   const seen =
     instance.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', instance.lastSeenAt, now);
+  const current = device?.onMachine === true;
+  const access = device ? 'In this dashboard' : 'Not added on this device';
   return {
     instance,
     device,
+    label: resolveMachineLabel({ name: instance.name, current }),
     status: instance.online ? 'Online' : seen,
-    access: device ? 'In this dashboard' : 'Not added in this browser',
+    access: current ? `${instance.name} · ${access}` : access,
   };
 }
 
@@ -65,6 +70,7 @@ export function createFleetMember(
   const member: FleetMember = {
     id: instance.id,
     name: instance.name,
+    current: device.onMachine === true,
     connection,
     fetch: (request) => link.fetch(request),
   };
@@ -72,6 +78,14 @@ export function createFleetMember(
 }
 
 export const TASK_CAPACITY_TITLE = 'Task capacity';
+
+export const PLACEMENT_RULES_TITLE = 'Placement rules';
+
+export const PLACEMENT_RULES_PLACEHOLDER = 'For example: iOS, simulator, benchmark';
+
+export function serializePlacementRules(rules: readonly string[] | undefined) {
+  return (rules ?? []).join(', ');
+}
 
 export const NO_TASK_CAPACITY = 'none';
 
