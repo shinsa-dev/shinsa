@@ -34,6 +34,8 @@ export interface DesktopBridge {
   windowState: DesktopWindowState;
   updateBadge: (count: number) => void;
   notify: (notice: DesktopNotice) => void;
+  openNotificationSettings: () => void;
+  onNotifyFailed: (listener: () => void) => () => void;
   installUpdate: () => void;
   checkForUpdates: () => void;
   applyUpdateChannel: (channel: UpdateChannel) => void;
@@ -91,6 +93,14 @@ export function notifyDesktop(notice: DesktopNotice) {
   const desktop = selectDesktop();
   desktop?.notify(notice);
   return desktop !== null;
+}
+
+export function openDesktopNotificationSettings() {
+  selectDesktop()?.openNotificationSettings();
+}
+
+export function subscribeDesktopNotifyFailed(listener: () => void) {
+  return selectDesktop()?.onNotifyFailed(listener) ?? (() => undefined);
 }
 
 const NO_UPDATE: DesktopUpdate = { status: 'none' };

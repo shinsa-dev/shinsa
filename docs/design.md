@@ -1660,7 +1660,11 @@ Only these, and they win over anything below:
       which: "Play the sound" or "Play the sound and show a test notification", 13; a blocked browser gets the same
       toast as below) and Show a notification (Never by default; choosing another asks the browser first and stays off
       with a toast when it is blocked). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
-      take the media keys.
+      take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
+      button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
+      only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,
+      "macOS blocked a notification. Allow notifications for Shinsa in System Settings.", with the action Open
+      settings (`apps/desktop/CLAUDE.md` → Rules).
     - **What triggers them**: a gate that newly enters Needs you within the focus project. The first snapshot after a
       load never chimes, a gate outside the focus project never does, and neither does one that comes into view when the
       focus changes or lifts. One chime per burst (repeated up to three times for several), one notification per gate

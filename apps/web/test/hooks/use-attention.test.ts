@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { renderHook } from '@testing-library/react';
 import { useAttention } from '@/hooks/use-attention.ts';
+import { NOTIFY_BLOCKED } from '@/lib/notifications/settings.ts';
 import { writeNotificationPreferences } from '@/lib/preferences/notifications.ts';
+import { spyOnToasts } from '../support/commands.ts';
 import { installDesktop } from '../support/desktop.ts';
 import { installAudio, installNotifications } from '../support/notifications.ts';
 import { pushSurfaces, startFakeServer, stopFakeServer } from '../support/server.ts';
@@ -131,5 +133,17 @@ describe('useAttention', () => {
       { title: 'Paint it', body: 'Question g-1', tag: 'g-1', path: '/tasks/SW-142' },
     ]);
     expect(desktop.badges.at(-1)).toBe(1);
+  });
+
+  it('in the app, shows a toast when macOS refuses a notification, until it unmounts', () => {
+    const desktop = installDesktop();
+    restores.push(desktop.restore);
+    const toasts = spyOnToasts();
+    restores.push(toasts.restore);
+    const { unmount } = renderHook(() => useAttention(withGates()));
+    desktop.failNotice();
+    expect(toasts.error.mock.calls.map(([message]) => message)).toEqual([NOTIFY_BLOCKED]);
+    unmount();
+    expect(desktop.failedListeners()).toBe(0);
   });
 });

@@ -6,6 +6,7 @@ import { CHANNELS, type DesktopStart } from '../lib/bridge.ts';
 import { findDeepLink, parseDeepLink, URL_SCHEME } from '../lib/deep-link.ts';
 import { APP_NAME, resolveUserDataDir } from '../lib/dev-bundle.ts';
 import {
+  APP_ID,
   describeEngineScreen,
   type EngineAction,
   type EngineScreen,
@@ -14,12 +15,12 @@ import {
 } from '../lib/engine.ts';
 import { describeServer, type ServerHealth } from '../lib/health.ts';
 import { isPermissionAllowed } from '../lib/navigation.ts';
-import { parseNotice } from '../lib/notice.ts';
+import { parseNotice, resolveNotificationSettingsUrl } from '../lib/notice.ts';
 import { describeAppVersion, parseUpdateChannel } from '../lib/update-channel.ts';
 import { syncCommandLine } from './command-line.ts';
 import { EngineSupervisor } from './engine.ts';
 import { applyMenu } from './menu.ts';
-import { showNotice } from './notifications.ts';
+import { showNotice, watchNoticeFailures } from './notifications.ts';
 import { requestHealth, requestTrayQueue, resolveAppServerUrl } from './server.ts';
 import { StatusTray } from './tray.ts';
 import { Updater } from './updater.ts';
@@ -175,6 +176,12 @@ function watchPage() {
       if (path) main?.open(path);
       main?.show();
     });
+  });
+  watchNoticeFailures(() => {
+    if (main?.showsApp) main.win.webContents.send(CHANNELS.notifyFailed);
+  });
+  ipcMain.on(CHANNELS.notificationSettings, (event) => {
+    if (main?.isAppSender(event)) void shell.openExternal(resolveNotificationSettingsUrl(APP_ID));
   });
 }
 
