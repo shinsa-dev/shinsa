@@ -96,7 +96,12 @@ describe('a provider’s header in Agent usage', () => {
       isDefault: false,
       status: { label: 'Out of usage', tone: 'red', until: NOW + 60_000 },
       checkedAt: NOW - 60_000,
+      retryAt: null,
     });
+    expect(
+      resolveProviderHeader(login({ status: 'signed_in', usage: { ...usage, retryAt: NOW + 60_000 } }), NOW)
+        .retryAt
+    ).toBe(NOW + 60_000);
   });
 
   it('falls back to its sign-in state without a plan, and has no freshness without a reading', () => {

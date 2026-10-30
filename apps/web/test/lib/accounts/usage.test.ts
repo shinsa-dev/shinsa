@@ -262,8 +262,14 @@ describe('a Claude account’s header in Agent usage', () => {
       isDefault: true,
       status: { label: 'Paused', tone: 'neutral', until: null },
       checkedAt: NOW - 60_000,
+      retryAt: null,
     });
     expect(resolveAccountHeader(createAccount({ id: 'b', plan: null }), 'opus', NOW).detail).toBeNull();
+    const throttled = createAccount({
+      id: 'c',
+      usage: { status: 'ok', windows: [], detail: null, checkedAt: NOW, source: 'read', retryAt: NOW + HOUR },
+    });
+    expect(resolveAccountHeader(throttled, 'opus', NOW).retryAt).toBe(NOW + HOUR);
   });
 });
 
@@ -293,8 +299,12 @@ describe('reset times', () => {
     expect(describeResetsIn(NOW + 30 * 24 * HOUR, NOW)).toMatch(/^Resets on [A-Z][a-z]{2} \d+$/);
   });
 
-  it('says when the usage was last read', () => {
-    expect(describeUsageChecked(NOW - 2 * 60_000, NOW)).toBe('Updated 2m ago');
+  it('says when the usage was last read, and when Claude lets it be read next', () => {
+    expect(describeUsageChecked(NOW - 2 * 60_000, null, NOW)).toBe('Updated 2m ago');
+    expect(describeUsageChecked(NOW - 3 * HOUR, NOW + 12 * 60_000, NOW)).toBe(
+      'Updated 3h ago · next read in 12m'
+    );
+    expect(describeUsageChecked(NOW - 3 * HOUR, NOW - 1, NOW)).toBe('Updated 3h ago');
   });
 });
 
@@ -320,11 +330,17 @@ describe('account status', () => {
     });
   });
 
-  it('adds the moment an account is out of usage until', () => {
+  it('says how long until a reset later today, and the moment of one on a later day', () => {
     const morning = new Date(NOW).setHours(9, 0, 0, 0);
-    expect(
-      describeAccountStatus({ label: 'Out of usage', tone: 'red', until: morning + HOUR }, morning)
-    ).toBe('Out of usage until 10:00 AM');
+    const out = (until: number) => ({ label: 'Out of usage', tone: 'red' as const, until });
+    expect(describeAccountStatus(out(morning + HOUR + 20 * 60_000), morning)).toBe(
+      'Out of usage, resets in 1h 20m'
+    );
+    expect(describeAccountStatus(out(morning + 20_000), morning)).toBe('Out of usage, resets in 1m');
+    expect(describeAccountStatus(out(morning + 20 * HOUR), morning)).toMatch(
+      /^Out of usage until [A-Z][a-z]{2} 5:00 AM$/
+    );
+    expect(describeAccountStatus(out(morning - HOUR), morning)).toBe('Out of usage until 8:00 AM');
     expect(describeAccountStatus({ label: 'Paused', tone: 'neutral', until: null }, morning)).toBe('Paused');
   });
 });

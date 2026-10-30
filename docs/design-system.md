@@ -7316,9 +7316,9 @@ readings on a shelf.
 - Header row (32px, `flex min-w-0 flex-1 items-center gap-1.5 text-xs`): the resource named with its provider
   (provider icon at `size='sm'`, then "Claude · a@b.com" as a `Truncate`, `font-medium text-fg-4`), its plan in
   `fg-2`, a `Badge size='sm'` "Default" (`ms-0.5`) when it is the default, and only when something is wrong a status
-  in its tone ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage until 3:40 PM" red, from the moment a window
-  hits 100%). Then at the right "Updated 2m ago" (`text-2xs text-fg-2`, a live relative time, `hidden sm:inline`)
-  and the `•••` menu.
+  in its tone ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red, from the moment a
+  window hits 100%). Then at the right "Updated 2m ago" (`text-2xs text-fg-2`, a live relative time, `hidden
+  sm:inline`; "Updated 3h ago · next read in 12m" while the provider asks for fewer reads) and the `•••` menu.
 - Blocks sit 6px apart in the card, in the user's order (the menu has Move up / Move down).
 - One reading per row, 40px (`SETTING_ROW`): the label over "Resets in 3h" (`text-2xs text-fg-2`, the exact time on
   hover), a usage bar `w-24 shrink-0 sm:w-40`, and the percentage `w-9 text-right`.
@@ -9096,7 +9096,7 @@ tooltip.
 | Age tooltip | the day bright, the clock muted, on one line | "Wed, Oct 22, 2026 **2:14 PM**" (clock in `TooltipLabel`) |
 | Duration tooltip | clock to clock, the day muted; "Since" while it runs | "2:14 PM to 2:17 PM Wed, Oct 22, 2026", "Since 2:14 PM Wed, Oct 22, 2026" |
 | Tooltip detail | a muted second line naming what the time is when the row does not | "Waiting on you", "Step started", "Finished", "Last message" |
-| Limit reset | "until" and the clock | "Out of usage until 3:40 PM" |
+| Limit reset | today: "resets in" and the time left; a later day: "until" and the moment | "Out of usage, resets in 1h 20m", "Out of usage until Sat 2:00 AM" |
 | Recurring | "weekdays at 9:00 AM", "… · when its webhook is called" |  |
 
 A time that ticks re-renders once a minute (a shared minute clock), a live duration once a second.

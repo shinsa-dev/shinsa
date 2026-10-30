@@ -89,6 +89,10 @@ function resolveStartOfDay(at: number) {
   return new Date(at).setHours(0, 0, 0, 0);
 }
 
+export function isSameDay(at: number, now = Date.now()) {
+  return resolveStartOfDay(at) === resolveStartOfDay(now);
+}
+
 export function formatMoment(at: number, now = Date.now()) {
   const days = Math.round((resolveStartOfDay(at) - resolveStartOfDay(now)) / DAY_MS);
   if (days === 0) return formatClock(at);

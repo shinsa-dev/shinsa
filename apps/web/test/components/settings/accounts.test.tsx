@@ -128,7 +128,7 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('Default')).toBeTruthy();
     expect(screen.getByText('Needs sign-in')).toBeTruthy();
     expect(screen.getByText('Paused')).toBeTruthy();
-    expect(screen.getByText(/^Out of usage until /)).toBeTruthy();
+    expect(screen.getByText(/^Out of usage(, resets in | until )/)).toBeTruthy();
     expect(screen.getAllByText('20%')).toHaveLength(4);
   });
 
@@ -149,7 +149,7 @@ describe('the Accounts settings', () => {
         ],
       })
     );
-    expect(screen.getByText(/^Out of usage until /)).toBeTruthy();
+    expect(screen.getByText(/^Out of usage(, resets in | until )/)).toBeTruthy();
   });
 
   it('shows every window of every account with its reset, bar and percentage', () => {

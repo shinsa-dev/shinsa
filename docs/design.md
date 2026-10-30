@@ -1385,8 +1385,11 @@ Only these, and they win over anything below:
       Claude account is a `UsageAccountBlock` (`usage-account.tsx`, a `SettingsBlock`: 15, Cards), in order, 6px
       apart: a 32px header row with the account
       named with its provider (`AccountName`, medium: "Claude · a@b.com"), the plan (`fg-2`), a `Badge` "Default", and only when something is wrong a status in its tone
-      ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage until 3:40 PM" red through `TimeAgo` as soon as a
-      window is at 100%), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up) and a
+      ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red through `TimeAgo` as soon as a
+      window is at 100%: a reset later today says how long, one on a later day its moment, "Out of usage until Sat
+      2:00 AM"), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
+      reading counts, and while Claude asks for fewer reads it adds when the next one happens: "Updated 3h ago · next
+      read in 12m") and a
       `•••` click menu (`OptionsTrigger`, the one trigger every `•••` menu uses): Set as default, Sign in again,
       Move up / Move down, Leave out of new work / Use for new work, Switch accounts at (a submenu: Use the
       setting (90%), 80/90/95/98%, Other… which opens a dialog for any whole percentage) and Remove behind the
@@ -1531,7 +1534,9 @@ Only these, and they win over anything below:
     - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
       Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
       in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
-      hidden; a hidden page that comes back reads again when the last read is a minute old. Every read, Refresh usage
+      hidden; a hidden page that comes back reads again when the last read is a minute old. These automatic reads
+      ask for usage only (`{ scope: 'usage' }`: readings over a minute old, no sign-in checks); Refresh usage reads
+      everything again. Every read, Refresh usage
       and the Sign in card's check included, goes through one request: a read already on its way is shared, never
       sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
       of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
