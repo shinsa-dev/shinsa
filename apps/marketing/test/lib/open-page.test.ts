@@ -51,7 +51,6 @@ describe('readOpenPage', () => {
         description: '',
         handle: 'LOC-44',
         link: 'shinsa://task/id-1',
-        documentTitle: 'LOC-44: Fix tabs · Shinsa',
       },
     });
     expect(await readOpenPage('', '#review=AAAA', 1_000)).toMatchObject({

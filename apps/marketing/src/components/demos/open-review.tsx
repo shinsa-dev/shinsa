@@ -9,7 +9,7 @@ import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import type { PendingHeader } from '../../lib/open.ts';
+import type { InviteHeader } from '../../lib/open.ts';
 import { type OpenPage, type OpenScene, readOpenPage } from '../../lib/open-page.ts';
 import { site } from '../../lib/site.ts';
 import { DemoRoot } from './frame.tsx';
@@ -68,7 +68,7 @@ function ReviewDescription({ payload }: { payload: ReviewPayload }) {
   );
 }
 
-function InvitePage({ header }: { header: PendingHeader }) {
+function InvitePage({ header }: { header: InviteHeader }) {
   return (
     <>
       <OpenHeader

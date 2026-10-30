@@ -2725,11 +2725,10 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   app's review gate. The page itself never scrolls; the review scrolls inside it. Without the data the same
   header shows the task's handle and title and the same two buttons, with no Review tab; a link that names no task
   gets the header "This link does not lead to a review" with Download alone. The data rides in the fragment,
-  which the browser never sends, so the review can only be drawn in the browser; the header arrives drawn: the
-  site's Worker serves `/open` (`apps/marketing/src/worker/open.ts`) and writes the title, Open in Shinsa link and tab
-  title from the query into the page before it is sent. The first paint is only the title and the buttons, nothing
-  from the review, so when the fragment is read the summary, the facts and the Review tab appear under them and
-  nothing already on screen moves. The data is a compact copy of the review (`serializeReviewPayload`,
+  which the browser never sends, so the page can only be drawn in the browser: until its script has read the
+  fragment the page shows one small spinner and nothing else, then the whole page appears in one paint, so nothing
+  arrives in pieces. The site's Worker serves `/open` (`apps/marketing/src/worker/open.ts`) and writes only the tab's
+  title from the query before the page is sent. The data is a compact copy of the review (`serializeReviewPayload`,
   `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
   task page's header shows that are not private (the status, as its stage once the pull request is open: shipping,
   ready to merge, merged or done; the repository's name and GitHub slug, the branch, the changed-line coverage and when

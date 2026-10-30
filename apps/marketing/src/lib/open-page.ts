@@ -1,5 +1,5 @@
 import type { ReviewPayload, ShinsaState, Task } from '@shinsa/core';
-import { type PendingHeader, readReviewFragment, resolvePendingHeader } from './open.ts';
+import { type InviteHeader, readReviewFragment, resolveInviteHeader } from './open.ts';
 import { createOpenState } from './open-scene.ts';
 
 export interface OpenScene {
@@ -9,10 +9,10 @@ export interface OpenScene {
   link: string | null;
 }
 
-export type OpenPage = { scene: OpenScene } | { header: PendingHeader };
+export type OpenPage = { scene: OpenScene } | { header: InviteHeader };
 
 export async function readOpenPage(search: string, hash: string, now: number): Promise<OpenPage> {
-  const header = resolvePendingHeader(search);
+  const header = resolveInviteHeader(search);
   const payload = await readReviewFragment(hash);
   if (!payload) return { header };
   return { scene: { ...createOpenState(payload, now), payload, link: header.link } };
