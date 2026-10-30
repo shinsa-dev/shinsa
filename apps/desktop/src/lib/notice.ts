@@ -7,6 +7,8 @@ const BODY_MAX = 240;
 
 const TAG_MAX = 120;
 
+const NOTIFICATION_SETTINGS_URL = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension';
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -27,4 +29,8 @@ export function parseNotice(payload: unknown): DesktopNotice | null {
     tag: tag.slice(0, TAG_MAX),
     path,
   };
+}
+
+export function resolveNotificationSettingsUrl(appId: string) {
+  return `${NOTIFICATION_SETTINGS_URL}?id=${encodeURIComponent(appId)}`;
 }

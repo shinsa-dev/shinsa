@@ -26,6 +26,8 @@ if (start) {
     windowState: start.windowState,
     updateBadge: (count) => ipcRenderer.send(CHANNELS.badge, count),
     notify: (notice) => ipcRenderer.send(CHANNELS.notify, notice),
+    openNotificationSettings: () => ipcRenderer.send(CHANNELS.notificationSettings),
+    onNotifyFailed: (listener) => subscribe<void>(CHANNELS.notifyFailed, () => listener()),
     installUpdate: () => ipcRenderer.send(CHANNELS.installUpdate),
     checkForUpdates: () => ipcRenderer.send(CHANNELS.checkForUpdates),
     applyUpdateChannel: (channel) => ipcRenderer.send(CHANNELS.updateChannel, channel),

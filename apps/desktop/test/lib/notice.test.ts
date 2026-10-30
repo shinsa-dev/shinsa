@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { parseNotice } from '../../src/lib/notice.ts';
+import { parseNotice, resolveNotificationSettingsUrl } from '../../src/lib/notice.ts';
 
 const NOTICE = { title: 'Fix login', body: 'Which colour?', tag: 'g-1', path: '/tasks/LOC-4' };
 
@@ -33,5 +33,13 @@ describe('parseNotice', () => {
     expect(parseNotice({ ...NOTICE, tag: '' })).toBeNull();
     expect(parseNotice({ ...NOTICE, path: 'https://evil.example/' })).toBeNull();
     expect(parseNotice({ ...NOTICE, path: undefined })).toBeNull();
+  });
+});
+
+describe('resolveNotificationSettingsUrl', () => {
+  it('opens the app’s own pane in System Settings → Notifications', () => {
+    expect(resolveNotificationSettingsUrl('studio.overclock.shinsa')).toBe(
+      'x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=studio.overclock.shinsa'
+    );
   });
 });
