@@ -256,9 +256,9 @@ describe('a row’s summary line', () => {
     expect(row(/Build the export/).textContent).toContain('Running bun test apps/web');
   });
 
-  it('names the current step instead of the agent’s action when the queue leaves activity out', () => {
+  it('names the current step instead of the agent’s action in the compact queue', () => {
     renderQueue({
-      activity: false,
+      variant: 'compact',
       state: createShinsaState({
         tasks: [BUILDING],
         runs: [createRun({ id: 'run-popover', taskId: 'build', purpose: 'build' })],
@@ -319,6 +319,7 @@ describe('a row’s summary line', () => {
 
   it('keeps a waiting agent’s action still', () => {
     renderQueue({
+      variant: 'wide',
       state: createShinsaState({
         tasks: [BUILDING],
         runs: [createRun({ id: 'run-wait', taskId: 'build', purpose: 'build', status: 'waiting' })],
@@ -350,6 +351,7 @@ describe('a row’s summary line', () => {
 
   it('shows the planning agent’s latest action while it can still change the steps', () => {
     renderQueue({
+      variant: 'wide',
       state: createShinsaState({
         tasks: [
           createTask({

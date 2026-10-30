@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
+import { TOOLTIP_DELAY, TooltipProvider } from '../../src/components/tooltip';
 import { Truncate } from '../../src/components/truncate';
 import { flush, installLayout, installResizeObserver, layout } from '../support/layout';
+import { installMedia } from '../support/media';
 
 let restoreLayout: () => void;
 let resizes: ReturnType<typeof installResizeObserver>;
@@ -17,6 +19,24 @@ afterEach(() => {
 });
 
 const tooltipEnabled = (element: Element) => element.hasAttribute('data-tooltip-trigger');
+
+async function hoverTooltip(element: Element) {
+  const real = globalThis.setTimeout;
+  globalThis.setTimeout = ((handler: () => void, ms?: number) => {
+    if (ms !== TOOLTIP_DELAY) return real(handler, ms);
+    handler();
+    return real(() => undefined, 0);
+  }) as typeof setTimeout;
+  try {
+    await act(async () => {
+      fireEvent.pointerOver(element, { pointerType: 'mouse' });
+      await flush();
+    });
+  } finally {
+    globalThis.setTimeout = real;
+  }
+  return document.querySelector('[data-slot="tooltip-content"]')?.textContent;
+}
 
 describe('Truncate', () => {
   it('offers the full text in a tooltip only while the text is cut off', () => {
@@ -42,6 +62,21 @@ describe('Truncate', () => {
     );
     await act(() => flush());
     expect(tooltipEnabled(view.getByText('A much longer title now'))).toBe(true);
+  });
+
+  it('shows the given tooltip instead of the children when they are cut off', async () => {
+    const media = installMedia({ '(hover: hover)': true });
+    const view = render(
+      <TooltipProvider>
+        <Truncate tooltip='Running bun test' data-layout={layout({ clientWidth: 100, scrollWidth: 180 })}>
+          <span aria-hidden>Shimmer</span>
+        </Truncate>
+      </TooltipProvider>
+    );
+    const text = view.getByText('Shimmer').parentElement as HTMLElement;
+    expect(tooltipEnabled(text)).toBe(true);
+    expect(await hoverTooltip(text)).toBe('Running bun test');
+    media.restore();
   });
 
   it('offers the full text when the clamped lines cut it off', () => {

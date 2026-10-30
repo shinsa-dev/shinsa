@@ -11,7 +11,6 @@ import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import { SHIMMER_LINE } from '@/components/chat/chat-line.tsx';
 import { MiniTrack } from '@/components/overview/mini-track.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { describeParkedRun } from '@/lib/chat/delegations.ts';
@@ -30,7 +29,11 @@ function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) 
   const text = resolveLatestActivity(useTranscript(run.id)) ?? fallback;
   if (!text) return null;
   if (describeParkedRun(run)) return <Truncate>{text}</Truncate>;
-  return <ShimmeringText key={text} text={text} className={cn(SHIMMER_LINE, 'min-w-0')} />;
+  return (
+    <Truncate key={text} tooltip={text} className='leading-normal'>
+      <ShimmeringText text={text} className='inline leading-normal' />
+    </Truncate>
+  );
 }
 
 function resolveRowProgress(task: Task, status: string) {

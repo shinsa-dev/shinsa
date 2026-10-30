@@ -35,15 +35,17 @@ function fontOf(element: HTMLElement): string {
  * moment `scrollWidth` is the text's natural width and `clientWidth` the room it
  * was given. A cut belongs to the text it was measured for, so new text renders
  * in full and is measured again; a change in the parent's width does the same.
- * `lines` clamps to two or three lines instead of one.
+ * `lines` clamps to two or three lines instead of one. `tooltip` replaces the
+ * tooltip's content when the children are not plain text (a shimmering line).
  */
 function Truncate({
   children,
   className,
   middle = false,
   lines,
+  tooltip,
   ...props
-}: React.ComponentProps<'span'> & { middle?: boolean; lines?: 2 | 3 }) {
+}: React.ComponentProps<'span'> & { middle?: boolean; lines?: 2 | 3; tooltip?: React.ReactNode }) {
   const ref = React.useRef<HTMLSpanElement>(null);
   const [clipped, setClipped] = React.useState(false);
   const [cut, setCut] = React.useState<{ source: string; text: string } | null>(null);
@@ -127,7 +129,7 @@ function Truncate({
     clipped
       ? {
           className: 'max-w-72 whitespace-normal text-pretty [overflow-wrap:anywhere]',
-          content: <span>{full ?? children}</span>,
+          content: <span>{tooltip ?? full ?? children}</span>,
         }
       : null
   );

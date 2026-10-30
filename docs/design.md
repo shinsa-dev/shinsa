@@ -249,8 +249,9 @@ Only these, and they win over anything below:
    (`describeTrackPosition`), no tooltip per dot since the row is already a button. After the dots,
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
-   over the run's transcript, which the row follows only while it is mounted), on Home and in the rail but not in the
-   Needs you popover, which has no room for it (`TaskQueue`'s `activity`, off in `QueueMenu`); otherwise the current
+   over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
+   and shows in full in a tooltip), on Home's rows only: the rail and the Needs you popover have no room for it
+   (`RowSummary`'s `activity`, on for the wide queue); otherwise the current
    step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
    ("Pre-merge · 1 step left"), and nothing more. The
    queue rows carry no now line or stage reason: the status and the dots already say it, and a static
