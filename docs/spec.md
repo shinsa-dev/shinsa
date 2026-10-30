@@ -237,10 +237,10 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   does not navigate. The project defaults to the focus project; When to start and Priority default
   to Auto, and picking one overrides what Shinsa would decide. The kind of task is not asked: the
   classifier and the agent decide it.
-- **Attachments.** Home's composer and every task composer take files and images: the paperclip, a
-  paste or a drop. Each shows as a chip above the text while it uploads and can be removed; a
-  message can be attachments alone. The chat shows them as thumbnails and file chips, and the agent
-  gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
+- **Attachments.** Home's composer, every task composer and a question's answer box take files and
+  images: the paperclip, a paste or a drop. Each shows as a chip above the text while it uploads and
+  can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
+  and file chips, an answer's under the question it answers, and the agent gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
   say in the chat what to change), Review (§5), Merge, Question, a proposed change.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,

@@ -121,14 +121,14 @@ export function QuestionCard({
 }) {
   const { busy, run } = useBusy<'answer'>();
   const asked = gate.runId ? state.runs[gate.runId] : undefined;
-  const answer = (response: string) => void run('answer', () => onReply('answer', response));
+  const answer = (response: string) => run('answer', () => onReply('answer', response));
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={asked ? 'The agent asked' : undefined} />}
       title={gate.title}
     >
       {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
-      <QuestionChoices gate={gate} busy={busy !== null} onPick={answer} />
+      <QuestionChoices gate={gate} busy={busy !== null} onPick={(choice) => void answer(choice)} />
       <AnswerBox
         label='Your answer'
         placeholder={describeAnswerPlaceholder(gate)}

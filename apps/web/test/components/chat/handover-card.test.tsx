@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ChatTool, Task } from '@shinsa/core';
+import { type ChatTool, resolveAnsweredReply, serializeAttachments, type Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
@@ -136,6 +136,24 @@ describe('HandoverCard for the process tools', () => {
     expect(view.getByText('Blue')).toBeTruthy();
     expect(view.getByText('Withdrawn')).toBeTruthy();
     expect(view.queryByText('Your answer')).toBeNull();
+  });
+
+  it('shows the files attached to your answer as chips, never the markup they travel in', () => {
+    const answer = serializeAttachments('Like this', [
+      {
+        kind: 'file',
+        name: 'trace.log',
+        url: '/api/attachments/1/trace.log',
+        path: '/d/trace.log',
+        mimeType: 'text/plain',
+        size: 2048,
+      },
+    ]);
+    const view = renderCard(call('ask', { question: 'Which run?' }, resolveAnsweredReply(answer, false)));
+    expect(view.getByText('Your answer')).toBeTruthy();
+    expect(view.getByText('Like this')).toBeTruthy();
+    expect(view.getByText('trace.log')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('<attachment');
   });
 
   it('shows a delegated agent’s question as asked of the agent that delegated it, with its answer', () => {

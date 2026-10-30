@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveAnsweredReply, resolveSupersededReply, resolveWithdrawnReply } from '@shinsa/core';
+import {
+  resolveAnsweredReply,
+  resolveSupersededReply,
+  resolveWithdrawnReply,
+  serializeAttachments,
+} from '@shinsa/core';
 import {
   hasHandOverWalkthrough,
   readHandOverSpots,
@@ -39,9 +44,27 @@ describe('resolveAskAnswer', () => {
 
   it('shows the answer alone, without the words the agent reads around it', () => {
     const answered = createToolCall(ask, { result: resolveAnsweredReply('Shinsa’s projects', false) });
-    expect(resolveAskAnswer(answered)).toBe('Shinsa’s projects');
+    expect(resolveAskAnswer(answered)).toEqual({ text: 'Shinsa’s projects', attachments: [] });
     const delegated = createToolCall(ask, { result: resolveAnsweredReply('The second', true) });
-    expect(resolveAskAnswer(delegated)).toBe('The second');
+    expect(resolveAskAnswer(delegated)).toEqual({ text: 'The second', attachments: [] });
+  });
+
+  it('takes the files you attached out of the answer’s text', () => {
+    const file = {
+      kind: 'image' as const,
+      name: 'shot.png',
+      url: '/api/attachments/1/shot.png',
+      path: '/d/shot.png',
+      mimeType: 'image/png',
+      size: 4,
+    };
+    const answered = createToolCall(ask, {
+      result: resolveAnsweredReply(serializeAttachments('Like this', [file]), false),
+    });
+    expect(resolveAskAnswer(answered)).toEqual({
+      text: 'Like this',
+      attachments: [{ kind: 'image', name: 'shot.png', url: file.url, mimeType: 'image/png', size: 4 }],
+    });
   });
 
   it('has no answer while it waits, when it failed or when it was withdrawn', () => {
