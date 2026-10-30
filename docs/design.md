@@ -804,8 +804,8 @@ Only these, and they win over anything below:
       is the progress track: its done steps (a 15px check on `green` at 29%) and the line
       between them are green, so done reads apart from the blue pulse of the current step. A cancelled
       task keeps its track: the steps it finished stay done and the step it was on when it was
-      cancelled shows Cancelled (an `fg-3` `IconCrossSmall` on a `bg-a3` disc, the done step's
-      circle in grey, and a filled `fg-2` dot on a queue row's mini track), from
+      cancelled shows Cancelled (an `fg-3` `IconCrossSmall` at `scale-70`, about 10px, on a `bg-a3`
+      disc, the done step's circle in grey, and a filled `fg-2` dot on a queue row's mini track), from
       `Task.cancelledFrom`; its now card says where and why, "Cancelled at Merge: the pull request
       was closed without merging."
     - **Page headings** (`components/layout/page/heading.tsx`): one `PageHeading` for Task, All tasks
