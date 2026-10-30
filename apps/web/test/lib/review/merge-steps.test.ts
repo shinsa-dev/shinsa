@@ -106,8 +106,9 @@ describe('the steps around the merge', () => {
   it('lists each task the merge waits on as a linked row that ticks itself once that task finishes', () => {
     const docs = createTask({ id: 'docs', title: 'Document the agent login', stage: 'building' });
     const skills = createTask({ id: 'skills', title: 'Teach the skill to log in', stage: 'merged' });
-    const task = createTask({ id: 't1', waitsOn: ['docs', 'skills', 'gone'] });
-    const waits = listMergeWaits(createShinsaState({ tasks: [docs, skills, task] }), task);
+    const dropped = createTask({ id: 'dropped', title: 'Retire the old login', stage: 'cancelled' });
+    const task = createTask({ id: 't1', waitsOn: ['docs', 'skills', 'dropped', 'gone'] });
+    const waits = listMergeWaits(createShinsaState({ tasks: [docs, skills, dropped, task] }), task);
     expect(waits).toEqual([
       {
         key: 'wait:docs',
@@ -121,6 +122,14 @@ describe('the steps around the merge', () => {
         key: 'wait:skills',
         taskId: 'skills',
         title: 'Merges after [Teach the skill to log in](shinsa://task/skills) finishes',
+        detail: null,
+        command: null,
+        done: true,
+      },
+      {
+        key: 'wait:dropped',
+        taskId: 'dropped',
+        title: 'No longer waits for [Retire the old login](shinsa://task/dropped): it was cancelled',
         detail: null,
         command: null,
         done: true,

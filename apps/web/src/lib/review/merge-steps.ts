@@ -1,6 +1,6 @@
 import {
   type ChecklistItem,
-  isTaskComplete,
+  isTaskSettled,
   listMergeSteps,
   type MergeStepKind,
   type MergeStepTiming,
@@ -82,14 +82,18 @@ export function listMergeWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): M
   return task.waitsOn.flatMap((id) => {
     const other = state.tasks[id];
     if (!other) return [];
+    const link = `[${other.title}](${serializeReference({ kind: 'task', id })})`;
     return [
       {
         key: `wait:${id}`,
         taskId: id,
-        title: `Merges after [${other.title}](${serializeReference({ kind: 'task', id })}) finishes`,
+        title:
+          other.stage === 'cancelled'
+            ? `No longer waits for ${link}: it was cancelled`
+            : `Merges after ${link} finishes`,
         detail: null,
         command: null,
-        done: isTaskComplete(other),
+        done: isTaskSettled(other),
       },
     ];
   });

@@ -472,7 +472,9 @@ Only these, and they win over anything below:
       says so. **A task the merge waits on is a pre-merge row too**: "Merges after ‹task› finishes", the task's title a
       link, its kind "Linked task" with `IconHourglass`, after the agent's steps; you never tick it (its box is
       disabled, its tooltip "Ticks itself once that task finishes", then "That task finished") and it is ticked as
-      soon as that task merges or is marked done (`listMergeWaits` in `lib/review/merge-steps.ts`, from `Task.waitsOn`).
+      soon as that task settles, as the merge hold reads it (`listOpenBlockers`): merged, marked done, or cancelled,
+      which reads "No longer waits for ‹task›: it was cancelled" (`listMergeWaits` in `lib/review/merge-steps.ts`,
+      from `Task.waitsOn`).
       The review gate's now card lists Pre-merge steps when the merge waits on a task, so you see the hold before
       you approve; the merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
       gate, a now card titled "Merged. 2 steps left to do." that lists Post-merge steps
