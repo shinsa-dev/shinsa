@@ -5,8 +5,26 @@ import { defineConfig } from 'vite';
 
 const SERVER = `http://127.0.0.1:${process.env.SHINSA_PORT ?? '5180'}`;
 
+const REMOTE = process.env.VITE_SHINSA_REMOTE === '1';
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  ...(REMOTE
+    ? {
+        build: {
+          outDir: 'dist-remote',
+          rollupOptions: {
+            input: {
+              main: resolve(import.meta.dirname, 'index.html'),
+              sw: resolve(import.meta.dirname, 'src/remote-sw.ts'),
+            },
+            output: {
+              entryFileNames: (chunk) => (chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js'),
+            },
+          },
+        },
+      }
+    : {}),
   resolve: {
     alias: [{ find: /^@\//, replacement: `${resolve(import.meta.dirname, 'src')}/` }],
     dedupe: ['react', 'react-dom'],

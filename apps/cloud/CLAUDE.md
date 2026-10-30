@@ -62,7 +62,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 
 - `bun test test` (100% line and function coverage, `bunfig.toml`) and `bun run check-types`.
 - `bun run dev` runs `wrangler dev` on :5183; `APP_ORIGIN` points the Worker at that origin.
-- The assets are `../web/dist-remote`, the web app's remote build.
+- The assets are `../web/dist-remote`, the web app's remote build: `bun run --cwd apps/web build:remote` before `wrangler dev` or a deploy.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and

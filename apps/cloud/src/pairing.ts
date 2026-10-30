@@ -1,8 +1,10 @@
 import {
   APP_IDENTITY,
   type MachineCredentials,
+  type PairApproveResponse,
   type PairPollResponse,
   type PairStartResponse,
+  type PairView,
   parsePublicKey,
   REMOTE_PATHS,
   resolveKeyFingerprint,
@@ -22,14 +24,6 @@ export const MAX_PENDING_PAIRS_PER_ADDRESS = 10;
 export const MAX_INSTANCES_PER_USER = 5;
 
 const DEFAULT_LOCAL_URL = `http://127.0.0.1:${APP_IDENTITY.port}`;
-
-export interface PairView {
-  claimCode: string;
-  name: string;
-  fingerprint: string;
-  expiresAt: number;
-  claimed: boolean;
-}
 
 function readClientIp(request: Request) {
   return request.headers.get('cf-connecting-ip') ?? 'unknown';
@@ -156,5 +150,5 @@ export async function respondPairApprove(request: Request, claimCode: string, wo
     connectKey,
   };
   await world.store.recordPairClaim(row.claim_code, credentials, user.login);
-  return respondJson({ instanceId, name: row.name });
+  return respondJson({ instanceId, name: row.name } satisfies PairApproveResponse);
 }

@@ -53,7 +53,14 @@ const NO_ENTRIES: ChatEntry[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
+let socketOpener: (() => WebSocket) | null = null;
+
+export function replaceSocketOpener(open: (() => WebSocket) | null) {
+  socketOpener = open;
+}
+
 function openShinsaSocket() {
+  if (socketOpener) return socketOpener();
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   return new WebSocket(`${protocol}://${location.host}/ws`);
 }

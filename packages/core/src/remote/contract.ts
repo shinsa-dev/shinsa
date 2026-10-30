@@ -78,6 +78,19 @@ export interface RemoteSession {
   user: { id: string; login: string; avatarUrl: string | null } | null;
 }
 
+export interface PairView {
+  claimCode: string;
+  name: string;
+  fingerprint: string;
+  expiresAt: number;
+  claimed: boolean;
+}
+
+export interface PairApproveResponse {
+  instanceId: string;
+  name: string;
+}
+
 export interface ConnectResponse {
   url: string;
   expiresAt: number;

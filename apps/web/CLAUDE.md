@@ -10,7 +10,9 @@ themes, from sample data.
 
 ```
 src/
-├── main.tsx             Mounts Root; applies the stored theme and a `?layout=` override before the first paint
+├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and a
+│                        `?layout=` override before the first paint
+├── remote-sw.ts         The remote build's service worker (/sw.js): hands the page's /api/ requests to the page
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
 │                        /onboarding until setup is complete, resolveOnboardingRedirect), the frame (AppFrame for Cards and
 │                        Sidebar, or setup's own OnboardingShell on /onboarding, which has no ⌘K)
@@ -25,7 +27,12 @@ src/
 │                        rubber-band on the page root, docs/design.md 31)
 ├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, automation.tsx (a
 │   │                    automation's own page at /automations/<id>, laid out like a task page: facts row, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed in roadmap rows, an Activity log of its runs), onboarding.tsx
-│   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar)
+│   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar;
+│   │                    in the remote build, a note that terminals stay on the Mac)
+│   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
+│   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header, sign-in),
+│   │                    machines.tsx, pair.tsx, enroll.tsx, instance.tsx (InstanceApp: the channel and the
+│   │                    service worker, then the app)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -119,6 +126,13 @@ src/
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
+    ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the chosen machine, the
+    │                    enrollment link kept through sign-in), dashboard.ts (app.shinsa.dev's /__remote/ routes),
+    │                    devices.ts and indexed-store.ts (this browser's key per machine, in IndexedDB),
+    │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
+    │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
+    │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
+    │                    enroll.ts (enrollDevice), machines.ts (a machine's row)
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
     │                    patches applied once per frame, acks, transcripts from the position held (every followed
     │                    run plus the 24 read last, TRANSCRIPT_CACHE_LIMIT), whether the desktop app is connected,

@@ -47,6 +47,7 @@ import {
 } from '@/lib/connection/terminals.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { describeFindKey } from '@/lib/terminal/keys.ts';
 import {
   describeServiceClose,
@@ -355,6 +356,20 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
 }
 
 export function TerminalPage({ state }: { state: ShinsaState }) {
+  if (isRemoteBuild())
+    return (
+      <div className='grid flex-1 place-items-center'>
+        <EmptyState
+          icon='IconConsole'
+          title='Terminals stay on your Mac'
+          description='A terminal is a shell on your Mac, so Shinsa only opens one there. Use it at your desk.'
+        />
+      </div>
+    );
+  return <TerminalWorkspace state={state} />;
+}
+
+function TerminalWorkspace({ state }: { state: ShinsaState }) {
   const snapshot = useTerminals();
   const search = useSearchString();
   React.useEffect(() => rememberTerminalPath(`/terminal${search}`), [search]);

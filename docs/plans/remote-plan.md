@@ -46,7 +46,7 @@ t-‹instance›.shinsa.dev ◄──outbound tunnel── cloudflared ── sh
   id and login), sessions, instances (owner, name, tunnel id, the hash of the machine token, the connect key, the
   machine's public key fingerprint, last heartbeat) and pair sessions. Secrets: the GitHub OAuth app's client id and
   secret, a Cloudflare API token scoped to Tunnel edit and DNS edit on the shinsa.dev zone, and the session signing
-  key. It serves `apps/web/dist` (the remote build) as its assets and answers `/__remote/*` and `/hooks/*` itself.
+  key. It serves `apps/web/dist-remote` (the remote build) as its assets and answers `/__remote/*` and `/hooks/*` itself.
 - **`packages/core/src/remote/`** holds what both ends share and that has no I/O: the wire contract between the
   machine and the Worker, the handshake, frame sealing and the channel's messages, and the list of commands that are
   local only. It uses WebCrypto (`crypto.subtle`), which the browser, Bun and Workers all have.

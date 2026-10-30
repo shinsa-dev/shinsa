@@ -2256,6 +2256,21 @@ The machine side is `apps/engine/src/remote/`:
   `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
   `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
   machine's own address, as before.
+- **The hosted web app** (`apps/web/src/lib/remote/`, `routes/remote/`; `bun run --cwd apps/web build:remote` writes
+  `apps/web/dist-remote`, which `apps/cloud` serves): the same web app built with `VITE_SHINSA_REMOTE=1`. Before the
+  app it shows app.shinsa.dev's own pages: sign in with GitHub, Your machines (`/machines`: each instance online or
+  last seen, and whether this browser was added to it; Open, Remove), the pairing approval (`/pair?code=`: the
+  machine's name and key fingerprint to compare with Settings) and adding this browser (`/enroll#…`: the fragment is
+  kept in `sessionStorage` through the GitHub sign-in and taken out of the address bar at once). Adding a browser
+  makes a P-256 key pair that cannot be exported, kept in IndexedDB (`shinsa-remote`) with the machine key pinned from
+  the link, and proves the one-time secret in its first handshake. Opening a machine (`InstanceApp`) asks
+  app.shinsa.dev for a connect token, opens the sealed channel (`RemoteLink`, `openRemoteChannel`) and starts a
+  service worker (`/sw.js`, from `src/remote-sw.ts`) before the app mounts: the worker hands every `/api/` request of
+  the page, `fetch` and `<img src>` alike, to the page, which sends it through the channel and streams the answer
+  back (`relay.ts`), and the app's socket is a `ChannelSocket` on the same channel (`replaceSocketOpener`). A dropped
+  channel closes that socket, and the connection's own retry opens a fresh channel with a new token. A Mac that
+  refuses this browser's key forgets the device here and says to add it again. The Terminal page says terminals stay
+  on the Mac.
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the Mac already
   reaches the engine, and the danger is a copy leaving the machine.

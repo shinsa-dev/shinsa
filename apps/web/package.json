@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:remote": "VITE_SHINSA_REMOTE=1 vite build",
     "check-types": "tsc --noEmit",
     "dev": "vite --port 5181 --strictPort",
     "test": "bun test --randomize"

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   type PairPollResponse,
   type PairStartResponse,
+  type PairView,
   REMOTE_KEY_ALGORITHM,
   REMOTE_PATHS,
   resolveKeyFingerprint,
@@ -9,12 +10,7 @@ import {
   resolvePairPath,
   serializePublicKey,
 } from '@shinsa/core';
-import {
-  MAX_INSTANCES_PER_USER,
-  MAX_PENDING_PAIRS_PER_ADDRESS,
-  PAIR_TTL_MS,
-  type PairView,
-} from '../src/pairing.ts';
+import { MAX_INSTANCES_PER_USER, MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL_MS } from '../src/pairing.ts';
 import { createHarness, type Harness, readJson } from './harness.ts';
 
 async function createMachineKey() {

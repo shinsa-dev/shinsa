@@ -12,6 +12,7 @@ import { act, renderHook } from '@testing-library/react';
 import {
   Connection,
   connection,
+  replaceSocketOpener,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
   useConnection,
@@ -691,6 +692,19 @@ describe('the shared connection', () => {
     timers[0]?.run();
     expect(urls).toHaveLength(2);
     timeout.mockRestore();
+  });
+
+  it('opens the socket a remote page put in place, until it is taken away', () => {
+    const opened: FakeSocket[] = [];
+    replaceSocketOpener(() => {
+      const socket = new FakeSocket();
+      opened.push(socket);
+      return socket as unknown as WebSocket;
+    });
+    const subject = new Connection();
+    subject.start();
+    expect(opened).toHaveLength(1);
+    replaceSocketOpener(null);
   });
 
   it('sends commands through the shared connection', async () => {
