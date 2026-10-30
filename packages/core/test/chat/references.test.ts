@@ -99,15 +99,27 @@ describe('listReferenceSpans', () => {
     ]);
   });
 
-  test('detects quoted titles, long bare titles and unambiguous pull request numbers', () => {
+  test('detects quoted titles, long bare titles and pull request numbers of the context repository', () => {
     const text =
-      'Review "fix login" first. Run the embedded chat on MCP v2 is blocked, #4531 is green, #12 is ambiguous.';
-    const spans = listReferenceSpans(text, CATALOG);
+      'Review "fix login" first. Run the embedded chat on MCP v2 is blocked, #4531 is green, #12 is ours.';
+    const spans = listReferenceSpans(text, CATALOG, { repo: 'paywall-next' });
     expect(spans.map((span) => [span.source, text.slice(span.start, span.end)])).toEqual([
       ['quoted', '"fix login"'],
       ['title', 'Run the embedded chat on MCP v2'],
       ['number', '#4531'],
+      ['number', '#12'],
     ]);
+  });
+
+  test('links a bare number only to a pull request of the context repository', () => {
+    const numbers = (text: string, repo?: string | null) =>
+      listReferenceSpans(text, CATALOG, { repo }).map((span) => serializeReference(span.reference));
+    expect(numbers('#12', 'docs')).toEqual(['shinsa://pr/docs#12']);
+    expect(numbers('#12', 'paywall-next')).toEqual(['shinsa://pr/paywall-next#12']);
+    expect(numbers('#4531', 'docs')).toEqual([]);
+    expect(numbers('#4531', 'superwall')).toEqual([]);
+    expect(numbers('#4531', null)).toEqual([]);
+    expect(numbers('#4531')).toEqual([]);
   });
 
   test('leaves short bare titles, code, excluded tasks and links alone', () => {
@@ -117,13 +129,17 @@ describe('listReferenceSpans', () => {
     expect(
       listReferenceSpans('Run the embedded chat on MCP v2', CATALOG, { exclude: new Set(['task-chat']) })
     ).toEqual([]);
-    expect(listReferenceSpans('#4531', CATALOG, { numbers: false })).toEqual([]);
+    expect(listReferenceSpans('#4531', CATALOG, { numbers: false, repo: 'paywall-next' })).toEqual([]);
   });
 });
 
 describe('linkReferences', () => {
   test('turns detected mentions into reference links and keeps explicit ones', () => {
-    expect(linkReferences('After "Fix login", merge #4531 and read [x](shinsa://repo/docs).', CATALOG)).toBe(
+    expect(
+      linkReferences('After "Fix login", merge #4531 and read [x](shinsa://repo/docs).', CATALOG, {
+        repo: 'paywall-next',
+      })
+    ).toBe(
       'After [Fix login](shinsa://task/task-short), merge [#4531](shinsa://pr/paywall-next#4531) and read [x](shinsa://repo/docs).'
     );
   });

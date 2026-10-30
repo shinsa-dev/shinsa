@@ -27,6 +27,7 @@ export interface ReferenceOptions {
   titles?: boolean;
   numbers?: boolean;
   exclude?: ReadonlySet<string>;
+  repo?: string | null;
 }
 
 export const REFERENCE_SCHEME = 'shinsa://';
@@ -195,11 +196,13 @@ function listTitleSpans(text: string, catalog: ReferenceCatalog, exclude: Readon
   return spans;
 }
 
-function listNumberSpans(text: string, catalog: ReferenceCatalog) {
+function listNumberSpans(text: string, catalog: ReferenceCatalog, repo: string) {
   const spans: ReferenceSpan[] = [];
   for (const match of text.matchAll(PULL_NUMBER)) {
     const number = Number(match[1]);
-    const owners = catalog.pullRequests.filter((pullRequest) => pullRequest.number === number);
+    const owners = catalog.pullRequests.filter(
+      (pullRequest) => pullRequest.number === number && pullRequest.repo === repo
+    );
     const owner = owners[0];
     if (!owner || owners.length > 1) continue;
     spans.push({
@@ -216,7 +219,7 @@ function listNumberSpans(text: string, catalog: ReferenceCatalog) {
 export function listReferenceSpans(
   text: string,
   catalog: ReferenceCatalog,
-  { titles = true, numbers = true, exclude = new Set() }: ReferenceOptions = {}
+  { titles = true, numbers = true, exclude = new Set(), repo = null }: ReferenceOptions = {}
 ) {
   const code = listRanges(text, CODE);
   const links = listRanges(text, ANY_LINK);
@@ -224,7 +227,7 @@ export function listReferenceSpans(
   const candidates = [
     ...explicit,
     ...(titles ? listTitleSpans(text, catalog, exclude) : []),
-    ...(numbers ? listNumberSpans(text, catalog) : []),
+    ...(numbers && repo ? listNumberSpans(text, catalog, repo) : []),
   ]
     .filter((span) => !code.some(([start, end]) => span.start < end && span.end > start))
     .filter(

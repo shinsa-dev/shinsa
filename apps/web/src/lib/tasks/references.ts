@@ -37,14 +37,20 @@ function matchesRepo(state: ShinsaState, repoId: string | null, name: string) {
   return repoName !== undefined && (repoName === name || name.endsWith(`/${repoName}`));
 }
 
+export function resolveReferenceRepo(state: ShinsaState, scope: string | null) {
+  const repoId = scope ? state.tasks[scope]?.repoId : null;
+  return repoId ? (state.repos[repoId]?.name ?? null) : null;
+}
+
 export function selectPullRequestTask(
   state: ShinsaState,
   repo: string | null,
   number: number,
   scope: string | null
 ) {
+  const name = repo ?? resolveReferenceRepo(state, scope);
   const owners = Object.values(state.tasks).filter(
-    (task) => task.pullRequest?.number === number && (repo === null || matchesRepo(state, task.repoId, repo))
+    (task) => task.pullRequest?.number === number && (name === null || matchesRepo(state, task.repoId, name))
   );
   if (owners.length === 1) return owners[0] ?? null;
   return owners.find((task) => task.id === scope) ?? null;

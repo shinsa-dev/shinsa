@@ -18,6 +18,7 @@ import { createScopedCache } from '@/lib/format/cache.ts';
 import {
   describeReference,
   resolveCatalog,
+  resolveReferenceRepo,
   selectBranchTask,
   selectPullRequestTask,
   selectRepo,
@@ -38,9 +39,14 @@ export function useReferenceMarkdown(text: string) {
   const route = useRoute();
   const selectScope = React.useCallback((state: ShinsaState) => resolveRouteTaskId(state, route), [route]);
   const scope = useShinsaSelector(selectScope);
+  const selectScopeRepo = React.useCallback(
+    (state: ShinsaState) => resolveReferenceRepo(state, scope),
+    [scope]
+  );
+  const repo = useShinsaSelector(selectScopeRepo);
   const catalog = useShinsaSelector(resolveCatalog) ?? resolveCatalog(null);
-  return linked(catalog).read(`${scope ?? ''}\u0000${text}`, () =>
-    linkReferences(text, catalog, { exclude: new Set(scope ? [scope] : []) })
+  return linked(catalog).read(`${scope ?? ''}\u0000${repo ?? ''}\u0000${text}`, () =>
+    linkReferences(text, catalog, { exclude: new Set(scope ? [scope] : []), repo })
   );
 }
 
@@ -127,7 +133,11 @@ export function ReferenceText({
   const exclude = new Set([...(options?.exclude ?? []), ...(scope ? [scope] : [])]);
   const parts = splitReferenceText(
     text,
-    listReferenceSpans(text, resolveCatalog(state), { ...options, exclude })
+    listReferenceSpans(text, resolveCatalog(state), {
+      repo: resolveReferenceRepo(state, scope),
+      ...options,
+      exclude,
+    })
   );
   return (
     <>
