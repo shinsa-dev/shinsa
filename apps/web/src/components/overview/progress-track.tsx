@@ -37,6 +37,11 @@ function StepMark({ status }: { status: StepStatus }) {
       <Icon size='sm' name='IconCircleDotted' aria-label={STEP_STATUS_LABEL.skipped} className='text-fg-2' />
     );
   }
+  if (status === 'cancelled') {
+    return (
+      <Icon size='sm' name='IconCircleX' aria-label={STEP_STATUS_LABEL.cancelled} className='text-fg-3' />
+    );
+  }
   if (status === 'current') {
     return (
       <span className='grid size-4 shrink-0 place-items-center rounded-full bg-primary-a3'>
@@ -55,7 +60,7 @@ function StepMark({ status }: { status: StepStatus }) {
 }
 
 function StepItem({ step, fold, note }: { step: Step; fold: LabelFold; note: string | null }) {
-  const emphasised = step.status === 'current' || step.status === 'waiting';
+  const emphasised = step.status === 'current' || step.status === 'waiting' || step.status === 'cancelled';
   return (
     <Tooltip>
       <TooltipTrigger render={<li className='flex w-fit shrink-0 cursor-default items-center gap-1.5' />}>

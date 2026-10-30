@@ -82,6 +82,27 @@ describe('resolveNowTitle', () => {
     );
   });
 
+  it('names the step a cancelled task stopped at and why', () => {
+    const closed = createTask({
+      id: 'closed',
+      repoId: 'repo-1',
+      stage: 'cancelled',
+      cancelledFrom: 'awaiting_merge',
+      stageReason: 'pull request closed',
+    });
+    expect(resolveNowTitle(closed, [], null, undefined)).toBe(
+      'Cancelled at Merge: the pull request was closed without merging.'
+    );
+    const yours = { ...closed, cancelledFrom: 'planning' as const, stageReason: 'cancelled by you' };
+    expect(resolveNowTitle(yours, [], null, undefined)).toBe('Cancelled at Plan: you cancelled the task.');
+    const failed = { ...closed, stageReason: 'cancelled after a failure' };
+    expect(resolveNowTitle(failed, [], null, undefined)).toBe(
+      'Cancelled at Merge: cancelled after a failure.'
+    );
+    const silent = { ...closed, stageReason: '' };
+    expect(resolveNowTitle(silent, [], null, undefined)).toBe('Cancelled at Merge.');
+  });
+
   it('falls back to the stage reason, capitalised', () => {
     const task = createTask({ id: 'task-1', stage: 'shipping', stageReason: 'waiting for CI' });
     expect(resolveNowTitle(task, [], phase({ key: 'pull-request' }), undefined)).toBe('Waiting for CI');

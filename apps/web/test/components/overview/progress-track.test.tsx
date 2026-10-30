@@ -34,6 +34,19 @@ describe('ProgressTrack', () => {
     expect(checks.queryByLabelText('Done')).toBeNull();
   });
 
+  it('marks the step a cancelled task stopped at as cancelled and keeps the steps before it done', () => {
+    const track = renderTrack([
+      phase('pull-request', 'Pull request', 'done'),
+      phase('merge', 'Merge', 'cancelled'),
+    ]);
+    const merge = within(track.getByText('Merge').closest('li') as HTMLElement);
+    expect(
+      within(track.getByText('Pull request').closest('li') as HTMLElement).getByLabelText('Done')
+    ).toBeTruthy();
+    expect(merge.getByLabelText('Cancelled')).toBeTruthy();
+    expect(merge.queryByLabelText('Done')).toBeNull();
+  });
+
   it('says the conflict the agent resolves in the pull request step, not In progress', async () => {
     const task = createTask({
       id: 't',
