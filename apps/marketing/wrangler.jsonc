@@ -19,7 +19,6 @@
   "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "shinsa-releases" }],
   "services": [{ "binding": "CLOUD", "service": "shinsa-cloud" }],
   "previews": {
-    "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "shinsa-releases" }],
-    "services": [{ "binding": "CLOUD", "service": "shinsa-cloud" }]
+    "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "shinsa-releases" }]
   }
 }

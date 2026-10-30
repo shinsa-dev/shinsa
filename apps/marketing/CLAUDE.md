@@ -162,8 +162,10 @@ hit. `bun run preview` serves `/open` without the Worker, so its tab keeps the g
 after a build shows it as production does.
 `/app` is the remote dashboard (`docs/engine.md` → Remote access): `src/worker/app.ts` hands it, as it came, to the
 `shinsa-cloud` Worker (`apps/cloud`) through the `CLOUD` service binding, sends `www.shinsa.dev/app` to
-`shinsa.dev/app`, and answers 503 while the binding is missing. `shinsa-cloud` must exist before this Worker deploys with the binding
-(a deploy naming a missing service fails), so deploy it before the change that adds the binding merges.
+`shinsa.dev/app`, and answers 503 while the binding is missing. Only the production deploy carries the binding: a
+preview has none (`previews` leaves it out), so a branch builds whether or not `shinsa-cloud` exists and its `/app`
+answers 503. `shinsa-cloud` must exist before this Worker deploys on `main` (a deploy naming a missing service fails),
+so deploy it before the change that adds the binding merges.
 
 The site shares its origin with the dashboard at `/app`, which keeps each browser's device keys and session there
 (`docs/plans/remote-plan.md` → Risks). So nothing on the site may run code from anywhere else: no third-party script,

@@ -114,7 +114,11 @@ function startSocketServer(engine: Engine, transcripts: Transcripts) {
     port: 0,
     hostname: '127.0.0.1',
     fetch(request, bunServer) {
-      if (bunServer.upgrade(request, { data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } }))
+      if (
+        bunServer.upgrade(request, {
+          data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' },
+        })
+      )
         return undefined;
       return new Response('no', { status: 400 });
     },
