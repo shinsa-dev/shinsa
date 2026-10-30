@@ -804,10 +804,10 @@ Only these, and they win over anything below:
       is the progress track: its done steps (a 15px check on `green` at 29%) and the line
       between them are green, so done reads apart from the blue pulse of the current step. A cancelled
       task keeps its track: the steps it finished stay done and the step it was on when it was
-      cancelled shows Cancelled (an `fg-3` `IconCrossSmall` at `scale-70`, about 10px, on a `bg-a3`
-      disc, the done step's circle in grey, and a filled `fg-2` dot on a queue row's mini track), from
-      `Task.cancelledFrom`; its now card says where and why, "Cancelled at Merge: the pull request
-      was closed without merging."
+      cancelled shows Cancelled (an `fg-3` `IconCrossSmall` on a `bg-a3` disc, the done step's
+      circle in grey, its X smaller than other crosses (Where Shinsa differs, 42), and a filled
+      `fg-2` dot on a queue row's mini track), from `Task.cancelledFrom`; its now card says where
+      and why, "Cancelled at Merge: the pull request was closed without merging."
     - **Page headings** (`components/layout/page/heading.tsx`): one `PageHeading` for Task, All tasks
       and Settings (Home's greeting uses its `PAGE_TITLE`): a `text-base` medium `fg-4` title on a
       20px line (`leading-tight`), the description or count `text-xs` `fg-2` directly under it
@@ -2899,6 +2899,13 @@ Only these, and they win over anything below:
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
 
+42. **A cancelled step's cross is smaller than every other cross** (since 2026-10-30;
+    `components/overview/progress-track.tsx`). A cancelled task's track marks the step it stopped at with an
+    `fg-3` `IconCrossSmall` on a 16px `bg-a3` disc, the done step's circle in grey. Inside that disc the
+    standard cross (6.5px, 19) reads too heavy beside the done steps' checks, so the icon draws at `scale-70`:
+    its X is about 4.5px in a 9.8px box. This is the one icon in the app scaled by a transform; every other
+    cross keeps the one size, and no icon takes a size outside `sm`, `md` and `lg`.
+
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
@@ -3944,7 +3951,7 @@ it sits with (Where Shinsa differs, 19). No icon has an opacity.
 
 An icon's spacing comes from **the height of the control it sits in**, and its
 size from the three-size scale (Icon sizes): `sm` in 22/24px controls and `default` buttons, `md` in
-the other 26/30px ones. Primitives set the size for their glyphs; never override it.
+the other 26/30px ones. Primitives set the size for their glyphs; never override it (the one exception is the cancelled step's cross, Where Shinsa differs, 42).
 The pixel columns below are paywall-next's; Shinsa's control heights are
 Where Shinsa differs, 20.
 
