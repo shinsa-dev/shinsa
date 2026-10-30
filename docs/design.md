@@ -1683,7 +1683,8 @@ Only these, and they win over anything below:
       page), a 14px orange `IconExclamationTriangle`, one `fg-3` sentence ("Shinsa skipped 2 damaged entries in its
       log at start. Everything else loaded."), a quiet "Details" that opens an `InfoPopover` ("Damaged log entries",
       then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
-      `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
+      `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it across reloads and restarts (localStorage),
+      until the skipped entries change.
     - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
       banner, the same `CARD` row, shown only in the desktop app and only when you must act: the orange triangle
       and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update

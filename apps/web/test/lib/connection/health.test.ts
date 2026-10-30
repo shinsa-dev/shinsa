@@ -111,7 +111,7 @@ describe('reading the health', () => {
     stop();
   });
 
-  it('shows the banner, keeps it when a read fails, and hides it for the session when dismissed', async () => {
+  it('shows the banner, keeps it when a read fails, and hides it once dismissed', async () => {
     const torn: LogProblem = { seq: 301, type: 'gate.opened', kind: 'unreadable', error: 'Torn' };
     let answer = createHealth([UNREADABLE, UNAPPLIABLE, torn]);
     let failing = false;
@@ -136,6 +136,24 @@ describe('reading the health', () => {
     answer = createHealth([torn]);
     await act(() => refreshHealth());
     expect(result.current?.problems).toHaveLength(1);
+  });
+});
+
+describe('a dismissal', () => {
+  it('is remembered after a reload, until the engine skips other entries', async () => {
+    let answer = createHealth([UNREADABLE, UNAPPLIABLE]);
+    serveHealth(() => answer);
+    const first = renderHook(() => useHealthBanner());
+    await waitFor(() => expect(first.result.current?.problems).toHaveLength(2));
+    act(() => dismissHealth());
+    first.unmount();
+    expect(localStorage.getItem('shinsa.health-dismissed')).toBe('41:unreadable,57:unappliable');
+    const reloaded = renderHook(() => useHealthBanner());
+    await waitFor(() => expect(countReads()).toBe(2));
+    expect(reloaded.result.current).toBeNull();
+    answer = createHealth([UNREADABLE, UNAPPLIABLE, { ...UNREADABLE, seq: 88 }]);
+    await act(() => refreshHealth());
+    expect(reloaded.result.current?.problems).toHaveLength(3);
   });
 });
 

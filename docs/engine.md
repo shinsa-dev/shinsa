@@ -4556,7 +4556,9 @@ started. `problems` lists every event row the engine skipped at boot:
 or an event `applyEvent` threw on). Replay never stops at a damaged row: every later event is still applied, the
 problem is logged as an error, and new events are numbered after the last row in the table. The web reads it on
 start and after every reconnect (`lib/connection/health.ts`) and, while `ok` is false, shows a banner saying how many
-entries were skipped, each listed under Details, until it is dismissed for the session (`docs/design.md`, 27). A
+entries were skipped, each listed under Details, until it is dismissed. A dismissal is kept in the page's
+localStorage (`shinsa.health-dismissed`) as the skipped entries it hid, so the same damaged rows, skipped again at
+every start, never show the banner again; a different set (new damage) does (`docs/design.md`, 27). A
 transcript line torn by a crash is shown as an error entry,
 and the next line is never glued onto it (`readChatEntries`).
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { writeLayoutPreference } from '@/lib/preferences/layout.ts';
 import { Root } from '@/root.tsx';
@@ -64,6 +64,18 @@ describe('the health banner', () => {
     expect(screen.getByText('Not applied')).toBeTruthy();
     fireEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByText(/damaged entries/)).toBeNull();
+  });
+
+  it('stays away after a reload once dismissed', async () => {
+    renderRoot();
+    const banner = (await findBanner(2)).closest('[role="status"]') as HTMLElement;
+    fireEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }));
+    cleanup();
+    const reads = fake?.requests.length ?? 0;
+    renderRoot();
+    await waitFor(() => expect(fake?.requests.length ?? 0).toBeGreaterThan(reads));
+    await act(() => refreshHealth());
+    expect(screen.queryByText(/damaged entr/)).toBeNull();
   });
 
   it('appears in the Sidebar layout too, and only once', async () => {
