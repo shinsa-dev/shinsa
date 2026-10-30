@@ -44,7 +44,7 @@ describe('webhooks through app.shinsa.dev', () => {
       headers: {
         'content-type': 'application/json',
         'x-maple-signature': 'sig',
-        cookie: '__Secure-shinsa_session=secret',
+        cookie: '__Host-shinsa_session=secret',
         'cf-connecting-ip': '1.2.3.4',
       },
       body: '{"alert":"down"}',

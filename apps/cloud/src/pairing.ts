@@ -115,40 +115,46 @@ export async function respondPairApprove(request: Request, claimCode: string, wo
   assertSameOrigin(request, world.config.origin);
   const user = await findSessionUser(request, world);
   const row = await findLivePairSession(claimCode, world);
-  if (row.credentials) throw new CloudError('pair_claimed', 'This Mac is already paired.', 409);
   if ((await world.store.listUserInstances(user.id)).length >= MAX_INSTANCES_PER_USER)
     throw new CloudError(
       'instances_full',
       `You can pair up to ${MAX_INSTANCES_PER_USER} machines. Remove one on the dashboard first.`,
       409
     );
+  if (!(await world.store.reservePairClaim(row.claim_code, user.login)))
+    throw new CloudError('pair_claimed', 'This Mac is already paired.', 409);
   const instanceId = createInstanceId();
-  const tunnelHost = resolveTunnelHost(instanceId);
-  const tunnel = await createCloudflare(world.config, world.fetch).createTunnel(
-    `shinsa-${instanceId}`,
-    tunnelHost,
-    DEFAULT_LOCAL_URL
-  );
-  const machineToken = createToken();
-  const connectKey = createToken();
-  await world.store.createInstance({
-    id: instanceId,
-    userId: user.id,
-    name: row.name,
-    fingerprint: await resolveKeyFingerprint(row.public_key),
-    tunnelId: tunnel.tunnelId,
-    dnsRecordId: tunnel.dnsRecordId,
-    machineTokenHash: await resolveTokenHash(machineToken),
-    connectKey,
-    createdAt: world.now(),
-  });
-  const credentials: MachineCredentials = {
-    instanceId,
-    machineToken,
-    tunnelToken: tunnel.tunnelToken,
-    tunnelHost,
-    connectKey,
-  };
-  await world.store.recordPairClaim(row.claim_code, credentials, user.login);
+  try {
+    const tunnelHost = resolveTunnelHost(instanceId);
+    const tunnel = await createCloudflare(world.config, world.fetch).createTunnel(
+      `shinsa-${instanceId}`,
+      tunnelHost,
+      DEFAULT_LOCAL_URL
+    );
+    const machineToken = createToken();
+    const connectKey = createToken();
+    await world.store.createInstance({
+      id: instanceId,
+      userId: user.id,
+      name: row.name,
+      fingerprint: await resolveKeyFingerprint(row.public_key),
+      tunnelId: tunnel.tunnelId,
+      dnsRecordId: tunnel.dnsRecordId,
+      machineTokenHash: await resolveTokenHash(machineToken),
+      connectKey,
+      createdAt: world.now(),
+    });
+    const credentials: MachineCredentials = {
+      instanceId,
+      machineToken,
+      tunnelToken: tunnel.tunnelToken,
+      tunnelHost,
+      connectKey,
+    };
+    await world.store.recordPairClaim(row.claim_code, credentials);
+  } catch (error) {
+    await world.store.releasePairClaim(row.claim_code);
+    throw error;
+  }
   return respondJson({ instanceId, name: row.name } satisfies PairApproveResponse);
 }

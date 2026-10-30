@@ -44,6 +44,10 @@ export async function resolveTokenHash(token: string) {
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+export async function createCodeChallenge(verifier: string) {
+  return serializeBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', encodeText(verifier))));
+}
+
 export function isSameSecret(left: string, right: string) {
   if (left.length !== right.length) return false;
   let difference = 0;

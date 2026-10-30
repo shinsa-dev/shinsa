@@ -53,6 +53,12 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
   remove this; it protects against reading traffic, not against altered code. An installed app would.
 - **The dashboard has its own origin.** app.shinsa.dev is not shinsa.dev, so nothing the marketing site runs can
   reach the enrolled device keys (IndexedDB), the session cookie or `/__remote/instances/<id>/connect`.
+- **Machines' hosts are same-site with the dashboard.** `t-<id>.shinsa.dev` is served by whichever machine owns it,
+  so the cookies carry the `__Host-` prefix (no other host can set or replace them) and every POST a page makes needs
+  the dashboard's exact `Origin`; SameSite alone would not keep a sibling host out.
+- **Who can get in.** Sign-in is GitHub OAuth with PKCE, gated by `ALLOWED_GITHUB_LOGINS` (logins or numeric ids),
+  checked on every request. Even a signed-in account reaches no machine: the tunnel answers only the sealed channel,
+  which needs a device key that machine enrolled and proves the machine's own key, pinned from its QR.
 - **A second public entry point.** The request class is decided once, first, from `cf-connecting-ip`, and every route
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.

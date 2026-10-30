@@ -49,7 +49,7 @@ describe('the router', () => {
     const logged = spyOn(console, 'error').mockImplementation(() => undefined);
     harness.db.sqlite.exec('DROP TABLE sessions');
     const failed = await harness.call(REMOTE_PATHS.session, {
-      headers: { cookie: '__Secure-shinsa_session=x' },
+      headers: { cookie: '__Host-shinsa_session=x' },
     });
     expect(failed.status).toBe(500);
     expect(await failed.json()).toEqual({

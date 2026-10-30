@@ -34,15 +34,22 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - **Where it lives.** On its own custom domain, `app.shinsa.dev` (`routes` in `wrangler.jsonc`, `workers_dev` off),
   with the app at the root. Its own origin keeps the session cookie, the service worker and each browser's device keys
   apart from the marketing site on `shinsa.dev`, which knows nothing of it.
-- **Sign-in.** `/__remote/sign-in?return=<path>` sends you to GitHub with a random `state` kept in a short
-  `__Secure-shinsa_oauth` cookie; the callback checks it, reads who you are from GitHub, refuses a login not in
-  `ALLOWED_GITHUB_LOGINS` (an empty or missing list lets nobody in, so a deploy without it is closed), and sets `__Secure-shinsa_session` (Path=/, HttpOnly, Secure, SameSite=Lax, 30
-  days). D1 keeps only the SHA-256 of the session token. The return path is a path on this origin (never `//…`). A failed
-  callback sends you to `/?sign_in_error=<code>`, which the sign-in page says in words.
+- **Sign-in.** Our own GitHub OAuth, about 150 lines, rather than an auth library: one provider, nothing else to
+  audit. `/__remote/sign-in?return=<path>` sends you to GitHub with a random `state` and a PKCE `S256` challenge, the
+  state and the verifier kept in a 10-minute `__Host-shinsa_oauth` cookie; the callback checks the state in constant
+  time, redeems the code with the verifier (a code stolen from the redirect cannot be redeemed without it), reads who
+  you are from GitHub, refuses an account not in `ALLOWED_GITHUB_LOGINS` (logins or numeric GitHub ids; an empty or
+  missing list lets nobody in, so a deploy without it is closed), and sets `__Host-shinsa_session` (Path=/, HttpOnly,
+  Secure, SameSite=Lax, 30 days). The `__Host-` prefix means no other host, a machine's `t-<id>.shinsa.dev`
+  included, can set or overwrite either cookie. D1 keeps only the SHA-256 of the session token, and every request
+  checks the list again, so taking an account off it ends its sessions at once. The return path is parsed against
+  this origin and kept only when it stays on it (a tab, a newline or a backslash cannot turn it into `//elsewhere`).
+  A failed callback sends you to `/?sign_in_error=<code>`, which the sign-in page says in words.
 - **Pairing.** The machine posts its name and public key to `pair/start` (no account yet; at most 10 waiting pairings
   per address, each for 10 minutes) and gets an 8-character claim code, a poll secret (kept only as a hash) and the
   `/pair?code=` link. You open it signed in, see the machine's name and key fingerprint (`/__remote/pairs/<code>`),
-  and approve (`…/approve`): the Worker makes the tunnel `shinsa-<instance>`, its ingress to `http://127.0.0.1:7446`
+  and approve (`…/approve`), which first reserves the code in one conditional update so two approvals at once pair
+  it only once (a failed approval releases it): the Worker makes the tunnel `shinsa-<instance>`, its ingress to `http://127.0.0.1:7446`
   with a 404 for anything else, its token and the proxied CNAME `t-<instance>.shinsa.dev`, then the instance with
   the hash of a new machine token and a new connect key. A failed step removes the half-made tunnel. The machine's
   next poll with the right secret collects the credentials once; the row is then gone. At most 5 machines per account.
@@ -72,7 +79,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone), and `ALLOWED_GITHUB_LOGINS`, the comma-separated GitHub logins that may sign in. It is a
+  the `shinsa.dev` zone), and `ALLOWED_GITHUB_LOGINS`, the comma-separated GitHub logins or numeric ids that may sign in (an id survives a
+  rename; a login someone else can take once it is free). It is a
   secret, not a `vars` entry, so `wrangler deploy` never overwrites it with an empty list.
 - The custom domain `app.shinsa.dev` is created by `wrangler deploy` (it needs the `shinsa.dev` zone on the same
   account). The GitHub OAuth app's callback URL must be exactly `https://app.shinsa.dev/__remote/sign-in/callback`.

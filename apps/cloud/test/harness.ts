@@ -2,9 +2,10 @@ import { Database as Sqlite } from 'bun:sqlite';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REMOTE_APP_ORIGIN } from '@shinsa/core';
+import { createCodeChallenge } from '../src/crypto.ts';
 import type { Database, DatabaseStatement } from '../src/database.ts';
 import { createWorld, respond } from '../src/router.ts';
-import type { CloudConfig } from '../src/world.ts';
+import type { CloudConfig, CloudWorld } from '../src/world.ts';
 
 type SqlValue = string | number | null;
 
@@ -66,6 +67,7 @@ export const TEST_CONFIG: CloudConfig = {
 
 export interface Harness {
   db: ReturnType<typeof createTestDatabase>;
+  world: CloudWorld;
   calls: UpstreamCall[];
   handlers: UpstreamHandler[];
   clock: { now: number };
@@ -79,6 +81,13 @@ export interface Harness {
 }
 
 const GITHUB_USERS = new Map<string, { id: number; login: string }>();
+
+const GITHUB_CHALLENGES = new Map<string, string>();
+
+export function registerGitHubCode(code: string, user: { id: number; login: string }, challenge: string) {
+  GITHUB_USERS.set(code, user);
+  GITHUB_CHALLENGES.set(code, challenge);
+}
 
 export function createHarness(config: Partial<CloudConfig> = {}): Harness {
   const db = createTestDatabase();
@@ -102,7 +111,13 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
         if (answer.status !== 599) return answer;
       }
       if (url === 'https://github.com/login/oauth/access_token') {
-        const { code } = JSON.parse(upstream.body) as { code: string };
+        const { code, code_verifier: verifier } = JSON.parse(upstream.body) as {
+          code: string;
+          code_verifier: string;
+        };
+        const challenge = GITHUB_CHALLENGES.get(code);
+        if (challenge && challenge !== (await createCodeChallenge(verifier)))
+          return Response.json({ error: 'bad_verification_code' });
         return Response.json({ access_token: `token-for-${code}` });
       }
       if (url === 'https://api.github.com/user') {
@@ -124,7 +139,7 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     init: RequestInit & { session?: string; sameOrigin?: boolean } = {}
   ): Promise<Response> {
     const headers = new Headers(init.headers);
-    if (init.session) headers.set('cookie', `__Secure-shinsa_session=${init.session}`);
+    if (init.session) headers.set('cookie', `__Host-shinsa_session=${init.session}`);
     if (init.sameOrigin) headers.set('origin', REMOTE_APP_ORIGIN);
     return respond(new Request(`${REMOTE_APP_ORIGIN}${path}`, { ...init, headers }), world);
   }
@@ -149,17 +164,19 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     const code = `code-${login}-${id}`;
     GITHUB_USERS.set(code, { id, login });
     const start = await call('/__remote/sign-in?return=/');
-    const state = new URL(start.headers.get('location') ?? '').searchParams.get('state') ?? '';
+    const authorize = new URL(start.headers.get('location') ?? '');
+    const state = authorize.searchParams.get('state') ?? '';
+    GITHUB_CHALLENGES.set(code, authorize.searchParams.get('code_challenge') ?? '');
     const oauth = (start.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
     const done = await call(`/__remote/sign-in/callback?code=${code}&state=${state}`, {
       headers: { cookie: oauth },
     });
     const cookie =
-      done.headers.getSetCookie().find((value) => value.startsWith('__Secure-shinsa_session=')) ?? '';
+      done.headers.getSetCookie().find((value) => value.startsWith('__Host-shinsa_session=')) ?? '';
     return cookie.split(';')[0]?.split('=')[1] ?? '';
   }
 
-  return { db, calls, handlers, clock, call, post, signIn };
+  return { db, world, calls, handlers, clock, call, post, signIn };
 }
 
 export async function readJson<T>(response: Response) {

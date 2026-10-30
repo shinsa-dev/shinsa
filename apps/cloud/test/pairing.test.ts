@@ -44,6 +44,23 @@ describe('pairing a machine', () => {
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
   });
 
+  test('pairs a Mac once when two approvals race, making one tunnel', async () => {
+    const harness = createHarness();
+    const mona = await harness.signIn('mona', 42);
+    const kai = await harness.signIn('kai', 43);
+    const { start } = await startPair(harness);
+    const answers = await Promise.all([
+      harness.post(resolvePairApprovePath(start.claimCode), {}, { session: mona }),
+      harness.post(resolvePairApprovePath(start.claimCode), {}, { session: kai }),
+    ]);
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 1 });
+    const tunnels = harness.calls.filter(
+      (call) => call.method === 'POST' && call.url.endsWith('/cfd_tunnel')
+    );
+    expect(tunnels).toHaveLength(1);
+  });
+
   test('shows the machine and its key fingerprint to the signed-in person who approves it', async () => {
     const harness = createHarness();
     const { start, publicKey } = await startPair(harness);
@@ -166,6 +183,26 @@ describe('pairing a machine', () => {
     expect(harness.calls.at(-1)).toMatchObject({ method: 'DELETE' });
     expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 0 });
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
+    harness.handlers.length = 0;
+    const retried = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
+    expect(retried.status).toBe(200);
+  });
+
+  test('pairs a Mac once when two approvals race, making one tunnel', async () => {
+    const harness = createHarness();
+    const mona = await harness.signIn('mona', 42);
+    const kai = await harness.signIn('kai', 43);
+    const { start } = await startPair(harness);
+    const answers = await Promise.all([
+      harness.post(resolvePairApprovePath(start.claimCode), {}, { session: mona }),
+      harness.post(resolvePairApprovePath(start.claimCode), {}, { session: kai }),
+    ]);
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 1 });
+    const tunnels = harness.calls.filter(
+      (call) => call.method === 'POST' && call.url.endsWith('/cfd_tunnel')
+    );
+    expect(tunnels).toHaveLength(1);
   });
 
   test('refuses a bad machine key or body, and too many waiting pairings from one address', async () => {

@@ -1,5 +1,5 @@
 import { REMOTE_PATHS, type RemoteSession } from '@shinsa/core';
-import { createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
+import { createCodeChallenge, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
 import type { UserRow } from './database.ts';
 import {
   assertSameOrigin,
@@ -11,9 +11,9 @@ import {
 } from './http.ts';
 import type { CloudWorld } from './world.ts';
 
-const SESSION_COOKIE = '__Secure-shinsa_session';
+const SESSION_COOKIE = '__Host-shinsa_session';
 
-const OAUTH_COOKIE = '__Secure-shinsa_oauth';
+const OAUTH_COOKIE = '__Host-shinsa_oauth';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -31,10 +31,16 @@ interface GitHubUser {
   avatar_url?: string;
 }
 
+function isAllowedUser(user: Pick<UserRow, 'id' | 'login'>, world: CloudWorld) {
+  const { allowedLogins } = world.config;
+  return allowedLogins.includes(user.login.toLowerCase()) || allowedLogins.includes(user.id);
+}
+
 async function selectSessionUser(request: Request, world: CloudWorld) {
   const token = readCookie(request, SESSION_COOKIE);
   if (!token) return null;
-  return world.store.selectSessionUser(await resolveTokenHash(token), world.now());
+  const user = await world.store.selectSessionUser(await resolveTokenHash(token), world.now());
+  return user && isAllowedUser(user, world) ? user : null;
 }
 
 export async function findSessionUser(request: Request, world: CloudWorld) {
@@ -51,21 +57,33 @@ export async function respondSession(request: Request, world: CloudWorld) {
   return respondJson(session);
 }
 
-function resolveReturnPath(value: string | null) {
-  if (!value?.startsWith(REMOTE_PATHS.app) || value.startsWith('//') || value.includes('\\'))
+function resolveReturnPath(value: string | null, origin: string) {
+  if (!value?.startsWith('/')) return REMOTE_PATHS.app;
+  try {
+    const url = new URL(value, origin);
+    return url.origin === origin ? `${url.pathname}${url.search}` : REMOTE_PATHS.app;
+  } catch {
     return REMOTE_PATHS.app;
-  return value;
+  }
 }
 
-export function respondSignIn(url: URL, world: CloudWorld) {
+function readOAuthCookie(request: Request) {
+  const [state, verifier, ...rest] = (readCookie(request, OAUTH_COOKIE) ?? '').split('.');
+  return { state, verifier, returnPath: decodeURIComponent(rest.join('.')) };
+}
+
+export async function respondSignIn(url: URL, world: CloudWorld) {
   const state = createToken(24);
-  const returnPath = resolveReturnPath(url.searchParams.get('return'));
+  const verifier = createToken(32);
+  const returnPath = resolveReturnPath(url.searchParams.get('return'), world.config.origin);
   const authorize = new URL(GITHUB_AUTHORIZE);
   authorize.searchParams.set('client_id', world.config.githubClientId);
   authorize.searchParams.set('redirect_uri', `${world.config.origin}${REMOTE_PATHS.signInCallback}`);
   authorize.searchParams.set('state', state);
+  authorize.searchParams.set('code_challenge', await createCodeChallenge(verifier));
+  authorize.searchParams.set('code_challenge_method', 'S256');
   authorize.searchParams.set('allow_signup', 'false');
-  const cookie = `${state}.${encodeURIComponent(returnPath)}`;
+  const cookie = `${state}.${verifier}.${encodeURIComponent(returnPath)}`;
   return new Response(null, {
     status: 302,
     headers: {
@@ -76,7 +94,7 @@ export function respondSignIn(url: URL, world: CloudWorld) {
   });
 }
 
-async function requestGitHubUser(code: string, world: CloudWorld): Promise<GitHubUser> {
+async function requestGitHubUser(code: string, verifier: string, world: CloudWorld): Promise<GitHubUser> {
   const tokenResponse = await world.fetch(GITHUB_TOKEN, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },
@@ -84,6 +102,7 @@ async function requestGitHubUser(code: string, world: CloudWorld): Promise<GitHu
       client_id: world.config.githubClientId,
       client_secret: world.config.githubClientSecret,
       code,
+      code_verifier: verifier,
       redirect_uri: `${world.config.origin}${REMOTE_PATHS.signInCallback}`,
     }),
   });
@@ -105,22 +124,18 @@ async function requestGitHubUser(code: string, world: CloudWorld): Promise<GitHu
   return { id: user.id, login: user.login, avatar_url: user.avatar_url };
 }
 
-function isAllowedLogin(login: string, world: CloudWorld) {
-  return world.config.allowedLogins.includes(login.toLowerCase());
-}
-
 export async function respondSignInCallback(request: Request, url: URL, world: CloudWorld) {
-  const [state, encodedReturn] = (readCookie(request, OAUTH_COOKIE) ?? '').split('.');
+  const { state, verifier, returnPath } = readOAuthCookie(request);
   const answered = url.searchParams.get('state') ?? '';
   const code = url.searchParams.get('code');
-  if (!state || !code || !isSameSecret(state, answered))
+  if (!state || !verifier || !code || !isSameSecret(state, answered))
     throw new CloudError(
       'sign_in_failed',
       'The sign-in expired or came from somewhere else. Try again.',
       400
     );
-  const github = await requestGitHubUser(code, world);
-  if (!isAllowedLogin(github.login, world))
+  const github = await requestGitHubUser(code, verifier, world);
+  if (!isAllowedUser({ id: String(github.id), login: github.login }, world))
     throw new CloudError('sign_in_refused', `${github.login} cannot use this Shinsa dashboard.`, 403);
   const now = world.now();
   const user: UserRow = { id: String(github.id), login: github.login, avatar_url: github.avatar_url ?? null };
@@ -128,7 +143,7 @@ export async function respondSignInCallback(request: Request, url: URL, world: C
   const token = createToken();
   await world.store.createSession(await resolveTokenHash(token), user.id, now + SESSION_TTL_MS);
   const headers = new Headers({
-    location: resolveReturnPath(decodeURIComponent(encodedReturn ?? REMOTE_PATHS.app)),
+    location: resolveReturnPath(returnPath, world.config.origin),
     'cache-control': 'no-store',
   });
   headers.append('set-cookie', serializeCookie(SESSION_COOKIE, token, SESSION_TTL_MS / 1000));

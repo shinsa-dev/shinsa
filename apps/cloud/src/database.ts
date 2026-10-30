@@ -126,10 +126,27 @@ export function createStore(db: Database) {
         .first<PairSessionRow>();
     },
 
-    async recordPairClaim(claimCode: string, credentials: MachineCredentials, owner: string) {
+    async reservePairClaim(claimCode: string, owner: string) {
+      const row = await db
+        .prepare(
+          'UPDATE pair_sessions SET owner = ? WHERE claim_code = ? AND owner IS NULL RETURNING claim_code'
+        )
+        .bind(owner, claimCode)
+        .first<{ claim_code: string }>();
+      return row !== null;
+    },
+
+    async releasePairClaim(claimCode: string) {
       await db
-        .prepare('UPDATE pair_sessions SET credentials = ?, owner = ? WHERE claim_code = ?')
-        .bind(JSON.stringify(credentials), owner, claimCode)
+        .prepare('UPDATE pair_sessions SET owner = NULL WHERE claim_code = ? AND credentials IS NULL')
+        .bind(claimCode)
+        .run();
+    },
+
+    async recordPairClaim(claimCode: string, credentials: MachineCredentials) {
+      await db
+        .prepare('UPDATE pair_sessions SET credentials = ? WHERE claim_code = ?')
+        .bind(JSON.stringify(credentials), claimCode)
         .run();
     },
 
