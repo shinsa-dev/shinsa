@@ -2351,7 +2351,7 @@ The dashboard shares the shinsa.dev origin with the marketing site, so that site
   machine's own address, as before.
 - **The hosted web app** (`apps/web/src/lib/remote/`, `routes/remote/`; `bun run --cwd apps/web build:remote` writes
   `apps/web/dist-remote` with the base path `/app/`, which `apps/cloud` serves): the same web app built with
-  `VITE_SHINSA_REMOTE=1`, on `https://shinsa.dev/app`. `apps/cloud` owns the route `shinsa.dev/app*`, which runs
+  `VITE_SHINSA_REMOTE=1`, on `https://shinsa.dev/app`. `apps/cloud` owns the routes `shinsa.dev/app` and `shinsa.dev/app/*`, which runs
   before the marketing Worker's custom domain, and the marketing Worker also hands `/app` to it through a service
   binding (`apps/marketing/src/worker/app.ts`), so there is one origin and no subdomain; `www.shinsa.dev/app` redirects there. Its own pages are sign in with GitHub, the pairing approval
   (`/app/pair?code=`: the machine's name and key fingerprint to compare with Settings) and adding this browser
