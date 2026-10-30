@@ -31,6 +31,7 @@ import { assertNotWatchHome, messageTask } from './messages.ts';
 import { isReadBusy } from './reads.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
+import { findOpenWatchSuggestion, suggestWatch, type WatchSuggestionInput } from './watch-suggestions.ts';
 
 const NAME_FROM_TEXT = 60;
 
@@ -375,14 +376,44 @@ function emitWritten(
   const nextRunAt = restart ? resolveRestart(existing, body, now) : (existing?.nextRunAt ?? null);
   const schedule: Schedule = { ...draft, nextRunAt };
   assertRunnable(schedule);
-  if (existing && isSameValue({ ...existing, updatedAt: now }, schedule)) return;
+  if (existing && isSameValue({ ...existing, updatedAt: now }, schedule)) return existing;
   decider.emit({ type: 'schedule.written', schedule });
+  return schedule;
+}
+
+function resolveSuggestion(
+  decider: Decider,
+  command: ScheduleWrite,
+  source: ScheduleSource,
+  origin: WatchSuggestionInput['origin']
+): WatchSuggestionInput {
+  findProjectSource(decider, source);
+  const text = resolveText(command, null);
+  return {
+    projectId: source.projectId,
+    server: source.server,
+    name: resolveWrittenName(command, null, text),
+    text,
+    trigger: resolveTrigger(command, null, decider.context.now),
+    timeZone: command.timeZone,
+    maxRuns: resolveMaxRuns(command, null),
+    origin,
+  };
 }
 
 export function writeSchedule(decider: Decider, command: CommandOf<'agent.set_schedule'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'set_schedule');
   assertTimeZone(command.timeZone);
   const existing = command.scheduleId ? selectOwnSchedule(decider, command.scheduleId, task) : null;
+  if (!existing && command.source?.trim()) {
+    const source = resolveAgentSource(decider, command, task, null);
+    assertSourceChange(source, null, command.target !== null);
+    if (source) {
+      const origin = { kind: 'agent' as const, taskId: task.id, runId: run.id };
+      suggestWatch(decider, resolveSuggestion(decider, command, source, origin));
+      return;
+    }
+  }
   if (!existing) assertScheduleRoom(decider, task);
   const body = resolveBody(decider, command, task, existing);
   emitWritten(decider, existing, body, { kind: 'agent', taskId: task.id, runId: run.id });
@@ -440,8 +471,14 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
   if (command.scheduleId && !existing) {
     throw new DomainError('schedule_not_found', `No schedule ${command.scheduleId}.`);
   }
-  if (!existing) assertScheduleRoom(decider, null);
   const source = resolveUserSource(decider, command, existing);
+  if (!existing && source && decider.context.onBehalf) {
+    assertSourceChange(source, null, command.target !== null);
+    const origin = { kind: 'agent' as const, taskId: decider.context.byTask ?? null, runId: null };
+    suggestWatch(decider, resolveSuggestion(decider, command, source, origin));
+    return;
+  }
+  if (!existing) assertScheduleRoom(decider, null);
   const body = resolveWrittenBody(
     decider,
     command,
@@ -450,6 +487,29 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
     source
   );
   emitWritten(decider, existing, body, { kind: 'you' });
+}
+
+export function acceptWatchSuggestion(decider: Decider, command: CommandOf<'watch_suggestion.accept'>) {
+  if (decider.context.onBehalf) {
+    throw new DomainError(
+      'human_only',
+      'Only the human accepts a suggested watch. It waits for them in Settings → Automations.'
+    );
+  }
+  const suggestion = findOpenWatchSuggestion(decider, command.suggestionId);
+  const source = { projectId: suggestion.projectId, server: suggestion.server };
+  findProjectSource(decider, source);
+  assertScheduleRoom(decider, null);
+  const write = { ...suggestion, enabled: true };
+  const body = resolveWrittenBody(
+    decider,
+    write,
+    null,
+    resolveSourceTarget(decider, write, null, source),
+    source
+  );
+  const schedule = emitWritten(decider, null, body, { kind: 'you' });
+  decider.emit({ type: 'watch_suggestion.accepted', suggestionId: suggestion.id, scheduleId: schedule.id });
 }
 
 export function removeOwnSchedule(decider: Decider, command: CommandOf<'agent.delete_schedule'>) {

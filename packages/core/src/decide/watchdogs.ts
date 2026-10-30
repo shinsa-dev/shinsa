@@ -25,6 +25,7 @@ import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
 import { isReadBusy, listSourceFiledTasks, type ReadReport } from './reads.ts';
 import { resolveRestingStage } from './shapes.ts';
+import { isWatchSuggestible, removeSourceSuggestions } from './watch-suggestions.ts';
 
 function selectWatchdog(task: Task, watchdogId: string) {
   return (task.watchdogs ?? []).find((watchdog) => watchdog.id === watchdogId) ?? null;
@@ -113,6 +114,8 @@ function writeSource(decider: Decider, projectId: string, source: WatchSource) {
   const written = { ...source, repoIds: known && known.repoIds.length === 0 ? [] : repoIds };
   if (known && known.data === written.data && known.repoIds.join() === written.repoIds.join()) return;
   decider.emit({ type: 'watch_source.written', projectId, source: written });
+  if (known || !isWatchSuggestible(decider, projectId, written.server)) return;
+  decider.run({ kind: 'watch.suggest', projectId, server: written.server, data: written.data });
 }
 
 function recordAgentSource(decider: Decider, task: Task, source: WatchdogSource) {
@@ -455,6 +458,7 @@ export function removeWatchSource(decider: Decider, command: CommandOf<'watch_so
   const project = decider.state.projects[command.projectId];
   if (!project) throw new DomainError('project_not_found', `No project ${command.projectId}`);
   if (!(project.watchSources ?? []).some((source) => source.server === command.server)) return;
+  removeSourceSuggestions(decider, project.id, command.server);
   decider.emit({ type: 'watch_source.removed', projectId: project.id, server: command.server });
 }
 

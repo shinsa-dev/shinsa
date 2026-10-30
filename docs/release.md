@@ -38,13 +38,16 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
    builds and signs `release/mac-arm64/Shinsa.app` (ad hoc when unsigned) without notarizing; when signed,
    `scripts/release-notarize.ts` notarizes and staples that app, retrying (Signing and notarization, below); and
    `electron-builder --mac dmg zip --arm64 --prepackaged release/mac-arm64/Shinsa.app` packages the disk image and the
-   zip from it, without signing it again, so both carry the stapled ticket. Every channel builds the same app from
-   `electron-builder.yml`. The disk image's volume is
+   zip from it, without signing it again, so both carry the stapled ticket. electron-builder writes the updater's
+   `Contents/Resources/app-update.yml` only when the run that packs builds a `dmg` or `zip`, which neither step does,
+   so the app carries a checked-in `apps/desktop/resources/app-update.yml` (`extraResources`) that the first step
+   copies in before signing; without it electron-updater finds an update and fails to download it. Every channel
+   builds the same app from `electron-builder.yml`. The disk image's volume is
    `Shinsa <version>` and opens on the install window, the app beside an Applications link on the site's
    background; a beta or a canary passes `-c.dmg.background=dmg/background-<channel>.png` for the one with its Beta
    or Canary pill (`apps/desktop/CLAUDE.md` → The disk image).
 4. Checks that the app (`CFBundleShortVersionString`) and the engine inside it (`shinsa version --json`) both say the
-   release's version, prerelease suffix included, that the bundle id is `studio.overclock.shinsa` on every channel, and verifies the signature (`codesign --verify --deep --strict`;
+   release's version, prerelease suffix included, that the bundle id is `studio.overclock.shinsa` on every channel, that the app has `Contents/Resources/app-update.yml`, and verifies the signature (`codesign --verify --deep --strict`;
    `spctl` and `stapler validate` too when signed).
 5. Writes the update files for the channels (below) and publishes the release with GitHub's generated notes under a
    one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s and the update files. A beta or a canary

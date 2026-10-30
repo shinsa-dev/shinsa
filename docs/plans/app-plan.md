@@ -168,7 +168,7 @@ data directory for it.
   an unsigned download, and `SMAppService` will not register the engine from an unsigned app. The release workflow
   (`.github/workflows/release.yml`) gets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`
   and `APPLE_TEAM_ID` as secrets and drops `mac.identity=-`.
-- **Releases live in this repository.** `shinsa-dev/shinsa` goes public, under MIT, when Shinsa launches; until
+- **Releases live in this repository.** `shinsa-dev/shinsa` goes public, under the AGPL v3, when Shinsa launches; until
   then its release files cannot be downloaded without signing in, which is fine while nothing is published.
   `shinsa.dev/download` serves the newest stable `Shinsa-mac-arm64.dmg` through the site's Worker, from a copy in
   Cloudflare R2 the release workflow makes (`docs/release.md` → Downloads), and electron-updater reads the releases.

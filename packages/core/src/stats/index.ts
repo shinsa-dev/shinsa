@@ -2,6 +2,7 @@ import { addUsage, resolveUsageDelta } from '../costs/index.ts';
 import { resolveTaskRounds } from '../domain/rounds.ts';
 import type { PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { resolveTaskProject } from '../state/queries.ts';
 
 export interface TokenLine {
   runs: number;
@@ -250,7 +251,21 @@ function resolveTotal(series: StatsDay[]): StatsDay {
   return total;
 }
 
-export function resolveStats(state: Pick<ShinsaState, 'tasks' | 'runs'>, window: StatsWindow): Stats {
+export type StatsSource = Pick<ShinsaState, 'tasks' | 'runs'>;
+
+export function resolveProjectStatsSource(
+  state: Pick<ShinsaState, 'tasks' | 'runs' | 'repos'>,
+  projectId: string | null
+): StatsSource {
+  if (projectId === null) return { tasks: state.tasks, runs: state.runs };
+  const tasks = Object.fromEntries(
+    Object.entries(state.tasks).filter(([, task]) => resolveTaskProject(state, task) === projectId)
+  );
+  const runs = Object.fromEntries(Object.entries(state.runs).filter(([, run]) => run.taskId in tasks));
+  return { tasks, runs };
+}
+
+export function resolveStats(state: StatsSource, window: StatsWindow): Stats {
   const days = new Map(window.days.map((day) => [day, createDay(day)]));
   const dayAt: DayLookup = (at) => days.get(window.dayOf(at)) ?? null;
   const fold: UsageFold = {

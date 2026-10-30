@@ -4,8 +4,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
 import { spyOnCommands } from '../../support/commands.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
-import { createSchedule } from '../../support/schedules.ts';
-import { createShinsaState, createTask, NOW } from '../../support/state.ts';
+import { createSchedule, createWatchSuggestion } from '../../support/schedules.ts';
+import { createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
 
@@ -33,6 +33,46 @@ async function openMenu(index = 0) {
   fireEvent.click(screen.getAllByRole('button', { name: 'Automation options' })[index] as HTMLElement);
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
+
+describe('Settings → Automations, suggested watches', () => {
+  function renderSuggestions() {
+    const state = createShinsaState({
+      projects: [createProject({ id: 'p1', name: 'Superwall' })],
+      patch: {
+        watchSuggestions: {
+          s1: createWatchSuggestion({ id: 's1' }),
+          s2: createWatchSuggestion({ id: 's2', server: 'maple', text: 'Errors.', status: 'dismissed' }),
+        },
+      },
+    });
+    return render(
+      <TooltipProvider>
+        <ScheduleSettings state={state} />
+      </TooltipProvider>
+    );
+  }
+
+  it('lists the open ones above the automations, with their project, instead of the empty note', () => {
+    renderSuggestions();
+    expect(screen.getByText('Suggested watches')).toBeDefined();
+    expect(screen.getByText('File a task for each new bug in #feedback.')).toBeDefined();
+    expect(screen.getByText('slack · every hour · Superwall')).toBeDefined();
+    expect(screen.queryByText('Errors.')).toBeNull();
+    expect(screen.queryByText(/^Ask an agent for a schedule/)).toBeNull();
+  });
+
+  it('adds or dismisses one in a click', async () => {
+    renderSuggestions();
+    fireEvent.click(screen.getByRole('button', { name: 'Add the watch' }));
+    await waitFor(() => expect(spies.sent).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the suggested watch' }));
+    await waitFor(() => expect(spies.sent).toHaveBeenCalledTimes(2));
+    expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'watch_suggestion.accept', suggestionId: 's1' },
+      { type: 'watch_suggestion.dismiss', suggestionId: 's1' },
+    ]);
+  });
+});
 
 describe('Settings → Schedules', () => {
   it('says how schedules appear when there are none', () => {

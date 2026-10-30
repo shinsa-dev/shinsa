@@ -311,7 +311,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Claude's subagents. Agent usage shows every connected provider in Settings and at a glance in the
   top bar.
 - **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
-  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). Shipping: pull requests merged, tasks finished, lines merged and the
+  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). With a project in focus it counts only that project's tasks and their runs, and each section says so beside its title; it counts everything again once the focus ends. Shipping: pull requests merged, tasks finished, lines merged and the
   shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
   past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
@@ -615,6 +615,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   still open. A watch reads one of a project's integrations (a Slack channel, a support inbox,
   traces) on a clock or a webhook, out of sight, and files a task for each new report in it, with the report kept on the
   task, forked from the task that shipped the feature it is about, and never filed twice.
+  A project that starts using an integration is offered one watch suited to it ("File a task for
+  each new bug in #feedback", hourly), added or dismissed in one click; a watch an agent sets, such
+  as one asked for from Home ("watch #feedback for bugs, hourly"), is that same suggestion, the one
+  thing to approve.
   Settings → Automations and ⌘K pause, resume and delete them. Webhooks are signed
   (HMAC), deduped by a replay key and rate limited, and what they carry reaches the agent framed as
   untrusted data.

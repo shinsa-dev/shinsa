@@ -1,4 +1,4 @@
-import type { Schedule } from '@shinsa/core';
+import type { Schedule, WatchSuggestion } from '@shinsa/core';
 import { NOW } from './state.ts';
 
 export function createSchedule(overrides: Partial<Schedule> & { id: string }): Schedule {
@@ -22,6 +22,24 @@ export function createSchedule(overrides: Partial<Schedule> & { id: string }): S
     lastReadAt: null,
     stopped: null,
     replayKeys: {},
+    ...overrides,
+  };
+}
+
+export function createWatchSuggestion(overrides: Partial<WatchSuggestion> & { id: string }): WatchSuggestion {
+  return {
+    projectId: 'p1',
+    server: 'slack',
+    name: 'Bugs in #feedback',
+    text: 'File a task for each new bug in #feedback.',
+    trigger: { kind: 'interval', everyMinutes: 60 },
+    timeZone: 'UTC',
+    maxRuns: null,
+    origin: { kind: 'source' },
+    status: 'open',
+    scheduleId: null,
+    createdAt: NOW - 60_000,
+    decidedAt: null,
     ...overrides,
   };
 }

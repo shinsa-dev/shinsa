@@ -25,6 +25,8 @@ export type ScheduleTargetInput =
 export type ScheduleUserCommand =
   | { type: 'schedule.enable'; scheduleId: string; enabled: boolean }
   | { type: 'schedule.remove'; scheduleId: string }
+  | { type: 'watch_suggestion.accept'; suggestionId: string }
+  | { type: 'watch_suggestion.dismiss'; suggestionId: string }
   | {
       type: 'schedule.write';
       scheduleId: string | null;
@@ -58,6 +60,14 @@ export type ScheduleAgentCommand =
 
 export type ScheduleSystemCommand =
   | { type: 'schedule.fire'; scheduleId: string; dueAt: number }
+  | {
+      type: 'watch_suggestion.record';
+      projectId: string;
+      server: string;
+      name: string | null;
+      text: string | null;
+      timeZone: string;
+    }
   | {
       type: 'schedule.fail';
       scheduleId: string;

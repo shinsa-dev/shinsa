@@ -59,6 +59,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; each check is a read of that source scoped to the change, and a report it files is a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `file_report`, `report_read` | Watchdogs, Watching |
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
 | watch | An automation that reads one of its project's integrations on a clock or a webhook and files a task per new report, from a home task no list shows | `Schedule.source`, `Task.watchHome`, `isWatchHome`, purpose `intake` | Watch, Show its reads |
+| suggested watch | A watch offered for one click, never running until you accept it: one per integration a project starts using, worded from what it holds, or one an agent asked for; accepting writes it as yours, dismissing keeps it from being offered again | `WatchSuggestion` (`state.watchSuggestions`), `watch_suggestion.record`, `watch_suggestion.accept`, `watch_suggestion.dismiss`, the effect `watch.suggest` | Suggested watch, Add the watch, Dismiss the suggested watch (the cross in Settings), Cancel (the chat card) |
 | report | One message or signal in an integration a watch or a watchdog read (a Slack message, a support email, an error) that it filed as a task, kept on that task with its id or link, author, time and text; the filed tasks are what dedupes the next read, a watch's and a watchdog's alike | `SourceReport` (`Task.sourceReport`), purposes `intake` and `watch`, `file_report`, `report_read`, `TaskCreator.kind: 'intake'` or `'watchdog'` | Reported in, N tasks filed |
 | fork | A task whose Agent starts from a copy of another task's conversation | `Task.forkOf`, `Run.fork` | Fork into a new task, Forked from, Forked into |
 | point | Anything the Review tab marks for you to read: a spot, a judgement call, a risk or a finding | `ReviewItem` (web, `lib/review/report.ts`) | point, "Every point" |
@@ -752,8 +753,10 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `run.snooze_silence` | snoozes a quiet-run warning | `runs snooze` | agent |
 | `run.dismiss_silence` | dismisses it for the run | `runs dismiss` | agent |
 | `delegation.cancel` | stops a delegation and what it delegated | `delegations stop` | agent |
-| `schedule.write` | creates or changes a schedule; with `source` (`projectId`, `server`) it is a watch, reading that integration in a home it creates; no target (`source_target`), and a schedule that starts or messages a task never becomes one (`source_change`) | `schedules write` | agent |
+| `schedule.write` | creates or changes a schedule; with `source` (`projectId`, `server`) it is a watch, reading that integration in a home it creates; no target (`source_target`), and a schedule that starts or messages a task never becomes one (`source_change`); a new watch sent for you is recorded as a suggested watch instead (`watch_suggestion.recorded`, origin the acting task) | `schedules write` | agent |
 | `schedule.enable` | pauses or resumes one | `schedules enable`, `schedules disable` | agent |
+| `watch_suggestion.accept` | accepts a suggested watch: writes it as your `schedule.write` with `source` (`createdBy: you`, its home, its first read a slot later); refused once decided (`suggestion_decided`) or with its integration gone (`source_not_found`) | `schedules accept` | **human** |
+| `watch_suggestion.dismiss` | dismisses a suggested watch, which is never offered again for that integration | `schedules dismiss` | agent |
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
 | `project.remove` | removes one | `projects remove` | agent |
@@ -823,7 +826,7 @@ role without the tool (`hasTool`).
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`) or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
-| `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch, from a home of its own |
+| `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
 The delegation tools name a delegation by `delegation_id`. Reads with no command: `find_tasks`, `read_task`,
@@ -868,6 +871,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
+| `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries.ts` | a delivery claim was taken, or released |
@@ -967,6 +971,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.message_queued` | your message was queued for a waiting step |
 | `memory.written`, `memory.proposed`, `memory.removed` | you wrote, kept or changed a rule (the whole `entry`); an agent proposed one (recorded in its task's activity); a rule was forgotten or a proposal dismissed, or its project removed |
 | `schedule.written`, `schedule.removed`, `schedule.fired` | a schedule was written, removed, fired (with its run) |
+| `watch_suggestion.recorded`, `watch_suggestion.accepted`, `watch_suggestion.dismissed`, `watch_suggestion.removed` | a watch was suggested (the whole `suggestion`; an agent's is recorded in its task's activity); you accepted it (with the `scheduleId` it became) or dismissed it; an open one was dropped with its integration, or any with its project |
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 
@@ -987,6 +992,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.push` | replay_safe | `task:<id>` | as `pull_request.open`, without opening when the pull request is open; then rewrites the description's block (`evidence.record_uploads` for what it uploaded) |
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
+| `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |

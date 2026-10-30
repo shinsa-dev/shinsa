@@ -3,7 +3,13 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
-type HumanOnlyType = 'gate.answer' | 'merge_step.tick' | 'memory.write' | 'memory.accept' | 'memory.remove';
+type HumanOnlyType =
+  | 'gate.answer'
+  | 'merge_step.tick'
+  | 'memory.write'
+  | 'memory.accept'
+  | 'memory.remove'
+  | 'watch_suggestion.accept';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -11,11 +17,18 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'memory.write',
   'memory.accept',
   'memory.remove',
+  'watch_suggestion.accept',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;
 
 type Describe<T extends OnBehalfCommand['type']> = (state: ShinsaState, command: CommandOf<T>) => string;
+
+function describeScheduleWrite(command: CommandOf<'schedule.write'>) {
+  if (command.scheduleId) return 'Changed a schedule';
+  if (command.source) return `Suggested the watch “${command.name ?? 'Watch'}”`;
+  return `Saved the schedule “${command.name ?? 'Schedule'}”`;
+}
 
 type Descriptions = { [T in Exclude<OnBehalfCommand['type'], 'task.create'>]: Describe<T> };
 
@@ -89,8 +102,9 @@ const DESCRIPTIONS: Descriptions = {
   'schedule.enable': (state, command) =>
     `${command.enabled ? 'Resumed' : 'Paused'} the schedule ${quoteSchedule(state, command.scheduleId)}`,
   'schedule.remove': () => 'Deleted a schedule',
-  'schedule.write': (_state, command) =>
-    command.scheduleId ? 'Changed a schedule' : `Saved the schedule “${command.name ?? 'Schedule'}”`,
+  'schedule.write': (_state, command) => describeScheduleWrite(command),
+  'watch_suggestion.dismiss': (state, command) =>
+    `Dismissed the suggested watch “${state.watchSuggestions[command.suggestionId]?.name ?? 'Watch'}”`,
   'watchdog.stop': (state, command) => `Stopped a watchdog of ${quoteTask(state, command.taskId)}`,
   'watchdog.connect': (state, command) =>
     `Connected ${command.server} to a watchdog of ${quoteTask(state, command.taskId)}`,
