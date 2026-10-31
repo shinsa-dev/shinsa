@@ -132,7 +132,9 @@ type EventBody =
       kind?: MessageKind;
       round?: number;
       suggestionId?: string;
+      kept?: true;
     }
+  | { type: 'task.messages_told'; taskId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }
   | { type: 'task.message_dropped'; taskId: string; messageId: string; reason: string }
