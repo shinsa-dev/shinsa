@@ -1,4 +1,4 @@
-provider: github
-owner: shinsa-dev
-repo: shinsa
+provider: generic
+url: https://shinsa.dev/updates
+useMultipleRangeRequest: false
 updaterCacheDirName: shinsa-updater
