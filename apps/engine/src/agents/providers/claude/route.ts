@@ -1,12 +1,10 @@
-import type { ChatNotice, CompactionMode } from '@shinsa/core';
+import { type ChatNotice, type CompactionMode, isEunoeCompaction } from '@shinsa/core';
 
 export const DIRECT_BASE_URL = 'https://api.anthropic.com';
 
 export const BLOCKING_LIMIT_ENV = 'CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE';
 
 const BLOCKING_LIMIT_OFF = '1000000000';
-
-export type EunoeMode = 'compact' | 'default';
 
 export type EunoeStatus = { ok: true; url: string; dir: string } | { ok: false; reason: string };
 
@@ -16,7 +14,7 @@ export interface EunoeWatcher {
 }
 
 export interface EunoeLink {
-  ensure: (mode: EunoeMode) => Promise<EunoeStatus>;
+  ensure: () => Promise<EunoeStatus>;
   watch: (sessionId: string, watcher: EunoeWatcher) => () => void;
   fold: (sessionId: string) => () => void;
 }
@@ -27,11 +25,6 @@ interface ClaudeRoute {
   eunoe: boolean;
   notice: ChatNotice | null;
 }
-
-const EUNOE_MODES: Partial<Record<CompactionMode, EunoeMode>> = {
-  eunoe_compact: 'compact',
-  eunoe_default: 'default',
-};
 
 function resolveDirectRoute(autoCompact: boolean, notice: ChatNotice | null = null): ClaudeRoute {
   return {
@@ -46,10 +39,9 @@ export async function resolveClaudeRoute(
   compaction: CompactionMode,
   eunoe: EunoeLink | null
 ): Promise<ClaudeRoute> {
-  const mode = EUNOE_MODES[compaction];
-  if (!mode) return resolveDirectRoute(compaction === 'claude');
+  if (!isEunoeCompaction(compaction)) return resolveDirectRoute(compaction === 'provider');
   let status: EunoeStatus = { ok: false, reason: 'Eunoe is not set up in this Shinsa.' };
-  if (eunoe) status = await eunoe.ensure(mode);
+  if (eunoe) status = await eunoe.ensure();
   if (!status.ok) {
     return resolveDirectRoute(true, {
       kind: 'proxy',

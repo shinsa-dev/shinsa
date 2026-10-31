@@ -639,7 +639,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   protection for the default branch; it is what really guards a merge. Shinsa itself answers only
   on this machine and refuses requests from other websites.
 - **Idle sessions let go.** A session left waiting on you is stopped and your answer resumes it.
-  With Claude Code's compaction picked, a finished session near its context limit can also be
+  With provider compaction picked, a finished session near its context limit can also be
   compacted just before its prompt cache expires (Settings → General → Context, off by default).
 - **Shinsa tells you when something needs you**: the tab title counts it ("[3] Shinsa"), a sound
   plays (by default only when Shinsa is in the background) and, if you allow it, a browser
@@ -682,6 +682,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Watchdog checks have a session of their own.** A check reads logs after the merge in a watch
   session that starts with the brief and is resumed by the next check; the Agent's own session never
   carries a check's output, and a check never carries the Agent's build.
+- **Context management is a setting.** Settings → General → Context, Context management: Default
+  (folds at each step and compacts near the limit), Compaction only (eunoe near the limit, no folds
+  between steps), Provider compaction (Claude Code's or Codex's own) or Off.
 - **Bots don't wake the Agent for notices.** A bot's comment on the pull request conversation (a
   preview deployment, a "reviewing…" placeholder) no longer starts a fix, and nor does a bot editing
   its comment. A bot's review and its inline comments still do.
@@ -691,9 +694,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **eunoe compacts, not Claude Code.** Claude sessions go through eunoe, served by Shinsa itself
   (since 2026-10-31, inside the engine), in its own folder: at the context limit it folds the finished turns
   to your messages, the output that mattered and the replies, so nothing is summarised away and the
-  full transcript stays searchable. Settings → General → Context, Compaction picks eunoe compaction
-  (the default), eunoe always fold (folds as the session grows, too), Claude Code's compaction, or
-  off. Each fold shows as a quiet line in the chat.
+  full transcript stays searchable. Settings → General → Context picks how (Context management,
+  since 2026-10-31). Each fold shows as a quiet line in the chat.
 - **A missing eunoe never stops work.** When eunoe cannot start, the run talks to Claude directly
   with Claude Code's compaction and the chat says why. Shinsa's eunoe is its own: its own port and
   folder under Shinsa's data, never the eunoe you run yourself or its settings.

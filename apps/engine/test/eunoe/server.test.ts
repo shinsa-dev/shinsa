@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ChatNotice } from '@shinsa/core';
-import { createFileStore, EunoeServer, resolveCompactionNotice } from '../../src/eunoe/server.ts';
+import { createFileStore, EunoeServer, isStuck, resolveCompactionNotice } from '../../src/eunoe/server.ts';
 import { log } from '../../src/log/index.ts';
 import {
   createMessagesBody,
@@ -44,8 +44,8 @@ function watchSession(eunoe: EunoeServer, sessionId: string) {
   return { notices, stuck, stop };
 }
 
-async function ensureUrl(eunoe: EunoeServer, mode: 'compact' | 'default' = 'compact') {
-  const status = await eunoe.ensure(mode);
+async function ensureUrl(eunoe: EunoeServer) {
+  const status = await eunoe.ensure();
   if (!status.ok) throw new Error(status.reason);
   return status.url;
 }
@@ -53,9 +53,9 @@ async function ensureUrl(eunoe: EunoeServer, mode: 'compact' | 'default' = 'comp
 describe('EunoeServer', () => {
   test('serves the forwarder on a loopback port of its own and passes a request it cannot thread through untouched', async () => {
     const { server, upstream, dir } = openServer();
-    const status = await server.ensure('compact');
+    const status = await server.ensure();
     expect(status).toEqual({ ok: true, url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/), dir });
-    const again = await server.ensure('default');
+    const again = await server.ensure();
     expect(again).toEqual(status);
     const body = createMessagesBody([10]);
     const response = await sendMessages(status.ok ? status.url : '', null, body);
@@ -88,12 +88,12 @@ describe('EunoeServer', () => {
     expect(logged.at(-1)).toMatchObject({ mode: 'compact', compacted: true, actions: ['cut'] });
   });
 
-  test('always-fold mode rolls finished turns once their detail passes the budget, as a quiet fold', async () => {
+  test('a budget fold in the library’s rolling mode is a quiet fold, not a cut', async () => {
     const { server } = openServer({
       window: () => Promise.resolve(1_000_000),
-      tuning: { budget: 1_000, keep: 1 },
+      tuning: { mode: 'default', budget: 1_000, keep: 1 },
     });
-    const url = await ensureUrl(server, 'default');
+    const url = await ensureUrl(server);
     const watched = watchSession(server, 'session-1');
     await (await sendMessages(url, 'session-1', createMessagesBody([4_000, 4_000, 4_000]))).text();
     expect(watched.notices).toEqual([
@@ -149,12 +149,27 @@ describe('EunoeServer', () => {
     stale();
     await (await sendMessages(url, 'session-1', body)).text();
     expect(upstream.received[1]?.body.messages).toEqual(body.messages);
-    const info = spyOn(log, 'info');
-    server.fold('session-2');
-    await (await sendMessages(url, 'session-2', createMessagesBody([]))).text();
-    expect(info).toHaveBeenCalledWith('[Eunoe] Nothing to fold before this turn', expect.any(Object));
-    info.mockRestore();
     expect(watched.notices).toEqual([]);
+  });
+
+  test('a side request with no tools, or a thread with nothing before its turn yet, leaves the fold for the real request', async () => {
+    const { server, upstream } = openServer({ window: () => Promise.resolve(1_000_000) });
+    const url = await ensureUrl(server);
+    const watched = watchSession(server, 'session-1');
+    server.fold('session-1');
+    const side = { ...createMessagesBody([4_000, 4_000]), tools: [] };
+    await (await sendMessages(url, 'session-1', side)).text();
+    expect(upstream.received[0]?.body.messages).toEqual(side.messages);
+    const info = spyOn(log, 'info');
+    await (await sendMessages(url, 'session-1', createMessagesBody([]))).text();
+    expect(info).toHaveBeenCalledWith('[Eunoe] Nothing to fold before this turn yet', expect.any(Object));
+    info.mockRestore();
+    const real = createMessagesBody([4_000, 4_000, 4_000], 'Now build phase 1.');
+    await (await sendMessages(url, 'session-1', real)).text();
+    expect(upstream.received[2]?.body.messages).toHaveLength(real.messages.length - 5);
+    expect(watched.notices).toEqual([
+      { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
+    ]);
   });
 
   test('a request log it cannot write is logged and the request still goes through', async () => {
@@ -172,11 +187,11 @@ describe('EunoeServer', () => {
   test('a port it cannot take leaves runs to talk to Claude directly, and a stopped server never starts again', async () => {
     const taken = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('') });
     const { server } = openServer({ port: taken.port });
-    const status = await server.ensure('compact');
+    const status = await server.ensure();
     expect(status).toEqual({ ok: false, reason: expect.stringMatching(/^Eunoe could not start: /) });
     await taken.stop(true);
     await server.stop();
-    expect(await server.ensure('compact')).toEqual({ ok: false, reason: 'Shinsa is stopping.' });
+    expect(await server.ensure()).toEqual({ ok: false, reason: 'Shinsa is stopping.' });
   });
 });
 
@@ -188,6 +203,16 @@ describe('createFileStore', () => {
     store.save('session/1-abc', { keep: 2 });
     expect(existsSync(join(dir, 'session_1-abc.json'))).toBe(true);
     expect(store.read('session/1-abc')).toEqual({ keep: 2 });
+  });
+});
+
+describe('isStuck', () => {
+  test('only a request that still does not fit is stuck; a stuck note under the limit is not', () => {
+    const sizes = { fixed: 500, head: 300, folded: 20, live: 11_000 };
+    expect(isStuck({ stuck: sizes, fit: 'over' })).toBe(true);
+    expect(isStuck({ stuck: sizes })).toBe(false);
+    expect(isStuck({ stuck: sizes, fit: 'bare' })).toBe(false);
+    expect(isStuck({ fit: 'over' })).toBe(false);
   });
 });
 

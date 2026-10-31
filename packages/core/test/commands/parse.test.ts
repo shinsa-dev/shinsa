@@ -729,10 +729,10 @@ describe('schedules and idle compaction from Settings', () => {
 
   test('takes the compaction choice and the fast mode switch, and refuses anything else', () => {
     expect(
-      parseUserCommand({ type: 'settings.change', patch: { compaction: 'eunoe_default', fastMode: false } })
-    ).toEqual({ type: 'settings.change', patch: { compaction: 'eunoe_default', fastMode: false } });
+      parseUserCommand({ type: 'settings.change', patch: { compaction: 'compact', fastMode: false } })
+    ).toEqual({ type: 'settings.change', patch: { compaction: 'compact', fastMode: false } });
     expect(() => parseUserCommand({ type: 'settings.change', patch: { compaction: 'summary' } })).toThrow(
-      'compaction must be one of eunoe_compact, eunoe_default, claude, off.'
+      'compaction must be one of fold, compact, provider, off.'
     );
     expect(() => parseUserCommand({ type: 'settings.change', patch: { fastMode: 'on' } })).toThrow(
       'fastMode must be true or false.'

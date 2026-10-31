@@ -53,7 +53,7 @@ same session's next turn with a short "Now build phase 2 of 3: …" instruction,
 is still a run of its own (its attempts, its account, its usage), so every run of a task shares one session, and an
 Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix`, `operate`, `watch` or `intake`). Long
 tasks rely on compaction (eunoe's folds or Claude Code's, Compaction and fast mode below) to stay inside the window,
-and in an eunoe mode each build, fix and operate turn folds the steps before it and starts from the round brief
+and with the default context management each build, fix and operate turn folds the steps before it and starts from the round brief
 (Boundary folds), so one session costs what its current step needs, not its whole history.
 
 The one exception is the watchdog check (purpose `watch`): it is specialised, read-only work that reads logs and
@@ -3589,7 +3589,7 @@ the instruction alone.
 each turn after the planning brief is a short instruction: "Phase 1 is committed. Now build phase 2 of 3: …", a fix
 prompt, or "Now run the operation in the plan". The house rules travel with it as usual, and the full brief replaces the
 short one exactly where the house rules would be sent again: a fresh session, a handoff, or a session compacted since
-its last brief, since a summary or a fold may have dropped the plan. In an eunoe mode a build, fix or operate turn
+its last brief, since a summary or a fold may have dropped the plan. With the default context management a build, fix or operate turn
 folds the turns before it and sends the round brief (without the house rules) on purpose: Compaction and fast mode,
 Boundary folds. That full brief is core's `resolveRunBrief(state,
 run)`: the house rules, the round as it stands (the request and your later messages, the goal, the plan, the approved
@@ -3775,7 +3775,7 @@ context usage Claude reports at the end of the turn), `IdleCompaction` (`agents/
 sends `/compact` to that session 2 minutes before the cache expires (Settings → General → Context, Compact idle
 sessions: never, the default, or 1 to 30 minutes before), so the next step resumes a small context instead of
 re-reading a cold large one. It exists only where the provider summarises itself (`hasNativeCompaction`,
-`resolveIdleCompaction(settings, providers)`): for Claude only with Claude Code's compaction, since `/compact` is
+`resolveIdleCompaction(settings, providers)`): for Claude only with provider compaction, since `/compact` is
 Claude Code's summary; for Codex under every choice but Off (its `thread/compact/start`, Codex adapter above). With
 eunoe and only Claude agents, or with compaction off, the row is hidden and nothing is compacted early.
 It never compacts a compaction, a delegated or subtask run, a session with an open question or background work, a
@@ -3786,17 +3786,21 @@ runs on the account the run used, only its compaction notice is kept in the tran
 run, and a new step on the task waits for a compaction in flight. Shutdown stops a compaction in flight and waits
 for it, so its `claude` never outlives the server.
 
-**Compaction and fast mode.** Shinsa does not use Claude Code's own summary by default: eunoe's core
-(`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) compacts instead.
-Settings → General → Context, Compaction (`settings.compaction`, a `settings.change` event because replay must
-reproduce it):
+**Compaction and fast mode.** Shinsa does not use a provider's own summary by default: eunoe's core
+(`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) folds and
+compacts instead. Settings → General → Context, Context management (`settings.compaction`, a `settings.change` event
+because replay must reproduce it):
 
-| Setting | eunoe mode | What happens |
-| --- | --- | --- |
-| `eunoe_compact`, "Eunoe compaction" (default) | `compact` | The context grows within a step; at `compactAt` (0.9) of the model's window eunoe folds every finished turn to your message, the output lines that mattered and the reply, instead of Claude Code's summary. Boundary folds (below) apply |
-| `eunoe_default`, "Eunoe always fold" | `default` | eunoe also folds as the session grows: once older detail passes 100,000 tokens every turn but the last 3 folds in one step, and it still cuts at the limit. Boundary folds apply |
-| `claude`, "Claude Code's compaction" | none | Direct to Anthropic, Claude Code's auto-compact on; the only mode where idle compaction exists |
-| `off` | none | Direct to Anthropic, auto-compact off: a full context fails the turn as `context_window_full` and the step starts a fresh session with the handoff |
+| Setting | What happens |
+| --- | --- |
+| `fold`, "Default" | eunoe in its `compact` mode, plus boundary folds (below): each build, fix and operate turn folds the turns before it and starts from the round brief, and within a step the context grows until `compactAt` (0.9) of the model's window, where eunoe folds every finished turn to your message, the output lines that mattered and the reply |
+| `compact`, "Compaction only" | eunoe in its `compact` mode without boundary folds: only the cut near the limit |
+| `provider`, "Provider compaction" | Each provider's own compaction: Claude goes direct to Anthropic with Claude Code's auto-compact on, Codex compacts its thread itself; the only setting where idle compaction exists for Claude |
+| `off` | Direct to Anthropic, auto-compact off: a full context fails the turn as `context_window_full` and the step starts a fresh session with the handoff |
+
+Codex compacts its own threads under every setting but `off`; eunoe and its folds sit in front of the Anthropic API
+only. The setting's earlier values (`eunoe_compact` and `eunoe_default`, now `fold`; `claude`, now `provider`) are
+rewritten once in the event log on start (`store/legacy.ts`, log version 11).
 
 *Why the library in process.* Since 1.3, `@chroxify/eunoe` exports its core: `rewrite`, `foldThread`,
 `createForwarder` and a `ThreadStore` interface, with no disk, environment or global state of its own. Shinsa
@@ -3819,9 +3823,11 @@ Shutdown stops the forwarder after the effects, once no `claude` can still talk 
 *Boundary folds.* The Agent keeps one session for the task, but a step does not need the raw history of the steps
 before it. When the Agent's run resumes its session for a build phase, a fix or an operation (any purpose with a
 round brief, never planning; `resolveTurnFold` in `agents/turns.ts`), on the run's first attempt and with its own step
-prompt (never a restart, an answer or a delivery), in an eunoe mode on a provider whose capabilities include
+prompt (never a restart, an answer or a delivery), with context management on its default (`fold`) on a provider whose capabilities include
 `folds` (Claude), the supervisor asks the session to fold. The session queues the fold for its session id
-(`EunoeLink.fold`) and releases it when the turn ends; on that session's next messages request (never a token count)
+(`EunoeLink.fold`) and releases it when the turn ends; on that session's next messages request that carries tools
+and has a turn before its own (never a token count, a side request without tools, or a thread with nothing to fold
+yet, which all leave the fold queued)
 the forwarder calls eunoe's `foldThread` at the latest turn, the step's own prompt, so every earlier turn is folded to
 its prompt, the evidence and its reply, and the fold is saved in the thread state, which keeps the prefix the same for
 the rest of the step and the cache warm. In exchange the turn sends the round brief instead of the bare instruction
@@ -3833,8 +3839,8 @@ nothing before its turn is left as it is.
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it
 starts and passes it both as process environment and in the Agent SDK's flag-settings layer, which outranks the
 user's `settings.json` (where `eunoe start` writes its own address): `ANTHROPIC_BASE_URL` (the forwarder's URL, or
-Anthropic directly), `autoCompactEnabled` (off in both eunoe modes and in `off`), `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`
-(`1000000000` in eunoe modes, so Claude Code never refuses a prompt eunoe will shrink; empty otherwise, which Claude
+Anthropic directly), `autoCompactEnabled` (off in `fold`, `compact` and `off`), `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`
+(`1000000000` in `fold` and `compact`, so Claude Code never refuses a prompt eunoe will shrink; empty otherwise, which Claude
 Code reads as its default) and `EUNOE_DIR` (`data/eunoe`, for the agent's own `eunoe load` and `eunoe peek`). Quick
 calls stay direct: they carry no history to compact. Every `claude` Shinsa starts gets the server's environment
 without `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` and `EUNOE_DIR` (`resolveClaudeProcess`), so a
@@ -3846,8 +3852,9 @@ Claude Code's compaction on and writes a `proxy` notice with the reason (the cha
 compacts this run"). Once Shinsa is stopping, nothing starts it again.
 
 *Stuck threads.* When even a cut cannot bring a thread under eunoe's target (a single turn too big for the window),
-eunoe reports it `stuck` and holds the cleared set still, so the cache keeps hitting. The forwarder tells the
-session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
+eunoe reports it `stuck` and holds the cleared set still, so the cache keeps hitting. Only a request that still
+does not fit (`fit: "over"`, `isStuck`) counts: eunoe 1.3 also notes `stuck` when it cannot reach its own target
+while the request is well under the limit, and that is ignored. The forwarder tells the session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
 recovery for that class starts a fresh session with the handoff instead of resuming the stuck one.
 
 *Notices.* eunoe compacts on the wire, so Claude Code reports nothing; the forwarder matches each request's log line
@@ -4773,7 +4780,8 @@ following a file through its watch and the check every second, both triggered by
   - `eunoe.test.ts`: the real Claude adapter over a scripted SDK and the engine's forwarder in front of a fake
     Anthropic API: a run routed through it in compact mode and fast mode, with eunoe's cut in its transcript; eunoe
     always fold in its `default` mode, each budget fold a quiet line; a forwarder that cannot take its port, so the run
-    goes direct with a `proxy` notice; Claude Code's compaction and standard speed, and off, picked in Settings;
+    goes direct with a `proxy` notice; compaction only through the forwarder; provider compaction and standard speed,
+    and off, picked in Settings;
   - `shapes.test.ts`: one task of each kind: a question answered in the repository itself and a follow-up on the same
     session; an investigation that reports and leaves no worktree; one whose fix you approve, planned and opened as a
     pull request without its scratch edits; an operation that waits for its plan and opens no pull request; research

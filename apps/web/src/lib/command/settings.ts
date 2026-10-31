@@ -41,6 +41,7 @@ import {
   type AgentGroup,
   ALERT_ITEMS,
   COMPACTION_MODE_ITEMS,
+  CONTEXT_MANAGEMENT,
   COST_LIMIT_TITLE,
   CUSTOM_DELEGATION_LIMIT,
   DELEGATION_LIMIT_TITLE,
@@ -324,7 +325,7 @@ function listWorkflowChoices(settings: Settings): Command[] {
     ),
     settingChoice(
       'compaction.mode',
-      'Compaction',
+      CONTEXT_MANAGEMENT,
       COMPACTION_MODE_ITEMS,
       resolveCompaction(settings),
       (value) => patchSettings({ compaction: value as CompactionMode })

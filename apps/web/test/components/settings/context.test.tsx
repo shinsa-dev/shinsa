@@ -31,7 +31,7 @@ function renderContext(settings: Settings = createSettings()) {
   );
 }
 
-async function choose(label: string, option: string) {
+async function choose(label: string, option: string | RegExp) {
   fireEvent.click(screen.getByRole('combobox', { name: label }));
   await settle();
   const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
@@ -42,16 +42,16 @@ async function choose(label: string, option: string) {
 }
 
 describe('Settings → General → Context', () => {
-  it('compacts through Eunoe by default and leaves idle compaction to Claude Code’s mode', async () => {
+  it('folds by default and leaves idle compaction to provider compaction', async () => {
     renderContext();
-    expect(screen.getByRole('combobox', { name: 'Compaction' }).textContent).toBe('Eunoe compaction');
+    expect(screen.getByRole('combobox', { name: 'Context management' }).textContent).toBe('Default');
     expect(screen.queryByRole('combobox', { name: 'Compact idle sessions' })).toBeNull();
-    await choose('Compaction', 'Eunoe always fold');
-    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { compaction: 'eunoe_default' } }]);
+    await choose('Context management', /^Compaction only/);
+    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { compaction: 'compact' } }]);
   });
 
-  it('with Claude Code’s compaction, idle sessions can be compacted before the cache expires', async () => {
-    renderContext({ ...createSettings(), compaction: 'claude' });
+  it('with provider compaction, idle sessions can be compacted before the cache expires', async () => {
+    renderContext({ ...createSettings(), compaction: 'provider' });
     expect(screen.getByRole('combobox', { name: 'Compact idle sessions' }).textContent).toBe('Never');
     await choose('Compact idle sessions', '5 minutes before the cache expires');
     expect(listSentCommands()).toEqual([

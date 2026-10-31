@@ -283,7 +283,7 @@ export function startClaudeSession(
     const process = await resolveClaudeProcess(runtime.resolveExecutable);
     ledger.echoes = process.version !== null;
     const configDir = input.account?.configDir ?? null;
-    const route = await resolveClaudeRoute(input.compaction ?? 'claude', options.eunoe ?? null);
+    const route = await resolveClaudeRoute(input.compaction ?? 'provider', options.eunoe ?? null);
     if (route.notice) recorder.notify(route.notice);
     eunoe = route.eunoe;
     if (eunoe && options.eunoe && input.fold && input.resume && !input.fork) {

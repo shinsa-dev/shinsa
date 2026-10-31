@@ -394,12 +394,12 @@ describe('settings', () => {
 
   test('picking a compaction and fast mode is recorded once, and again only when it changes', () => {
     const harness = createHarness();
-    expect(harness.state.settings).toMatchObject({ compaction: 'eunoe_compact', fastMode: false });
+    expect(harness.state.settings).toMatchObject({ compaction: 'fold', fastMode: false });
     expect(harness.state.settings.idleCompaction).toBeUndefined();
-    harness.send({ type: 'settings.change', patch: { compaction: 'claude', fastMode: true } });
-    expect(harness.state.settings).toMatchObject({ compaction: 'claude', fastMode: true });
+    harness.send({ type: 'settings.change', patch: { compaction: 'provider', fastMode: true } });
+    expect(harness.state.settings).toMatchObject({ compaction: 'provider', fastMode: true });
     const seq = harness.state.seq;
-    harness.send({ type: 'settings.change', patch: { compaction: 'claude' } });
+    harness.send({ type: 'settings.change', patch: { compaction: 'provider' } });
     expect(harness.state.seq).toBe(seq);
   });
 

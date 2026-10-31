@@ -944,7 +944,7 @@ describe('compaction and fast mode', () => {
   test('a session goes through eunoe in its mode, with Claude Code’s compaction off and fast mode on', async () => {
     const { link } = createEunoe();
     const { input } = createInput({
-      compaction: 'eunoe_compact',
+      compaction: 'fold',
       fastMode: true,
       account: { id: 'acc-1', configDir: '/accounts/acc-1' },
     });
@@ -983,7 +983,7 @@ describe('compaction and fast mode', () => {
 
   test('when eunoe is down the session says so and runs directly with Claude Code compacting', async () => {
     const { link, watching } = createEunoe(false);
-    const { input, entries } = createInput({ compaction: 'eunoe_default' });
+    const { input, entries } = createInput({ compaction: 'compact' });
     const { session, messages, calls } = startScripted(input, { eunoe: link });
     messages.push(init);
     messages.push(success('ok'));
@@ -997,7 +997,7 @@ describe('compaction and fast mode', () => {
 
   test('eunoe’s folds of the session land in its transcript until the session ends', async () => {
     const { link, watching } = createEunoe();
-    const { input, entries } = createInput({ compaction: 'eunoe_compact' });
+    const { input, entries } = createInput({ compaction: 'fold' });
     const { session, messages } = startScripted(input, { eunoe: link });
     messages.push(init);
     await until('the watch', () => watching.length === 1);
@@ -1021,7 +1021,7 @@ describe('compaction and fast mode', () => {
 
   test('a thread eunoe reports stuck ends the turn as a full context window, once, so the next attempt starts fresh', async () => {
     const { link, watching } = createEunoe();
-    const { input, entries } = createInput({ compaction: 'eunoe_compact' });
+    const { input, entries } = createInput({ compaction: 'fold' });
     const interrupts: string[] = [];
     const { session, messages } = startScripted(input, {
       eunoe: link,
@@ -1048,7 +1048,7 @@ describe('compaction and fast mode', () => {
 
   test('a turn that asks for a fold queues one for the session it resumes, until the turn ends', async () => {
     const { link, folds } = createEunoe();
-    const { input } = createInput({ compaction: 'eunoe_compact', fold: true, resume: 'sess-1' });
+    const { input } = createInput({ compaction: 'fold', fold: true, resume: 'sess-1' });
     const { session, messages } = startScripted(input, { eunoe: link });
     messages.push(init);
     await until('the fold', () => folds.length === 1);
@@ -1060,14 +1060,14 @@ describe('compaction and fast mode', () => {
 
   test('no fold is queued for a new session, a fork, a turn that does not ask, or a session that goes direct', async () => {
     const cases = [
-      { link: createEunoe(), input: { compaction: 'eunoe_compact' as const, fold: true } },
+      { link: createEunoe(), input: { compaction: 'fold' as const, fold: true } },
       {
         link: createEunoe(),
-        input: { compaction: 'eunoe_compact' as const, fold: true, resume: 's', fork: true },
+        input: { compaction: 'fold' as const, fold: true, resume: 's', fork: true },
       },
-      { link: createEunoe(), input: { compaction: 'eunoe_compact' as const, resume: 's' } },
-      { link: createEunoe(false), input: { compaction: 'eunoe_compact' as const, fold: true, resume: 's' } },
-      { link: createEunoe(), input: { compaction: 'claude' as const, fold: true, resume: 's' } },
+      { link: createEunoe(), input: { compaction: 'fold' as const, resume: 's' } },
+      { link: createEunoe(false), input: { compaction: 'fold' as const, fold: true, resume: 's' } },
+      { link: createEunoe(), input: { compaction: 'provider' as const, fold: true, resume: 's' } },
     ];
     for (const { link, input: overrides } of cases) {
       const { input } = createInput(overrides);
@@ -1081,7 +1081,7 @@ describe('compaction and fast mode', () => {
 
   test('a stuck report after the run was cancelled leaves it cancelled', async () => {
     const { link, watching } = createEunoe();
-    const { input } = createInput({ compaction: 'eunoe_compact' });
+    const { input } = createInput({ compaction: 'fold' });
     const { session, messages } = startScripted(input, { eunoe: link });
     messages.push(init);
     await until('the watch', () => watching.length === 1);

@@ -5,7 +5,7 @@ import {
   type DelegatedRun,
   DomainError,
   isDelegatedRun,
-  isEunoeCompaction,
+  isFoldingCompaction,
   isReadOnlyRun,
   type LoadedExtensions,
   listLiveRuns,
@@ -629,7 +629,7 @@ export class RunSupervisor {
       plan,
       stepPrompt: turn.stepPrompt,
       firstAttempt,
-      folds: resolveCapabilities(provider).folds && isEunoeCompaction(options.compaction ?? 'off'),
+      folds: resolveCapabilities(provider).folds && isFoldingCompaction(options.compaction ?? 'off'),
     });
     const session = startSession({
       role: run.role,

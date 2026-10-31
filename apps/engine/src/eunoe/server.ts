@@ -15,7 +15,7 @@ import {
   type WindowLookup,
 } from '@chroxify/eunoe';
 import type { ChatNotice } from '@shinsa/core';
-import type { EunoeLink, EunoeMode, EunoeStatus, EunoeWatcher } from '../agents/providers/claude/index.ts';
+import type { EunoeLink, EunoeStatus, EunoeWatcher } from '../agents/providers/claude/index.ts';
 import { DIRECT_BASE_URL } from '../agents/providers/claude/route.ts';
 import { describeError, log } from '../log/index.ts';
 
@@ -24,7 +24,7 @@ export interface EunoeServerOptions {
   upstream?: string;
   port?: number;
   window?: WindowLookup;
-  tuning?: Partial<Omit<CoreConfig, 'mode'>>;
+  tuning?: Partial<CoreConfig>;
 }
 
 type Entry = Record<string, unknown>;
@@ -65,8 +65,8 @@ export function resolveCompactionNotice(entry: Entry): ChatNotice | null {
   };
 }
 
-function isStuck(entry: Entry) {
-  return typeof entry.stuck === 'object' && entry.stuck !== null;
+export function isStuck(entry: Entry) {
+  return typeof entry.stuck === 'object' && entry.stuck !== null && entry.fit === 'over';
 }
 
 export class EunoeServer implements EunoeLink {
@@ -74,11 +74,10 @@ export class EunoeServer implements EunoeLink {
   readonly #upstream: string;
   readonly #port: number;
   readonly #window: WindowLookup;
-  readonly #tuning: Partial<Omit<CoreConfig, 'mode'>>;
+  readonly #config: CoreConfig;
   readonly #store: ThreadStore;
   readonly #watchers = new Map<string, Set<EunoeWatcher>>();
   readonly #folds = new Map<string, object>();
-  #mode: EunoeMode = 'compact';
   #server: ReturnType<typeof Bun.serve> | null = null;
   #stopped = false;
 
@@ -87,13 +86,12 @@ export class EunoeServer implements EunoeLink {
     this.#upstream = options.upstream ?? DIRECT_BASE_URL;
     this.#port = options.port ?? 0;
     this.#window = options.window ?? createWindowLookup();
-    this.#tuning = options.tuning ?? {};
+    this.#config = { ...CORE_DEFAULTS, mode: 'compact', ...options.tuning };
     this.#store = createFileStore(join(this.dir, 'threads'));
   }
 
-  ensure(mode: EunoeMode): Promise<EunoeStatus> {
+  ensure(): Promise<EunoeStatus> {
     if (this.#stopped) return Promise.resolve({ ok: false, reason: STOPPING });
-    this.#mode = mode;
     try {
       this.#server ??= this.#serve();
     } catch (error) {
@@ -150,28 +148,34 @@ export class EunoeServer implements EunoeLink {
   async #prepare(request: Request, body: Body, mayCompact: boolean): Promise<Prepared> {
     const threadId = claudeCodeSessionId(request.headers, body);
     const window = await this.#window(body.model, request.headers, this.#upstream);
-    const config: CoreConfig = { ...CORE_DEFAULTS, ...this.#tuning, mode: this.#mode };
     const folded = threadId !== null && mayCompact && this.#foldPending(threadId, body);
-    const result = await rewriteAsync({ body, threadId, config, store: this.#store, window, mayCompact });
+    const result = await rewriteAsync({
+      body,
+      threadId,
+      config: this.#config,
+      store: this.#store,
+      window,
+      mayCompact,
+    });
     if (!folded) return result;
     const actions = [...(result.note.actions ?? []), 'fold'];
     return { ...result, note: { ...result.note, compacted: true, actions } };
   }
 
   #foldPending(threadId: string, body: Body) {
-    if (!this.#folds.has(threadId)) return false;
-    this.#folds.delete(threadId);
+    if (!this.#folds.has(threadId) || !Array.isArray(body.tools) || body.tools.length === 0) return false;
     try {
       foldThread({ store: this.#store, threadId, messages: body.messages }, { at: 'latest' });
-      return true;
     } catch (error) {
-      log.info('[Eunoe] Nothing to fold before this turn', { threadId, reason: describeError(error) });
+      log.info('[Eunoe] Nothing to fold before this turn yet', { threadId, reason: describeError(error) });
       return false;
     }
+    this.#folds.delete(threadId);
+    return true;
   }
 
   #record(entry: Entry) {
-    const line = JSON.stringify({ ts: new Date().toISOString(), mode: this.#mode, ...entry });
+    const line = JSON.stringify({ ts: new Date().toISOString(), mode: this.#config.mode, ...entry });
     try {
       appendFileSync(join(this.dir, 'requests.jsonl'), `${line}\n`);
     } catch (error) {

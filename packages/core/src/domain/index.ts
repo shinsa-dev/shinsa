@@ -132,6 +132,7 @@ export {
   HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   isEunoeCompaction,
+  isFoldingCompaction,
   MAX_COMPACTION_LEAD_MINUTES,
   MERGE_METHODS,
   type MergeMethod,

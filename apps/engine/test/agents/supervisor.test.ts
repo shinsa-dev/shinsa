@@ -115,7 +115,7 @@ function withIdleCompaction(patch: (state: ShinsaState) => void) {
   return (state: ShinsaState) => {
     patch(state);
     Object.assign(state.settings, {
-      compaction: 'claude',
+      compaction: 'provider',
       idleCompaction: true,
       agentFastModes: { agent: true },
     });
@@ -407,7 +407,7 @@ describe('starting and ending runs', () => {
     });
     const first = supervisor.execute('run-1');
     await until('the first session', () => fast.started.length === 1);
-    expect(fast.started[0]?.input).toMatchObject({ compaction: 'eunoe_compact', fastMode: false });
+    expect(fast.started[0]?.input).toMatchObject({ compaction: 'fold', fastMode: false });
     fast.started[0]?.finish();
     await first;
     update((state) => {
@@ -1466,14 +1466,16 @@ describe('resume fallback', () => {
     (retried.sessions.started[0] as FakeSession).finish();
     await again;
     expect(retried.sessions.started[0]?.input.fold).toBeUndefined();
-    const direct = restoreSetup((state) => {
-      state.settings.compaction = 'claude';
-    });
-    const plain = direct.supervisor.execute('run-1');
-    await until('the direct session', () => direct.sessions.started.length > 0);
-    (direct.sessions.started[0] as FakeSession).finish();
-    await plain;
-    expect(direct.sessions.started[0]?.input.fold).toBeUndefined();
+    for (const compaction of ['provider', 'compact'] as const) {
+      const direct = restoreSetup((state) => {
+        state.settings.compaction = compaction;
+      });
+      const plain = direct.supervisor.execute('run-1');
+      await until('the session without folds', () => direct.sessions.started.length > 0);
+      (direct.sessions.started[0] as FakeSession).finish();
+      await plain;
+      expect(direct.sessions.started[0]?.input.fold).toBeUndefined();
+    }
   });
 
   test('a provider without a context handoff, or a history with nothing to hand over, starts plainly fresh', async () => {
@@ -3384,7 +3386,7 @@ describe('compacting an idle session', () => {
     expect(context.compacted[0]).toMatchObject({
       resume: 's1',
       account: { id: 'acc-1', configDir: '/accounts/one' },
-      compaction: 'claude',
+      compaction: 'provider',
       fastMode: true,
     });
     expect(context.leases).toHaveLength(2);

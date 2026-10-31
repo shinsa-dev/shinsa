@@ -109,25 +109,16 @@ describe('compacting through eunoe, end to end', () => {
     expect(upstream?.received.length).toBeGreaterThan(0);
   });
 
-  test('picking eunoe always fold runs eunoe in its default mode, and each fold is a quiet line in the chat', async () => {
-    const { w, params, dir } = await openWorld({
-      server: { window: () => Promise.resolve(1_000_000), tuning: { budget: 1_000, keep: 1 } },
-      requests: 2,
-    });
-    await w.engine.dispatch({ type: 'settings.change', patch: { compaction: 'eunoe_default' } });
+  test('picking compaction only still goes through the forwarder and cuts near the limit', async () => {
+    const { w, params, dir } = await openWorld();
+    await w.engine.dispatch({ type: 'settings.change', patch: { compaction: 'compact' } });
     const taskId = await w.createTask();
     await w.until('the first turn', () => params.length > 0);
     expect(params[0]?.options?.settings).toMatchObject({ autoCompactEnabled: false });
+    expect(params[0]?.options?.env?.ANTHROPIC_BASE_URL).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     const runId = firstRun(w, taskId)?.id ?? '';
-    await w.until(
-      'both folds',
-      () => listNotices(w, runId).filter((notice) => notice.kind === 'compaction').length === 2
-    );
-    expect(listNotices(w, runId).filter((notice) => notice.kind === 'compaction')).toEqual([
-      { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
-      { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
-    ]);
-    expect(readModes(dir)).toEqual(new Set(['default']));
+    await w.until('the cut', () => listNotices(w, runId).some((notice) => notice.kind === 'compaction'));
+    expect(readModes(dir)).toEqual(new Set(['compact']));
   });
 
   test('when eunoe cannot start the run talks to Claude directly, Claude Code compacts, and the chat says why', async () => {
@@ -147,9 +138,9 @@ describe('compacting through eunoe, end to end', () => {
     });
   });
 
-  test('picking Claude Code’s compaction and standard speed takes the next run straight to Claude', async () => {
+  test('picking provider compaction and standard speed takes the next run straight to Claude with its own compaction', async () => {
     const { w, params } = await openWorld();
-    await w.engine.dispatch({ type: 'settings.change', patch: { compaction: 'claude', fastMode: false } });
+    await w.engine.dispatch({ type: 'settings.change', patch: { compaction: 'provider', fastMode: false } });
     await w.createTask();
     await w.until('the first turn', () => params.length > 0);
     expect(params[0]?.options?.settings).toEqual({

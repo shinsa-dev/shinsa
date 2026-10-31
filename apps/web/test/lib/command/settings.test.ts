@@ -102,7 +102,7 @@ describe('Change a setting', () => {
       ['Automatic fix rounds', 'Until clean'],
       ['Delegations at once', 'No limit'],
       ['Merge with', 'Squash'],
-      ['Compaction', 'Eunoe compaction'],
+      ['Context management', 'Default'],
       ['Model for task agents', 'Opus'],
       ['Speed for task agents', 'Standard'],
       ['Model for quick jobs', 'Sonnet'],
@@ -271,7 +271,7 @@ describe('Change a setting', () => {
       ...createSettings(),
       agentModels: { agent: 'sonnet' },
       autoResume: false,
-      compaction: 'claude',
+      compaction: 'provider',
     };
     const sections = listSettingsSections({ ...settings, taskBudgetUsd: 2 }, MODELS, DEFAULT_PREFERENCES);
     pick(sections, 'settings.attention', '3');
@@ -295,7 +295,7 @@ describe('Change a setting', () => {
     pick(sections, 'settings.snooze', 'off');
     pick(sections, 'settings.compaction', 'off');
     pick(sections, 'settings.compaction', '5');
-    pick(sections, 'settings.compaction.mode', 'eunoe_default');
+    pick(sections, 'settings.compaction.mode', 'compact');
     pick(sections, 'settings.speed.task', 'on');
     pick(sections, 'settings.speed.agent', 'off');
     expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
@@ -337,7 +337,7 @@ describe('Change a setting', () => {
       [{ type: 'settings.change', patch: { snoozeLimited: false } }, 'Saved.'],
       [{ type: 'settings.change', patch: { idleCompaction: false } }, 'Saved.'],
       [{ type: 'settings.change', patch: { idleCompaction: true, compactionLeadMinutes: 5 } }, 'Saved.'],
-      [{ type: 'settings.change', patch: { compaction: 'eunoe_default' } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { compaction: 'compact' } }, 'Saved.'],
       [
         {
           type: 'settings.change',
