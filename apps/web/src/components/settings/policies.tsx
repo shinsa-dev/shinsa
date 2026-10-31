@@ -187,8 +187,8 @@ export function PolicySettings({
       )}
       {empty && !draft && (
         <SettingsEmpty>
-          Which machine runs which work. A new task whose request names a word of a policy runs on its
-          machine, unless its project lives on another.
+          Say in plain words which work runs on which machine, such as “Run Xcode simulator tests here.” When
+          you start a task with Automatic, Shinsa reads every policy with the request and picks the machine.
         </SettingsEmpty>
       )}
       {!empty &&

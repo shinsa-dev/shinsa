@@ -139,7 +139,7 @@ src/
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (enrollDevice), policies.ts (Settings → Policies: each machine's placement policies, the form's checks and the
+    │                    enroll.ts (enrollDevice), policies.ts (Settings → Policies: each machine's plain-English policies, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
@@ -280,7 +280,7 @@ src/
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, automations.ts (a watch's page: its facts,
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
-        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, each machine's load),
+        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
         remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
         expiry and its QR code as an image; connection/remote-access.ts reads and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,

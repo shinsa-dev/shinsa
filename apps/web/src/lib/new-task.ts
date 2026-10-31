@@ -1,10 +1,13 @@
 import {
   describeCount,
+  hasPlacementPolicies,
+  listPlacementCandidates,
   type MachineLoad,
+  type PlacementAnswer,
   type PlacementMachine,
+  type PlacementQuestion,
   resolveMachineLoad,
   resolvePlacement,
-  resolvePolicyMachine,
   resolveProjectMachine,
   type ShinsaState,
   type Task,
@@ -13,6 +16,7 @@ import {
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import * as React from 'react';
+import { requestJson } from '@/lib/connection/http.ts';
 import type { MachineChoice } from '@/lib/connection/socket.ts';
 import { selectFocus } from '@/lib/focus.ts';
 import { listPriorityItems } from '@/lib/format/labels.ts';
@@ -169,25 +173,47 @@ function selectChosenMachine(machines: PlacementMachine[], machine: AutoChoice<s
 
 export interface NewTaskPlacement {
   id: string;
-  rule: string | null;
+  byPolicy: boolean;
 }
 
 export function resolveNewTaskMachine(
   machines: PlacementMachine[],
   choices: Pick<NewTaskChoices, 'machine' | 'project'>,
-  shownProject: string,
-  request: string
+  shownProject: string
 ): NewTaskPlacement | null {
   if (machines.length < 2) return null;
   const chosen = selectChosenMachine(machines, choices.machine);
-  if (chosen) return { id: chosen.id, rule: null };
+  if (chosen) return { id: chosen.id, byPolicy: false };
   const named = choices.project === 'auto' || choices.project === NO_PROJECT ? null : choices.project;
   const owner = named ? resolveProjectMachine(machines, named) : null;
-  if (owner) return { id: owner, rule: null };
-  const ruled = resolvePolicyMachine(machines, request);
-  if (ruled) return { id: ruled.id, rule: ruled.term };
+  if (owner) return { id: owner, byPolicy: false };
   const placed = resolvePlacement(machines, shownProject === NO_PROJECT ? null : shownProject);
-  return placed ? { id: placed, rule: null } : null;
+  return placed ? { id: placed, byPolicy: hasPlacementPolicies(machines) } : null;
+}
+
+export type PlacementAsker = (question: PlacementQuestion) => Promise<{ answer: PlacementAnswer | null }>;
+
+function askPlacement(question: PlacementQuestion) {
+  return requestJson<{ answer: PlacementAnswer | null }>('/api/placement', question);
+}
+
+export async function requestPolicyPlacement(
+  machines: PlacementMachine[],
+  request: string,
+  ask: PlacementAsker = askPlacement
+) {
+  try {
+    const { answer } = await ask({ request, machines: listPlacementCandidates(machines) });
+    return answer;
+  } catch {
+    return null;
+  }
+}
+
+export function describePlacementDone(done: string, machine: MachineChoice | undefined, reason: string) {
+  if (!machine) return done;
+  const runs = `It runs on ${resolveMachineLabel(machine)}.`;
+  return reason ? `${done} ${runs} ${reason}` : `${done} ${runs}`;
 }
 
 export function listNewTaskMachines(
@@ -198,9 +224,9 @@ export function listNewTaskMachines(
   return [
     {
       value: 'auto',
-      label: automatic ? `Automatic: ${resolveMachineLabel(automatic)}` : 'Automatic',
+      label: placement?.byPolicy || !automatic ? 'Automatic' : `Automatic: ${resolveMachineLabel(automatic)}`,
       icon: 'IconSparkle',
-      ...(placement?.rule ? { hint: `for “${placement.rule}”` } : {}),
+      ...(placement?.byPolicy ? { hint: 'Your policies decide when you start it' } : {}),
     },
     ...machines.map((machine) => ({
       value: machine.id,

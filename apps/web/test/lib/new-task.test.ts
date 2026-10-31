@@ -5,6 +5,7 @@ import {
   createNewTaskCommand,
   describeMachineLoad,
   describeNewTask,
+  describePlacementDone,
   isProjectOnMachine,
   isWaitingStart,
   listNewTaskMachines,
@@ -13,6 +14,7 @@ import {
   listNewTaskStarts,
   NO_PROJECT,
   requestNewTask,
+  requestPolicyPlacement,
   resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
@@ -188,45 +190,103 @@ describe('the machine a new task runs on', () => {
   const box = { ...createMachine('box', 1, null), current: false };
   const ruled = {
     ...box,
-    state: { ...box.state, settings: { taskCapacity: null, placementPolicies: ['benchmark'] } },
+    state: {
+      ...box.state,
+      settings: { taskCapacity: null, placementPolicies: ['Run benchmarks on the build box.'] },
+    },
   };
   const auto = { machine: 'auto', project: 'auto' } as const;
 
-  it('picks nothing with one machine, the project you pick, a rule, then the focus project or the most room', () => {
-    expect(resolveNewTaskMachine([studio], auto, 'p1', '')).toBeNull();
-    expect(resolveNewTaskMachine([studio, box], auto, 'p1', '')).toEqual({ id: 'studio', rule: null });
-    expect(resolveNewTaskMachine([studio, box], auto, NO_PROJECT, '')).toEqual({ id: 'box', rule: null });
-    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'studio' }, NO_PROJECT, '')).toEqual({
+  it('picks nothing with one machine, the project you pick, then the focus project or the most room', () => {
+    expect(resolveNewTaskMachine([studio], auto, 'p1')).toBeNull();
+    expect(resolveNewTaskMachine([studio, box], auto, 'p1')).toEqual({ id: 'studio', byPolicy: false });
+    expect(resolveNewTaskMachine([studio, box], auto, NO_PROJECT)).toEqual({ id: 'box', byPolicy: false });
+    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'studio' }, NO_PROJECT)).toEqual({
       id: 'studio',
-      rule: null,
+      byPolicy: false,
     });
-    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'gone' }, NO_PROJECT, '')).toEqual({
+    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'gone' }, NO_PROJECT)).toEqual({
       id: 'box',
-      rule: null,
+      byPolicy: false,
     });
-    expect(resolveNewTaskMachine([studio, ruled], auto, 'p1', 'Run the benchmark')).toEqual({
-      id: 'box',
-      rule: 'benchmark',
-    });
-    expect(resolveNewTaskMachine([studio, ruled], { ...auto, project: 'p1' }, 'p1', 'benchmark')).toEqual({
-      id: 'studio',
-      rule: null,
-    });
-    expect(
-      resolveNewTaskMachine([studio, ruled], { ...auto, project: NO_PROJECT }, NO_PROJECT, 'benchmark')
-    ).toEqual({
-      id: 'box',
-      rule: 'benchmark',
-    });
-    expect(resolveNewTaskMachine([], { ...auto, machine: 'x' }, NO_PROJECT, '')).toBeNull();
+    expect(resolveNewTaskMachine([], { ...auto, machine: 'x' }, NO_PROJECT)).toBeNull();
   });
 
-  it('lists Automatic with the machine it chose and why, then each machine with its load, this one by that name', () => {
-    expect(listNewTaskMachines([studio, box], { id: 'box', rule: 'benchmark' })).toEqual([
-      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle', hint: 'for “benchmark”' },
+  it('leaves Automatic to the policies when there are any and you named no project or machine', () => {
+    expect(resolveNewTaskMachine([studio, ruled], auto, 'p1')).toEqual({ id: 'studio', byPolicy: true });
+    expect(resolveNewTaskMachine([studio, ruled], { ...auto, project: 'p1' }, 'p1')).toEqual({
+      id: 'studio',
+      byPolicy: false,
+    });
+    expect(resolveNewTaskMachine([studio, ruled], { ...auto, machine: 'box' }, NO_PROJECT)).toEqual({
+      id: 'box',
+      byPolicy: false,
+    });
+  });
+
+  it('asks the engine which machine the policies send a request to, and falls back on no answer', async () => {
+    const asked: unknown[] = [];
+    const answer = { machineId: 'box', reason: 'Benchmarks run on the build box.' };
+    expect(
+      await requestPolicyPlacement([studio, ruled], 'Run the benchmark', (question) => {
+        asked.push(question);
+        return Promise.resolve({ answer });
+      })
+    ).toEqual(answer);
+    expect(asked).toEqual([
+      {
+        request: 'Run the benchmark',
+        machines: [
+          { id: 'studio', name: 'Studio', policies: [], open: 3, capacity: 4 },
+          {
+            id: 'box',
+            name: 'Build box',
+            policies: ['Run benchmarks on the build box.'],
+            open: 1,
+            capacity: null,
+          },
+        ],
+      },
+    ]);
+    expect(
+      await requestPolicyPlacement([studio, ruled], 'x', () => Promise.reject(new Error('down')))
+    ).toBeNull();
+  });
+
+  it('asks the machine in front by POST /api/placement', async () => {
+    const answer = { machineId: 'box', reason: 'Benchmarks run on the build box.' };
+    const realFetch = globalThis.fetch;
+    const posted: string[] = [];
+    globalThis.fetch = mock((url: string) => {
+      posted.push(url);
+      return Promise.resolve(Response.json({ answer }));
+    }) as unknown as typeof globalThis.fetch;
+    const placed = await requestPolicyPlacement([studio, ruled], 'Run the benchmark');
+    globalThis.fetch = realFetch;
+    expect(placed).toEqual(answer);
+    expect(posted).toEqual(['/api/placement']);
+  });
+
+  it('says in the toast which machine took the task and why', () => {
+    expect(describePlacementDone('Started.', box, 'Benchmarks run there.')).toBe(
+      'Started. It runs on Build box. Benchmarks run there.'
+    );
+    expect(describePlacementDone('Started.', studio, '')).toBe('Started. It runs on This machine.');
+    expect(describePlacementDone('Started.', undefined, '')).toBe('Started.');
+  });
+
+  it('lists Automatic with the machine it chose, or as the policies’ choice, then each machine with its load', () => {
+    expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: false })).toEqual([
+      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle' },
       { value: 'studio', label: 'This machine', icon: 'IconMacbookRemote', hint: '3 of 4 open tasks' },
       { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
     ]);
+    expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: true })[0]).toEqual({
+      value: 'auto',
+      label: 'Automatic',
+      icon: 'IconSparkle',
+      hint: 'Your policies decide when you start it',
+    });
     expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
     expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');
   });

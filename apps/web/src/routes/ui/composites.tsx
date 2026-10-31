@@ -153,7 +153,11 @@ function ComposerSpecimen() {
       id: 'build-box',
       name: 'Build box',
       current: false,
-      state: { tasks: {}, projects: {}, settings: { taskCapacity: null, placementPolicies: ['benchmark'] } },
+      state: {
+        tasks: {},
+        projects: {},
+        settings: { taskCapacity: null, placementPolicies: ['Benchmarks run on the build box.'] },
+      },
     },
   ];
   return (

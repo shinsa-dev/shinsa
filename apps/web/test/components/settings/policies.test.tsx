@@ -29,14 +29,14 @@ describe('Settings → Policies', () => {
     const { container } = render(<PolicySettings machines={[]} />);
     expect(container.textContent).toBe('');
     renderPolicies([machine('studio', 'Studio', [])]);
-    expect(screen.getByText(/A new task whose request names a word of a policy/)).toBeTruthy();
+    expect(screen.getByText(/Shinsa reads every policy with the request and picks the machine/)).toBeTruthy();
   });
 
   it('adds a policy for the machine picked, after refusing an empty one', async () => {
     const write = renderPolicies([machine('studio', 'Studio', []), machine('server', 'Server', [])]);
     fireEvent.click(screen.getByRole('button', { name: 'New policy' }));
     fireEvent.submit(screen.getByRole('textbox', { name: 'The policy' }).closest('form') as HTMLFormElement);
-    expect(await screen.findByText('Write the words a request names to run on this machine.')).toBeTruthy();
+    expect(await screen.findByText('Write what runs on this machine.')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox', { name: 'The policy' }), { target: { value: 'benchmark' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add policy' }));
     await waitFor(() =>

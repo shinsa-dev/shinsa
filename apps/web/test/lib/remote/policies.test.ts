@@ -42,9 +42,7 @@ describe('placement policies', () => {
   });
 
   it('refuses an empty, long, repeated or 21st policy, and lets an edit keep its own text', () => {
-    expect(validatePolicy([STUDIO], null, 'studio', ' ')).toBe(
-      'Write the words a request names to run on this machine.'
-    );
+    expect(validatePolicy([STUDIO], null, 'studio', ' ')).toBe('Write what runs on this machine.');
     expect(validatePolicy([STUDIO], null, 'studio', 'x'.repeat(241))).toBe(
       'Keep it to 240 characters. It has 241.'
     );

@@ -20,7 +20,7 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    channel, merges their tasks, queue and gates into one view, and shows each task's machine on the task, as Kanna does.
    A machine is a computer that runs the engine and the only place tasks run; a device (a browser or a phone) is only
    a way in. With two machines or more, New task has a Machine picker: Automatic sends a task to the machine of the
-   project you picked, then to a machine whose placement policy (such as `iOS, simulator` or `benchmark`) the request names, then
+   project you picked, then where your policies send it: sentences in plain English per machine, such as "Run Xcode simulator tests here.", that the classifier reads with the request, then
    to the one with the most room under its task capacity; picking one overrides it. Settings → Machines lists every
    machine with its status, its open tasks, its task capacity and Remove, and Settings → Policies says which machine runs which work. On the machine a
    device was added from, the dashboard calls that machine This machine.
@@ -78,6 +78,6 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
 - Push notifications on a phone, and a smaller phone surface.
 - Terminals over remote access.
 - Sharing an instance with another GitHub account.
-- Placement policies a project or a kind of task asks for (macOS for simulators) beyond words in the request, and a
-  machine's own engine on Linux and Windows.
+- A machine's own engine on Linux and Windows, and what it can do (macOS for simulators) told to the classifier
+  without a policy saying it.
 - Moving a task to another machine, and running one run of a task (a check, a delegation) on another machine.

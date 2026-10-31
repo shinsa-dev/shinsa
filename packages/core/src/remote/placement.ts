@@ -23,30 +23,6 @@ export function isPlacementPoliciesValid(policies: readonly string[]) {
   );
 }
 
-export function listPolicyTerms(policy: string) {
-  return policy
-    .split(',')
-    .map((term) => term.trim())
-    .filter((term) => term.length > 0);
-}
-
-function escapePattern(text: string) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function matchesTerm(request: string, term: string) {
-  return new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(term)}($|[^\\p{L}\\p{N}])`, 'iu').test(request);
-}
-
-export function resolvePolicyMachine(machines: PlacementMachine[], request: string) {
-  for (const machine of machines)
-    for (const policy of machine.state.settings.placementPolicies ?? []) {
-      const term = listPolicyTerms(policy).find((candidate) => matchesTerm(request, candidate));
-      if (term) return { id: machine.id, policy, term };
-    }
-  return null;
-}
-
 export interface MachineLoad {
   id: string;
   name: string;
@@ -73,13 +49,127 @@ export function resolveProjectMachine(machines: PlacementMachine[], projectId: s
   return machines.find((machine) => projectId in machine.state.projects)?.id ?? null;
 }
 
-export function resolvePlacement(machines: PlacementMachine[], projectId: string | null, request = '') {
+export function resolvePlacement(machines: PlacementMachine[], projectId: string | null) {
   const owner = projectId ? resolveProjectMachine(machines, projectId) : null;
   if (owner) return owner;
-  const ruled = resolvePolicyMachine(machines, request);
-  if (ruled) return ruled.id;
   const loads = machines.map(resolveMachineLoad);
   const roomy = loads.filter((load) => !load.full);
   const [best] = (roomy.length > 0 ? roomy : loads).sort(compareLoads);
   return best?.id ?? null;
+}
+
+export interface PlacementCandidate {
+  id: string;
+  name: string;
+  policies: string[];
+  open: number;
+  capacity: number | null;
+}
+
+export interface PlacementQuestion {
+  request: string;
+  machines: PlacementCandidate[];
+}
+
+export interface PlacementAnswer {
+  machineId: string;
+  reason: string;
+}
+
+export const PLACEMENT_LIMITS = { request: 20_000, machines: 20, reason: 240 } as const;
+
+export const NO_POLICY_MACHINE = 'none';
+
+export function hasPlacementPolicies(machines: PlacementMachine[]) {
+  return machines.some((machine) => (machine.state.settings.placementPolicies ?? []).length > 0);
+}
+
+export function listPlacementCandidates(machines: PlacementMachine[]): PlacementCandidate[] {
+  return machines.map((machine) => {
+    const load = resolveMachineLoad(machine);
+    return {
+      id: machine.id,
+      name: machine.name,
+      policies: machine.state.settings.placementPolicies ?? [],
+      open: load.open,
+      capacity: load.capacity,
+    };
+  });
+}
+
+export const PLACEMENT_SYSTEM = [
+  'You choose which machine a new coding task runs on.',
+  'Each machine runs its own Shinsa engine. The person wrote policies in plain English saying what runs where.',
+  'Read the request and the policies. Pick the machine a policy sends this request to.',
+  `If no policy speaks to this request, answer "${NO_POLICY_MACHINE}"; the machine with the most room takes it then.`,
+  'When two policies conflict, follow the one that matches the request most closely.',
+  'The reason is one short sentence in plain words that names the policy you followed.',
+].join(' ');
+
+export const PLACEMENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    machine: { type: 'string' },
+    reason: { type: 'string' },
+  },
+  required: ['machine', 'reason'],
+  additionalProperties: false,
+} as const;
+
+function describeCandidate(candidate: PlacementCandidate) {
+  const load =
+    candidate.capacity === null
+      ? `${candidate.open} open tasks, no limit`
+      : `${candidate.open} of ${candidate.capacity} open tasks`;
+  const policies =
+    candidate.policies.length > 0
+      ? candidate.policies.map((policy) => `  - ${policy}`).join('\n')
+      : '  (no policies)';
+  return `Machine "${candidate.id}" named ${candidate.name} (${load}):\n${policies}`;
+}
+
+export function serializePlacementPrompt(question: PlacementQuestion) {
+  return [
+    'Machines and their policies:',
+    ...question.machines.map(describeCandidate),
+    '',
+    'The request:',
+    question.request,
+    '',
+    `Answer with JSON: {"machine": the machine's id in quotes, or "${NO_POLICY_MACHINE}", "reason": one sentence}.`,
+  ].join('\n');
+}
+
+export function parsePlacementAnswer(question: PlacementQuestion, value: unknown): PlacementAnswer | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { machine, reason } = value as { machine?: unknown; reason?: unknown };
+  if (typeof machine !== 'string' || !question.machines.some((candidate) => candidate.id === machine))
+    return null;
+  const said = typeof reason === 'string' ? reason.trim().slice(0, PLACEMENT_LIMITS.reason) : '';
+  return { machineId: machine, reason: said };
+}
+
+function readCandidate(value: unknown): PlacementCandidate | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { id, name, policies, open, capacity } = value as Record<string, unknown>;
+  if (typeof id !== 'string' || !id || typeof name !== 'string') return null;
+  if (!Array.isArray(policies) || !policies.every((policy) => typeof policy === 'string')) return null;
+  if (!isPlacementPoliciesValid(policies)) return null;
+  if (typeof open !== 'number' || !Number.isInteger(open) || open < 0) return null;
+  if (capacity !== null && (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity < 1))
+    return null;
+  return { id, name: name.slice(0, 120), policies, open, capacity };
+}
+
+export function parsePlacementQuestion(value: unknown): PlacementQuestion | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { request, machines } = value as Record<string, unknown>;
+  if (typeof request !== 'string' || !request.trim() || request.length > PLACEMENT_LIMITS.request)
+    return null;
+  if (!Array.isArray(machines) || machines.length < 2 || machines.length > PLACEMENT_LIMITS.machines)
+    return null;
+  const candidates = machines.map(readCandidate);
+  if (!candidates.every((candidate): candidate is PlacementCandidate => candidate !== null)) return null;
+  if (new Set(candidates.map((candidate) => candidate.id)).size !== candidates.length) return null;
+  return { request, machines: candidates };
 }

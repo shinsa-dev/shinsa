@@ -236,6 +236,8 @@ describe('sending to the machine that owns it', () => {
     expect(laptop.connection.commands.map((command) => command.type)).toEqual(['task.create']);
     expect(studio.connection.commands.map((command) => command.type)).toEqual(['task.create']);
     fleet.removeMember('m2');
+    expect(fleet.listMachines().map((machine) => machine.id)).toEqual(['m1']);
+    fleet.removeMember('m1');
     expect(fleet.listMachines()).toEqual([]);
   });
 

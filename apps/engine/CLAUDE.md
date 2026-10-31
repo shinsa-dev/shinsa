@@ -168,7 +168,8 @@ src/
 │                        enrollments.ts (one-time enrollment secrets, each for a named device), channel.ts
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
-│                        (the routes a remote request is refused), routes.ts (/api/remote), index.ts (Remote: wires
+│                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
+│                        classifier reads every machine's policies with a new task's request and names its machine), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,

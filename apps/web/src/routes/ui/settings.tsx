@@ -266,14 +266,23 @@ const SAMPLE_POLICY_MACHINES = [
     state: {
       tasks: {},
       projects: {},
-      settings: { placementPolicies: ['iOS, simulator, Xcode', 'TestFlight'] },
+      settings: {
+        placementPolicies: [
+          'Run Xcode simulator tests and TestFlight builds here.',
+          'Anything that needs macOS runs here.',
+        ],
+      },
     },
   },
   {
     id: 'server',
     name: 'Build server',
     current: false,
-    state: { tasks: {}, projects: {}, settings: { placementPolicies: ['benchmark, load test'] } },
+    state: {
+      tasks: {},
+      projects: {},
+      settings: { placementPolicies: ['Benchmarks and load tests always run here.'] },
+    },
   },
 ];
 
@@ -392,7 +401,7 @@ export function SettingsSpecimens() {
           </RemoteServicesContext.Provider>
         </div>
       </Specimen>
-      <Specimen label='PolicySettings · on app.shinsa.dev: which machine runs which work, by the words a request names'>
+      <Specimen label='PolicySettings · on app.shinsa.dev: which work runs on which machine, in plain English'>
         <div className='w-full max-w-xl'>
           <PolicySettings machines={SAMPLE_POLICY_MACHINES} actions={SAMPLE_POLICY_ACTIONS} />
         </div>

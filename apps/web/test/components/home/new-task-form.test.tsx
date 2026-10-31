@@ -87,7 +87,11 @@ function connectTwoMachines() {
       id: 'box',
       name: 'Build box',
       current: false,
-      state: { tasks: {}, projects: {}, settings: { taskCapacity: null, placementPolicies: ['benchmark'] } },
+      state: {
+        tasks: {},
+        projects: {},
+        settings: { taskCapacity: null, placementPolicies: ['Benchmarks run on the build box.'] },
+      },
     },
   ];
   replaceConnection({
@@ -108,13 +112,23 @@ describe('NewTaskForm with several machines', () => {
     expect(screen.queryByRole('combobox', { name: 'Machine' })).toBeNull();
   });
 
-  it('places a task automatically, and on the machine you pick with only that machine’s projects', async () => {
+  it('lets the policies place a task, and on the machine you pick with only that machine’s projects', async () => {
     const sent = connectTwoMachines();
+    const realFetch = globalThis.fetch;
+    const asked: unknown[] = [];
+    globalThis.fetch = mock((_url: string, init: RequestInit) => {
+      asked.push(JSON.parse(String(init.body)));
+      return Promise.resolve(
+        Response.json({ answer: { machineId: 'studio', reason: 'Studio runs reviews.' } })
+      );
+    }) as unknown as typeof globalThis.fetch;
     renderForm();
-    expect(combobox('Machine').textContent).toBe('Automatic: Build box');
-    fireEvent.change(field(), { target: { value: 'Benchmark the build' } });
+    expect(combobox('Machine').textContent).toBe('Automatic');
+    fireEvent.change(field(), { target: { value: 'Review the build' } });
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
-    await waitFor(() => expect(sent).toEqual([['task.create', 'box']]));
+    await waitFor(() => expect(sent).toEqual([['task.create', 'studio']]));
+    globalThis.fetch = realFetch;
+    expect(asked).toMatchObject([{ request: 'Review the build' }]);
     await pick('Project', /Superwall on Studio/, /Superwall/);
     expect(combobox('Machine').textContent).toBe('Automatic: Studio');
     await pick('Machine', /Build box/, 'Build box');

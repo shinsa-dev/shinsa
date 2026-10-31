@@ -2,16 +2,20 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
+import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
+import { createQuickCalls } from '../apps/engine/src/agents/quick/index.ts';
 import { ConfigStore, resolveConfig } from '../apps/engine/src/config/index.ts';
 import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
+import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
+  createSettings,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
   REMOTE_PATHS,
@@ -28,6 +32,7 @@ const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-re
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER = { id: '1', login: 'you', avatarUrl: null };
+const PLACE = createPlacementAsker(createQuickCalls(new ProviderRegistry(), createSettings).classify);
 
 const LAPTOP_TASKS = [
   {
@@ -137,6 +142,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
       accounts: () => Promise.resolve([]),
     }),
     remote,
+    place: PLACE,
   });
   const key = await remote.store.resolveMachineKey();
   const machine: Machine = {

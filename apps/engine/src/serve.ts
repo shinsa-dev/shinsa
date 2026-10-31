@@ -44,6 +44,7 @@ import {
   resolveMachineName,
   type StartConnector,
 } from './remote/index.ts';
+import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -84,6 +85,7 @@ export interface ShinsaOptions {
   onNotice?: NoticeListener;
   triage?: TriageResolver;
   classify?: Classifier;
+  place?: PlacementAsker;
   resolveLogin?: LoginResolver;
   providers?: ProviderRegistry;
   models?: ModelSource;
@@ -275,6 +277,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     roots,
     resolveLogin: services.resolveLogin,
     classify: services.classify,
+    place: options.place ?? createPlacementAsker(services.quick.classify),
     workspaces: services.runs.workspaces,
     remote: services.remote,
     restarter: createLaunchdRestarter(engine, {

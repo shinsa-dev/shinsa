@@ -1,13 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import type { TaskStage } from '../../src/domain/types.ts';
 import {
+  hasPlacementPolicies,
   isPlacementPoliciesValid,
-  listPolicyTerms,
+  listPlacementCandidates,
+  NO_POLICY_MACHINE,
   type PlacementMachine,
+  parsePlacementAnswer,
+  parsePlacementQuestion,
   resolveMachineLoad,
   resolvePlacement,
-  resolvePolicyMachine,
   resolveProjectMachine,
+  serializePlacementPrompt,
 } from '../../src/remote/placement.ts';
 
 function machine(
@@ -100,38 +104,107 @@ describe('placement', () => {
 });
 
 describe('placement policies', () => {
-  const studio = machine('studio', [], { policies: ['iOS, simulator'] });
+  const studio = machine('studio', ['building'], {
+    policies: ['Run Xcode simulator tests on this machine.'],
+  });
   const server = machine('server', ['building', 'building'], {
-    policies: ['bench mark', 'C++, Rust'],
-    projects: ['p'],
+    capacity: 4,
+    policies: ['Benchmarks and load tests always run here.'],
   });
+  const bare = machine('bare', []);
+  const question = {
+    request: 'Run the iOS simulator tests',
+    machines: listPlacementCandidates([studio, server, bare]),
+  };
 
-  test('a request naming a term of a machine’s policy goes there, as a whole word and in any case', () => {
-    expect(resolvePolicyMachine([studio, server], 'Run the iOS tests')).toEqual({
-      id: 'studio',
-      policy: 'iOS, simulator',
-      term: 'iOS',
-    });
-    expect(resolvePolicyMachine([studio, server], 'a Bench Mark run')).toMatchObject({
-      id: 'server',
-      term: 'bench mark',
-    });
-    expect(resolvePolicyMachine([studio, server], 'build with c++ flags')).toMatchObject({ term: 'C++' });
-    expect(resolvePolicyMachine([studio, server], 'a kiosk with simulators')).toBeNull();
-    expect(resolvePolicyMachine([machine('bare', [])], 'iOS')).toBeNull();
-  });
-
-  test('a project still wins, a policy beats room, and room decides the rest', () => {
-    expect(resolvePlacement([studio, server], 'p', 'iOS work')).toBe('server');
-    expect(resolvePlacement([server, studio], null, 'benchmark')).toBe('studio');
-    expect(resolvePlacement([studio, server], null, 'a bench mark')).toBe('server');
-  });
-
-  test('a policy’s terms are its comma-separated words, and a machine holds up to 20 of 240 characters', () => {
-    expect(listPolicyTerms(' iOS, simulator ,, Xcode ')).toEqual(['iOS', 'simulator', 'Xcode']);
-    expect(isPlacementPoliciesValid(['iOS'])).toBe(true);
+  test('a machine holds up to 20 policies of 1 to 240 characters, and any one turns the classifier on', () => {
+    expect(isPlacementPoliciesValid(['Run iOS work here.'])).toBe(true);
     expect(isPlacementPoliciesValid([' '])).toBe(false);
     expect(isPlacementPoliciesValid(['x'.repeat(241)])).toBe(false);
-    expect(isPlacementPoliciesValid(Array.from({ length: 21 }, (_, index) => `w${index}`))).toBe(false);
+    expect(isPlacementPoliciesValid(Array.from({ length: 21 }, (_, index) => `p${index}`))).toBe(false);
+    expect(hasPlacementPolicies([studio, bare])).toBe(true);
+    expect(hasPlacementPolicies([bare])).toBe(false);
+  });
+
+  test('the prompt lists every machine with its load and its policies in plain English, then the request', () => {
+    expect(question.machines[1]).toEqual({
+      id: 'server',
+      name: 'server',
+      policies: ['Benchmarks and load tests always run here.'],
+      open: 2,
+      capacity: 4,
+    });
+    const prompt = serializePlacementPrompt(question);
+    expect(prompt).toContain(
+      'Machine "studio" named studio (1 open tasks, no limit):\n  - Run Xcode simulator tests'
+    );
+    expect(prompt).toContain('Machine "server" named server (2 of 4 open tasks):');
+    expect(prompt).toContain('Machine "bare" named bare (0 open tasks, no limit):\n  (no policies)');
+    expect(prompt).toContain('The request:\nRun the iOS simulator tests');
+  });
+
+  test('the answer names one of the machines, with a short reason; "none" or anything else is no answer', () => {
+    expect(
+      parsePlacementAnswer(question, { machine: 'studio', reason: ' Simulator tests run here. ' })
+    ).toEqual({
+      machineId: 'studio',
+      reason: 'Simulator tests run here.',
+    });
+    expect(
+      parsePlacementAnswer(question, { machine: 'server', reason: 'x'.repeat(300) })?.reason
+    ).toHaveLength(240);
+    expect(parsePlacementAnswer(question, { machine: 'server' })).toEqual({
+      machineId: 'server',
+      reason: '',
+    });
+    expect(
+      parsePlacementAnswer(question, { machine: NO_POLICY_MACHINE, reason: 'No policy fits.' })
+    ).toBeNull();
+    expect(parsePlacementAnswer(question, { machine: 7 })).toBeNull();
+    expect(parsePlacementAnswer(question, null)).toBeNull();
+    expect(parsePlacementAnswer(question, 'studio')).toBeNull();
+  });
+
+  test('a question from a page is checked field by field before the classifier sees it', () => {
+    const json = JSON.parse(JSON.stringify(question)) as unknown;
+    expect(parsePlacementQuestion(json)).toEqual(question);
+    const candidate = question.machines[0];
+    const broken: unknown[] = [
+      null,
+      'question',
+      { ...question, request: ' ' },
+      { ...question, request: 'x'.repeat(20_001) },
+      { ...question, machines: [candidate] },
+      { ...question, machines: 'all' },
+      {
+        ...question,
+        machines: Array.from({ length: 21 }, (_, index) => ({ ...candidate, id: `m${index}` })),
+      },
+      { ...question, machines: [candidate, candidate] },
+      { ...question, machines: [candidate, null] },
+      { ...question, machines: [candidate, { ...candidate, id: '' }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', name: 3 }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', policies: 'all' }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', policies: [3] }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', policies: ['x'.repeat(241)] }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', open: -1 }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', open: 1.5 }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', capacity: 0 }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', capacity: 'none' }] },
+    ];
+    for (const value of broken) expect(parsePlacementQuestion(value)).toBeNull();
+    expect(
+      parsePlacementQuestion({
+        ...question,
+        machines: [candidate, { ...candidate, id: 'b', name: 'n'.repeat(200) }],
+      })?.machines[1]?.name
+    ).toHaveLength(120);
+  });
+
+  test('a project still wins, and room decides the rest', () => {
+    expect(
+      resolvePlacement([studio, { ...server, state: { ...server.state, projects: { p: {} } } }], 'p')
+    ).toBe('server');
+    expect(resolvePlacement([server, studio], null)).toBe('studio');
   });
 });

@@ -2381,7 +2381,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Settings → General → Machines lists every machine in rows like Remote access's: its name with its status beside it
   (online or last seen), whether it is in this dashboard, and Remove; machines in the dashboard also show their open
   tasks and their task capacity. Below it, Policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
-  lists each machine's placement policies the way Memory lists rules: New policy opens a one-line form with the machine
+  lists each machine's policies, sentences in plain English, the way Memory lists rules: New policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
@@ -2389,10 +2389,14 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
-  disk; `resolveProjectMachine`); then a placement policy: a machine's `placementPolicies`, each a comma-separated
-  list of words or phrases such as `iOS, simulator, Xcode`, take a request that names one of its terms as a whole word
-  in any case (`resolvePolicyMachine`, the first machine with a match; New task shows the term beside Automatic); then the focus project's machine; then
-  the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
+  disk; `resolveProjectMachine`); then, when any machine has a policy, the policies: each is a sentence in plain
+  English (`placementPolicies`, such as "Run Xcode simulator tests here."), and when you start the task the page sends
+  the request with every machine's policies and load to `POST /api/placement` on the first machine of the dashboard
+  (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
+  prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
+  none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
+  "Your policies decide when you start it", and the toast says where the task went and why); then, with no answer, the
+  focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in

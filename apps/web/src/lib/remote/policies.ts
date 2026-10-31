@@ -5,7 +5,7 @@ import { resolveMachineLabel } from './mode.ts';
 
 export const POLICIES_SECTION = 'Policies';
 
-export const POLICY_PLACEHOLDER = 'Words a request names to run here, such as “iOS, simulator, Xcode”.';
+export const POLICY_PLACEHOLDER = 'What runs on this machine, such as “Run Xcode simulator tests here.”';
 
 export interface PolicyRef {
   machineId: string;
@@ -53,7 +53,7 @@ export function validatePolicy(
   text: string
 ) {
   const length = text.trim().length;
-  if (length === 0) return 'Write the words a request names to run on this machine.';
+  if (length === 0) return 'Write what runs on this machine.';
   if (length > PLACEMENT_POLICY_LIMITS.text)
     return `Keep it to ${PLACEMENT_POLICY_LIMITS.text} characters. It has ${length}.`;
   const staying = editing?.machineId === machineId;
