@@ -330,7 +330,9 @@ describe('a row’s summary line', () => {
     });
     pushTranscript('run-wait', [createAgentEntry('Waiting on the planner.', 'interim')]);
     expect(row(/Build the export/).textContent).toContain('Waiting on the planner.');
-    expect(row(/Build the export/).querySelectorAll('[data-char]')).toHaveLength('Waiting on the planner.'.length);
+    expect(row(/Build the export/).querySelectorAll('[data-char]')).toHaveLength(
+      'Waiting on the planner.'.length
+    );
   });
 
   it('says the steps are still being worked out while triage shapes the task', () => {
