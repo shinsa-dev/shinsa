@@ -114,6 +114,15 @@ describe('a merge gate with steps before it', () => {
   });
 });
 
+describe('an answered task', () => {
+  it('is a blue Answered, with the answered glyph', () => {
+    expect(resolveGateGlyph(gate({ type: 'result' }))).toEqual({ icon: 'IconBubbleCheck', tone: 'blue' });
+    const { state, task } = withGate({ type: 'result' }, { stage: 'answered' });
+    expect(resolveTaskStatus(state, task)).toEqual({ label: 'Answered', tone: 'blue' });
+    expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconBubbleCheck', tone: 'blue' });
+  });
+});
+
 describe('a proposed change', () => {
   it('is a purple decision to approve, like a plan', () => {
     expect(resolveGateGlyph(gate({ type: 'proposal' }))).toEqual({ icon: 'IconFileEdit', tone: 'purple' });

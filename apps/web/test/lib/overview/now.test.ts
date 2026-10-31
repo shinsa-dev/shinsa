@@ -326,6 +326,10 @@ describe('what the now card shows', () => {
     expect(resolveResultPlace(state, done, createGate({ id: 'g', taskId: 't', type: 'proposal' }))).toBe(
       'now_card'
     );
+    const answered = createTask({ id: 't', stage: 'answered', result: RESULT });
+    expect(resolveResultPlace(state, answered, createGate({ id: 'g', taskId: 't', type: 'result' }))).toBe(
+      'now_card'
+    );
     expect(resolveResultPlace(state, done, createGate({ id: 'g', taskId: 't', type: 'question' }))).toBe(
       'panel'
     );

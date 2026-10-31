@@ -140,6 +140,29 @@ function createResultTask(now: number, step: DeliveringStep, title: string, body
   });
 }
 
+function createAnsweredSample(now: number) {
+  const task = createSampleTask(now, {
+    id: 'answered',
+    title: 'How many times does a failed webhook retry?',
+    stage: 'answered',
+    pipeline: ['answer'],
+    result: {
+      step: 'answer',
+      body: 'Five times, backing off 1, 5, 15, 60 and 240 minutes. `RETRY_SCHEDULE` in `webhooks/retry.ts` sets it.',
+      runId: null,
+      at: now - 2 * MINUTE,
+    },
+  });
+  const gate = createSampleGate(now, {
+    id: 'answered-gate',
+    taskId: 'answered',
+    type: 'result',
+    title: 'Read the answer',
+    body: 'Close the task once you have read it.',
+  });
+  return { task, gate };
+}
+
 function createResultTasks(now: number) {
   return [
     createResultTask(
@@ -642,5 +665,14 @@ export function createOverviewScene(now: number) {
     ],
     taskUsageLimit: 10,
   });
-  return { state, tasks, gates, runs, usageWaits, monitor, results: createResultTasks(now) };
+  return {
+    state,
+    tasks,
+    gates,
+    runs,
+    usageWaits,
+    monitor,
+    results: createResultTasks(now),
+    answered: createAnsweredSample(now),
+  };
 }

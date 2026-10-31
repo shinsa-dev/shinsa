@@ -59,6 +59,7 @@ function describeBody({ gate, task, reason }: QueuedGate) {
   if (isAgentQuestion(gate)) return gate.title;
   if (isDecisionGate(gate)) return `${reason}. ${resolveGateNow(task, gate)}`;
   if (gate.type === 'operation') return `${reason}. ${describeOperationIntro(gate)}`;
+  if (gate.type === 'result' && task.result) return task.result.body.replace(/[*`#>]/g, '');
   return gate.body?.trim() ? `${reason}. ${gate.body}` : reason;
 }
 

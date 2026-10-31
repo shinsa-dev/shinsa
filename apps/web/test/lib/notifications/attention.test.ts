@@ -121,6 +121,23 @@ describe('what a notification says', () => {
     );
   });
 
+  it('shows an answered question by the answer itself, without markdown', () => {
+    const task = createTask({
+      id: 't',
+      title: 'How webhook retries back off',
+      stage: 'answered',
+      result: {
+        step: 'answer',
+        body: '## Retries\nIt retries **5 times** in `retry()`.',
+        runId: null,
+        at: NOW,
+      },
+    });
+    const gate = createGate({ id: 'g', taskId: 't', type: 'result', title: 'Read the answer' });
+    const state = createShinsaState({ tasks: [task], gates: [gate] });
+    expect(listNewDecisions(new Set(), state, NOW)[0]?.body).toBe('Retries It retries 5 times in retry().');
+  });
+
   it('never repeats a secret request, only names what was asked for', () => {
     const secret = {
       ...question,

@@ -123,6 +123,25 @@ describe('the change gate on the Overview', () => {
 });
 
 describe('the Overview for each kind of task', () => {
+  it('shows an answered question in front of you with a Close button that closes the task', async () => {
+    const task = createTask({
+      id: 't',
+      stage: 'answered',
+      pipeline: ['answer'],
+      result: { step: 'answer', body: 'It retries five times.', runId: null, at: 0 },
+    });
+    const gate = createGate({ id: 'g', taskId: 't', type: 'result', title: 'Read the answer' });
+    const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('It retries five times.')).toBeTruthy();
+    expect(view.getAllByText('It retries five times.')).toHaveLength(1);
+    fireEvent.click(card.getByRole('button', { name: 'Close' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null },
+    ]);
+    expect(await view.findByText('Closed. The task is done.')).toBeTruthy();
+  });
+
   it('shows a finished report without a summary or code panels, and takes a follow-up', async () => {
     const task = createTask({
       id: 't',
