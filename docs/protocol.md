@@ -191,7 +191,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `projectId?` | string \| null | the project, else none |
 | `request` | string | your request, as written |
 | `title` | string | from triage (the request's first line until then) |
-| `origin` | string \| null | the folder `shinsa do` or `shinsa import` ran in, a hint for triage |
+| `origin` | string \| null | the folder `shinsa do` or `shinsa import` ran in, a hint for triage; `onboarding` for the welcome task setup records |
 | `mode?` | `build` \| `ask` | `ask` reads as the answer shape: `tasks create --ask`, a schedule's `just_answer` target |
 | `createdAt`, `updatedAt`, `stageChangedAt` | number | times (ms) |
 
@@ -915,6 +915,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
+| `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries.ts` | a delivery claim was taken, or released |
 | `delegation.wake_policy` | `agents/tools/orchestration.ts` | a `wait` call that timed out switches to waking |
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |

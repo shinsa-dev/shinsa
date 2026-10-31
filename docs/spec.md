@@ -284,13 +284,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
-- **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
-  questions: the folders that hold your repositories (found on this machine, with their
-  repository counts), the default model, the merge method, plan approval, your Claude accounts and
-  the tools Shinsa needs. Pick a suggestion or answer in your own words; an answer that names an
-  option is taken as is, a skip (or a plain yes where no option is a yes) keeps what is saved, and
-  any other is read by a quick model call that knows what each option means, said back and confirmed (the accounts and tools steps act at once). It can never add, skip or
-  reorder a question. Nothing about folders is hard-coded:
+- **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
+  steps you pass like gates: the folders that hold your repositories (found on this machine, with their
+  repository counts), the projects for them, the default model, the merge method and plan approval, signing in
+  with Claude, and the tools Shinsa needs, each installed with one click. It can never add, skip or reorder a
+  step, and finishing leaves a done "Welcome to Shinsa" task. Nothing about folders is hard-coded:
   Settings → Projects → Repository folders shows the chosen ones, editable, with Find folders.
 - **Every agent can manage Shinsa.** There is no separate conversation: the task chat is where you
   talk, and a question with no repository work (an Answer task) is how you just talk. Every task
@@ -618,12 +616,15 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup steps): five steps on first run, one at a time (Folders,
-Projects, Defaults, Accounts, Tools), each with the recommended answer already picked (folders also by path),
-any earlier one open to change. Your projects are suggested from the repositories in your folders and made
-with one press, your Claude logins are imported for you, a folder macOS keeps private asks for access
-instead of failing, and the prerequisites are checked with the command that fixes each. Nothing else opens
-until setup is complete.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): setup reads as your first task, "Set up Shinsa", whose
+five steps (Folders, Projects, Defaults, Claude, Tools) are gates you pass one at a time, each with the
+recommended answer already picked (folders also by path), any earlier one open to change. Your projects are
+suggested from the repositories in your folders and made with one press, a folder macOS keeps private asks for
+access instead of failing, Claude Code is installed if it is missing and you sign in to your Claude account (no
+login is found or imported for you), and each missing tool installs in a terminal on the step when you click
+Install (Bun only when a repository uses it). When an install still fails, an agent reads the failing checks and
+replies with commands you run with one click. Finishing records a done "Welcome to Shinsa" task that sums up what
+you set up, and you land on it. Nothing else opens until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own
