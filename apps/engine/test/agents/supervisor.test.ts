@@ -1138,6 +1138,57 @@ describe('hand-overs', () => {
     await without.running;
   });
 
+  test('a watchdog that asks for a server the run already has is refused until it says why that server falls short', async () => {
+    const session = {
+      servers: [{ name: 'Cloudflare', claudeName: 'cloudflare', definition: {} }],
+      skills: [],
+      plugins: {},
+      skillsOff: [],
+      codexServersOff: [],
+      deferred: [{ name: 'maple', claudeName: 'maple', definition: {}, tools: [], tokens: null }],
+      deferredSkills: [],
+      loaded: { servers: [], skills: [], plugins: [] },
+    };
+    const extensions = { resolveSession: () => Promise.resolve(session as never) };
+    const watch = (evidence: string) => ({
+      summary: 'Fixed.',
+      walkthrough: {
+        watchdogs: [
+          {
+            title: 'Update feed errors',
+            check: 'No 5xx responses on /updates/*.',
+            source_request: {
+              data: 'Workers Logs of the site Worker',
+              evidence,
+              suggestions: ['Cloudflare’s official MCP server', 'Maple'],
+            },
+          },
+        ],
+      },
+    });
+    const { call, dispatched, done, running } = await handOverSetup(undefined, { extensions });
+    const refusal = call('complete_fix', watch('apps/marketing serves /updates.'));
+    await expect(refusal).rejects.toThrow(
+      'walkthrough.watchdogs[0].source_request suggests `Cloudflare`, a server you already have.'
+    );
+    await expect(refusal).rejects.toThrow('suggests `maple`');
+    expect(dispatched.some((command) => command.type === 'agent.complete_fix')).toBe(false);
+    expect(
+      await call(
+        'complete_fix',
+        watch('apps/marketing serves /updates. I checked Cloudflare and maple: neither reaches it.')
+      )
+    ).toContain('Handed over');
+    done();
+    await running;
+    const without = await handOverSetup();
+    expect(await without.call('complete_fix', watch('apps/marketing serves /updates.'))).toContain(
+      'Handed over'
+    );
+    without.done();
+    await without.running;
+  });
+
   test('a hand-over core refuses leaves no commit behind, and the edits stay in the worktree', async () => {
     const { call, path, reject, done, running } = await handOverSetup();
     reject(
