@@ -379,3 +379,25 @@ describe('the pull request fact', () => {
     expect(screen.getByText('#43').className).toContain(TONE_TEXT.green);
   });
 });
+
+describe('the related task facts', () => {
+  it('reads each verb and its count or title with one plain space between them', () => {
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const view = renderFacts(task, [
+      createTask({ id: 'd1', waitsOn: ['t'] }),
+      createTask({ id: 'd2', waitsOn: ['t'] }),
+      createTask({ id: 'f1', title: 'Fix the schema', forkOf: 't' }),
+    ]);
+    const texts = view.getAllByRole('button').map((button) => button.textContent);
+    expect(texts).toContain('Unblocks 2 tasks');
+    expect(texts).toContain('Forked into Fix the schema');
+  });
+
+  it('reads Waits on and the titles it waits on with one plain space between them', () => {
+    const base = createTask({ id: 'base', title: 'Fix the schema' });
+    const view = renderFacts(createTask({ id: 't', stage: 'waiting_on_tasks', waitsOn: ['base'] }), [base]);
+    expect(view.getAllByRole('button').map((button) => button.textContent)).toContain(
+      'Waits on Fix the schema'
+    );
+  });
+});
