@@ -227,6 +227,7 @@ function redactRound(round: Round, redaction: Redaction): Round {
     ...round,
     request: splitMessageAttachments(round.request).text,
     base: redaction.paths ? round.base : null,
+    branch: redaction.paths ? round.branch : null,
     pullRequest,
   };
 }
@@ -245,7 +246,7 @@ function redactTask(task: Task, redaction: Redaction): Task {
     stageReason: task.stageReason,
     cancelledFrom: task.cancelledFrom ?? null,
     priority: task.priority,
-    branch: task.branch,
+    branch: redaction.paths ? task.branch : null,
     worktreePath: null,
     plan: task.plan ? redactPlan(task.plan, redaction) : null,
     phases: task.phases,

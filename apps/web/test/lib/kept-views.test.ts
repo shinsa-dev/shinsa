@@ -23,6 +23,12 @@ describe('resolvePageKey', () => {
     expect(resolvePageKey(TASK, null)).toBe('task:SW-1');
   });
 
+  it('keys a share preview by the task it previews', () => {
+    expect(resolvePageKey({ route: { name: 'sharePreview', reference: 'SW-1' }, search: '' }, null)).toBe(
+      'share-preview:SW-1'
+    );
+  });
+
   it('keys every other page by its name', () => {
     expect(resolvePageKey(HOME, null)).toBe('home');
     expect(resolvePageKey(SETTINGS, null)).toBe('settings');

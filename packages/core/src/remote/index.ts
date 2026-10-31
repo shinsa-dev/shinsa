@@ -123,11 +123,14 @@ export {
   resolveShareFilePath,
   resolveSharePagePath,
   resolveSharePath,
+  resolveSharePreviewApiPath,
+  resolveSharePreviewDiffApiPath,
   resolveShareUrl,
   SHARE_DIFF_FILE,
   SHARE_FILE_TYPES,
   type SharedPublication,
   type ShareFileType,
+  type SharePreview,
 } from './shares.ts';
 export type {
   PairingView,

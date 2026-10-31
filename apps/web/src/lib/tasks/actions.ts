@@ -4,6 +4,7 @@ import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
+import { openShareDialog, SHARE_TITLE } from '@/lib/share/dialog.ts';
 import { FORK_TITLE, openForkDialog } from '@/lib/tasks/fork.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -15,6 +16,7 @@ export type TaskActionKey =
   | 'terminal'
   | 'finder'
   | 'fork'
+  | 'share'
   | 'moveToBacklog'
   | 'removeFromBacklog'
   | 'restart'
@@ -29,6 +31,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   terminal: { label: 'Open a terminal', icon: 'IconConsole' },
   finder: { label: 'Show in Finder', icon: 'IconFolder1' },
   fork: { label: FORK_TITLE, icon: 'IconFork' },
+  share: { label: SHARE_TITLE, icon: 'IconShareOs' },
   moveToBacklog: { label: 'Move to the backlog', icon: 'IconArchive' },
   removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
@@ -43,7 +46,10 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
   const lifecycle: TaskActionKey[] = isTaskSettled(task) ? [] : ['restart', 'complete', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
-  return [links, worktree, fork, listBacklogActions(task), lifecycle].filter((group) => group.length > 0);
+  const share: TaskActionKey[] = task.watchHome ? [] : ['share'];
+  return [links, worktree, [...fork, ...share], listBacklogActions(task), lifecycle].filter(
+    (group) => group.length > 0
+  );
 }
 
 function listBacklogActions(task: Task): TaskActionKey[] {
@@ -71,6 +77,9 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       return;
     case 'fork':
       openForkDialog(task.id);
+      return;
+    case 'share':
+      openShareDialog(task.id);
       return;
     case 'moveToBacklog':
       void sendCommandWithToast({ type: 'task.move_to_backlog', taskId: task.id }, 'Moved to the backlog.');

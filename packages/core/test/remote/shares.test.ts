@@ -8,6 +8,8 @@ import {
   resolveShareFilePath,
   resolveSharePagePath,
   resolveSharePath,
+  resolveSharePreviewApiPath,
+  resolveSharePreviewDiffApiPath,
   resolveShareUrl,
   SHARE_DIFF_FILE,
 } from '../../src/remote/shares.ts';
@@ -26,6 +28,11 @@ describe('the share contract', () => {
     expect(resolveShareUrl('https://app.shinsa.dev', 'tok')).toBe('https://app.shinsa.dev/share/tok');
     expect(resolveSharePath('tok')).toBe('/__remote/shares/tok');
     expect(resolveShareFilePath('tok', SHARE_DIFF_FILE)).toBe('/__remote/shares/tok/files/diff');
+  });
+
+  test('names the engine routes a preview reads', () => {
+    expect(resolveSharePreviewApiPath('task 1')).toBe('/api/tasks/task%201/share/preview');
+    expect(resolveSharePreviewDiffApiPath('task-1')).toBe('/api/tasks/task-1/share/preview/diff');
   });
 
   test('accepts only file types a page can show without running them', () => {

@@ -162,6 +162,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     machineName: resolveMachineName(),
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
+  const shares = new SharePublisher({ engine, remote, evidence });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
     baseUrl: () => address.url,
@@ -217,6 +218,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     briefings,
     terminals,
     remote,
+    shares,
     inbox,
     quick,
     classify,
@@ -234,7 +236,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     ],
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
-      shares: new SharePublisher({ engine, remote, evidence }),
+      shares,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
@@ -278,6 +280,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     place: options.place ?? createPlacementAsker(services.quick.classify),
     workspaces: services.runs.workspaces,
     remote: services.remote,
+    shares: services.shares,
     restarter: createLaunchdRestarter(engine, {
       byService: options.byService ?? false,
       drain: services.runs,

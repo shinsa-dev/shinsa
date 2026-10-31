@@ -53,6 +53,20 @@ export interface SharedPublication {
   updatedAt: number;
 }
 
+export interface SharePreview {
+  shared: SharedTask;
+  files: Record<string, string>;
+  updatedAt: number;
+}
+
+export function resolveSharePreviewApiPath(taskId: string) {
+  return `/api/tasks/${encodeURIComponent(taskId)}/share/preview`;
+}
+
+export function resolveSharePreviewDiffApiPath(taskId: string) {
+  return `${resolveSharePreviewApiPath(taskId)}/diff`;
+}
+
 export function isShareFileType(value: string): value is ShareFileType {
   return (SHARE_FILE_TYPES as readonly string[]).includes(value);
 }

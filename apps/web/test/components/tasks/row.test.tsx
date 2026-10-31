@@ -77,6 +77,7 @@ describe('the row context menu', () => {
       'Open a terminal',
       'Show in Finder',
       'Fork into a new task',
+      'Share task',
       'Move to the backlog',
       'Restart the current step',
       'Mark as done',
@@ -116,10 +117,10 @@ describe('the row context menu', () => {
     await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'task.cancel', taskId: 'docs' }]));
   });
 
-  it('offers only Open task and forking on a settled task without a branch', async () => {
+  it('offers only Open task, forking and sharing on a settled task without a branch', async () => {
     renderRow(findTask('shipped'), 'done');
     await openContextMenu();
-    expect(menuItems()).toEqual(['Open task', 'Fork into a new task']);
+    expect(menuItems()).toEqual(['Open task', 'Fork into a new task', 'Share task']);
   });
 });
 

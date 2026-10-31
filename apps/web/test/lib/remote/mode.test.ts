@@ -43,6 +43,11 @@ describe('the remote page’s mode', () => {
     expect(resolveRemoteView({ pathname: '/enroll', search: '' })).toEqual({ kind: 'enroll' });
     expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '' })).toEqual({ kind: 'app' });
     expect(resolveRemoteView({ pathname: '/', search: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: '/share/abc_D-9', search: '' })).toEqual({
+      kind: 'share',
+      token: 'abc_D-9',
+    });
+    expect(resolveRemoteView({ pathname: '/share/a/b', search: '' })).toEqual({ kind: 'app' });
     expect(SERVICE_WORKER_PATH).toBe('/sw.js');
     expect(SERVICE_WORKER_SCOPE).toBe('/');
   });

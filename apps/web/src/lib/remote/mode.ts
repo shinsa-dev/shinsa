@@ -29,7 +29,13 @@ export function resolveOnMachineUrl(url: string) {
   return fragment === undefined ? marked : `${marked}#${fragment}`;
 }
 
-export type RemoteView = { kind: 'app' } | { kind: 'pair'; claimCode: string | null } | { kind: 'enroll' };
+export type RemoteView =
+  | { kind: 'app' }
+  | { kind: 'pair'; claimCode: string | null }
+  | { kind: 'enroll' }
+  | { kind: 'share'; token: string };
+
+const SHARE_PAGE = new RegExp(`^${REMOTE_PATHS.sharePage}/([A-Za-z0-9_-]{1,64})$`);
 
 export function isRemoteBuild(env: Record<string, unknown> = import.meta.env) {
   return env.VITE_SHINSA_REMOTE === '1';
@@ -39,6 +45,8 @@ export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'
   if (location.pathname === REMOTE_PATHS.pairPage)
     return { kind: 'pair', claimCode: new URLSearchParams(location.search).get('code') };
   if (location.pathname === REMOTE_PATHS.enrollPage) return { kind: 'enroll' };
+  const token = SHARE_PAGE.exec(location.pathname)?.[1];
+  if (token) return { kind: 'share', token };
   return { kind: 'app' };
 }
 

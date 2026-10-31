@@ -93,9 +93,29 @@ function resolveVersionedUrl(url: string, version: string) {
   return `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`;
 }
 
+export type CodeSource = (name: string, params: URLSearchParams) => Promise<unknown>;
+
+const CODE_URL = /^\/api\/tasks\/([^/?]+)\/([^?]+)(?:\?(.*))?$/;
+
+const sources = new Map<string, CodeSource>();
+
+export function registerCodeSource(taskId: string, source: CodeSource) {
+  sources.set(taskId, source);
+  return () => {
+    if (sources.get(taskId) === source) sources.delete(taskId);
+  };
+}
+
+function answerCodeRead<T>(key: string): Promise<T> {
+  const [, taskId = '', name = '', search = ''] = CODE_URL.exec(key) ?? [];
+  const source = sources.get(decodeURIComponent(taskId));
+  if (!source) return requestJson<T>(key);
+  return source(name, new URLSearchParams(search)) as Promise<T>;
+}
+
 function requestCodeRead<T>(url: string, version = ''): Promise<T> {
   const key = resolveVersionedUrl(url, version);
-  return remember(url, key, () => requestJson<T>(key));
+  return remember(url, key, () => answerCodeRead<T>(key));
 }
 
 function selectSettled<T>(url: string | null, version: string): Loaded<T> {

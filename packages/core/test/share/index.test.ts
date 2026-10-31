@@ -184,6 +184,8 @@ describe('what a shared task shows', () => {
       repository: 'superwall/paywall-next',
       code: true,
     });
+    expect(shared.task.branch).not.toBeNull();
+    expect(shared.task.branch).toBe(task.branch);
     expect(shared.task).toMatchObject({
       request: 'Fix the scroll in tab groups',
       worktreePath: null,
@@ -231,6 +233,8 @@ describe('what a shared task shows', () => {
     expect(shared.task.plan?.document?.files).toEqual([]);
     expect(shared.task.plan?.document?.verification[0]?.command).toBe('');
     expect(shared.task.plan?.body).not.toContain('src/panel.ts');
+    expect(shared.task.plan?.body).toContain('- Panel tests (phases 1, 2)');
+    expect(shared.task.plan?.body).not.toContain('``');
     expect(shared.task.phaseReports.flatMap((report) => report.spots)).toEqual([
       { file: '', start: 0, end: 0, attention: 'critical', why: 'The change.', title: 'Clamp' },
       { file: '', start: 0, end: 0, attention: 'high', why: 'The other change.' },
@@ -257,6 +261,8 @@ describe('what a shared task shows', () => {
     expect(shared.task.pullRequest).toMatchObject({ url: '', headSha: null, mergeCommit: null });
     expect(shared.task.pullRequest?.checkRuns?.[0]?.url).toBeNull();
     expect(shared.task.rounds?.[0]?.pullRequest).toBeNull();
+    expect(shared.task.branch).toBeNull();
+    expect(shared.task.rounds?.every((round) => round.branch === null)).toBe(true);
     expect(shared.evidence.map((evidence) => evidence.title)).toEqual([
       'Shot of panel.ts',
       'Shot of panel.ts',

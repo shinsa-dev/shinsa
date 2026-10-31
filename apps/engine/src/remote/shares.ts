@@ -1,19 +1,23 @@
 import { statSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
+  DomainError,
   type MachineCredentials,
   PUBLICATION_LIMITS,
   type Repo,
   type RepositoryVisibility,
   resolveSharedTask,
+  resolveSharePreviewDiffApiPath,
   SHARE_DIFF_FILE,
   SHARED_EVIDENCE_PREFIX,
   type SharedRepository,
   type SharedTask,
   type ShareFileType,
+  type SharePreview,
   type Task,
 } from '@shinsa/core';
 import { readPullRequestDiff, resolveRepoSlug, resolveRepoVisibility } from '../github/index.ts';
+import type { ApiRoute } from '../http/routes.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 import { EffectError } from '../runtime/failures.ts';
 import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence.ts';
@@ -42,6 +46,11 @@ const FILE_TYPES: Readonly<Record<string, ShareFileType>> = {
 export interface ShareGitHub {
   resolveVisibility: (repo: Repo) => Promise<RepositoryVisibility>;
   readDiff: (repo: Repo, number: number) => Promise<string>;
+}
+
+export interface SharePreviewer {
+  preview: (taskId: string) => Promise<SharePreview>;
+  previewDiff: (taskId: string) => Promise<string>;
 }
 
 export interface ShareEffects {
@@ -83,6 +92,28 @@ function resolveControlFailure(error: unknown) {
   return error;
 }
 
+function isListed(item: SharedTask['evidence'][number], files: Record<string, string>) {
+  return !item.uri.startsWith(SHARED_EVIDENCE_PREFIX) || item.id in files;
+}
+
+export function createSharePreviewRoutes(shares: SharePreviewer): ApiRoute[] {
+  return [
+    {
+      method: 'GET',
+      pattern: /^\/api\/tasks\/([^/]+)\/share\/preview$/,
+      respond: async ([, taskId = '']) => Response.json(await shares.preview(decodeURIComponent(taskId))),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/tasks\/([^/]+)\/share\/preview\/diff$/,
+      respond: async ([, taskId = '']) =>
+        new Response(await shares.previewDiff(decodeURIComponent(taskId)), {
+          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+        }),
+    },
+  ];
+}
+
 function isPublished(files: readonly PublishedFile[]) {
   const ids = new Set(files.map((file) => file.id));
   return (item: SharedTask['evidence'][number]) =>
@@ -99,7 +130,7 @@ function createDiffFile(bytes: Uint8Array<ArrayBuffer>): PublishedFile | null {
   };
 }
 
-export class SharePublisher implements ShareEffects {
+export class SharePublisher implements ShareEffects, SharePreviewer {
   readonly #engine: Engine;
   readonly #remote: Remote;
   readonly #evidence: EvidenceStore;
@@ -117,17 +148,52 @@ export class SharePublisher implements ShareEffects {
     this.#now = options.now ?? Date.now;
   }
 
+  async preview(taskId: string): Promise<SharePreview> {
+    const task = this.#findTask(taskId);
+    const { shared } = await this.#resolveShared(task);
+    const files: Record<string, string> = {};
+    for (const item of shared.evidence) {
+      if (!item.uri.startsWith(SHARED_EVIDENCE_PREFIX)) continue;
+      const original = this.#engine.state.evidence[item.id];
+      if (original && this.#selectEvidencePath(item.id)) files[item.id] = original.uri;
+    }
+    if (shared.code) files[SHARE_DIFF_FILE] = resolveSharePreviewDiffApiPath(taskId);
+    return {
+      shared: { ...shared, evidence: shared.evidence.filter((item) => isListed(item, files)) },
+      files,
+      updatedAt: this.#now(),
+    };
+  }
+
+  async previewDiff(taskId: string) {
+    const task = this.#findTask(taskId);
+    const { shared, repo } = await this.#resolveShared(task);
+    const [file] = await this.#listDiffFiles(shared, task, repo);
+    if (!file) throw new DomainError('share_no_code', 'This task shares no code.');
+    return new TextDecoder().decode(await file.read());
+  }
+
+  #findTask(taskId: string) {
+    const task = this.#engine.state.tasks[taskId];
+    if (!task) throw new DomainError('task_not_found', 'No such task.');
+    return task;
+  }
+
+  async #resolveShared(task: Task) {
+    const repo = task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
+    const shared = resolveSharedTask(this.#engine.state, task, {
+      owner: this.#remote.store.file.owner,
+      machine: this.#remote.snapshot().machineName,
+      repository: await this.#resolveRepository(repo),
+    });
+    return { shared, repo };
+  }
+
   async publish(taskId: string, context: EffectContext) {
     const task = this.#engine.state.tasks[taskId];
     if (!task?.share) return;
     const credentials = this.#findCredentials();
-    const repo = task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
-    const repository = await this.#resolveRepository(repo);
-    const shared = resolveSharedTask(this.#engine.state, task, {
-      owner: this.#remote.store.file.owner,
-      machine: this.#remote.snapshot().machineName,
-      repository,
-    });
+    const { shared, repo } = await this.#resolveShared(task);
     const files = [
       ...(await this.#listEvidenceFiles(shared)),
       ...(await this.#listDiffFiles(shared, task, repo)),
@@ -185,7 +251,7 @@ export class SharePublisher implements ShareEffects {
     return files;
   }
 
-  async #resolveEvidenceFile(evidenceId: string): Promise<PublishedFile | null> {
+  #selectEvidencePath(evidenceId: string) {
     const original = this.#engine.state.evidence[evidenceId];
     if (!original?.uri.startsWith(EVIDENCE_ROUTE)) return null;
     const path = this.#evidence.selectFile(original.uri.slice(EVIDENCE_ROUTE.length));
@@ -193,6 +259,13 @@ export class SharePublisher implements ShareEffects {
     if (!path || !contentType) return null;
     const stat = statSync(path);
     if (stat.size > PUBLICATION_LIMITS.fileBytes) return null;
+    return { path, contentType, stat };
+  }
+
+  async #resolveEvidenceFile(evidenceId: string): Promise<PublishedFile | null> {
+    const selected = this.#selectEvidencePath(evidenceId);
+    if (!selected) return null;
+    const { path, contentType, stat } = selected;
     const read = async () => new Uint8Array(await Bun.file(path).arrayBuffer());
     return { id: evidenceId, hash: await this.#resolveFileHash(path, stat, read), contentType, read };
   }

@@ -386,6 +386,7 @@ describe('the This task section', () => {
       'Open a terminal',
       'Show in Finder',
       'Fork into a new task',
+      'Share task',
       'Restart the current step',
       'Mark as done',
       'Cancel task',
@@ -423,6 +424,7 @@ describe('the This task section', () => {
       'Set priority',
       'Message the agent',
       'Fork into a new task',
+      'Share task',
       'Restart the current step',
       'Mark as done',
       'Cancel task',
@@ -439,6 +441,7 @@ describe('the This task section', () => {
       'Set priority',
       'Copy branch name',
       'Fork into a new task',
+      'Share task',
     ]);
   });
 

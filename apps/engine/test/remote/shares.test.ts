@@ -10,6 +10,8 @@ import {
   resolveMachineFilePath,
   resolveMachinePublicationPath,
   resolveMachinePublicationRemovePath,
+  resolveSharePreviewApiPath,
+  resolveSharePreviewDiffApiPath,
   SHARE_DIFF_FILE,
   type ShinsaState,
   type Task,
@@ -17,6 +19,7 @@ import {
 import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
 import {
+  createSharePreviewRoutes,
   SHARE_NOT_PAIRED,
   type ShareGitHub,
   SharePublisher,
@@ -336,5 +339,58 @@ describe('removing a publication', () => {
     plane.answers.set(resolveMachinePublicationRemovePath('task-1'), () => new Response('', { status: 401 }));
     const failure = (await publisher.remove('task-1').catch((error: unknown) => error)) as EffectError;
     expect(failure.message).toBe(SHARE_NOT_PAIRED);
+  });
+});
+
+describe('previewing a share', () => {
+  test('shows what a viewer would see from local addresses, before the task is shared and with nothing sent', async () => {
+    const { plane, publisher } = setUp({
+      paired: false,
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ share: null });
+        state.evidence['page'] = createEvidence({
+          id: 'page',
+          uri: '/api/evidence/page.html',
+          attachedAt: 2,
+        });
+      },
+    });
+    const preview = await publisher.preview('task-1');
+    expect(preview.files).toEqual({
+      'shot-1': '/api/evidence/settings.png',
+      [SHARE_DIFF_FILE]: resolveSharePreviewDiffApiPath('task-1'),
+    });
+    expect(preview.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
+    expect(preview.shared).toMatchObject({ owner: null, machine: 'Studio', code: true });
+    expect(await publisher.previewDiff('task-1')).toBe('diff --git a/src/a.ts b/src/a.ts');
+    expect(plane.calls).toEqual([]);
+  });
+
+  test('a private repository previews with no code, and its diff is refused', async () => {
+    const { publisher, github } = setUp({ github: createGitHub('private') });
+    const preview = await publisher.preview('task-1');
+    expect(preview.files).toEqual({ 'shot-1': '/api/evidence/settings.png' });
+    expect(preview.shared.code).toBe(false);
+    await expect(publisher.previewDiff('task-1')).rejects.toThrow('This task shares no code.');
+    expect(github.diffReads).toBe(0);
+  });
+
+  test('an unknown task cannot be previewed', async () => {
+    const { publisher } = setUp();
+    await expect(publisher.preview('missing')).rejects.toThrow('No such task.');
+  });
+
+  test('the routes answer the preview as JSON and the diff as plain text', async () => {
+    const { publisher } = setUp();
+    const [preview, diff] = createSharePreviewRoutes(publisher);
+    const previewMatch = preview?.pattern.exec(resolveSharePreviewApiPath('task-1'));
+    if (!preview || !previewMatch || !diff) throw new Error('The preview routes do not match their paths.');
+    const answer = await preview.respond(previewMatch, new Request('http://x'));
+    expect(((await answer.json()) as { shared: { code: boolean } }).shared.code).toBe(true);
+    const diffMatch = diff.pattern.exec(resolveSharePreviewDiffApiPath('task-1'));
+    if (!diffMatch) throw new Error('The diff route does not match its path.');
+    const text = await diff.respond(diffMatch, new Request('http://x'));
+    expect(text?.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(await text?.text()).toBe('diff --git a/src/a.ts b/src/a.ts');
   });
 });

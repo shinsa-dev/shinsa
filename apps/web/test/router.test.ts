@@ -9,6 +9,7 @@ import {
   resolveCanonicalTaskPath,
   resolveRouteBase,
   resolveRouteTaskId,
+  resolveSharePreviewPath,
   resolveTaskPath,
   resolveTaskTarget,
   stripRouteBase,
@@ -25,6 +26,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/')).toEqual({ name: 'home' });
     expect(parseRoute('/tasks')).toEqual({ name: 'tasks' });
     expect(parseRoute('/tasks/t1')).toEqual({ name: 'task', reference: 't1' });
+    expect(parseRoute('/tasks/SW-1/shared')).toEqual({ name: 'sharePreview', reference: 'SW-1' });
     expect(parseRoute('/automations/s%201')).toEqual({ name: 'automation', scheduleId: 's 1' });
     expect(parseRoute('/settings')).toEqual({ name: 'settings' });
     expect(parseRoute('/terminal')).toEqual({ name: 'terminal' });
@@ -136,6 +138,13 @@ describe('popstate', () => {
       dispatchEvent(new PopStateEvent('popstate'));
     });
     expect(result.current).toBe('chat');
+  });
+});
+
+describe('resolveSharePreviewPath', () => {
+  it('previews a shared task under its own page', () => {
+    expect(resolveSharePreviewPath({ id: 't1', handle: 'SW-142' })).toBe('/tasks/SW-142/shared');
+    expect(resolveSharePreviewPath({ id: 'a b' })).toBe('/tasks/a%20b/shared');
   });
 });
 

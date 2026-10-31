@@ -562,10 +562,12 @@ export function ReviewTab({
   state,
   task,
   summary,
+  readOnly = false,
 }: {
   state: ShinsaState;
   task: Task;
   summary?: React.ReactNode;
+  readOnly?: boolean;
 }) {
   const diff = useReviewDiff(task);
   const { tasks } = state;
@@ -621,7 +623,7 @@ export function ReviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <p className='text-fg-2 text-xs'>{diff.message}</p>
-          <EvidenceSection state={state} task={task} showEmpty />
+          <EvidenceSection state={state} task={task} showEmpty={!readOnly} />
         </div>
       </PageScroll>
     );
@@ -652,7 +654,7 @@ export function ReviewTab({
               diff={diffValue}
             />
           )}
-          <EvidenceSection state={state} task={task} showEmpty />
+          <EvidenceSection state={state} task={task} showEmpty={!readOnly} />
           <ReviewChapters
             task={task}
             report={report}

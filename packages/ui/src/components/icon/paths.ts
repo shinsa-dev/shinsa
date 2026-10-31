@@ -229,6 +229,7 @@ export const ICON_NAMES = [
   'IconSettingsGear4',
   'IconSettingsGear4Filled',
   'IconSettingsSliderHor',
+  'IconShareOs',
   'IconShieldCheck',
   'IconSidebar',
   'IconSidebarSimpleLeftWide',
@@ -960,6 +961,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconSettingsSliderHor: {
     '3': '<g><path fill-rule="evenodd" clip-rule="evenodd" d="M15 10C16.6575 10 18 8.6575 18 7C18 5.3425 16.6575 4 15 4C13.3425 4 12 5.3425 12 7C12 8.6575 13.3425 10 15 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 7H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9 20C10.6575 20 12 18.6575 12 17C12 15.3425 10.6575 14 9 14C7.3425 14 6 15.3425 6 17C6 18.6575 7.3425 20 9 20Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 17H4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 17H12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>',
+  },
+  IconShareOs: {
+    '3': '<g><path d="M8 6L12 2L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 10C18.1046 10 19 10.8954 19 12V17C19 18.6569 17.6569 20 16 20H8C6.34315 20 5 18.6569 5 17V12C5 10.8954 5.89543 10 7 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconShieldCheck: {
     '3': '<g><path d="M9.5 11.75L11 13.25L14.5 9.75M20 11.9123V7.17737C20 6.32338 19.4578 5.56361 18.6502 5.286L12.9752 3.33524C12.3432 3.11799 11.6568 3.11799 11.0248 3.33524L5.34984 5.286C4.54224 5.56361 4 6.32338 4 7.17737V11.9123C4 16.8848 8 19 12 21.1579C16 19 20 16.8848 20 11.9123Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',

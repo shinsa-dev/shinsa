@@ -26,7 +26,7 @@ describe('listTaskActions', () => {
     expect(listTaskActions(FULL)).toEqual([
       ['pullRequest', 'branch'],
       ['editor', 'terminal', 'finder'],
-      ['fork'],
+      ['fork', 'share'],
       ['restart', 'complete', 'cancel'],
     ]);
   });
@@ -34,16 +34,17 @@ describe('listTaskActions', () => {
   it('drops groups that do not apply, and lifecycle actions once the task is settled', () => {
     expect(listTaskActions(createTask({ id: 't', branch: 'fix/tabs' }))).toEqual([
       ['branch'],
-      ['fork'],
+      ['fork', 'share'],
       ['restart', 'complete', 'cancel'],
     ]);
-    expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork']]);
-    expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork', 'share']]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([['share']]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'cancelled', watchHome: true }))).toEqual([]);
   });
 
   it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
-      ['fork'],
+      ['fork', 'share'],
       ['moveToBacklog'],
       ['restart', 'complete', 'cancel'],
     ]);
