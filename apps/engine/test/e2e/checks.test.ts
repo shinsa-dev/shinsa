@@ -2,7 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PlanCheck } from '@shinsa/core';
-import { type AgentScript, PLAN, toolPlan, World } from './harness.ts';
+import { type AgentScript, FIX_REPLY, PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(60_000);
 
@@ -153,11 +153,11 @@ describe('the checks an agent plans', () => {
       'fix',
       async (agent) => {
         agent.write('a.txt', 'renamed\n');
-        await agent.call('complete_fix', { summary: 'Renamed the greeting.' });
+        await agent.call('complete_fix', { summary: 'Renamed the greeting.', reply: FIX_REPLY });
       },
       async (agent) => {
         agent.write('notes.txt', 'notes\n');
-        await agent.call('complete_fix', { summary: 'Wrote the notes.' });
+        await agent.call('complete_fix', { summary: 'Wrote the notes.', reply: FIX_REPLY });
       }
     );
     const taskId = await w.createTask();
