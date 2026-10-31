@@ -22,8 +22,20 @@ export function createSampleRemote(now: number) {
     machineKey: 'machine-key',
     pairing: null,
     devices: [
-      { publicKey: 'dev-1', name: 'iPhone', enrolledAt: now - 72 * HOUR_MS, lastSeenAt: now - 2 * HOUR_MS },
-      { publicKey: 'dev-2', name: 'Work laptop', enrolledAt: now - 5 * HOUR_MS, lastSeenAt: null },
+      {
+        publicKey: 'dev-1',
+        name: 'iPhone',
+        enrolledAt: now - 72 * HOUR_MS,
+        lastSeenAt: now - 2 * HOUR_MS,
+        enrollmentId: null,
+      },
+      {
+        publicKey: 'dev-2',
+        name: 'Work laptop',
+        enrolledAt: now - 5 * HOUR_MS,
+        lastSeenAt: null,
+        enrollmentId: null,
+      },
     ],
   };
   return [
@@ -73,6 +85,7 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
     forgetDevice: answer,
     createEnrollment: (name) =>
       Promise.resolve({
+        id: 'sample-link',
         name,
         url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
         expiresAt: now + 10 * 60_000,

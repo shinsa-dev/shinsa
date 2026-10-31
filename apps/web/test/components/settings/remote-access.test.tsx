@@ -19,7 +19,7 @@ function createActions() {
     remove: mock(snapshot),
     forgetDevice: mock((_publicKey: string) => snapshot()),
     createEnrollment: mock((name: string) =>
-      Promise.resolve({ url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
     ),
   } satisfies RemoteAccessActions;
 }
@@ -97,7 +97,15 @@ describe('Settings → Remote access', () => {
   it('lists the devices and forgets one after a confirmation', async () => {
     const actions = renderGroup(
       createRemoteSnapshot({
-        devices: [{ publicKey: 'dev-1', name: 'iPhone', enrolledAt: Date.now() - 1e6, lastSeenAt: null }],
+        devices: [
+          {
+            publicKey: 'dev-1',
+            name: 'iPhone',
+            enrolledAt: Date.now() - 1e6,
+            lastSeenAt: null,
+            enrollmentId: null,
+          },
+        ],
       })
     );
     expect(screen.getByText('iPhone')).toBeTruthy();

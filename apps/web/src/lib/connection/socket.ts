@@ -426,6 +426,8 @@ export class Connection implements ShinsaConnection {
       case 'terminals':
         this.replaceTerminals(message.terminals);
         return;
+      case 'remote':
+        return;
     }
   }
 }

@@ -63,7 +63,13 @@ describe('remote access words', () => {
   });
 
   it('says when a device was added or last used, and when a link stops working', () => {
-    const device = { publicKey: 'k', name: 'iPhone', enrolledAt: NOW - 3_600_000, lastSeenAt: null };
+    const device = {
+      publicKey: 'k',
+      name: 'iPhone',
+      enrolledAt: NOW - 3_600_000,
+      lastSeenAt: null,
+      enrollmentId: null,
+    };
     expect(describeDeviceSeen(device, NOW)).toStartWith('Added ');
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
     expect(describeEnrollmentExpiry(NOW + 600_000, NOW)).toStartWith('It works once and expires');
