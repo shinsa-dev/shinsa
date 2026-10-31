@@ -18,6 +18,7 @@ import {
 } from '@shinsa/core';
 import { readPullRequestDiff, resolveRepoSlug, resolveRepoVisibility } from '../github/index.ts';
 import type { ApiRoute } from '../http/routes.ts';
+import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 import { EffectError } from '../runtime/failures.ts';
 import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence.ts';
@@ -26,6 +27,9 @@ import type { Remote } from './index.ts';
 
 export const SHARE_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this task. Its link works once this machine is paired.';
+
+export const SHARE_LINK_LOST =
+  'Remote access was removed from this machine, so app.shinsa.dev no longer serves this link. Turn remote access on again, then share this task again for a new link.';
 
 export const VISIBILITY_TTL_MS = 10 * 60_000;
 
@@ -139,6 +143,7 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
   readonly #visibilities = new Map<string, { visibility: RepositoryVisibility; at: number }>();
   readonly #hashes = new Map<string, HashedFile>();
   readonly #diffs = new Map<string, { key: string; file: PublishedFile | null }>();
+  #pairedAs: string | null;
 
   constructor(options: SharePublisherOptions) {
     this.#engine = options.engine;
@@ -146,6 +151,29 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     this.#evidence = options.evidence;
     this.#github = options.github ?? GITHUB;
     this.#now = options.now ?? Date.now;
+    this.#pairedAs = this.#selectInstanceId();
+    options.remote.subscribe(() => this.#syncPairing());
+  }
+
+  #selectInstanceId() {
+    return this.#remote.store.file.credentials?.instanceId ?? null;
+  }
+
+  #syncPairing() {
+    const before = this.#pairedAs;
+    this.#pairedAs = this.#selectInstanceId();
+    if (before === null || before === this.#pairedAs) return;
+    for (const task of Object.values(this.#engine.state.tasks)) {
+      if (!task.share?.url || task.share.failure) continue;
+      this.#engine
+        .dispatch({ type: 'share.fail', taskId: task.id, detail: SHARE_LINK_LOST })
+        .catch((error: unknown) => {
+          log.error('[Share] Could not mark a link as lost', {
+            taskId: task.id,
+            error: describeError(error),
+          });
+        });
+    }
   }
 
   async preview(taskId: string): Promise<SharePreview> {

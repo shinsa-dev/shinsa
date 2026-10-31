@@ -22,7 +22,7 @@ export function useSharedView(key: string, request: () => Promise<SharedSource>)
   requestRef.current = request;
   React.useEffect(() => {
     let alive = true;
-    let release = () => undefined as void;
+    let release: () => void = () => undefined;
     setLoad({ status: 'loading' });
     requestRef.current().then(
       (source) => {

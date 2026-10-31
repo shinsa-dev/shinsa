@@ -15,7 +15,11 @@ afterEach(() => {
   mock.restore();
 });
 
-const PUBLICATION: SharedPublication = { shared: createSharedTask(), files: ['shot-1', 'diff'], updatedAt: 7 };
+const PUBLICATION: SharedPublication = {
+  shared: createSharedTask(),
+  files: ['shot-1', 'diff'],
+  updatedAt: 7,
+};
 
 function answer(response: Response | Error): typeof fetch {
   return (() => (response instanceof Error ? Promise.reject(response) : Promise.resolve(response))) as never;

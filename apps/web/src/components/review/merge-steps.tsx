@@ -23,6 +23,7 @@ interface MergeStepsProps {
   when: MergeStepTiming;
   waits?: MergeWaitView[];
   onTick?: StepTicker;
+  readOnly?: boolean;
 }
 
 function StepKind({ item }: { item: PreMergeItem }) {
@@ -43,10 +44,15 @@ function resolveChecklist({
   waits = [],
   onTick = (step, done) =>
     sendCommandWithToast({ type: 'merge_step.tick', taskId: task.id, key: step.key, done }),
+  readOnly = false,
 }: MergeStepsProps): ChecklistProps<PreMergeItem> {
   return {
     items: [...listTimedSteps(task, when), ...(when === 'pre_merge' ? waits : [])],
-    onTick: (item, done) => (isMergeWait(item) ? undefined : onTick(item, done)),
+    ...(readOnly
+      ? {}
+      : {
+          onTick: (item: PreMergeItem, done: boolean) => (isMergeWait(item) ? undefined : onTick(item, done)),
+        }),
     describeBlock: (item) => (isMergeWait(item) ? resolveWaitBlock(item) : resolveTickBlock(task, item)),
     meta: (item) => <StepKind item={item} />,
   };

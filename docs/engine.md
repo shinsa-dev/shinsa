@@ -2549,9 +2549,12 @@ same projection and publishing path will serve teams.
   | Activity, notes, inbox, messages, watchdogs, delegations, worktree, waits | never | never |
   | Links to other tasks (`shinsa://task/…`) | their label as plain text | their label as plain text |
 
-  Visibility is `public` only when GitHub says so (`gh repo view --json visibility`, `resolveRepoVisibility`, kept 10
-  minutes per repository, `VISIBILITY_TTL_MS`); a repository without a GitHub remote, a failed read or any other
-  answer is `unknown` and is treated as private. A task without a repository has no Code. Text an agent wrote freely
+  Visibility is `public` only when GitHub says so (`gh api repos/<owner>/<name> --jq .visibility`,
+  `resolveRepoVisibility`, kept 10 minutes per repository, `VISIBILITY_TTL_MS`); `internal` reads as `private`, and a
+  repository without a GitHub remote, a failed read or any other answer is `unknown`, treated as private. Visibility is
+  read on each publish but is not part of the fingerprint, so a public repository made private is published again,
+  without its code and paths, only when the task next changes; stop sharing and share it again to take the code down
+  at once. A task without a repository has no Code. Text an agent wrote freely
   (a summary, a finding's message, a testing step) is kept as written and can name a file; Preview is how you check it.
 - **When it is published.** `task.share` emits `task.shared` and queues `share.publish` (`replay_safe`, lane
   `share:<task>`, so a later publish waits for the one running). At the end of every `decide`, `syncShares` (beside
@@ -2575,7 +2578,9 @@ same projection and publishing path will serve teams.
   again republishes, keeping the link); it opens no failure gate, since nothing in the task waits on it. A
   successful publish clears it. Pausing remote access does not stop publishing: pausing closes the way in, not the
   links you gave out. Removing remote access, or the machine on app.shinsa.dev, removes every publication and file
-  the machine made, so every link answers as no longer shared.
+  the machine made, so every link answers as no longer shared; once this machine loses its pairing (`remove`, or a
+  revocation), the publisher marks each shared task's link failed with "Remote access was removed from this machine…"
+  (`SHARE_LINK_LOST`), so Share task says so and Try again, once remote access is on, gets a new link.
 - **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one dialog over the task's
   `TaskShare` and the remote snapshot, in five views: remote access needed (Open Settings), ready (Share), making the link,
   failed (the reason, Stop sharing and Try again) and shared (the link, read-only and selectable, with Copy, Stop
@@ -2587,13 +2592,13 @@ same projection and publishing path will serve teams.
   the link would, private-repository rules included, before anything leaves the machine. Its note says it is a
   preview and that chats, activity and notes never leave the machine.
 - **The shared page** (`routes/remote/share.tsx`, `components/share/shared-task-page.tsx`): the remote build's
-  `/share/<token>` reads `GET /__remote/shares/<token>` with no session and shows the task read-only: its heading,
-  its facts (handle, status, project, repository, pull request with its checks, who shared it from which machine and
-  when it was last published), and the tabs Overview (result, summary, plan, evidence), Review (the review tab read
-  only: no verdict, no comments, no drafts) when the task reached review, and Code for a public repository: every
-  file of the published diff, read from the publication's `diff` file, never from a worktree. No control on it sends
-  a command. An unknown or removed link says "This task is no longer shared, or the link is wrong." Every answer and
-  the page carry `X-Robots-Tag: noindex, nofollow, noarchive`.
+  `/share/<token>` reads `GET /__remote/shares/<token>` with no session and shows the task read-only: its heading, its
+  facts (handle, status, project, repository, pull request with its checks, who shared it from which machine and when
+  it was last published), and the tabs Overview (result, summary, plan, evidence), Review (the review tab read only:
+  no verdict, no comments, no drafts, merge steps listed without a box to tick) when the task reached review, and Code
+  for a public repository: every file of the published diff, read from the publication's `diff` file, never from a
+  worktree. No control on it sends a command. An unknown or removed link says "This task is no longer shared, or the
+  link is wrong." Every answer and the page carry `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
 

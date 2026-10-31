@@ -198,12 +198,14 @@ function BuiltPart({
   checks,
   waits,
   prose,
+  readOnly,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
   waits: MergeWaitView[];
   prose: ReviewProseId;
+  readOnly: boolean;
 }) {
   const walkthrough = report.walkthrough;
   switch (prose) {
@@ -236,6 +238,7 @@ function BuiltPart({
           task={task}
           when={prose}
           waits={waits}
+          readOnly={readOnly}
         />
       );
   }
@@ -248,6 +251,7 @@ function HowItIsBuilt({
   waits,
   chapter,
   selected,
+  readOnly,
 }: {
   task: Task;
   report: WorkReport;
@@ -255,12 +259,20 @@ function HowItIsBuilt({
   waits: MergeWaitView[];
   chapter: ReviewChapter;
   selected: string | null;
+  readOnly: boolean;
 }) {
   return (
     <Chapter title={chapter.title}>
       {chapter.prose.map((prose) => (
         <Stop key={prose.key} stop={prose.key} selected={selected}>
-          <BuiltPart task={task} report={report} checks={checks} waits={waits} prose={prose.key} />
+          <BuiltPart
+            task={task}
+            report={report}
+            checks={checks}
+            waits={waits}
+            prose={prose.key}
+            readOnly={readOnly}
+          />
         </Stop>
       ))}
     </Chapter>
@@ -529,6 +541,7 @@ function ReviewChapters({
   waits,
   chapters,
   selected,
+  readOnly,
 }: {
   task: Task;
   report: WorkReport;
@@ -536,6 +549,7 @@ function ReviewChapters({
   waits: MergeWaitView[];
   chapters: ReviewChapter[];
   selected: string | null;
+  readOnly: boolean;
 }) {
   return chapters.map((chapter) => {
     if (chapter.id === 'built') {
@@ -548,6 +562,7 @@ function ReviewChapters({
           waits={waits}
           chapter={chapter}
           selected={selected}
+          readOnly={readOnly}
         />
       );
     }
@@ -662,6 +677,7 @@ export function ReviewTab({
             waits={waits}
             chapters={chapters}
             selected={lit}
+            readOnly={readOnly}
           />
           <AgentReview
             task={task}

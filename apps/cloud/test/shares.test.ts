@@ -329,6 +329,43 @@ describe('stopping a share', () => {
     expect(again.status).toBe(200);
   });
 
+  test('removing one publication keeps a file another task uploaded but has not listed yet', async () => {
+    const { harness, machine } = await setUp();
+    const shot = await uploadScreenshot(harness, machine);
+    await publish(harness, machine, { shared: sharedTask(), files: [{ id: 'shot-1', hash: shot }] });
+    const bytes = new TextEncoder().encode('another shot');
+    const fresh = await hashOf(bytes);
+    await upload(harness, machine, fresh, bytes, 'image/png');
+    await harness.post(
+      resolveMachinePublicationRemovePath(TASK_ID),
+      {},
+      { bearer: machine, sameOrigin: false }
+    );
+    expect(harness.bucket.size).toBe(1);
+    const other = '0192f0a0-0000-7000-8000-000000000002';
+    const written = await publish(
+      harness,
+      machine,
+      { shared: sharedTask(other), files: [{ id: 'shot-2', hash: fresh }] },
+      other
+    );
+    expect(written.status).toBe(200);
+  });
+
+  test('a machine paired again after its removal gets a new link for a task it shares', async () => {
+    const { harness, session, machine, instanceId } = await setUp();
+    const first = await readToken(await publish(harness, machine));
+    await harness.post(resolveInstanceRemovePath(instanceId), {}, { session });
+    const again = await pairMachine(harness, session, 'Studio');
+    const second = await readToken(
+      await publish(harness, again.machineToken, { shared: sharedTask(), files: [], newLink: false })
+    );
+    expect(second).toHaveLength(43);
+    expect(second).not.toBe(first);
+    expect((await harness.call(resolveSharePath(second))).status).toBe(200);
+    expect((await harness.call(resolveSharePath(first))).status).toBe(404);
+  });
+
   test('removing the machine removes every publication and file it made', async () => {
     const { harness, session, machine, instanceId } = await setUp();
     const hash = await uploadScreenshot(harness, machine);

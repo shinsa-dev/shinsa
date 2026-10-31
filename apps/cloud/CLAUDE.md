@@ -92,7 +92,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   A task is published by one machine only (`publication_conflict`, 409). The first publication, or one with
   `newLink`, makes a 32-byte link token and answers `{ url: "https://app.shinsa.dev/share/<token>" }`; D1 keeps only
   its SHA-256, so a later publication answers `{ url: null }` and keeps the link. `…/<task>/remove` ends the link at
-  once. A file no publication lists is cleared an hour after its upload, or at once when its publication is removed,
+  once. A file no publication lists is cleared an hour after its upload, or at once when the publication that listed it is
+  removed (a file another task uploaded but has not listed yet is kept),
   and removing a machine removes its publications and every file. Anyone with the link reads
   `GET /__remote/shares/<token>` (`SharedPublication`: the shared task, the ids of its files, when it was published)
   and `…/files/<id>`, served with `default-src 'none'; sandbox` as its content security policy; an unknown link, a

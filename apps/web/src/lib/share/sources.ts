@@ -8,7 +8,8 @@ import {
 import { requestJson } from '@/lib/connection/http.ts';
 import type { SharedSource } from '@/lib/share/view.ts';
 
-export const SHARE_GONE = 'This task is no longer shared, or the link is wrong. Ask whoever sent it for a new one.';
+export const SHARE_GONE =
+  'This task is no longer shared, or the link is wrong. Ask whoever sent it for a new one.';
 
 export class ShareGoneError extends Error {
   constructor() {
@@ -46,7 +47,8 @@ export async function requestPublicationSource(token: string, read: typeof fetch
     throw new Error('Couldn’t reach app.shinsa.dev. Check your connection and reload the page.');
   }
   if (response.status === 404) throw new ShareGoneError();
-  if (!response.ok) throw new Error(`app.shinsa.dev answered with status ${response.status}. Reload the page.`);
+  if (!response.ok)
+    throw new Error(`app.shinsa.dev answered with status ${response.status}. Reload the page.`);
   return createPublicationSource((await response.json()) as SharedPublication, token);
 }
 

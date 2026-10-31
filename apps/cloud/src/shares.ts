@@ -76,8 +76,14 @@ async function assertFilesUploaded(machine: InstanceRow, files: PublicationFile[
     throw new CloudError('file_missing', `Upload these files first: ${missing.join(', ')}.`, 409);
 }
 
-async function removeOrphanFiles(machine: InstanceRow, world: CloudWorld, createdBefore: number) {
-  const hashes = await world.store.listOrphanFileHashes(machine.id, createdBefore);
+async function removeOrphanFiles(
+  machine: InstanceRow,
+  world: CloudWorld,
+  createdBefore: number,
+  only: ReadonlySet<string> | null = null
+) {
+  const orphans = await world.store.listOrphanFileHashes(machine.id, createdBefore);
+  const hashes = only ? orphans.filter((hash) => only.has(hash)) : orphans;
   if (hashes.length === 0) return;
   await world.files.remove(hashes.map((hash) => resolveFileKey(machine.id, hash)));
   await world.store.removeFiles(machine.id, hashes);
@@ -114,8 +120,10 @@ export async function respondPublicationWrite(request: Request, taskId: string, 
 
 export async function respondPublicationRemove(request: Request, taskId: string, world: CloudWorld) {
   const machine = await findMachine(request, world);
-  if (await findOwnPublication(machine, taskId, world)) await world.store.removePublication(taskId);
-  await removeOrphanFiles(machine, world, world.now() + 1);
+  if (!(await findOwnPublication(machine, taskId, world))) return respondJson({ ok: true });
+  const listed = new Set(await world.store.listPublicationFileHashes(taskId));
+  await world.store.removePublication(taskId);
+  await removeOrphanFiles(machine, world, world.now() + 1, listed);
   return respondJson({ ok: true });
 }
 

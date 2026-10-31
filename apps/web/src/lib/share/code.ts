@@ -9,7 +9,10 @@ export const NO_SHARED_CODE = 'This task shares no code.';
 
 export const ONLY_CHANGES = 'Only the changes of this task are shared.';
 
-export function createSharedCodeSource(readDiff: (() => Promise<string>) | null, branch: string | null): CodeSource {
+export function createSharedCodeSource(
+  readDiff: (() => Promise<string>) | null,
+  branch: string | null
+): CodeSource {
   let files: ReturnType<typeof parseUnifiedDiff> | null = null;
   const listFiles = async () => {
     if (!readDiff) throw new Error(NO_SHARED_CODE);

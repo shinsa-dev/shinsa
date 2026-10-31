@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import { describeSharedBy, listSharedTabs, resolveSharedTab } from '@/lib/share/page.ts';
 import type { Task } from '@shinsa/core';
+import { describeSharedBy, listSharedTabs, resolveSharedTab } from '@/lib/share/page.ts';
 import { createTask } from '../../support/state.ts';
 import { createSharedTask } from './fixtures.ts';
 
 function createReport() {
-  return { headline: '', sections: [], checks: [], judgementCalls: [] } as unknown as NonNullable<Task['report']>;
+  return { headline: '', sections: [], checks: [], judgementCalls: [] } as unknown as NonNullable<
+    Task['report']
+  >;
 }
 
 describe('the shared page', () => {

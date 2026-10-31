@@ -17,6 +17,7 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { resolveFileSource } from '@/lib/code/diff-view.ts';
 import { useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
+import { STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import {
@@ -30,10 +31,9 @@ import {
 import type { SharedView } from '@/lib/share/view.ts';
 import { describePullRequestFact } from '@/lib/tasks/facts.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
-import { STAGE_TONE } from '@/lib/format/labels.ts';
 import { resolveStageLabel, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
-import { ReviewTab } from '@/routes/task/review.tsx';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
+import { ReviewTab } from '@/routes/task/review.tsx';
 
 function SharedFacts({ view }: { view: SharedView }) {
   const { task, shared } = view;
@@ -131,7 +131,8 @@ function SharedCode({ task }: { task: Task }) {
       <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
         {failure && <p className='text-fg-2 text-xs'>{failure.message}</p>}
         {!failure && diff.status !== 'ready' && <LoadingLine label='Reading the changes' />}
-        {diff.status === 'ready' && diff.value.files.map((file) => <SharedFileDiff key={file.path} file={file} />)}
+        {diff.status === 'ready' &&
+          diff.value.files.map((file) => <SharedFileDiff key={file.path} file={file} />)}
       </div>
     </PageScroll>
   );

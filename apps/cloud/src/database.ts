@@ -317,6 +317,14 @@ export function createStore(db: Database) {
       return results.map((row) => row.file_id);
     },
 
+    async listPublicationFileHashes(taskId: string) {
+      const { results } = await db
+        .prepare('SELECT DISTINCT hash FROM publication_files WHERE task_id = ?')
+        .bind(taskId)
+        .all<{ hash: string }>();
+      return results.map((row) => row.hash);
+    },
+
     selectSharedFile(linkTokenHash: string, fileId: string) {
       return db
         .prepare(

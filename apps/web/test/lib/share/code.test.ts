@@ -2,7 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import type { TaskDiff, TaskRefs } from '@shinsa/core';
 import { renderHook, waitFor } from '@testing-library/react';
 import { registerCodeSource, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
-import { createSharedCodeSource, NO_SHARED_CODE, ONLY_CHANGES, SHARED_BASE, SHARED_HEAD } from '@/lib/share/code.ts';
+import {
+  createSharedCodeSource,
+  NO_SHARED_CODE,
+  ONLY_CHANGES,
+  SHARED_BASE,
+  SHARED_HEAD,
+} from '@/lib/share/code.ts';
 import { createTask } from '../../support/state.ts';
 import { DIFF } from './fixtures.ts';
 
@@ -15,8 +21,13 @@ describe('the shared code source', () => {
     }, 'feat/keys');
     const refs = (await source('refs', new URLSearchParams())) as TaskRefs;
     expect(refs).toMatchObject({ head: SHARED_HEAD, base: SHARED_BASE, branch: 'feat/keys', working: false });
-    const diff = (await source('diff', new URLSearchParams({ base: SHARED_BASE, head: SHARED_HEAD }))) as TaskDiff;
-    expect(diff.files.map((file) => [file.path, file.additions, file.deletions])).toEqual([['src/keys.ts', 1, 1]]);
+    const diff = (await source(
+      'diff',
+      new URLSearchParams({ base: SHARED_BASE, head: SHARED_HEAD })
+    )) as TaskDiff;
+    expect(diff.files.map((file) => [file.path, file.additions, file.deletions])).toEqual([
+      ['src/keys.ts', 1, 1],
+    ]);
     const one = (await source('diff', new URLSearchParams({ path: 'src/other.ts' }))) as TaskDiff;
     expect(one.files).toEqual([]);
     expect(reads).toBe(1);
@@ -32,7 +43,10 @@ describe('the shared code source', () => {
 
   it('answers a registered task’s code reads without the network, until it is released', async () => {
     const task = createTask({ id: 'shared-code-1' });
-    const release = registerCodeSource(task.id, createSharedCodeSource(() => Promise.resolve(DIFF), null));
+    const release = registerCodeSource(
+      task.id,
+      createSharedCodeSource(() => Promise.resolve(DIFF), null)
+    );
     const refs = renderHook(() => useTaskRefs(task));
     await waitFor(() => expect(refs.result.current.status).toBe('ready'));
     const diff = renderHook(() => useTaskDiff(task, SHARED_BASE, SHARED_HEAD));

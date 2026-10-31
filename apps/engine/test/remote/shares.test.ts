@@ -20,6 +20,7 @@ import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
 import {
   createSharePreviewRoutes,
+  SHARE_LINK_LOST,
   SHARE_NOT_PAIRED,
   type ShareGitHub,
   SharePublisher,
@@ -152,7 +153,7 @@ function setUp(options: SetUp = {}) {
     Response.json({ missing: (lastBody(REMOTE_PATHS.machineFilesCheck) as { hashes: string[] }).hashes })
   );
   plane.answers.set(resolveMachinePublicationPath('task-1'), () => Response.json({ url: SHARE_URL }));
-  return { plane, stub, publisher, github };
+  return { plane, stub, publisher, github, remote };
 }
 
 function lastBody(path: string) {
@@ -326,6 +327,37 @@ describe('when publishing cannot work', () => {
     const outage = await publisher.publish('task-1', CONTEXT).catch((error: unknown) => error);
     expect(outage).not.toBeInstanceOf(EffectError);
     expect((outage as Error).message).toContain('status 503');
+  });
+});
+
+describe('when this machine loses its pairing', () => {
+  test('every link it shared is marked as no longer working, so Share again makes a new one', async () => {
+    const { stub, remote } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+        state.tasks['task-2'] = shareTask({ id: 'task-2', share: { at: 1, url: null } });
+        state.tasks['task-3'] = shareTask({
+          id: 'task-3',
+          share: { at: 1, url: SHARE_URL, failure: 'Earlier.' },
+        });
+        state.tasks['task-4'] = shareTask({ id: 'task-4', share: null });
+      },
+    });
+    await remote.disable();
+    expect(stub.dispatched).toEqual([]);
+    await remote.remove();
+    expect(stub.dispatched).toEqual([{ type: 'share.fail', taskId: 'task-1', detail: SHARE_LINK_LOST }]);
+  });
+
+  test('a failure to record a lost link is logged, never thrown', async () => {
+    const { stub, remote } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+      },
+    });
+    stub.reject(() => true, new Error('closed'));
+    await remote.remove();
+    expect(stub.dispatched).toHaveLength(1);
   });
 });
 
