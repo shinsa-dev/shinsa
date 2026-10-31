@@ -583,6 +583,9 @@ describe('firing a schedule', () => {
     harness.advance(30 * MINUTE);
     harness.send({ type: 'schedule.fire', scheduleId: created.id, dueAt: created.nextRunAt ?? 0 });
     expect(only(harness).runs[0]?.outcome).toBe('sent');
+    expect(harness.task(askId).stage).toBe('answering');
+    expect(harness.activeRun(askId).role).toBe('answerer');
+    expect(harness.task(askId).untoldMessages ?? []).toEqual([]);
   });
 });
 

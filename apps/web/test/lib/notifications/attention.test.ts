@@ -128,14 +128,16 @@ describe('what a notification says', () => {
       stage: 'answered',
       result: {
         step: 'answer',
-        body: '## Retries\nIt retries **5 times** in `retry()`.',
+        body: '## Retries\n- It retries **5 times** in `retry()`, see [retry.ts](shinsa://file/src/retry.ts#L4).\n> Backoff is 2 * the last wait.',
         runId: null,
         at: NOW,
       },
     });
     const gate = createGate({ id: 'g', taskId: 't', type: 'result', title: 'Read the answer' });
     const state = createShinsaState({ tasks: [task], gates: [gate] });
-    expect(listNewDecisions(new Set(), state, NOW)[0]?.body).toBe('Retries It retries 5 times in retry().');
+    expect(listNewDecisions(new Set(), state, NOW)[0]?.body).toBe(
+      'Retries It retries 5 times in retry(), see retry.ts. Backoff is 2 * the last wait.'
+    );
   });
 
   it('never repeats a secret request, only names what was asked for', () => {

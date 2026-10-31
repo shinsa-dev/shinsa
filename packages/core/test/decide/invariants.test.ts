@@ -1029,9 +1029,10 @@ function assertHumanGatesKept(
   events: ReturnType<typeof decide>['events'],
   command: ShinsaCommand
 ) {
-  const open = new Set(listOpenGates(prior).map((gate) => gate.id));
+  const open = new Map(listOpenGates(prior).map((gate) => [gate.id, gate.type]));
   for (const event of events) {
     if (!CLOSING_EVENTS.has(event.type) || !('gateId' in event)) continue;
+    if (event.type === 'gate.withdrawn' && open.get(event.gateId) === 'result') continue;
     expect(open.has(event.gateId), `${command.type} on your behalf closed an open gate (${event.type})`).toBe(
       false
     );

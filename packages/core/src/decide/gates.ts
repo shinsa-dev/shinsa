@@ -51,7 +51,10 @@ function findOpenGate(decider: Decider, gateId: string) {
 
 export function assertGatesStayOpen(decider: Decider, before: ShinsaState) {
   if (!decider.context.onBehalf) return;
-  const closed = listOpenGates(before).some((gate) => decider.state.gates[gate.id]?.status !== 'open');
+  const closed = listOpenGates(before).some((gate) => {
+    const status = decider.state.gates[gate.id]?.status;
+    return status !== 'open' && !(gate.type === 'result' && status === 'withdrawn');
+  });
   if (!closed) return;
   throw new DomainError(
     'human_only',

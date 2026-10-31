@@ -107,6 +107,24 @@ describe('ask mode', () => {
     expect(listOpenGates(harness.state, taskId).filter((gate) => gate.type === 'result')).toHaveLength(0);
   });
 
+  test('an agent on your behalf can ask an answered question a follow-up, but not close it with new work', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    harness.send(
+      { type: 'task.message', taskId, text: 'Make it retry five times.', kind: 'new_round' },
+      { onBehalf: true, byTask: 'other' }
+    );
+    expect(harness.task(taskId).stage).toBe('answered');
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
+    harness.send(
+      { type: 'task.message', taskId, text: 'And on a timeout?' },
+      { onBehalf: true, byTask: 'other' }
+    );
+    expect(harness.task(taskId).stage).toBe('answering');
+    answer(harness, taskId, 'It gives up after a minute.');
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
+  });
+
   test('marking an answered question done withdraws the gate', () => {
     const { harness, taskId } = ask();
     answer(harness, taskId);

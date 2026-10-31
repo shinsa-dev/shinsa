@@ -9,6 +9,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import { flattenWhitespace } from '@/lib/format/count.ts';
+import { stripMarkdown } from '@/lib/format/markdown.ts';
 import { describeOperationIntro } from '@/lib/overview/operation.ts';
 import { resolveGateNow } from '@/lib/tasks/now.ts';
 
@@ -59,7 +60,7 @@ function describeBody({ gate, task, reason }: QueuedGate) {
   if (isAgentQuestion(gate)) return gate.title;
   if (isDecisionGate(gate)) return `${reason}. ${resolveGateNow(task, gate)}`;
   if (gate.type === 'operation') return `${reason}. ${describeOperationIntro(gate)}`;
-  if (gate.type === 'result' && task.result) return task.result.body.replace(/[*`#>]/g, '');
+  if (gate.type === 'result' && task.result) return stripMarkdown(task.result.body);
   return gate.body?.trim() ? `${reason}. ${gate.body}` : reason;
 }
 

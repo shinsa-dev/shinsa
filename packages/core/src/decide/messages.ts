@@ -275,6 +275,10 @@ function isRepeatedMessage(task: Task, text: string, now: number) {
   );
 }
 
+function isHeldForYou(state: ShinsaState, task: Task, kind: MessageKind) {
+  return listOpenGates(state, task.id).some((gate) => gate.type !== 'result' || kind === 'new_round');
+}
+
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
@@ -283,11 +287,11 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   if (isRepeatedMessage(task, text, decider.context.now)) return;
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
-  if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
+  const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
+  if (sentForYou && isHeldForYou(decider.state, task, kind)) {
     recordMessages(decider, task.id, texts, { ...scheduled, kept: true });
     return;
   }
-  const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
     const suggestionId = decider.context.newId();
     recordMessages(decider, task.id, texts, { kind, suggestionId });
