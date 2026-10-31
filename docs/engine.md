@@ -52,7 +52,15 @@ Phases stay checkpoints. `complete_phase` still commits the phase and moves the 
 same session's next turn with a short "Now build phase 2 of 3: …" instruction, not a new agent's full brief. Each turn
 is still a run of its own (its attempts, its account, its usage), so every run of a task shares one session, and an
 Agent run differs from the next only in its **purpose** (`Run.purpose`: `plan`, `build`, `fix`, `operate`, `watch` or `intake`). Long
-tasks rely on compaction (eunoe's folds or Claude Code's, Compaction and fast mode below) to stay inside the window.
+tasks rely on compaction (eunoe's folds or Claude Code's, Compaction and fast mode below) to stay inside the window,
+and in an eunoe mode each build, fix and operate turn folds the steps before it and starts from the round brief
+(Boundary folds), so one session costs what its current step needs, not its whole history.
+
+The one exception is the watchdog check (purpose `watch`): it is specialised, read-only work that reads logs and
+traces after the merge, so it runs in a **watch session** of its own. `Decider.taskSession(taskId, role, purpose)`
+keeps two lanes: a watch run resumes only earlier watch runs' session (`isWatchSession`), and every other run of the
+Agent only sessions that are not a watch's. The first check starts fresh with the round brief (the request, the plan and
+the hand-overs), later checks resume it, and the Agent's next build, fix or round never reads a check's log output.
 
 Each role's provider (Claude or Codex) and model are set in Settings → Agents → Models: Task agents (Opus) and Quick
 jobs (Sonnet), and per role underneath. The Agent's planning, building and fixing are one setting, so its turns share
@@ -62,7 +70,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits, checks its watchdogs read-only after the merge; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -415,8 +423,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    in the chat: a message while the gate is open withdraws it and goes to the Agent. Approving with edits you made in
    the Code tab that no commit has yet commits them and runs the checks again before the push (Your edits, below).
 7. **Pull request.** Shinsa pushes and opens the PR, then watches it (The pull request watch,
-   below). A check that newly fails, a new comment from anyone but Shinsa's own GitHub user, a new
-   conflict, or a problem that is still there after the last fix resumes the Agent, told exactly
+   below). A check that newly fails, a new comment from anyone but Shinsa's own GitHub user (a bot's only as a review
+   or an inline comment), a new conflict, or a problem that is still there after the last fix resumes the Agent, told exactly
    what is new; `complete_fix` pushes the fix. While a push is on its way (`pull_request.push_requested` until
    `pull_request.pushed`, which `pull_request.record_push` records), and until GitHub reports the pushed commit, a
    sync is stored but not judged, so a stale result never starts a second fix.
@@ -835,7 +843,8 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   or any gate is open (`human_only`: Who can change Shinsa, below). A closed task takes no message.
 - **Long sessions.** A round resumes the same provider sessions, and Shinsa's eunoe keys its thread on the session id
   and its first turn, so the folds a session built in earlier rounds carry over into later ones and every compaction
-  is a notice in the run's chat. The session id lives in the log, so a restart between or inside rounds resumes the same
+  is a notice in the run's chat. Each build phase, fix and operation folds the turns before it (boundary folds,
+  Compaction and fast mode), so a later round's work starts from its brief, not from every earlier round's raw output. The session id lives in the log, so a restart between or inside rounds resumes the same
   session (`test/e2e/rounds-session.test.ts`: eight rounds, folds every turn, a restart in the middle).
 - **Steps belong to their round.** Runs, gates, evidence and activity entries carry the round they were made in
   (`round`, from round 2; `docs/protocol.md` → Rounds), a delegated run its parent's round and account, and the
@@ -1369,7 +1378,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 - **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
   branch, a manual deploy), the agent sets `starts: production` and says how to tell (`production_check`). Armed, the
   watchdog waits (`awaiting_production`, from `awaitingSince`) and its checks only ask whether the change is live
-  (`resolveProductionPrompt`). Each costs a turn of the task's whole session, so they back off: the next one comes
+  (`resolveProductionPrompt`). Each costs a turn of the task's watch session, so they back off: the next one comes
   after as long as the watchdog has already waited, at least 30 minutes (`productionPollMinutes`) and at most 6 hours
   (`productionPollMaxMinutes`), about 30 turns in a week rather than one every half hour. One answer counts for every
   watchdog of the task that waits for production, since they wait for the same change: `report_read {live: false}`
@@ -1386,8 +1395,9 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   next check) rather than passing without it. A watchdog passes only on a check's report. A task that is not resting, or has a
   live run (a later round at work), defers it 15 minutes (`watchdog.deferred`), so a check never shares the session
   with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
-  (`isReadOnlyRun`), in the repository itself, resuming the task's session (`Decider.taskSession`), so it knows what
-  shipped. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
+  (`isReadOnlyRun`), in the repository itself, in the task's watch session (`Decider.taskSession` with purpose `watch`):
+  the first check starts it with the round brief, so it knows what shipped, and later checks resume it. The Agent's
+  own session never resumes a check, and a check never resumes the Agent's. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
   change: its prompt (`resolveWatchPrompt`, on the skeleton both share, `resolveReadPrompt` in `prompts/reads.ts`)
   names the watchdog, its check as what to look for, its source, what arrived since its last check (or since the
   window started), its last checks and the last 10 tasks filed from that server in the project.
@@ -3003,6 +3013,13 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   comments at the boundary second are told apart by id. A comment edited after the watermark
   counts again, once. Comments by the reader (the GitHub user Shinsa acts as, falling back to the
   pull request's author) never count.
+- **Bots post notices, not reviews** (`isBotNotice`, `resolveRemarkTime` in `decide/watch.ts`). The read marks a
+  remark `bot` when GitHub's GraphQL author is a `Bot` (logins such as `cloudflare-workers-and-pages` carry no
+  `[bot]`). A bot's top-level comment on the conversation (no file, no review state: a preview deployment, a "no rules
+  matched" note, a "reviewing…" placeholder or its summary) never counts; its reviews and inline comments do, which is
+  where a review bot such as Maple puts its findings. A bot's remark is timed by when it was posted, so a bot editing it
+  (Cloudflare and Maple rewrite theirs on every push) is never news. Before this, those notices started a fix turn
+  that changed nothing, 60 of them in Shinsa's own first week.
 - **An incomplete read never moves the watermark.** A read that could not list every comment,
   review, thread or thread reply reports `remarks: null`; the watermark stays where it was and
   the comments count on the next complete read.
@@ -3234,7 +3251,7 @@ and a session is resumed only by the provider that owns it. Two providers are re
 | --- | --- |
 | `id`, `label` | `claude` / `Claude`, `codex` / `Codex`. The id is what `settings.defaultProvider` and `settings.agentProviders` store |
 | `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no whole test suite) |
-| `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`, `fork`: it can copy a session into a new one), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
+| `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`, `fork`: it can copy a session into a new one), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session), `folds` (its requests go through eunoe, so a step can fold the turns before it) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
 | `inspectSession({ cwd, sessionId })` | Optional. Whether the provider still has a session: `present`, `missing`, `empty` (metadata only, so it can neither be resumed nor recreated) or `unknown` |
 | `AgentSession.done` | Resolves to `{ outcome: completed \| failed \| cancelled, summary, failure?, undelivered?, usage?, subagentUsage?, context? }` when the run ends: `failure` is the classified `RunFailure`, `undelivered` the steered messages the agent never answered, `usage` the session's running totals (metered with `run.meter`), `subagentUsage` the totals of each agent it started on its own thread (Codex), `context` the tokens in use, when the prompt cache expires and whether background work is pending (idle compaction reads it) |
 | `AgentSession.steer(text)` | Delivers a message into the running turn; returns false when it no longer can, and the supervisor hands the message to the next run instead (`message.deliver`) |
@@ -3258,13 +3275,14 @@ What each provider declares:
 | `planning.readOnly` | yes (no Edit or Write tools) | yes (the `read-only` sandbox) |
 | `contextHandoff`, `structuredOutput` | yes, yes | yes, yes (`outputSchema` on an ephemeral thread) |
 | `accounts`, `compaction` | yes, yes | no, yes: one Codex login (Accounts and usage limits, below); `thread/compact/start` compacts an idle thread |
+| `folds` | yes (eunoe's forwarder in the engine) | no (eunoe sits in front of the Anthropic API only) |
 | `fastMode` | yes (`settings.fastMode` in the flag-settings layer) | yes (`serviceTier: 'fast'`) |
 
 Both providers also report usage windows (Claude per account, Codex through `readUsage`), price their runs (Claude's
 own cost, Codex's from `CODEX_PRICES`), show the agents they start in the step's turn, write a `context` notice for
 the context meter, take your messages mid-turn, hand a session over to the other provider, and stop at a Sign in
 gate when signed out. What is still Claude-only, and why: several accounts with rotation and Run on account (one
-Codex login), eunoe (a proxy in front of the Anthropic API), Claude Code's plugins as a whole and its PreToolUse hook
+Codex login), eunoe and its boundary folds (in front of the Anthropic API only; the `folds` capability), Claude Code's plugins as a whole and its PreToolUse hook
 (Codex gets a plugin's MCP servers and the skills' paths, and asks for approval per command instead), checking a session file before a resume (Codex
 has no file to check, so a refused resume is `session_lost`), background work pinning an idle session, and `shinsa
 import` (it reads Claude Code sessions).
@@ -3567,18 +3585,20 @@ across a restart. Measured on a two-turn answer task (Claude, Sonnet, the e2e ha
 sent 8,989 characters and wrote 3,389 cache tokens with the full brief, and sends 1,277 characters and writes 709 with
 the instruction alone.
 
-**The task's Agent across turns.** Every run of a task's Agent resumes one session (Agents, above), so after the
-planning brief each turn is a short instruction: "Phase 1 is committed. Now build phase 2 of 3: …", a fix prompt, or
-"Now run the operation in the plan". The house rules travel with it as usual, and the full brief replaces the short
-one exactly where the house rules would be sent again: a fresh session, a handoff, or a session compacted since its
-last brief, since a summary or a fold may have dropped the plan. That full brief is core's `resolveRunBrief(state,
+**The task's Agent across turns.** Every run of a task's Agent resumes one session (Agents, above). Without folds
+each turn after the planning brief is a short instruction: "Phase 1 is committed. Now build phase 2 of 3: …", a fix
+prompt, or "Now run the operation in the plan". The house rules travel with it as usual, and the full brief replaces the
+short one exactly where the house rules would be sent again: a fresh session, a handoff, or a session compacted since
+its last brief, since a summary or a fold may have dropped the plan. In an eunoe mode a build, fix or operate turn
+folds the turns before it and sends the round brief (without the house rules) on purpose: Compaction and fast mode,
+Boundary folds. That full brief is core's `resolveRunBrief(state,
 run)`: the house rules, the round as it stands (the request and your later messages, the goal, the plan, the approved
 version and your answers, each finished phase with its summary, the earlier work), the run's own instruction and the
 project. The prompt-cache rules (Caching, below) hold across the whole task: the session's tools are one list for
 every purpose and kind of work, and its appended system prompt never changes, so each turn reads the conversation so
 far from the cache and writes only its new instruction. Compaction (Compaction and fast mode, below) keeps a long task
-inside the window: eunoe folds finished turns on the wire and the session goes on;
-Claude Code's compaction summarises, and the next turn then gets the full brief again.
+inside the window: eunoe folds the earlier steps at each step boundary and finished turns on the wire, and the
+session goes on; Claude Code's compaction summarises, and the next turn then gets the full brief again.
 
 **Read-only while planning, answering and researching.** The Agent plans read-only and builds with edits on the same
 session, and an answer or research round on that session reads only, so Shinsa runs one provider process per turn and
@@ -3766,62 +3786,74 @@ runs on the account the run used, only its compaction notice is kept in the tran
 run, and a new step on the task waits for a compaction in flight. Shutdown stops a compaction in flight and waits
 for it, so its `claude` never outlives the server.
 
-**Compaction and fast mode.** Shinsa does not use Claude Code's own summary by default: eunoe
-(`@chroxify/eunoe`, a local proxy between Claude Code and the Anthropic API) compacts instead. Settings → General →
-Context, Compaction (`settings.compaction`, a `settings.change` event because replay must reproduce it):
+**Compaction and fast mode.** Shinsa does not use Claude Code's own summary by default: eunoe's core
+(`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) compacts instead.
+Settings → General → Context, Compaction (`settings.compaction`, a `settings.change` event because replay must
+reproduce it):
 
 | Setting | eunoe mode | What happens |
 | --- | --- | --- |
-| `eunoe_compact`, "Eunoe compaction" (default) | `compact` | The context grows as usual; at `compactAt` (0.9) of the model's window eunoe folds every finished turn to your message, the output lines that mattered and the reply, instead of Claude Code's summary |
-| `eunoe_default`, "Eunoe always fold" | `default` | eunoe also folds as the session grows: once older detail passes 100,000 tokens every turn but the last 3 folds in one step, and it still cuts at the limit |
+| `eunoe_compact`, "Eunoe compaction" (default) | `compact` | The context grows within a step; at `compactAt` (0.9) of the model's window eunoe folds every finished turn to your message, the output lines that mattered and the reply, instead of Claude Code's summary. Boundary folds (below) apply |
+| `eunoe_default`, "Eunoe always fold" | `default` | eunoe also folds as the session grows: once older detail passes 100,000 tokens every turn but the last 3 folds in one step, and it still cuts at the limit. Boundary folds apply |
 | `claude`, "Claude Code's compaction" | none | Direct to Anthropic, Claude Code's auto-compact on; the only mode where idle compaction exists |
 | `off` | none | Direct to Anthropic, auto-compact off: a full context fails the turn as `context_window_full` and the step starts a fresh session with the handoff |
 
-*Why a managed proxy.* Four ways were weighed. Copying eunoe's source into Shinsa would fork it: every fix and
-benchmark result in eunoe would need porting by hand, and Shinsa would carry code it does not test. Pointing at an
-eunoe already running (the user's own, on `eunoe
-start`'s port) would tie Shinsa's sessions to that instance's single global mode and to `~/.eunoe`, which Shinsa must
-not edit, and its watchdog adds itself to `~/.claude/settings.json` and takes itself out again on its own schedule. Importing eunoe in
-process is not possible cleanly: the package exports no API (only `bin`), reads `EUNOE_DIR` once at import and keeps
-module-wide caches, and a proxy bug would take the server down with it. So Shinsa depends on the package (pinned,
-`apps/engine/package.json`) and runs its CLI as a separate process it owns: `bun <package>/src/cli/main.ts serve`
-(or `$SHINSA_EUNOE serve`), with `EUNOE_DIR` set to `data/eunoe`, so its config, request log, thread state and
-transcripts live beside Shinsa's data and never touch `~/.eunoe`. Taking a new eunoe is a version bump there.
+*Why the library in process.* Since 1.3, `@chroxify/eunoe` exports its core: `rewrite`, `foldThread`,
+`createForwarder` and a `ThreadStore` interface, with no disk, environment or global state of its own. Shinsa
+depends on the package (pinned, `apps/engine/package.json`) and serves its forwarder from the engine process itself,
+so there is no second process, port file, health probe or install for anyone to run, and taking a new eunoe is a
+version bump. Before 1.3 the package exported no API, so Shinsa ran its CLI as a proxy process it owned; that is
+gone. `shinsa eunoe …` still runs eunoe's CLI from the bundle, for the agents' own `eunoe load` and `eunoe peek`.
 
-*The proxy* (`apps/engine/src/eunoe/`). `EunoeProxy` starts eunoe lazily, the first time a Claude session needs it,
-on a port of its own: `SHINSA_EUNOE_PORT` when set, else the one `data/eunoe/config.json` remembers, else a free one.
-Shinsa writes that `config.json` (atomically; eunoe re-reads it on every request): `port`, `mode` (from the setting,
-so a change applies to the next request), `upstream` (`https://api.anthropic.com`) and `claudeConfigDirs`, every
-account folder a session has run on, so eunoe finds each session's file under whichever account it used (its own
-`~/.claude` is always included). Auth headers pass through untouched, so every leased account's token reaches the API
-as is, and rotation needs nothing: eunoe keys a thread on the session id and its first turn, so a session resumed on
-another account keeps its folds. A healthy proxy is reused for 5 s without asking; after that `GET /_eunoe/health`
-answers whether it is up and its pid. A proxy whose pid matches `data/eunoe/serve.pid` (a crash of an earlier
-Shinsa) is adopted; another eunoe on the port is never used: with `SHINSA_EUNOE_PORT` that fails the start, otherwise
-a new port is picked. Its output goes to `data/eunoe/serve.log`. Shutdown kills its process group and waits for it.
+*The forwarder* (`apps/engine/src/eunoe/server.ts`). `EunoeServer` starts one `Bun.serve` on `127.0.0.1` and a free
+port, lazily, the first time a Claude session needs it: never on the engine's own port, which can be reachable from
+elsewhere and caps request bodies. Each request goes through eunoe's `createForwarder`: Shinsa's `prepare` keys the
+thread on Claude Code's session id, asks the Models API for the model's window once, and runs `rewriteAsync` in the
+mode the setting names now, so a change applies to the next request. The forwarder sends the request to
+`https://api.anthropic.com` with the caller's own auth headers, streams the answer back, learns the thread's token
+ratio from its usage and retries once after a prompt-too-long error. Thread state lives in `data/eunoe/threads` (one
+JSON file per thread, keyed `<session id>-<first turn>`) and every request is one line of `data/eunoe/requests.jsonl`.
+Rotation needs nothing: auth headers pass through, and a session resumed on another account keeps its thread.
+Shutdown stops the forwarder after the effects, once no `claude` can still talk to it.
+
+*Boundary folds.* The Agent keeps one session for the task, but a step does not need the raw history of the steps
+before it. When the Agent's run resumes its session for a build phase, a fix or an operation (any purpose with a
+round brief, never planning; `resolveTurnFold` in `agents/turns.ts`), on the run's first attempt and with its own step
+prompt (never a restart, an answer or a delivery), in an eunoe mode on a provider whose capabilities include
+`folds` (Claude), the supervisor asks the session to fold. The session queues the fold for its session id
+(`EunoeLink.fold`) and releases it when the turn ends; on that session's next messages request (never a token count)
+the forwarder calls eunoe's `foldThread` at the latest turn, the step's own prompt, so every earlier turn is folded to
+its prompt, the evidence and its reply, and the fold is saved in the thread state, which keeps the prefix the same for
+the rest of the step and the cache warm. In exchange the turn sends the round brief instead of the bare instruction
+(`resolveTurnPrompt` with `fold`): the request, the accepted plan and the earlier phases' hand-overs in full, without
+the house rules the session's first message still carries. So build phase 1 starts from the accepted plan rather than
+the planning conversation, and a fix from the plan and the hand-overs rather than the whole build. A thread with
+nothing before its turn is left as it is.
 
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it
 starts and passes it both as process environment and in the Agent SDK's flag-settings layer, which outranks the
-user's `settings.json` (where `eunoe start` writes its own address): `ANTHROPIC_BASE_URL` (eunoe's URL, or Anthropic
-directly), `autoCompactEnabled` (off in both eunoe modes and in `off`), `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`
-(`1000000000` in eunoe modes, as `eunoe start` sets it, so Claude Code never refuses a prompt eunoe will shrink; empty
-otherwise, which Claude Code reads as its default) and `EUNOE_DIR` (so the agent's own `eunoe load` and `eunoe peek`
-read Shinsa's transcripts). Quick calls stay direct: they carry no history to compact. Every `claude` Shinsa starts
-gets the server's environment without `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` and `EUNOE_DIR`
-(`resolveClaudeProcess`), so a Shinsa started from inside a Claude Code session that routes through the user's own
-eunoe never sends a quick call, or anything else, through it.
+user's `settings.json` (where `eunoe start` writes its own address): `ANTHROPIC_BASE_URL` (the forwarder's URL, or
+Anthropic directly), `autoCompactEnabled` (off in both eunoe modes and in `off`), `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`
+(`1000000000` in eunoe modes, so Claude Code never refuses a prompt eunoe will shrink; empty otherwise, which Claude
+Code reads as its default) and `EUNOE_DIR` (`data/eunoe`, for the agent's own `eunoe load` and `eunoe peek`). Quick
+calls stay direct: they carry no history to compact. Every `claude` Shinsa starts gets the server's environment
+without `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` and `EUNOE_DIR` (`resolveClaudeProcess`), so a
+Shinsa started from inside a Claude Code session that routes through the user's own eunoe never sends a quick call, or
+anything else, through it.
 
-*When eunoe is down.* A proxy that will not start (it exits, does not answer within 15 s, cannot be run, is not
-found at `SHINSA_EUNOE`, or the bundled package is missing, in which case Shinsa still starts and `resolveEunoeCommand`
-logs it) is not retried for a minute; meanwhile, and whenever it is down, the session runs directly with Claude Code's compaction on
-and writes a `proxy` notice with the reason (the chat's "Eunoe unavailable · Claude Code compacts this run"). A
-proxy that dies mid-turn makes Claude Code's requests fail; the turn ends as a transport or provider failure, the
-run resumes as a new attempt, and that attempt starts eunoe again or falls back. Nothing hangs on a dead proxy.
+*When the forwarder cannot start.* A port it cannot take leaves `ensure` not ok: the session runs directly with
+Claude Code's compaction on and writes a `proxy` notice with the reason (the chat's "Eunoe unavailable · Claude Code
+compacts this run"). Once Shinsa is stopping, nothing starts it again.
 
-*Notices.* eunoe compacts on the wire, so Claude Code reports nothing; Shinsa tails `data/eunoe/requests.jsonl` (one
-line per request, `thread` = `<session id>-<first turn>`) while a session runs and writes a `compaction` notice with
-`by: 'eunoe'` for each request eunoe marks `compacted`: `trigger: 'auto'` for a cut at the limit, `'fold'` for a
-budget fold. Claude Code's own compactions keep their `compact_boundary` notice.
+*Stuck threads.* When even a cut cannot bring a thread under eunoe's target (a single turn too big for the window),
+eunoe reports it `stuck` and holds the cleared set still, so the cache keeps hitting. The forwarder tells the
+session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
+recovery for that class starts a fresh session with the handoff instead of resuming the stuck one.
+
+*Notices.* eunoe compacts on the wire, so Claude Code reports nothing; the forwarder matches each request's log line
+to the sessions it serves (`thread` = `<session id>-<first turn>`) and writes a `compaction` notice with `by:
+'eunoe'` for each request that moved the cut: `trigger: 'auto'` for a cut at the limit, `'fold'` for a budget fold
+or a boundary fold. Claude Code's own compactions keep their `compact_boundary` notice.
 
 *Fast mode* (`settings.fastMode`, Settings → Agents, the speed select on each role, default Standard). Each
 role can differ from it: `settings.agentFastModes` holds a true or false per agent role, written whole by
@@ -4202,8 +4234,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
-    ├── eunoe/         eunoe's own folder (`EUNOE_DIR`): config.json, the request log, thread state, transcripts,
-    │                  serve.pid and serve.log (The agent loop → Compaction and fast mode)
+    ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)
+    │                  the engine's forwarder keeps (The agent loop → Compaction and fast mode)
     ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
     │                  the log)
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
@@ -4217,8 +4249,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
-  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
-  command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_WEB_DIR` serves
+  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
@@ -4338,7 +4369,8 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   beside it `plugin/` (the plugin agents load) and `web/` (the built interface it serves). The build bakes in the
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
   `instance/bundle.ts` as `BUNDLE`, null when running from source): a compiled engine cannot read core's sources or
-  the SDK's `package.json`. `shinsa eunoe …` runs Eunoe from the same executable, so the proxy needs no second Bun.
+  the SDK's `package.json`. `shinsa eunoe …` runs eunoe's CLI from the same executable (the agents' `eunoe load` and
+  `eunoe peek`); the forwarder itself is the library, in the engine.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
 - **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
@@ -4711,11 +4743,10 @@ following a file through its watch and the check every second, both triggered by
   endpoint, with the app-server fallback (`usage.test.ts`), the agents a Codex agent starts nested in the turn, held
   and replayed, a compaction turn and compaction off (`session.test.ts`); `test/accounts/index.test.ts` the Codex
   reading in the snapshot, its weekly window, fast mode, its usage wait and its Sign in gate.
-  `test/eunoe/` runs `EunoeProxy` against a fake eunoe (`test/helpers/bin/eunoe`: health, a request log line per
-  message, and a `fake.json` that makes it fail or hang): starting on a free port, the config it writes, restarting a
-  proxy that died, the retry pause, a start that times out, an eunoe that is missing or cannot be run, a Shinsa
-  without the bundled package, another eunoe on the port, adopting an orphan, stopping mid-start, and folds reaching
-  the session that watches them. `packages/core/test/chat/`
+  `test/eunoe/` runs `EunoeServer` with the real eunoe core against a fake Anthropic API (`test/helpers/anthropic.ts`,
+  which reports input tokens from the body's size): a cut, an always-fold roll, a stuck thread, a boundary fold taken
+  once and never by a token count, a released or stale fold, a thread with nothing to fold, a request log it cannot
+  write, a port it cannot take, and the notices reaching only the session they belong to. `packages/core/test/chat/`
   covers references and `markFinalReplies`.
 - **Checks.** `packages/core/test/decide/checks.test.ts` covers when checks run and what they run (per phase, after a
   fix, after your edits, an empty set skipped), the agent's check changes and their refusals, and that only blocking
@@ -4739,11 +4770,10 @@ following a file through its watch and the check every second, both triggered by
   - `engine-restart.test.ts`: a restart for an update through `EngineRestarter` on the whole engine: the drain waits
     for the working agent to hand over, holds the steps that come after it and starts them on the next engine with
     no recovery spent, and the deadline cuts a working agent, which resumes its own session;
-  - `eunoe.test.ts`: the real Claude adapter over a scripted SDK and the fake eunoe: a run routed through Shinsa's
-    eunoe in compact mode and fast mode, with eunoe's compaction in its transcript; eunoe always fold running eunoe in
-    its `default` mode, each budget fold a quiet line; a proxy that cannot start, so the run goes direct with a
-    `proxy` notice; an eunoe that is missing, so the run goes direct, and a run a minute later that goes through it;
-    Claude Code's compaction and standard speed, and off, picked in Settings;
+  - `eunoe.test.ts`: the real Claude adapter over a scripted SDK and the engine's forwarder in front of a fake
+    Anthropic API: a run routed through it in compact mode and fast mode, with eunoe's cut in its transcript; eunoe
+    always fold in its `default` mode, each budget fold a quiet line; a forwarder that cannot take its port, so the run
+    goes direct with a `proxy` notice; Claude Code's compaction and standard speed, and off, picked in Settings;
   - `shapes.test.ts`: one task of each kind: a question answered in the repository itself and a follow-up on the same
     session; an investigation that reports and leaves no worktree; one whose fix you approve, planned and opened as a
     pull request without its scratch edits; an operation that waits for its plan and opens no pull request; research
@@ -4792,9 +4822,9 @@ following a file through its watch and the check every second, both triggered by
     an answer round and a change round after a merge on one session with one prefix, the reviewer on one session of
     its own, the whole prefix written only by each session's first turn, the moved note where a turn runs in another
     directory, and the metered cache writes equal to the modelled ones (Caching);
-  - `rounds-session.test.ts`: the real Claude adapter over a scripted SDK that calls Shinsa's tools, through the fake
-    eunoe: eight rounds onto one pull request, every Agent turn (planning, each phase) resuming the first session (one
-    eunoe thread), planning turns read-only through the edit-denying hooks and build turns with edits on the same tools,
+  - `rounds-session.test.ts`: the real Claude adapter over a scripted SDK that calls Shinsa's tools, through the
+    engine's forwarder: eight rounds onto one pull request, every Agent turn (planning, each phase) resuming the first
+    session (one eunoe thread), every build turn folding the turns before it and opening with the plan, planning turns read-only through the edit-denying hooks and build turns with edits on the same tools,
     the first review fresh and every later one resuming the reviewer's own session, a fold or cut every turn shown in
     the chat, and a graceful restart in the middle that changes none
     of it;
@@ -4836,9 +4866,9 @@ following a file through its watch and the check every second, both triggered by
   it back within seconds, `POST /api/engine/restart` exits 75 and comes back, and a taken port shows the app's
   status screen until the port is free.
 - **Real agents.** `bun run --cwd apps/engine test:live` runs a change, an Ask task, an investigation and a support
-  question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. The real eunoe is
-  checked by hand: `shinsa engine` on a throwaway `SHINSA_HOME` with `SHINSA_EUNOE_PORT` on a spare port, one task, and
-  `data/eunoe/requests.jsonl` showing the run's requests.
+  question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. eunoe against the real API is
+  checked by hand: `shinsa engine` on a throwaway `SHINSA_HOME`, one task, and `data/eunoe/requests.jsonl` showing the
+  run's requests, a `fold` action on each build phase's first request.
 
 Not covered by automated tests: GitHub's real JSON (the fake `gh` mirrors its shape) and the real Claude Agent SDK
 process, which only the live run exercises.

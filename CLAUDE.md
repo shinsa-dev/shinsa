@@ -52,7 +52,9 @@ web ──WebSocket──► shinsa engine
   planning is its round zero, then it builds every phase, takes every fix and runs the operation, and every later round
   and kind of work (an answer, an investigation, research) resumes the same session (`Decider.taskSession`); an Agent's
   runs differ only by `purpose`. A fresh session only when the old one cannot go on (context full, lost, image error,
-  provider changed); a changed model resumes the session on the new model. The reviewer keeps a session of its own per task, checks stay commands (the Agent chooses scoped ones in its plan and keeps them current, Shinsa runs them, `docs/engine.md` → Checks), and delegation is
+  provider changed); a changed model resumes the session on the new model. Each build phase, fix and operation folds
+  the turns before it through eunoe and starts from the round brief (`docs/engine.md` → Compaction and fast mode,
+  Boundary folds). The reviewer keeps a session of its own per task, and so do watchdog checks (a watch session), checks stay commands (the Agent chooses scoped ones in its plan and keeps them current, Shinsa runs them, `docs/engine.md` → Checks), and delegation is
   only for work whose context must stay apart or that runs truly in parallel. Never add a role per step or per problem
   type.
 - **Cache first: an agent session's prefix never changes** (`docs/engine.md` → Caching). The system prompt and the
