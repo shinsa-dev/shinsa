@@ -81,6 +81,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       return;
     case 'awaiting_proposal':
     case 'awaiting_operation':
+    case 'answered':
     case 'awaiting_review':
     case 'merged':
     case 'done':

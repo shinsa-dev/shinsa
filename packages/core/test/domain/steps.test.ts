@@ -52,7 +52,7 @@ describe('the step schema', () => {
     expect(STEP_SCHEMA.build.actor).toEqual({ by: 'agent', role: 'agent' });
     expect(STEP_SCHEMA.agent_review.gate.strength).toBe('soft');
     expect(STEP_SCHEMA.merge.gate.strength).toBe('hard');
-    expect(STEP_SCHEMA.answer.gate.strength).toBe('none');
+    expect(STEP_SCHEMA.answer.gate).toMatchObject({ strength: 'hard', types: ['result'] });
   });
 
   test('every gate a step names is in the gate schema, and every hard gate is decided by you', () => {

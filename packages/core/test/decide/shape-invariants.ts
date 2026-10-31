@@ -307,6 +307,13 @@ function isAllBuilt(task: Task) {
   return phases > 0 && new Set(task.phaseReports.map((report) => report.index)).size >= phases;
 }
 
+function assertResultInvariants(task: Task, gates: Gate[], context: string) {
+  const open = gates.filter((gate) => gate.type === 'result' && gate.status === 'open');
+  expect(open.length, `${context}: a result gate exactly while answered`).toBe(
+    task.stage === 'answered' ? 1 : 0
+  );
+}
+
 function assertProposalInvariants(
   task: Task,
   pipeline: readonly PipelineStep[],
@@ -371,6 +378,7 @@ export function assertShapeInvariants(task: Task, gates: Gate[], state: ShinsaSt
   }
   assertStageFitsPipeline(task, pipeline, context);
   assertProposalInvariants(task, pipeline, gates, context);
+  assertResultInvariants(task, gates, context);
   const history = Object.values(state.gates).filter((gate) => gate.taskId === task.id);
   assertOperationInvariants(task, pipeline, gates, history, context);
   if (!pipeline.includes('pull_request')) expect(task.pullRequest, context).toBeNull();

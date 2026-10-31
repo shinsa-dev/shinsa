@@ -979,7 +979,7 @@ Only these, and they win over anything below:
       another task, because that is all a new dependency can still do. Stop waiting clears every one at once
       ("No longer waiting.").
     - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
-      Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
+      Needs your answer and Answered blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
       needed are orange like Paused, and Waiting to check in again, Waiting for the usage limit and Waiting for
       delegations are neutral: the agent is neither working nor waiting on you, so the status is grey and its
@@ -1001,7 +1001,7 @@ Only these, and they win over anything below:
 
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
-    approve, Needs your answer, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
+    approve, Needs your answer, Answered, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
     (both collapsed). Each section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
@@ -1026,6 +1026,9 @@ Only these, and they win over anything below:
       purple): a proposed change decides what gets built, like a plan, but it is not a plan yet.
     - **Operation to confirm** follows it (`IconConsole`, purple): a merged change whose operation waits for your
       OK on the merged code.
+    - **Answered** follows Needs your answer (`IconBubbleCheck`, blue, open): an answer, report or diagnosis that
+      waits for you to read it (the `result` gate). Its now card is the result with Close, which moves it to Done;
+      it never sits in Done before you have read it.
     - **Backlog** comes after Waiting on another task (`IconArchive`, neutral, open): every task kept for later
       (`Task.backlog`), planning or with its plan held (`isHeldInBacklog`). A held plan never reads as Plan to
       approve: its status label and glyph are the Backlog group's (`resolveTaskStatus`, `resolveTaskMenuIcon`). Any

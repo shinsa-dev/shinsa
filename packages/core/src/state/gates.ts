@@ -47,7 +47,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   record(state, gate.taskId, event.at, {
     actor: 'you',
     kind: 'decision',
-    text: describeDecision(event.decision, gate.title),
+    text: gate.type === 'result' ? 'Closed the task' : describeDecision(event.decision, gate.title),
     detail: event.response,
     ...(event.comments ? { comments: event.comments } : {}),
   });

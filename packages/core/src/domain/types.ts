@@ -42,6 +42,7 @@ export type TaskStage =
   | 'watching'
   | 'awaiting_proposal'
   | 'awaiting_operation'
+  | 'answered'
   | 'merged'
   | 'done'
   | 'cancelled';
@@ -148,7 +149,8 @@ export type GateType =
   | 'failure'
   | 'configuration'
   | 'sign_in'
-  | 'post_merge';
+  | 'post_merge'
+  | 'result';
 
 export type GateCause = 'budget' | 'monitor' | 'push_hook';
 

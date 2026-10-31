@@ -118,6 +118,8 @@ function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand
     if (task.stage === 'triage' && task.branch) {
       return [{ type: 'worktree.ready', taskId: task.id, path: `/wt/${task.id}`, branch: task.branch }];
     }
+    const result = listOpenGates(state, task.id).find((gate) => gate.type === 'result');
+    if (result) return [{ type: 'gate.answer', gateId: result.id, decision: 'approve', response: null }];
     if (task.stage !== 'shipping' && task.stage !== 'awaiting_merge') return [];
     const merging = task.stage === 'awaiting_merge' && listOpenGates(state, task.id).length === 0;
     const pullRequest = readPullRequest(task, random);
