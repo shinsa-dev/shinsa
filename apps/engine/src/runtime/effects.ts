@@ -13,6 +13,7 @@ import {
   needsRepository,
   needsWorktree,
   type PullRequest,
+  type PullRequestCloseFailure,
   type Repo,
   type RepoCi,
   type RoundPullRequest,
@@ -44,6 +45,7 @@ import { resolveTaskRefs } from '../git/task-refs.ts';
 import { RepoCiCache } from '../github/ci.ts';
 import { PullRequestDescriptions } from '../github/description.ts';
 import {
+  closePullRequest,
   createPullRequest,
   mergePullRequest,
   type PullRequestRead,
@@ -94,6 +96,10 @@ type ChecksEffect = Extract<ShinsaEffect, { kind: 'checks.run' }>;
 type SuggestEffect = Extract<ShinsaEffect, { kind: 'watch.suggest' }>;
 
 type MergeEffect = Extract<ShinsaEffect, { kind: 'pull_request.merge' }>;
+
+type CloseEffect = Extract<ShinsaEffect, { kind: 'pull_request.close' }>;
+
+const CANCELLED_COMMENT = 'Closed because its task was cancelled in Shinsa.';
 
 const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
   'task.triage': 'Could not start the task',
@@ -215,6 +221,8 @@ export class EffectRunner {
         return this.#merge(effect, context);
       case 'pull_request.watch':
         return this.#watch(effect.taskId, context);
+      case 'pull_request.close':
+        return this.#closePullRequests(effect, context);
       case 'worktree.remove':
         return this.#removeWorktree(effect.taskId, context);
       case 'scratch.remove':
@@ -790,6 +798,30 @@ export class EffectRunner {
     if (after) await this.#recordFreshRead(repo, taskId, after, context.signal);
     if (after && isAwaitingMerge(after.pullRequest)) throw new Error(NOT_MERGED_YET);
     await this.#assertStackMerged(repo, stacked, context.signal);
+  }
+
+  async #closePullRequests(effect: CloseEffect, context: EffectContext) {
+    const { repo } = this.#requireTask(effect.taskId);
+    const closed: number[] = [];
+    const failed: PullRequestCloseFailure[] = [];
+    for (const number of effect.numbers) {
+      if (context.signal.aborted) return;
+      try {
+        await closePullRequest(repo, number, CANCELLED_COMMENT, context.signal);
+        closed.push(number);
+      } catch (error) {
+        log.warn('[Effects] Could not close a pull request', {
+          taskId: effect.taskId,
+          number,
+          error: describeError(error),
+        });
+        failed.push({ number, detail: describeError(error) });
+      }
+    }
+    await this.#engine.dispatch(
+      { type: 'pull_request.record_closed', taskId: effect.taskId, closed, failed },
+      { id: `${context.key}:pull_request.record_closed` }
+    );
   }
 
   async #removeIsolated(repo: Repo, taskId: string) {

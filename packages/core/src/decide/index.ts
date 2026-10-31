@@ -49,6 +49,7 @@ import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
+  recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
   recordPullRequestReadFailure,
@@ -254,6 +255,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
       return recordPullRequestReadFailure(decider, command);
+    case 'pull_request.record_closed':
+      return recordClosedPullRequests(decider, command);
     case 'evidence.record_uploads':
       return recordUploads(decider, command);
     case 'run.link':

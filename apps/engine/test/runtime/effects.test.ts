@@ -1143,6 +1143,42 @@ describe('pull requests', () => {
     ).rejects.toThrow('GitHub did not return');
   });
 
+  test('closing on cancel closes each pull request and reports the ones that failed', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    restores.push(() => warn.mockRestore());
+    const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll'), fakePull('fix/other', { number: 8 })]);
+    const { repo } = await createGitRepo();
+    const { runner, dispatched } = setup(withTask({ stage: 'cancelled', pullRequest: PULL }, repo));
+    await runner.apply({ kind: 'pull_request.close', taskId: 'task-1', numbers: [7, 9, 8] }, createContext());
+    expect(readGitHub().pulls.map((pull) => pull.state)).toEqual(['CLOSED', 'CLOSED']);
+    expect(dispatched).toEqual([
+      {
+        type: 'pull_request.record_closed',
+        taskId: 'task-1',
+        closed: [7, 8],
+        failed: [{ number: 9, detail: expect.any(String) }],
+      },
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      '[Effects] Could not close a pull request',
+      expect.objectContaining({ number: 9 })
+    );
+  });
+
+  test('a close cancelled before it starts closes nothing and reports nothing', async () => {
+    const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll')]);
+    const { repo } = await createGitRepo();
+    const { runner, dispatched } = setup(withTask({ stage: 'cancelled', pullRequest: PULL }, repo));
+    const controller = new AbortController();
+    controller.abort();
+    await runner.apply(
+      { kind: 'pull_request.close', taskId: 'task-1', numbers: [7] },
+      createContext(controller.signal)
+    );
+    expect(readGitHub().pulls[0]?.state).toBe('OPEN');
+    expect(dispatched).toEqual([]);
+  });
+
   test('merging uses the merge method from settings and needs a pull request', async () => {
     const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll')]);
     const { repo } = await createGitRepo();

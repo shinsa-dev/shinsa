@@ -75,6 +75,11 @@ export type ShippingStep =
 
 export type ShippingStepKind = ShippingStep['kind'];
 
+export interface PullRequestCloseFailure {
+  number: number;
+  detail: string;
+}
+
 export interface PushHookFailure {
   output: string;
   failures: string[] | null;

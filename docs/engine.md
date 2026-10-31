@@ -2770,6 +2770,13 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   nothing and opens nothing) and its lane is free. Whatever it does afterwards is
   ignored: settling, retrying and failing only change an effect that is still `running`, and a
   late failure is only logged.
+- **Cancelling closes the pull requests.** A task settled as cancelled (by you, a rejected gate or Cancel on a
+  failure) queues `pull_request.close` with every pull request of it still open: the current round's and the
+  earlier rounds' stacked ones (`listStackedPullRequests`). The engine closes each with `gh pr close` and a comment
+  saying the task was cancelled, keeps the branch so it can be reopened, and reports back with
+  `pull_request.record_closed`, which core takes on the settled task: the closed ones show as closed on the task and
+  its rounds, and one that failed (no access, GitHub down) is an activity entry with the reason, never a failure
+  gate. Marking a task done or a merge closes nothing.
 - **A side lane for cheap work.** The pull request watch runs in `side:<taskId>`, so a read never
   waits behind a long merge or a push backing off in `task:<taskId>`. Every decision it feeds is
   guarded already (a push in flight, a merge running, a run active). It is the only per-task effect
