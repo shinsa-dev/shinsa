@@ -60,11 +60,21 @@ const GATE_STATUS: Record<GateType, Status> = {
 
 const RESOLVING_CONFLICTS = 'Resolving conflicts';
 
-const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'blue' };
+const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'neutral' };
 
-const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 'blue' };
+const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 'neutral' };
 
-const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegations', tone: 'blue' };
+const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegations', tone: 'neutral' };
+
+const PAUSED: ReadonlySet<Status> = new Set([
+  WAITING_TO_CHECK_IN,
+  WAITING_FOR_USAGE,
+  WAITING_FOR_DELEGATIONS,
+]);
+
+export function isPausedStatus(status: Status) {
+  return PAUSED.has(status);
+}
 
 export const ATTENTION: Record<Attention, Status> = {
   critical: { label: 'Critical', tone: 'red' },

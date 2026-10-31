@@ -22,7 +22,7 @@ import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
 import { describeChecksPassed } from '@/lib/tasks/checks.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
-import { resolveTaskStatus } from '@/lib/tasks/status.ts';
+import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export type NowTarget = 'review' | 'changes' | 'agent';
@@ -108,7 +108,8 @@ export function isAgentWorking(state: ShinsaState, task: Task) {
 }
 
 export function isTaskWatchable(state: ShinsaState, task: Task) {
-  return resolveTaskStatus(state, task).tone !== 'neutral';
+  const status = resolveTaskStatus(state, task);
+  return status.tone !== 'neutral' || isPausedStatus(status);
 }
 
 export function describeReviewFacts(task: Task, merge: boolean) {

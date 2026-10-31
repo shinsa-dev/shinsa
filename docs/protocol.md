@@ -15,7 +15,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | Term | Definition | Code | UI |
 | --- | --- | --- | --- |
 | task | The conversation about one goal you asked for, worked in rounds; the only object with a lifecycle. A small task is a task with one round | `Task` | task |
-| round | One unit of work inside a task, with its own steps, plan, build, review and pull request; numbered within the task (`SW-14 · round 3`). One is active at a time | `Round`, `Task.rounds` | round |
+| round | One unit of work inside a task, with its own steps, plan, build, review and pull request; numbered within the task (`SW-14 · Round 3`). One is active at a time | `Round`, `Task.rounds` | round |
 | request | What you wrote when you created the task (round 1), or the message that started a later round; the first line becomes the title | `Task.request`, `Round.request` | request |
 | shipping | How a round's commits reach GitHub: onto the task's open pull request (the default), or as its own pull request stacked on it | `RoundShipping` (`onto_pull_request`, `stacked`) | "Onto #12", "As a stacked pull request" |
 | resting | A task whose last round finished on its own (merged, answered, ran): open, holding no run or gate, and a message starts its next round | `isTaskResting` | Merged, Done |

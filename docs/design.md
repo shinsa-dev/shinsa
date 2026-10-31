@@ -249,13 +249,16 @@ Only these, and they win over anything below:
    (`describeTrackPosition`), no tooltip per dot since the row is already a button. After the dots,
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
-   over the run's transcript, which the row follows only while it is mounted); otherwise the current
+   over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
+   and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: `ShimmeringText` counts
+   the ones its clipping box shows, `countVisibleChars`); otherwise the current
    step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
-   ("Pre-merge · 1 step left"), and nothing more. The
+   ("Pre-merge · 1 step left"), and nothing more. That text after the dots is on Home's rows only: the rail and the
+   Needs you popover end at the dots (`RowSummary`'s `detail`, on for the wide queue). The
    queue rows carry no now line or stage reason: the status and the dots already say it, and a static
    description only repeats them. While the steps can still change (triage, or the agent planning
    before its plan) a spinner stands in for the dots, followed by the planning agent's latest action or
-   "Working out the steps". The guide above is a short summary of
+   "Working out the steps" (on Home; the rail and the popover show the spinner alone). The guide above is a short summary of
    these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Needs you, In progress, Recently finished
@@ -337,7 +340,7 @@ Only these, and they win over anything below:
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
    (37), and the queue popover is `QUEUE_POPOVER` (`COMPACT_POPOVER`, as tall as its content up to the room under the button,
    then it scrolls, and at least 320px wide, growing just enough to fit its widest status and step track, never past the
-   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   room left in the window; titles truncate instead of widening it, `contain-inline-size` on them, and its rows end at the step dots) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
    sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since
@@ -971,7 +974,8 @@ Only these, and they win over anything below:
       Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
       needed are orange like Paused, and Waiting to check in again, Waiting for the usage limit and Waiting for
-      delegations are blue like working. The All tasks section icons,
+      delegations are neutral: the agent is neither working nor waiting on you, so the status is grey and its
+      line is still, while its icon stays blue with the working tasks. The All tasks section icons,
       the queue's section icons, the gate tiles, ⌘K's task icons and the status labels all read
       them (`resolveTaskGlyph`, `resolveTaskStatus`).
     - **Resolving conflicts** is the status of a task fixing a conflict with its base (`fixFor` `conflict`, a pull
@@ -1286,7 +1290,7 @@ Only these, and they win over anything below:
       (`lib/overview/verdicts.ts`).
     - **A wait** (`wait-card.tsx`): "The agent is waiting on something outside the repository",
       the agent's notes, "Check-in 2 of 10 · gives up in 3 hours" under them and Check in now (outline);
-      the eyebrow's `TimeAgo` counts down to the next check-in. Status "Waiting to check in again", blue.
+      the eyebrow's `TimeAgo` counts down to the next check-in. Status "Waiting to check in again", neutral.
     - **The live feed** (`live-feed.tsx`, `listFeedLines`): the run's last four messages and tool
       calls as 24px `text-2xs` rows, so the card holds its height once four have arrived and a new
       step swaps in at the bottom. The newest row carries the pulse and names its step in the
@@ -1663,7 +1667,7 @@ Only these, and they win over anything below:
       · 1 done" in the header) right under the now card: one row per delegation, children
       indented under the task that delegated them with `IconArrowCornerDownRight`, the same mark,
       role, title, status and Stop; the title opens the chat at its card, opened along with every
-      card it sits in. A task whose step waits for its delegations is "Waiting for delegations" (blue)
+      card it sits in. A task whose step waits for its delegations is "Waiting for delegations" (neutral)
       wherever its status shows, and ⌘K offers Stop ‹role› ‹title› per live one.
 
 27. **Schedules, secrets and notifications** (harness plan WS7; `lib/schedules.ts`, `lib/secrets.ts`,

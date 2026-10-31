@@ -734,7 +734,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Notes for an operation.** A message at the operation gate replaces the notes for the operation on the
   same gate: nothing runs and nothing notifies you again until you choose.
 - **On screen.** The chat runs on as one conversation, a quiet divider with the round's title and status where
-  each round starts; the Overview and the rows show the current round ("SW-14 · round 3"), and the Overview's
+  each round starts; the Overview and the rows show the current round ("SW-14 · Round 3"), and the Overview's
   Rounds panel keeps earlier rounds folded and readable with their pull requests.
 - **A second lock on your decisions.** Core now refuses an answer to one of your gates sent on an
   agent's behalf, beside the tool list that never offered one; while one is open an agent cannot

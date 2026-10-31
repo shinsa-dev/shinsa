@@ -74,8 +74,8 @@ describe('rounds on screen', () => {
     expect(resolveHandleText(single)).toBe('SW-1');
     expect(resolveHandleText(createTask({ id: 'b' }))).toBeNull();
     const task = threeRounds();
-    expect(resolveRoundTag(task)).toBe('round 2');
-    expect(resolveHandleText(task)).toBe('SW-14 · round 2');
+    expect(resolveRoundTag(task)).toBe('Round 2');
+    expect(resolveHandleText(task)).toBe('SW-14 · Round 2');
   });
 
   it('says how each round stands', () => {
