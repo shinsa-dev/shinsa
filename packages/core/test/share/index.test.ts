@@ -261,7 +261,36 @@ describe('what a shared task shows', () => {
         gateType: 'review',
         onBehalf: true,
         round: 2,
-        comments: [],
+      },
+    ]);
+  });
+
+  test('a gate answer keeps what was decided, never the answer or its comments', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    const task: Task = {
+      ...harness.task(taskId),
+      activity: [
+        {
+          at: 1,
+          actor: 'you',
+          kind: 'decision',
+          text: 'Asked for changes on the review',
+          detail: 'The key is sk-live-123.',
+          evidenceId: null,
+          comments: [{ path: 'src/a.ts', line: 3, body: 'Use the staging secret here.' }] as never,
+        },
+      ],
+    };
+    expect(resolveSharedTask(harness.state, task, CONTEXT).task.activity).toEqual([
+      {
+        at: 1,
+        actor: 'you',
+        kind: 'decision',
+        text: 'Asked for changes on the review',
+        detail: null,
+        evidenceId: null,
+        runId: null,
       },
     ]);
   });

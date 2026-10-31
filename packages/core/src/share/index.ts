@@ -118,12 +118,11 @@ function redactActivity(activity: readonly Activity[]): Activity[] {
       actor: entry.actor,
       kind: entry.kind,
       text: entry.text,
-      detail: entry.detail,
+      detail: entry.kind === 'decision' ? null : entry.detail,
       evidenceId: entry.evidenceId,
       runId: null,
       ...(entry.gateType ? { gateType: entry.gateType } : {}),
       ...(entry.onBehalf ? { onBehalf: entry.onBehalf } : {}),
-      ...(entry.comments ? { comments: entry.comments } : {}),
       ...(entry.round ? { round: entry.round } : {}),
     }));
 }
