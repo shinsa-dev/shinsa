@@ -1029,9 +1029,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
   gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
   a Slack token, and the relay stores no message text.
-- **The thread follows the task, minimally**: one status line edited in place as it moves, one short line for each
-  question, secret, plan and review with a link to decide in Shinsa, and the result's start with a link to the rest.
-  No streamed text and no "Thinking…" placeholder. No buttons, so Slack never asks for interactivity; nothing in Slack closes a gate.
+- **The thread follows the task, minimally**: one status message edited in place as it moves, one post for each
+  question, secret, plan and review, each a bold title, the gist quoted and the link to decide in Shinsa on its own
+  line, and the result's start with a link to the rest. No icons in the posts: the state is the one reaction on your
+  message (⏳ sizing up, 🛠️ working, ✋ needs you, ✅ done), there from the moment the bot reads it. No streamed text
+  and no "Thinking…" placeholder. "@Shinsa preview posts" shows every post with sample data. No buttons, so Slack never asks for interactivity; nothing in Slack closes a gate.
 - **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every
   machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
   Mentions while a machine is offline are not kept.

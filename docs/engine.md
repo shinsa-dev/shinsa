@@ -2503,12 +2503,14 @@ Slack ──event──► app.shinsa.dev /slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, "Sent to the task"
                   └─ a gate open ──► kept in its chat, "Kept for the task"
-   otherwise ──► slack.evaluate: the model reads the thread
-                  ├─ not work ──► "Not a task", once per thread
+   otherwise ──► slack.evaluate: ⏳ on the mention at once,
+                  the model reads the thread
+                  ├─ "preview posts" ──► every post, sample data
+                  ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
                               task.create, as from Home
-   the task moves ──► slack.status (one line, edited)
-   a gate opens ──► slack.post (one line + a link to Shinsa)
+   the task moves ──► slack.status (edited) + the mention's one reaction
+   a gate opens ──► slack.post (a title, the gate quoted, a link)
    the result ──► slack.post (its start + a link to Shinsa)
                   └─ app.shinsa.dev /__remote/slack/post ──► Slack
 ```
@@ -2517,7 +2519,7 @@ Slack ──event──► app.shinsa.dev /slack/events
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
   goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `groups:history`,
-  `chat:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
+  `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
   linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
   says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
@@ -2536,8 +2538,8 @@ Slack ──event──► app.shinsa.dev /slack/events
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
   dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its
   receipt.
-- **How a thread maps to a task** (`Task.slack`, `SlackThreadLink`: workspace, channel, thread, author, permalink and
-  the status message's ts; the key is `resolveSlackThreadKey`, `team:channel:threadTs`). A thread holds at most one
+- **How a thread maps to a task** (`Task.slack`, `SlackThreadLink`: workspace, channel, thread, author, the mention's
+  own `messageTs`, permalink, the status message's ts and the reaction on the mention; the key is `resolveSlackThreadKey`, `team:channel:threadTs`). A thread holds at most one
   open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
   write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
   as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
@@ -2545,7 +2547,8 @@ Slack ──event──► app.shinsa.dev /slack/events
   review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
   nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
   waits on you in Shinsa" (`held`).
-- **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the machine asks
+- **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
+  ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
   the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
   `serializeSlackEvaluationPrompt`), whether the thread asks for work, and gets `task` or `none`
   (`parseSlackEvaluation`). Shinsa does work as tasks and never chats: greetings, thanks, small talk and questions
@@ -2555,7 +2558,17 @@ Slack ──event──► app.shinsa.dev /slack/events
   asks for work there still starts a task. Anything someone wants done or wants to know about their code, product or work is a
   task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
   key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
-  posted while it reads.
+  posted while it reads; a mention that is not a task loses its ⏳.
+- **This one check is the only thing Slack adds.** A task it starts is the same `task.create` Home sends with
+  everything on Auto, through the same `createTask` and the same triage (repository, kind, priority, and whatever
+  triage learns next, such as finding a duplicate of an open task), so a change to triage reaches Slack with no
+  change here.
+- **Every post at once, with sample data**: a mention whose text is exactly "preview posts" (`isSlackPreviewRequest`)
+  skips the check and starts nothing: the machine posts a list of what follows, then every post the bot can make
+  from sample data (`listSlackPreviewPosts`: each status, a question, a secret, a plan, a review, a proposal, a
+  result, "Sent to", "Kept for", "Not a task", the private "Connect Slack" and "offline"), and steps the mention's
+  reaction through each state (`SLACK_PREVIEW_REACTIONS`), so every post can be seen without a teammate or a real
+  task.
 - **Work starts a task, as Home does** (`startSlackTask`): a mention in any other thread, a task's
   closed thread included, is `task.create` with no project, kind or priority given, exactly as a request typed on Home
   with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
@@ -2568,15 +2581,19 @@ Slack ──event──► app.shinsa.dev /slack/events
   (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
   Slack notifies; every change to the task is one `slack.status`, the status message edited in place. Each message is
   built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
-  as one line or two of plain sections, with no buttons and no headers, and points at the task on app.shinsa.dev for
-  everything else with a text link (`resolveSlackTaskUrl`), so Slack never asks for interactivity:
-  - the status message: a coloured mark, what the task is doing now (its stage reason, else its stage, or "Needs
-    you: …" when a question waits or it paused), the task's handle and title as the link, and its pull request;
-  - a question: ❓ the question, its choices with the recommended one bold, "Answer in Shinsa";
-  - a secret: 🔑 what is needed, never to paste it there, "Give it in Shinsa";
-  - a plan: 📋 its goal in one sentence, "Review the plan in Shinsa";
-  - a review: 👀 the summary's first sentence, how the checks went, "Review in Shinsa" and the pull request;
-  - a proposal: 💡 the change in one line, "Decide in Shinsa";
+  as one plain section, with no icons, no buttons and no headers: a bold title, what it is about quoted (`>`, so code
+  and links in it keep their markup), its details as lines or a list, and the link to the task on app.shinsa.dev on
+  its own last line (`resolveSlackTaskUrl`), so Slack never asks for interactivity:
+  - the status message: what the task is doing now in bold (its stage reason, else its stage, or "Needs you" with
+    the question or failure quoted under it), then the task's handle and title as the link, and its pull request;
+  - a question: "Question", the question quoted, the first sentence of its context, its choices as a list with the
+    recommended one marked, "Answer in Shinsa";
+  - a secret: "Secret needed", what is needed quoted, to give it in Shinsa and never in Slack, "Give it in Shinsa";
+  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), "Review the plan in
+    Shinsa";
+  - a review: "Ready for your review", the summary's first sentence quoted, how the checks went, "Review in Shinsa"
+    and the pull request;
+  - a proposal: "Proposed change", the change quoted, "Decide in Shinsa";
   - the result: one message in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
     (`SLACK_RESULT_LIMIT`) and ending in "Open in Shinsa" (or "Read the rest in Shinsa").
   Slack never closes a gate: the posts say where to decide, and a mention while a gate is open is kept, not routed.
@@ -2585,6 +2602,16 @@ Slack ──event──► app.shinsa.dev /slack/events
   that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
   → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new status message, whose ts
   is recorded instead.
+- **Reactions: one state on the mention** (`resolveSlackReaction`, `SLACK_REACTIONS`, `/__remote/slack/react`): the
+  message that mentioned the bot always carries one reaction, the task's state: ⏳ `hourglass_flowing_sand` while it
+  is read and triaged or waits on other tasks, 🛠️ `hammer_and_wrench` while an agent works, ✋ `raised_hand` while it
+  waits on you, ❌ `x` when it failed, ✅ `white_check_mark` once answered, delivered, merged or done, and ➖
+  `heavy_minus_sign` when cancelled. Each status edit moves it, taking the old one off first, and records the one
+  shown with the status message's ts (`slack.record_status` → `slack.status_posted`), so a restart never leaves two.
+  It is best effort: a workspace that added the app before it asked for `reactions:write` answers `missing_scope`,
+  app.shinsa.dev logs it and says `applied: false`, and the posts carry on. Connect Slack again grants it: connecting
+  reads the scopes of the workspace's bot token (`hasSlackBotScopes`, the `x-oauth-scopes` Slack answers `auth.test`
+  with) and, when one of `SLACK_BOT_SCOPES` is missing, goes on to add the app again, as for a new workspace.
 - **The thread's own status in Slack** (`resolveSlackSessionStatus`, `agents.sessions.setStatus` through
   `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
   loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),

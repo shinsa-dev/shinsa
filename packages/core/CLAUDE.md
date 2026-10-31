@@ -273,15 +273,18 @@ src/
 │                    what is posted back (posts.ts: SlackPost, SLACK_POSTED_GATES); the thread key is
 │                    domain/slack.ts (resolveSlackThreadKey, Task.slack); Markdown as Slack mrkdwn, cutting to a
 │                    limit and splitting into sections without breaking a link, an escape or a fence (mrkdwn.ts),
-│                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, sections and context
-│                    lines only), and every message the bot posts, each a line or two with a text link
-│                    (messages.ts: the status line edited in place, resolveSlackSessionStatus for the thread's
-│                    status, a post per question, secret, plan, review and proposal gate, the result in mrkdwn, the
-│                    bot's own lines (Sent to, Kept for, Not a task, Connect Slack, offline), and
-│                    resolveSlackPostMessage for a `slack.post` from the outbox), and the relay's wire contract
-│                    (relay.ts: SLACK_RELAY_PATHS, the forward signature made with the machine's connect key and
-│                    checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost and
-│                    parseSlackRelaySession for a machine's post and thread status,
+│                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, sections only), every
+│                    message the bot posts, each a bold title, the gist quoted and a text link on its own line
+│                    (messages.ts: the status message edited in place, resolveSlackSessionStatus for the thread's
+│                    status, resolveSlackReaction and SLACK_REACTIONS for the one reaction on the mention, the
+│                    views (SlackTaskRef, serializeSlack*View) the real posts and the preview share; a post per
+│                    question, secret, plan, review and proposal gate, the result in mrkdwn, the bot's own posts
+│                    (Sent to, Kept for, Not a task, Connect Slack, offline), and resolveSlackPostMessage for a
+│                    `slack.post` from the outbox), every post with sample data for "preview posts" (preview.ts:
+│                    isSlackPreviewRequest, listSlackPreviewPosts, SLACK_PREVIEW_REACTIONS), and the relay's wire
+│                    contract (relay.ts: SLACK_RELAY_PATHS, the forward signature made with the machine's connect
+│                    key and checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost, parseSlackRelayReaction
+│                    and parseSlackRelaySession for a machine's post, reaction and thread status,
 │                    resolveSlackReadableText for Slack's <@U…> markup, SlackLinks)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,

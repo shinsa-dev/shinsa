@@ -297,7 +297,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
 | `watchHome?` | boolean | the home a watch reads in: no handle, no triage, on no list, takes no messages (`docs/engine.md` → Schedules and webhooks) |
-| `slack?` | `SlackThreadLink` \| null | the Slack thread it was started from: `teamId`, `channelId`, `threadTs`, the author's `userId`, the `permalink` and `statusTs`, the status message edited in place (`docs/engine.md` → Slack) |
+| `slack?` | `SlackThreadLink` \| null | the Slack thread it was started from: `teamId`, `channelId`, `threadTs`, the author's `userId`, the mention's `messageTs`, the `permalink`, `statusTs`, the status message edited in place, and `reaction`, the one reaction on the mention (`docs/engine.md` → Slack) |
 | `sourceReport?` | `SourceReport` \| null | the report it was filed from: `scheduleId` (a watch's) or `watchdogId` (a watchdog's; the other is null), `server`, `reportId`, `link` (one of the two is set), `author`, `postedAt`, `text` (`docs/engine.md` → Schedules and webhooks) |
 
 **Rounds**
@@ -896,7 +896,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread (kept while a gate is open), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
-| `slack.record_status` | the `slack.status` effect | the ts of the task's status message, once Slack has it |
+| `slack.record_status` | the `slack.status` effect | the ts of the task's status message and the reaction now on the mention, once Slack has them |
 
 ## Events
 
@@ -995,7 +995,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 | `slack.thread_linked` | a task was started from a Slack thread (the whole `link`, `Task.slack`; "Started from a Slack thread") |
-| `slack.status_posted` | the task's status message has this `ts` now |
+| `slack.status_posted` | the task's status message has this `ts` and its mention this `reaction` now |
 
 ## Effects
 
@@ -1024,9 +1024,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `question.resolve` | process_bound | `gate:<id>` | none: releases the waiting `ask` call |
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
-| `slack.evaluate` | replay_safe | `slack:<thread key>` | `slack.start_task` for work; otherwise "Not a task, so nothing was started.", once per thread; key `slack.evaluate:<event id>` |
+| `slack.evaluate` | replay_safe | `slack:<thread key>` | ⏳ on the mention first; `slack.start_task` for work; otherwise ⏳ off and "Not a task, so nothing was started.", once per thread; "preview posts" posts every post with sample data instead; key `slack.evaluate:<event id>` |
 | `slack.post` | replay_safe | `slack:<thread key>` | none: posts a gate, the result, "Sent to …" or "Kept for …" through app.shinsa.dev |
-| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new status message; edits it at most every 5 s |
+| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new status message or reaction; edits it at most every 5 s and moves the mention's reaction |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 
@@ -1269,6 +1269,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when Slack will not take it (a workspace without agent features) |
+| `POST /__remote/slack/react` | The engine, with its machine token | `SlackRelayReaction` (the thread, the mention's `messageTs`, the emoji name to `add` and to `remove`, at least one; `parseSlackRelayReaction`) → `SlackRelayReacted` `{ applied }`: `reactions.remove` then `reactions.add` on a message of a thread sent to that machine; `no_reaction` and `already_reacted` count as done, anything else (`missing_scope` on a workspace that added the app before `reactions:write`) is `applied: false` |
 | `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
 
 | Shape | Fields |

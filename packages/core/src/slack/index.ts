@@ -24,8 +24,12 @@ export {
 export {
   listSlackStatusGates,
   resolveSlackPostMessage,
+  resolveSlackReaction,
   resolveSlackSessionStatus,
+  SLACK_REACTIONS,
   SLACK_RESULT_LIMIT,
+  type SlackReaction,
+  type SlackTaskRef,
   serializeSlackDeclined,
   serializeSlackForwarded,
   serializeSlackGate,
@@ -44,9 +48,17 @@ export {
 } from './mrkdwn.ts';
 export { SLACK_POSTED_GATES, type SlackPost } from './posts.ts';
 export {
+  isSlackPreviewRequest,
+  listSlackPreviewPosts,
+  SLACK_PREVIEW_REACTIONS,
+  type SlackPreviewPost,
+  serializeSlackPreviewIntro,
+} from './preview.ts';
+export {
   createSlackForwardSignature,
   listSlackMentionedUsers,
   parseSlackRelayPost,
+  parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackConnectUrl,
   resolveSlackLinkedPath,
@@ -63,6 +75,8 @@ export {
   type SlackNames,
   type SlackRelayPost,
   type SlackRelayPosted,
+  type SlackRelayReacted,
+  type SlackRelayReaction,
   type SlackRelaySession,
   type SlackRelaySessionSet,
   type SlackSessionStatus,

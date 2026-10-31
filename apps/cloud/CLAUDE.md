@@ -75,7 +75,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `Retry-After: 60`.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
   Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one of yours, else the one seen last)
-  signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet goes on to add
+  signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet, or its bot
+  token lacks one of the scopes (`hasSlackBotScopes`, Slack's `x-oauth-scopes` on `auth.test`), goes on to add
   the app (OAuth v2, the bot scopes in `SLACK_BOT_SCOPES`); either way it writes the link of your Slack user to that
   machine and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
   cookie, checked in constant time. A bot token is kept sealed with AES-GCM under `SLACK_TOKEN_KEY`, never in clear.
@@ -87,7 +88,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
-  posted (`slack_threads`, `slack_posts`), `/__remote/slack/session` sets the thread's status
+  posted (`slack_threads`, `slack_posts`), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort), `/__remote/slack/session` sets the thread's status
   (`agents.sessions.setStatus`, best effort, `applied: false` where Slack has no agent features); `/__remote/slack/links` and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the

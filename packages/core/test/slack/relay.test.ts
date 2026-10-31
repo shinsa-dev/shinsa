@@ -3,6 +3,7 @@ import {
   createSlackForwardSignature,
   listSlackMentionedUsers,
   parseSlackRelayPost,
+  parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackConnectUrl,
   resolveSlackLinkedPath,
@@ -114,6 +115,22 @@ describe('a machine’s thread status through the relay', () => {
     expect(parseSlackRelaySession({ ...THREAD, status: 'thinking' })).toBeNull();
     expect(parseSlackRelaySession({ ...THREAD, teamId: '', status: 'active' })).toBeNull();
     expect(parseSlackRelaySession('active')).toBeNull();
+  });
+
+  test('a reaction names its message and the emoji it adds or takes off, at least one of them', () => {
+    const reaction = { ...THREAD, messageTs: '100.3', add: 'white_check_mark', remove: 'hammer_and_wrench' };
+    expect(parseSlackRelayReaction(reaction)).toEqual(reaction);
+    expect(parseSlackRelayReaction({ ...reaction, remove: undefined })).toEqual({
+      ...reaction,
+      remove: null,
+    });
+    expect(parseSlackRelayReaction({ ...reaction, add: null })).toEqual({ ...reaction, add: null });
+    expect(parseSlackRelayReaction({ ...reaction, add: null, remove: null })).toBeNull();
+    expect(parseSlackRelayReaction({ ...reaction, add: 'Not An Emoji' })).toBeNull();
+    expect(parseSlackRelayReaction({ ...reaction, remove: 7 })).toBeNull();
+    expect(parseSlackRelayReaction({ ...reaction, messageTs: '' })).toBeNull();
+    expect(parseSlackRelayReaction({ ...reaction, teamId: '' })).toBeNull();
+    expect(parseSlackRelayReaction('react')).toBeNull();
   });
 });
 

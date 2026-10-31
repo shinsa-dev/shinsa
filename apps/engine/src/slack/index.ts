@@ -1,11 +1,14 @@
 import {
   DomainError,
+  isSlackPreviewRequest,
+  listSlackPreviewPosts,
   listSlackStatusGates,
   type MachineCredentials,
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
+  resolveSlackReaction,
   resolveSlackSessionStatus,
   resolveSlackTaskUrl,
   resolveSlackThreadKey,
@@ -14,12 +17,16 @@ import {
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
+  SLACK_PREVIEW_REACTIONS,
+  SLACK_REACTIONS,
+  type SlackMention,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
   type SlackThreadRef,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
+  serializeSlackPreviewIntro,
   serializeSlackStatus,
   verifySlackForwardSignature,
 } from '@shinsa/core';
@@ -162,14 +169,52 @@ export class Slack {
     }
   }
 
+  async #react(thread: SlackThreadRef, messageTs: string, add: string | null, remove: string | null) {
+    const credentials = this.#selectCredentials();
+    if (!credentials || add === remove) return;
+    try {
+      const applied = await this.#relay.requestReaction(credentials.machineToken, {
+        teamId: thread.teamId,
+        channelId: thread.channelId,
+        threadTs: thread.threadTs,
+        messageTs,
+        add,
+        remove,
+      });
+      if (!applied) log.info('[Slack] Slack did not take the reaction', { messageTs, add });
+    } catch (error) {
+      log.warn('[Slack] The reaction could not be set', { messageTs, add, error: describeError(error) });
+    }
+  }
+
+  async #preview(mention: SlackMention) {
+    const credentials = this.#selectCredentials();
+    const origin = this.#remote.appOrigin;
+    const connectUrl = credentials ? resolveSlackConnectUrl(origin, credentials.instanceId) : origin;
+    const posts = listSlackPreviewPosts(origin, connectUrl);
+    await this.#send(mention, null, serializeSlackPreviewIntro(posts));
+    for (const post of posts) await this.#send(mention, null, post.message);
+    let shown: string | null = null;
+    for (const reaction of SLACK_PREVIEW_REACTIONS) {
+      await this.#react(mention, mention.messageTs, reaction, shown);
+      shown = reaction;
+    }
+  }
+
   async evaluate(effect: Effect<'slack.evaluate'>, context: EffectContext) {
     const { mention } = effect;
+    if (isSlackPreviewRequest(mention.text)) {
+      await this.#preview(mention);
+      return;
+    }
+    await this.#react(mention, mention.messageTs, SLACK_REACTIONS.sizing, null);
     const said = await this.#ask<unknown>(
       SLACK_EVALUATION_SYSTEM,
       serializeSlackEvaluationPrompt(mention),
       SLACK_EVALUATION_SCHEMA
     );
     if (parseSlackEvaluation(said) === 'none') {
+      await this.#react(mention, mention.messageTs, null, SLACK_REACTIONS.sizing);
       const key = resolveSlackThreadKey(mention);
       if (this.#declined.has(key)) return;
       this.#declined.add(key);
@@ -200,16 +245,18 @@ export class Slack {
     const gates = listSlackStatusGates(state, task.id);
     const message = serializeSlackStatus(task, gates, this.#taskUrl(task.id));
     const shown = JSON.stringify(message);
-    if (link.statusTs && this.#statusShown.get(task.id) === shown) return;
+    const reaction = resolveSlackReaction(task, gates);
+    if (link.statusTs && this.#statusShown.get(task.id) === shown && reaction === link.reaction) return;
     let ts = await this.#send(link, link.statusTs, message);
     if (!ts && link.statusTs) ts = await this.#send(link, null, message);
     this.#statusAt.set(task.id, this.#now());
     if (!ts) return;
     this.#statusShown.set(task.id, shown);
     await this.#syncSession(link, task.id, resolveSlackSessionStatus(task, gates));
-    if (ts === link.statusTs) return;
+    await this.#react(link, link.messageTs, reaction, link.reaction);
+    if (ts === link.statusTs && reaction === link.reaction) return;
     await this.#engine.dispatch(
-      { type: 'slack.record_status', taskId: task.id, ts },
+      { type: 'slack.record_status', taskId: task.id, ts, reaction },
       { id: `${context.key}:slack.record_status` }
     );
   }

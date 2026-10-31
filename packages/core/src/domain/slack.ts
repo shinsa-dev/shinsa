@@ -6,8 +6,10 @@ export interface SlackThreadRef {
 
 export interface SlackThreadLink extends SlackThreadRef {
   userId: string;
+  messageTs: string;
   permalink: string | null;
   statusTs: string | null;
+  reaction: string | null;
 }
 
 export function resolveSlackThreadKey(thread: SlackThreadRef) {

@@ -17,7 +17,14 @@
       "https://app.shinsa.dev/slack/install/callback"
     ],
     "scopes": {
-      "bot": ["app_mentions:read", "channels:history", "groups:history", "chat:write", "users:read"],
+      "bot": [
+        "app_mentions:read",
+        "channels:history",
+        "groups:history",
+        "chat:write",
+        "reactions:write",
+        "users:read"
+      ],
       "user": ["openid", "profile"]
     }
   },

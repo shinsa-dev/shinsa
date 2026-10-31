@@ -8,6 +8,7 @@ export const SLACK_BOT_SCOPES = [
   'channels:history',
   'groups:history',
   'chat:write',
+  'reactions:write',
   'users:read',
 ] as const;
 
@@ -83,4 +84,20 @@ export async function requestSlackUserName(world: CloudWorld, token: string, use
   } catch {
     return null;
   }
+}
+
+export async function hasSlackBotScopes(world: CloudWorld, token: string) {
+  let response: Response;
+  try {
+    response = await world.fetch(`${SLACK_API_ORIGIN}/api/auth.test`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return true;
+  }
+  const granted = response.headers.get('x-oauth-scopes');
+  if (granted === null) return true;
+  const scopes = new Set(granted.split(',').map((scope) => scope.trim()));
+  return SLACK_BOT_SCOPES.every((scope) => scopes.has(scope));
 }

@@ -1,11 +1,12 @@
 import { isSameSecret, REMOTE_PATHS, resolveSlackLinkedPath, SLACK_RELAY_PATHS } from '@shinsa/core';
-import { createToken, encryptToken } from './crypto.ts';
+import { createToken, decryptToken, encryptToken } from './crypto.ts';
 import type { InstanceRow, UserRow } from './database.ts';
 import { CloudError, readCookie, serializeCookie } from './http.ts';
 import { findOwnInstance } from './instances.ts';
 import { recordFailure } from './log.ts';
 import { selectSessionUser } from './session.ts';
 import {
+  hasSlackBotScopes,
   readSlackFields,
   readSlackText,
   requestSlack,
@@ -147,6 +148,8 @@ export async function respondSlackConnectCallback(request: Request, url: URL, wo
     const identity = await requestSlackIdentity(url.searchParams.get('code') ?? '', world);
     const workspace = await world.store.selectSlackWorkspace(identity.teamId);
     if (!workspace) return respondInstall(identity, instance, world);
+    const token = await decryptToken(world.config.slackTokenKey, workspace.bot_token);
+    if (!(await hasSlackBotScopes(world, token))) return respondInstall(identity, instance, world);
     await recordLink(identity, instance, world);
     return respondLinked({ team: workspace.team_name });
   } catch (error) {

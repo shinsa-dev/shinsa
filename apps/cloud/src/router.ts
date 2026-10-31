@@ -17,6 +17,7 @@ import {
   respondSlackEvents,
   respondSlackLinks,
   respondSlackPost,
+  respondSlackReaction,
   respondSlackSession,
   respondSlackUnlink,
 } from './slack.ts';
@@ -136,6 +137,11 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(SLACK_RELAY_PATHS.session),
     respond: (request, _url, _match, world) => respondSlackSession(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.react),
+    respond: (request, _url, _match, world) => respondSlackReaction(request, world),
   },
 ];
 

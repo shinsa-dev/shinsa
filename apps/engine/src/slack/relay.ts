@@ -3,6 +3,8 @@ import {
   type SlackLinks,
   type SlackRelayPost,
   type SlackRelayPosted,
+  type SlackRelayReacted,
+  type SlackRelayReaction,
   type SlackRelaySession,
   type SlackRelaySessionSet,
 } from '@shinsa/core';
@@ -81,6 +83,11 @@ export class SlackRelay {
   async requestSession(token: string, session: SlackRelaySession) {
     const set = await this.#call<SlackRelaySessionSet>(SLACK_RELAY_PATHS.session, token, session);
     return set.applied;
+  }
+
+  async requestReaction(token: string, reaction: SlackRelayReaction) {
+    const reacted = await this.#call<SlackRelayReacted>(SLACK_RELAY_PATHS.react, token, reaction);
+    return reacted.applied;
   }
 
   async requestLinks(token: string) {

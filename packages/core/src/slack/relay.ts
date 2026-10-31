@@ -12,6 +12,7 @@ export const SLACK_RELAY_PATHS = {
   unlink: '/__remote/slack/unlink',
   post: '/__remote/slack/post',
   session: '/__remote/slack/session',
+  react: '/__remote/slack/react',
 } as const;
 
 export const SLACK_FORWARD_HEADERS = {
@@ -52,6 +53,19 @@ export interface SlackRelaySession {
 }
 
 export interface SlackRelaySessionSet {
+  applied: boolean;
+}
+
+export interface SlackRelayReaction {
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  messageTs: string;
+  add: string | null;
+  remove: string | null;
+}
+
+export interface SlackRelayReacted {
   applied: boolean;
 }
 
@@ -193,4 +207,21 @@ export function parseSlackRelaySession(value: unknown): SlackRelaySession | null
   const thread = readThread(value);
   if (!thread || !isSessionStatus(value.status)) return null;
   return { ...thread, status: value.status };
+}
+
+function readReactionName(fields: Fields, key: string): string | null | undefined {
+  const value = fields[key];
+  if (value === null || value === undefined) return null;
+  return typeof value === 'string' && /^[a-z0-9_+-]{1,64}$/.test(value) ? value : undefined;
+}
+
+export function parseSlackRelayReaction(value: unknown): SlackRelayReaction | null {
+  if (!isFields(value)) return null;
+  const thread = readThread(value);
+  const messageTs = readId(value, 'messageTs');
+  const add = readReactionName(value, 'add');
+  const remove = readReactionName(value, 'remove');
+  if (!thread || !messageTs || add === undefined || remove === undefined) return null;
+  if (add === null && remove === null) return null;
+  return { ...thread, messageTs, add, remove };
 }

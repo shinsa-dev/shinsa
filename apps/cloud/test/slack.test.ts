@@ -75,6 +75,8 @@ function createFakeSlack(harness: Harness): FakeSlack {
     'chat.appendStream': () => ({ ok: true }),
     'chat.stopStream': () => ({ ok: true }),
     'agents.sessions.setStatus': () => ({ ok: true, status: 'processing' }),
+    'reactions.add': () => ({ ok: true }),
+    'reactions.remove': () => ({ ok: true }),
   };
   harness.handlers.push((call) => {
     if (!call.url.startsWith('https://slack.com/api/')) return new Response('', { status: 599 });
@@ -86,7 +88,12 @@ function createFakeSlack(harness: Harness): FakeSlack {
     const token = (call.headers.get('authorization') ?? '').replace('Bearer ', '') || null;
     calls.push({ method, body, token });
     const answer = answers[method];
-    return Response.json(answer ? answer(body) : { ok: false, error: 'unknown_method' });
+    const { headers, ...fields } = (
+      answer ? answer(body) : { ok: false, error: 'unknown_method' }
+    ) as Fields & {
+      headers?: Record<string, string>;
+    };
+    return Response.json(fields, { headers });
   });
   return { calls, answers, callsTo: (method) => calls.filter((call) => call.method === method) };
 }
@@ -289,7 +296,7 @@ describe('connecting Slack to a machine', () => {
     expect(install.origin + install.pathname).toBe('https://slack.com/oauth/v2/authorize');
     expect(install.searchParams.get('team')).toBe('T1');
     expect(install.searchParams.get('scope')).toBe(
-      'app_mentions:read,channels:history,groups:history,chat:write,users:read'
+      'app_mentions:read,channels:history,groups:history,chat:write,reactions:write,users:read'
     );
     const linked = await followAuthorize(
       harness,
@@ -334,6 +341,39 @@ describe('connecting Slack to a machine', () => {
       })
     );
     expect(links.links.map((link) => [link.userId, link.userName])).toEqual([['U2', 'Mia']]);
+  });
+
+  test('adds the app again when its bot token lacks a scope the relay now asks for', async () => {
+    const { harness, session, machine, slack } = await setUp();
+    slack.answers['auth.test'] = () => ({ ok: true, headers: { 'x-oauth-scopes': 'chat:write,users:read' } });
+    const start = await harness.call(`${SLACK_RELAY_PATHS.connect}?instance=${machine.instanceId}`, {
+      session,
+    });
+    const identified = await followAuthorize(
+      harness,
+      session,
+      start,
+      SLACK_RELAY_PATHS.connectCallback,
+      'oidc'
+    );
+    expect(readLocation(identified).pathname).toBe('/oauth/v2/authorize');
+    expect(readLocation(identified).searchParams.get('scope')).toContain('reactions:write');
+    slack.answers['auth.test'] = () => ({
+      ok: true,
+      headers: { 'x-oauth-scopes': SLACK_BOT_SCOPES.join(',') },
+    });
+    expect((await connectSlack(harness, session, machine.instanceId)).headers.get('location')).toBe(
+      '/slack/linked?team=Acme'
+    );
+    expect(slack.callsTo('oauth.v2.access')).toHaveLength(1);
+    harness.handlers.unshift((call) =>
+      call.url.endsWith('/api/auth.test')
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve(new Response('', { status: 599 }))
+    );
+    expect((await connectSlack(harness, session, machine.instanceId)).headers.get('location')).toBe(
+      '/slack/linked?team=Acme'
+    );
   });
 
   test('without a machine named it links the one seen last, and says so when there is none', async () => {
@@ -744,5 +784,29 @@ describe('what a machine does through the relay', () => {
     expect(
       (await session({ teamId: 'T1', channelId: 'C1', threadTs: '555.1', status: 'active' })).status
     ).toBe(403);
+  });
+
+  test('moves the reaction on a mention, taking the old one off first, and says when Slack will not', async () => {
+    const { harness, machine, slack } = await forwardedSetup();
+    const react = (body: unknown) =>
+      harness.post(SLACK_RELAY_PATHS.react, body, { bearer: machine.machineToken, sameOrigin: false });
+    const target = { teamId: 'T1', channelId: 'C1', threadTs: '100.1', messageTs: '100.1' };
+    const moved = await react({ ...target, add: 'white_check_mark', remove: 'hammer_and_wrench' });
+    expect(await moved.json()).toEqual({ applied: true });
+    expect(slack.calls.slice(-2).map((call) => [call.method, call.body])).toEqual([
+      ['reactions.remove', { channel: 'C1', timestamp: '100.1', name: 'hammer_and_wrench' }],
+      ['reactions.add', { channel: 'C1', timestamp: '100.1', name: 'white_check_mark' }],
+    ]);
+    slack.answers['reactions.add'] = () => ({ ok: false, error: 'already_reacted' });
+    slack.answers['reactions.remove'] = () => ({ ok: false, error: 'no_reaction' });
+    expect(await (await react({ ...target, add: 'x', remove: 'raised_hand' })).json()).toEqual({
+      applied: true,
+    });
+    expect(await (await react({ ...target, add: null, remove: 'x' })).json()).toEqual({ applied: true });
+    expect(await (await react({ ...target, add: 'x', remove: null })).json()).toEqual({ applied: true });
+    slack.answers['reactions.add'] = () => ({ ok: false, error: 'missing_scope' });
+    expect(await (await react({ ...target, add: 'x', remove: null })).json()).toEqual({ applied: false });
+    expect((await react({ ...target, add: null, remove: null })).status).toBe(400);
+    expect((await react({ ...target, threadTs: '555.1', add: 'x', remove: null })).status).toBe(403);
   });
 });

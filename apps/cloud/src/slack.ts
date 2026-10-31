@@ -3,6 +3,7 @@ import {
   isSameSecret,
   listSlackMentionedUsers,
   parseSlackRelayPost,
+  parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackReadableText,
   resolveTunnelHost,
@@ -15,6 +16,7 @@ import {
   type SlackMention,
   type SlackMessage,
   type SlackRelayPosted,
+  type SlackRelayReacted,
   type SlackRelaySessionSet,
   type SlackThreadMessage,
   serializeSlackLinkPrompt,
@@ -405,5 +407,37 @@ export async function respondSlackSession(request: Request, world: CloudWorld) {
     recordFailure('[Cloud] Slack did not take a thread status', { error, teamId: session.teamId });
     answer = { applied: false };
   }
+  return respondJson(answer);
+}
+
+const SETTLED_REACTION_CODES = new Set(['no_reaction', 'already_reacted']);
+
+async function requestReaction(
+  world: CloudWorld,
+  method: string,
+  token: string,
+  target: Fields,
+  name: string | null
+) {
+  if (!name) return true;
+  try {
+    await requestSlack(world, method, { token, json: { ...target, name } });
+    return true;
+  } catch (error) {
+    if (error instanceof SlackApiError && SETTLED_REACTION_CODES.has(error.code)) return true;
+    recordFailure('[Cloud] Slack did not take a reaction', { error, method });
+    return false;
+  }
+}
+
+export async function respondSlackReaction(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  const reaction = parseSlackRelayReaction(await readJsonFields(request));
+  if (!reaction) throw new CloudError('body_invalid', 'The Slack reaction is not one this relay sends.', 400);
+  const token = await findThreadToken(instance, reaction, null, world);
+  const target = { channel: reaction.channelId, timestamp: reaction.messageTs };
+  const removed = await requestReaction(world, 'reactions.remove', token, target, reaction.remove);
+  const added = await requestReaction(world, 'reactions.add', token, target, reaction.add);
+  const answer: SlackRelayReacted = { applied: removed && added };
   return respondJson(answer);
 }

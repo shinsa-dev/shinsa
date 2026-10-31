@@ -4,6 +4,7 @@ import { isSameSlackThread, type SlackThreadRef } from '../domain/slack.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
 import { resolveSlackMentionThread, type SlackMention } from '../slack/contract.ts';
+import { SLACK_REACTIONS } from '../slack/messages.ts';
 import { SLACK_POSTED_GATES, type SlackPost } from '../slack/posts.ts';
 import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -57,14 +58,26 @@ export function startSlackTask(decider: Decider, command: CommandOf<'slack.start
   decider.emit({
     type: 'slack.thread_linked',
     taskId,
-    link: { ...thread, userId: mention.userId, permalink: mention.permalink, statusTs: null },
+    link: {
+      ...thread,
+      userId: mention.userId,
+      messageTs: mention.messageTs,
+      permalink: mention.permalink,
+      statusTs: null,
+      reaction: SLACK_REACTIONS.sizing,
+    },
   });
 }
 
 export function recordSlackStatus(decider: Decider, command: CommandOf<'slack.record_status'>) {
   const link = decider.state.tasks[command.taskId]?.slack;
-  if (!link || link.statusTs === command.ts) return;
-  decider.emit({ type: 'slack.status_posted', taskId: command.taskId, ts: command.ts });
+  if (!link || (link.statusTs === command.ts && link.reaction === command.reaction)) return;
+  decider.emit({
+    type: 'slack.status_posted',
+    taskId: command.taskId,
+    ts: command.ts,
+    reaction: command.reaction,
+  });
 }
 
 function resolveEventTask(event: ShinsaEventInput) {

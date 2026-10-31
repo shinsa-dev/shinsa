@@ -78,8 +78,10 @@ describe('a mention in a thread no task holds', () => {
     expect(task.slack).toEqual({
       ...THREAD,
       userId: 'U1',
+      messageTs: '100.3',
       permalink: 'https://acme.slack.com/archives/C1/p1003',
       statusTs: null,
+      reaction: 'hourglass_flowing_sand',
     });
     expect(task.activity.map((entry) => entry.text)).toContain('Started from a Slack thread');
     expect(harness.effectsOf('slack.status').map((effect) => effect.taskId)).toContain(taskId);
@@ -220,9 +222,17 @@ describe('the status message', () => {
     const harness = createHarness();
     const taskId = startFromSlack(harness);
     expect(harness.task(taskId).slack?.statusTs).toBeNull();
-    harness.send({ type: 'slack.record_status', taskId, ts: '100.9' });
-    expect(harness.task(taskId).slack?.statusTs).toBe('100.9');
-    expect(harness.send({ type: 'slack.record_status', taskId, ts: '100.9' }).events).toEqual([]);
-    expect(harness.send({ type: 'slack.record_status', taskId: 'gone', ts: '100.9' }).events).toEqual([]);
+    const status = {
+      type: 'slack.record_status',
+      taskId,
+      ts: '100.9',
+      reaction: 'hammer_and_wrench',
+    } as const;
+    harness.send(status);
+    expect(harness.task(taskId).slack).toMatchObject({ statusTs: '100.9', reaction: 'hammer_and_wrench' });
+    expect(harness.send(status).events).toEqual([]);
+    harness.send({ ...status, reaction: 'white_check_mark' });
+    expect(harness.task(taskId).slack).toMatchObject({ statusTs: '100.9', reaction: 'white_check_mark' });
+    expect(harness.send({ ...status, taskId: 'gone' }).events).toEqual([]);
   });
 });
