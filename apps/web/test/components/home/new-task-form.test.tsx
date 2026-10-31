@@ -89,6 +89,11 @@ function serveUploads() {
 }
 
 describe('NewTaskForm attachments', () => {
+  it('fades the text where it scrolls under the attachments and the footer', () => {
+    renderForm();
+    expect(field().classList.contains('scroll-fade')).toBe(true);
+  });
+
   it('sends a pasted image and a dropped file with the request, as the attachments block', async () => {
     const restore = serveUploads();
     renderForm();

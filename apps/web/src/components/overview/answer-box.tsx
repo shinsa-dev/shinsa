@@ -1,5 +1,6 @@
 import { serializeAttachments } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { AttachButton, AttachmentChips, useFileDrop } from '@/components/chat/attachment-chips.tsx';
@@ -22,6 +23,7 @@ export function AnswerBox({
   onSubmit: (text: string) => Promise<boolean>;
 }) {
   const [text, setText] = React.useState('');
+  const field = React.useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments();
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(text, attachments.drafts, busy);
@@ -38,6 +40,7 @@ export function AnswerBox({
     <div {...dropProps} className={cn(INSET, 'flex flex-col bg-bg-a1', dragging && 'border-primary')}>
       <AttachmentChips attachments={attachments} />
       <textarea
+        ref={field}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onPaste={onPaste}
@@ -51,6 +54,7 @@ export function AnswerBox({
         placeholder={placeholder}
         className={cn(COMPOSER_FIELD, 'max-h-48 min-h-14')}
       />
+      <ScrollFade targetRef={field} />
       <div className={COMPOSER_FOOTER}>
         <AttachButton attachments={attachments} />
         <span className='flex-1' />

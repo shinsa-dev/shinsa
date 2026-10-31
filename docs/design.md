@@ -71,7 +71,9 @@ Only these, and they win over anything below:
    uses `PageScroll` (`components/layout/page/page-scroll.tsx`, a `ScrollArea` with the fade): Home, Settings and
    the task's Overview. The task chat keeps its own `ScrollArea` with the fade on, so its
    content fades under the header at the top and into the composer at the bottom; the composer draws no gradient of
-   its own. **Scrolling never repaints the fade.** The mask sits on a still box around the scroller
+   its own. A composer's text box (the task's composer, the new task form, the answer box) fades its own edges
+   where its text scrolls under the attachment chips and above the footer (`ScrollFade` with `targetRef` on the
+   `textarea`, which can hold no still box). **Scrolling never repaints the fade.** The mask sits on a still box around the scroller
    (`data-fade-scope`), not on the scroller, so it is painted once and the content scrolls under it on the
    compositor; a mask on the scrolling element made the browser repaint the whole chat on every scroll frame
    (`docs/performance.md` → Chat, overview, review and lists). **A fade is right on the first painted frame.** The
@@ -182,7 +184,9 @@ Only these, and they win over anything below:
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
      the chat and in evidence: attachments (sent ones, and the image chips in the composer and the new task form, so
-     you can look at a draft before sending it), tool results, evidence, and an evidence or attached recording (a sent
+     you can look at a draft before sending it; a draft image previews from a blob of its file only while it
+     uploads, then from its server copy, so a screenshot whose temporary file macOS has since removed keeps its
+     thumbnail), tool results, evidence, and an evidence or attached recording (a sent
      video file chip opens it there instead of a new tab), which plays only there
      (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
      and morphing out of its thumbnail. An image that knows the width it was taken at (an evidence shot's `width` in
