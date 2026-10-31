@@ -9,10 +9,12 @@ import {
   traceStalledLeaf,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import * as React from 'react';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
-import { ChecksBlock } from '@/components/checks/checks-list.tsx';
+import { ChecksBlock, FoldedChecks } from '@/components/checks/checks-list.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
+import { PrLink } from '@/components/links/pull-request.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
 import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
@@ -24,6 +26,7 @@ import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanChangeSummary, PlanFeedback, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
+import { ReplyReport, WorkingRequest } from '@/components/overview/reply-report.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
@@ -37,9 +40,11 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
 import {
+  describeAgentReviewFact,
   describeFollowUpNote,
-  describeReviewFacts,
   isTaskWatchable,
   type NowTarget,
   RESULT_TITLE,
@@ -62,6 +67,7 @@ import {
   resolveRetryLabel,
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
+import { describeMergeable, describePullRequestChecks } from '@/lib/tasks/pull-request.ts';
 import { describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
 
 function PlannedOperation({ task }: { task: Task }) {
@@ -275,6 +281,37 @@ export function ChangeCard({
   );
 }
 
+function ReviewFacts({ state, task, merge }: { state: ShinsaState; task: Task; merge: boolean }) {
+  const review = describeAgentReviewFact(task);
+  const pullRequest = merge ? task.pullRequest : null;
+  const mergeable = pullRequest ? describeMergeable(pullRequest) : null;
+  const checks = pullRequest ? describePullRequestChecks(pullRequest) : null;
+  const facts = [
+    { key: 'review', node: review && <span>{review}</span> },
+    { key: 'pull-request', node: pullRequest && <PrLink state={state} task={task} /> },
+    {
+      key: 'mergeable',
+      node: mergeable && <span className={TONE_TEXT[mergeable.tone]}>{mergeable.label}</span>,
+    },
+    { key: 'checks', node: checks && <span className={TONE_TEXT[checks.tone]}>{checks.label}</span> },
+  ].filter((fact) => fact.node);
+  if (facts.length === 0) return null;
+  return (
+    <p className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-fg-3 text-xs'>
+      {facts.map((fact, index) => (
+        <React.Fragment key={fact.key}>
+          {index > 0 && <FactDot />}
+          {fact.node}
+        </React.Fragment>
+      ))}
+    </p>
+  );
+}
+
+function FactDot() {
+  return <span className='text-fg-2'>·</span>;
+}
+
 function ReviewCard({
   state,
   task,
@@ -289,7 +326,7 @@ function ReviewCard({
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
-  const waits = listMergeWaits(state, task);
+  const reply = selectShownReply(task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -304,12 +341,15 @@ function ReviewCard({
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
-      <p className='text-fg-3 text-xs'>
-        {gate.escalation ? describeEscalationBody(gate.escalation) : describeReviewFacts(task, merge)}
-      </p>
-      {checks && <ChecksBlock taskId={task.id} view={checks} />}
+      {reply && <ReplyReport task={task} iteration={reply} />}
+      {gate.escalation ? (
+        <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>
+      ) : (
+        <ReviewFacts state={state} task={task} merge={merge} />
+      )}
+      {checks && <FoldedChecks taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
-      {(merge || waits.length > 0) && <MergeStepsBlock task={task} when='pre_merge' waits={waits} />}
+      {merge && <MergeStepsBlock task={task} when='pre_merge' waits={listMergeWaits(state, task)} />}
     </NowFrame>
   );
 }
@@ -328,6 +368,7 @@ function WorkCard({
   const current = progress.current;
   const leaf = traceStalledLeaf(state, task);
   const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
+  const request = selectWorkingRequest(task);
   return (
     <NowFrame
       eyebrow={
@@ -361,7 +402,8 @@ function WorkCard({
           Held up because <TaskLink state={state} task={leaf.task} /> {STALLED_REASON[leaf.reason]}.
         </p>
       )}
-      {current?.planned && current.detail && !checks && (
+      {request && <WorkingRequest iteration={request} />}
+      {current?.planned && current.detail && !checks && !request && (
         <Markdown text={current.detail} className='text-fg-3 text-xs' />
       )}
       {checks && <ChecksBlock taskId={task.id} view={checks} />}

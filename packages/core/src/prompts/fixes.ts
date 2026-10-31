@@ -81,6 +81,14 @@ function describeLineComments(comments: readonly ReviewComment[]) {
   return ['', 'Line comments:', ...comments.map(describeLineComment)];
 }
 
+const REPLY_INSTRUCTION = [
+  '',
+  'This fix answers the human, so `complete_fix` also takes `reply`, which they read on the overview instead of the chat:',
+  '- `headline`: one sentence, what you did about their request.',
+  '- `points`: each thing they raised, in their words cut short, with its outcome (`done`, `answered` for a question, `not_changed` when you left it as it was) and a note: where it is now, the answer, or why you left it.',
+  '- `next`: what they do now to see or try it, in markdown, with the exact commands and links. Leave it out when there is nothing.',
+].join('\n');
+
 export function resolveHumanFixPrompt(message: string | null, comments: readonly ReviewComment[]) {
   const note = message?.trim() ?? '';
   const opening =
@@ -93,9 +101,10 @@ export function resolveHumanFixPrompt(message: string | null, comments: readonly
     ...(note
       ? [
           '',
-          'When it asks you to run or start something so the human can try the work (a dev server, a service), to check something or to answer a question, rather than to change the work, do that, say what you did in the summary, and call `complete_fix` all the same.',
+          'When it asks you to run or start something so the human can try the work (a dev server, a service), to check something or to answer a question, rather than to change the work, do that, say what you did in the reply, and call `complete_fix` all the same.',
         ]
       : []),
+    REPLY_INSTRUCTION,
     describeFixClosing(WORK_FIX_NEXT),
   ].join('\n');
 }
@@ -120,6 +129,7 @@ export function resolveVerdictFixPrompt(
       : []),
     ...(message?.trim() ? ['', 'The human also wrote:', message.trim()] : []),
     ...describeLineComments(comments),
+    REPLY_INSTRUCTION,
     describeFixClosing(WORK_FIX_NEXT),
   ].join('\n');
 }

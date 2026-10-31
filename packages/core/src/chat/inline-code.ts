@@ -1,7 +1,7 @@
 const CODE_SPAN = /(`[^`\n]*`)/;
 const LINK = /(\[[^\]\n]*\]\([^)\n]*\)|https?:\/\/\S+)/;
 const CODE_LIKE =
-  /(?<![\w`/.@-])((?:[\w$]+\.)*[\w$]+\(\)|(?:[\w@.-]+\/)+[\w.-]+\.[a-z]{1,5}|[\w-]+\.(?:tsx?|jsx?|json|css|md|ya?ml|swift|kt|py|go|rs|sh)|--[a-z][\w-]+|[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+|[a-z][a-z0-9]*_[a-z0-9_]+)(?![\w`/])/g;
+  /(?<![\w`/.@-])((?:[\w$]+\.)*[\w$]+\(\)|(?:[\w@.-]+\/)+[\w.-]+\.[a-z]{1,5}|[\w-]+\.(?:tsx?|jsx?|json|css|md|ya?ml|swift|kt|py|go|rs|sh)|--[a-z][\w-]+|[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+|[a-z][a-z0-9]*_[a-z0-9_]+|[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9])(?![\w`/])/g;
 
 const PROSE_WORDS = new Set([
   'GitHub',

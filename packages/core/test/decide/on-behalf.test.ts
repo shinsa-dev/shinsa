@@ -18,6 +18,7 @@ import {
   PASSING,
   proposePlan,
   pullRequest,
+  REPLY,
   reachReviewGate,
   reachShipping,
   registerRepo,
@@ -252,7 +253,7 @@ describe('acting for the human', () => {
     expect(instruction).toContain(KEPT_NOTE);
     expect(instruction.indexOf('hello')).toBeLessThan(instruction.indexOf(KEPT_NOTE));
     expect(harness.task(taskId).untoldMessages).toEqual([]);
-    harness.send({ type: 'agent.complete_fix', runId: fix.id, summary: 'Kept the flag.' });
+    harness.send({ type: 'agent.complete_fix', runId: fix.id, summary: 'Kept the flag.', reply: REPLY });
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     const reviewer = harness.activeRun(taskId);
     expect(reviewer.role).toBe('reviewer');

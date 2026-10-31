@@ -85,6 +85,7 @@ export {
   type PullRequestSource,
   parseReviewPayload,
   parseTestFile,
+  REPLY_OUTCOMES,
   type ReviewPayload,
   type ReviewPayloadEvidence,
   replacePullRequestBlock,

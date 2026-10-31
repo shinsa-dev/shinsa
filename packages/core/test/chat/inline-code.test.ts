@@ -12,6 +12,15 @@ describe('markInlineCode', () => {
     expect(markInlineCode('the agent_question gate')).toBe('the `agent_question` gate');
   });
 
+  test('wraps upper-case names such as environment variables and secrets', () => {
+    expect(markInlineCode('Set SLACK_TOKEN_KEY and SLACK_CLIENT_ID on shinsa-cloud')).toBe(
+      'Set `SLACK_TOKEN_KEY` and `SLACK_CLIENT_ID` on shinsa-cloud'
+    );
+    expect(markInlineCode('An API key, not a URL, and not a trailing UNDER_')).toBe(
+      'An API key, not a URL, and not a trailing UNDER_'
+    );
+  });
+
   test('leaves prose, brands, links and existing code alone', () => {
     expect(markInlineCode('Open it on GitHub with TypeScript on iOS')).toBe(
       'Open it on GitHub with TypeScript on iOS'

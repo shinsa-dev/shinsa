@@ -5,6 +5,7 @@ import type {
   ChatTool,
   CiRun,
   FixReason,
+  FixReply,
   Gate,
   GateType,
   PipelineStep,
@@ -138,6 +139,33 @@ export interface SeedAddedCheck extends PlanCheck {
 }
 
 export type SeedCheckResult = Partial<Pick<ReportCheck, 'outcome' | 'detail' | 'note'>>;
+
+export interface SeedExchange {
+  text: string;
+  comments?: number;
+  reply: FixReply;
+}
+
+export function listSeedIterations(
+  taskId: string,
+  runId: string,
+  exchanges: SeedExchange[]
+): ShinsaEventInput[] {
+  return exchanges.flatMap((exchange, index) => {
+    const iterationId = `${taskId}-iteration-${index + 1}`;
+    return [
+      {
+        type: 'iteration.requested',
+        taskId,
+        iterationId,
+        round: 1,
+        text: exchange.text,
+        comments: exchange.comments ?? 0,
+      },
+      { type: 'iteration.answered', taskId, iterationId, runId, reply: exchange.reply },
+    ];
+  });
+}
 
 export function createPlanCheck(label: string, command: string, phases: number[] = [1]): PlanCheck {
   return { label, command, phases };

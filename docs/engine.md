@@ -1316,6 +1316,34 @@ with both the approach and the flow starts one on the latest phase report (risks
 is ignored. `assembleReport` reads the result as before, and a new round starts without phase reports, so a revision
 never reaches an earlier round's report. The `walkthrough` schema is static like every tool's (Caching, below).
 
+### Your requests and their replies
+
+Once the work is in, you steer it by sending things back: changes at the review gate, line comments, a question, a
+second thought while the Agent fixes. Each answer used to live only in the chat. Now every one is a request with a
+reply you read on the Overview, so the chat is never where you learn what changed.
+
+- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). A message or a
+  gate answer that starts a fix for you opens one before the fix starts; anything you send while that fix runs
+  joins it (a steer of a run with `purpose: fix`), so one reply covers everything said during one fix. A steer of a
+  build phase, a follow-up to an inquiry and a plan revision open none.
+- **The reply is a hand-over field.** While a request is open, `complete_fix` must carry `reply`: a `headline`, each
+  point you raised as `points` (in your words cut short, marked `done`, `answered` or `not_changed`, each with a
+  `note`: where it is now, the answer, or why it was left), `next` (what you do now, with the commands in `bash run`
+  blocks and full links). Core refuses the fix without one (`reply_required`) and refuses one on a fix
+  nobody asked for (`reply_unasked`), so an automatic checks or review fix never invents an answer. The schema stays
+  static and optional (Caching, below); the human fix prompts (`REPLY_INSTRUCTION`, `prompts/fixes.ts`) and the
+  handover skill say what each field holds.
+- **On the Overview** the review and merge cards lead with the latest reply (`ReplyReport`,
+  `components/overview/reply-report.tsx`): What you sent, folded above it as a quote of your words, then the
+  headline, each point with its outcome and What to do now. Facts the cards add are live links: the pull request at
+  the merge gate with its hover card, whether it conflicts and how its checks stand; the agent review's count is
+  left out when its findings show right below. While the Agent works on one, the work
+  card shows "Your request". Earlier requests, a panel below, lists every earlier reply and every plan revision you
+  gave feedback on (its change summary as the headline), newest first, each folded to its headline and a count of
+  its outcomes (`listEarlierExchanges`, `lib/overview/exchanges.ts`; `RequestsPanel`). The checks fold to one line on these cards, open by
+  themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`); opened, they show
+  the list itself, with a stage's header only when there is more than one stage.
+
 ### Steps around the merge
 
 The two kinds have standard names, like a pre-commit and a post-commit hook. A **pre-merge step** is done before the
@@ -1377,6 +1405,9 @@ steps takes its step out again.
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
   steps while the later round works. Steps ticked before a round starts are dropped.
+- **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
+  your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
+  names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.
 - **Visible to agents.** `read_task` (`serializeTaskDetail`) numbers the steps with their ticks, the review gate's body
   and the pull request's description list them as task lists (`serializeMergeStepsMarkdown`), and the activity
   records each tick. Nothing runs a step for you: a step's command opens in a terminal only when you ask (Run in
