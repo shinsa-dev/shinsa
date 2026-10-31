@@ -36,13 +36,11 @@ function check(name: string, passed: boolean, detail: string) {
   print(passed ? 'PASS' : 'FAIL', name, '·', detail);
 }
 
-function writeHaystack(dir: string) {
-  const lines = Array.from(
-    { length: 4_000 },
-    (_, index) => `line ${index + 1}: ${'filler '.repeat(6).trim()}`
-  );
+function writeHaystack(dir: string, length = 4_000) {
+  const lines = Array.from({ length }, (_, index) => `line ${index + 1}: ${'filler '.repeat(6).trim()}`);
+  const step = Math.floor(length / (MARKERS.length + 1));
   MARKERS.forEach((word, index) => {
-    lines[700 + index * 900] = `MARKER ${index + 1}: ${word}`;
+    lines[step * (index + 1)] = `MARKER ${index + 1}: ${word}`;
   });
   writeFileSync(join(dir, 'haystack.txt'), `${lines.join('\n')}\n`);
 }
@@ -254,8 +252,8 @@ async function runCutScenario(root: string) {
   const cwd = join(root, 'cut');
   const eunoeDir = join(root, 'cut-eunoe');
   mkdirSync(cwd, { recursive: true });
-  writeHaystack(cwd);
-  const server = new EunoeServer({ dir: eunoeDir, window: () => Promise.resolve(90_000) });
+  writeHaystack(cwd, 2_000);
+  const server = new EunoeServer({ dir: eunoeDir, window: () => Promise.resolve(150_000) });
   try {
     const first = await runTurn({
       label: 'cut 1 · read the file in a small window',
@@ -267,14 +265,14 @@ async function runCutScenario(root: string) {
         'Run `cat haystack.txt` with the Bash tool and read its whole output (no head, tail or grep). Reply with only the four MARKER words.',
     });
     const second = await runTurn({
-      label: 'cut 2 · read it again, past the limit',
+      label: 'cut 2 · read it twice more, past the limit',
       cwd,
       eunoeDir,
       server,
       compaction: 'compact',
       resume: first.sessionId,
       prompt:
-        'Run `cat haystack.txt` with the Bash tool again and read its whole output. Then reply with only the line number of MARKER 3.',
+        'Run `cat haystack.txt` with the Bash tool, then run it a second time, reading the whole output each time. Then reply with only the line number of MARKER 3.',
     });
     const cut = second.requests.some((request) => listActions(request).includes('cut'));
     check('compaction only cuts near a small window', cut, `${second.requests.length} requests`);
@@ -287,6 +285,11 @@ async function runCutScenario(root: string) {
       'compaction only never folds at the turn boundary',
       second.requests.every((request) => !listActions(request).includes('fold')),
       second.requests.map((request) => listActions(request).join('+') || '-').join(',')
+    );
+    check(
+      'the first turn fits the window and completes',
+      first.result.outcome === 'completed',
+      `reply "${first.result.summary}"`
     );
     check(
       'the cut turn still completes',

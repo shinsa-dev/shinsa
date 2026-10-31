@@ -3853,8 +3853,9 @@ compacts this run"). Once Shinsa is stopping, nothing starts it again.
 
 *Stuck threads.* When even a cut cannot bring a thread under eunoe's target (a single turn too big for the window),
 eunoe reports it `stuck` and holds the cleared set still, so the cache keeps hitting. Only a request that still
-does not fit (`fit: "over"`, `isStuck`) counts: eunoe 1.3 also notes `stuck` when it cannot reach its own target
-while the request is well under the limit, and that is ignored. The forwarder tells the session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
+does not fit (`fit: "over"`, `isStuck`) counts. Since 1.3.1 eunoe notes `stuck` only while a request stays over
+`compactAt × window` and keeps the prefix still meanwhile; the `fit` check also guards against a `stuck` note under
+the limit, which 1.3.0 wrote. The forwarder tells the session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
 recovery for that class starts a fresh session with the handoff instead of resuming the stuck one.
 
 *Notices.* eunoe compacts on the wire, so Claude Code reports nothing; the forwarder matches each request's log line
