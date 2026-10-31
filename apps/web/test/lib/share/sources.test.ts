@@ -3,9 +3,9 @@ import type { SharedPublication, SharePreview } from '@shinsa/core';
 import {
   createPreviewSource,
   createPublicationSource,
-  requestDiffText,
   requestPreviewSource,
   requestPublicationSource,
+  requestSharedText,
   requestViewerLogin,
   SHARE_GONE,
   ShareGoneError,
@@ -50,9 +50,9 @@ describe('a publication on app.shinsa.dev', () => {
   });
 
   it('reads the diff as text, and fails in words when it does not load', async () => {
-    expect(await requestDiffText('/diff', answer(new Response(DIFF)))).toBe(DIFF);
-    await expect(requestDiffText('/diff', answer(new Response('', { status: 404 })))).rejects.toThrow(
-      'The changes did not load. Reload the page to try again.'
+    expect(await requestSharedText('/diff', answer(new Response(DIFF)))).toBe(DIFF);
+    await expect(requestSharedText('/diff', answer(new Response('', { status: 404 })))).rejects.toThrow(
+      'The code did not load. Reload the page to try again.'
     );
   });
 });

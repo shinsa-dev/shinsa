@@ -3,6 +3,7 @@ import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
@@ -32,6 +33,7 @@ export function SuggestionRow({
   onDismiss: SuggestionDismisser;
   onKeep: SuggestionKeeper;
 }) {
+  const readOnly = useReadOnly();
   const { busy, run } = useBusy<'accept' | 'dismiss' | 'keep'>();
   const [start, setStart] = React.useState<SuggestionStart>(resolveSuggestionStart(suggestion));
 
@@ -41,43 +43,45 @@ export function SuggestionRow({
         <InlineMarkdown text={suggestion.title} className='font-medium text-fg-4 leading-5' />
         <InlineMarkdown text={suggestion.why} className='text-fg-3' />
       </div>
-      <div className='flex shrink-0 items-center gap-1.5'>
-        <SelectField
-          label={SUGGESTION_START_LABEL}
-          size='sm'
-          variant='ghost'
-          items={listSuggestionStarts(suggestion)}
-          value={start}
-          onValueChange={setStart}
-        />
-        {suggestion.splitOff ? (
-          <Button
-            variant='secondary'
+      {!readOnly && (
+        <div className='flex shrink-0 items-center gap-1.5'>
+          <SelectField
+            label={SUGGESTION_START_LABEL}
             size='sm'
-            loading={busy === 'keep'}
-            onClick={() => void run('keep', () => onKeep(suggestion))}
-          >
-            Keep it here
-          </Button>
-        ) : (
+            variant='ghost'
+            items={listSuggestionStarts(suggestion)}
+            value={start}
+            onValueChange={setStart}
+          />
+          {suggestion.splitOff ? (
+            <Button
+              variant='secondary'
+              size='sm'
+              loading={busy === 'keep'}
+              onClick={() => void run('keep', () => onKeep(suggestion))}
+            >
+              Keep it here
+            </Button>
+          ) : (
+            <Button
+              variant='secondary'
+              size='sm'
+              loading={busy === 'dismiss'}
+              onClick={() => void run('dismiss', () => onDismiss(suggestion))}
+            >
+              Dismiss
+            </Button>
+          )}
           <Button
-            variant='secondary'
+            variant='outline'
             size='sm'
-            loading={busy === 'dismiss'}
-            onClick={() => void run('dismiss', () => onDismiss(suggestion))}
+            loading={busy === 'accept'}
+            onClick={() => void run('accept', () => onAccept(suggestion, start))}
           >
-            Dismiss
+            {suggestion.splitOff ? 'Make it a task' : 'Add'}
           </Button>
-        )}
-        <Button
-          variant='outline'
-          size='sm'
-          loading={busy === 'accept'}
-          onClick={() => void run('accept', () => onAccept(suggestion, start))}
-        >
-          {suggestion.splitOff ? 'Make it a task' : 'Add'}
-        </Button>
-      </div>
+        </div>
+      )}
     </li>
   );
 }

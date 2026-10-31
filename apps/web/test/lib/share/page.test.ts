@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { describeSharedBy, listSharedTabs, resolveSharedTab } from '@/lib/share/page.ts';
+import { describeSharedBy, listSharedTabs } from '@/lib/share/page.ts';
 import { createTask } from '../../support/state.ts';
 import { createSharedTask } from './fixtures.ts';
 
@@ -11,24 +11,12 @@ function createReport() {
 }
 
 describe('the shared page', () => {
-  it('shows the review once there is a report, and the code only when it is shared', () => {
-    const reviewed = createTask({ id: 't', stage: 'awaiting_review', report: createReport() });
+  it('has the owner’s tabs but Chat, and Code only when it is shared', () => {
+    const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
     expect(listSharedTabs(reviewed, createSharedTask())).toEqual(['overview', 'review', 'code']);
     expect(listSharedTabs(reviewed, createSharedTask({ code: false }))).toEqual(['overview', 'review']);
     const planning = createTask({ id: 't', stage: 'planning' });
     expect(listSharedTabs(planning, createSharedTask({ code: false }))).toEqual(['overview']);
-  });
-
-  it('leaves out a review with no report when no code is shared to build one from', () => {
-    const reviewing = createTask({ id: 't', stage: 'awaiting_review', report: null });
-    expect(listSharedTabs(reviewing, createSharedTask({ code: false }))).toEqual(['overview']);
-    expect(listSharedTabs(reviewing, createSharedTask())).toEqual(['overview', 'review', 'code']);
-  });
-
-  it('opens on the tab asked for when it exists, and the overview otherwise', () => {
-    expect(resolveSharedTab(['overview', 'review'], 'review')).toBe('review');
-    expect(resolveSharedTab(['overview', 'review'], 'code')).toBe('overview');
-    expect(resolveSharedTab(['overview'], null)).toBe('overview');
   });
 
   it('says who shared it and from which machine, with what it knows', () => {

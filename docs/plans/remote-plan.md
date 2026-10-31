@@ -34,9 +34,10 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    task by task: a task you share is published to app.shinsa.dev as a read-only projection (core's `SharedTask`), so
    anyone with its link can read it without a device key: read-only remote access to that one task. A publication
    carries what its owner sees on its Overview, Review and Code: the request, plan, phase reports, walkthrough,
-   review, checks with their output, evidence, activity, notes, the pull request whole and its diff from GitHub, for
-   a private repository too. Chats, transcripts, tool calls, messages to agents, gate questions and answers,
-   attachments, accounts and costs never leave the machine. The same projection and publishing path will serve
+   review, checks with their output, evidence, activity, notes, gates without their answers, who worked and when, the
+   pull request whole, its diff and its changed files whole from GitHub, for a private repository too, shown on the
+   owner's own task page with every control taken away. Chats, transcripts, tool calls, live agent output, messages
+   to agents, gate answers, attachments and accounts never leave the machine. The same projection and publishing path will serve
    teams (`docs/engine.md` → Sharing a task).
 6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed

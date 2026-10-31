@@ -1,6 +1,7 @@
 import {
   createState,
   type Evidence,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARED_EVIDENCE_PREFIX,
   type SharedTask,
@@ -22,6 +23,7 @@ export interface SharedView {
   shared: SharedTask;
   updatedAt: number;
   diffUrl: string | null;
+  codeUrl: string | null;
 }
 
 export function resolveSharedTaskId(taskId: string) {
@@ -39,6 +41,11 @@ export function resolveSharedView(source: SharedSource): SharedView {
   const task: Task = { ...source.shared.task, id };
   const state = createState();
   state.tasks = { [id]: task };
+  state.gates = Object.fromEntries(source.shared.gates.map((gate) => [gate.id, { ...gate, taskId: id }]));
+  state.runs = Object.fromEntries(source.shared.runs.map((run) => [run.id, { ...run, taskId: id }]));
+  const { repo, project } = source.shared;
+  if (repo) state.repos = { [repo.id]: repo };
+  if (project) state.projects = { [project.id]: project };
   state.evidence = Object.fromEntries(
     source.shared.evidence.flatMap((item) => {
       const evidence = resolveSharedEvidence(item, id, source);
@@ -51,5 +58,6 @@ export function resolveSharedView(source: SharedSource): SharedView {
     shared: source.shared,
     updatedAt: source.updatedAt,
     diffUrl: source.shared.code ? source.resolveFileUrl(SHARE_DIFF_FILE) : null,
+    codeUrl: source.shared.code ? source.resolveFileUrl(SHARE_CODE_FILE) : null,
   };
 }

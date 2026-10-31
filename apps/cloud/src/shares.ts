@@ -1,12 +1,12 @@
 import {
   type FilesCheckResponse,
+  isShareCodeFile,
   isShareFileId,
   isShareFileType,
   PUBLICATION_LIMITS,
   type PublicationFile,
   type PublicationResponse,
   resolveShareUrl,
-  SHARE_DIFF_FILE,
   type SharedPublication,
   type SharedTask,
 } from '@shinsa/core';
@@ -55,8 +55,12 @@ function readPublicationFiles(value: unknown, shared: SharedTask): PublicationFi
     if (typeof id !== 'string' || !isShareFileId(id) || seen.has(id) || typeof hash !== 'string')
       throw new CloudError('body_invalid', 'Each file needs a unique id and the hash of its bytes.', 400);
     assertFileHash(hash);
-    if (id === SHARE_DIFF_FILE && !shared.code)
-      throw new CloudError('code_refused', 'This task shares no code, so it cannot publish a diff.', 400);
+    if (isShareCodeFile(id) && !shared.code)
+      throw new CloudError(
+        'code_refused',
+        'This task shares no code, so it cannot publish its changes.',
+        400
+      );
     seen.add(id);
     return { id, hash };
   });

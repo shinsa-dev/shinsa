@@ -2531,9 +2531,10 @@ publishing path will serve teams.
   core refuses them on your behalf (`human_only`), since they publish outside the machine. An automation's home is
   refused (`share_refused`). The remote dashboard may share, as it may close a gate.
 - **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository })`) builds a
-  `SharedTask`: a redacted `Task` (so the web's tab components render it unchanged), the task's current evidence, the
-  project's name, the owner's GitHub login and the machine's name from `remote.json`, the repository's name and
-  whether it shares code. It copies fields by name: a field added to `Task` later stays empty until it is added here
+  `SharedTask`: a redacted `Task`, its gates and runs, its current evidence, its repository and project records
+  (without their paths, folders or description), the owner's GitHub login and the machine's name from `remote.json`,
+  the repository's name and whether it shares code, which is everything the owner's task page reads, so the shared
+  page renders that same page. It copies fields by name: a field added to `Task` later stays empty until it is added here
   on purpose. What it keeps and drops, the same for every repository:
 
   | Part | Shared |
@@ -2547,11 +2548,14 @@ publishing path will serve teams.
   | Merge steps and which are ticked | kept |
   | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed |
   | The diff (Code) | the pull request's, from GitHub, once one is open or merged |
+  | Gates | kept with their title, body, choices and decision; never your answer, verdicts, notes, a secret or an account |
+  | Runs (who worked, when, which model, delegations, cost) | kept; never their prompt, session, final message, feedback or account |
+  | Suggestions, watchdogs, a monitor, a usage wait (without its account) | kept |
   | Activity | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments |
   | Notes | kept |
-  | Chats, transcripts, runs, tool calls, sessions, accounts, costs | never |
-  | Messages to agents, gates' questions and answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
-  | Worktree, waits, delegations, the task's origin | never |
+  | Chats, transcripts, tool calls, live agent output | never |
+  | Messages to agents, gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
+  | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never |
   | Links to other tasks (`shinsa://task/…`) | their label as plain text |
 
   A task without a repository has no Code. Check output and text an agent wrote (a summary, a finding, a testing
@@ -2567,8 +2571,11 @@ publishing path will serve teams.
   of 50 MB at most; anything else is left out of the publication rather than shown broken. Each file is hashed once
   per size and modification time, the Worker is asked which hashes it lacks, and only those are uploaded. For a
   task with an open or merged pull request, the diff is `gh pr diff <n>` (with the owner's own GitHub access, so a
-  private repository's diff too), read again only when the
-  head moves, and left out above 50 MB (Code then shows no diff). At most 200 files. The first publication asks for a
+  private repository's diff too), and the `code` file holds every modified or renamed file of that diff whole at the
+  pushed head (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), so Code opens
+  each change in the editor as its owner sees it: an added or removed file comes whole from the diff, and a changed
+  file's base is rebuilt from its head and its hunks (`resolveBaseContent`). Both are read again only when the head
+  moves; the diff is left out above 50 MB, and the whole files with it. At most 200 files. The first publication asks for a
   new link (`newLink` while `TaskShare.url` is null); its answer is recorded with `share.record`, and later ones keep
   the link.
 - **Failures.** Not paired (no credentials, or a 401 that revokes the machine) fails at once with "Turn on remote
@@ -2591,14 +2598,15 @@ publishing path will serve teams.
   address of each file it would upload) and `…/share/preview/diff`, so it shows exactly what the link would before
   anything leaves the machine. Its note says it is a preview and that chats never leave the machine.
 - **The shared page** (`routes/remote/share.tsx`, `components/share/shared-task-page.tsx`): the remote build's
-  `/share/<token>` reads `GET /__remote/shares/<token>` with no session and shows the task read-only: its heading, its
-  facts (handle, status, project, repository, pull request with its checks, who shared it from which machine, "you"
-  when the GitHub login signed in to app.shinsa.dev is its owner and on the machine's Preview, and when it was last
-  published), and the tabs Overview (where the task stands with its checks, CI, merge steps and track, result,
-  summary, evidence, what changed, plan and activity), Review (the review tab read only:
-  no verdict, no comments, no drafts, merge steps listed without a box to tick) when the task reached review, and Code
-  once a pull request is open or merged: every file of the published diff, read from the publication's `diff` file, never from a
-  worktree. No control on it sends a command. It follows the task while it is open: every `SHARE_REFRESH_MS` (3
+  `/share/<token>` reads `GET /__remote/shares/<token>` with no session, builds a state from the publication
+  (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
+  and Code components, the same layout) inside `ReadOnlyProvider`, under one line saying it is read-only, who shared
+  it from which machine ("you" when the GitHub login signed in to app.shinsa.dev is its owner, and on the machine's
+  Preview) and when it was last published. Read-only takes away only what acts: the task menu, the ⌘K commands,
+  every card's buttons and links (`NowFrame`'s action, `QuietLink`), answer boxes, the composer, verdicts, merge-step
+  boxes, suggestion and watchdog buttons, a delegation's Stop, the priority menu, services and every way into a chat;
+  the live agent output is never shown. Its tabs are the owner's without Chat, Code only once a pull request is open
+  or merged, in its Changes view, read from the publication's `diff` and `code` files, never from a worktree. It follows the task while it is open: every `SHARE_REFRESH_MS` (3
   seconds) while the tab is visible, and at once when it comes back into view, it reads the publication again and
   swaps the view in place when its `updatedAt` moved, so a running task's stage, phases, checks and review show up as
   the engine republishes them; a refresh that fails keeps the view, and a link that stopped working says so at once.

@@ -28,6 +28,7 @@ import {
   type Repo,
   resolveKeyFingerprint,
   resolveSharePagePath,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   type SharedPublication,
   serializeBase64Url,
@@ -245,6 +246,14 @@ function createPreviewGitHub(engine: Engine): ShareGitHub {
       );
       return Promise.resolve(readBranchDiff(repo, repo.defaultBranch, task?.branch ?? repo.defaultBranch));
     },
+    readFile: (repo, ref, path) => {
+      const task = Object.values(engine.state.tasks).find(
+        (entry) => entry.repoId === repo.id && entry.pullRequest?.headSha === ref
+      );
+      const shown = Bun.spawnSync(['git', '-C', repo.path, 'show', `${task?.branch ?? ref}:${path}`]);
+      if (shown.exitCode !== 0) return Promise.reject(new Error(`git show failed for ${path}.`));
+      return Promise.resolve(shown.stdout.toString());
+    },
   };
 }
 
@@ -287,6 +296,19 @@ async function createPreviewShare(
   };
 }
 
+async function recordPushedHead(engine: Engine, task: Task) {
+  const repo = task.repoId ? engine.state.repos[task.repoId] : undefined;
+  if (!(repo && task.branch && task.pullRequest) || task.pullRequest.headSha) return task;
+  const parsed = Bun.spawnSync(['git', '-C', repo.path, 'rev-parse', task.branch]);
+  const headSha = parsed.stdout.toString().trim();
+  await engine.dispatch({
+    type: 'pull_request.record',
+    taskId: task.id,
+    pullRequest: { ...task.pullRequest, headSha },
+  });
+  return engine.state.tasks[task.id] ?? task;
+}
+
 async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachine>>) {
   const { engine } = studio;
   const tasks = Object.values(engine.state.tasks).filter((entry) => entry.report && entry.repoId);
@@ -297,11 +319,12 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   const [evidenced] = tasks.sort(
     (left, right) => countStoredEvidence(engine, right.id) - countStoredEvidence(engine, left.id)
   );
+  const pushed = coded && (await recordPushedHead(engine, coded));
   const shares = [
-    coded &&
+    pushed &&
       (await createPreviewShare(
         studio,
-        coded,
+        pushed,
         'preview-code',
         'A shared task with an open pull request, with Code'
       )),
@@ -322,6 +345,10 @@ async function respondShare(match: RegExpExecArray, shares: PreviewShare[]) {
   const preview = share.publisher.preview(share.taskId);
   if (fileId === SHARE_DIFF_FILE && preview.files[fileId])
     return new Response(await share.publisher.previewDiff(share.taskId), {
+      headers: { 'content-type': 'text/plain' },
+    });
+  if (fileId === SHARE_CODE_FILE && preview.files[fileId])
+    return new Response(await share.publisher.previewCode(share.taskId), {
       headers: { 'content-type': 'text/plain' },
     });
   const uri = fileId ? preview.files[fileId] : undefined;

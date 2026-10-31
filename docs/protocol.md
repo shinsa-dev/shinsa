@@ -1223,14 +1223,15 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 <token>`; a bearer request needs no `Origin`, since it is not a page.
 
 **Shared tasks** (`shares.ts` here, `share/` for the projection): `SharedTask` is `task` (a `Task` with every field
-not copied by name left empty), `evidence` (current evidence; a stored file's `uri` is `shared-evidence:<id>`,
-`SHARED_EVIDENCE_PREFIX`), `project`, `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository with an open or
+not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a stored file's `uri` is `shared-evidence:<id>`,
+`SHARED_EVIDENCE_PREFIX`), `repo` and `project` (their records without path, folders or description), `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository with an open or
 merged pull request), the same for a public or a private repository (`docs/engine.md` → Sharing a task has the
 table). A file's id is
-its evidence id or `diff` (`SHARE_DIFF_FILE`, refused unless `code`). The share page is
+its evidence id, `diff` (`SHARE_DIFF_FILE`) or `code` (`SHARE_CODE_FILE`, `{ files: { <path>: <content at the head> } }`), both refused unless `code` (`isShareCodeFile`). The share page is
 `https://app.shinsa.dev/share/<token>` (`resolveShareUrl`). On the machine, `GET /api/tasks/<id>/share/preview`
-answers `SharePreview` (`shared`, `files`: each file id's local address, `updatedAt`) and `…/preview/diff` the diff
-it would publish (`resolveSharePreviewApiPath`, `resolveSharePreviewDiffApiPath`).
+answers `SharePreview` (`shared`, `files`: each file id's local address, `updatedAt`), `…/preview/diff` the diff
+and `…/preview/code` the whole files it would publish (`resolveSharePreviewApiPath`, `resolveSharePreviewDiffApiPath`,
+`resolveSharePreviewCodeApiPath`).
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine

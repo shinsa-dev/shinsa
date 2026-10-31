@@ -10,7 +10,9 @@ import {
   resolveMachinePublicationPath,
   resolveMachinePublicationRemovePath,
   resolveSharePreviewApiPath,
+  resolveSharePreviewCodeApiPath,
   resolveSharePreviewDiffApiPath,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   type ShinsaState,
   type Task,
@@ -51,14 +53,24 @@ afterEach(async () => {
 
 interface FakeGitHub extends ShareGitHub {
   diffReads: number;
+  fileReads: string[];
 }
 
-function createGitHub(diff = 'diff --git a/src/a.ts b/src/a.ts'): FakeGitHub {
+const DIFF = 'diff --git a/src/a.ts b/src/a.ts';
+
+const CODE = JSON.stringify({ files: { 'src/a.ts': 'content of src/a.ts at abc123' } });
+
+function createGitHub(diff = DIFF, readFile?: ShareGitHub['readFile']): FakeGitHub {
   const github: FakeGitHub = {
     diffReads: 0,
+    fileReads: [],
     readDiff: () => {
       github.diffReads += 1;
       return Promise.resolve(diff);
+    },
+    readFile: (repo, ref, path) => {
+      github.fileReads.push(`${path}@${ref}`);
+      return readFile ? readFile(repo, ref, path) : Promise.resolve(`content of ${path} at ${ref}`);
     },
   };
   return github;
@@ -173,12 +185,14 @@ describe('publishing a shared task', () => {
     expect(sent.shared.evidence.map((item) => item.uri)).toEqual(['shared-evidence:shot-1']);
     expect(sent.files).toEqual([
       { id: 'shot-1', hash: sha256('png bytes') },
-      { id: SHARE_DIFF_FILE, hash: sha256('diff --git a/src/a.ts b/src/a.ts') },
+      { id: SHARE_DIFF_FILE, hash: sha256(DIFF) },
+      { id: SHARE_CODE_FILE, hash: sha256(CODE) },
     ]);
     expect(plane.calls.map((call) => [call.path, call.token])).toEqual([
       [REMOTE_PATHS.machineFilesCheck, 'machine-token'],
       [resolveMachineFilePath(sha256('png bytes')), 'machine-token'],
-      [resolveMachineFilePath(sha256('diff --git a/src/a.ts b/src/a.ts')), 'machine-token'],
+      [resolveMachineFilePath(sha256(DIFF)), 'machine-token'],
+      [resolveMachineFilePath(sha256(CODE)), 'machine-token'],
       [resolveMachinePublicationPath('task-1'), 'machine-token'],
     ]);
     expect(lastBody(resolveMachineFilePath(sha256('png bytes')))).toEqual({
@@ -237,7 +251,52 @@ describe('publishing a shared task', () => {
     });
     await publisher.publish('task-1', CONTEXT);
     expect(publication().shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
+    expect(publication().files.map((file) => file.id)).toEqual(['shot-1', SHARE_DIFF_FILE, SHARE_CODE_FILE]);
+  });
+
+  test('the changed files go out whole from GitHub at the pushed head, without new, removed or binary ones', async () => {
+    const diff = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      'diff --git a/src/new.ts b/src/new.ts',
+      'new file mode 100644',
+      'diff --git a/src/gone.ts b/src/gone.ts',
+      'deleted file mode 100644',
+      'diff --git a/logo.png b/logo.png',
+      'Binary files a/logo.png and b/logo.png differ',
+      'diff --git a/src/lost.ts b/src/lost.ts',
+    ].join('\n');
+    const github = createGitHub(diff, (_repo, ref, path) =>
+      path === 'src/lost.ts' ? Promise.reject(new Error('Not Found')) : Promise.resolve(`${path}@${ref}`)
+    );
+    const { publisher } = setUp({ github });
+    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({
+      files: { 'src/a.ts': 'src/a.ts@abc123' },
+    });
+    expect(github.fileReads).toEqual(['src/a.ts@abc123', 'src/lost.ts@abc123']);
+  });
+
+  test('changed files past the size a publication can carry are left out', async () => {
+    const big = 'x'.repeat(PUBLICATION_LIMITS.fileBytes);
+    const diff = ['diff --git a/a.ts b/a.ts', 'diff --git a/b.ts b/b.ts'].join('\n');
+    const github = createGitHub(diff, (_repo, _ref, path) => Promise.resolve(path === 'a.ts' ? 'a' : big));
+    const { publisher } = setUp({ github });
+    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({ files: { 'a.ts': 'a' } });
+  });
+
+  test('a pull request with no pushed head shares its diff and no whole files', async () => {
+    const { publisher, github } = setUp({
+      patch: (state) => {
+        const task = shareTask();
+        state.tasks['task-1'] = {
+          ...task,
+          pullRequest: task.pullRequest && { ...task.pullRequest, headSha: null },
+        };
+      },
+    });
+    await publisher.publish('task-1', CONTEXT);
     expect(publication().files.map((file) => file.id)).toEqual(['shot-1', SHARE_DIFF_FILE]);
+    expect(Object.keys(publisher.preview('task-1').files)).toEqual(['shot-1', SHARE_DIFF_FILE]);
+    expect(github.fileReads).toEqual([]);
   });
 
   test('a task with no repository and no files is published without checking any or reading a diff', async () => {
@@ -357,6 +416,7 @@ describe('previewing a share', () => {
     expect(preview.files).toEqual({
       'shot-1': '/api/evidence/settings.png',
       [SHARE_DIFF_FILE]: resolveSharePreviewDiffApiPath('task-1'),
+      [SHARE_CODE_FILE]: resolveSharePreviewCodeApiPath('task-1'),
     });
     expect(preview.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
     expect(preview.shared).toMatchObject({ owner: null, machine: 'Studio', code: true });
@@ -382,9 +442,9 @@ describe('previewing a share', () => {
     expect(() => publisher.preview('missing')).toThrow('No such task.');
   });
 
-  test('the routes answer the preview as JSON and the diff as plain text', async () => {
+  test('the routes answer the preview as JSON and the diff and the files as plain text', async () => {
     const { publisher } = setUp();
-    const [preview, diff] = createSharePreviewRoutes(publisher);
+    const [preview, diff, code] = createSharePreviewRoutes(publisher);
     const previewMatch = preview?.pattern.exec(resolveSharePreviewApiPath('task-1'));
     if (!preview || !previewMatch || !diff) throw new Error('The preview routes do not match their paths.');
     const answer = await preview.respond(previewMatch, new Request('http://x'));
@@ -393,6 +453,9 @@ describe('previewing a share', () => {
     if (!diffMatch) throw new Error('The diff route does not match its path.');
     const text = await diff.respond(diffMatch, new Request('http://x'));
     expect(text?.headers.get('content-type')).toBe('text/plain; charset=utf-8');
-    expect(await text?.text()).toBe('diff --git a/src/a.ts b/src/a.ts');
+    expect(await text?.text()).toBe(DIFF);
+    const codeMatch = code?.pattern.exec(resolveSharePreviewCodeApiPath('task-1'));
+    if (!code || !codeMatch) throw new Error('The code route does not match its path.');
+    expect(await (await code.respond(codeMatch, new Request('http://x'))).text()).toBe(CODE);
   });
 });

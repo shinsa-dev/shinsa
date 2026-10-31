@@ -17,6 +17,7 @@ import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { Composer } from '@/components/task/composer.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
@@ -43,7 +44,7 @@ function EvidencePlace({
   return <EvidenceSection state={state} task={task} />;
 }
 
-export function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
+function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
   const report = task.report;
   if (!report || report.sections.length === 0) return null;
   const points = listReviewPoints(listReviewChapters(report, task.findings, task.reviewDisagreements));
@@ -94,7 +95,7 @@ function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task;
   );
 }
 
-export function ActivityPanel({
+function ActivityPanel({
   state,
   task,
   onOpenRun,
@@ -135,7 +136,8 @@ export function OverviewTab({
 }) {
   const summary = resolveOverviewSummary(task);
   const code = isCodeTask(task);
-  const hint = resolveMessageHint(state, task);
+  const readOnly = useReadOnly();
+  const hint = readOnly ? null : resolveMessageHint(state, task);
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <PageScroll>

@@ -4,9 +4,15 @@ import { Choice } from '@/components/controls/choice.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
 import type { TaskView } from '@/hooks/use-task-view.ts';
 import { TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
+
+function TaskPageCommands({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
+  useTaskPageCommands(state, task, view);
+  return null;
+}
 
 export function TaskHeader({
   state,
@@ -21,9 +27,10 @@ export function TaskHeader({
   onTabIntent?: (tab: TaskTab) => void;
   className?: string;
 }) {
-  useTaskPageCommands(state, task, view);
+  const readOnly = useReadOnly();
   return (
     <div className={cn('flex shrink-0 flex-col gap-2.5', className)}>
+      {!readOnly && <TaskPageCommands state={state} task={task} view={view} />}
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
         <TaskHeading task={task} className='min-w-60 flex-1 py-0.5' />
         <Choice
@@ -37,9 +44,11 @@ export function TaskHeader({
       </div>
       <div className='flex items-start gap-2'>
         <TaskFacts state={state} task={task} className='min-w-0 flex-1' />
-        <div className='flex h-6 shrink-0 items-center gap-2'>
-          <TaskMenu state={state} task={task} />
-        </div>
+        {!readOnly && (
+          <div className='flex h-6 shrink-0 items-center gap-2'>
+            <TaskMenu state={state} task={task} />
+          </div>
+        )}
       </div>
     </div>
   );

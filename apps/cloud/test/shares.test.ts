@@ -10,6 +10,7 @@ import {
   resolveMachinePublicationRemovePath,
   resolveShareFilePath,
   resolveSharePath,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   type SharedPublication,
   type SharedTask,
@@ -92,12 +93,12 @@ describe('publishing a shared task', () => {
     const { harness, machine } = await setUp();
     const token = await readToken(await publish(harness, machine));
     const again = await publish(harness, machine, {
-      shared: { ...sharedTask(), project: 'Shinsa' },
+      shared: { ...sharedTask(), machine: 'Laptop' },
       files: [],
     });
     expect(await readJson<PublicationResponse>(again)).toEqual({ url: null });
     const read = await readJson<SharedPublication>(await harness.call(resolveSharePath(token)));
-    expect(read.shared.project).toBe('Shinsa');
+    expect(read.shared.machine).toBe('Laptop');
     const stored = harness.db.sqlite.query('SELECT link_token_hash FROM publications').get() as {
       link_token_hash: string;
     };
@@ -188,8 +189,13 @@ describe('publishing a shared task', () => {
     });
     expect(diff.status).toBe(400);
     expect(await diff.json()).toEqual({
-      error: { code: 'code_refused', message: 'This task shares no code, so it cannot publish a diff.' },
+      error: { code: 'code_refused', message: 'This task shares no code, so it cannot publish its changes.' },
     });
+    const code = await publish(harness, machine, {
+      shared: sharedTask(TASK_ID, false),
+      files: [{ id: SHARE_CODE_FILE, hash }],
+    });
+    expect(code.status).toBe(400);
   });
 });
 

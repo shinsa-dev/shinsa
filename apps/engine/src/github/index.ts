@@ -410,6 +410,23 @@ export async function resolveRepositoryId(repo: Repo, signal?: AbortSignal) {
   return id;
 }
 
+export async function readRepoFile(repo: Repo, ref: string, path: string, signal?: AbortSignal) {
+  const slug = resolveRepoSlug(repo);
+  if (!slug) throw new Error('The repository has no GitHub remote.');
+  const file = path.split('/').map(encodeURIComponent).join('/');
+  const output = await runGhOrThrow(
+    [
+      'api',
+      `repos/${slug.owner}/${slug.name}/contents/${file}?ref=${encodeURIComponent(ref)}`,
+      '--jq',
+      '.content',
+    ],
+    repo.path,
+    { signal }
+  );
+  return Buffer.from(output.replace(/\s/g, ''), 'base64').toString('utf8');
+}
+
 export function readPullRequestDiff(repo: Repo, number: number, signal?: AbortSignal) {
   return runGhOrThrow(['pr', 'diff', String(number)], repo.path, { signal });
 }

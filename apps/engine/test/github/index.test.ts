@@ -9,6 +9,7 @@ import {
   type PullRequestDetails,
   readPullRequest,
   readPullRequestDiff,
+  readRepoFile,
   resolveCheckRuns,
   resolveCheckRunsState,
   resolveChecks,
@@ -50,6 +51,7 @@ interface FakePull {
 
 interface FakeExtra {
   diffs?: Record<string, string>;
+  contents?: Record<string, string>;
   mergeQueue?: boolean;
   failReads?: number;
   repositoryId?: number;
@@ -566,6 +568,20 @@ describe('what a shared task reads from GitHub', () => {
     expect(await readPullRequestDiff(repo, 7)).toBe('diff --git a/x b/x');
     expect(github.read().calls).toContainEqual(['pr', 'diff', '7']);
     await expect(readPullRequestDiff(repo, 8)).rejects.toThrow('no pull requests found');
+  });
+
+  test('reads a file at a commit through GitHub, whole and as it is', async () => {
+    const github = useFakeGitHub([], { contents: { 'src/my file.ts@abc': 'one\ntwo\n' } });
+    const repo = createRepo({ path: createTempDir() });
+    expect(await readRepoFile(repo, 'abc', 'src/my file.ts')).toBe('one\ntwo\n');
+    expect(github.read().calls).toContainEqual([
+      'api',
+      'repos/acme/app/contents/src/my%20file.ts?ref=abc',
+      '--jq',
+      '.content',
+    ]);
+    await expect(readRepoFile(repo, 'abc', 'missing.ts')).rejects.toThrow('Not Found');
+    await expect(readRepoFile({ ...repo, remote: null }, 'abc', 'a.ts')).rejects.toThrow('no GitHub remote');
   });
 });
 

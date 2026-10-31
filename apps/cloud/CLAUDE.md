@@ -84,7 +84,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - **Shared tasks.** A machine publishes a task you shared (machine token as bearer):
   `POST /__remote/machine/publications/<task>` `{ shared, files, newLink }`, 1 MB at most, where `shared` is core's
   `SharedTask` for that task id and `files` names each file it shows (`{ id, hash }`, 200 at most; the id is the
-  evidence id or `diff`, and a `diff` is refused unless `shared.code`). Every file must be uploaded first
+  evidence id, `diff` or `code` (the changed files whole), and `diff` and `code` are refused unless `shared.code`). Every file must be uploaded first
   (`file_missing`, 409): `POST /__remote/machine/files/check { hashes }` answers the missing ones, and
   `POST /__remote/machine/files/<sha256>` takes the raw bytes, 50 MB at most, only as `image/png`, `jpeg`, `webp`,
   `gif`, `video/mp4`, `webm` or `text/plain` (`SHARE_FILE_TYPES`; an SVG or HTML file could run script), and checks

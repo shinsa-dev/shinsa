@@ -4,9 +4,12 @@ import {
   DomainError,
   type MachineCredentials,
   PUBLICATION_LIMITS,
+  parseUnifiedDiff,
   type Repo,
   resolveSharedTask,
+  resolveSharePreviewCodeApiPath,
   resolveSharePreviewDiffApiPath,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARED_EVIDENCE_PREFIX,
   type SharedTask,
@@ -14,7 +17,7 @@ import {
   type SharePreview,
   type Task,
 } from '@shinsa/core';
-import { readPullRequestDiff, resolveRepoSlug } from '../github/index.ts';
+import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
@@ -45,11 +48,17 @@ const FILE_TYPES: Readonly<Record<string, ShareFileType>> = {
 
 export interface ShareGitHub {
   readDiff: (repo: Repo, number: number) => Promise<string>;
+  readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
 }
 
 export interface SharePreviewer {
   preview: (taskId: string) => SharePreview;
   previewDiff: (taskId: string) => Promise<string>;
+  previewCode: (taskId: string) => Promise<string>;
+}
+
+export interface SharedCode {
+  files: Record<string, string>;
 }
 
 export interface ShareEffects {
@@ -78,7 +87,11 @@ interface HashedFile {
   hash: string;
 }
 
-const GITHUB: ShareGitHub = { readDiff: readPullRequestDiff };
+const GITHUB: ShareGitHub = { readDiff: readPullRequestDiff, readFile: readRepoFile };
+
+const CODE_FILE_LIMIT = 300;
+
+const CODE_STATUSES: ReadonlySet<string> = new Set(['modified', 'renamed']);
 
 function resolveRepositoryName(repo: Repo | null) {
   if (!repo) return null;
@@ -117,6 +130,14 @@ export function createSharePreviewRoutes(shares: SharePreviewer): ApiRoute[] {
           headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
         }),
     },
+    {
+      method: 'GET',
+      pattern: /^\/api\/tasks\/([^/]+)\/share\/preview\/code$/,
+      respond: async ([, taskId = '']) =>
+        new Response(await shares.previewCode(decodeURIComponent(taskId)), {
+          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+        }),
+    },
   ];
 }
 
@@ -126,10 +147,10 @@ function isPublished(files: readonly PublishedFile[]) {
     !item.uri.startsWith(SHARED_EVIDENCE_PREFIX) || ids.has(item.uri.slice(SHARED_EVIDENCE_PREFIX.length));
 }
 
-function createDiffFile(bytes: Uint8Array<ArrayBuffer>): PublishedFile | null {
+function createTextFile(id: string, bytes: Uint8Array<ArrayBuffer>): PublishedFile | null {
   if (bytes.byteLength > PUBLICATION_LIMITS.fileBytes) return null;
   return {
-    id: SHARE_DIFF_FILE,
+    id,
     hash: resolveBytesHash(bytes),
     contentType: 'text/plain',
     read: async () => bytes,
@@ -143,7 +164,7 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
   readonly #github: ShareGitHub;
   readonly #now: () => number;
   readonly #hashes = new Map<string, HashedFile>();
-  readonly #diffs = new Map<string, { key: string; file: PublishedFile | null }>();
+  readonly #diffs = new Map<string, { key: string; files: PublishedFile[] }>();
   #pairedAs: string | null;
 
   constructor(options: SharePublisherOptions) {
@@ -186,7 +207,10 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
       const original = this.#engine.state.evidence[item.id];
       if (original && this.#selectEvidencePath(item.id)) files[item.id] = original.uri;
     }
-    if (shared.code) files[SHARE_DIFF_FILE] = resolveSharePreviewDiffApiPath(taskId);
+    if (shared.code) {
+      files[SHARE_DIFF_FILE] = resolveSharePreviewDiffApiPath(taskId);
+      if (task.pullRequest?.headSha) files[SHARE_CODE_FILE] = resolveSharePreviewCodeApiPath(taskId);
+    }
     return {
       shared: { ...shared, evidence: shared.evidence.filter((item) => isListed(item, files)) },
       files,
@@ -194,10 +218,18 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     };
   }
 
-  async previewDiff(taskId: string) {
+  previewDiff(taskId: string) {
+    return this.#readPreviewFile(taskId, SHARE_DIFF_FILE);
+  }
+
+  previewCode(taskId: string) {
+    return this.#readPreviewFile(taskId, SHARE_CODE_FILE);
+  }
+
+  async #readPreviewFile(taskId: string, fileId: string) {
     const task = this.#findTask(taskId);
     const { shared, repo } = this.#resolveShared(task);
-    const [file] = await this.#listDiffFiles(shared, task, repo);
+    const file = (await this.#listCodeFiles(shared, task, repo)).find((candidate) => candidate.id === fileId);
     if (!file) throw new DomainError('share_no_code', 'This task shares no code.');
     return new TextDecoder().decode(await file.read());
   }
@@ -225,7 +257,7 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     const { shared, repo } = this.#resolveShared(task);
     const files = [
       ...(await this.#listEvidenceFiles(shared)),
-      ...(await this.#listDiffFiles(shared, task, repo)),
+      ...(await this.#listCodeFiles(shared, task, repo)),
     ].slice(0, PUBLICATION_LIMITS.files);
     try {
       await this.#upload(credentials, files);
@@ -296,16 +328,43 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     return hash;
   }
 
-  async #listDiffFiles(shared: SharedTask, task: Task, repo: Repo | null) {
+  async #listCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
     const pullRequest = task.pullRequest;
     if (!(shared.code && repo && pullRequest)) return [];
     const key = `${pullRequest.number}:${pullRequest.headSha ?? ''}`;
     const cached = this.#diffs.get(task.id);
-    if (cached && pullRequest.headSha && cached.key === key) return cached.file ? [cached.file] : [];
-    const bytes = new TextEncoder().encode(await this.#github.readDiff(repo, pullRequest.number));
-    const file = createDiffFile(bytes);
-    this.#diffs.set(task.id, { key, file });
-    return file ? [file] : [];
+    if (cached && pullRequest.headSha && cached.key === key) return cached.files;
+    const diff = await this.#github.readDiff(repo, pullRequest.number);
+    const encoder = new TextEncoder();
+    const diffFile = createTextFile(SHARE_DIFF_FILE, encoder.encode(diff));
+    let codeFile: PublishedFile | null = null;
+    if (diffFile && pullRequest.headSha) {
+      const code = await this.#readChangedFiles(repo, pullRequest.headSha, diff);
+      codeFile = createTextFile(SHARE_CODE_FILE, encoder.encode(JSON.stringify(code)));
+    }
+    const files = [diffFile, codeFile].flatMap((file) => file ?? []);
+    this.#diffs.set(task.id, { key, files });
+    return files;
+  }
+
+  async #readChangedFiles(repo: Repo, head: string, diff: string): Promise<SharedCode> {
+    const files: Record<string, string> = {};
+    let bytes = 0;
+    const changed = parseUnifiedDiff(diff).filter((file) => CODE_STATUSES.has(file.status) && !file.binary);
+    for (const file of changed.slice(0, CODE_FILE_LIMIT)) {
+      try {
+        const content = await this.#github.readFile(repo, head, file.path);
+        bytes += content.length;
+        if (bytes > PUBLICATION_LIMITS.fileBytes) break;
+        files[file.path] = content;
+      } catch (error) {
+        log.warn('[Share] Could not read a changed file from GitHub', {
+          path: file.path,
+          error: describeError(error),
+        });
+      }
+    }
+    return { files };
   }
 
   async #upload(credentials: MachineCredentials, files: readonly PublishedFile[]) {

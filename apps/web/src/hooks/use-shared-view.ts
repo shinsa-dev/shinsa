@@ -2,7 +2,7 @@ import * as React from 'react';
 import { registerCodeSource } from '@/lib/connection/code.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { createSharedCodeSource, resolveSharedHead } from '@/lib/share/code.ts';
-import { requestDiffText, ShareGoneError } from '@/lib/share/sources.ts';
+import { requestSharedText, ShareGoneError } from '@/lib/share/sources.ts';
 import { resolveSharedView, type SharedSource, type SharedView } from '@/lib/share/view.ts';
 
 export type SharedViewLoad =
@@ -11,11 +11,15 @@ export type SharedViewLoad =
   | { status: 'ready'; view: SharedView };
 
 function registerSharedCode(view: SharedView) {
-  const { diffUrl } = view;
-  const readDiff = diffUrl ? () => requestDiffText(diffUrl) : null;
+  const { diffUrl, codeUrl } = view;
   return registerCodeSource(
     view.task.id,
-    createSharedCodeSource(readDiff, view.task.branch, resolveSharedHead(view.task))
+    createSharedCodeSource({
+      readDiff: diffUrl ? () => requestSharedText(diffUrl) : null,
+      readCode: codeUrl ? () => requestSharedText(codeUrl) : null,
+      branch: view.task.branch,
+      head: resolveSharedHead(view.task),
+    })
   );
 }
 

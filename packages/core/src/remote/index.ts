@@ -111,6 +111,7 @@ export {
 export {
   type FilesCheckRequest,
   type FilesCheckResponse,
+  isShareCodeFile,
   isShareFileId,
   isShareFileType,
   PUBLICATION_LIMITS,
@@ -124,8 +125,10 @@ export {
   resolveSharePagePath,
   resolveSharePath,
   resolveSharePreviewApiPath,
+  resolveSharePreviewCodeApiPath,
   resolveSharePreviewDiffApiPath,
   resolveShareUrl,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_TYPES,
   type SharedPublication,

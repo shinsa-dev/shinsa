@@ -172,7 +172,7 @@ src/
 │                        classifier reads every machine's policies with a new task's request and names its machine),
 │                        shares.ts (SharePublisher: the share.publish and share.remove effects, which publish a shared
 │                        task's projection to app.shinsa.dev with its evidence files by hash and its pull
-│                        request's diff, and GET /api/tasks/<id>/share/preview,
+│                        request's diff and changed files whole, and GET /api/tasks/<id>/share/preview,
 │                        what it would publish now), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
@@ -213,7 +213,8 @@ src/
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
 │                        merge (only the approved head, `--match-head-commit`), the repository's numeric id,
-│                        a pull request's diff (`gh pr diff`, what a shared task's Code tab shows), a user
+│                        a pull request's diff (`gh pr diff`) and a file at a commit (readRepoFile), what a shared
+│                        task's Code tab shows, a user
 │                        attachment upload and rewriting the description's block (writePullRequestBlock);
 │                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
 │                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a

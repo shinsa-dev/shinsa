@@ -56,9 +56,9 @@ export async function requestPublicationSource(token: string, read: typeof fetch
   return createPublicationSource((await response.json()) as SharedPublication, token);
 }
 
-export async function requestDiffText(url: string, read: typeof fetch = fetch) {
+export async function requestSharedText(url: string, read: typeof fetch = fetch) {
   const response = await read(url, { cache: 'no-store' });
-  if (!response.ok) throw new Error('The changes did not load. Reload the page to try again.');
+  if (!response.ok) throw new Error('The code did not load. Reload the page to try again.');
   return response.text();
 }
 

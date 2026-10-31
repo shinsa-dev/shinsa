@@ -3,6 +3,10 @@ import { REMOTE_PATHS } from './contract.ts';
 
 export const SHARE_DIFF_FILE = 'diff';
 
+export const SHARE_CODE_FILE = 'code';
+
+const SHARE_CODE_IDS: ReadonlySet<string> = new Set([SHARE_DIFF_FILE, SHARE_CODE_FILE]);
+
 export const PUBLICATION_LIMITS = {
   bytes: 1024 * 1024,
   files: 200,
@@ -65,6 +69,14 @@ export function resolveSharePreviewApiPath(taskId: string) {
 
 export function resolveSharePreviewDiffApiPath(taskId: string) {
   return `${resolveSharePreviewApiPath(taskId)}/diff`;
+}
+
+export function resolveSharePreviewCodeApiPath(taskId: string) {
+  return `${resolveSharePreviewApiPath(taskId)}/code`;
+}
+
+export function isShareCodeFile(fileId: string) {
+  return SHARE_CODE_IDS.has(fileId);
 }
 
 export function isShareFileType(value: string): value is ShareFileType {

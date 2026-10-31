@@ -33,6 +33,7 @@ function publication(overrides: Partial<SharedPublication['shared']> = {}): Shar
   const task = createTask({
     id: 'task-1',
     handle: 'SW-34',
+    repoId: 'repo-1',
     title: 'Rotate API keys',
     stage: 'awaiting_review',
     report: REPORT,
@@ -58,16 +59,15 @@ describe('the shared page on app.shinsa.dev', () => {
     });
     render(<SharePage token='tok' />);
     expect(await screen.findByText('Rotate API keys')).toBeTruthy();
-    expect(
-      screen.getByText('Read-only. Only its owner can change this task, from their own Shinsa.')
-    ).toBeTruthy();
+    expect(screen.getByText('Read-only')).toBeTruthy();
     expect(screen.getByText('Shared by @mona from Studio')).toBeTruthy();
-    expect(screen.getByText('acme/app')).toBeTruthy();
-    expect(screen.getByText('A rotated key keeps working for a day.')).toBeTruthy();
-    expect(screen.getByText('No plan yet. It shows here once the agent proposes one.')).toBeTruthy();
+    expect(screen.getByText('app')).toBeTruthy();
+    expect(screen.getAllByText('Summary').length).toBeGreaterThan(0);
     expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    expect(await screen.findByText('src/keys.ts')).toBeTruthy();
+    expect((await screen.findAllByText(/keys\.ts/)).length).toBeGreaterThan(0);
   });
 
   it('shows where the task stands, what changed and its activity, like its owner’s overview', async () => {
@@ -86,16 +86,18 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(screen.getByText('Activity')).toBeTruthy();
     expect(screen.getByText('Finished phase 1.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Read the review' }));
-    expect(await screen.findByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
+    expect(
+      (await screen.findAllByText('Rotating a key keeps the old one for a day.')).length
+    ).toBeGreaterThan(0);
   });
 
   it('a task with no repository has no Code tab', async () => {
-    const shared = publication({ code: false, repository: null });
+    const shared = publication({ code: false, repository: null, repo: null });
     shared.files = [];
     serve({ '/__remote/shares/tok': () => Response.json(shared) });
     render(<SharePage token='tok' />);
     expect(await screen.findByText('Rotate API keys')).toBeTruthy();
-    expect(screen.queryByText('acme/app')).toBeNull();
+    expect(screen.queryByText('app')).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Code' })).toBeNull();
   });
 

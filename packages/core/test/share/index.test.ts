@@ -163,8 +163,9 @@ describe('what a shared task shows', () => {
     const taskId = reachReview(harness);
     const task = withPullRequest(harness.task(taskId), 'open');
     const shared = resolveSharedTask(harness.state, task, CONTEXT);
+    expect(shared.project?.name).toBe('Superwall');
+    expect(shared.repo).toMatchObject({ id: task.repoId, path: '' });
     expect(shared).toMatchObject({
-      project: 'Superwall',
       owner: 'mona',
       machine: 'Studio',
       repository: 'superwall/paywall-next',
@@ -175,12 +176,11 @@ describe('what a shared task shows', () => {
     expect(shared.task).toMatchObject({
       request: 'Fix the scroll in tab groups',
       worktreePath: null,
-      repoId: null,
-      projectId: null,
+      repoId: task.repoId,
       origin: null,
       waitsOn: [],
       planAnswers: null,
-      updatedAt: task.stageChangedAt,
+      updatedAt: task.updatedAt,
     });
     expect(shared.task.plan?.document?.files).toEqual([{ path: 'src/panel.ts', change: 'Clamp the width' }]);
     expect(shared.task.plan?.body).toContain('src/panel.ts');
@@ -412,6 +412,65 @@ describe('what a shared task shows', () => {
       base: 'main',
       pullRequest: { url: 'https://github.com/o/r/pull/7', base: 'main' },
     });
+  });
+
+  test('gates and runs keep what the page shows, never an answer, a prompt, a session or an account', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    const [gate] = Object.values(harness.state.gates).filter((candidate) => candidate.taskId === taskId);
+    const [run] = Object.values(harness.state.runs).filter((candidate) => candidate.taskId === taskId);
+    if (!gate || !run) throw new Error('no gate or run');
+    const account = { id: 'a1', label: 'me@x.dev' } as never;
+    harness.state.gates[gate.id] = {
+      ...gate,
+      response: 'The key is sk-live-123.',
+      verdicts: [{ index: 0, verdict: 'fix', note: 'secret note' }] as never,
+      secret: { name: 'TOKEN' } as never,
+      account,
+      notes: 'private',
+      choices: ['Yes', 'No'],
+      recommendation: 'Yes',
+      planVersion: 2,
+      supersededBy: 'g2',
+      round: 2,
+      cause: 'checks' as never,
+      escalation: { reason: 'rounds' } as never,
+    };
+    harness.state.runs[run.id] = {
+      ...run,
+      prompt: 'the brief',
+      rolePrompt: 'the role',
+      sessionId: 'session-1',
+      summary: 'what the agent said',
+      account,
+      feedback: 'my feedback',
+      usage: { costUsd: 1 } as never,
+      delegation: { parentRunId: 'r0' } as never,
+      waitingOn: { kind: 'delegation' } as never,
+      round: 2,
+    };
+    const task: Task = {
+      ...harness.task(taskId),
+      monitor: { id: 'm1', runId: run.id, notes: 'deploy' } as never,
+      usageWait: { id: 'u1', runId: run.id, account } as never,
+      suggestions: [{ id: 's1', title: 'Add a test' } as never],
+      watchdogs: [{ id: 'w1', title: 'Errors on /share' } as never],
+    };
+    const shared = resolveSharedTask(harness.state, task, CONTEXT);
+    const sharedGate = shared.gates.find((candidate) => candidate.id === gate.id);
+    expect(sharedGate).toMatchObject({ response: null, choices: ['Yes', 'No'], planVersion: 2, round: 2 });
+    expect(sharedGate).not.toHaveProperty('verdicts');
+    expect(sharedGate).not.toHaveProperty('secret');
+    expect(sharedGate).not.toHaveProperty('account');
+    expect(sharedGate).not.toHaveProperty('notes');
+    const sharedRun = shared.runs.find((candidate) => candidate.id === run.id);
+    expect(sharedRun).toMatchObject({ sessionId: null, summary: null, usage: { costUsd: 1 }, round: 2 });
+    for (const field of ['prompt', 'rolePrompt', 'account', 'feedback'])
+      expect(sharedRun).not.toHaveProperty(field);
+    expect(shared.task.monitor).toMatchObject({ notes: 'deploy' });
+    expect(shared.task.usageWait?.account).toBeNull();
+    expect(shared.task.suggestions?.[0]?.title).toBe('Add a test');
+    expect(shared.task.watchdogs?.[0]?.title).toBe('Errors on /share');
   });
 
   test('a task with no project names none', () => {

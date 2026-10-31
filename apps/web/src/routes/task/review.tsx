@@ -198,14 +198,12 @@ function BuiltPart({
   checks,
   waits,
   prose,
-  readOnly,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
   waits: MergeWaitView[];
   prose: ReviewProseId;
-  readOnly: boolean;
 }) {
   const walkthrough = report.walkthrough;
   switch (prose) {
@@ -238,7 +236,6 @@ function BuiltPart({
           task={task}
           when={prose}
           waits={waits}
-          readOnly={readOnly}
         />
       );
   }
@@ -251,7 +248,6 @@ function HowItIsBuilt({
   waits,
   chapter,
   selected,
-  readOnly,
 }: {
   task: Task;
   report: WorkReport;
@@ -259,20 +255,12 @@ function HowItIsBuilt({
   waits: MergeWaitView[];
   chapter: ReviewChapter;
   selected: string | null;
-  readOnly: boolean;
 }) {
   return (
     <Chapter title={chapter.title}>
       {chapter.prose.map((prose) => (
         <Stop key={prose.key} stop={prose.key} selected={selected}>
-          <BuiltPart
-            task={task}
-            report={report}
-            checks={checks}
-            waits={waits}
-            prose={prose.key}
-            readOnly={readOnly}
-          />
+          <BuiltPart task={task} report={report} checks={checks} waits={waits} prose={prose.key} />
         </Stop>
       ))}
     </Chapter>
@@ -541,7 +529,6 @@ function ReviewChapters({
   waits,
   chapters,
   selected,
-  readOnly,
 }: {
   task: Task;
   report: WorkReport;
@@ -549,7 +536,6 @@ function ReviewChapters({
   waits: MergeWaitView[];
   chapters: ReviewChapter[];
   selected: string | null;
-  readOnly: boolean;
 }) {
   return chapters.map((chapter) => {
     if (chapter.id === 'built') {
@@ -562,7 +548,6 @@ function ReviewChapters({
           waits={waits}
           chapter={chapter}
           selected={selected}
-          readOnly={readOnly}
         />
       );
     }
@@ -577,12 +562,10 @@ export function ReviewTab({
   state,
   task,
   summary,
-  readOnly = false,
 }: {
   state: ShinsaState;
   task: Task;
   summary?: React.ReactNode;
-  readOnly?: boolean;
 }) {
   const diff = useReviewDiff(task);
   const { tasks } = state;
@@ -638,7 +621,7 @@ export function ReviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <p className='text-fg-2 text-xs'>{diff.message}</p>
-          <EvidenceSection state={state} task={task} showEmpty={!readOnly} />
+          <EvidenceSection state={state} task={task} showEmpty />
         </div>
       </PageScroll>
     );
@@ -669,7 +652,7 @@ export function ReviewTab({
               diff={diffValue}
             />
           )}
-          <EvidenceSection state={state} task={task} showEmpty={!readOnly} />
+          <EvidenceSection state={state} task={task} showEmpty />
           <ReviewChapters
             task={task}
             report={report}
@@ -677,7 +660,6 @@ export function ReviewTab({
             waits={waits}
             chapters={chapters}
             selected={lit}
-            readOnly={readOnly}
           />
           <AgentReview
             task={task}

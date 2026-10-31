@@ -5,9 +5,13 @@ import type {
   Activity,
   ActivityKind,
   Evidence,
+  Gate,
   PhaseReport,
   Plan,
+  Project,
   PullRequest,
+  Repo,
+  Run,
   Task,
 } from '../domain/types.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
@@ -23,8 +27,11 @@ export interface SharedTaskContext {
 
 export interface SharedTask {
   task: Task;
+  gates: Gate[];
+  runs: Run[];
   evidence: Evidence[];
-  project: string | null;
+  repo: Repo | null;
+  project: Project | null;
   owner: string | null;
   machine: string | null;
   repository: string | null;
@@ -130,10 +137,10 @@ function redactTask(task: Task): Task {
   return {
     id: task.id,
     handle: task.handle ?? null,
-    projectId: null,
+    projectId: task.projectId ?? null,
     request: splitMessageAttachments(task.request).text,
     title: task.title,
-    repoId: null,
+    repoId: task.repoId,
     size: task.size,
     planFirst: task.planFirst,
     stage: task.stage,
@@ -153,6 +160,8 @@ function redactTask(task: Task): Task {
     fixFor: null,
     fixSignature: null,
     stalledFixes: 0,
+    pushedSha: task.pushedSha ?? null,
+    pushedAt: task.pushedAt ?? null,
     recoveries: 0,
     phaseReports: task.phaseReports.map(redactPhaseReport),
     checks: task.checks ?? [],
@@ -164,11 +173,15 @@ function redactTask(task: Task): Task {
     note: null,
     origin: null,
     createdAt: task.createdAt,
-    updatedAt: task.stageChangedAt,
+    updatedAt: task.updatedAt,
     stageChangedAt: task.stageChangedAt,
     activity: redactActivity(task.activity),
     ...(task.mode ? { mode: task.mode } : {}),
     reviewDisagreements: task.reviewDisagreements ?? [],
+    monitor: task.monitor ? { ...task.monitor } : null,
+    suggestions: (task.suggestions ?? []).map((suggestion) => ({ ...suggestion })),
+    usageWait: task.usageWait ? { ...task.usageWait, account: null } : null,
+    triageDecisions: task.triageDecisions ?? null,
     ...(task.pipeline ? { pipeline: task.pipeline } : {}),
     auto: task.auto,
     result: task.result ? { ...task.result, runId: null } : null,
@@ -177,6 +190,75 @@ function redactTask(task: Task): Task {
     closedAt: task.closedAt ?? null,
     mergeStepsDone: task.mergeStepsDone ?? [],
     carriedMergeSteps: task.carriedMergeSteps ?? [],
+    watchdogs: (task.watchdogs ?? []).map((watchdog) => ({ ...watchdog })),
+  };
+}
+
+function redactGate(gate: Gate): Gate {
+  return {
+    id: gate.id,
+    taskId: gate.taskId,
+    type: gate.type,
+    status: gate.status,
+    title: gate.title,
+    body: gate.body,
+    runId: gate.runId,
+    openedAt: gate.openedAt,
+    answeredAt: gate.answeredAt,
+    decision: gate.decision,
+    response: null,
+    ...(gate.planVersion ? { planVersion: gate.planVersion } : {}),
+    ...(gate.choices ? { choices: gate.choices } : {}),
+    ...(gate.recommendation ? { recommendation: gate.recommendation } : {}),
+    ...(gate.cause ? { cause: gate.cause } : {}),
+    ...(gate.escalation ? { escalation: gate.escalation } : {}),
+    ...(gate.supersededBy ? { supersededBy: gate.supersededBy } : {}),
+    ...(gate.round ? { round: gate.round } : {}),
+  };
+}
+
+function redactRun(run: Run): Run {
+  return {
+    id: run.id,
+    taskId: run.taskId,
+    role: run.role,
+    ...(run.purpose ? { purpose: run.purpose } : {}),
+    ...(run.status ? { status: run.status } : {}),
+    phaseIndex: run.phaseIndex ?? null,
+    provider: run.provider,
+    model: run.model,
+    sessionId: null,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    outcome: run.outcome,
+    summary: null,
+    ...(run.usage ? { usage: run.usage } : {}),
+    ...(run.delegation ? { delegation: run.delegation } : {}),
+    ...(run.waitingOn ? { waitingOn: run.waitingOn } : {}),
+    ...(run.round ? { round: run.round } : {}),
+  };
+}
+
+function redactRepo(repo: Repo): Repo {
+  return {
+    id: repo.id,
+    name: repo.name,
+    path: '',
+    defaultBranch: repo.defaultBranch,
+    remote: repo.remote,
+    projectId: repo.projectId,
+    checkCommands: repo.checkCommands,
+  };
+}
+
+function redactProject(project: Project): Project {
+  return {
+    id: project.id,
+    name: project.name,
+    color: project.color,
+    key: project.key,
+    description: '',
+    folders: [],
   };
 }
 
@@ -225,10 +307,19 @@ export function hasSharedCode(task: Task, repository: string | null) {
 
 export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {
   const projectId = resolveTaskProject(state, task);
+  const project = projectId ? state.projects[projectId] : undefined;
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
   return {
     task: scrubValue(redactTask(task)),
+    gates: Object.values(state.gates)
+      .filter((gate) => gate.taskId === task.id)
+      .map((gate) => scrubValue(redactGate(gate))),
+    runs: Object.values(state.runs)
+      .filter((run) => run.taskId === task.id)
+      .map(redactRun),
     evidence: listSharedEvidence(state, task),
-    project: projectId ? (state.projects[projectId]?.name ?? null) : null,
+    repo: repo ? redactRepo(repo) : null,
+    project: project ? redactProject(project) : null,
     owner: context.owner,
     machine: context.machine,
     repository: context.repository,
@@ -239,5 +330,6 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
 export function resolveSharedFingerprint(state: ShinsaState, taskId: string) {
   const task = state.tasks[taskId];
   if (!task?.share) return null;
-  return JSON.stringify(resolveSharedTask(state, task, FINGERPRINT_CONTEXT));
+  const shared = resolveSharedTask(state, task, FINGERPRINT_CONTEXT);
+  return JSON.stringify({ ...shared, task: { ...shared.task, updatedAt: 0 } });
 }

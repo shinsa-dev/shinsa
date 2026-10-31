@@ -48,6 +48,7 @@ interface FakeState {
   baseChecks?: boolean;
   repositoryId?: number;
   diffs?: Record<string, string>;
+  contents?: Record<string, string>;
   uploads?: number;
   failUploads?: boolean;
   uploadReply?: string;
@@ -342,6 +343,18 @@ if (group === 'api' && /^repos\/[^/]+\/[^/]+$/.test(command ?? '') && flag('--jq
     process.exit(1);
   }
   console.log(String(state.repositoryId));
+  process.exit(0);
+}
+const CONTENTS = /^repos\/[^/]+\/[^/]+\/contents\/(.+)\?ref=(.+)$/;
+if (group === 'api' && CONTENTS.test(command ?? '') && flag('--jq') === '.content') {
+  save();
+  const [, file = '', ref = ''] = CONTENTS.exec(command ?? '') ?? [];
+  const content = state.contents?.[`${decodeURIComponent(file)}@${decodeURIComponent(ref)}`];
+  if (content === undefined) {
+    console.error('HTTP 404: Not Found');
+    process.exit(1);
+  }
+  console.log(Buffer.from(content).toString('base64').replace(/(.{60})/g, '$1\n'));
   process.exit(0);
 }
 if (group === 'pr' && command === 'diff') {

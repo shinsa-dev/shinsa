@@ -29,6 +29,27 @@ describe('a shared view', () => {
     ]);
   });
 
+  it('carries the task’s gates, runs, repository and project, each under the shared task', () => {
+    const { state } = resolveSharedView(source());
+    expect(Object.values(state.gates).map((gate) => [gate.id, gate.taskId])).toEqual([
+      ['gate-1', 'shared-task-1'],
+    ]);
+    expect(Object.values(state.runs).map((run) => [run.id, run.taskId])).toEqual([
+      ['run-1', 'shared-task-1'],
+    ]);
+    expect(state.repos['repo-1']?.name).toBe('app');
+    expect(state.projects['project-1']?.name).toBe('Superwall');
+  });
+
+  it('leaves the repository and project out when the task has none', () => {
+    const { state } = resolveSharedView({
+      ...source(),
+      shared: createSharedTask({ repo: null, project: null }),
+    });
+    expect(state.repos).toEqual({});
+    expect(state.projects).toEqual({});
+  });
+
   it('reads the diff only for a task that shares its code', () => {
     expect(resolveSharedView(source()).diffUrl).toBe('/files/diff');
     expect(resolveSharedView(source(false)).diffUrl).toBeNull();
