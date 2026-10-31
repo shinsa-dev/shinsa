@@ -12,6 +12,7 @@ import {
   resolveWorkStep,
   SHAPE_LIMITS,
   type Task,
+  type UntoldMessage,
 } from '../domain/index.ts';
 import type { CheckNote, ReportCheck, ReviewFinding, TaskCheck } from '../report/types.ts';
 
@@ -234,17 +235,35 @@ export function describeRounds(task: Task) {
   ].join('\n');
 }
 
+const SENT_BY = {
+  agent: 'Sent by an agent on the human’s behalf: ',
+  schedule: 'Sent by a schedule: ',
+} as const;
+
 function describeSender(entry: Activity) {
-  if (entry.actor === 'shinsa') return 'Sent by a schedule: ';
-  return entry.onBehalf ? 'Sent by an agent on the human’s behalf: ' : '';
+  if (entry.actor === 'shinsa') return SENT_BY.schedule;
+  return entry.onBehalf ? SENT_BY.agent : '';
+}
+
+function isUntold(task: Task, entry: Activity) {
+  return (task.untoldMessages ?? []).some(
+    (message) => message.at === entry.at && message.text === entry.detail
+  );
 }
 
 export function resolveLaterMessages(task: Task) {
   const round = resolveCurrentRound(task).number;
   const messages = task.activity
     .filter((entry) => entry.kind === 'message' && entry.detail)
-    .filter((entry) => (entry.round ?? 1) === round)
+    .filter((entry) => (entry.round ?? 1) === round && !isUntold(task, entry))
     .map((entry) => `- ${describeSender(entry)}${entry.detail}`);
   if (messages.length === 0) return '';
   return ['', 'The human added since:', ...messages].join('\n');
+}
+
+export function describeUntoldMessages(messages: readonly UntoldMessage[]) {
+  return [
+    'While this task waited for the human, these messages were left for you. Act on them along with the rest of this turn:',
+    ...messages.map((message) => `- ${SENT_BY[message.sender]}${message.text}`),
+  ].join('\n');
 }

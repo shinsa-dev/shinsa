@@ -378,6 +378,12 @@ export interface Activity {
   suggestionId?: string;
 }
 
+export interface UntoldMessage {
+  at: number;
+  text: string;
+  sender: 'agent' | 'schedule';
+}
+
 export interface UndeliveredMessage {
   text: string;
   reason: string;
@@ -470,6 +476,7 @@ export interface Task {
   inbox?: InboxMessage[];
   editedPaths?: string[];
   untoldEdits?: string[];
+  untoldMessages?: UntoldMessage[];
   overlaps?: TaskOverlap[];
   approvedEdits?: EditsApproval | null;
   pushHookFailure?: PushHookFailure | null;

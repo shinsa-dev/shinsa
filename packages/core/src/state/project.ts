@@ -490,6 +490,16 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
     detail: event.text,
     ...(event.kind === 'acknowledge' ? { noted: true } : {}),
   });
+  if (event.kept) keepMessage(state, event);
+}
+
+function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const sender = event.scheduleId ? 'schedule' : 'agent';
+  updateTask(state, event.taskId, event.at, {
+    untoldMessages: [...(task.untoldMessages ?? []), { at: event.at, text: event.text, sender }],
+  });
 }
 
 function applyEdited(state: ShinsaState, event: EventOf<'task.edited'>) {
@@ -872,6 +882,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.edits_told':
       updateTask(state, event.taskId, event.at, { untoldEdits: [] });
+      break;
+    case 'task.messages_told':
+      updateTask(state, event.taskId, event.at, { untoldMessages: [] });
       break;
     case 'task.overlapped':
     case 'task.overlaps_told':

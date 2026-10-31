@@ -24,6 +24,7 @@ import {
 } from '../domain/index.ts';
 import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effects/index.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
+import { describeUntoldMessages } from '../prompts/context.ts';
 import { describeForkSource, resolveForkNote } from '../prompts/forks.ts';
 import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
@@ -295,7 +296,7 @@ export class Decider {
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
     const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
-    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}`;
+    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${this.#tellMessages(task.id, role)}${tellOverlaps(this, task.id, role)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
@@ -330,6 +331,13 @@ export class Decider {
     if (untold.length === 0) return '';
     this.emit({ type: 'task.edits_told', taskId });
     return `\n\n${describeHumanEdits(untold)}`;
+  }
+
+  #tellMessages(taskId: string, role: RunRole) {
+    const untold = this.task(taskId).untoldMessages ?? [];
+    if (untold.length === 0 || !isTaskSessionRole(role)) return '';
+    this.emit({ type: 'task.messages_told', taskId });
+    return `\n\n${describeUntoldMessages(untold)}`;
   }
 
   bindNextRun(taskId: string, account: RunAccount) {
