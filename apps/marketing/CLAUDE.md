@@ -65,7 +65,10 @@ src/
                             the demo's page) and Stage; focus.ts (`useFocus`) plays a demo only
                             while it is the main thing on screen (half of it in view, or 45% of the screen), and its first step comes 300ms after
   lib/content.ts            Every headline and paragraph on the page, the principles and the feature grid
-  lib/site.ts               Name, URL, description, the download and GitHub links
+  lib/site.ts               Name, URL, description, the download and GitHub links: every download button (Header,
+                            Hero, Closing, the open page) links canaryUrl (`/download/canary`), labelled Canary, while
+                            there is no stable release and the beta is held back; betaUrl is the small link under the
+                            Closing CTA and llms.txt's second download. Nothing links `/download` itself
   lib/scene.ts              The sample project (Northwind) and the Home and All tasks state
   lib/*-scene.ts            One file of sample state per demo. onboarding-code.ts is the Northwind change the gates and
                             Code demos show. tint-scene.ts is the Review demo's task, a real Shinsa change (SW-214, the
@@ -162,7 +165,8 @@ after a build shows it as production does.
 
 The downloads are served from Cloudflare R2, so they never wait on GitHub and have no request limit and no egress fee.
 The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in `wrangler.jsonc`), bound as
-`DOWNLOADS`. The Release workflow fills it (`docs/release.md`), so the site never changes for a release:
+`DOWNLOADS`. The Release workflow fills it (`docs/release.md`), so the site never changes for a release (which
+channel the buttons link is lib/site.ts's choice, not the Worker's):
 
 ```
 releases/<version>/Shinsa-mac-arm64.dmg            every release's disk image, never overwritten
