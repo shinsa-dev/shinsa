@@ -230,6 +230,11 @@ describe('the onboarding endpoints', () => {
     const tools = (await (await call('/api/onboarding/prerequisites')).json()) as { ready: boolean };
     expect(tools.ready).toBe(true);
     expect(await (await post('/api/onboarding/privacy', {})).json()).toEqual({ ok: true });
+    expect(await (await post('/api/onboarding/install', { id: 'gh' })).json()).toEqual({
+      error: { code: 'browser_only', message: 'Only Shinsa’s own page installs the tools setup checks.' },
+    });
+    const install = await post('/api/onboarding/install', { id: 'gh' }, { origin: 'http://localhost:5181' });
+    expect(((await install.json()) as { error: { code: string } }).error.code).toBe('terminals_off');
     expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
   });
 

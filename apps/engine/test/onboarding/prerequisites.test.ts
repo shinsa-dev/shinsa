@@ -1,33 +1,48 @@
 import { describe, expect, test } from 'bun:test';
-import { type CommandRunner, resolvePrerequisites } from '../../src/onboarding/prerequisites.ts';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  type CommandRunner,
+  isBunUsed,
+  resolveInstallCommand,
+  resolvePrerequisiteLabel,
+  resolvePrerequisites,
+} from '../../src/onboarding/prerequisites.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
+import { createTempDir } from '../helpers/index.ts';
 
 const HOME = '/Users/me';
 
-function result(ok: boolean, stdout = '', stderr = '', timedOut = false): CommandResult {
-  return { ok, code: ok ? 0 : 1, stdout, stderr, timedOut };
+function result(ok: boolean, stdout = '', stderr = '', timedOut = false, code = ok ? 0 : 1): CommandResult {
+  return { ok, code, stdout, stderr, timedOut };
 }
+
+const MISSING = result(false, '', 'Executable not found in $PATH', false, 127);
 
 function createRunner(answers: Record<string, CommandResult>): CommandRunner {
   return (command, cwd) => {
     expect(cwd).toBe(HOME);
-    return Promise.resolve(answers[command.join(' ')] ?? result(false, '', '', false));
+    return Promise.resolve(answers[command.join(' ')] ?? MISSING);
   };
 }
 
 const READY: Record<string, CommandResult> = {
   'git --version': result(true, 'git version 2.50.0'),
+  'brew --version': result(true, 'Homebrew 5.0.0'),
   'gh --version': result(true, 'gh version 2.80.0 (2026-01-01)\nhttps://github.com/cli/cli'),
   'gh auth status': result(true, 'github.com\n  ✓ Logged in to github.com account octo (keyring)'),
   'claude --version': result(true, '2.1.287 (Claude Code)'),
-  'claude auth status --json': result(true, JSON.stringify({ loggedIn: true, email: 'me@example.com' })),
   'codex --version': result(true, 'codex-cli 0.153.4'),
   'codex login status': result(true, 'Logged in using ChatGPT'),
   'bun --version': result(true, '1.4.2'),
 };
 
+function withoutKeys(keys: string[]) {
+  return Object.fromEntries(Object.entries(READY).filter(([key]) => !keys.includes(key)));
+}
+
 describe('resolvePrerequisites', () => {
-  test('reports each tool with its version and who is signed in', async () => {
+  test('reports each tool with its version, and leaves out Homebrew when nothing needs it', async () => {
     const report = await resolvePrerequisites(HOME, createRunner(READY));
     expect(report.ready).toBe(true);
     expect(report.checks.map((check) => [check.id, check.detail])).toEqual([
@@ -35,28 +50,84 @@ describe('resolvePrerequisites', () => {
       ['gh', 'gh version 2.80.0 (2026-01-01)'],
       ['gh_auth', 'Signed in as octo.'],
       ['claude', '2.1.287 (Claude Code)'],
-      ['claude_auth', 'Signed in as me@example.com.'],
+      ['bun', '1.4.2'],
       ['codex', 'codex-cli 0.153.4'],
       ['codex_auth', 'Logged in using ChatGPT'],
-      ['bun', '1.4.2'],
     ]);
-    expect(report.checks.every((check) => check.fix === null)).toBe(true);
+    expect(report.checks.every((check) => check.fix === null && check.command === null)).toBe(true);
   });
 
-  test('Codex is optional: without it setup is still ready, and it says how to add it', async () => {
-    const missing = await resolvePrerequisites(
+  test('no longer asks whether Claude Code itself is signed in: Shinsa signs in its own accounts', async () => {
+    const report = await resolvePrerequisites(HOME, createRunner(READY));
+    expect(report.checks.map((check) => check.id)).not.toContain('claude_auth');
+  });
+
+  test('says what is missing and the command that installs it, Claude Code included', async () => {
+    const report = await resolvePrerequisites(
       HOME,
-      createRunner({ ...READY, 'codex --version': result(false, '') })
+      createRunner({
+        'git --version': result(false, '', '', true),
+        'brew --version': result(true, 'Homebrew'),
+      })
     );
-    expect(missing.ready).toBe(true);
-    expect(missing.checks.filter((check) => check.optional)).toEqual([
-      expect.objectContaining({ id: 'codex', ok: false, detail: 'It exited with code 1.' }),
-      expect.objectContaining({ id: 'codex_auth', ok: false, detail: 'Codex is missing.' }),
+    expect(report.ready).toBe(false);
+    expect(report.checks.map((check) => [check.id, check.ok, check.detail, check.command])).toEqual([
+      ['git', false, 'It did not answer in time.', 'xcode-select --install'],
+      ['brew', true, 'Homebrew', null],
+      ['gh', false, 'Not installed.', 'brew install gh'],
+      ['gh_auth', false, 'The GitHub CLI is missing.', 'gh auth login'],
+      ['claude', false, 'Not installed.', 'curl -fsSL https://claude.ai/install.sh | bash'],
+      ['bun', false, 'Not installed.', 'curl -fsSL https://bun.sh/install | bash'],
+      ['codex', false, 'Not installed.', 'npm install -g @openai/codex'],
+      ['codex_auth', false, 'Codex is missing.', 'codex login'],
     ]);
-    expect(missing.checks.find((check) => check.id === 'codex')).toMatchObject({
-      fix: 'Only for agents you run on Codex.',
-      command: 'npm install -g @openai/codex',
+    expect(report.checks.find((check) => check.id === 'claude')?.fix).toBe(
+      'Install Claude Code, which agents run on.'
+    );
+  });
+
+  test('asks for Homebrew first when the GitHub CLI needs it and it is missing', async () => {
+    const report = await resolvePrerequisites(
+      HOME,
+      createRunner(withoutKeys(['brew --version', 'gh --version']))
+    );
+    expect(report.ready).toBe(false);
+    expect(report.checks.slice(0, 3).map((check) => [check.id, check.ok, check.optional ?? false])).toEqual([
+      ['git', true, false],
+      ['brew', false, false],
+      ['gh', false, false],
+    ]);
+    expect(report.checks[1]).toMatchObject({
+      fix: 'Install Homebrew, which installs the GitHub CLI.',
+      command: expect.stringContaining('Homebrew/install/HEAD/install.sh'),
     });
+  });
+
+  test('Bun is needed only when a repository uses it', async () => {
+    const runner = createRunner(withoutKeys(['bun --version']));
+    const needed = await resolvePrerequisites(HOME, runner, { bun: true });
+    expect(needed.ready).toBe(false);
+    expect(needed.checks.find((check) => check.id === 'bun')).toMatchObject({
+      ok: false,
+      fix: 'Your repositories use Bun. Install it so agents can run their checks.',
+    });
+    expect(needed.checks.find((check) => check.id === 'bun')?.optional).toBeUndefined();
+    const unneeded = await resolvePrerequisites(HOME, runner, { bun: false });
+    expect(unneeded.ready).toBe(true);
+    expect(unneeded.checks.find((check) => check.id === 'bun')).toMatchObject({
+      ok: false,
+      optional: true,
+      fix: 'Only for repositories that use Bun.',
+    });
+  });
+
+  test('Codex is optional, and so is Homebrew when only Codex would need it', async () => {
+    const missing = await resolvePrerequisites(HOME, createRunner(withoutKeys(['codex --version'])));
+    expect(missing.ready).toBe(true);
+    expect(missing.checks.filter((check) => check.optional).map((check) => check.id)).toEqual([
+      'codex',
+      'codex_auth',
+    ]);
     const signedOut = await resolvePrerequisites(
       HOME,
       createRunner({ ...READY, 'codex login status': result(false, '', 'Not logged in') })
@@ -69,66 +140,52 @@ describe('resolvePrerequisites', () => {
     });
   });
 
-  test('says what is missing and how to fix it', async () => {
-    const report = await resolvePrerequisites(
-      HOME,
-      createRunner({
-        'git --version': result(false, '', '', true),
-        'bun --version': result(false, '', 'command not found: bun'),
-        'claude --version': result(true, '2.1.287'),
-        'claude auth status --json': result(true, JSON.stringify({ loggedIn: false })),
-      })
-    );
-    expect(report.ready).toBe(false);
-    expect(report.checks.map((check) => [check.id, check.ok, check.detail])).toEqual([
-      ['git', false, 'It did not answer in time.'],
-      ['gh', false, 'It exited with code 1.'],
-      ['gh_auth', false, 'The GitHub CLI is missing.'],
-      ['claude', true, '2.1.287'],
-      ['claude_auth', false, 'Not signed in.'],
-      ['codex', false, 'It exited with code 1.'],
-      ['codex_auth', false, 'Codex is missing.'],
-      ['bun', false, 'command not found: bun'],
-    ]);
-    expect(report.checks.map((check) => [check.id, check.command])).toEqual([
-      ['git', 'xcode-select --install'],
-      ['gh', 'brew install gh'],
-      ['gh_auth', 'gh auth login'],
-      ['claude', null],
-      ['claude_auth', 'claude auth login'],
-      ['codex', 'npm install -g @openai/codex'],
-      ['codex_auth', 'codex login'],
-      ['bun', 'curl -fsSL https://bun.sh/install | bash'],
-    ]);
-    expect(report.checks[2]?.fix).toBe('Sign in to GitHub in a terminal.');
-  });
-
-  test('reads older CLIs that print plain text, and a failed sign-in check', async () => {
+  test('reads an older gh that prints plain text, and a failure with no output', async () => {
     const report = await resolvePrerequisites(
       HOME,
       createRunner({
         ...READY,
         'gh auth status': result(true, '', 'Logged in'),
-        'claude auth status --json': result(true, 'Logged in with a subscription'),
+        'bun --version': result(false, '', '', false, 3),
       })
     );
-    expect(report.checks[2]?.detail).toBe('Signed in.');
-    expect(report.checks[4]?.detail).toBe('Logged in with a subscription');
-    const failed = await resolvePrerequisites(
+    expect(report.checks.find((check) => check.id === 'gh_auth')?.detail).toBe('Signed in.');
+    expect(report.checks.find((check) => check.id === 'bun')?.detail).toBe('It exited with code 3.');
+    const signedOut = await resolvePrerequisites(
       HOME,
-      createRunner({ ...READY, 'claude auth status --json': result(false, '', 'unknown command') })
+      createRunner({ ...READY, 'gh auth status': result(false, '', 'You are not logged in') })
     );
-    expect(failed.checks[4]).toMatchObject({ ok: false, detail: 'unknown command' });
+    expect(signedOut.checks.find((check) => check.id === 'gh_auth')).toMatchObject({
+      ok: false,
+      detail: 'You are not logged in',
+    });
   });
+});
 
-  test('a signed-out Claude Code exits with an error but still prints its status as JSON', async () => {
-    const report = await resolvePrerequisites(
-      HOME,
-      createRunner({
-        ...READY,
-        'claude auth status --json': result(false, '{\n  "loggedIn": false,\n  "authMethod": "none"\n}'),
-      })
-    );
-    expect(report.checks[4]).toMatchObject({ ok: false, detail: 'Not signed in.' });
+describe('the install commands', () => {
+  test('come only from the fixed list, by check id', () => {
+    expect(resolveInstallCommand('gh')).toBe('brew install gh');
+    expect(resolvePrerequisiteLabel('gh')).toBe('GitHub CLI');
+    expect(resolveInstallCommand('rm -rf ~')).toBeNull();
+    expect(resolveInstallCommand('toString')).toBeNull();
+    expect(resolvePrerequisiteLabel('constructor')).toBeNull();
+  });
+});
+
+describe('isBunUsed', () => {
+  test('finds a Bun lockfile or bunfig in a folder or a repository one level inside it', () => {
+    const root = createTempDir();
+    mkdirSync(join(root, 'plain'), { recursive: true });
+    mkdirSync(join(root, '.hidden'), { recursive: true });
+    writeFileSync(join(root, '.hidden', 'bun.lock'), '');
+    writeFileSync(join(root, 'notes.txt'), '');
+    expect(isBunUsed([root, join(root, 'missing')])).toBe(false);
+    mkdirSync(join(root, 'app'), { recursive: true });
+    writeFileSync(join(root, 'app', 'bun.lockb'), '');
+    expect(isBunUsed([root])).toBe(true);
+    const own = createTempDir();
+    writeFileSync(join(own, 'bunfig.toml'), '');
+    expect(isBunUsed([own])).toBe(true);
+    expect(isBunUsed([])).toBe(false);
   });
 });

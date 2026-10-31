@@ -16,9 +16,11 @@ import { createProjectChanges } from '../projects/routes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
+import { refreshInstallFolders } from '../shell/login.ts';
 import type { AccountSource } from './accounts.ts';
 import { OnboardingSetup } from './flow.ts';
-import { type CommandRunner, resolvePrerequisites } from './prerequisites.ts';
+import { type InstallTerminals, openInstallTerminal } from './install.ts';
+import { type CommandRunner, isBunUsed, resolvePrerequisites } from './prerequisites.ts';
 import {
   createChosenProjects,
   listFiledProjects,
@@ -31,6 +33,7 @@ import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 
 export type { AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
+export type { InstallTerminals } from './install.ts';
 export type { CommandRunner } from './prerequisites.ts';
 
 export interface OnboardingContext {
@@ -43,6 +46,7 @@ export interface OnboardingContext {
   run?: CommandRunner;
   models: ModelSource;
   accounts: AccountSource;
+  terminals?: InstallTerminals;
 }
 
 const MODEL_ID = /^[\w.[\]-]{1,100}$/;
@@ -177,8 +181,18 @@ export class Onboarding {
     return { ok: result.ok };
   }
 
-  resolvePrerequisites() {
-    return resolvePrerequisites(this.#context.config.userHome, this.#context.run);
+  async resolvePrerequisites() {
+    const { config, roots, run } = this.#context;
+    refreshInstallFolders(Bun.env, config.userHome);
+    return resolvePrerequisites(config.userHome, run, { bun: isBunUsed(await roots.listRoots()) });
+  }
+
+  openInstall(fields: JsonObject) {
+    const { terminals, config } = this.#context;
+    if (typeof fields.id !== 'string')
+      throw new DomainError('body_invalid', 'Send “id” as the check to fix, such as gh.');
+    if (!terminals) throw new DomainError('terminals_off', 'Terminals are off, so run the command yourself.');
+    return { terminal: openInstallTerminal(terminals, fields.id, config.userHome) };
   }
 
   async #saveAnswer(patch: SetupPatch, commandId: string) {

@@ -1,15 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { TerminalInfo } from '@shinsa/core';
 import { ConfigStore } from '../../src/config/index.ts';
-import { type CommandRunner, Onboarding } from '../../src/onboarding/index.ts';
+import { type CommandRunner, type InstallTerminals, Onboarding } from '../../src/onboarding/index.ts';
 import { PRIVACY_SETTINGS_URL, PrivateFoldersError, resolveChosenRoots } from '../../src/onboarding/roots.ts';
 import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { createTempDir, createTestConfig } from '../helpers/index.ts';
+import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
 
-function setup(run?: CommandRunner) {
+function setup(run?: CommandRunner, terminals?: InstallTerminals) {
   const root = createTempDir();
   const config = createTestConfig(root, { roots: [] });
   const engine = new Engine(new EventLog(config.databasePath));
@@ -29,6 +30,7 @@ function setup(run?: CommandRunner) {
     run: run ?? (() => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false })),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),
+    terminals,
   });
   return { root, config, engine, store, developer, onboarding };
 }
@@ -103,6 +105,63 @@ describe('Onboarding', () => {
   test('checks the prerequisites with the injected runner', async () => {
     const { onboarding } = setup();
     expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
+  });
+
+  test('needs Bun only when a repository in your folders uses it', async () => {
+    const run: CommandRunner = (command) =>
+      Promise.resolve({
+        ok: command[0] !== 'bun',
+        code: command[0] === 'bun' ? 127 : 0,
+        stdout: 'v1',
+        stderr: '',
+        timedOut: false,
+      });
+    const { onboarding, developer } = setup(run);
+    expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
+    writeFileSync(join(developer, 'app', 'bun.lock'), '');
+    const report = await onboarding.resolvePrerequisites();
+    expect(report.ready).toBe(false);
+    expect(report.checks.find((check) => check.id === 'bun')).toMatchObject({
+      ok: false,
+      detail: 'Not installed.',
+    });
+  });
+
+  test('finds a tool installed since Shinsa started: each check puts the install folders on PATH', async () => {
+    const { onboarding, config } = setup();
+    const restore = overrideEnv({ PATH: '/usr/bin:/bin' });
+    try {
+      await onboarding.resolvePrerequisites();
+      const before = process.env.PATH;
+      expect(before?.startsWith('/usr/bin:/bin')).toBe(true);
+      mkdirSync(join(config.userHome, '.local/bin'), { recursive: true });
+      await onboarding.resolvePrerequisites();
+      expect(process.env.PATH).toBe(`${before}:${join(config.userHome, '.local/bin')}`);
+    } finally {
+      restore();
+    }
+  });
+
+  test('opens the install terminal for a check, and refuses without one or without terminals', () => {
+    const opened: string[] = [];
+    const terminals: InstallTerminals = {
+      snapshot: () => ({ terminals: [], services: [], home: '/' }),
+      create: (start) => ({ id: 't1', ...start }) as unknown as TerminalInfo,
+      rename: () => undefined,
+      run: (_id, command) => {
+        opened.push(command);
+      },
+      close: () => undefined,
+    };
+    const { onboarding, config } = setup(undefined, terminals);
+    expect(onboarding.openInstall({ id: 'gh' })).toEqual({
+      terminal: expect.objectContaining({ id: 't1', cwd: config.userHome, name: 'Set up GitHub CLI' }),
+    });
+    expect(opened).toEqual(['brew install gh; exit']);
+    expect(() => onboarding.openInstall({ id: 3 })).toThrow('Send “id” as the check to fix, such as gh.');
+    expect(() => setup().onboarding.openInstall({ id: 'gh' })).toThrow(
+      'Terminals are off, so run the command yourself.'
+    );
   });
 
   test('resolveChosenRoots expands ~ and drops duplicates', () => {

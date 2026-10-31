@@ -49,6 +49,7 @@ function setup(options: Setup = {}) {
   const developer = join(root, 'Developer');
   const work = join(root, 'work');
   mkdirSync(join(developer, 'app', '.git'), { recursive: true });
+  writeFileSync(join(developer, 'app', 'bun.lock'), '');
   mkdirSync(work, { recursive: true });
   const accounts = [...(options.accounts ?? [ME])];
   function open() {

@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { type CommandResult, runCommand } from '../shell/index.ts';
 
 export type CommandRunner = (
@@ -6,7 +8,7 @@ export type CommandRunner = (
   options?: { timeoutMs?: number }
 ) => Promise<CommandResult>;
 
-type PrerequisiteId = 'git' | 'gh' | 'gh_auth' | 'claude' | 'claude_auth' | 'codex' | 'codex_auth' | 'bun';
+type PrerequisiteId = 'git' | 'brew' | 'gh' | 'gh_auth' | 'claude' | 'bun' | 'codex' | 'codex_auth';
 
 interface Prerequisite {
   id: PrerequisiteId;
@@ -23,42 +25,74 @@ export interface PrerequisiteReport {
   checks: Prerequisite[];
 }
 
+export interface PrerequisiteNeeds {
+  bun: boolean;
+}
+
 const CHECK_TIMEOUT_MS = 15_000;
 
+const NOT_FOUND_CODE = 127;
+
+const BUN_FILES = ['bun.lock', 'bun.lockb', 'bunfig.toml'];
+
 const FIXES: Record<PrerequisiteId, string> = {
-  git: 'Install Git with Apple’s command line tools, or with `brew install git`.',
+  git: 'Install Apple’s command line tools, which include Git.',
+  brew: 'Install Homebrew, which installs the GitHub CLI.',
   gh: 'Install the GitHub CLI with Homebrew.',
-  gh_auth: 'Sign in to GitHub in a terminal.',
-  claude: 'Install Claude Code from https://claude.com/claude-code.',
-  claude_auth: 'Sign in to Claude Code in a terminal.',
+  gh_auth: 'Sign in to GitHub, so Shinsa can open and merge pull requests.',
+  claude: 'Install Claude Code, which agents run on.',
+  bun: 'Your repositories use Bun. Install it so agents can run their checks.',
   codex: 'Only for agents you run on Codex.',
   codex_auth: 'Only for agents you run on Codex.',
-  bun: 'Install Bun from https://bun.sh.',
 };
 
-const COMMANDS: Record<PrerequisiteId, string | null> = {
+const OPTIONAL_BUN_FIX = 'Only for repositories that use Bun.';
+
+const COMMANDS: Record<PrerequisiteId, string> = {
   git: 'xcode-select --install',
+  brew: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
   gh: 'brew install gh',
   gh_auth: 'gh auth login',
-  claude: null,
-  claude_auth: 'claude auth login',
+  claude: 'curl -fsSL https://claude.ai/install.sh | bash',
+  bun: 'curl -fsSL https://bun.sh/install | bash',
   codex: 'npm install -g @openai/codex',
   codex_auth: 'codex login',
-  bun: 'curl -fsSL https://bun.sh/install | bash',
 };
-
-const OPTIONAL: ReadonlySet<PrerequisiteId> = new Set(['codex', 'codex_auth']);
 
 const LABELS: Record<PrerequisiteId, string> = {
   git: 'Git',
+  brew: 'Homebrew',
   gh: 'GitHub CLI',
   gh_auth: 'Signed in to GitHub',
   claude: 'Claude Code',
-  claude_auth: 'Signed in to Claude',
+  bun: 'Bun',
   codex: 'Codex',
   codex_auth: 'Signed in to Codex',
-  bun: 'Bun',
 };
+
+export function resolveInstallCommand(id: string) {
+  return Object.hasOwn(COMMANDS, id) ? COMMANDS[id as PrerequisiteId] : null;
+}
+
+export function resolvePrerequisiteLabel(id: string) {
+  return Object.hasOwn(LABELS, id) ? LABELS[id as PrerequisiteId] : null;
+}
+
+function listFolders(root: string) {
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+      .map((entry) => join(root, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+export function isBunUsed(roots: readonly string[]) {
+  return roots
+    .flatMap((root) => [root, ...listFolders(root)])
+    .some((folder) => BUN_FILES.some((file) => existsSync(join(folder, file))));
+}
 
 function firstLine(text: string) {
   return text.split('\n')[0]?.trim() ?? '';
@@ -67,18 +101,25 @@ function firstLine(text: string) {
 function describeOutcome(result: CommandResult) {
   if (result.ok) return firstLine(result.stdout || result.stderr);
   if (result.timedOut) return 'It did not answer in time.';
+  if (result.code === NOT_FOUND_CODE) return 'Not installed.';
   return firstLine(result.stderr || result.stdout) || `It exited with code ${result.code}.`;
 }
 
-function createCheck(id: PrerequisiteId, ok: boolean, detail: string): Prerequisite {
+function createCheck(
+  id: PrerequisiteId,
+  ok: boolean,
+  detail: string,
+  optional: boolean,
+  fix = FIXES[id]
+): Prerequisite {
   return {
     id,
     label: LABELS[id],
     ok,
     detail,
-    fix: ok ? null : FIXES[id],
+    fix: ok ? null : fix,
     command: ok ? null : COMMANDS[id],
-    ...(OPTIONAL.has(id) ? { optional: true } : {}),
+    ...(optional ? { optional: true } : {}),
   };
 }
 
@@ -88,59 +129,58 @@ function readGithubLogin(result: CommandResult) {
   return account ? `Signed in as ${account}.` : 'Signed in.';
 }
 
-function parseClaudeStatus(stdout: string) {
-  try {
-    return JSON.parse(stdout) as { loggedIn?: unknown; email?: unknown };
-  } catch {
-    return null;
-  }
-}
-
-function readClaudeLogin(result: CommandResult) {
-  const status = parseClaudeStatus(result.stdout);
-  if (!status) return { ok: result.ok, detail: describeOutcome(result) };
-  if (status.loggedIn !== true) return { ok: false, detail: 'Not signed in.' };
-  const who = typeof status.email === 'string' ? status.email : 'an account';
-  return { ok: true, detail: `Signed in as ${who}.` };
+function listBrewDependents(checks: Prerequisite[]) {
+  return checks.filter((check) => check.command?.startsWith('brew '));
 }
 
 export async function resolvePrerequisites(
   cwd: string,
-  run: CommandRunner = runCommand
+  run: CommandRunner = runCommand,
+  needs: PrerequisiteNeeds = { bun: true }
 ): Promise<PrerequisiteReport> {
   const ask = (command: string[]) => run(command, cwd, { timeoutMs: CHECK_TIMEOUT_MS });
-  const [git, gh, ghAuth, claude, claudeAuth, codex, codexAuth, bun] = await Promise.all([
+  const [git, brew, gh, ghAuth, claude, bun, codex, codexAuth] = await Promise.all([
     ask(['git', '--version']),
+    ask(['brew', '--version']),
     ask(['gh', '--version']),
     ask(['gh', 'auth', 'status']),
     ask(['claude', '--version']),
-    ask(['claude', 'auth', 'status', '--json']),
+    ask(['bun', '--version']),
     ask(['codex', '--version']),
     ask(['codex', 'login', 'status']),
-    ask(['bun', '--version']),
   ]);
-  const claudeLogin = readClaudeLogin(claudeAuth);
-  const checks = [
-    createCheck('git', git.ok, describeOutcome(git)),
-    createCheck('gh', gh.ok, describeOutcome(gh)),
+  const tools = [
+    createCheck('gh', gh.ok, describeOutcome(gh), false),
     createCheck(
       'gh_auth',
       gh.ok && ghAuth.ok,
-      gh.ok ? readGithubLogin(ghAuth) : 'The GitHub CLI is missing.'
+      gh.ok ? readGithubLogin(ghAuth) : 'The GitHub CLI is missing.',
+      false
     ),
-    createCheck('claude', claude.ok, describeOutcome(claude)),
-    createCheck(
-      'claude_auth',
-      claude.ok && claudeLogin.ok,
-      claude.ok ? claudeLogin.detail : 'Claude Code is missing.'
-    ),
-    createCheck('codex', codex.ok, describeOutcome(codex)),
+    createCheck('claude', claude.ok, describeOutcome(claude), false),
+    createCheck('bun', bun.ok, describeOutcome(bun), !needs.bun, needs.bun ? FIXES.bun : OPTIONAL_BUN_FIX),
+    createCheck('codex', codex.ok, describeOutcome(codex), true),
     createCheck(
       'codex_auth',
       codex.ok && codexAuth.ok,
-      codex.ok ? describeOutcome(codexAuth) : 'Codex is missing.'
+      codex.ok ? describeOutcome(codexAuth) : 'Codex is missing.',
+      true
     ),
-    createCheck('bun', bun.ok, describeOutcome(bun)),
+  ];
+  const brewFor = listBrewDependents(tools);
+  const checks = [
+    createCheck('git', git.ok, describeOutcome(git), false),
+    ...(brewFor.length > 0
+      ? [
+          createCheck(
+            'brew',
+            brew.ok,
+            describeOutcome(brew),
+            brewFor.every((check) => check.optional === true)
+          ),
+        ]
+      : []),
+    ...tools,
   ];
   return { ready: checks.every((check) => check.ok || check.optional === true), checks };
 }
