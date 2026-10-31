@@ -9,6 +9,7 @@ import {
   traceStalledLeaf,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import * as React from 'react';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { ChecksBlock, FoldedChecks } from '@/components/checks/checks-list.tsx';
@@ -286,23 +287,23 @@ function ReviewFacts({ state, task, merge }: { state: ShinsaState; task: Task; m
   const mergeable = pullRequest ? describeMergeable(pullRequest) : null;
   const checks = pullRequest ? describePullRequestChecks(pullRequest) : null;
   const facts = [
-    review && <span key='review'>{review}</span>,
-    pullRequest && <PrLink key='pull-request' state={state} task={task} />,
-    mergeable && (
-      <span key='mergeable' className={TONE_TEXT[mergeable.tone]}>
-        {mergeable.label}
-      </span>
-    ),
-    checks && (
-      <span key='checks' className={TONE_TEXT[checks.tone]}>
-        {checks.label}
-      </span>
-    ),
-  ].filter(Boolean);
+    { key: 'review', node: review && <span>{review}</span> },
+    { key: 'pull-request', node: pullRequest && <PrLink state={state} task={task} /> },
+    {
+      key: 'mergeable',
+      node: mergeable && <span className={TONE_TEXT[mergeable.tone]}>{mergeable.label}</span>,
+    },
+    { key: 'checks', node: checks && <span className={TONE_TEXT[checks.tone]}>{checks.label}</span> },
+  ].filter((fact) => fact.node);
   if (facts.length === 0) return null;
   return (
     <p className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-fg-3 text-xs'>
-      {facts.flatMap((fact, index) => (index === 0 ? [fact] : [<FactDot key={`dot-${index}`} />, fact]))}
+      {facts.map((fact, index) => (
+        <React.Fragment key={fact.key}>
+          {index > 0 && <FactDot />}
+          {fact.node}
+        </React.Fragment>
+      ))}
     </p>
   );
 }

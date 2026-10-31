@@ -16,7 +16,6 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
