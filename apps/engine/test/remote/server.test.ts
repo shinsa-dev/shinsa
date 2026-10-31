@@ -698,6 +698,31 @@ describe('links, access requests and members', () => {
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineInviteRemove)).toBe(true);
   });
 
+  test('accepting an invite request on a machine with every member place taken says so and keeps the request', async () => {
+    const { remote, local, port, plane } = await start();
+    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => new Response('', { status: 409 }));
+    await local('/api/remote/links/create', { kind: 'invite' });
+    const machine = await remote.store.resolveMachineKey();
+    void openChannel(
+      remote.appOrigin,
+      port,
+      (await readLink(remote, 'invite'))?.secret ?? '',
+      machine.publicKey,
+      { userId: KAI.id }
+    ).catch((error: unknown) => error);
+    const requestId = await waitForRequest(remote);
+    expect(await readError(await local('/api/remote/requests/accept', { requestId }))).toBe('members_full');
+    expect(remote.snapshot().requests.map((entry) => entry.id)).toEqual([requestId]);
+    expect(remote.snapshot().devices).toEqual([]);
+    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => new Response('', { status: 500 }));
+    expect(await readError(await local('/api/remote/requests/accept', { requestId }))).not.toBe(
+      'members_full'
+    );
+    remote.declineRequest(requestId);
+  });
+
   test('an invite request from the owner or a member adds only the device', async () => {
     const { remote, local, port, plane } = await start({
       access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },

@@ -5,6 +5,7 @@ import {
   type ConnectClaim,
   DomainError,
   type HandshakeKeys,
+  MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
   type RequestOrigin,
   resolveEnrollUrl,
@@ -16,7 +17,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
-import { ControlClient } from './control.ts';
+import { ControlClient, ControlError } from './control.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
 import { RemoteStore, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
@@ -375,7 +376,7 @@ export class Remote {
       access.owner.id !== request.user.id &&
       !access.members.some((member) => member.user.id === request.user.id);
     if (joins) {
-      const member = await this.control.requestMemberAddition(credentials.machineToken, request.user.id);
+      const member = await this.#requestMemberAddition(credentials.machineToken, request.user.id);
       this.#recordAccess({ ...access, members: [...access.members, member] });
     }
     this.store.upsertDevice({
@@ -386,6 +387,19 @@ export class Remote {
       userId: request.user.id,
     });
     this.#settleRequest(request, true);
+  }
+
+  async #requestMemberAddition(machineToken: string, userId: string) {
+    try {
+      return await this.control.requestMemberAddition(machineToken, userId);
+    } catch (error) {
+      if (error instanceof ControlError && error.status === 409)
+        throw new DomainError(
+          'members_full',
+          `This machine already has ${MAX_INSTANCE_MEMBERS} members. Remove one, then accept the request again.`
+        );
+      throw error;
+    }
   }
 
   declineRequest(requestId: string) {
