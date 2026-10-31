@@ -1,34 +1,21 @@
 import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
-import type { DeliveringStep } from '../domain/shapes.ts';
 import type { Gate, Task, TaskStage } from '../domain/types.ts';
-import { type DisplayPhase, resolveTaskProgress } from '../progress/index.ts';
 import { assembleReport } from '../report/assemble.ts';
-import { listMergeSteps } from '../report/merge-steps.ts';
-import type { WorkReport } from '../report/types.ts';
 import type { ShinsaState } from '../state/index.ts';
-import {
-  createSlackActions,
-  createSlackButton,
-  createSlackContext,
-  createSlackHeader,
-  createSlackMessage,
-  createSlackPlan,
-  createSlackRichText,
-  createSlackSection,
-  SLACK_BLOCK_LIMITS,
-  type SlackMessage,
-  type SlackPlanTask,
-  type SlackTaskStatus,
-} from './blocks.ts';
+import { createSlackContext, createSlackMessage, createSlackSection, type SlackMessage } from './blocks.ts';
 import { escapeSlackText, listSlackChunks, serializeSlackMrkdwn } from './mrkdwn.ts';
 import type { SlackPost } from './posts.ts';
 import type { SlackSessionStatus } from './relay.ts';
 
-export const SLACK_RESULT_LIMIT = 12_000;
+export const SLACK_RESULT_LIMIT = 3000;
 
-const OPEN_LABEL = 'Open in Shinsa';
+export const SLACK_STARTING_MARKDOWN = 'On it.';
+
+const SLACK_LEAD_LIMIT = 280;
+
+const SLACK_STREAM_PIECE = 48;
 
 const NEEDS_YOU_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_plan',
@@ -42,41 +29,24 @@ const FINISHED_MARK: Partial<Record<TaskStage, string>> = { merged: '✅', done:
 
 const WAITING_MARK: Partial<Record<TaskStage, string>> = { triage: '⏳', waiting_on_tasks: '⏳' };
 
-const PHASE_MARK: Record<DisplayPhase['status'], string> = {
-  done: '✓',
-  active: '●',
-  waiting: '◐',
-  pending: '○',
-  skipped: '○',
-  cancelled: '✕',
-};
-
-const PHASE_STATUS: Record<DisplayPhase['status'], SlackTaskStatus> = {
-  done: 'complete',
-  active: 'in_progress',
-  waiting: 'in_progress',
-  pending: 'pending',
-  skipped: 'pending',
-  cancelled: 'error',
-};
-
-const RESULT_TITLE: Record<DeliveringStep, string> = {
-  answer: 'Answer',
-  investigate: 'Diagnosis',
-  research: 'Report',
-  operate: 'Operation outcome',
-};
-
 function describeTask(task: Task) {
   return task.handle ? `${task.handle} · ${task.title}` : task.title;
 }
 
 function describeTaskLink(task: Task, taskUrl: string) {
-  return `<${taskUrl}|${escapeSlackText(task.title).replaceAll('|', '/')}>`;
+  return `<${taskUrl}|${escapeSlackText(describeTask(task)).replaceAll('|', '/')}>`;
 }
 
-function describeTaskContext(task: Task) {
-  return task.handle ? `*${escapeSlackText(task.handle)}*` : '';
+function describeShinsaLink(label: string, taskUrl: string) {
+  return `<${taskUrl}|${label}>`;
+}
+
+function resolveLead(text: string) {
+  const line = text.trim().split('\n')[0]?.trim() ?? '';
+  const sentence = /^(.+?[.!?])(\s|$)/.exec(line)?.[1] ?? line;
+  return sentence.length > SLACK_LEAD_LIMIT
+    ? `${sentence.slice(0, SLACK_LEAD_LIMIT - 1).trimEnd()}…`
+    : sentence;
 }
 
 function resolveAttentionGate(gates: readonly Gate[]) {
@@ -94,44 +64,15 @@ function resolveStatusMark(task: Task, attention: Gate | null) {
   return FINISHED_MARK[task.stage] ?? WAITING_MARK[task.stage] ?? '🔵';
 }
 
-function describeStatusLine(task: Task, attention: Gate | null) {
-  const mark = resolveStatusMark(task, attention);
-  if (attention) return `${mark} *Needs you*  ${escapeSlackText(attention.title)}`;
-  return `${mark} *${escapeSlackText(describePlanTitle(task, null))}*`;
-}
-
-function describePlanTitle(task: Task, attention: Gate | null) {
+function describeStatusLabel(task: Task, attention: Gate | null) {
   if (attention) return `Needs you: ${attention.title}`;
   return capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]);
 }
 
-function describePhaseDetail(phase: DisplayPhase) {
-  if (phase.status === 'waiting') return 'Waiting for you';
-  if (phase.count && phase.count.total > 1) return `${phase.count.done} of ${phase.count.total}`;
-  return null;
+function describePullRequest(task: Task) {
+  const pullRequest = task.pullRequest;
+  return pullRequest ? `  ·  <${pullRequest.url}|PR #${pullRequest.number}>` : '';
 }
-
-function resolvePlanTask(phase: DisplayPhase): SlackPlanTask {
-  const detail = describePhaseDetail(phase);
-  return {
-    task_id: phase.key,
-    title: phase.title,
-    status: PHASE_STATUS[phase.status],
-    ...(detail ? { details: createSlackRichText(detail) } : {}),
-  };
-}
-
-function listShownPhases(task: Task) {
-  return resolveTaskProgress(task).phases.filter((phase) => phase.status !== 'skipped');
-}
-
-function describeSteps(task: Task) {
-  return listShownPhases(task)
-    .map((phase) => `${PHASE_MARK[phase.status]} ${escapeSlackText(phase.title)}`)
-    .join('   ');
-}
-
-export type SlackStatusLayout = 'plan' | 'text';
 
 export function resolveSlackSessionStatus(task: Task, gates: readonly Gate[]): SlackSessionStatus {
   if (isTaskClosed(task)) return 'closed';
@@ -140,168 +81,77 @@ export function resolveSlackSessionStatus(task: Task, gates: readonly Gate[]): S
   return 'processing';
 }
 
-function describePullRequest(task: Task) {
-  const pullRequest = task.pullRequest;
-  return pullRequest ? `<${pullRequest.url}|Pull request #${pullRequest.number}>` : '';
-}
-
-export function serializeSlackStatus(
-  task: Task,
-  gates: readonly Gate[],
-  taskUrl: string,
-  layout: SlackStatusLayout = 'plan'
-): SlackMessage {
+export function serializeSlackStatus(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
   const attention = resolveAttentionGate(gates);
-  const line = describeStatusLine(task, attention);
-  const plain = line.replace(/[*_]/g, '');
-  const steps =
-    layout === 'plan'
-      ? [createSlackPlan(describePlanTitle(task, attention), listShownPhases(task).map(resolvePlanTask))]
-      : [];
-  const context = layout === 'plan' ? [] : [describeSteps(task)];
-  return createSlackMessage(`${describeTask(task)}: ${plain}`, [
+  const label = describeStatusLabel(task, attention);
+  const mark = resolveStatusMark(task, attention);
+  return createSlackMessage(`${describeTask(task)}: ${label}`, [
     createSlackSection(
-      `*${describeTaskLink(task, taskUrl)}*\n${line}`,
-      createSlackButton(OPEN_LABEL, taskUrl)
+      `${mark} *${escapeSlackText(label)}*  ·  ${describeTaskLink(task, taskUrl)}${describePullRequest(task)}`
     ),
-    ...steps,
-    createSlackContext([describeTaskContext(task), ...context, describePullRequest(task)]),
   ]);
 }
 
-function createFooter(task: Task, hint: string) {
-  return createSlackContext([describeTaskContext(task), hint]);
-}
-
-function listMrkdwnSections(markdown: string, total: number) {
-  const { chunks, cut } = listSlackChunks(serializeSlackMrkdwn(markdown), SLACK_BLOCK_LIMITS.section, total);
-  return { sections: chunks.map((chunk) => createSlackSection(chunk)), cut };
-}
-
-function describeChoice(choice: string, recommendation: string | null | undefined) {
-  const recommended = choice === recommendation ? '  _recommended_' : '';
-  return `• ${escapeSlackText(choice)}${recommended}`;
-}
-
 function serializeQuestion(task: Task, gate: Gate, taskUrl: string) {
-  const choices = gate.choices ?? [];
-  const body = gate.body.trim().length > 0 ? listMrkdwnSections(gate.body, 6000).sections : [];
+  const choices = (gate.choices ?? []).map((choice) =>
+    choice === gate.recommendation ? `*${escapeSlackText(choice)}*` : escapeSlackText(choice)
+  );
   return createSlackMessage(`${describeTask(task)} asks: ${gate.title}`, [
-    createSlackHeader('Question'),
-    createSlackSection(`*${escapeSlackText(gate.title)}*`),
-    ...body,
-    ...(choices.length > 0
-      ? [createSlackSection(choices.map((choice) => describeChoice(choice, gate.recommendation)).join('\n'))]
-      : []),
-    createSlackActions([createSlackButton('Answer in Shinsa', taskUrl, true)]),
-    createFooter(task, 'Answer it in Shinsa. A mention here is kept for the task, not taken as the answer.'),
+    createSlackSection(
+      [
+        `❓ *${escapeSlackText(gate.title)}*`,
+        ...(choices.length > 0 ? [choices.join('  ·  ')] : []),
+        describeShinsaLink('Answer in Shinsa', taskUrl),
+      ].join('\n')
+    ),
   ]);
 }
 
 function serializeSecret(task: Task, gate: Gate, taskUrl: string) {
   const label = gate.secret?.label ?? gate.title;
   return createSlackMessage(`${describeTask(task)} needs a secret: ${label}`, [
-    createSlackHeader('Secret needed'),
     createSlackSection(
-      `*${escapeSlackText(label)}*\nGive it in Shinsa on the machine the task runs on. Never paste a secret in Slack.`
+      `🔑 *${escapeSlackText(label)}* is needed. Never paste it here.\n${describeShinsaLink('Give it in Shinsa', taskUrl)}`
     ),
-    createSlackActions([createSlackButton(OPEN_LABEL, taskUrl, true)]),
-    createFooter(task, ''),
   ]);
 }
 
 function serializePlan(task: Task, taskUrl: string) {
-  const plan = task.plan?.document;
-  const phases = (plan?.phases ?? []).map(
-    (phase, index) => `${index + 1}. *${escapeSlackText(phase.title)}*  ${escapeSlackText(phase.detail)}`
-  );
-  const facts = plan
-    ? [
-        describeCount(plan.files.length, 'file'),
-        describeCount(plan.verification.length, 'check'),
-        ...(plan.questions.length > 0 ? [describeCount(plan.questions.length, 'question')] : []),
-      ].join(' · ')
-    : '';
+  const goal = resolveLead(task.plan?.document?.goal ?? task.title);
   return createSlackMessage(`${describeTask(task)} has a plan for you to approve.`, [
-    createSlackHeader('Plan to approve'),
-    createSlackSection(`*${describeTaskLink(task, taskUrl)}*\n${escapeSlackText(plan?.goal ?? task.title)}`),
-    ...(phases.length > 0 ? [createSlackSection(phases.join('\n'))] : []),
-    ...(facts ? [createSlackContext([facts])] : []),
-    createSlackActions([createSlackButton('Review the plan', taskUrl, true)]),
-    createFooter(task, 'Approve it or ask for changes in Shinsa.'),
+    createSlackSection(
+      `📋 *Plan ready*  ${escapeSlackText(goal)}\n${describeShinsaLink('Review the plan in Shinsa', taskUrl)}`
+    ),
   ]);
 }
 
-function describeChecks(task: Task, report: WorkReport) {
-  const checks = report.checks;
-  if (checks.length === 0) return '';
+function describeChecks(task: Task) {
+  const checks = assembleReport(task).checks;
+  if (checks.length === 0) return null;
   const failed = checks.filter((check) => check.outcome === 'fail').length;
-  const coverage =
-    task.coverage?.status === 'measured' && task.coverage.executable > 0
-      ? ` The tests cover ${task.coverage.covered} of ${task.coverage.executable} changed lines.`
-      : '';
-  const verdict =
-    failed === 0
-      ? `✅ *Checks*  All ${describeCount(checks.length, 'check')} passed.`
-      : `❌ *Checks*  ${failed} of ${checks.length} did not pass.`;
-  return `${verdict}${coverage}`;
-}
-
-function describeFindings(task: Task) {
-  const open = task.findings.length;
-  if (open === 0) return '';
-  return `🔎 *Agent review*  ${describeCount(open, 'finding')} for you to weigh.`;
-}
-
-function describeRisks(report: WorkReport) {
-  const risks = report.walkthrough?.risks ?? [];
-  if (risks.length === 0) return '';
-  const listed = risks
-    .slice(0, 5)
-    .map((risk) => `• ⚠️ *${escapeSlackText(risk.title)}*  ${escapeSlackText(risk.risk)}`);
-  const more = risks.length > 5 ? [`_and ${describeCount(risks.length - 5, 'more risk')}_`] : [];
-  return [`*Risks*`, ...listed, ...more].join('\n');
-}
-
-function describeMergeSteps(task: Task) {
-  const steps = listMergeSteps(task).filter((step) => step.when === 'pre_merge');
-  if (steps.length === 0) return '';
-  return `☐ *Before the merge*  ${describeCount(steps.length, 'step')} for you, listed in Shinsa.`;
+  if (failed === 0)
+    return checks.length === 1
+      ? '✓ The check passed'
+      : `✓ All ${describeCount(checks.length, 'check')} passed`;
+  return `✕ ${failed} of ${describeCount(checks.length, 'check')} failed`;
 }
 
 function serializeReview(task: Task, taskUrl: string) {
-  const report = assembleReport(task);
-  const summary = task.summary?.trim() || report.headline;
-  const approach = report.walkthrough?.approach?.trim() ?? '';
-  const facts = [describeChecks(task, report), describeFindings(task), describeMergeSteps(task)].filter(
-    Boolean
-  );
-  const risks = describeRisks(report);
-  const pullRequest = describePullRequest(task);
+  const summary = resolveLead(task.summary?.trim() || assembleReport(task).headline);
+  const facts = [describeChecks(task), describeShinsaLink('Review in Shinsa', taskUrl)].filter(Boolean);
   return createSlackMessage(`${describeTask(task)} is ready for your review.`, [
-    createSlackHeader('Ready for your review'),
-    createSlackSection(`*${describeTaskLink(task, taskUrl)}*\n${serializeSlackMrkdwn(summary)}`),
-    ...(approach ? [createSlackSection(`*Approach*\n${serializeSlackMrkdwn(approach)}`)] : []),
-    ...(facts.length > 0 ? [createSlackSection(facts.join('\n'))] : []),
-    ...(risks ? [createSlackSection(risks)] : []),
-    createSlackActions([createSlackButton('Review in Shinsa', taskUrl, true)]),
-    createFooter(
-      task,
-      [pullRequest, 'Approve it or ask for changes in Shinsa.'].filter(Boolean).join('  ·  ')
+    createSlackSection(
+      `👀 *Ready for review*  ${escapeSlackText(summary)}\n${facts.join('  ·  ')}${describePullRequest(task)}`
     ),
   ]);
 }
 
 function serializeProposal(task: Task, taskUrl: string) {
-  const proposal = task.proposal;
+  const request = resolveLead(task.proposal?.request ?? '');
   return createSlackMessage(`${describeTask(task)} proposes a change.`, [
-    createSlackHeader('Change to approve'),
     createSlackSection(
-      `*${describeTaskLink(task, taskUrl)}*\n${serializeSlackMrkdwn(proposal?.request ?? '')}`
+      `💡 *Proposed change*  ${escapeSlackText(request)}\n${describeShinsaLink('Decide in Shinsa', taskUrl)}`
     ),
-    ...(proposal?.why ? [createSlackContext([`_Why:_ ${escapeSlackText(proposal.why)}`])] : []),
-    createSlackActions([createSlackButton('Decide in Shinsa', taskUrl, true)]),
-    createFooter(task, 'Decide in Shinsa.'),
   ]);
 }
 
@@ -327,49 +177,72 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
   }
 }
 
+function resolveResultBody(task: Task) {
+  const body = task.result?.body.trim() ?? '';
+  if (body.length <= SLACK_RESULT_LIMIT) return { body, cut: false };
+  const kept = body.slice(0, SLACK_RESULT_LIMIT);
+  const end = Math.max(kept.lastIndexOf('\n'), kept.lastIndexOf(' '));
+  return { body: `${(end > 0 ? kept.slice(0, end) : kept).trimEnd()}…`, cut: true };
+}
+
+export function resolveSlackResultMarkdown(task: Task, taskUrl: string): string | null {
+  if (!task.result) return null;
+  const { body, cut } = resolveResultBody(task);
+  return `${body}\n\n[${cut ? 'Read the rest in Shinsa' : 'Open in Shinsa'}](${taskUrl})`;
+}
+
 export function serializeSlackResult(task: Task, taskUrl: string): SlackMessage | null {
-  const result = task.result;
-  if (!result) return null;
-  const { sections, cut } = listMrkdwnSections(result.body, SLACK_RESULT_LIMIT);
-  const title = RESULT_TITLE[result.step];
-  return createSlackMessage(`${title} for ${describeTask(task)}`, [
-    createSlackHeader(title),
-    createSlackSection(`*${describeTaskLink(task, taskUrl)}*`),
-    ...sections,
-    ...(cut ? [createSlackContext(['_This is cut short. Read the rest in Shinsa._'])] : []),
-    createSlackActions([createSlackButton(OPEN_LABEL, taskUrl)]),
-    createFooter(task, ''),
+  if (!task.result) return null;
+  const { body, cut } = resolveResultBody(task);
+  const { chunks } = listSlackChunks(serializeSlackMrkdwn(body), 2800, SLACK_RESULT_LIMIT + 100);
+  return createSlackMessage(resolveLead(body) || describeTask(task), [
+    ...chunks.map((chunk) => createSlackSection(chunk)),
+    createSlackContext([describeShinsaLink(cut ? 'Read the rest in Shinsa' : 'Open in Shinsa', taskUrl)]),
   ]);
+}
+
+export function listSlackStreamPieces(text: string) {
+  const pieces: string[] = [];
+  let piece = '';
+  for (const word of text.split(/(?<=\s)/)) {
+    if (piece.length > 0 && piece.length + word.length > SLACK_STREAM_PIECE) {
+      pieces.push(piece);
+      piece = '';
+    }
+    piece += word;
+  }
+  if (piece.length > 0) pieces.push(piece);
+  return pieces;
 }
 
 export function serializeSlackForwarded(task: Task, taskUrl: string) {
   return createSlackMessage(`Sent to ${describeTask(task)}.`, [
-    createSlackContext([`↪️ Sent to ${describeTaskLink(task, taskUrl)}. It reads your message next.`]),
+    createSlackContext([`↪️ Sent to ${describeTaskLink(task, taskUrl)}`]),
   ]);
 }
 
 export function serializeSlackHeld(task: Task, taskUrl: string) {
   return createSlackMessage(`Kept for ${describeTask(task)}. It waits on you in Shinsa.`, [
-    createSlackContext([
-      `📌 Kept for ${describeTaskLink(task, taskUrl)}. It waits on you in Shinsa, so nothing changes until you decide there.`,
-    ]),
+    createSlackContext([`📌 Kept for ${describeTaskLink(task, taskUrl)}. It waits on you in Shinsa.`]),
   ]);
 }
 
+export function serializeSlackReply(text: string) {
+  return createSlackMessage(text, [createSlackSection(escapeSlackText(text))]);
+}
+
 export function serializeSlackLinkPrompt(linkUrl: string) {
-  return createSlackMessage('Connect Slack to your Shinsa to use me.', [
+  return createSlackMessage('Connect Slack to your own Shinsa first.', [
     createSlackSection(
-      'I only take work from people who connected Slack to their own Shinsa, so the task runs on their machine.',
-      createSlackButton('Connect Slack', linkUrl, true)
+      `Connect Slack to your own Shinsa first, so the work runs on your machine.  <${linkUrl}|Connect Slack>`
     ),
   ]);
 }
 
 export function serializeSlackOffline(machineName: string) {
-  const name = escapeSlackText(machineName);
-  return createSlackMessage(`${machineName} is offline, so I couldn't start anything.`, [
+  return createSlackMessage(`${machineName} is offline, so nothing started.`, [
     createSlackSection(
-      `🔌 *${name} is offline*, so I couldn't start anything. Mention me again once Shinsa is running there.`
+      `🔌 *${escapeSlackText(machineName)}* is offline, so nothing started. Mention me again once Shinsa runs there.`
     ),
   ]);
 }

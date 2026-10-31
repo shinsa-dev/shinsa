@@ -379,8 +379,8 @@ task showing its machine, and with several machines New task places each task au
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
-and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it, or
-messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread, and every decision
+and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (small
+talk gets a short streamed reply and no task), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread, and every decision
 is still made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
 own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
@@ -1020,16 +1020,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 ### Slack (2026-10-31)
 
 - **Tag the bot, from anywhere in Slack.** A mention outside a thread starts one; in a thread the bot reads all of it,
-  so a bare mention under a bug report is enough. It always answers in the thread: the new task's status message, or
-  "Sent to" the task the thread already has. A mention runs the same loop as Home's input with everything on Auto:
-  triage picks the project, the repository, the kind (a question is answered and ends there) and the priority.
+  so a bare mention under a bug report is enough. It always answers in the thread, streaming as it goes: a short reply
+  to small talk with no task, the new task's status message, or "Sent to" the task the thread already has. Work runs
+  the same loop as Home's input with everything on Auto: triage picks the project, the repository, the kind (a
+  question is answered and ends there) and the priority.
 - **One shared bot, locked to its owner.** The app lives on app.shinsa.dev and relays each mention to the machine of
   the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
   gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
   a Slack token, and the relay stores no message text.
-- **The thread follows the task**: one status message edited in place as it moves, and a new message for each
-  question, secret, plan, review (written like the pull request's description) and the result. Each says where to
-  decide in Shinsa; nothing in Slack closes a gate.
+- **The thread follows the task, minimally**: one status line edited in place as it moves, one short line for each
+  question, secret, plan and review with a link to decide in Shinsa, and the result streamed in with a link to the
+  rest. No buttons, so Slack never asks for interactivity; nothing in Slack closes a gate.
 - **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every
   machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
   Mentions while a machine is offline are not kept.

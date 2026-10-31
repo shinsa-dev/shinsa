@@ -18,6 +18,7 @@ import {
   respondSlackLinks,
   respondSlackPost,
   respondSlackSession,
+  respondSlackStream,
   respondSlackUnlink,
 } from './slack.ts';
 import {
@@ -131,6 +132,11 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(SLACK_RELAY_PATHS.post),
     respond: (request, _url, _match, world) => respondSlackPost(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.stream),
+    respond: (request, _url, _match, world) => respondSlackStream(request, world),
   },
   {
     method: 'POST',

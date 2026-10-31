@@ -185,8 +185,9 @@ src/
 │   │                missRead (a read that gives up), isReadBusy, listSourceFiledTasks
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
 │   ├── slack.ts     A Slack mention: to the open task of its thread (forwarded, or kept while a gate is open,
-│   │                said in the thread), else a new task as Home starts one (`task.create`, triage picks the
-│   │                kind, project and priority), linked to the thread with `slack.thread_linked`; the status
+│   │                said in the thread), else `slack.evaluate`; `slack.start_task` once it is work: a new task as
+│   │                Home starts one (`task.create`, triage picks the kind, project and priority), linked to the
+│   │                thread with `slack.thread_linked` and the streamed message as its status; the status
 │   │                message's ts; and
 │   │                syncSlackThreads (after every command): a linked task's question, secret, plan, review and
 │   │                proposal gates and its result as `slack.post`, and one `slack.status` per changed task
@@ -268,18 +269,20 @@ src/
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
 │                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
-│                    untrusted data, and a mention sent to a linked task (thread.ts), and what is posted back (posts.ts: SlackPost, SLACK_POSTED_GATES); the thread key is
+│                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work or
+│                    small talk with its reply (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
+│                    what is posted back (posts.ts: SlackPost, SLACK_POSTED_GATES); the thread key is
 │                    domain/slack.ts (resolveSlackThreadKey, Task.slack); Markdown as Slack mrkdwn, cutting to a
 │                    limit and splitting into sections without breaking a link, an escape or a fence (mrkdwn.ts),
-│                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, createSlack*, the
-│                    `plan` block with a content-hashed block_id), and every
-│                    message the bot posts (messages.ts: the status message edited in place with its steps as a
-│                    plan, resolveSlackSessionStatus for the thread's status, a post per question,
-│                    secret, plan, review and proposal gate, the result, the bot's own replies, and
+│                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, sections and context
+│                    lines only), and every message the bot posts, each a line or two with a text link
+│                    (messages.ts: the status line edited in place, resolveSlackSessionStatus for the thread's
+│                    status, a post per question, secret, plan, review and proposal gate, the result as markdown
+│                    to stream and as mrkdwn, listSlackStreamPieces, the bot's own replies, and
 │                    resolveSlackPostMessage for a `slack.post` from the outbox), and the relay's wire contract
 │                    (relay.ts: SLACK_RELAY_PATHS, the forward signature made with the machine's connect key and
 │                    checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost and
-│                    parseSlackRelaySession for a machine's post and thread status,
+│                    parseSlackRelaySession and parseSlackRelayStream for a machine's post, thread status and stream,
 │                    resolveSlackReadableText for Slack's <@U…> markup, SlackLinks)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,

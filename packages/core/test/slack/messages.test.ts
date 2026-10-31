@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  createSlackHeader,
   createSlackMessage,
   createSlackSection,
   listSlackStatusGates,
+  listSlackStreamPieces,
   resolveSlackPostMessage,
+  resolveSlackResultMarkdown,
   resolveSlackSessionStatus,
   SLACK_BLOCK_LIMITS,
   SLACK_RESULT_LIMIT,
@@ -15,6 +16,7 @@ import {
   serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
+  serializeSlackReply,
   serializeSlackResult,
   serializeSlackStatus,
   type TaskShape,
@@ -34,24 +36,10 @@ const URL = 'https://app.shinsa.dev/tasks/t1';
 
 function readText(message: SlackMessage) {
   return message.blocks
-    .map((block: SlackBlock) => {
-      if (block.type === 'header') return block.text.text;
-      if (block.type === 'section') return [block.text.text, block.accessory?.text.text ?? ''].join(' ');
-      if (block.type === 'context') return block.elements.map((element) => element.text).join(' ');
-      if (block.type === 'actions') return block.elements.map((button) => button.text.text).join(' ');
-      if (block.type === 'plan')
-        return [block.title, ...block.tasks.map((task) => `${task.status} ${task.title}`)].join(' ');
-      return '---';
-    })
+    .map((block: SlackBlock) =>
+      block.type === 'section' ? block.text.text : block.elements.map((element) => element.text).join(' ')
+    )
     .join('\n');
-}
-
-function listButtons(message: SlackMessage) {
-  return message.blocks.flatMap((block) => {
-    if (block.type === 'actions') return block.elements;
-    if (block.type === 'section' && block.accessory) return [block.accessory];
-    return [];
-  });
 }
 
 function startShaped(harness: Harness, shape: TaskShape, request = 'Why does the export hang?') {
@@ -77,103 +65,58 @@ function statusOf(harness: Harness, taskId: string) {
   return serializeSlackStatus(harness.task(taskId), listSlackStatusGates(harness.state, taskId), URL);
 }
 
+function ask(
+  harness: Harness,
+  taskId: string,
+  fields: { question: string; choices?: string[]; recommendation?: string }
+) {
+  harness.send({
+    type: 'agent.ask',
+    runId: harness.activeRun(taskId).id,
+    gateId: 'q1',
+    context: null,
+    ...fields,
+  });
+}
+
 describe('the status message', () => {
-  test('names the task with a link, its stage, its steps as a plan and an Open in Shinsa button', () => {
+  test('is one line: a mark, what the task does now and a link to it', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'Fix the <export> & hang' });
     const message = statusOf(harness, taskId);
-    const [section, plan, context] = message.blocks;
-    expect(section).toMatchObject({
-      type: 'section',
-      accessory: { type: 'button', text: { text: 'Open in Shinsa' }, url: URL },
-    });
-    expect(section?.type === 'section' && section.text.text).toStartWith(
-      `*<${URL}|Fix the &lt;export&gt; &amp; hang>*\n🔵 *Planning the phases*`
+    expect(message.blocks).toHaveLength(1);
+    expect(readText(message)).toBe(
+      `🔵 *Planning the phases*  ·  <${URL}|SUP-1 · Fix the &lt;export&gt; &amp; hang>`
     );
-    expect(plan).toMatchObject({ type: 'plan', title: 'Planning the phases' });
-    expect(plan?.type === 'plan' && plan.tasks[0]).toEqual({
-      task_id: 'plan',
-      title: 'Plan',
-      status: 'in_progress',
-    });
-    expect(plan?.type === 'plan' && plan.tasks.at(-1)?.status).toBe('pending');
-    const handle = harness.task(taskId).handle;
-    expect(context?.type === 'context' && context.elements.map((element) => element.text)).toEqual([
-      `*${handle}*`,
-    ]);
-    expect(message.text).toBe(`${handle} · Fix the &lt;export&gt; &amp; hang: 🔵 Planning the phases`);
+    expect(message.text).toBe('SUP-1 · Fix the &lt;export&gt; &amp; hang: Planning the phases');
   });
 
-  test('lists its steps as text, with no plan block, for a workspace that refuses one', () => {
+  test('says what needs you when a question waits or the task failed', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    const message = serializeSlackStatus(
-      harness.task(taskId),
-      listSlackStatusGates(harness.state, taskId),
-      URL,
-      'text'
-    );
-    expect(message.blocks.map((block) => block.type)).toEqual(['section', 'context']);
-    const [, context] = message.blocks;
-    expect(context?.type === 'context' && context.elements[1]?.text).toStartWith('● Plan   ○ Build');
-  });
-
-  test('marks a step that waits for you, and gives the plan a new block id whenever it changes', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    const planning = statusOf(harness, taskId).blocks[1];
-    expect(statusOf(harness, taskId).blocks[1]).toEqual(planning);
-    reachReviewGate(harness, taskId);
-    const plan = statusOf(harness, taskId).blocks[1];
-    if (plan?.type !== 'plan' || planning?.type !== 'plan') throw new Error('No plan block.');
-    expect(plan.block_id).not.toBe(planning.block_id);
-    expect(plan.title).toBe('Changes ready for your review');
-    expect(plan.tasks.find((task) => task.title === 'Plan')?.status).toBe('complete');
-    expect(plan.tasks.find((task) => task.title === 'Your review')).toMatchObject({
-      status: 'in_progress',
-      details: { type: 'rich_text' },
-    });
-  });
-
-  test('a question or a failure says the task needs you, with the gate title', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(taskId).id,
-      gateId: 'q1',
-      question: 'Which <format>?',
-      context: null,
-    });
-    expect(readText(statusOf(harness, taskId))).toContain('🟣 *Needs you*  Which &lt;format&gt;?');
-    expect(statusOf(harness, taskId).blocks[1]).toMatchObject({
-      type: 'plan',
-      title: 'Needs you: Which <format>?',
-    });
+    ask(harness, taskId, { question: 'Which <format>?' });
+    expect(readText(statusOf(harness, taskId))).toStartWith('🟣 *Needs you: Which &lt;format&gt;?*');
     const failed = createTask(harness, { request: 'Second' });
     harness.send({ type: 'effect.fail', taskId: failed, title: 'The worktree failed', detail: 'disk full' });
-    expect(readText(statusOf(harness, failed))).toContain('🔴 *Needs you*  The worktree failed');
+    expect(readText(statusOf(harness, failed))).toStartWith('🔴 *Needs you: The worktree failed*');
   });
 
-  test('shows the pull request once there is one, and a finished mark when merged or cancelled', () => {
+  test('adds the pull request, and marks a merged, cancelled or waiting task', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
+    expect(readText(statusOf(harness, taskId))).toStartWith('🟣 ');
     approve(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
     const text = readText(statusOf(harness, taskId));
-    expect(text).toContain('✅ *Pull request merged*');
-    expect(text).toContain(`|Pull request #${harness.task(taskId).pullRequest?.number}>`);
+    expect(text).toStartWith('✅ *Pull request merged*');
+    expect(text).toEndWith(`|PR #${harness.task(taskId).pullRequest?.number}>`);
     const other = createTask(harness, { request: 'Other' });
     harness.send({ type: 'task.cancel', taskId: other });
-    expect(readText(statusOf(harness, other))).toContain('⚪ *Cancelled by you*');
-  });
-
-  test('a task that waits on another says so with an hourglass', () => {
-    const harness = createHarness();
+    expect(readText(statusOf(harness, other))).toStartWith('⚪ *Cancelled by you*');
     const first = createTask(harness, { request: 'First' });
     const second = createTask(harness, { request: 'Second', waitsOn: [first] });
-    expect(readText(statusOf(harness, second))).toContain('⏳ *Waiting for “First” to finish*');
+    expect(readText(statusOf(harness, second))).toStartWith('⏳ *Waiting for “First” to finish*');
   });
 });
 
@@ -184,13 +127,7 @@ describe('the thread’s own status in Slack', () => {
     const status = () =>
       resolveSlackSessionStatus(harness.task(taskId), listSlackStatusGates(harness.state, taskId));
     expect(status()).toBe('processing');
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(taskId).id,
-      gateId: 'q1',
-      question: 'Go?',
-      context: null,
-    });
+    ask(harness, taskId, { question: 'Go?' });
     expect(status()).toBe('suspended');
     const review = createTask(harness, { request: 'Review it' });
     reachReviewGate(harness, review);
@@ -208,45 +145,23 @@ describe('the thread’s own status in Slack', () => {
 });
 
 describe('the posts each gate makes', () => {
-  test('a question lists its body, its choices with the recommendation, and how to answer', () => {
+  test('a question is its title, its choices with the recommended one bold, and a link to answer', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(taskId).id,
-      gateId: 'q1',
-      question: 'Which format should the export use?',
-      context: 'The **old** one is slow.',
-      choices: ['CSV', 'JSON'],
-      recommendation: 'JSON',
-    });
-    const message = serializeSlackGate(harness.task(taskId), harness.state.gates.q1 ?? never(), URL);
-    const text = readText(message ?? never());
-    expect(text).toContain('Question\n*Which format should the export use?*');
-    expect(text).toContain('The *old* one is slow.');
-    expect(text).toContain('• CSV\n• JSON  _recommended_');
-    expect(text).toContain('A mention here is kept for the task, not taken as the answer.');
-    expect(listButtons(message ?? never())).toEqual([
-      expect.objectContaining({
-        text: expect.objectContaining({ text: 'Answer in Shinsa' }),
-        style: 'primary',
-      }),
-    ]);
-    expect(message?.text).toContain('asks: Which format should the export use?');
+    ask(harness, taskId, { question: 'Which format?', choices: ['CSV', 'JSON'], recommendation: 'JSON' });
+    const message =
+      serializeSlackGate(harness.task(taskId), harness.state.gates.q1 ?? never(), URL) ?? never();
+    expect(readText(message)).toBe(`❓ *Which format?*\nCSV  ·  *JSON*\n<${URL}|Answer in Shinsa>`);
+    expect(message.text).toContain('asks: Which format?');
   });
 
-  test('a question with no body or choices is only its title', () => {
+  test('a question without choices is only its title and the link', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(taskId).id,
-      gateId: 'q1',
-      question: 'Go?',
-      context: null,
-    });
-    const message = serializeSlackGate(harness.task(taskId), harness.state.gates.q1 ?? never(), URL);
-    expect(message?.blocks.map((block) => block.type)).toEqual(['header', 'section', 'actions', 'context']);
+    ask(harness, taskId, { question: 'Go?' });
+    const message =
+      serializeSlackGate(harness.task(taskId), harness.state.gates.q1 ?? never(), URL) ?? never();
+    expect(readText(message)).toBe(`❓ *Go?*\n<${URL}|Answer in Shinsa>`);
   });
 
   test('a secret is never asked for in Slack', () => {
@@ -262,11 +177,10 @@ describe('the posts each gate makes', () => {
     const text = readText(
       serializeSlackGate(harness.task(taskId), harness.state.gates.s1 ?? never(), URL) ?? never()
     );
-    expect(text).toContain('Secret needed\n*Stripe key*');
-    expect(text).toContain('Never paste a secret in Slack.');
+    expect(text).toBe(`🔑 *Stripe key* is needed. Never paste it here.\n<${URL}|Give it in Shinsa>`);
   });
 
-  test('a plan shows its goal, its numbered phases and its size', () => {
+  test('a plan is its goal in one sentence and a link to review it', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness);
@@ -274,7 +188,7 @@ describe('the posts each gate makes', () => {
       type: 'agent.propose_plan',
       runId: harness.activeRun(taskId).id,
       document: {
-        goal: 'Stream the export.',
+        goal: 'Stream the export. Then test it on a large file.',
         phases: [
           { title: 'Read in chunks', detail: 'Use a stream.' },
           { title: 'Test it', detail: 'A large file.' },
@@ -285,85 +199,45 @@ describe('the posts each gate makes', () => {
         outOfScope: [],
         verification: [{ label: 'Export tests', command: 'bun test test/export', phases: [1, 2] }],
         evidence: ['test'],
-        questions: [{ question: 'Keep CSV?', options: ['Yes', 'No'], recommendation: 'Yes' }],
+        questions: [],
       },
     });
-    const gate = harness.openGate(taskId);
-    const text = readText(serializeSlackGate(harness.task(taskId), gate, URL) ?? never());
-    expect(text).toContain('Plan to approve');
-    expect(text).toContain('Stream the export.');
-    expect(text).toContain('1. *Read in chunks*  Use a stream.\n2. *Test it*  A large file.');
-    expect(text).toContain('1 file · 1 check · 1 question');
-    expect(text).toContain('Review the plan');
-    expect(text).toContain('Approve it or ask for changes in Shinsa.');
-  });
-
-  test('a review reads like the pull request description: summary, approach, checks and risks', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    reachReviewGate(harness, taskId);
     const text = readText(serializeSlackGate(harness.task(taskId), harness.openGate(taskId), URL) ?? never());
-    expect(text).toContain('Ready for your review');
-    expect(text).toContain('✅ *Checks*  All');
-    expect(text).toContain('Review in Shinsa');
+    expect(text).toBe(`📋 *Plan ready*  Stream the export.\n<${URL}|Review the plan in Shinsa>`);
   });
 
-  test('a review names failing checks, findings, coverage, risks and the steps before the merge', () => {
+  test('a review is its summary, how the checks went and a link, plus the pull request', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
     const task = harness.task(taskId);
-    const risks = Array.from({ length: 7 }, (_, index) => ({
-      title: `Risk ${index}`,
-      file: null,
-      line: null,
-      end: null,
-      risk: 'It may break.',
-    }));
-    const walkthrough = {
-      approach: 'Read with a `ReadableStream`.',
-      flow: '',
-      risks,
-      testing: { automated: [], manual: [] },
-      steps: [
-        {
-          when: 'pre_merge' as const,
-          kind: 'env' as const,
-          title: 'Set EXPORT_DIR',
-          detail: 'In production.',
-          command: null,
-        },
-      ],
-    };
-    const reviewed = {
+    const text = readText(serializeSlackGate(task, harness.openGate(taskId), URL) ?? never());
+    expect(text).toStartWith('👀 *Ready for review*  ');
+    expect(text).toContain('✓ All');
+    expect(text).toEndWith(`<${URL}|Review in Shinsa>`);
+    const check = { id: 'c1', label: 'Export tests', command: 'bun test', detail: null };
+    const failing = {
       ...task,
-      phaseReports: task.phaseReports.map((report) => ({ ...report, walkthrough })),
-      summary: 'Streams the **export**.',
+      summary: `${'Streams the export. '.repeat(30)}`,
       checkResults: [
-        { id: 'c1', label: 'Export tests', command: 'bun test', outcome: 'fail' as const, detail: null },
+        { ...check, outcome: 'fail' as const },
+        { ...check, id: 'c2', outcome: 'pass' as const },
       ],
-      coverage: {
-        status: 'measured' as const,
-        command: 'bun test --coverage',
-        covered: 8,
-        executable: 10,
-        files: [],
-      },
-      findings: [{ severity: 'should_fix' as const, file: null, line: null, message: 'Name it better.' }],
       pullRequest: pullRequest(),
     };
-    const text = readText(serializeSlackGate(reviewed, harness.openGate(taskId), URL) ?? never());
-    expect(text).toContain('Streams the *export*.');
-    expect(text).toContain('*Approach*\nRead with a `ReadableStream`.');
-    expect(text).toContain('❌ *Checks*  1 of 1 did not pass. The tests cover 8 of 10 changed lines.');
-    expect(text).toContain('🔎 *Agent review*  1 finding for you to weigh.');
-    expect(text).toContain('☐ *Before the merge*  1 step for you, listed in Shinsa.');
-    expect(text).toContain('• ⚠️ *Risk 0*  It may break.');
-    expect(text).toContain('_and 2 more risks_');
-    expect(text).toContain(`|Pull request #${reviewed.pullRequest.number}>`);
+    const failed = readText(serializeSlackGate(failing, harness.openGate(taskId), URL) ?? never());
+    expect(failed).toContain('👀 *Ready for review*  Streams the export.\n✕ 1 of 2 checks failed');
+    expect(failed).toEndWith(`|PR #${failing.pullRequest.number}>`);
+    const one = { ...task, checkResults: [{ ...check, outcome: 'pass' as const }] };
+    expect(readText(serializeSlackGate(one, harness.openGate(taskId), URL) ?? never())).toContain(
+      '✓ The check passed'
+    );
+    const none = { ...task, checkResults: [], summary: 'x'.repeat(400) };
+    const bare = readText(serializeSlackGate(none, harness.openGate(taskId), URL) ?? never());
+    expect(bare).toContain(`${'x'.repeat(279)}…\n<${URL}|Review in Shinsa>`);
   });
 
-  test('a proposal shows the change and why, and gates nobody acts on in Slack post nothing', () => {
+  test('a proposal is the change in one line and a link, and gates nobody decides in Slack post nothing', () => {
     const harness = createHarness();
     const taskId = startShaped(harness, 'investigate');
     harness.send({
@@ -371,13 +245,15 @@ describe('the posts each gate makes', () => {
       runId: harness.activeRun(taskId).id,
       step: 'investigate',
       body: 'It reads the whole file.',
-      proposal: { request: 'Stream the export in chunks.', why: 'It reads the whole file into memory.' },
+      proposal: { request: 'Stream the export in chunks.\nMore detail.', why: 'It reads the whole file.' },
     });
     const gate = harness.openGate(taskId);
-    const text = readText(serializeSlackGate(harness.task(taskId), gate, URL) ?? never());
-    expect(text).toContain('Change to approve');
-    expect(text).toContain('Stream the export in chunks.');
-    expect(text).toContain('_Why:_ It reads the whole file into memory.');
+    expect(readText(serializeSlackGate(harness.task(taskId), gate, URL) ?? never())).toBe(
+      `💡 *Proposed change*  Stream the export in chunks.\n<${URL}|Decide in Shinsa>`
+    );
+    expect(
+      readText(serializeSlackGate({ ...harness.task(taskId), proposal: null }, gate, URL) ?? never())
+    ).toContain('💡 *Proposed change*  \n');
     for (const type of ['merge', 'operation', 'failure', 'configuration', 'sign_in', 'post_merge'] as const) {
       expect(serializeSlackGate(harness.task(taskId), { ...gate, type }, URL)).toBeNull();
     }
@@ -385,63 +261,83 @@ describe('the posts each gate makes', () => {
 });
 
 describe('the result', () => {
-  test('is posted in full under its kind, as mrkdwn', () => {
+  function deliver(harness: Harness, taskId: string, body: string, step: 'answer' | 'research' = 'answer') {
+    harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step, body });
+  }
+
+  test('streams as markdown with a link to Shinsa, and posts as mrkdwn when it cannot stream', () => {
     const harness = createHarness();
     const taskId = startShaped(harness, 'answer');
-    harness.send({
-      type: 'agent.deliver',
-      runId: harness.activeRun(taskId).id,
-      step: 'answer',
-      body: '## Cause\nThe **parser** reads it all. See [the code](https://github.com/a/b).',
-    });
-    const message = serializeSlackResult(harness.task(taskId), URL) ?? never();
-    const text = readText(message);
-    expect(text).toStartWith('Answer\n');
-    expect(text).toContain('*Cause*\nThe *parser* reads it all. See <https://github.com/a/b|the code>.');
-    expect(text).not.toContain('cut short');
-    expect(message.text).toStartWith('Answer for ');
+    deliver(
+      harness,
+      taskId,
+      '## Cause\nThe **parser** reads it all. See [the code](https://github.com/a/b).'
+    );
+    const task = harness.task(taskId);
+    expect(resolveSlackResultMarkdown(task, URL)).toBe(
+      `## Cause\nThe **parser** reads it all. See [the code](https://github.com/a/b).\n\n[Open in Shinsa](${URL})`
+    );
+    const message = serializeSlackResult(task, URL) ?? never();
+    expect(readText(message)).toBe(
+      `*Cause*\nThe *parser* reads it all. See <https://github.com/a/b|the code>.\n<${URL}|Open in Shinsa>`
+    );
+    expect(message.text).toBe('## Cause');
   });
 
-  test('a long one is split into sections and cut with a pointer to Shinsa', () => {
+  test('a long one is cut at a word, with a link to read the rest', () => {
     const harness = createHarness();
     const taskId = startShaped(harness, 'research');
-    const body = Array.from({ length: 400 }, (_, index) => `Paragraph ${index} ${'word '.repeat(10)}`).join(
-      '\n\n'
+    deliver(
+      harness,
+      taskId,
+      Array.from({ length: 400 }, (_, index) => `Paragraph ${index} words`).join('\n\n'),
+      'research'
     );
-    harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'research', body });
+    const markdown = resolveSlackResultMarkdown(harness.task(taskId), URL) ?? never();
+    expect(markdown.length).toBeLessThanOrEqual(SLACK_RESULT_LIMIT + URL.length + 40);
+    expect(markdown).toEndWith(`…\n\n[Read the rest in Shinsa](${URL})`);
     const message = serializeSlackResult(harness.task(taskId), URL) ?? never();
-    const sections = message.blocks
-      .flatMap((block) => (block.type === 'section' ? [block.text.text] : []))
-      .slice(1);
-    expect(sections.length).toBeGreaterThan(3);
-    for (const section of sections) expect(section.length).toBeLessThanOrEqual(SLACK_BLOCK_LIMITS.section);
-    const total = sections.reduce((sum, section) => sum + section.length, 0);
-    expect(total).toBeLessThanOrEqual(SLACK_RESULT_LIMIT);
-    expect(readText(message)).toContain('_This is cut short. Read the rest in Shinsa._');
-    expect(readText(message)).toStartWith('Report\n');
+    expect(readText(message)).toEndWith(`<${URL}|Read the rest in Shinsa>`);
+    const unbroken = startShaped(harness, 'answer', 'Other');
+    deliver(harness, unbroken, 'x'.repeat(SLACK_RESULT_LIMIT + 10));
+    expect(resolveSlackResultMarkdown(harness.task(unbroken), URL)).toStartWith(
+      `${'x'.repeat(SLACK_RESULT_LIMIT)}…`
+    );
   });
 
-  test('a task without a result posts nothing', () => {
+  test('a task without a result has nothing to post', () => {
     const harness = createHarness();
-    expect(serializeSlackResult(harness.task(createTask(harness)), URL)).toBeNull();
+    const task = harness.task(createTask(harness));
+    expect(serializeSlackResult(task, URL)).toBeNull();
+    expect(resolveSlackResultMarkdown(task, URL)).toBeNull();
+  });
+});
+
+describe('streaming', () => {
+  test('splits text into short pieces at word boundaries, losing nothing', () => {
+    const text = 'Hi Christo! Tell me what you need and I will start on it right away.';
+    const pieces = listSlackStreamPieces(text);
+    expect(pieces.join('')).toBe(text);
+    expect(pieces.length).toBeGreaterThan(1);
+    for (const piece of pieces) expect(piece.length).toBeLessThanOrEqual(48);
+    expect(listSlackStreamPieces('a'.repeat(100))).toEqual(['a'.repeat(100)]);
+    expect(listSlackStreamPieces('')).toEqual([]);
   });
 });
 
 describe("the bot's own replies", () => {
-  test('forwarded, held, link and offline', () => {
+  test('forwarded, held, a reply, the connect link and offline are each one short line', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness, { request: 'Fix it' }));
-    expect(readText(serializeSlackForwarded(task, URL))).toBe(
-      `↪️ Sent to <${URL}|Fix it>. It reads your message next.`
-    );
+    expect(readText(serializeSlackForwarded(task, URL))).toBe(`↪️ Sent to <${URL}|SUP-1 · Fix it>`);
     expect(readText(serializeSlackHeld(task, URL))).toBe(
-      `📌 Kept for <${URL}|Fix it>. It waits on you in Shinsa, so nothing changes until you decide there.`
+      `📌 Kept for <${URL}|SUP-1 · Fix it>. It waits on you in Shinsa.`
     );
-    const link = serializeSlackLinkPrompt('https://app.shinsa.dev/slack/link');
-    expect(listButtons(link)).toEqual([
-      expect.objectContaining({ url: 'https://app.shinsa.dev/slack/link', style: 'primary' }),
-    ]);
-    expect(readText(serializeSlackOffline('Studio & Co'))).toContain('*Studio &amp; Co is offline*');
+    expect(readText(serializeSlackReply('Hi <there>!'))).toBe('Hi &lt;there&gt;!');
+    expect(readText(serializeSlackLinkPrompt('https://app.shinsa.dev/slack/connect'))).toEndWith(
+      '<https://app.shinsa.dev/slack/connect|Connect Slack>'
+    );
+    expect(readText(serializeSlackOffline('Studio & Co'))).toStartWith('🔌 *Studio &amp; Co* is offline');
   });
 });
 
@@ -449,13 +345,7 @@ describe('a post from the outbox', () => {
   test('resolves each kind from the state, and nothing for a task or gate that is gone', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(taskId).id,
-      gateId: 'q1',
-      question: 'Go?',
-      context: null,
-    });
+    ask(harness, taskId, { question: 'Go?' });
     const { state } = harness;
     expect(
       readText(resolveSlackPostMessage(state, { kind: 'gate', gateId: 'q1' }, taskId, URL) ?? never())
@@ -470,7 +360,7 @@ describe('a post from the outbox', () => {
 });
 
 describe('Slack limits on every message', () => {
-  test('a long title, label and fallback are cut, and empty contexts and extra blocks are dropped', () => {
+  test('a long fallback is cut, and empty contexts and extra blocks are dropped', () => {
     const blocks = [
       ...Array.from({ length: 60 }, () => createSlackSection('x')),
       { type: 'context' as const, elements: [] },
@@ -478,30 +368,10 @@ describe('Slack limits on every message', () => {
     const message = createSlackMessage('y'.repeat(5000), blocks);
     expect(message.blocks.length).toBe(SLACK_BLOCK_LIMITS.blocks);
     expect(message.text.length).toBe(SLACK_BLOCK_LIMITS.fallback);
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(taskId).id,
-      gateId: 'q1',
-      question: 'Go?',
-      context: null,
-    });
-    const task = { ...harness.task(taskId), title: 't'.repeat(400) };
-    const plan =
-      serializeSlackGate(
-        task,
-        { ...harness.openGate(taskId), type: 'plan' },
-        `https://app.shinsa.dev/${'u'.repeat(4000)}`
-      ) ?? never();
-    expect(createSlackHeader('h'.repeat(400))).toMatchObject({
-      text: { text: `${'h'.repeat(SLACK_BLOCK_LIMITS.header - 1)}…` },
-    });
-    for (const block of plan.blocks) {
-      if (block.type === 'section')
-        expect(block.text.text.length).toBeLessThanOrEqual(SLACK_BLOCK_LIMITS.section);
-    }
-    for (const button of listButtons(plan)) expect(button.url.length).toBe(SLACK_BLOCK_LIMITS.url);
+    const section = createSlackSection('z'.repeat(4000));
+    const text = section.type === 'section' ? section.text.text : '';
+    expect(text.length).toBeLessThanOrEqual(SLACK_BLOCK_LIMITS.section);
+    expect(text).toEndWith('…');
   });
 });
 

@@ -33,7 +33,16 @@ function forwardMention(decider: Decider, task: Task, mention: SlackMention) {
 }
 
 export function receiveSlackMention(decider: Decider, command: CommandOf<'slack.mention'>) {
-  const { mention } = command;
+  const linked = selectThreadTask(decider, resolveSlackMentionThread(command.mention));
+  if (linked) {
+    forwardMention(decider, linked, command.mention);
+    return;
+  }
+  decider.run({ kind: 'slack.evaluate', mention: command.mention });
+}
+
+export function startSlackTask(decider: Decider, command: CommandOf<'slack.start_task'>) {
+  const { mention, statusTs } = command;
   const thread = resolveSlackMentionThread(mention);
   const linked = selectThreadTask(decider, thread);
   if (linked) {
@@ -48,7 +57,7 @@ export function receiveSlackMention(decider: Decider, command: CommandOf<'slack.
   decider.emit({
     type: 'slack.thread_linked',
     taskId,
-    link: { ...thread, userId: mention.userId, permalink: mention.permalink, statusTs: null },
+    link: { ...thread, userId: mention.userId, permalink: mention.permalink, statusTs },
   });
 }
 

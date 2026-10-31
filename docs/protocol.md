@@ -894,7 +894,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
-| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread (kept while a gate is open), else starts a task as Home does and links it to the thread |
+| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread (kept while a gate is open), else asks for `slack.evaluate` |
+| `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention and the streamed message to edit as its status (`statusTs`, or null): starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
 | `slack.record_status` | the `slack.status` effect | the ts of the task's status message, once Slack has it |
 
 ## Events
@@ -1023,7 +1024,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `question.resolve` | process_bound | `gate:<id>` | none: releases the waiting `ask` call |
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
-| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a gate, the result, "Sent to …" or "Kept for …" through app.shinsa.dev |
+| `slack.evaluate` | replay_safe | `slack:<thread key>` | streams a short reply for small talk, else `slack.start_task`; key `slack.evaluate:<event id>` |
+| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a gate, "Sent to …" or "Kept for …" through app.shinsa.dev, and streams the result |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new status message; edits it at most every 5 s |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
@@ -1266,6 +1268,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
 | `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
+| `POST /__remote/slack/stream` | The engine, with its machine token | `SlackRelayStream` (the thread, the person it streams to, `ts` null to start or the stream's, `done`, `markdown` up to `SLACK_STREAM_LIMIT`; `parseSlackRelayStream`) → `SlackRelayPosted` `{ ts }`: `chat.startStream`, `chat.appendStream` or `chat.stopStream` in `markdown_text` mode, only in a thread forwarded to it and only its own stream |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when Slack will not take it (a workspace without agent features) |
 | `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
 

@@ -87,7 +87,9 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
-  posted (`slack_threads`, `slack_posts`), `/__remote/slack/session` sets the thread's status (`agents.sessions.setStatus`, best effort, `applied:
+  posted (`slack_threads`, `slack_posts`), `/__remote/slack/stream` starts, appends to and stops a stream of
+  markdown to the person who mentioned the bot (`chat.startStream` and the rest, its own streams only),
+  `/__remote/slack/session` sets the thread's status (`agents.sessions.setStatus`, best effort, `applied:
   false` where Slack has no agent features); `/__remote/slack/links` and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the

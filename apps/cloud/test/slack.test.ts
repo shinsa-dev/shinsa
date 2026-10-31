@@ -71,6 +71,9 @@ function createFakeSlack(harness: Harness): FakeSlack {
     'chat.postMessage': () => ({ ok: true, ts: `300.${++posted}` }),
     'chat.update': () => ({ ok: true }),
     'chat.postEphemeral': () => ({ ok: true, message_ts: '300.0' }),
+    'chat.startStream': () => ({ ok: true, ts: `400.${++posted}` }),
+    'chat.appendStream': () => ({ ok: true }),
+    'chat.stopStream': () => ({ ok: true }),
     'agents.sessions.setStatus': () => ({ ok: true, status: 'processing' }),
   };
   harness.handlers.push((call) => {
@@ -719,6 +722,45 @@ describe('what a machine does through the relay', () => {
     expect(links.links).toEqual([]);
     await sendEvent(harness, mentionEnvelope());
     expect(slack.callsTo('chat.postEphemeral')).toHaveLength(1);
+  });
+
+  test('streams text in the thread to the person who mentioned it, then appends to and stops only its own stream', async () => {
+    const { harness, machine, slack } = await forwardedSetup();
+    const stream = (body: unknown) =>
+      harness.post(SLACK_RELAY_PATHS.stream, body, { bearer: machine.machineToken, sameOrigin: false });
+    const thread = { teamId: 'T1', channelId: 'C1', threadTs: '100.1', recipientUserId: 'U1' };
+    const started = await stream({ ...thread, ts: null, done: false, markdown: null });
+    const { ts } = await readJson<{ ts: string }>(started);
+    expect(slack.callsTo('chat.startStream').at(-1)?.body).toEqual({
+      channel: 'C1',
+      thread_ts: '100.1',
+      recipient_user_id: 'U1',
+      recipient_team_id: 'T1',
+    });
+    await stream({ ...thread, ts, done: false, markdown: 'Hi ' });
+    expect(slack.callsTo('chat.appendStream').at(-1)?.body).toEqual({
+      channel: 'C1',
+      ts,
+      markdown_text: 'Hi ',
+    });
+    const stopped = await stream({ ...thread, ts, done: true, markdown: 'On it.' });
+    expect(await stopped.json()).toEqual({ ts });
+    expect(slack.callsTo('chat.stopStream').at(-1)?.body).toEqual({
+      channel: 'C1',
+      ts,
+      markdown_text: 'On it.',
+    });
+    const edited = await harness.post(
+      SLACK_RELAY_PATHS.post,
+      { ...POST, replaceTs: ts },
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    expect(edited.status).toBe(200);
+    expect((await stream({ ...thread, ts: '999.9', done: true, markdown: null })).status).toBe(403);
+    expect((await stream({ ...thread, ts: null, done: true, markdown: null })).status).toBe(400);
+    slack.answers['chat.startStream'] = () => ({ ok: false, error: 'missing_scope' });
+    const refused = await stream({ ...thread, ts: null, done: false, markdown: null });
+    expect(refused.status).toBe(502);
   });
 
   test('sets the thread’s status in Slack, and says so when Slack will not take it', async () => {

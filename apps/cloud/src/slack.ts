@@ -4,6 +4,7 @@ import {
   listSlackMentionedUsers,
   parseSlackRelayPost,
   parseSlackRelaySession,
+  parseSlackRelayStream,
   resolveSlackReadableText,
   resolveTunnelHost,
   SLACK_BLOCKS_REFUSED,
@@ -406,4 +407,26 @@ export async function respondSlackSession(request: Request, world: CloudWorld) {
     answer = { applied: false };
   }
   return respondJson(answer);
+}
+
+export async function respondSlackStream(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  const stream = parseSlackRelayStream(await readJsonFields(request, SLACK_POST_BODY_LIMIT_BYTES));
+  if (!stream) throw new CloudError('body_invalid', 'The Slack stream is not one this relay sends.', 400);
+  const token = await findThreadToken(instance, stream, stream.ts, world);
+  const text = stream.markdown ? { markdown_text: stream.markdown } : {};
+  if (stream.ts) {
+    const method = stream.done ? 'chat.stopStream' : 'chat.appendStream';
+    await requestSlackPost(world, method, token, { channel: stream.channelId, ts: stream.ts, ...text });
+    const answer: SlackRelayPosted = { ts: stream.ts };
+    return respondJson(answer);
+  }
+  const started = await requestSlackPost(world, 'chat.startStream', token, {
+    channel: stream.channelId,
+    thread_ts: stream.threadTs,
+    recipient_user_id: stream.recipientUserId,
+    recipient_team_id: stream.teamId,
+    ...text,
+  });
+  return recordPosted(world, started, stream, instance);
 }
