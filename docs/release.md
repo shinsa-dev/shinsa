@@ -200,8 +200,13 @@ uploads it to `shinsa-releases/releases/<version>/Shinsa-mac-arm64.dmg`, then wr
 `channels/stable.json` (a stable release), `channels/beta.json` (a stable or beta release) and `channels/canary.json`
 (a canary only), each only when the release is not older by semver than what it points at, so a stable release moves
 Beta too once it is newer, a stable hotfix below a running beta leaves Beta alone, and a stable or beta release never
-moves Canary. Then it deletes the
-disk images of all but the newest five canaries from the bucket (`listStaleCanaryKeys`). The rules are `scripts/release-downloads.ts`, tested at 100%; the layout and how the
+moves Canary. Before any of that it also downloads the zip, its blockmap and the release's own update file
+(`latest-mac.yml`, `beta-mac.yml` or `canary-mac.yml`), checks the zip's size and SHA-512 against that file
+(`parseUpdateFile`, `assertUpdateZip`) and uploads both next to the disk image; then, for the same channels as the
+pointers, it writes `updates/<channel>-mac.yml` with every URL rewritten to `<version>/Shinsa-mac-arm64.zip`
+(`serializeUpdateFile`), the files the Mac app's updater reads at `shinsa.dev/updates`. The update files are written
+last, so none ever names a zip the bucket does not hold. Nothing in the bucket is ever deleted: every version's disk
+image, zip and blockmap stay under `releases/<version>/`. The rules are `scripts/release-downloads.ts`, tested at 100%; the layout and how the
 site serves it are `apps/marketing/CLAUDE.md` → Deploy. It talks to R2's S3 API with the `CLOUDFLARE_API_TOKEN` secret, the
 **Shinsa CI** account token of Overclock Studio, which needs only **Workers R2 Storage Bucket Item Read** and **Write**
 on `shinsa-releases`. The script asks Cloudflare for the token's id (`/accounts/<id>/tokens/verify`) and signs in with

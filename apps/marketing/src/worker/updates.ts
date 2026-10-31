@@ -80,7 +80,7 @@ function createUpdateHeaders(file: UpdateFile, object: UpdateObject) {
   });
 }
 
-function answerStatus(status: number, headers: HeadersInit = {}) {
+function answerStatus(status: number, headers: Record<string, string> = {}) {
   return new Response(null, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 }
 

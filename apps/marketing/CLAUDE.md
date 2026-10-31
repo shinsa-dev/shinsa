@@ -180,8 +180,9 @@ A channel file is a pointer, `{version, key, size, sha256, publishedAt}` (`parse
 GitHub release is published and only when its version is not older than the one there by semver (so a stable release
 moves `stable.json` and `beta.json`, a beta only `beta.json`, a canary only `canary.json`, and a stable hotfix below a
 running beta moves only `stable.json`). `canary.json` only ever points at a canary and the other two never do, so
-`/download` and `/download/beta` never hand out a build of `main`. Only the newest five canaries keep their disk image in the bucket;
-the Release workflow deletes the older ones.
+`/download` and `/download/beta` never hand out a build of `main`. Nothing in the bucket is deleted: every version keeps its
+disk image, zip and blockmap under `releases/<version>/`, and the channel's `updates/<channel>-mac.yml` moves with its
+pointer (`docs/release.md` → Downloads).
 
 - **Serving.** The Worker reads the channel's pointer (kept 60 seconds in the edge cache, `caches.default` under a
   made-up URL; the cache works on the custom domains, not on a workers.dev preview) and streams the object from the
