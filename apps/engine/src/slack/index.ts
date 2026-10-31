@@ -11,6 +11,7 @@ import {
   resolveSlackSessionStatus,
   resolveSlackTaskUrl,
   type ShinsaEffect,
+  SLACK_BLOCKS_REFUSED,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
@@ -88,6 +89,7 @@ export class Slack {
   readonly #statusAt = new Map<string, number>();
   readonly #statusShown = new Map<string, string>();
   readonly #sessionShown = new Map<string, SlackSessionStatus>();
+  readonly #textStatusTeams = new Set<string>();
 
   constructor(options: SlackOptions) {
     this.#engine = options.engine;
@@ -140,7 +142,12 @@ export class Slack {
     return taskId ? resolveSlackTaskUrl(origin, taskId) : origin;
   }
 
-  async #send(thread: SlackThreadRef, replaceTs: string | null, message: SlackMessage) {
+  async #send(
+    thread: SlackThreadRef,
+    replaceTs: string | null,
+    message: SlackMessage,
+    fallback: SlackMessage | null = null
+  ): Promise<string | null> {
     const credentials = this.#selectCredentials();
     if (!credentials) {
       log.warn('[Slack] Remote access is off, so nothing was posted', { threadTs: thread.threadTs });
@@ -155,6 +162,14 @@ export class Slack {
         message,
       });
     } catch (error) {
+      if (error instanceof SlackRelayError && error.code === SLACK_BLOCKS_REFUSED && fallback) {
+        log.info('[Slack] Slack refused the plan block, so the status message lists its steps as text', {
+          teamId: thread.teamId,
+          threadTs: thread.threadTs,
+        });
+        this.#textStatusTeams.add(thread.teamId);
+        return this.#send(thread, replaceTs, fallback);
+      }
       if (error instanceof SlackRelayError && !error.isRetryable) {
         log.warn('[Slack] app.shinsa.dev refused the post', {
           code: error.code,
@@ -225,18 +240,17 @@ export class Slack {
     const task = state.tasks[effect.taskId];
     const link = task?.slack;
     if (!task || !link) return;
-    const message = serializeSlackStatus(task, listSlackStatusGates(state, task.id), this.#taskUrl(task.id));
-    const shown = JSON.stringify(message);
-    if (link.statusTs && this.#statusShown.get(task.id) === shown) return;
-    const ts = await this.#send(link, link.statusTs, message);
+    const gates = listSlackStatusGates(state, task.id);
+    const url = this.#taskUrl(task.id);
+    const text = serializeSlackStatus(task, gates, url, 'text');
+    const textOnly = this.#textStatusTeams.has(link.teamId);
+    const message = textOnly ? text : serializeSlackStatus(task, gates, url);
+    if (link.statusTs && this.#statusShown.get(task.id) === JSON.stringify(message)) return;
+    const ts = await this.#send(link, link.statusTs, message, textOnly ? null : text);
     this.#statusAt.set(task.id, this.#now());
     if (!ts) return;
-    this.#statusShown.set(task.id, shown);
-    await this.#syncSession(
-      link,
-      task.id,
-      resolveSlackSessionStatus(task, listSlackStatusGates(state, task.id))
-    );
+    this.#statusShown.set(task.id, JSON.stringify(this.#textStatusTeams.has(link.teamId) ? text : message));
+    await this.#syncSession(link, task.id, resolveSlackSessionStatus(task, gates));
     if (ts === link.statusTs) return;
     await this.#engine.dispatch(
       { type: 'slack.record_status', taskId: task.id, ts },

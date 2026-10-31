@@ -688,6 +688,10 @@ describe('what a machine does through the relay', () => {
     expect((await readJson<{ error: { message: string } }>(refused)).error.message).toBe(
       'Slack did not take the post (msg_too_long).'
     );
+    slack.answers['chat.postMessage'] = () => ({ ok: false, error: 'invalid_blocks' });
+    const blocks = await post(POST);
+    expect(blocks.status).toBe(422);
+    expect((await readJson<{ error: { code: string } }>(blocks)).error.code).toBe('slack_blocks_refused');
     slack.answers['chat.postMessage'] = () => ({ ok: true });
     expect((await post(POST)).status).toBe(502);
     harness.handlers.unshift((call) => {

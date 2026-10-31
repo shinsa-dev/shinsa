@@ -108,6 +108,20 @@ describe('the status message', () => {
     expect(message.text).toBe(`${handle} · Fix the &lt;export&gt; &amp; hang: 🔵 Planning the phases`);
   });
 
+  test('lists its steps as text, with no plan block, for a workspace that refuses one', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const message = serializeSlackStatus(
+      harness.task(taskId),
+      listSlackStatusGates(harness.state, taskId),
+      URL,
+      'text'
+    );
+    expect(message.blocks.map((block) => block.type)).toEqual(['section', 'context']);
+    const [, context] = message.blocks;
+    expect(context?.type === 'context' && context.elements[1]?.text).toStartWith('● Plan   ○ Build');
+  });
+
   test('marks a step that waits for you, and gives the plan a new block id whenever it changes', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

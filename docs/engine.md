@@ -2587,7 +2587,10 @@ Slack ──event──► app.shinsa.dev /slack/events
 - **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
   that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
-  → `slack.status_posted`).
+  → `slack.status_posted`). Where Slack refuses the `plan` block (`invalid_blocks`, which app.shinsa.dev answers
+  as 422 `slack_blocks_refused`, never retried), the same edit is sent at once with the steps as a line of text
+  (`serializeSlackStatus(…, 'text')`: ✓ done, ● at work, ◐ waiting for you, ○ to come), and every later status
+  message of that workspace is sent as text until the engine restarts.
 - **The thread's own status in Slack** (`resolveSlackSessionStatus`, `agents.sessions.setStatus` through
   `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
   loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),

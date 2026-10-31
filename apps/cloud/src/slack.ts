@@ -7,6 +7,7 @@ import {
   parseSlackRelayStream,
   resolveSlackReadableText,
   resolveTunnelHost,
+  SLACK_BLOCKS_REFUSED,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_FORWARD_HEADERS,
   SLACK_LIMITS,
@@ -328,11 +329,15 @@ export async function respondSlackUnlink(request: Request, world: CloudWorld) {
   return respondJson({ ok: true });
 }
 
+const REFUSED_BLOCK_CODES = new Set(['invalid_blocks', 'invalid_blocks_format']);
+
 async function requestSlackPost(world: CloudWorld, method: string, token: string, json: Fields) {
   try {
     return await requestSlack(world, method, { token, json });
   } catch (error) {
     const code = error instanceof SlackApiError ? error.code : 'failed';
+    if (REFUSED_BLOCK_CODES.has(code))
+      throw new CloudError(SLACK_BLOCKS_REFUSED, `Slack did not take the blocks in the post (${code}).`, 422);
     throw new CloudError('slack_failed', `Slack did not take the post (${code}).`, 502);
   }
 }

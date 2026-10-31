@@ -22,6 +22,8 @@ export const SLACK_FORWARD_HEADERS = {
 
 export const SLACK_FORWARD_WINDOW_MS = 5 * 60_000;
 
+export const SLACK_BLOCKS_REFUSED = 'slack_blocks_refused';
+
 export const SLACK_RELAY_MESSAGE_LIMITS = {
   text: 40_000,
   blocks: SLACK_BLOCK_LIMITS.blocks,

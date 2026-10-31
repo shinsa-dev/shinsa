@@ -45,6 +45,15 @@ const FINISHED_MARK: Partial<Record<TaskStage, string>> = { merged: '✅', done:
 
 const WAITING_MARK: Partial<Record<TaskStage, string>> = { triage: '⏳', waiting_on_tasks: '⏳' };
 
+const PHASE_MARK: Record<DisplayPhase['status'], string> = {
+  done: '✓',
+  active: '●',
+  waiting: '◐',
+  pending: '○',
+  skipped: '○',
+  cancelled: '✕',
+};
+
 const PHASE_STATUS: Record<DisplayPhase['status'], SlackTaskStatus> = {
   done: 'complete',
   active: 'in_progress',
@@ -115,11 +124,17 @@ function resolvePlanTask(phase: DisplayPhase): SlackPlanTask {
   };
 }
 
-function listPlanTasks(task: Task) {
-  return resolveTaskProgress(task)
-    .phases.filter((phase) => phase.status !== 'skipped')
-    .map(resolvePlanTask);
+function listShownPhases(task: Task) {
+  return resolveTaskProgress(task).phases.filter((phase) => phase.status !== 'skipped');
 }
+
+function describeSteps(task: Task) {
+  return listShownPhases(task)
+    .map((phase) => `${PHASE_MARK[phase.status]} ${escapeSlackText(phase.title)}`)
+    .join('   ');
+}
+
+export type SlackStatusLayout = 'plan' | 'text';
 
 export function resolveSlackSessionStatus(task: Task, gates: readonly Gate[]): SlackSessionStatus {
   if (isTaskClosed(task)) return 'closed';
@@ -133,17 +148,27 @@ function describePullRequest(task: Task) {
   return pullRequest ? `<${pullRequest.url}|Pull request #${pullRequest.number}>` : '';
 }
 
-export function serializeSlackStatus(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
+export function serializeSlackStatus(
+  task: Task,
+  gates: readonly Gate[],
+  taskUrl: string,
+  layout: SlackStatusLayout = 'plan'
+): SlackMessage {
   const attention = resolveAttentionGate(gates);
   const line = describeStatusLine(task, attention);
   const plain = line.replace(/[*_]/g, '');
+  const steps =
+    layout === 'plan'
+      ? [createSlackPlan(describePlanTitle(task, attention), listShownPhases(task).map(resolvePlanTask))]
+      : [];
+  const context = layout === 'plan' ? [] : [describeSteps(task)];
   return createSlackMessage(`${describeTask(task)}: ${plain}`, [
     createSlackSection(
       `*${describeTaskLink(task, taskUrl)}*\n${line}`,
       createSlackButton(OPEN_LABEL, taskUrl)
     ),
-    createSlackPlan(describePlanTitle(task, attention), listPlanTasks(task)),
-    createSlackContext([describeTaskContext(task), describePullRequest(task)]),
+    ...steps,
+    createSlackContext([describeTaskContext(task), ...context, describePullRequest(task)]),
   ]);
 }
 

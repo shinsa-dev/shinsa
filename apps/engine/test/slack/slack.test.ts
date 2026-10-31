@@ -391,6 +391,35 @@ describe('the status message of a task', () => {
     expect(JSON.stringify(callsTo(relay, 'post')[1]?.body?.message)).toContain('Which tab?');
   });
 
+  test('lists its steps as text where Slack refuses the plan block, and keeps doing so for that workspace', async () => {
+    const { slack, stub, relay, answers, clock } = setUp();
+    const blocksOf = (index: number) =>
+      (callsTo(relay, 'post')[index]?.body?.message as { blocks: { type: string }[] } | undefined)?.blocks ??
+      [];
+    answers['/__remote/slack/post'] = (body) => {
+      const blocks = (body?.message as { blocks: { type: string }[] }).blocks;
+      if (blocks.some((block) => block.type === 'plan'))
+        return Response.json({ error: { code: 'slack_blocks_refused' } }, { status: 422 });
+      return Response.json({ ts: body?.replaceTs ?? '200.1' });
+    };
+    await slack.status(effect, context('status-1'));
+    expect(blocksOf(0).some((block) => block.type === 'plan')).toBe(true);
+    expect(blocksOf(1).some((block) => block.type === 'plan')).toBe(false);
+    expect(JSON.stringify(blocksOf(1))).toContain('● ');
+    expect(stub.dispatched).toEqual([{ type: 'slack.record_status', taskId: 't1', ts: '200.1' }]);
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) {
+        task.slack = { ...LINK, statusTs: '200.1' };
+        task.stage = 'building';
+      }
+    });
+    clock.now += 10_000;
+    await slack.status(effect, context('status-2'));
+    expect(callsTo(relay, 'post')).toHaveLength(3);
+    expect(blocksOf(2).some((block) => block.type === 'plan')).toBe(false);
+  });
+
   test('keeps nothing when the relay refuses, and does nothing for a task without a thread', async () => {
     const { slack, stub, relay, answers } = setUp();
     answers['/__remote/slack/post'] = () =>
