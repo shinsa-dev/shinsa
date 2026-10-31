@@ -21,6 +21,7 @@ import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
 import { ErrorSpecimens } from './errors.tsx';
 import { EvidenceSpecimens } from './evidence.tsx';
+import { ExchangeSpecimens } from './exchanges.tsx';
 import { INPUT_SECTIONS, InputSpecimens } from './inputs.tsx';
 import { OnboardingSpecimens } from './onboarding.tsx';
 import { OVERLAY_SECTIONS, OverlaySpecimens } from './overlays.tsx';
@@ -43,6 +44,7 @@ const SECTIONS = [
   { id: 'shinsa-setup', label: 'Setup' },
   { id: 'shinsa-accounts', label: 'Accounts' },
   { id: 'shinsa-overview', label: 'Overview cards' },
+  { id: 'shinsa-replies', label: 'Replies' },
   { id: 'shinsa-chat', label: 'Chat' },
   { id: 'shinsa-review', label: 'Review' },
   { id: 'shinsa-checks', label: 'Checks' },
@@ -207,6 +209,14 @@ export function UiPage() {
             className='flex-col items-start gap-8'
           >
             <OverviewSpecimens />
+          </Section>
+          <Section
+            id='shinsa-replies'
+            title='Shinsa composites · replies to your requests'
+            description='Five ways the review card could answer what you asked, on your requests in the Slack task. Each folds the checks into one line and shows no pre-merge steps before the merge.'
+            className='flex-col items-start gap-8'
+          >
+            <ExchangeSpecimens />
           </Section>
           <Section
             id='shinsa-chat'
