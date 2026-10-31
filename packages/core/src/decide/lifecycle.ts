@@ -3,6 +3,7 @@ import {
   isOfCurrentRound,
   isTaskSettled,
   listRepoWatchSources,
+  listStackedPullRequests,
   needsRepository,
   PLAN_GATE_RULE,
   PLAN_SIZE_LIMITS,
@@ -39,6 +40,11 @@ const SETTLED_EFFECTS: ShinsaEffectKind[] = [
   'pull_request.push',
   'pull_request.watch',
 ];
+
+function listOpenPullRequestNumbers(task: Task) {
+  const current = task.pullRequest?.state === 'open' ? [task.pullRequest.number] : [];
+  return [...current, ...listStackedPullRequests(task).map((pullRequest) => pullRequest.number)];
+}
 
 function countPhases(task: Task) {
   return Math.max(1, task.plan?.document?.phases.length ?? 0);
@@ -185,6 +191,8 @@ export function settleTask(
   decider.withdrawGates(taskId, (gate) => stage === 'cancelled' || gate.type !== 'post_merge');
   decider.clearWaits(taskId);
   decider.stage(taskId, stage, reason, by);
+  const open = stage === 'cancelled' ? listOpenPullRequestNumbers(task) : [];
+  if (open.length > 0) decider.run({ kind: 'pull_request.close', taskId, numbers: open });
   if (task.worktreePath) decider.run({ kind: 'worktree.remove', taskId });
   decider.run({ kind: 'scratch.remove', taskId });
   decider.requestBriefing(taskId);

@@ -8,6 +8,7 @@ import {
   type PullRequestRemark,
   type RepoCi,
   replayEventLog,
+  resolveTaskRounds,
   type ShinsaCommand,
 } from '../../src/index.ts';
 import {
@@ -1333,5 +1334,77 @@ describe('evidence uploads', () => {
       harness.send({ type: 'evidence.record_uploads', taskId: otherId, uploads: [{ evidenceId, url: 'x' }] })
         .events
     ).toEqual([]);
+  });
+});
+
+describe('cancelling a task with open pull requests', () => {
+  test('cancelling closes the open pull request and records it closed', () => {
+    const { harness, taskId } = shipping();
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'pending' }) });
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.lastEffect('pull_request.close')).toEqual({
+      kind: 'pull_request.close',
+      taskId,
+      numbers: [42],
+    });
+    harness.send({ type: 'pull_request.record_closed', taskId, closed: [42], failed: [] });
+    const task = harness.task(taskId);
+    expect(task.stage).toBe('cancelled');
+    expect(task.pullRequest?.state).toBe('closed');
+    expect(resolveTaskRounds(task).map((round) => round.pullRequest?.state)).toEqual(['closed']);
+    expect(task.activity.at(-1)?.text).toBe('Closed pull request #42');
+    expect(replayEventLog(harness.events).state).toEqual(harness.state);
+  });
+
+  test('a stacked round closes the earlier round pull request too', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { request: 'MCP v2' });
+    harness.send({ type: 'task.message', taskId, text: 'Stack this', kind: 'new_round', title: 'Stack' });
+    harness.send({ type: 'round.ship', taskId, number: 2, shipping: 'stacked' });
+    reachShipping(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ number: 42 }) });
+    harness.send({ type: 'config.record', taskId, problems: [] });
+    const branch = harness.task(taskId).branch ?? '';
+    harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch });
+    reachReviewGate(harness, taskId);
+    approve(harness, taskId);
+    pushed(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ number: 43 }) });
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.lastEffect('pull_request.close').numbers).toEqual([43, 42]);
+    harness.send({
+      type: 'pull_request.record_closed',
+      taskId,
+      closed: [43],
+      failed: [{ number: 42, detail: 'HTTP 403: Resource not accessible' }],
+    });
+    const task = harness.task(taskId);
+    expect(resolveTaskRounds(task).map((round) => round.pullRequest?.state)).toEqual(['open', 'closed']);
+    expect(task.activity.slice(-2).map((entry) => [entry.text, entry.detail])).toEqual([
+      ['Closed pull request #43', null],
+      ['Could not close pull request #42', 'HTTP 403: Resource not accessible'],
+    ]);
+    expect(replayEventLog(harness.events).state).toEqual(harness.state);
+  });
+
+  test('marking a task done or cancelling one without a pull request closes nothing', () => {
+    const done = createHarness();
+    const doneId = createTask(done);
+    done.send({ type: 'task.complete', taskId: doneId });
+    expect(done.effectsOf('pull_request.close')).toEqual([]);
+    const { harness, taskId } = shipping();
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.effectsOf('pull_request.close')).toEqual([]);
+  });
+
+  test('a close recorded for a task that is not cancelled, or with nothing in it, changes nothing', () => {
+    const { harness, taskId } = shipping();
+    expect(
+      harness.send({ type: 'pull_request.record_closed', taskId, closed: [42], failed: [] }).events
+    ).toEqual([]);
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.send({ type: 'pull_request.record_closed', taskId, closed: [], failed: [] }).events).toEqual(
+      []
+    );
   });
 });
