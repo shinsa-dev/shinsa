@@ -3693,19 +3693,16 @@ So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px 
 
 Sonner's own defaults stand for everything not listed (auto-close time, stack behaviour, enter and exit motion, swipe to dismiss).
 
-**Copy rules that bind toasts:** a toast states the outcome, in sentence case, with a period when it is a sentence ("Approved. Opening the pull request."), a short fragment otherwise ("Copied"). An error says what failed and, in the description, what to do.
+**Copy rules that bind toasts:** a toast is one short line: the outcome in a few words, at most 40 characters (an inserted name or count counts as 12), with no description line under it, so it never wraps at the toaster's width. Sentence case, with a period when it is a sentence ("Request declined."), a short fragment otherwise ("Copied"). An error toast is the server's short message. The toaster clips a title or description that is still too long to one line with an ellipsis, and `bun lint:conventions` (`scripts/lint-toast.ts`) rejects a longer toast string, and toast text it cannot read through to its words.
 
 ```tsx
 // Root
 <Toaster />
 
 // Anywhere
-toast.success('Approved. Opening the pull request.');
-toast.error('Couldn’t reach Shinsa', { description: 'Run shinsa status to see whether the engine is running.' });
-toast('Task cancelled', {
-  description: 'The agent stopped and the worktree is gone.',
-  action: { label: 'Undo', onClick: () => restore() },
-});
+toast.success('Approved. Building now.');
+toast.error('Couldn’t reach Shinsa.');
+toast('Task cancelled', { action: { label: 'Undo', onClick: () => restore() } });
 
 const id = toast.loading('Merging…');
 await merge();
@@ -8980,7 +8977,7 @@ Mistakes that were made before and must not come back:
 | Status line under a row | Short phrase, may join facts with " · " | No | "Building · Agent working", "Started 2h ago" |
 | Activity entry | Past-tense sentence, sentence case | No | "Opened pull request #42", "Agent review found 2 issues, 1 blocking", "Finished: Phase 1" |
 | Toast, a word or label | The outcome | No | "Copied", "Merged #4512", "Task cancelled", "Sent to the agent" |
-| Toast, a sentence | Outcome, then one line of consequence | Yes | "Answered. The agent carries on.", "Approved. Opening the pull request.", "Notes saved." |
+| Toast, a sentence | One short line, the outcome in a few words, at most 40 characters | Yes | "Request declined.", "Approved. Building now.", "Notes saved." |
 | Failure toast | "Couldn’t {verb} {object}" | No when one phrase | "Couldn’t copy to the clipboard", "Couldn’t read the version" |
 | Empty state title | What is missing, short | No | "No tasks yet", "Nothing matches", "No terminals in Shop", "Nothing needs you" |
 | Empty state description | One or two sentences: why, and how to fill it | Yes | "A terminal keeps running when you close Shinsa." |

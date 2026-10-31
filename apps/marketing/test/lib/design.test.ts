@@ -31,7 +31,7 @@ const SKILL_RULES: Record<string, readonly string[]> = {
     'VOICE_RULE',
     'Out of automatic fix rounds',
     'The agent review found',
-    'Answered. The agent carries on.',
+    'Request declined.',
     'Check in now',
   ],
   '.claude/skills/conventions/SKILL.md': [
