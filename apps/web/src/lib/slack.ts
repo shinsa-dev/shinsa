@@ -32,7 +32,7 @@ export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
     return {
       label: 'Needs remote access',
       tone: 'neutral',
-      detail: 'Slack reaches this machine through remote access. Turn it on first.',
+      detail: 'Slack reaches this machine through remote access. Turn it on above first.',
     };
   if (snapshot.problem) return { label: 'Unknown', tone: 'amber', detail: snapshot.problem };
   if (snapshot.links.length === 0)

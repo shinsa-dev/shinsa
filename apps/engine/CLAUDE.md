@@ -175,8 +175,10 @@ src/
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
 │                        slack.mention; the slack.evaluate, slack.post and slack.status effects, the status message
-│                        edited at most every 5 s and only when it changes; GET /api/slack and POST
-│                        /api/slack/disconnect), relay.ts (SlackRelay: posts, links and unlink on app.shinsa.dev with
+│                        edited at most every 5 s and only when it changes, the thread's status set with it, the
+│                        reading streamed with a plain post where Slack will not stream; GET /api/slack and POST
+│                        /api/slack/disconnect), relay.ts (SlackRelay: posts, streams, the thread's status, links
+│                        and unlink on app.shinsa.dev with
 │                        the machine token; SlackRelayError, retried only when the relay is down or busy)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
 │                        MCP sign-ins

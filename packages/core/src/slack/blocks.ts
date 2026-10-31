@@ -9,6 +9,9 @@ export const SLACK_BLOCK_LIMITS = {
   url: 3000,
   fallback: 3000,
   blocks: 50,
+  planTitle: 150,
+  planTasks: 50,
+  taskTitle: 150,
 } as const;
 
 export interface SlackMrkdwn {
@@ -30,12 +33,38 @@ export interface SlackButton {
   style?: 'primary';
 }
 
+export type SlackTaskStatus = 'pending' | 'in_progress' | 'complete' | 'error';
+
+export interface SlackRichText {
+  type: 'rich_text';
+  elements: { type: 'rich_text_section'; elements: { type: 'text'; text: string }[] }[];
+}
+
+export interface SlackPlanTask {
+  task_id: string;
+  title: string;
+  status: SlackTaskStatus;
+  details?: SlackRichText;
+}
+
+export type SlackStreamChunk =
+  | { type: 'plan_update'; title: string }
+  | {
+      type: 'task_update';
+      id: string;
+      title: string;
+      status: Exclude<SlackTaskStatus, 'pending'>;
+      details?: SlackRichText;
+      output?: SlackRichText;
+    };
+
 export type SlackBlock =
   | { type: 'header'; text: SlackPlainText }
   | { type: 'section'; text: SlackMrkdwn; accessory?: SlackButton }
   | { type: 'context'; elements: SlackMrkdwn[] }
   | { type: 'divider' }
-  | { type: 'actions'; elements: SlackButton[] };
+  | { type: 'actions'; elements: SlackButton[] }
+  | { type: 'plan'; block_id: string; title: string; tasks: SlackPlanTask[] };
 
 export interface SlackMessage {
   text: string;
@@ -74,6 +103,33 @@ export function createSlackButton(label: string, url: string, primary = false): 
     text: { type: 'plain_text', text: fitSlackPlainText(label, SLACK_BLOCK_LIMITS.button), emoji: true },
     url: url.slice(0, SLACK_BLOCK_LIMITS.url),
     ...(primary ? { style: 'primary' as const } : {}),
+  };
+}
+
+export function createSlackRichText(text: string): SlackRichText {
+  return { type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text }] }] };
+}
+
+function resolveContentHash(text: string) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+export function createSlackPlan(title: string, tasks: SlackPlanTask[]): SlackBlock {
+  const fitted = tasks.slice(0, SLACK_BLOCK_LIMITS.planTasks).map((task) => ({
+    ...task,
+    title: fitSlackPlainText(task.title, SLACK_BLOCK_LIMITS.taskTitle),
+  }));
+  const planTitle = fitSlackPlainText(title, SLACK_BLOCK_LIMITS.planTitle);
+  return {
+    type: 'plan',
+    block_id: `plan-${resolveContentHash(JSON.stringify([planTitle, fitted]))}`,
+    title: planTitle,
+    tasks: fitted,
   };
 }
 

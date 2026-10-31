@@ -28,7 +28,7 @@ describe('Slack’s status in Settings', () => {
     expect(describeSlackStatus(snapshot({ remote: false }))).toEqual({
       label: 'Needs remote access',
       tone: 'neutral',
-      detail: 'Slack reaches this machine through remote access. Turn it on first.',
+      detail: 'Slack reaches this machine through remote access. Turn it on above first.',
     });
   });
 

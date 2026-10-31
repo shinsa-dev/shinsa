@@ -18,14 +18,12 @@ import {
   resolvePathWithoutAdd,
   SEARCH_PARAM,
 } from '@/lib/extensions.ts';
-import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { replaceRoute, updateSearchParams, useSearchParam } from '@/router.ts';
 import { ContextOptimizerGroup } from './context-optimizer.tsx';
 import { SettingsEmpty, SettingsGroup } from './group.tsx';
 import { McpServersGroup } from './mcp-servers.tsx';
 import { PluginsGroup } from './plugins.tsx';
 import { SkillsGroup } from './skills.tsx';
-import { SlackSettings } from './slack.tsx';
 
 export function IntegrationSettings({ state }: { state: ShinsaState }) {
   const { snapshot, failure } = useExtensions();
@@ -36,22 +34,17 @@ export function IntegrationSettings({ state }: { state: ShinsaState }) {
   const matches = React.useMemo(() => snapshot && filterExtensions(snapshot, query), [snapshot, query]);
   useServerCheck();
   useRefreshOnReturn();
-  const slack = isRemoteBuild() ? null : <SlackSettings state={state} />;
   if (!snapshot || !matches) {
-    if (!failure) return slack;
+    if (!failure) return null;
     return (
-      <>
-        {slack}
-        <SettingsGroup title={EXTENSION_SECTION.servers}>
-          <SettingsEmpty>{`${EXTENSION_LABEL.unreadable} ${failure}`}</SettingsEmpty>
-        </SettingsGroup>
-      </>
+      <SettingsGroup title={EXTENSION_SECTION.servers}>
+        <SettingsEmpty>{`${EXTENSION_LABEL.unreadable} ${failure}`}</SettingsEmpty>
+      </SettingsGroup>
     );
   }
   const { searching } = matches;
   return (
     <>
-      {slack}
       <Input
         type='search'
         value={query}

@@ -28,7 +28,7 @@ function renderGroup(current: SlackSnapshot | null, failure: string | null = nul
   return actions;
 }
 
-describe('Settings → Integrations → Slack', () => {
+describe('Settings → General → Slack', () => {
   it('waits for the snapshot, or says why it could not read it', () => {
     renderGroup(null);
     expect(screen.getByText('Reading Slack…')).toBeTruthy();
@@ -39,11 +39,11 @@ describe('Settings → Integrations → Slack', () => {
     expect(screen.getByText('Shinsa answered with status 503.')).toBeTruthy();
   });
 
-  it('sends you to remote access first when it is off, with no project to pick yet', () => {
+  it('asks for remote access above it first, with nothing to connect and no project to pick yet', () => {
     renderGroup(snapshot({ remote: false, connectUrl: null }));
     expect(screen.getByText('Needs remote access')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open remote access' }));
-    expect(location.pathname + location.search + location.hash).toBe('/settings#remote-access');
+    expect(screen.getByText(/Turn it on above first/)).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByText('Project for new tasks')).toBeNull();
   });
 

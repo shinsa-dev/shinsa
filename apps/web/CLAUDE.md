@@ -73,9 +73,9 @@ src/
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
 │                        accounts.tsx is the Agent usage tab's Accounts card, with usage.tsx's windows, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
-│                        integrations.tsx reads the extensions for the search, slack.tsx (Slack first, on the
-│                        machine only: the status, Connect Slack, each linked workspace, Disconnect and the project for
-│                        new tasks), context-optimizer.tsx,
+│                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
+│                        Remote access, on the machine only: the status, Connect Slack, each linked workspace,
+│                        Disconnect and the project for new tasks), context-optimizer.tsx,
 │                        mcp-servers.tsx (with mcp-server-row.tsx, mcp-server-menu.tsx and server-dialog.tsx),
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
@@ -285,7 +285,7 @@ src/
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
-        slack.ts (Settings → Integrations → Slack: the status words, a link's line, the project for new tasks, the
+        slack.ts (Settings → General → Slack: the status words, a link's line, the project for new tasks, the
         linked page's result and reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
         disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
         expiry and its QR code as an image; connection/remote-access.ts reads and changes /api/remote),

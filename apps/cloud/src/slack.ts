@@ -3,6 +3,8 @@ import {
   isSameSecret,
   listSlackMentionedUsers,
   parseSlackRelayPost,
+  parseSlackRelaySession,
+  parseSlackRelayStream,
   resolveSlackReadableText,
   resolveTunnelHost,
   SLACK_ENGINE_EVENTS_PATH,
@@ -13,12 +15,13 @@ import {
   type SlackMention,
   type SlackMessage,
   type SlackRelayPosted,
+  type SlackRelaySessionSet,
   type SlackThreadMessage,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
 } from '@shinsa/core';
 import { createSlackSignature, decryptToken } from './crypto.ts';
-import type { InstanceRow, SlackWorkspaceRow } from './database.ts';
+import type { InstanceRow, SlackThreadKey, SlackWorkspaceRow } from './database.ts';
 import { TUNNEL_OFFLINE_STATUSES } from './hooks.ts';
 import { CloudError, readJsonFields, respondJson } from './http.ts';
 import { findMachine, isInstanceOnline } from './instances.ts';
@@ -334,21 +337,40 @@ async function requestSlackPost(world: CloudWorld, method: string, token: string
   }
 }
 
+async function findThreadToken(
+  instance: InstanceRow,
+  thread: SlackThreadKey,
+  ownTs: string | null,
+  world: CloudWorld
+) {
+  if (!(await world.store.hasSlackThread(thread, instance.id)))
+    throw new CloudError('thread_not_forwarded', 'This machine was never sent that Slack thread.', 403);
+  if (ownTs && !(await world.store.hasSlackPost(thread.teamId, thread.channelId, ownTs, instance.id)))
+    throw new CloudError('post_not_yours', 'This machine did not post that Slack message.', 403);
+  const workspace = await world.store.selectSlackWorkspace(thread.teamId);
+  if (!workspace)
+    throw new CloudError('slack_not_installed', 'Shinsa is no longer in that Slack workspace.', 410);
+  return decryptToken(world.config.slackTokenKey, workspace.bot_token);
+}
+
+async function recordPosted(
+  world: CloudWorld,
+  posted: Fields,
+  thread: SlackThreadKey,
+  instance: InstanceRow
+) {
+  const ts = readSlackText(posted, 'ts');
+  if (!ts) throw new CloudError('slack_failed', 'Slack did not say where the post went.', 502);
+  await world.store.recordSlackPost(thread.teamId, thread.channelId, ts, instance.id);
+  const answer: SlackRelayPosted = { ts };
+  return respondJson(answer);
+}
+
 export async function respondSlackPost(request: Request, world: CloudWorld) {
   const instance = await findMachine(request, world);
   const post = parseSlackRelayPost(await readJsonFields(request, SLACK_POST_BODY_LIMIT_BYTES));
   if (!post) throw new CloudError('body_invalid', 'The Slack post is not one this relay sends.', 400);
-  if (!(await world.store.hasSlackThread(post, instance.id)))
-    throw new CloudError('thread_not_forwarded', 'This machine was never sent that Slack thread.', 403);
-  if (
-    post.replaceTs &&
-    !(await world.store.hasSlackPost(post.teamId, post.channelId, post.replaceTs, instance.id))
-  )
-    throw new CloudError('post_not_yours', 'This machine did not post that Slack message.', 403);
-  const workspace = await world.store.selectSlackWorkspace(post.teamId);
-  if (!workspace)
-    throw new CloudError('slack_not_installed', 'Shinsa is no longer in that Slack workspace.', 410);
-  const token = await decryptToken(world.config.slackTokenKey, workspace.bot_token);
+  const token = await findThreadToken(instance, post, post.replaceTs, world);
   const content = { channel: post.channelId, text: post.message.text, blocks: post.message.blocks };
   if (post.replaceTs) {
     await requestSlackPost(world, 'chat.update', token, { ...content, ts: post.replaceTs });
@@ -361,9 +383,49 @@ export async function respondSlackPost(request: Request, world: CloudWorld) {
     unfurl_links: false,
     unfurl_media: false,
   });
-  const ts = readSlackText(posted, 'ts');
-  if (!ts) throw new CloudError('slack_failed', 'Slack did not say where the post went.', 502);
-  await world.store.recordSlackPost(post.teamId, post.channelId, ts, instance.id);
-  const answer: SlackRelayPosted = { ts };
+  return recordPosted(world, posted, post, instance);
+}
+
+export async function respondSlackStream(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  const stream = parseSlackRelayStream(await readJsonFields(request, SLACK_POST_BODY_LIMIT_BYTES));
+  if (!stream) throw new CloudError('body_invalid', 'The Slack stream is not one this relay sends.', 400);
+  const token = await findThreadToken(instance, stream, stream.ts, world);
+  if (stream.ts) {
+    const method = stream.done ? 'chat.stopStream' : 'chat.appendStream';
+    await requestSlackPost(world, method, token, {
+      channel: stream.channelId,
+      ts: stream.ts,
+      chunks: stream.chunks,
+    });
+    const answer: SlackRelayPosted = { ts: stream.ts };
+    return respondJson(answer);
+  }
+  const started = await requestSlackPost(world, 'chat.startStream', token, {
+    channel: stream.channelId,
+    thread_ts: stream.threadTs,
+    recipient_user_id: stream.recipientUserId,
+    recipient_team_id: stream.teamId,
+    task_display_mode: 'plan',
+    chunks: stream.chunks,
+  });
+  return recordPosted(world, started, stream, instance);
+}
+
+export async function respondSlackSession(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  const session = parseSlackRelaySession(await readJsonFields(request));
+  if (!session) throw new CloudError('body_invalid', 'The Slack status is not one this relay sends.', 400);
+  const token = await findThreadToken(instance, session, null, world);
+  let answer: SlackRelaySessionSet = { applied: true };
+  try {
+    await requestSlack(world, 'agents.sessions.setStatus', {
+      token,
+      json: { channel_id: session.channelId, thread_ts: session.threadTs, status: session.status },
+    });
+  } catch (error) {
+    recordFailure('[Cloud] Slack did not take a thread status', { error, teamId: session.teamId });
+    answer = { applied: false };
+  }
   return respondJson(answer);
 }

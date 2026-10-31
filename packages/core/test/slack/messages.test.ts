@@ -3,8 +3,11 @@ import {
   createSlackHeader,
   createSlackMessage,
   createSlackSection,
+  listSlackDecidedChunks,
+  listSlackReadingChunks,
   listSlackStatusGates,
   resolveSlackPostMessage,
+  resolveSlackSessionStatus,
   SLACK_BLOCK_LIMITS,
   SLACK_RESULT_LIMIT,
   type SlackBlock,
@@ -40,6 +43,8 @@ function readText(message: SlackMessage) {
       if (block.type === 'section') return [block.text.text, block.accessory?.text.text ?? ''].join(' ');
       if (block.type === 'context') return block.elements.map((element) => element.text).join(' ');
       if (block.type === 'actions') return block.elements.map((button) => button.text.text).join(' ');
+      if (block.type === 'plan')
+        return [block.title, ...block.tasks.map((task) => `${task.status} ${task.title}`)].join(' ');
       return '---';
     })
     .join('\n');
@@ -77,11 +82,11 @@ function statusOf(harness: Harness, taskId: string) {
 }
 
 describe('the status message', () => {
-  test('names the task with a link, its stage, its steps and an Open in Shinsa button', () => {
+  test('names the task with a link, its stage, its steps as a plan and an Open in Shinsa button', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'Fix the <export> & hang' });
     const message = statusOf(harness, taskId);
-    const [section, context] = message.blocks;
+    const [section, plan, context] = message.blocks;
     expect(section).toMatchObject({
       type: 'section',
       accessory: { type: 'button', text: { text: 'Open in Shinsa' }, url: URL },
@@ -89,22 +94,35 @@ describe('the status message', () => {
     expect(section?.type === 'section' && section.text.text).toStartWith(
       `*<${URL}|Fix the &lt;export&gt; &amp; hang>*\n🔵 *Planning the phases*`
     );
+    expect(plan).toMatchObject({ type: 'plan', title: 'Planning the phases' });
+    expect(plan?.type === 'plan' && plan.tasks[0]).toEqual({
+      task_id: 'plan',
+      title: 'Plan',
+      status: 'in_progress',
+    });
+    expect(plan?.type === 'plan' && plan.tasks.at(-1)?.status).toBe('pending');
     const handle = harness.task(taskId).handle;
     expect(context?.type === 'context' && context.elements.map((element) => element.text)).toEqual([
       `*${handle}*`,
-      expect.stringContaining('● Plan'),
     ]);
     expect(message.text).toBe(`${handle} · Fix the &lt;export&gt; &amp; hang: 🔵 Planning the phases`);
   });
 
-  test('marks a step that waits for you, and counts phases as they finish', () => {
+  test('marks a step that waits for you, and gives the plan a new block id whenever it changes', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    const planning = statusOf(harness, taskId).blocks[1];
+    expect(statusOf(harness, taskId).blocks[1]).toEqual(planning);
     reachReviewGate(harness, taskId);
-    const text = readText(statusOf(harness, taskId));
-    expect(text).toContain('🟣 *Changes ready for your review*');
-    expect(text).toContain('✓ Plan');
-    expect(text).toContain('◐ Your review');
+    const plan = statusOf(harness, taskId).blocks[1];
+    if (plan?.type !== 'plan' || planning?.type !== 'plan') throw new Error('No plan block.');
+    expect(plan.block_id).not.toBe(planning.block_id);
+    expect(plan.title).toBe('Changes ready for your review');
+    expect(plan.tasks.find((task) => task.title === 'Plan')?.status).toBe('complete');
+    expect(plan.tasks.find((task) => task.title === 'Your review')).toMatchObject({
+      status: 'in_progress',
+      details: { type: 'rich_text' },
+    });
   });
 
   test('a question or a failure says the task needs you, with the gate title', () => {
@@ -118,6 +136,10 @@ describe('the status message', () => {
       context: null,
     });
     expect(readText(statusOf(harness, taskId))).toContain('🟣 *Needs you*  Which &lt;format&gt;?');
+    expect(statusOf(harness, taskId).blocks[1]).toMatchObject({
+      type: 'plan',
+      title: 'Needs you: Which <format>?',
+    });
     const failed = createTask(harness, { request: 'Second' });
     harness.send({ type: 'effect.fail', taskId: failed, title: 'The worktree failed', detail: 'disk full' });
     expect(readText(statusOf(harness, failed))).toContain('🔴 *Needs you*  The worktree failed');
@@ -142,6 +164,80 @@ describe('the status message', () => {
     const first = createTask(harness, { request: 'First' });
     const second = createTask(harness, { request: 'Second', waitsOn: [first] });
     expect(readText(statusOf(harness, second))).toContain('⏳ *Waiting for “First” to finish*');
+  });
+});
+
+describe('the streamed reading of a thread', () => {
+  const MENTION = {
+    eventId: 'Ev1',
+    teamId: 'T1',
+    channelId: 'C1',
+    threadTs: '100.1',
+    messageTs: '100.3',
+    userId: 'U1',
+    userName: 'Christo',
+    text: 'take this',
+    permalink: null,
+    thread: [
+      { ts: '100.1', userId: 'U2', userName: 'Mia', text: 'It hangs.', bot: false },
+      { ts: '100.3', userId: 'U1', userName: 'Christo', text: 'take this', bot: false },
+    ],
+  };
+
+  test('opens a plan that reads the thread and decides, counting the messages', () => {
+    expect(listSlackReadingChunks(MENTION)).toEqual([
+      { type: 'plan_update', title: 'Reading the thread' },
+      expect.objectContaining({
+        id: 'read',
+        status: 'in_progress',
+        details: expect.objectContaining({ type: 'rich_text' }),
+      }),
+      { type: 'task_update', id: 'decide', title: 'Decide whether there is work', status: 'in_progress' },
+    ]);
+    expect(JSON.stringify(listSlackReadingChunks({ ...MENTION, thread: [] }))).toContain('1 message');
+  });
+
+  test('closes it with the decision: the first sentence of the work, or the reason there is none', () => {
+    const work = listSlackDecidedChunks({ kind: 'task', request: 'Fix the export hang. It started Monday.' });
+    expect(work.at(-1)).toEqual({ type: 'plan_update', title: 'Starting a task' });
+    expect(JSON.stringify(work)).toContain('Work: Fix the export hang.');
+    expect(JSON.stringify(work)).not.toContain('Monday');
+    const none = listSlackDecidedChunks({ kind: 'none', reason: 'This reads as a thank-you.' });
+    expect(none.at(-1)).toEqual({ type: 'plan_update', title: 'Nothing to start' });
+    expect(JSON.stringify(none)).toContain('This reads as a thank-you.');
+    expect(
+      none.slice(0, 2).every((chunk) => chunk.type === 'task_update' && chunk.status === 'complete')
+    ).toBe(true);
+  });
+});
+
+describe('the thread’s own status in Slack', () => {
+  test('works while the agent does, waits on you at a gate, rests when done and closes when finished', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const status = () =>
+      resolveSlackSessionStatus(harness.task(taskId), listSlackStatusGates(harness.state, taskId));
+    expect(status()).toBe('processing');
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Go?',
+      context: null,
+    });
+    expect(status()).toBe('suspended');
+    const review = createTask(harness, { request: 'Review it' });
+    reachReviewGate(harness, review);
+    expect(resolveSlackSessionStatus(harness.task(review), [])).toBe('suspended');
+    approve(harness, review);
+    harness.send({
+      type: 'pull_request.record',
+      taskId: review,
+      pullRequest: pullRequest({ state: 'merged' }),
+    });
+    expect(resolveSlackSessionStatus(harness.task(review), [])).toBe('active');
+    harness.send({ type: 'task.cancel', taskId });
+    expect(status()).toBe('closed');
   });
 });
 

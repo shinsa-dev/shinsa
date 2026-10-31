@@ -7,9 +7,7 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { SLACK_ACTIONS, type SlackActions, useSlack } from '@/lib/connection/slack.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import { updateSettings } from '@/lib/settings.ts';
-import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   describeSlackLink,
   describeSlackStatus,
@@ -19,20 +17,9 @@ import {
   SLACK_DESCRIPTION,
   SLACK_SECTION,
 } from '@/lib/slack.ts';
-import { navigate } from '@/router.ts';
 import { SETTING_ROW, SettingRow, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 function StatusAction({ snapshot }: { snapshot: SlackSnapshot }) {
-  if (!snapshot.remote)
-    return (
-      <Button
-        variant='secondary'
-        size='sm'
-        onClick={() => navigate(resolveSettingsPath('general', REMOTE_ACCESS_SECTION))}
-      >
-        Open remote access
-      </Button>
-    );
   if (!snapshot.connectUrl) return null;
   const connected = snapshot.links.length > 0;
   return (

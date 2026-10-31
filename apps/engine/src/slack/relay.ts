@@ -1,4 +1,12 @@
-import { SLACK_RELAY_PATHS, type SlackLinks, type SlackRelayPost, type SlackRelayPosted } from '@shinsa/core';
+import {
+  SLACK_RELAY_PATHS,
+  type SlackLinks,
+  type SlackRelayPost,
+  type SlackRelayPosted,
+  type SlackRelaySession,
+  type SlackRelaySessionSet,
+  type SlackRelayStream,
+} from '@shinsa/core';
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -69,6 +77,16 @@ export class SlackRelay {
   async requestPost(token: string, post: SlackRelayPost) {
     const posted = await this.#call<SlackRelayPosted>(SLACK_RELAY_PATHS.post, token, post);
     return posted.ts;
+  }
+
+  async requestStream(token: string, stream: SlackRelayStream) {
+    const posted = await this.#call<SlackRelayPosted>(SLACK_RELAY_PATHS.stream, token, stream);
+    return posted.ts;
+  }
+
+  async requestSession(token: string, session: SlackRelaySession) {
+    const set = await this.#call<SlackRelaySessionSet>(SLACK_RELAY_PATHS.session, token, session);
+    return set.applied;
   }
 
   async requestLinks(token: string) {

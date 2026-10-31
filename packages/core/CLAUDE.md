@@ -272,12 +272,16 @@ src/
 │                    and what is posted back (posts.ts: SlackPost, SLACK_POSTED_GATES); the thread key is
 │                    domain/slack.ts (resolveSlackThreadKey, Task.slack); Markdown as Slack mrkdwn, cutting to a
 │                    limit and splitting into sections without breaking a link, an escape or a fence (mrkdwn.ts),
-│                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, createSlack*), and every
-│                    message the bot posts (messages.ts: the status message edited in place, a post per question,
+│                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, createSlack*, the
+│                    `plan` block with a content-hashed block_id, the stream chunks), and every
+│                    message the bot posts (messages.ts: the status message edited in place with its steps as a
+│                    plan, resolveSlackSessionStatus for the thread's status, the streamed reading of a thread
+│                    (listSlackReadingChunks, listSlackDecidedChunks), a post per question,
 │                    secret, plan, review and proposal gate, the result, the bot's own replies, and
 │                    resolveSlackPostMessage for a `slack.post` from the outbox), and the relay's wire contract
 │                    (relay.ts: SLACK_RELAY_PATHS, the forward signature made with the machine's connect key and
-│                    checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost for a machine's post,
+│                    checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost, parseSlackRelayStream and
+│                    parseSlackRelaySession for a machine's post, stream and thread status,
 │                    resolveSlackReadableText for Slack's <@U…> markup, SlackLinks)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,

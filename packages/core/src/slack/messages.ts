@@ -1,5 +1,6 @@
 import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
+import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
 import type { DeliveringStep } from '../domain/shapes.ts';
 import type { Gate, Task, TaskStage } from '../domain/types.ts';
 import { type DisplayPhase, resolveTaskProgress } from '../progress/index.ts';
@@ -13,12 +14,20 @@ import {
   createSlackContext,
   createSlackHeader,
   createSlackMessage,
+  createSlackPlan,
+  createSlackRichText,
   createSlackSection,
   SLACK_BLOCK_LIMITS,
   type SlackMessage,
+  type SlackPlanTask,
+  type SlackStreamChunk,
+  type SlackTaskStatus,
 } from './blocks.ts';
+import type { SlackMention } from './contract.ts';
+import type { SlackEvaluation } from './evaluation.ts';
 import { escapeSlackText, listSlackChunks, serializeSlackMrkdwn } from './mrkdwn.ts';
 import type { SlackPost } from './posts.ts';
+import type { SlackSessionStatus } from './relay.ts';
 
 export const SLACK_RESULT_LIMIT = 12_000;
 
@@ -36,13 +45,13 @@ const FINISHED_MARK: Partial<Record<TaskStage, string>> = { merged: '✅', done:
 
 const WAITING_MARK: Partial<Record<TaskStage, string>> = { triage: '⏳', waiting_on_tasks: '⏳' };
 
-const PHASE_MARK: Record<DisplayPhase['status'], string> = {
-  done: '✓',
-  active: '●',
-  waiting: '◐',
-  pending: '○',
-  skipped: '',
-  cancelled: '✕',
+const PHASE_STATUS: Record<DisplayPhase['status'], SlackTaskStatus> = {
+  done: 'complete',
+  active: 'in_progress',
+  waiting: 'in_progress',
+  pending: 'pending',
+  skipped: 'pending',
+  cancelled: 'error',
 };
 
 const RESULT_TITLE: Record<DeliveringStep, string> = {
@@ -82,20 +91,41 @@ function resolveStatusMark(task: Task, attention: Gate | null) {
 function describeStatusLine(task: Task, attention: Gate | null) {
   const mark = resolveStatusMark(task, attention);
   if (attention) return `${mark} *Needs you*  ${escapeSlackText(attention.title)}`;
-  const reason = task.stageReason.trim();
-  return `${mark} *${escapeSlackText(capitalise(reason || STAGE_WORDS[task.stage]))}*`;
+  return `${mark} *${escapeSlackText(describePlanTitle(task, null))}*`;
 }
 
-function describePhase(phase: DisplayPhase) {
-  const count = phase.count && phase.count.total > 1 ? ` ${phase.count.done}/${phase.count.total}` : '';
-  return `${PHASE_MARK[phase.status]} ${escapeSlackText(phase.title)}${count}`;
+function describePlanTitle(task: Task, attention: Gate | null) {
+  if (attention) return `Needs you: ${attention.title}`;
+  return capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]);
 }
 
-function describeSteps(task: Task) {
+function describePhaseDetail(phase: DisplayPhase) {
+  if (phase.status === 'waiting') return 'Waiting for you';
+  if (phase.count && phase.count.total > 1) return `${phase.count.done} of ${phase.count.total}`;
+  return null;
+}
+
+function resolvePlanTask(phase: DisplayPhase): SlackPlanTask {
+  const detail = describePhaseDetail(phase);
+  return {
+    task_id: phase.key,
+    title: phase.title,
+    status: PHASE_STATUS[phase.status],
+    ...(detail ? { details: createSlackRichText(detail) } : {}),
+  };
+}
+
+function listPlanTasks(task: Task) {
   return resolveTaskProgress(task)
     .phases.filter((phase) => phase.status !== 'skipped')
-    .map(describePhase)
-    .join('   ');
+    .map(resolvePlanTask);
+}
+
+export function resolveSlackSessionStatus(task: Task, gates: readonly Gate[]): SlackSessionStatus {
+  if (isTaskClosed(task)) return 'closed';
+  if (resolveAttentionGate(gates) || NEEDS_YOU_STAGES.has(task.stage)) return 'suspended';
+  if (isTaskResting(task) || task.stage === 'merged') return 'active';
+  return 'processing';
 }
 
 function describePullRequest(task: Task) {
@@ -106,12 +136,14 @@ function describePullRequest(task: Task) {
 export function serializeSlackStatus(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
   const attention = resolveAttentionGate(gates);
   const line = describeStatusLine(task, attention);
-  return createSlackMessage(`${describeTask(task)}: ${line.replace(/[*_]/g, '')}`, [
+  const plain = line.replace(/[*_]/g, '');
+  return createSlackMessage(`${describeTask(task)}: ${plain}`, [
     createSlackSection(
       `*${describeTaskLink(task, taskUrl)}*\n${line}`,
       createSlackButton(OPEN_LABEL, taskUrl)
     ),
-    createSlackContext([describeTaskContext(task), describeSteps(task), describePullRequest(task)]),
+    createSlackPlan(describePlanTitle(task, attention), listPlanTasks(task)),
+    createSlackContext([describeTaskContext(task), describePullRequest(task)]),
   ]);
 }
 
@@ -307,6 +339,42 @@ export function serializeSlackDeclined(reason: string) {
     createSlackSection(`I didn't start a task. ${escapeSlackText(reason)}`),
     createSlackContext(['Mention me again with what you want done, and I will take it from there.']),
   ]);
+}
+
+const READ_TASK = { id: 'read', title: 'Read the thread' } as const;
+
+const DECIDE_TASK = { id: 'decide', title: 'Decide whether there is work' } as const;
+
+export function listSlackReadingChunks(mention: SlackMention): SlackStreamChunk[] {
+  return [
+    { type: 'plan_update', title: 'Reading the thread' },
+    {
+      type: 'task_update',
+      ...READ_TASK,
+      status: 'in_progress',
+      details: createSlackRichText(describeCount(Math.max(mention.thread.length, 1), 'message')),
+    },
+    { type: 'task_update', ...DECIDE_TASK, status: 'in_progress' },
+  ];
+}
+
+function describeDecision(evaluation: SlackEvaluation) {
+  if (evaluation.kind === 'none') return evaluation.reason;
+  const [first] = evaluation.request.trim().split(/(?<=[.!?])\s/u);
+  return `Work: ${first ?? evaluation.request}`.slice(0, SLACK_BLOCK_LIMITS.taskTitle * 2);
+}
+
+export function listSlackDecidedChunks(evaluation: SlackEvaluation): SlackStreamChunk[] {
+  return [
+    { type: 'task_update', ...READ_TASK, status: 'complete' },
+    {
+      type: 'task_update',
+      ...DECIDE_TASK,
+      status: 'complete',
+      output: createSlackRichText(describeDecision(evaluation)),
+    },
+    { type: 'plan_update', title: evaluation.kind === 'task' ? 'Starting a task' : 'Nothing to start' },
+  ];
 }
 
 export function serializeSlackReading() {

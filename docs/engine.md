@@ -2511,7 +2511,7 @@ Slack ──event──► app.shinsa.dev /slack/events
                   └─ POST app.shinsa.dev /__remote/slack/post ──► Slack
 ```
 
-- **Connecting** (Settings → Integrations → Slack, `components/settings/slack.tsx`): with remote access on, Connect
+- **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
   goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `groups:history`,
@@ -2522,7 +2522,7 @@ Slack ──event──► app.shinsa.dev /slack/events
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
   link of this machine; both are refused from off the machine (`local-only.ts`, writes only).
-- **The project for new tasks** is the human-only setting `slackProjectId` (Settings → Integrations → Slack, "Project
+- **The project for new tasks** is the human-only setting `slackProjectId` (Settings → General → Slack, "Project
   for new tasks"): a project, or null for the focus project at the time of the mention. Core refuses a project that
   does not exist (`settings_invalid`) and clears the setting when its project is removed. Triage picks the repository
   in it as for any task.
@@ -2545,12 +2545,19 @@ Slack ──event──► app.shinsa.dev /slack/events
   nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
   waits on you in Shinsa" (`held`). A mention in any other thread, a task's closed thread
   included, is evaluated first.
-- **The evaluation** (`slack.evaluate`, `slack/evaluation.ts`): the bot posts "Reading the thread…" in the thread, then
+- **The evaluation** (`slack.evaluate`, `slack/evaluation.ts`): the bot streams its reading into the thread with
+  Slack's agent streaming (`chat.startStream` in `plan` display mode, to the person who mentioned it as its recipient,
+  through `/__remote/slack/stream`): a plan "Reading the thread" with two tasks at work, "Read the thread" (the number
+  of messages) and "Decide whether there is work" (`listSlackReadingChunks`). Where Slack will not stream (an older
+  workspace, a refusal), it posts "Reading the thread…" instead. Then
   one quick call with the classifier triage uses reads the whole thread under a fixed system prompt
   (`SLACK_EVALUATION_SYSTEM`, the thread as data, never instructions) and answers `task` with the request as the person
   would write it, or `none` with a one-sentence reason (`parseSlackEvaluation`, `SLACK_EVALUATION_LIMITS`). A bare
   mention under a bug report is work; thanks and small talk are not. When no provider answers, the answer is `none`
-  with "I could not read the thread just now…", so a mention never hangs on Reading. The result comes back as
+  with "I could not read the thread just now…", so a mention never hangs on Reading. The stream is then stopped with
+  both tasks done, the decision as the second one's output (the first sentence of the work, or the reason there is
+  none) and the plan retitled "Starting a task" or "Nothing to start" (`listSlackDecidedChunks`, `chat.stopStream`),
+  well inside Slack's 10-minute limit for a stream. The result comes back as
   `slack.record_evaluation` with the reading post's ts: `none` replaces that post with the reason; `task` creates a
   task (`task.create` in the project for new tasks, its request the evaluation's words, who asked with the permalink,
   and the thread fenced in a nonce-tagged `<slack-thread-…>` element marked as untrusted data,
@@ -2564,9 +2571,10 @@ Slack ──event──► app.shinsa.dev /slack/events
   built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
   and every one ends in Open in Shinsa, a link to the task on app.shinsa.dev (`resolveSlackTaskUrl`):
   - the status message: the task's handle and title, what it is doing now (its stage reason, else its stage) with a
-    coloured mark, the steps of its pipeline
-    (done, at work, waiting for you, to come), its pull request, and what needs you when a question waits or it
-    paused;
+    coloured mark, the steps of its pipeline as Slack's `plan` block (one task card per step: `complete`,
+    `in_progress`, "Waiting for you" on a step that waits on you, `pending` to come; phases counted "2 of 4"), its
+    pull request, and what needs you when a question waits or it paused. The plan's `block_id` is a hash of what it
+    shows, so each change gets a new one as Slack asks, and an unchanged message stays byte for byte the same;
   - a question: the question, its context, the choices with the recommended one marked, "Answer in Shinsa";
   - a secret: what is asked and why, and never to paste a secret in Slack;
   - a plan: its goal, its phases numbered, its size, "Review the plan";
@@ -2580,6 +2588,12 @@ Slack ──event──► app.shinsa.dev /slack/events
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
   that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
   → `slack.status_posted`).
+- **The thread's own status in Slack** (`resolveSlackSessionStatus`, `agents.sessions.setStatus` through
+  `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
+  loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),
+  `active` once it rests or merged, and `closed` when it is done or cancelled; only a change is sent. It is best
+  effort: a workspace without Slack's agent features answers `feature_disabled`, app.shinsa.dev logs it and says
+  `applied: false`, and the posts carry on as they are.
 - **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the

@@ -11,6 +11,8 @@ export const SLACK_RELAY_PATHS = {
   links: '/__remote/slack/links',
   unlink: '/__remote/slack/unlink',
   post: '/__remote/slack/post',
+  session: '/__remote/slack/session',
+  stream: '/__remote/slack/stream',
 } as const;
 
 export const SLACK_FORWARD_HEADERS = {
@@ -20,7 +22,15 @@ export const SLACK_FORWARD_HEADERS = {
 
 export const SLACK_FORWARD_WINDOW_MS = 5 * 60_000;
 
-export const SLACK_RELAY_MESSAGE_LIMITS = { text: 40_000, blocks: SLACK_BLOCK_LIMITS.blocks } as const;
+export const SLACK_RELAY_MESSAGE_LIMITS = {
+  text: 40_000,
+  blocks: SLACK_BLOCK_LIMITS.blocks,
+  chunks: 60,
+} as const;
+
+export const SLACK_SESSION_STATUSES = ['processing', 'suspended', 'active', 'closed'] as const;
+
+export type SlackSessionStatus = (typeof SLACK_SESSION_STATUSES)[number];
 
 export interface SlackRelayPost {
   teamId: string;
@@ -32,6 +42,27 @@ export interface SlackRelayPost {
 
 export interface SlackRelayPosted {
   ts: string;
+}
+
+export interface SlackRelaySession {
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  status: SlackSessionStatus;
+}
+
+export interface SlackRelaySessionSet {
+  applied: boolean;
+}
+
+export interface SlackRelayStream {
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  recipientUserId: string;
+  ts: string | null;
+  done: boolean;
+  chunks: unknown[];
 }
 
 export interface SlackLink {
@@ -154,4 +185,35 @@ export function listSlackMentionedUsers(text: string) {
 export function resolveSlackLinkedPath(result: { team: string } | { error: string }) {
   const params = new URLSearchParams('team' in result ? { team: result.team } : { error: result.error });
   return `${SLACK_RELAY_PATHS.linkedPage}?${params.toString()}`;
+}
+
+function readThread(value: Fields) {
+  const teamId = readId(value, 'teamId');
+  const channelId = readId(value, 'channelId');
+  const threadTs = readId(value, 'threadTs');
+  return teamId && channelId && threadTs ? { teamId, channelId, threadTs } : null;
+}
+
+function isSessionStatus(value: unknown): value is SlackSessionStatus {
+  return SLACK_SESSION_STATUSES.some((status) => status === value);
+}
+
+export function parseSlackRelaySession(value: unknown): SlackRelaySession | null {
+  if (!isFields(value)) return null;
+  const thread = readThread(value);
+  if (!thread || !isSessionStatus(value.status)) return null;
+  return { ...thread, status: value.status };
+}
+
+export function parseSlackRelayStream(value: unknown): SlackRelayStream | null {
+  if (!isFields(value)) return null;
+  const thread = readThread(value);
+  const recipientUserId = readId(value, 'recipientUserId');
+  const ts = value.ts === null ? null : readId(value, 'ts');
+  const { chunks } = value;
+  if (!thread || !recipientUserId || (ts === null && value.ts !== null)) return null;
+  if (typeof value.done !== 'boolean' || (ts === null && value.done)) return null;
+  if (!Array.isArray(chunks) || chunks.length > SLACK_RELAY_MESSAGE_LIMITS.chunks || !chunks.every(isFields))
+    return null;
+  return { ...thread, recipientUserId, ts, done: value.done, chunks };
 }

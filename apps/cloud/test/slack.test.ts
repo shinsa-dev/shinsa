@@ -71,6 +71,10 @@ function createFakeSlack(harness: Harness): FakeSlack {
     'chat.postMessage': () => ({ ok: true, ts: `300.${++posted}` }),
     'chat.update': () => ({ ok: true }),
     'chat.postEphemeral': () => ({ ok: true, message_ts: '300.0' }),
+    'chat.startStream': () => ({ ok: true, ts: `400.${++posted}` }),
+    'chat.appendStream': () => ({ ok: true }),
+    'chat.stopStream': () => ({ ok: true }),
+    'agents.sessions.setStatus': () => ({ ok: true, status: 'processing' }),
   };
   harness.handlers.push((call) => {
     if (!call.url.startsWith('https://slack.com/api/')) return new Response('', { status: 599 });
@@ -714,5 +718,61 @@ describe('what a machine does through the relay', () => {
     expect(links.links).toEqual([]);
     await sendEvent(harness, mentionEnvelope());
     expect(slack.callsTo('chat.postEphemeral')).toHaveLength(1);
+  });
+
+  test('streams a plan in the thread to the person who mentioned it, then appends to and stops only its own stream', async () => {
+    const { harness, machine, slack } = await forwardedSetup();
+    const stream = (body: unknown) =>
+      harness.post(SLACK_RELAY_PATHS.stream, body, { bearer: machine.machineToken, sameOrigin: false });
+    const thread = { teamId: 'T1', channelId: 'C1', threadTs: '100.1', recipientUserId: 'U1' };
+    const chunks = [{ type: 'plan_update', title: 'Reading the thread' }];
+    const started = await stream({ ...thread, ts: null, done: false, chunks });
+    const { ts } = await readJson<{ ts: string }>(started);
+    expect(slack.callsTo('chat.startStream').at(-1)?.body).toEqual({
+      channel: 'C1',
+      thread_ts: '100.1',
+      recipient_user_id: 'U1',
+      recipient_team_id: 'T1',
+      task_display_mode: 'plan',
+      chunks,
+    });
+    await stream({ ...thread, ts, done: false, chunks });
+    expect(slack.callsTo('chat.appendStream').at(-1)?.body).toEqual({ channel: 'C1', ts, chunks });
+    const stopped = await stream({ ...thread, ts, done: true, chunks });
+    expect(await stopped.json()).toEqual({ ts });
+    expect(slack.callsTo('chat.stopStream')).toHaveLength(1);
+    const edited = await harness.post(
+      SLACK_RELAY_PATHS.post,
+      { ...POST, replaceTs: ts },
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    expect(edited.status).toBe(200);
+    expect((await stream({ ...thread, ts: '999.9', done: true, chunks })).status).toBe(403);
+    expect((await stream({ ...thread, ts: null, done: true, chunks })).status).toBe(400);
+    slack.answers['chat.startStream'] = () => ({ ok: false, error: 'missing_scope' });
+    const refused = await stream({ ...thread, ts: null, done: false, chunks });
+    expect(refused.status).toBe(502);
+  });
+
+  test('sets the thread’s status in Slack, and says so when Slack will not take it', async () => {
+    const { harness, machine, slack } = await forwardedSetup();
+    const session = (body: unknown) =>
+      harness.post(SLACK_RELAY_PATHS.session, body, { bearer: machine.machineToken, sameOrigin: false });
+    const set = await session({ teamId: 'T1', channelId: 'C1', threadTs: '100.1', status: 'suspended' });
+    expect(await set.json()).toEqual({ applied: true });
+    expect(slack.callsTo('agents.sessions.setStatus').at(-1)?.body).toEqual({
+      channel_id: 'C1',
+      thread_ts: '100.1',
+      status: 'suspended',
+    });
+    slack.answers['agents.sessions.setStatus'] = () => ({ ok: false, error: 'feature_disabled' });
+    const disabled = await session({ teamId: 'T1', channelId: 'C1', threadTs: '100.1', status: 'active' });
+    expect(await disabled.json()).toEqual({ applied: false });
+    expect((await session({ teamId: 'T1', channelId: 'C1', threadTs: '100.1', status: 'busy' })).status).toBe(
+      400
+    );
+    expect(
+      (await session({ teamId: 'T1', channelId: 'C1', threadTs: '555.1', status: 'active' })).status
+    ).toBe(403);
   });
 });

@@ -1,11 +1,14 @@
 import {
   DomainError,
+  listSlackDecidedChunks,
+  listSlackReadingChunks,
   listSlackStatusGates,
   type MachineCredentials,
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
+  resolveSlackSessionStatus,
   resolveSlackTaskUrl,
   type ShinsaEffect,
   SLACK_ENGINE_EVENTS_PATH,
@@ -13,8 +16,11 @@ import {
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
   type SlackEvaluation,
+  type SlackMention,
   type SlackMessage,
+  type SlackSessionStatus,
   type SlackSnapshot,
+  type SlackStreamChunk,
   type SlackThreadRef,
   serializeSlackEvaluationPrompt,
   serializeSlackReading,
@@ -81,6 +87,7 @@ export class Slack {
   readonly #statusIntervalMs: number;
   readonly #statusAt = new Map<string, number>();
   readonly #statusShown = new Map<string, string>();
+  readonly #sessionShown = new Map<string, SlackSessionStatus>();
 
   constructor(options: SlackOptions) {
     this.#engine = options.engine;
@@ -160,15 +167,39 @@ export class Slack {
     }
   }
 
+  async #stream(mention: SlackMention, ts: string | null, done: boolean, chunks: SlackStreamChunk[]) {
+    const credentials = this.#selectCredentials();
+    if (!credentials) return null;
+    try {
+      return await this.#relay.requestStream(credentials.machineToken, {
+        teamId: mention.teamId,
+        channelId: mention.channelId,
+        threadTs: mention.threadTs,
+        recipientUserId: mention.userId,
+        ts,
+        done,
+        chunks,
+      });
+    } catch (error) {
+      log.warn('[Slack] The thread could not be streamed', {
+        threadTs: mention.threadTs,
+        error: describeError(error),
+      });
+      return null;
+    }
+  }
+
   async evaluate(effect: Effect<'slack.evaluate'>, context: EffectContext) {
     const { mention } = effect;
-    const statusTs = await this.#send(mention, null, serializeSlackReading());
+    const streamTs = await this.#stream(mention, null, false, listSlackReadingChunks(mention));
+    const statusTs = streamTs ?? (await this.#send(mention, null, serializeSlackReading()));
     const said = await this.#ask<unknown>(
       SLACK_EVALUATION_SYSTEM,
       serializeSlackEvaluationPrompt(mention),
       SLACK_EVALUATION_SCHEMA
     );
     const evaluation = parseSlackEvaluation(said) ?? UNDECIDED;
+    if (streamTs) await this.#stream(mention, streamTs, true, listSlackDecidedChunks(evaluation));
     await this.#engine.dispatch(
       { type: 'slack.record_evaluation', mention, statusTs, evaluation },
       { id: `${context.key}:slack.record_evaluation` }
@@ -201,11 +232,33 @@ export class Slack {
     this.#statusAt.set(task.id, this.#now());
     if (!ts) return;
     this.#statusShown.set(task.id, shown);
+    await this.#syncSession(
+      link,
+      task.id,
+      resolveSlackSessionStatus(task, listSlackStatusGates(state, task.id))
+    );
     if (ts === link.statusTs) return;
     await this.#engine.dispatch(
       { type: 'slack.record_status', taskId: task.id, ts },
       { id: `${context.key}:slack.record_status` }
     );
+  }
+
+  async #syncSession(thread: SlackThreadRef, taskId: string, status: SlackSessionStatus) {
+    const credentials = this.#selectCredentials();
+    if (!credentials || this.#sessionShown.get(taskId) === status) return;
+    try {
+      const applied = await this.#relay.requestSession(credentials.machineToken, {
+        teamId: thread.teamId,
+        channelId: thread.channelId,
+        threadTs: thread.threadTs,
+        status,
+      });
+      this.#sessionShown.set(taskId, status);
+      if (!applied) log.info('[Slack] Slack did not show the thread status', { taskId, status });
+    } catch (error) {
+      log.warn('[Slack] The thread status could not be set', { taskId, status, error: describeError(error) });
+    }
   }
 
   async snapshot(): Promise<SlackSnapshot> {

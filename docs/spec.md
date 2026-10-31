@@ -382,7 +382,7 @@ Slack: mention the Shinsa bot in a channel or a thread and the machine of whoeve
 decides whether it is work, and starts a task in the project for new tasks or messages the task the thread already
 has; the task's status, its questions, its plan, its review and its result come back in the thread, and every decision
 is still made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
-own machine in Settings → Integrations → Slack (`docs/engine.md` → Slack).
+own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after

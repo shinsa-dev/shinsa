@@ -13,7 +13,14 @@ import {
 import { recordFailure } from './log.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
 import { respondSession, respondSignIn, respondSignInCallback, respondSignOut } from './session.ts';
-import { respondSlackEvents, respondSlackLinks, respondSlackPost, respondSlackUnlink } from './slack.ts';
+import {
+  respondSlackEvents,
+  respondSlackLinks,
+  respondSlackPost,
+  respondSlackSession,
+  respondSlackStream,
+  respondSlackUnlink,
+} from './slack.ts';
 import {
   respondSlackConnect,
   respondSlackConnectCallback,
@@ -125,6 +132,16 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(SLACK_RELAY_PATHS.post),
     respond: (request, _url, _match, world) => respondSlackPost(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.stream),
+    respond: (request, _url, _match, world) => respondSlackStream(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.session),
+    respond: (request, _url, _match, world) => respondSlackSession(request, world),
   },
 ];
 

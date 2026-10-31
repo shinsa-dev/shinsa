@@ -32,7 +32,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
       'Attention',
       'Notifications',
       'Context',
-      isRemoteBuild() ? MACHINES_SECTION : REMOTE_ACCESS_SECTION,
+      ...(isRemoteBuild() ? [MACHINES_SECTION] : [REMOTE_ACCESS_SECTION, SLACK_SECTION]),
       'Setup',
       UPDATES_SECTION,
     ],
@@ -60,7 +60,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   integrations: {
     id: 'integrations',
     label: 'Integrations',
-    sections: [SLACK_SECTION, 'Context optimizer', 'MCPs', 'Plugins', 'Skills'],
+    sections: ['Context optimizer', 'MCPs', 'Plugins', 'Skills'],
   },
   automations: {
     id: 'automations',
