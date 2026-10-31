@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { isTaskSettled, listActiveRuns, resolveTaskProgress } from '../../src/index.ts';
-import { createHarness, type Harness, registerRepo, verifySetup } from '../harness.ts';
+import {
+  isTaskClosed,
+  isTaskComplete,
+  isTaskSettled,
+  listActiveRuns,
+  listOpenGates,
+  resolveCurrentRound,
+  resolveMessageEffect,
+  resolveQueue,
+  resolveTaskProgress,
+} from '../../src/index.ts';
+import { approve, createHarness, type Harness, registerRepo, verifySetup } from '../harness.ts';
 
 function ask(harness: Harness = createHarness()) {
   const repoId = registerRepo(harness);
@@ -40,16 +50,79 @@ describe('ask mode', () => {
     expect(harness.effectsOf('worktree.create')).toHaveLength(0);
   });
 
-  test('the answer settles the task as done and is kept', () => {
+  test('the answer waits as answered, in front of you, until you close it', () => {
     const { harness, taskId } = ask();
     answer(harness, taskId);
     const task = harness.task(taskId);
-    expect(task).toMatchObject({ stage: 'done', stageReason: 'answered your question' });
+    expect(task).toMatchObject({ stage: 'answered', stageReason: 'answered your question' });
     expect(task.result).toMatchObject({ step: 'answer', body: 'It retries three times in `retry()`.' });
     expect(task.activity.map((entry) => entry.text)).toContain('Answered the question');
-    expect(task.activity.map((entry) => entry.text)).not.toContain('Marked done');
-    expect(isTaskSettled(task)).toBe(true);
+    expect(isTaskSettled(task)).toBe(false);
+    expect(isTaskComplete(task)).toBe(true);
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'result', title: 'Read the answer' });
+    expect(resolveQueue(harness.state, harness.now).ready.map((entry) => entry.gate.type)).toEqual([
+      'result',
+    ]);
+  });
+
+  test('closing the answer settles the task as done, and it still takes a follow-up', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    approve(harness, taskId);
+    const task = harness.task(taskId);
+    expect(task).toMatchObject({ stage: 'done', stageReason: 'closed by you' });
+    expect(isTaskSettled(task)).toBe(true);
+    expect(isTaskClosed(task)).toBe(false);
+    const texts = task.activity.map((entry) => entry.text);
+    expect(texts).toContain('Closed the task');
+    expect(texts).not.toContain('Marked done');
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    harness.send({ type: 'task.message', taskId, text: 'And on a timeout?' });
+    expect(harness.task(taskId).stage).toBe('answering');
+  });
+
+  test('a message on an answered question asks a follow-up and withdraws the gate', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('follow_up');
+    harness.send({ type: 'task.message', taskId, text: 'And on a timeout?' });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'answering',
+      stageReason: 'answering your follow-up',
+    });
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    answer(harness, taskId, 'It gives up after a minute.');
+    expect(harness.task(taskId).stage).toBe('answered');
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
+  });
+
+  test('a new round on an answered question closes it and starts the round', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    harness.send({ type: 'task.message', taskId, text: 'Make it retry five times.', kind: 'new_round' });
+    const task = harness.task(taskId);
+    expect(resolveCurrentRound(task).number).toBe(2);
+    expect(task.stage).not.toBe('answered');
+    expect(listOpenGates(harness.state, taskId).filter((gate) => gate.type === 'result')).toHaveLength(0);
+  });
+
+  test('marking an answered question done withdraws the gate', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    harness.send({ type: 'task.complete', taskId });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'done', stageReason: 'marked done by you' });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain('Marked done');
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('the result gate only closes', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    const gateId = harness.openGate(taskId).id;
+    expect(() => harness.send({ type: 'gate.answer', gateId, decision: 'reject', response: null })).toThrow(
+      'Close the task once you have read the result.'
+    );
   });
 
   test('a follow-up reopens the question on the same session', () => {

@@ -27,6 +27,7 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { startWork } from './lifecycle.ts';
+import { closeResult } from './shapes.ts';
 
 interface RoundRequest {
   request: string;
@@ -65,7 +66,7 @@ function isShippedThroughPullRequest(pipeline: readonly PipelineStep[]) {
 
 function isAtRest(state: ShinsaState, task: Task, pipeline: readonly PipelineStep[]) {
   if (isTaskClosed(task)) return false;
-  if (isTaskResting(task)) return true;
+  if (isTaskResting(task) || task.stage === 'answered') return true;
   return isShippedThroughPullRequest(pipeline) && isAtMergeGate(state, task);
 }
 
@@ -159,7 +160,9 @@ export function recordEarlierRoundMerged(decider: Decider, task: Task, pullReque
   return true;
 }
 
-function startRound(decider: Decider, task: Task, round: Round) {
+function startRound(decider: Decider, resting: Task, round: Round) {
+  if (resting.stage === 'answered') closeResult(decider, resting.id);
+  const task = decider.task(resting.id);
   decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
   const branch = resolveBranch(task, round.number, round.shipping, selectOpenRound(task));
   decider.emit({ type: 'round.started', taskId: task.id, number: round.number, ...branch });

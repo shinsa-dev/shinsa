@@ -577,7 +577,7 @@ describe('firing a schedule', () => {
       step: 'answer',
       body: 'Like this.',
     });
-    expect(harness.task(askId).stage).toBe('done');
+    expect(harness.task(askId).stage).toBe('answered');
     schedule(harness, taskId, { target: { kind: 'task', taskId: askId } });
     const created = only(harness);
     harness.advance(30 * MINUTE);

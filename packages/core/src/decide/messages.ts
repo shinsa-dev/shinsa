@@ -46,12 +46,12 @@ type StageEffect =
   | 'operation_notes'
   | 'request_changes'
   | 'send_back'
+  | 'follow_up'
   | 'fix';
 
 export type MessageEffect =
   | StageEffect
   | 'closed'
-  | 'follow_up'
   | 'steer'
   | 'wake'
   | 'retry'
@@ -61,7 +61,7 @@ export type MessageEffect =
 type Delivery =
   | { effect: 'steer' | 'wake'; run: Run }
   | { effect: 'retry' | 'verify_setup' | 'supersede_question'; gate: Gate }
-  | { effect: StageEffect | 'follow_up' };
+  | { effect: StageEffect };
 
 const FEEDBACK_ONLY_EFFECTS: ReadonlySet<MessageEffect> = new Set<MessageEffect>([
   'retry',
@@ -88,6 +88,7 @@ const STAGE_EFFECT: Record<TaskStage, StageEffect> = {
   watching: 'restart_step',
   awaiting_proposal: 'decline_proposal',
   awaiting_operation: 'operation_notes',
+  answered: 'follow_up',
   checking: 'fix',
   reviewing: 'fix',
   fixing: 'fix',

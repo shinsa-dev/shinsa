@@ -23,7 +23,7 @@ import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
 import { retryTask } from './retry.ts';
 import { assertSecretAnswer } from './secrets.ts';
-import { answerOperation, answerProposal, startAfterPlan } from './shapes.ts';
+import { answerOperation, answerProposal, closeResult, startAfterPlan } from './shapes.ts';
 
 interface AnswerOptions {
   planVersion?: number;
@@ -248,6 +248,9 @@ export function answerGate(
       return;
     case 'operation':
       answerOperation(decider, gate, decision, response);
+      return;
+    case 'result':
+      closeResult(decider, gate.taskId);
       return;
     case 'plan':
     case 'review':

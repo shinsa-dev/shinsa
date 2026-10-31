@@ -175,13 +175,14 @@ describe('an investigation', () => {
     deliver(harness, taskId, 'investigate');
     const task = harness.task(taskId);
     expect(task).toMatchObject({
-      stage: 'done',
+      stage: 'answered',
       stageReason: 'reported its diagnosis',
       plan: null,
       pullRequest: null,
     });
     expect(task.result).toMatchObject({ step: 'investigate', body: 'The investigate result.' });
     expect(task.activity.map((entry) => entry.text)).toContain('Reported the diagnosis');
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'result', title: 'Read the diagnosis' });
     expect(acceptsFollowUp(task)).toBe(true);
     expect(resolveTaskProgress(task).phases.map((phase) => `${phase.key}:${phase.status}`)).toEqual([
       'setup:done',
@@ -421,7 +422,8 @@ describe('research', () => {
     expect(run.prompt).toContain('The repository is checked out at `/code/paywall-next`');
     harness.send({ type: 'run.link', runId: run.id, sessionId: 'res-1', provider: 'claude' });
     deliver(harness, taskId, 'research');
-    expect(harness.task(taskId)).toMatchObject({ stage: 'done', stageReason: 'wrote the report' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'answered', stageReason: 'wrote the report' });
+    expect(harness.openGate(taskId).title).toBe('Read the report');
     harness.send({ type: 'task.message', taskId, text: 'Add the licences.' });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'researcher', sessionId: 'res-1' });
     expect(harness.task(taskId).stage).toBe('researching');
