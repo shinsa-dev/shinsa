@@ -26,6 +26,7 @@ export interface EunoeServerOptions {
   window?: WindowLookup;
   tuning?: Partial<CoreConfig>;
   foldFloor?: number;
+  now?: () => number;
 }
 
 type Entry = Record<string, unknown>;
@@ -37,6 +38,10 @@ const IDLE_TIMEOUT_S = 255;
 const FOLD_FLOOR_TOKENS = 40_000;
 
 const CHARS_PER_TOKEN = 3.6;
+
+const HOUR_CACHE_MS = 60 * 60 * 1000;
+
+const DEFAULT_CACHE_MS = 5 * 60 * 1000;
 
 function resolveThreadFile(dir: string, key: string) {
   return join(dir, `${key.replace(/[^\w-]/g, '_')}.json`);
@@ -86,6 +91,8 @@ export class EunoeServer implements EunoeLink {
   readonly #config: CoreConfig;
   readonly #store: ThreadStore;
   readonly #foldFloor: number;
+  readonly #now: () => number;
+  readonly #lastRequestAt = new Map<string, number>();
   readonly #watchers = new Map<string, Set<EunoeWatcher>>();
   readonly #folds = new Map<string, object>();
   readonly #mainThreads = new Map<string, string>();
@@ -100,6 +107,7 @@ export class EunoeServer implements EunoeLink {
     this.#config = { ...CORE_DEFAULTS, mode: 'compact', ...options.tuning };
     this.#store = createFileStore(join(this.dir, 'threads'));
     this.#foldFloor = options.foldFloor ?? FOLD_FLOOR_TOKENS;
+    this.#now = options.now ?? Date.now;
   }
 
   ensure(): Promise<EunoeStatus> {
@@ -161,6 +169,7 @@ export class EunoeServer implements EunoeLink {
     const threadId = claudeCodeSessionId(request.headers, body);
     const window = await this.#window(body.model, request.headers, this.#upstream);
     const folded = threadId !== null && mayCompact && this.#foldPending(threadId, body);
+    if (threadId !== null && mayCompact && hasTools(body)) this.#lastRequestAt.set(threadId, this.#now());
     const result = await rewriteAsync({
       body,
       threadId,
@@ -179,8 +188,9 @@ export class EunoeServer implements EunoeLink {
 
   #foldPending(threadId: string, body: Body) {
     if (!this.#folds.has(threadId) || !hasTools(body)) return false;
-    const estimate = JSON.stringify(body.messages).length / CHARS_PER_TOKEN;
-    if (estimate < this.#foldFloor) {
+    const text = JSON.stringify(body.messages);
+    const estimate = text.length / CHARS_PER_TOKEN;
+    if (estimate < this.#foldFloor && this.#isCacheWarm(threadId, text)) {
       this.#folds.delete(threadId);
       log.info('[Eunoe] Too little before this turn to be worth a fold', {
         threadId,
@@ -196,6 +206,13 @@ export class EunoeServer implements EunoeLink {
     }
     this.#folds.delete(threadId);
     return true;
+  }
+
+  #isCacheWarm(threadId: string, text: string) {
+    const last = this.#lastRequestAt.get(threadId);
+    if (last === undefined) return false;
+    const lifetime = text.includes('"ttl":"1h"') ? HOUR_CACHE_MS : DEFAULT_CACHE_MS;
+    return this.#now() - last < lifetime;
   }
 
   #record(entry: Entry) {

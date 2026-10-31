@@ -192,21 +192,48 @@ describe('EunoeServer', () => {
     expect(watched.stuck).toEqual(['session-1']);
   });
 
+  test('a small history folds anyway once its cache has expired, since the next request rewrites it all', async () => {
+    let now = 0;
+    const { server, upstream } = openServer({ foldFloor: 5_000, now: () => now });
+    const url = await ensureUrl(server);
+    const small = createMessagesBody([1_000, 1_000]);
+    await (await sendMessages(url, 'session-1', small)).text();
+    now += 4 * 60 * 1000;
+    server.fold('session-1');
+    await (await sendMessages(url, 'session-1', small)).text();
+    expect(upstream.received[1]?.body.messages).toEqual(small.messages);
+    now += 5 * 60 * 1000;
+    server.fold('session-1');
+    await (await sendMessages(url, 'session-1', small)).text();
+    expect(upstream.received[2]?.body.messages).not.toEqual(small.messages);
+    const breakpoint = { type: 'text', text: 'Hour cache.', cache_control: { type: 'ephemeral', ttl: '1h' } };
+    const hour = {
+      ...small,
+      messages: [{ role: 'user', content: [breakpoint] }, ...small.messages.slice(1)],
+    };
+    await (await sendMessages(url, 'session-2', hour)).text();
+    now += 30 * 60 * 1000;
+    server.fold('session-2');
+    await (await sendMessages(url, 'session-2', hour)).text();
+    expect(upstream.received[4]?.body.messages).toEqual(upstream.received[3]?.body.messages);
+  });
+
   test('a step whose history is too small to be worth a fold keeps its cache and drops the fold', async () => {
     const { server, upstream } = openServer({ foldFloor: 5_000 });
     const url = await ensureUrl(server);
     const info = spyOn(log, 'info');
     const body = createMessagesBody([1_000, 1_000]);
+    await (await sendMessages(url, 'session-1', body)).text();
     server.fold('session-1');
     await (await sendMessages(url, 'session-1', body)).text();
     expect(info).toHaveBeenCalledWith(
       '[Eunoe] Too little before this turn to be worth a fold',
       expect.any(Object)
     );
-    expect(upstream.received[0]?.body.messages).toEqual(body.messages);
+    expect(upstream.received[1]?.body.messages).toEqual(body.messages);
     server.fold('session-1');
     await (await sendMessages(url, 'session-1', createMessagesBody([1_000, 20_000]))).text();
-    expect(upstream.received[1]?.body.messages).not.toEqual(createMessagesBody([1_000, 20_000]).messages);
+    expect(upstream.received[2]?.body.messages).not.toEqual(createMessagesBody([1_000, 20_000]).messages);
     info.mockRestore();
   });
 
