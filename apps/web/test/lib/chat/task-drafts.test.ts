@@ -1,9 +1,11 @@
 import { describe, expect, it, mock } from 'bun:test';
 import {
+  carryDraftFocus,
   clearTaskDraft,
   resetTaskDrafts,
   resolveTaskDraft,
   subscribeTaskDrafts,
+  takeCarriedCaret,
   taskDraftFiles,
   updateTaskDraft,
 } from '@/lib/chat/task-drafts.ts';
@@ -20,10 +22,14 @@ const attachment = {
 
 describe('task drafts', () => {
   it('starts every task empty and keeps each task’s draft apart', () => {
-    expect(resolveTaskDraft('task-a')).toEqual({ text: '', attachments: [] });
+    expect(resolveTaskDraft('task-a')).toEqual({ text: '', attachments: [], carriedCaret: null });
     updateTaskDraft('task-a', () => ({ text: 'Hello' }));
     updateTaskDraft('task-a', (draft) => ({ attachments: [...draft.attachments, attachment] }));
-    expect(resolveTaskDraft('task-a')).toEqual({ text: 'Hello', attachments: [attachment] });
+    expect(resolveTaskDraft('task-a')).toEqual({
+      text: 'Hello',
+      attachments: [attachment],
+      carriedCaret: null,
+    });
     expect(resolveTaskDraft('task-b').text).toBe('');
   });
 
@@ -48,5 +54,14 @@ describe('task drafts', () => {
     resetTaskDrafts();
     expect(resolveTaskDraft('task-b').attachments).toEqual([]);
     expect(taskDraftFiles.size).toBe(0);
+  });
+
+  it('hands a carried caret to the next input once, and keeps the text', () => {
+    updateTaskDraft('task-a', () => ({ text: 'Hello' }));
+    expect(takeCarriedCaret('task-a')).toBeNull();
+    carryDraftFocus('task-a', { start: 2, end: 4 });
+    expect(takeCarriedCaret('task-a')).toEqual({ start: 2, end: 4 });
+    expect(takeCarriedCaret('task-a')).toBeNull();
+    expect(resolveTaskDraft('task-a').text).toBe('Hello');
   });
 });

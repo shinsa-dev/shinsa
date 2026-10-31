@@ -1,11 +1,17 @@
 import type { AttachmentDraft } from '@/lib/chat/attachment-drafts.ts';
 
+export interface DraftCaret {
+  start: number;
+  end: number;
+}
+
 export interface TaskDraft {
   text: string;
   attachments: AttachmentDraft[];
+  carriedCaret: DraftCaret | null;
 }
 
-const EMPTY_DRAFT: TaskDraft = { text: '', attachments: [] };
+const EMPTY_DRAFT: TaskDraft = { text: '', attachments: [], carriedCaret: null };
 
 const drafts = new Map<string, TaskDraft>();
 const files = new Map<string, File>();
@@ -30,6 +36,16 @@ export function updateTaskDraft(key: string, change: (draft: TaskDraft) => Parti
   const current = resolveTaskDraft(key);
   drafts.set(key, { ...current, ...change(current) });
   notify();
+}
+
+export function carryDraftFocus(key: string, caret: DraftCaret) {
+  updateTaskDraft(key, () => ({ carriedCaret: caret }));
+}
+
+export function takeCarriedCaret(key: string) {
+  const caret = resolveTaskDraft(key).carriedCaret;
+  if (caret) updateTaskDraft(key, () => ({ carriedCaret: null }));
+  return caret;
 }
 
 export function clearTaskDraft(key: string) {

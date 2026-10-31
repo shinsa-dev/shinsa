@@ -134,4 +134,45 @@ describe('Composer drafts', () => {
       (screen.getByRole('textbox', { name: 'Tell the agent something' }) as HTMLTextAreaElement).value
     ).toBe('Half a thought');
   });
+
+  function renderTabs(shown: 'overview' | 'review', onSubmit: (text: string) => Promise<boolean>) {
+    return (
+      <TooltipProvider>
+        <div role='tablist'>
+          <button type='button' role='tab'>
+            Review
+          </button>
+          <button type='button'>Elsewhere</button>
+        </div>
+        <Composer key={shown} draftKey='task-1' placeholder={shown} submitLabel='Send' onSubmit={onSubmit} />
+      </TooltipProvider>
+    );
+  }
+
+  it('takes the focus and the caret along when a tab click moves the input', () => {
+    const onSubmit = mock(async (_text: string) => true);
+    const view = render(renderTabs('overview', onSubmit));
+    const overview = screen.getByRole('textbox', { name: 'overview' }) as HTMLTextAreaElement;
+    fireEvent.change(overview, { target: { value: 'Keep typing' } });
+    overview.focus();
+    overview.setSelectionRange(4, 4);
+    const tab = screen.getByRole('tab', { name: 'Review' });
+    fireEvent.blur(overview, { relatedTarget: tab });
+    view.rerender(renderTabs('review', onSubmit));
+    const review = screen.getByRole('textbox', { name: 'review' }) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(review);
+    expect([review.value, review.selectionStart, review.selectionEnd]).toEqual(['Keep typing', 4, 4]);
+  });
+
+  it('leaves the focus alone when the input lost it to anything but a tab', () => {
+    const onSubmit = mock(async (_text: string) => true);
+    const view = render(renderTabs('overview', onSubmit));
+    const overview = screen.getByRole('textbox', { name: 'overview' });
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    fireEvent.blur(overview, { relatedTarget: elsewhere });
+    fireEvent.blur(overview, { relatedTarget: null });
+    elsewhere.focus();
+    view.rerender(renderTabs('review', onSubmit));
+    expect(document.activeElement).toBe(elsewhere);
+  });
 });

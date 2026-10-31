@@ -11,12 +11,27 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import {
+  carryDraftFocus,
   clearTaskDraft,
   resolveTaskDraft,
   subscribeTaskDrafts,
+  takeCarriedCaret,
   updateTaskDraft,
 } from '@/lib/chat/task-drafts.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
+
+function isTabSwitch(target: EventTarget | null) {
+  return target instanceof Element && target.closest('[role="tab"]') !== null;
+}
+
+function useCarriedFocus(draftKey: string, field: React.RefObject<HTMLTextAreaElement | null>) {
+  React.useLayoutEffect(() => {
+    const caret = takeCarriedCaret(draftKey);
+    if (!caret || !field.current) return;
+    field.current.focus();
+    field.current.setSelectionRange(caret.start, caret.end);
+  }, [draftKey, field]);
+}
 
 export function Composer({
   draftKey,
@@ -36,6 +51,7 @@ export function Composer({
   const text = React.useSyncExternalStore(subscribeTaskDrafts, () => resolveTaskDraft(draftKey).text);
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
+  useCarriedFocus(draftKey, field);
   const attachments = useAttachments(draftKey);
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(text, attachments.drafts, busy);
@@ -61,6 +77,11 @@ export function Composer({
             onChange={(event) => {
               const typed = event.target.value;
               updateTaskDraft(draftKey, () => ({ text: typed }));
+            }}
+            onBlur={(event) => {
+              if (!isTabSwitch(event.relatedTarget)) return;
+              const { selectionStart, selectionEnd } = event.currentTarget;
+              carryDraftFocus(draftKey, { start: selectionStart, end: selectionEnd });
             }}
             onPaste={onPaste}
             onKeyDown={(event) => {
