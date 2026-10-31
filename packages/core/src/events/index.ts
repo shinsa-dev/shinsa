@@ -33,6 +33,7 @@ import type {
   Settings,
   ShapeActor,
   TaskAuto,
+  TaskDuplicate,
   TaskMode,
   TaskPriority,
   TaskShape,
@@ -121,6 +122,8 @@ type EventBody =
   | { type: 'task.change_approved'; taskId: string }
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
+  | { type: 'task.duplicated'; taskId: string; duplicate: TaskDuplicate }
+  | { type: 'task.duplicate_cleared'; taskId: string }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }

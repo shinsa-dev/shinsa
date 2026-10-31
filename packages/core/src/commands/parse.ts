@@ -656,6 +656,12 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     taskId: readId(fields, 'taskId'),
   }),
   'task.cancel': (fields) => ({ type: 'task.cancel', taskId: readId(fields, 'taskId') }),
+  'task.mark_duplicate': (fields) => ({
+    type: 'task.mark_duplicate',
+    taskId: readId(fields, 'taskId'),
+    duplicateOf: readId(fields, 'duplicateOf'),
+  }),
+  'task.clear_duplicate': (fields) => ({ type: 'task.clear_duplicate', taskId: readId(fields, 'taskId') }),
   'task.complete': (fields) => ({ type: 'task.complete', taskId: readId(fields, 'taskId') }),
   'task.retry': readRetry,
   'task.message': readTaskMessage,

@@ -484,6 +484,15 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   backlog?: TaskBacklog | null;
+  duplicate?: TaskDuplicate | null;
+}
+
+export type DuplicateActor = 'you' | 'shinsa';
+
+export interface TaskDuplicate {
+  of: string;
+  by: DuplicateActor;
+  why: string | null;
 }
 
 export interface TaskBacklog {

@@ -30,6 +30,7 @@ import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting } from './dependencies.ts';
+import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
@@ -160,6 +161,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return removeFromBacklog(decider, command);
     case 'task.cancel':
       return cancelTask(decider, command);
+    case 'task.mark_duplicate':
+      return markDuplicate(decider, command);
+    case 'task.clear_duplicate':
+      return clearDuplicate(decider, command);
     case 'task.complete':
       return completeTask(decider, command);
     case 'task.retry':
