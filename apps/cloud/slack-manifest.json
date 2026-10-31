@@ -33,6 +33,10 @@
       "request_url": "https://app.shinsa.dev/slack/events",
       "bot_events": ["app_mention", "app_uninstalled", "tokens_revoked"]
     },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://app.shinsa.dev/slack/interactions"
+    },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
     "token_rotation_enabled": false

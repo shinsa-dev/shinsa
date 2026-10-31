@@ -1,4 +1,10 @@
-import { createSlackMessage, createSlackSection, type SlackMessage } from './blocks.ts';
+import {
+  createSlackContext,
+  createSlackHeader,
+  createSlackMessage,
+  createSlackSection,
+  type SlackMessage,
+} from './blocks.ts';
 import {
   SLACK_REACTIONS,
   type SlackReaction,
@@ -53,13 +59,11 @@ const PREVIEW_RESULT = [
 
 export function serializeSlackPreviewIntro(posts: readonly SlackPreviewPost[]) {
   return createSlackMessage('Every post Shinsa makes in a thread, with sample data.', [
-    createSlackSection(
-      [
-        '*Every post Shinsa makes in a thread*',
-        'Sample data, in this order. The reaction on your message steps through each state.',
-        ...posts.map((post, index) => `${index + 1}.  ${post.name}`),
-      ].join('\n')
-    ),
+    createSlackHeader('Every post Shinsa makes in a thread'),
+    createSlackSection(posts.map((post, index) => `*${index + 1}.*  ${post.name}`).join('\n')),
+    createSlackContext([
+      'Sample data, in this order. The reaction on your message steps through each state. The question’s buttons answer nothing.',
+    ]),
   ]);
 }
 
@@ -96,6 +100,7 @@ export function listSlackPreviewPosts(origin: string, connectUrl: string): Slack
     {
       name: 'Question',
       message: serializeSlackQuestionView(ref, {
+        gateId: 'preview',
         question: 'Which wording should the footer use?',
         context: 'The page has room for one short line under the download button.',
         choices: ['Hand over the work. Keep the decisions.', 'Made for people who review their agents.'],

@@ -5,6 +5,7 @@ import {
   createSlackForwardSignature,
   DomainError,
   SLACK_FORWARD_HEADERS,
+  type SlackAnswer,
   type SlackMention,
   type SlackThreadLink,
   serializeBase64Url,
@@ -156,9 +157,9 @@ function context(key = 'effect-1'): EffectContext {
   return { key, attempt: 1, signal: new AbortController().signal };
 }
 
-async function forward(body: string, timestamp = NOW, signature?: string) {
+async function forward(body: string, timestamp = NOW, signature?: string, path = '/api/slack/events') {
   const signed = signature ?? (await createSlackForwardSignature(CONNECT_KEY, timestamp, body));
-  return new Request('https://t-k3x9.shinsa.dev/api/slack/events', {
+  return new Request(`https://t-k3x9.shinsa.dev${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -182,12 +183,11 @@ afterEach(() => {
 describe('a mention app.shinsa.dev forwards', () => {
   test('signed by the relay becomes slack.mention, once per Slack event', async () => {
     const { slack, stub } = setUp();
-    const response = await slack.handleEvents(await forward(JSON.stringify(MENTION)));
+    const request = await forward(JSON.stringify(MENTION));
+    const response = await slack.handleTunnel(request, new URL(request.url));
     expect(response.status).toBe(202);
     expect(stub.dispatched).toEqual([{ type: 'slack.mention', mention: MENTION }]);
     expect(stub.commandIds).toEqual(['slack:Ev1']);
-    expect(slack.isEventsPath('/api/slack/events')).toBe(true);
-    expect(slack.isEventsPath('/api/slack')).toBe(false);
   });
 
   test('is refused unsigned, signed long ago, too large, broken, or while remote access is off', async () => {
@@ -202,6 +202,57 @@ describe('a mention app.shinsa.dev forwards', () => {
     expect((await slack.handleEvents(await forward('{"eventId":"Ev1"}'))).status).toBe(400);
     const off = setUp({ enabled: false });
     expect((await off.slack.handleEvents(await forward(body))).status).toBe(404);
+    expect(stub.dispatched).toEqual([]);
+  });
+});
+
+describe('an answer from a question’s button', () => {
+  const ANSWER: SlackAnswer = {
+    interactionId: 'I1',
+    ...THREAD,
+    messageTs: '200.4',
+    userId: 'U1',
+    gateId: 'q1',
+    choice: 0,
+  };
+
+  async function click(slack: Slack, body: string, signature?: string) {
+    const request = await forward(body, NOW, signature, '/api/slack/interactions');
+    return slack.handleTunnel(request, new URL(request.url));
+  }
+
+  test('becomes slack.answer once per click, and says what was answered', async () => {
+    const { slack, stub } = setUp();
+    stub.update((state) => {
+      state.gates.q1 = { ...createGate({ id: 'q1', taskId: 't1', type: 'question' }), response: 'CSV' };
+    });
+    const response = await click(slack, JSON.stringify(ANSWER));
+    expect(await response.json()).toEqual({ answered: true, choice: 'CSV' });
+    expect(stub.dispatched).toEqual([{ type: 'slack.answer', answer: ANSWER }]);
+    expect(stub.commandIds).toEqual(['slack-answer:I1']);
+    const gone = setUp();
+    expect(await (await click(gone.slack, JSON.stringify({ ...ANSWER, gateId: 'q2' }))).json()).toEqual({
+      answered: true,
+      choice: '',
+    });
+  });
+
+  test('says why when Shinsa refuses it, and fails on anything else', async () => {
+    const { slack, stub } = setUp();
+    stub.reject(() => true, new DomainError('slack_answer_closed', 'This question is no longer open.'));
+    expect(await (await click(slack, JSON.stringify(ANSWER))).json()).toEqual({
+      answered: false,
+      reason: 'This question is no longer open.',
+    });
+    const broken = setUp();
+    broken.stub.reject(() => true, new Error('disk full'));
+    expect(click(broken.slack, JSON.stringify(ANSWER))).rejects.toThrow('disk full');
+  });
+
+  test('is refused unsigned or missing a part', async () => {
+    const { slack, stub } = setUp();
+    expect((await click(slack, JSON.stringify(ANSWER), 'v1=forged')).status).toBe(401);
+    expect((await click(slack, JSON.stringify({ ...ANSWER, choice: 'one' }))).status).toBe(400);
     expect(stub.dispatched).toEqual([]);
   });
 });
@@ -496,7 +547,7 @@ describe('the result of a task', () => {
     await slack.post(effect);
     const message = JSON.stringify(callsTo(relay, 'post')[0]?.body?.message);
     expect(message).toContain('It is the *buffer*.');
-    expect(message).toContain('<https://app.test/tasks/t1|Open in Shinsa>');
+    expect(message).toContain('"text":"Open in Shinsa","emoji":false},"url":"https://app.test/tasks/t1"');
     const none = setUp();
     await none.slack.post(effect);
     expect(none.relay).toEqual([]);

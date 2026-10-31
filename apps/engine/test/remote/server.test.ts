@@ -56,7 +56,7 @@ function createModels(models: AgentModel[]) {
 
 function createFakeSlack() {
   return {
-    handleEvents: () => Promise.resolve(new Response('mentioned', { status: 202 })),
+    handleTunnel: () => Promise.resolve(new Response('mentioned', { status: 202 })),
     routes: () => [],
   } as unknown as Slack;
 }

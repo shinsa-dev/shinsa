@@ -24,6 +24,7 @@ describe('the tunnel guard', () => {
     expect(route('/remote', 'POST')).toBeNull();
     expect(route('/api/slack/events', 'POST')).toBe('slack');
     expect(route('/api/slack/events')).toBeNull();
+    expect(route('/api/slack/interactions', 'POST')).toBe('slack');
     expect(route('/health', 'POST')).toBeNull();
     expect(route('/api/tasks')).toBeNull();
     expect(route('/ws')).toBeNull();

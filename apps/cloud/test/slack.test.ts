@@ -8,11 +8,14 @@ import {
   REMOTE_KEY_ALGORITHM,
   REMOTE_PATHS,
   resolvePairApprovePath,
+  SLACK_ANSWER_ACTION,
   SLACK_FORWARD_HEADERS,
+  SLACK_QUESTION_BLOCK,
   SLACK_RELAY_PATHS,
   type SlackLinks,
   type SlackMention,
   serializePublicKey,
+  serializeSlackAnswerValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
 import { createSlackSignature } from '../src/crypto.ts';
@@ -240,6 +243,7 @@ describe('the Slack app’s manifest', () => {
       oauth_config: { redirect_urls: string[]; scopes: { bot: string[]; user: string[] } };
       settings: {
         event_subscriptions: { request_url: string; bot_events: string[] };
+        interactivity: { is_enabled: boolean; request_url: string };
         socket_mode_enabled: boolean;
       };
     };
@@ -257,6 +261,10 @@ describe('the Slack app’s manifest', () => {
       'app_uninstalled',
       'tokens_revoked',
     ]);
+    expect(manifest.settings.interactivity).toEqual({
+      is_enabled: true,
+      request_url: `${TEST_CONFIG.origin}${SLACK_RELAY_PATHS.interactions}`,
+    });
     expect(manifest.settings.socket_mode_enabled).toBe(false);
   });
 });
@@ -808,5 +816,199 @@ describe('what a machine does through the relay', () => {
     expect(await (await react({ ...target, add: 'x', remove: null })).json()).toEqual({ applied: false });
     expect((await react({ ...target, add: null, remove: null })).status).toBe(400);
     expect((await react({ ...target, threadTs: '555.1', add: 'x', remove: null })).status).toBe(403);
+  });
+});
+
+describe('a click on a question’s choice', () => {
+  const QUESTION = {
+    text: 'LOC-7 asks: Which format?',
+    blocks: [
+      { type: 'header', text: { type: 'plain_text', text: 'Question for you' } },
+      { type: 'actions', block_id: `${SLACK_QUESTION_BLOCK}.q1`, elements: [] },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: 'LOC-7' }] },
+    ],
+  };
+
+  async function questionSetup() {
+    const setup = await setUp();
+    await sendEvent(setup.harness, mentionEnvelope());
+    const posted = await setup.harness.post(
+      SLACK_RELAY_PATHS.post,
+      { teamId: 'T1', channelId: 'C1', threadTs: '100.1', replaceTs: null, message: QUESTION },
+      { bearer: setup.machine.machineToken, sameOrigin: false }
+    );
+    const { ts } = await readJson<{ ts: string }>(posted);
+    const answers: { body: Fields; headers: Headers }[] = [];
+    const reply = { answer: (): Response => Response.json({ answered: true, choice: 'JSON' }) };
+    const replies: Fields[] = [];
+    setup.harness.handlers.unshift((call) => {
+      if (call.url.endsWith('.shinsa.dev/api/slack/interactions')) {
+        answers.push({ body: JSON.parse(call.body) as Fields, headers: call.headers });
+        return reply.answer();
+      }
+      if (call.url.startsWith('https://hooks.slack.com/')) {
+        replies.push(JSON.parse(call.body) as Fields);
+        return new Response('ok');
+      }
+      return new Response('', { status: 599 });
+    });
+    return { ...setup, ts, answers, reply, replies };
+  }
+
+  function clickPayload(ts: string, overrides: Fields = {}) {
+    return {
+      type: 'block_actions',
+      trigger_id: '13345.73847.8088',
+      team: { id: 'T1' },
+      user: { id: 'U1' },
+      channel: { id: 'C1' },
+      message: { ts, thread_ts: '100.1', ...QUESTION },
+      response_url: 'https://hooks.slack.com/actions/T1/1/abc',
+      actions: [
+        {
+          action_id: `${SLACK_ANSWER_ACTION}.1`,
+          value: serializeSlackAnswerValue('q1', 1),
+          action_ts: '500.1',
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  async function sendClick(harness: Harness, payload: unknown, signature?: string) {
+    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+    const timestamp = String(Math.floor(harness.clock.now / 1000));
+    const response = await harness.call(SLACK_RELAY_PATHS.interactions, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature':
+          signature ?? (await createSlackSignature(TEST_CONFIG.slackSigningSecret, timestamp, body)),
+      },
+      body,
+    });
+    await harness.settle();
+    return response;
+  }
+
+  test('reaches the asker’s machine signed, and swaps the buttons for who answered', async () => {
+    const { harness, machine, ts, answers, replies } = await questionSetup();
+    const response = await sendClick(harness, clickPayload(ts));
+    expect(response.status).toBe(200);
+    const [answer] = answers;
+    expect(answer?.body).toEqual({
+      interactionId: '13345.73847.8088',
+      teamId: 'T1',
+      channelId: 'C1',
+      threadTs: '100.1',
+      messageTs: ts,
+      userId: 'U1',
+      gateId: 'q1',
+      choice: 1,
+    });
+    const signature = {
+      signature: answer?.headers.get(SLACK_FORWARD_HEADERS.signature) ?? null,
+      timestamp: answer?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
+    };
+    expect(
+      await verifySlackForwardSignature(
+        machine.connectKey,
+        signature,
+        JSON.stringify(answer?.body),
+        harness.clock.now
+      )
+    ).toBe(true);
+    expect(replies).toEqual([
+      {
+        replace_original: true,
+        text: QUESTION.text,
+        blocks: [
+          QUESTION.blocks[0],
+          { type: 'context', elements: [{ type: 'mrkdwn', text: '<@U1> answered *JSON*' }] },
+          QUESTION.blocks[2],
+        ],
+      },
+    ]);
+  });
+
+  test('that Shinsa refuses tells only the person who clicked why', async () => {
+    const setup = await questionSetup();
+    setup.reply.answer = () => Response.json({ answered: false, reason: 'This question is no longer open.' });
+    await sendClick(setup.harness, clickPayload(setup.ts));
+    expect(setup.replies).toEqual([
+      { response_type: 'ephemeral', replace_original: false, text: 'This question is no longer open.' },
+    ]);
+  });
+
+  test('from someone not linked, on a post another machine made, or while the machine is offline, is refused privately', async () => {
+    const setup = await questionSetup();
+    await sendClick(setup.harness, clickPayload(setup.ts, { user: { id: 'U2' } }));
+    await sendClick(setup.harness, clickPayload('999.9'));
+    setup.reply.answer = () => new Response('', { status: 530 });
+    await sendClick(setup.harness, clickPayload(setup.ts));
+    setup.reply.answer = () => new Response('not json');
+    await sendClick(setup.harness, clickPayload(setup.ts, { trigger_id: undefined }));
+    expect(setup.replies.map((reply) => reply.text)).toEqual([
+      'Connect Slack to your own Shinsa first, then answer it in Shinsa.',
+      'This question was asked on someone else’s machine, so only they can answer it.',
+      'Studio is offline, so the answer was not sent. Try again once Shinsa runs there.',
+      'Studio is offline, so the answer was not sent. Try again once Shinsa runs there.',
+    ]);
+    expect(setup.answers.at(-1)?.body.interactionId).toBe('500.1');
+    expect(setup.replies.every((reply) => reply.response_type === 'ephemeral')).toBe(true);
+  });
+
+  test('on a machine that stopped heartbeating is refused without asking it', async () => {
+    const setup = await questionSetup();
+    setup.harness.clock.now += 10 * 60_000;
+    await sendClick(setup.harness, clickPayload(setup.ts));
+    expect(setup.answers).toHaveLength(0);
+    expect(setup.replies[0]?.text).toBe(
+      'Studio is offline, so the answer was not sent. Try again once Shinsa runs there.'
+    );
+  });
+
+  test('a link button, another kind of interaction or a reply address off Slack does nothing', async () => {
+    const setup = await questionSetup();
+    const open = { action_id: 'shinsa.open', action_ts: '500.2' };
+    expect((await sendClick(setup.harness, clickPayload(setup.ts, { actions: [open] }))).status).toBe(200);
+    await sendClick(setup.harness, clickPayload(setup.ts, { type: 'view_submission' }));
+    await sendClick(setup.harness, clickPayload(setup.ts, { response_url: 'https://evil.test/x' }));
+    await sendClick(
+      setup.harness,
+      clickPayload(setup.ts, { channel: {}, team: 'T1', user: null, message: [] })
+    );
+    await sendClick(setup.harness, 'noise');
+    expect(setup.answers).toHaveLength(0);
+    expect(setup.replies).toHaveLength(0);
+  });
+
+  test('is refused unsigned, too large or not JSON, and a failed reply is logged', async () => {
+    const setup = await questionSetup();
+    expect((await sendClick(setup.harness, clickPayload(setup.ts), 'v0=forged')).status).toBe(401);
+    const large = await setup.harness.call(SLACK_RELAY_PATHS.interactions, {
+      method: 'POST',
+      body: 'x'.repeat(SLACK_EVENT_BODY_LIMIT_BYTES + 1),
+    });
+    expect(large.status).toBe(413);
+    const body = 'payload=%7Bnope';
+    const timestamp = String(Math.floor(setup.harness.clock.now / 1000));
+    const broken = await setup.harness.call(SLACK_RELAY_PATHS.interactions, {
+      method: 'POST',
+      headers: {
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature': await createSlackSignature(TEST_CONFIG.slackSigningSecret, timestamp, body),
+      },
+      body,
+    });
+    expect(broken.status).toBe(400);
+    setup.harness.handlers.unshift((call) =>
+      call.url.startsWith('https://hooks.slack.com/')
+        ? Promise.reject(new Error('down'))
+        : new Response('', { status: 599 })
+    );
+    await sendClick(setup.harness, clickPayload(setup.ts));
+    expect(failures).toHaveBeenCalled();
   });
 });

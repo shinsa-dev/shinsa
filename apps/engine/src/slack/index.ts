@@ -4,6 +4,7 @@ import {
   listSlackPreviewPosts,
   listSlackStatusGates,
   type MachineCredentials,
+  parseSlackAnswer,
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
@@ -13,12 +14,13 @@ import {
   resolveSlackTaskUrl,
   resolveSlackThreadKey,
   type ShinsaEffect,
-  SLACK_ENGINE_EVENTS_PATH,
+  SLACK_ENGINE_INTERACTIONS_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
   SLACK_PREVIEW_REACTIONS,
   SLACK_REACTIONS,
+  type SlackAnswerReply,
   type SlackMention,
   type SlackMessage,
   type SlackSessionStatus,
@@ -102,16 +104,12 @@ export class Slack {
     return this.#remote.isEnabled ? this.#remote.store.file.credentials : null;
   }
 
-  isEventsPath(pathname: string) {
-    return pathname === SLACK_ENGINE_EVENTS_PATH;
-  }
-
-  async handleEvents(request: Request) {
+  async #readSigned(request: Request): Promise<{ value: unknown } | Response> {
     const credentials = this.#selectCredentials();
     if (!credentials) return respondJsonError('not_found', 'No such endpoint.', 404);
     const body = await request.text();
     if (body.length > SLACK_EVENT_BODY_LIMIT_BYTES)
-      return respondJsonError('body_too_large', 'The mention is over 1 MB.', 413);
+      return respondJsonError('body_too_large', 'The request is over 1 MB.', 413);
     const signed = await verifySlackForwardSignature(
       credentials.connectKey,
       {
@@ -121,17 +119,48 @@ export class Slack {
       body,
       this.#now()
     );
-    if (!signed) return respondJsonError('unauthorized', 'The mention is not signed by app.shinsa.dev.', 401);
-    let value: unknown;
+    if (!signed) return respondJsonError('unauthorized', 'The request is not signed by app.shinsa.dev.', 401);
     try {
-      value = JSON.parse(body);
+      return { value: JSON.parse(body) };
     } catch {
-      return respondJsonError('body_invalid', 'The mention is not JSON.', 400);
+      return respondJsonError('body_invalid', 'The request is not JSON.', 400);
     }
-    const mention = parseSlackMention(value);
+  }
+
+  async handleEvents(request: Request) {
+    const read = await this.#readSigned(request);
+    if (read instanceof Response) return read;
+    const mention = parseSlackMention(read.value);
     if (!mention) return respondJsonError('body_invalid', 'The mention is missing a part.', 400);
     await this.#engine.dispatch({ type: 'slack.mention', mention }, { id: `slack:${mention.eventId}` });
     return Response.json({ ok: true }, { status: 202 });
+  }
+
+  async handleInteractions(request: Request) {
+    const read = await this.#readSigned(request);
+    if (read instanceof Response) return read;
+    const answer = parseSlackAnswer(read.value);
+    if (!answer) return respondJsonError('body_invalid', 'The answer is missing a part.', 400);
+    try {
+      await this.#engine.dispatch(
+        { type: 'slack.answer', answer },
+        { id: `slack-answer:${answer.interactionId}` }
+      );
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
+      const refused: SlackAnswerReply = { answered: false, reason: error.message };
+      return Response.json(refused);
+    }
+    const answered: SlackAnswerReply = {
+      answered: true,
+      choice: this.#engine.state.gates[answer.gateId]?.response ?? '',
+    };
+    return Response.json(answered);
+  }
+
+  handleTunnel(request: Request, url: URL) {
+    if (url.pathname === SLACK_ENGINE_INTERACTIONS_PATH) return this.handleInteractions(request);
+    return this.handleEvents(request);
   }
 
   #taskUrl(taskId: string) {

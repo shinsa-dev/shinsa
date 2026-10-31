@@ -1,17 +1,23 @@
 import {
   createSlackForwardSignature,
   isSameSecret,
+  listSlackAnsweredBlocks,
   listSlackMentionedUsers,
+  parseSlackAnswerReply,
+  parseSlackAnswerValue,
   parseSlackRelayPost,
   parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackReadableText,
   resolveTunnelHost,
+  SLACK_ANSWER_ACTION,
   SLACK_BLOCKS_REFUSED,
   SLACK_ENGINE_EVENTS_PATH,
+  SLACK_ENGINE_INTERACTIONS_PATH,
   SLACK_FORWARD_HEADERS,
   SLACK_LIMITS,
   SLACK_RELAY_PATHS,
+  type SlackAnswer,
   type SlackLinks,
   type SlackMention,
   type SlackMessage,
@@ -19,6 +25,7 @@ import {
   type SlackRelayReacted,
   type SlackRelaySessionSet,
   type SlackThreadMessage,
+  serializeSlackAnsweredView,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
 } from '@shinsa/core';
@@ -281,13 +288,12 @@ async function resolveForwardedMention(
   };
 }
 
-async function forwardMention(mention: SlackMention, instance: InstanceRow, world: CloudWorld) {
-  const body = JSON.stringify(mention);
+async function requestMachine(instance: InstanceRow, path: string, payload: unknown, world: CloudWorld) {
+  const body = JSON.stringify(payload);
   const timestamp = world.now();
   const signature = await createSlackForwardSignature(instance.connect_key, timestamp, body);
-  let answer: Response;
   try {
-    answer = await world.fetch(`https://${resolveTunnelHost(instance.id)}${SLACK_ENGINE_EVENTS_PATH}`, {
+    return await world.fetch(`https://${resolveTunnelHost(instance.id)}${path}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -298,9 +304,13 @@ async function forwardMention(mention: SlackMention, instance: InstanceRow, worl
       redirect: 'manual',
     });
   } catch {
-    return false;
+    return null;
   }
-  if (TUNNEL_OFFLINE_STATUSES.has(answer.status)) return false;
+}
+
+async function forwardMention(mention: SlackMention, instance: InstanceRow, world: CloudWorld) {
+  const answer = await requestMachine(instance, SLACK_ENGINE_EVENTS_PATH, mention, world);
+  if (!answer || TUNNEL_OFFLINE_STATUSES.has(answer.status)) return false;
   if (!answer.ok)
     recordFailure('[Cloud] A machine refused a Slack mention', {
       instanceId: instance.id,
@@ -440,4 +450,141 @@ export async function respondSlackReaction(request: Request, world: CloudWorld) 
   const added = await requestReaction(world, 'reactions.add', token, target, reaction.add);
   const answer: SlackRelayReacted = { applied: removed && added };
   return respondJson(answer);
+}
+
+const RESPONSE_URL_ORIGIN = 'https://hooks.slack.com/';
+
+interface AnswerClick {
+  answer: SlackAnswer;
+  responseUrl: string;
+  message: { text: string; blocks: unknown[] };
+}
+
+function readAnswerClick(payload: Fields): AnswerClick | null {
+  if (payload.type !== 'block_actions') return null;
+  const team = isFields(payload.team) ? payload.team : {};
+  const user = isFields(payload.user) ? payload.user : {};
+  const channel = isFields(payload.channel) ? payload.channel : {};
+  const message = isFields(payload.message) ? payload.message : {};
+  const action = Array.isArray(payload.actions) && isFields(payload.actions[0]) ? payload.actions[0] : {};
+  const actionId = readString(action, 'action_id');
+  const value = parseSlackAnswerValue(readString(action, 'value') ?? '');
+  const responseUrl = readString(payload, 'response_url');
+  const teamId = readString(team, 'id');
+  const userId = readString(user, 'id');
+  const channelId = readString(channel, 'id');
+  const messageTs = readString(message, 'ts');
+  const interactionId = readString(payload, 'trigger_id') ?? readString(action, 'action_ts');
+  if (
+    !actionId?.startsWith(`${SLACK_ANSWER_ACTION}.`) ||
+    !value ||
+    !responseUrl?.startsWith(RESPONSE_URL_ORIGIN)
+  )
+    return null;
+  if (!teamId || !userId || !channelId || !messageTs || !interactionId) return null;
+  return {
+    answer: {
+      interactionId: interactionId.slice(0, SLACK_LIMITS.id),
+      teamId,
+      channelId,
+      threadTs: readString(message, 'thread_ts') ?? messageTs,
+      messageTs,
+      userId,
+      gateId: value.gateId,
+      choice: value.choice,
+    },
+    responseUrl,
+    message: {
+      text: typeof message.text === 'string' ? message.text : '',
+      blocks: Array.isArray(message.blocks) ? message.blocks : [],
+    },
+  };
+}
+
+export async function respondSlackInteractions(request: Request, world: CloudWorld) {
+  const body = await request.text();
+  if (body.length > SLACK_EVENT_BODY_LIMIT_BYTES)
+    throw new CloudError('body_too_large', 'The Slack interaction is over 1 MB.', 413);
+  await assertSlackSignature(request, body, world);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(new URLSearchParams(body).get('payload') ?? '');
+  } catch {
+    throw new CloudError('body_invalid', 'The Slack interaction is not JSON.', 400);
+  }
+  const click = isFields(payload) ? readAnswerClick(payload) : null;
+  if (click) world.defer(recordAnswerFailure(handleAnswer(click, world), click));
+  return new Response(null, { status: 200 });
+}
+
+async function recordAnswerFailure(work: Promise<void>, click: AnswerClick) {
+  try {
+    await work;
+  } catch (error) {
+    recordFailure('[Cloud] A Slack answer could not be passed on', { error, teamId: click.answer.teamId });
+  }
+}
+
+async function respondInSlack(world: CloudWorld, click: AnswerClick, body: Fields) {
+  await world.fetch(click.responseUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+function respondPrivately(world: CloudWorld, click: AnswerClick, text: string) {
+  return respondInSlack(world, click, { response_type: 'ephemeral', replace_original: false, text });
+}
+
+async function handleAnswer(click: AnswerClick, world: CloudWorld) {
+  const { answer } = click;
+  const link = await world.store.selectSlackLink(answer.teamId, answer.userId);
+  if (!link) {
+    await respondPrivately(world, click, 'Connect Slack to your own Shinsa first, then answer it in Shinsa.');
+    return;
+  }
+  if (
+    !(await world.store.hasSlackPost(answer.teamId, answer.channelId, answer.messageTs, link.instance_id))
+  ) {
+    await respondPrivately(
+      world,
+      click,
+      'This question was asked on someone else’s machine, so only they can answer it.'
+    );
+    return;
+  }
+  const instance = await world.store.selectInstance(link.instance_id);
+  const reply = await requestAnswer(instance, answer, world);
+  if (!reply) {
+    await respondPrivately(
+      world,
+      click,
+      `${instance?.name ?? 'Your machine'} is offline, so the answer was not sent. Try again once Shinsa runs there.`
+    );
+    return;
+  }
+  if (!reply.answered) {
+    await respondPrivately(world, click, reply.reason);
+    return;
+  }
+  await respondInSlack(world, click, {
+    replace_original: true,
+    text: click.message.text,
+    blocks: listSlackAnsweredBlocks(
+      click.message.blocks,
+      serializeSlackAnsweredView(reply.choice, answer.userId)
+    ),
+  });
+}
+
+async function requestAnswer(instance: InstanceRow | null, answer: SlackAnswer, world: CloudWorld) {
+  if (!instance || !isInstanceOnline(instance, world.now())) return null;
+  const response = await requestMachine(instance, SLACK_ENGINE_INTERACTIONS_PATH, answer, world);
+  if (!response?.ok) return null;
+  try {
+    return parseSlackAnswerReply(await response.json());
+  } catch {
+    return null;
+  }
 }

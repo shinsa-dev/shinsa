@@ -897,6 +897,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread (kept while a gate is open), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
 | `slack.record_status` | the `slack.status` effect | the ts of the task's status message and the reaction now on the mention, once Slack has them |
+| `slack.answer` | `POST /api/slack/interactions`, command id `slack-answer:<trigger id>` | a signed `SlackAnswer`: answers an open question gate with its choice (`gate.answer`, `reply`), only for the Slack user who started the task from that thread; refused `slack_answer_closed`, `slack_answer_refused` or `slack_answer_choice` |
 
 ## Events
 
@@ -1261,11 +1262,13 @@ arrived, never from the page.
 What the engine, the Worker on app.shinsa.dev and the web share for the Slack bot is in `packages/core/src/slack/`
 (how it behaves is `docs/engine.md` → Slack). Like remote access's contract it is append-only.
 
-| Path (`SLACK_RELAY_PATHS`, `SLACK_ENGINE_EVENTS_PATH`) | Who calls it | What it does |
+| Path (`SLACK_RELAY_PATHS`, `SLACK_ENGINE_EVENTS_PATH`, `SLACK_ENGINE_INTERACTIONS_PATH`) | Who calls it | What it does |
 | --- | --- | --- |
 | `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack for one of your machines (the one seen last without `instance`) |
 | `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
+| `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.answer.<n>` click from a linked person on a message their machine posted is forwarded as a `SlackAnswer`, and the click's `response_url` (on `hooks.slack.com`) gets the answered post or a private refusal; anything else is dropped |
+| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackAnswer` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackAnswerReply`: `{ answered: true, choice }` or `{ answered: false, reason }` |
 | `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when Slack will not take it (a workspace without agent features) |
@@ -1276,7 +1279,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | --- | --- |
 | `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`) |
 | `SlackPost` (`posts.ts`) | `gate` with its `gateId`, `result`, `forwarded`, `held` |
-| `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section) |
+| `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
+| `SlackAnswer` (`answers.ts`, `parseSlackAnswer`) | `interactionId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `gateId`, `choice` (the index into the gate's choices; a button's value is `{ gateId, choice }`, `serializeSlackAnswerValue`) |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
 
 ## Where it lives

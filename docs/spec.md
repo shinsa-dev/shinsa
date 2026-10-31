@@ -380,8 +380,8 @@ where your policies, plain-English sentences the classifier reads with the reque
 `docs/plans/remote-plan.md`).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
-that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread, and every decision
-is still made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
+that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
+can be answered with its button there, and every other decision is made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
 own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
@@ -1029,11 +1029,14 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
   gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
   a Slack token, and the relay stores no message text.
-- **The thread follows the task, minimally**: one status message edited in place as it moves, one post for each
-  question, secret, plan and review, each a bold title, the gist quoted and the link to decide in Shinsa on its own
-  line, and the result's start with a link to the rest. No icons in the posts: the state is the one reaction on your
+- **The thread follows the task, in Block Kit**: one status message edited in place as it moves, one post for each
+  question, secret, plan and review, each a header, the gist bold or quoted, its details as fields or a list, a
+  button to decide in Shinsa and a small line naming the task and its `PR #<number>`, and the result's start with a
+  button to the rest. No icons in the posts: the state is the one reaction on your
   message (⏳ sizing up, 🛠️ working, ✋ needs you, ✅ done), there from the moment the bot reads it. No streamed text
-  and no "Thinking…" placeholder. "@Shinsa preview posts" shows every post with sample data. No buttons, so Slack never asks for interactivity; nothing in Slack closes a gate.
+  and no "Thinking…" placeholder. "@Shinsa preview posts" shows every post with sample data. A question's choices are buttons: the person who started the task answers with one, the post then says who
+  answered what, and anyone else is told privately they cannot; plans, reviews, merges and the rest are decided only
+  in Shinsa.
 - **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every
   machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
   Mentions while a machine is offline are not kept.

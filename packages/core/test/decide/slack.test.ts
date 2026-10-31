@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { SlackMention, TaskShape } from '../../src/index.ts';
+import type { SlackAnswer, SlackMention, TaskShape } from '../../src/index.ts';
 import {
   approve,
   completePhase,
@@ -234,5 +234,98 @@ describe('the status message', () => {
     harness.send({ ...status, reaction: 'white_check_mark' });
     expect(harness.task(taskId).slack).toMatchObject({ statusTs: '100.9', reaction: 'white_check_mark' });
     expect(harness.send({ ...status, taskId: 'gone' }).events).toEqual([]);
+  });
+});
+
+describe('an answer from a question’s button in Slack', () => {
+  function askInSlack(harness: Harness) {
+    const taskId = startFromSlack(harness);
+    readyWorktree(harness, taskId);
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Which format?',
+      choices: ['CSV', 'JSON'],
+      context: null,
+    });
+    return taskId;
+  }
+
+  const answer = (overrides: Partial<SlackAnswer> = {}): SlackAnswer => ({
+    interactionId: 'I1',
+    ...THREAD,
+    messageTs: '100.9',
+    userId: 'U1',
+    gateId: 'q1',
+    choice: 1,
+    ...overrides,
+  });
+
+  test('answers the question with that choice and restates the status', () => {
+    const harness = createHarness();
+    const taskId = askInSlack(harness);
+    const before = harness.effectsOf('slack.status').length;
+    harness.send({ type: 'slack.answer', answer: answer() });
+    const gate = harness.state.gates.q1;
+    expect(gate?.status).toBe('answered');
+    expect(gate?.response).toBe('JSON');
+    expect(harness.effectsOf('slack.status').length).toBeGreaterThan(before);
+    expect(harness.task(taskId).stage).not.toBe('awaiting_answer');
+  });
+
+  test('is refused from anyone but the person who started the task, or from another thread', () => {
+    const harness = createHarness();
+    askInSlack(harness);
+    expect(() => harness.send({ type: 'slack.answer', answer: answer({ userId: 'U2' }) })).toThrow(
+      'Only the person who started this task from Slack'
+    );
+    expect(() => harness.send({ type: 'slack.answer', answer: answer({ threadTs: '200.1' }) })).toThrow(
+      'Only the person who started this task from Slack'
+    );
+    expect(harness.state.gates.q1?.status).toBe('open');
+  });
+
+  test('is refused once the question is closed, for a gate that is gone and for a choice it does not have', () => {
+    const harness = createHarness();
+    askInSlack(harness);
+    expect(() => harness.send({ type: 'slack.answer', answer: answer({ choice: 5 }) })).toThrow(
+      'That choice is no longer on the question'
+    );
+    expect(() => harness.send({ type: 'slack.answer', answer: answer({ gateId: 'gone' }) })).toThrow(
+      'This question is no longer open.'
+    );
+    harness.send({ type: 'slack.answer', answer: answer() });
+    expect(() => harness.send({ type: 'slack.answer', answer: answer({ interactionId: 'I2' }) })).toThrow(
+      'This question is no longer open.'
+    );
+  });
+
+  test('is refused for a task that did not come from Slack', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    harness.send({ type: 'task.create', request: 'Plain', repoId });
+    const taskId = Object.keys(harness.state.tasks)[0] ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: 'Plain',
+      repoId,
+      size: 'small',
+      branch: 'fix/plain',
+      waitsOn: [],
+    });
+    readyWorktree(harness, taskId);
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Which?',
+      choices: ['A'],
+      context: null,
+    });
+    expect(() => harness.send({ type: 'slack.answer', answer: answer({ choice: 0 }) })).toThrow(
+      'Only the person who started this task from Slack'
+    );
   });
 });

@@ -7,6 +7,7 @@ export const SLACK_RELAY_PATHS = {
   connectCallback: '/slack/connect/callback',
   installCallback: '/slack/install/callback',
   events: '/slack/events',
+  interactions: '/slack/interactions',
   linkedPage: '/slack/linked',
   links: '/__remote/slack/links',
   unlink: '/__remote/slack/unlink',

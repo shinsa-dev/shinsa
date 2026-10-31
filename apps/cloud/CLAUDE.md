@@ -23,7 +23,7 @@ src/
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
 ├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine
 ├── slack.ts       Slack's events (signature, dedupe, uninstall), a mention forwarded to its author's machine with
-│                  the thread, and the machine's links, unlink and posts
+│                  the thread, a question's choice clicked, and the machine's links, unlink and posts
 ├── slack-api.ts   The Slack Web API (requestSlack, SlackApiError) and the scopes
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
 ├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, the bot tokens sealed with AES-GCM,
@@ -88,7 +88,10 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
-  posted (`slack_threads`, `slack_posts`), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort), `/__remote/slack/session` sets the thread's status
+  posted (`slack_threads`, `slack_posts`), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
+  `/slack/interactions` takes a question's choice button (signed, acknowledged at once): from a linked person on a
+  message their own machine posted it is forwarded signed to that machine's `/api/slack/interactions`, and the
+  click's `response_url` gets the post with "@you answered" in place of the buttons, or a private refusal, `/__remote/slack/session` sets the thread's status
   (`agents.sessions.setStatus`, best effort, `applied: false` where Slack has no agent features); `/__remote/slack/links` and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the

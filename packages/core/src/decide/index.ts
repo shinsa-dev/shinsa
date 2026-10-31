@@ -94,7 +94,13 @@ import {
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
-import { receiveSlackMention, recordSlackStatus, startSlackTask, syncSlackThreads } from './slack.ts';
+import {
+  answerSlackQuestion,
+  receiveSlackMention,
+  recordSlackStatus,
+  startSlackTask,
+  syncSlackThreads,
+} from './slack.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
   cancelTask,
@@ -366,6 +372,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return startSlackTask(decider, command);
     case 'slack.record_status':
       return recordSlackStatus(decider, command);
+    case 'slack.answer':
+      return answerSlackQuestion(decider, command);
   }
 }
 

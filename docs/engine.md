@@ -2510,9 +2510,14 @@ Slack ──event──► app.shinsa.dev /slack/events
                   └─ work ──► slack.start_task:
                               task.create, as from Home
    the task moves ──► slack.status (edited) + the mention's one reaction
-   a gate opens ──► slack.post (a title, the gate quoted, a link)
-   the result ──► slack.post (its start + a link to Shinsa)
+   a gate opens ──► slack.post (a header, the gate, a button to Shinsa)
+   the result ──► slack.post (its start + a button to Shinsa)
                   └─ app.shinsa.dev /__remote/slack/post ──► Slack
+
+Slack ──a choice's button──► app.shinsa.dev /slack/interactions
+                  ├─ not linked, not their machine's post, offline ──► private reply
+                  └─ signed ──► /api/slack/interactions ──► slack.answer ──► gate.answer
+                                 └─ the buttons become "@you answered *choice*"
 ```
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
@@ -2581,22 +2586,40 @@ Slack ──event──► app.shinsa.dev /slack/events
   (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
   Slack notifies; every change to the task is one `slack.status`, the status message edited in place. Each message is
   built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
-  as one plain section, with no icons, no buttons and no headers: a bold title, what it is about quoted (`>`, so code
-  and links in it keep their markup), its details as lines or a list, and the link to the task on app.shinsa.dev on
-  its own last line (`resolveSlackTaskUrl`), so Slack never asks for interactivity:
+  in Block Kit with no icons (`slack/blocks.ts`): a header naming the post, the main point bold or quoted (`>`, so
+  code and links in it keep their markup), details as fields, a numbered list or a context line, a button to open
+  the task on app.shinsa.dev (`resolveSlackTaskUrl`, the primary one when it is where you decide), and a small last
+  line naming the task (its handle and title, linked) and its pull request as `PR #<number>`, linked:
   - the status message: what the task is doing now in bold (its stage reason, else its stage, or "Needs you" with
-    the question or failure quoted under it), then the task's handle and title as the link, and its pull request;
-  - a question: "Question", the question quoted, the first sentence of its context, its choices as a list with the
-    recommended one marked, "Answer in Shinsa";
-  - a secret: "Secret needed", what is needed quoted, to give it in Shinsa and never in Slack, "Give it in Shinsa";
-  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), "Review the plan in
-    Shinsa";
-  - a review: "Ready for your review", the summary's first sentence quoted, how the checks went, "Review in Shinsa"
-    and the pull request;
+    the question or failure quoted under it), then the task line, with no header;
+  - a question: "Question for you", the question in bold, the first sentence of its context quoted, "Recommended:"
+    with the agent's recommendation, a button per choice (the recommended one primary) when it has one to five
+    choices of at most 75 characters, otherwise the choices numbered, and "Answer in Shinsa" for any other answer;
+  - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
+  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), "Review the plan";
+  - a review: "Ready for your review", the summary's first sentence quoted, the fields Checks (how they went) and
+    Pull request (`PR #<number>`, or "Opens once you approve"), "Review in Shinsa";
   - a proposal: "Proposed change", the change quoted, "Decide in Shinsa";
-  - the result: one message in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
-    (`SLACK_RESULT_LIMIT`) and ending in "Open in Shinsa" (or "Read the rest in Shinsa").
-  Slack never closes a gate: the posts say where to decide, and a mention while a gate is open is kept, not routed.
+  - the result: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
+    (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa").
+  A link button still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the app's
+  Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
+- **A question's choice can be answered in Slack, and nothing else** (`slack/answers.ts`, `answerSlackQuestion`).
+  Each choice button carries `{ gateId, choice }` (`serializeSlackAnswerValue`, action `shinsa.answer.<n>`, in the
+  actions block `shinsa.question.<gate>`). A click reaches `POST /slack/interactions` on app.shinsa.dev, which checks
+  Slack's signature, acknowledges at once and then: refuses privately (an ephemeral reply through the click's
+  `response_url`, which must be on `hooks.slack.com`) a person with no link, a message their own machine did not post,
+  and a machine that is offline; otherwise it forwards a `SlackAnswer` (the click's trigger id, workspace, channel,
+  thread, message, Slack user, gate and choice) to `POST /api/slack/interactions` on that machine, signed like a
+  mention. The machine dispatches `slack.answer` (command id `slack-answer:<trigger id>`), which core accepts only for
+  an open question gate of a task started from that thread by that same Slack user, with a choice the question still
+  has, and answers as you would in Shinsa (`gate.answer`, `reply`, the choice as the response). It answers
+  `{ answered: true, choice }`, and app.shinsa.dev replaces the post's buttons with "@you answered *choice*"
+  (`listSlackAnsweredBlocks`, `serializeSlackAnsweredView`); a refusal (`slack_answer_closed`, `_refused`,
+  `_choice`) comes back as `{ answered: false, reason }` and is shown to the clicker alone. A question answered in
+  Shinsa first keeps its buttons in Slack, and a later click is told it is no longer open. Plans, reviews, merges,
+  proposals, secrets and failures are only ever decided in Shinsa, and a mention while a gate is open is kept, not
+  routed. The status refreshes on every answer (`gate.answered`), wherever it was given.
 - **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
   that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`

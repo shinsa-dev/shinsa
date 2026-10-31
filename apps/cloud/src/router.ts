@@ -15,6 +15,7 @@ import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView 
 import { respondSession, respondSignIn, respondSignInCallback, respondSignOut } from './session.ts';
 import {
   respondSlackEvents,
+  respondSlackInteractions,
   respondSlackLinks,
   respondSlackPost,
   respondSlackReaction,
@@ -165,6 +166,11 @@ const SLACK_ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(SLACK_RELAY_PATHS.events),
     respond: (request, _url, _match, world) => respondSlackEvents(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.interactions),
+    respond: (request, _url, _match, world) => respondSlackInteractions(request, world),
   },
 ];
 

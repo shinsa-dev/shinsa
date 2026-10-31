@@ -1,4 +1,5 @@
 import type { CommandOf } from '../commands/index.ts';
+import { DomainError } from '../domain/errors.ts';
 import { isTaskClosed } from '../domain/rounds.ts';
 import { isSameSlackThread, type SlackThreadRef } from '../domain/slack.ts';
 import type { Task } from '../domain/types.ts';
@@ -7,8 +8,10 @@ import { resolveSlackMentionThread, type SlackMention } from '../slack/contract.
 import { SLACK_REACTIONS } from '../slack/messages.ts';
 import { SLACK_POSTED_GATES, type SlackPost } from '../slack/posts.ts';
 import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
+import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
+import { answerGate } from './gates.ts';
 import { messageTask, recordHeldMessage } from './messages.ts';
 import { createTask } from './tasks.ts';
 
@@ -80,7 +83,28 @@ export function recordSlackStatus(decider: Decider, command: CommandOf<'slack.re
   });
 }
 
-function resolveEventTask(event: ShinsaEventInput) {
+export function answerSlackQuestion(decider: Decider, command: CommandOf<'slack.answer'>) {
+  const { answer } = command;
+  const gate = decider.state.gates[answer.gateId];
+  if (gate?.status !== 'open' || gate.type !== 'question')
+    throw new DomainError('slack_answer_closed', 'This question is no longer open.');
+  const link = decider.state.tasks[gate.taskId]?.slack;
+  if (!link || !isSameSlackThread(link, answer) || link.userId !== answer.userId)
+    throw new DomainError(
+      'slack_answer_refused',
+      'Only the person who started this task from Slack can answer it here. Answer it in Shinsa.'
+    );
+  const choice = gate.choices?.[answer.choice];
+  if (choice === undefined)
+    throw new DomainError(
+      'slack_answer_choice',
+      'That choice is no longer on the question. Answer it in Shinsa.'
+    );
+  answerGate(decider, gate.id, 'reply', choice);
+}
+
+function resolveEventTask(state: ShinsaState, event: ShinsaEventInput) {
+  if (event.type === 'gate.answered') return state.gates[event.gateId]?.taskId ?? null;
   if (event.type === 'gate.opened') return SLACK_POSTED_GATES.has(event.gate.type) ? event.gate.taskId : null;
   if (event.type === 'task.delivered' || event.type === 'task.staged') return event.taskId;
   if (event.type === 'slack.thread_linked') return event.taskId;
@@ -96,7 +120,7 @@ function resolveEventPost(event: ShinsaEventInput): SlackPost | null {
 export function syncSlackThreads(decider: Decider) {
   const restated = new Set<string>();
   for (const event of decider.events) {
-    const taskId = resolveEventTask(event);
+    const taskId = resolveEventTask(decider.state, event);
     const link = taskId ? decider.state.tasks[taskId]?.slack : null;
     if (!taskId || !link) continue;
     const post = resolveEventPost(event);
