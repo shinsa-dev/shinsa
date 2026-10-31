@@ -16,7 +16,9 @@ function applyThreadLinked(state: ShinsaState, event: EventOf<'slack.thread_link
 function applyStatusPosted(state: ShinsaState, event: EventOf<'slack.status_posted'>) {
   const link = state.tasks[event.taskId]?.slack;
   if (!link) return;
-  updateTask(state, event.taskId, event.at, { slack: { ...link, statusTs: event.ts, reaction: event.reaction } });
+  updateTask(state, event.taskId, event.at, {
+    slack: { ...link, statusTs: event.ts, reaction: event.reaction },
+  });
 }
 
 export function applySlackEvent(state: ShinsaState, event: SlackEvent) {
