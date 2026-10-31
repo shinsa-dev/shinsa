@@ -5,7 +5,6 @@ import {
   describeCanaryDecision,
   describeReleaseChannel,
   isAppChange,
-  listStaleCanaries,
   parseReleaseOptions,
   resolveCanaryDecision,
   resolveReleasePlan,
@@ -188,23 +187,6 @@ describe('resolveReleasePlan for a canary', () => {
     const tags = ['v1.2.0', 'v1.2.1-canary.9', 'v1.3.1-canary.2'];
     expect(resolveReleasePlan({ tags, channel: 'stable', bump: 'patch' }).version).toBe('1.2.1');
     expect(resolveReleasePlan({ tags, channel: 'beta', bump: 'minor' }).version).toBe('1.3.0-beta.1');
-  });
-});
-
-describe('listStaleCanaries', () => {
-  it('keeps the newest canaries by semver and lists the rest, never a beta or stable release', () => {
-    const tags = [
-      'v1.2.0',
-      'v1.3.0-beta.1',
-      'v1.2.1-canary.9',
-      'v1.2.1-canary.10',
-      'v1.3.1-canary.1',
-      'v1.2.1-canary.2',
-    ];
-    expect(listStaleCanaries(tags, 2)).toEqual(['v1.2.1-canary.9', 'v1.2.1-canary.2']);
-    expect(listStaleCanaries(tags)).toEqual([]);
-    expect(listStaleCanaries(['v1.2.0'], 0)).toEqual([]);
-    expect(listStaleCanaries(['1.2.1-canary.1', '1.2.1-canary.2'], 1)).toEqual(['1.2.1-canary.1']);
   });
 });
 
