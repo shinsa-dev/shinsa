@@ -9,13 +9,11 @@ import { escapeSlackText, listSlackChunks, serializeSlackMrkdwn } from './mrkdwn
 import type { SlackPost } from './posts.ts';
 import type { SlackSessionStatus } from './relay.ts';
 
-export const SLACK_RESULT_LIMIT = 3000;
-
-export const SLACK_STARTING_MARKDOWN = 'On it.';
+export const SLACK_RESULT_LIMIT = 1500;
 
 const SLACK_LEAD_LIMIT = 280;
 
-const SLACK_STREAM_PIECE = 48;
+const SLACK_DECLINED_TEXT = 'Not a task, so nothing was started.';
 
 const NEEDS_YOU_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_plan',
@@ -185,12 +183,6 @@ function resolveResultBody(task: Task) {
   return { body: `${(end > 0 ? kept.slice(0, end) : kept).trimEnd()}…`, cut: true };
 }
 
-export function resolveSlackResultMarkdown(task: Task, taskUrl: string): string | null {
-  if (!task.result) return null;
-  const { body, cut } = resolveResultBody(task);
-  return `${body}\n\n[${cut ? 'Read the rest in Shinsa' : 'Open in Shinsa'}](${taskUrl})`;
-}
-
 export function serializeSlackResult(task: Task, taskUrl: string): SlackMessage | null {
   if (!task.result) return null;
   const { body, cut } = resolveResultBody(task);
@@ -199,20 +191,6 @@ export function serializeSlackResult(task: Task, taskUrl: string): SlackMessage 
     ...chunks.map((chunk) => createSlackSection(chunk)),
     createSlackContext([describeShinsaLink(cut ? 'Read the rest in Shinsa' : 'Open in Shinsa', taskUrl)]),
   ]);
-}
-
-export function listSlackStreamPieces(text: string) {
-  const pieces: string[] = [];
-  let piece = '';
-  for (const word of text.split(/(?<=\s)/)) {
-    if (piece.length > 0 && piece.length + word.length > SLACK_STREAM_PIECE) {
-      pieces.push(piece);
-      piece = '';
-    }
-    piece += word;
-  }
-  if (piece.length > 0) pieces.push(piece);
-  return pieces;
 }
 
 export function serializeSlackForwarded(task: Task, taskUrl: string) {
@@ -227,8 +205,8 @@ export function serializeSlackHeld(task: Task, taskUrl: string) {
   ]);
 }
 
-export function serializeSlackReply(text: string) {
-  return createSlackMessage(text, [createSlackSection(escapeSlackText(text))]);
+export function serializeSlackDeclined() {
+  return createSlackMessage(SLACK_DECLINED_TEXT, [createSlackContext([SLACK_DECLINED_TEXT])]);
 }
 
 export function serializeSlackLinkPrompt(linkUrl: string) {

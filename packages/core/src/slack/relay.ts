@@ -12,7 +12,6 @@ export const SLACK_RELAY_PATHS = {
   unlink: '/__remote/slack/unlink',
   post: '/__remote/slack/post',
   session: '/__remote/slack/session',
-  stream: '/__remote/slack/stream',
 } as const;
 
 export const SLACK_FORWARD_HEADERS = {
@@ -55,18 +54,6 @@ export interface SlackRelaySession {
 export interface SlackRelaySessionSet {
   applied: boolean;
 }
-
-export interface SlackRelayStream {
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  recipientUserId: string;
-  ts: string | null;
-  done: boolean;
-  markdown: string | null;
-}
-
-export const SLACK_STREAM_LIMIT = 12_000;
 
 export interface SlackLink {
   teamId: string;
@@ -206,18 +193,4 @@ export function parseSlackRelaySession(value: unknown): SlackRelaySession | null
   const thread = readThread(value);
   if (!thread || !isSessionStatus(value.status)) return null;
   return { ...thread, status: value.status };
-}
-
-export function parseSlackRelayStream(value: unknown): SlackRelayStream | null {
-  if (!isFields(value)) return null;
-  const thread = readThread(value);
-  const recipientUserId = readId(value, 'recipientUserId');
-  const ts = value.ts === null ? null : readId(value, 'ts');
-  const markdown = value.markdown === null ? null : value.markdown;
-  if (!thread || !recipientUserId || (ts === null && value.ts !== null)) return null;
-  if (typeof value.done !== 'boolean' || (ts === null && value.done)) return null;
-  if (markdown !== null && (typeof markdown !== 'string' || markdown.length > SLACK_STREAM_LIMIT))
-    return null;
-  if (ts !== null && !value.done && !markdown) return null;
-  return { ...thread, recipientUserId, ts, done: value.done, markdown };
 }

@@ -1,28 +1,25 @@
 import {
   DomainError,
   listSlackStatusGates,
-  listSlackStreamPieces,
   type MachineCredentials,
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
-  resolveSlackResultMarkdown,
   resolveSlackSessionStatus,
   resolveSlackTaskUrl,
+  resolveSlackThreadKey,
   type ShinsaEffect,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
-  SLACK_STARTING_MARKDOWN,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
   type SlackThreadRef,
+  serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
-  serializeSlackReply,
-  serializeSlackResult,
   serializeSlackStatus,
   verifySlackForwardSignature,
 } from '@shinsa/core';
@@ -82,6 +79,7 @@ export class Slack {
   readonly #statusAt = new Map<string, number>();
   readonly #statusShown = new Map<string, string>();
   readonly #sessionShown = new Map<string, SlackSessionStatus>();
+  readonly #declined = new Set<string>();
 
   constructor(options: SlackOptions) {
     this.#engine = options.engine;
@@ -164,88 +162,28 @@ export class Slack {
     }
   }
 
-  async #stream(
-    thread: SlackThreadRef,
-    recipientUserId: string,
-    ts: string | null,
-    done: boolean,
-    markdown: string | null
-  ) {
-    const credentials = this.#selectCredentials();
-    if (!credentials) return null;
-    try {
-      return await this.#relay.requestStream(credentials.machineToken, {
-        teamId: thread.teamId,
-        channelId: thread.channelId,
-        threadTs: thread.threadTs,
-        recipientUserId,
-        ts,
-        done,
-        markdown,
-      });
-    } catch (error) {
-      log.warn('[Slack] The thread could not be streamed', {
-        threadTs: thread.threadTs,
-        error: describeError(error),
-      });
-      return null;
-    }
-  }
-
-  async #streamText(
-    thread: SlackThreadRef,
-    recipientUserId: string,
-    ts: string | null,
-    markdown: string,
-    fallback: SlackMessage
-  ) {
-    const started = ts ?? (await this.#stream(thread, recipientUserId, null, false, null));
-    if (!started) {
-      await this.#send(thread, null, fallback);
-      return;
-    }
-    for (const piece of listSlackStreamPieces(markdown)) {
-      if (!(await this.#stream(thread, recipientUserId, started, false, piece))) break;
-    }
-    await this.#stream(thread, recipientUserId, started, true, null);
-  }
-
   async evaluate(effect: Effect<'slack.evaluate'>, context: EffectContext) {
     const { mention } = effect;
-    const ts = await this.#stream(mention, mention.userId, null, false, null);
     const said = await this.#ask<unknown>(
       SLACK_EVALUATION_SYSTEM,
       serializeSlackEvaluationPrompt(mention),
       SLACK_EVALUATION_SCHEMA
     );
-    const evaluation = parseSlackEvaluation(said) ?? { kind: 'task' };
-    if (evaluation.kind === 'reply') {
-      await this.#streamText(
-        mention,
-        mention.userId,
-        ts,
-        evaluation.text,
-        serializeSlackReply(evaluation.text)
-      );
+    if (parseSlackEvaluation(said) === 'none') {
+      const key = resolveSlackThreadKey(mention);
+      if (this.#declined.has(key)) return;
+      this.#declined.add(key);
+      await this.#send(mention, null, serializeSlackDeclined());
       return;
     }
-    if (ts) await this.#stream(mention, mention.userId, ts, true, SLACK_STARTING_MARKDOWN);
     await this.#engine.dispatch(
-      { type: 'slack.start_task', mention, statusTs: ts },
+      { type: 'slack.start_task', mention },
       { id: `${context.key}:slack.start_task` }
     );
   }
 
   async post(effect: Effect<'slack.post'>) {
-    const task = this.#engine.state.tasks[effect.taskId];
     const url = this.#taskUrl(effect.taskId);
-    if (effect.post.kind === 'result' && task?.slack) {
-      const markdown = resolveSlackResultMarkdown(task, url);
-      const fallback = serializeSlackResult(task, url);
-      if (markdown && fallback)
-        await this.#streamText(effect.thread, task.slack.userId, null, markdown, fallback);
-      return;
-    }
     const message = resolveSlackPostMessage(this.#engine.state, effect.post, effect.taskId, url);
     if (!message) return;
     await this.#send(effect.thread, null, message);

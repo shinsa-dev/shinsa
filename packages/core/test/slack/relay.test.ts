@@ -4,14 +4,12 @@ import {
   listSlackMentionedUsers,
   parseSlackRelayPost,
   parseSlackRelaySession,
-  parseSlackRelayStream,
   resolveSlackConnectUrl,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
   resolveSlackTaskUrl,
   SLACK_FORWARD_WINDOW_MS,
   SLACK_RELAY_MESSAGE_LIMITS,
-  SLACK_STREAM_LIMIT,
   verifySlackForwardSignature,
 } from '../../src/index.ts';
 
@@ -105,23 +103,7 @@ describe('a machine’s post through the relay', () => {
   });
 });
 
-describe('a machine’s thread status and stream through the relay', () => {
-  test('reads a start, an append and a stop in text, and refuses what Slack would not take', () => {
-    const start = { ...THREAD, recipientUserId: 'U1', ts: null, done: false, markdown: null };
-    expect(parseSlackRelayStream(start)).toEqual(start);
-    expect(parseSlackRelayStream({ ...start, ts: '100.5', markdown: 'Hi ' })?.markdown).toBe('Hi ');
-    expect(parseSlackRelayStream({ ...start, ts: '100.5', done: true })?.done).toBe(true);
-    expect(parseSlackRelayStream({ ...start, ts: '100.5' })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, done: true })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, ts: 'a b' })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, recipientUserId: undefined })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, done: 'no' })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, markdown: 4 })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, markdown: 'x'.repeat(SLACK_STREAM_LIMIT + 1) })).toBeNull();
-    expect(parseSlackRelayStream({ ...start, teamId: 3 })).toBeNull();
-    expect(parseSlackRelayStream(null)).toBeNull();
-  });
-
+describe('a machine’s thread status through the relay', () => {
   const THREAD = { teamId: 'T1', channelId: 'C1', threadTs: '100.1' };
 
   test('reads a status Slack knows and refuses any other', () => {

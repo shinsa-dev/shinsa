@@ -30,15 +30,11 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
 
 const THREAD = { teamId: 'T1', channelId: 'C1', threadTs: '100.1' };
 
-function startFromSlack(harness: Harness, options: { shape?: TaskShape; statusTs?: string | null } = {}) {
+function startFromSlack(harness: Harness, options: { shape?: TaskShape } = {}) {
   const repoId = Object.keys(harness.state.repos)[0] || registerRepo(harness);
   const before = new Set(Object.keys(harness.state.tasks));
   harness.send({ type: 'slack.mention', mention: mention() });
-  harness.send({
-    type: 'slack.start_task',
-    mention: mention(),
-    statusTs: options.statusTs === undefined ? '100.4' : options.statusTs,
-  });
+  harness.send({ type: 'slack.start_task', mention: mention() });
   const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
   harness.send({
     type: 'task.triage',
@@ -83,7 +79,7 @@ describe('a mention in a thread no task holds', () => {
       ...THREAD,
       userId: 'U1',
       permalink: 'https://acme.slack.com/archives/C1/p1003',
-      statusTs: '100.4',
+      statusTs: null,
     });
     expect(task.activity.map((entry) => entry.text)).toContain('Started from a Slack thread');
     expect(harness.effectsOf('slack.status').map((effect) => effect.taskId)).toContain(taskId);
@@ -91,7 +87,7 @@ describe('a mention in a thread no task holds', () => {
 
   test('with no words asks the task to do what the thread asks for', () => {
     const harness = createHarness();
-    harness.send({ type: 'slack.start_task', mention: mention({ text: '  ' }), statusTs: null });
+    harness.send({ type: 'slack.start_task', mention: mention({ text: '  ' }) });
     const [task] = Object.values(harness.state.tasks);
     expect(task?.request).toStartWith('Do what this Slack thread asks for.');
   });
@@ -146,7 +142,6 @@ describe('a mention in a thread a task holds', () => {
     harness.send({
       type: 'slack.start_task',
       mention: mention({ eventId: 'Ev2', text: 'more' }),
-      statusTs: '100.6',
     });
     expect(Object.keys(harness.state.tasks)).toEqual([taskId]);
     expect(harness.lastEffect('slack.post')).toMatchObject({ post: { kind: 'forwarded' } });
@@ -223,7 +218,7 @@ describe('what a linked task posts back', () => {
 describe('the status message', () => {
   test('is recorded once posted, and the same message again records nothing', () => {
     const harness = createHarness();
-    const taskId = startFromSlack(harness, { statusTs: null });
+    const taskId = startFromSlack(harness);
     expect(harness.task(taskId).slack?.statusTs).toBeNull();
     harness.send({ type: 'slack.record_status', taskId, ts: '100.9' });
     expect(harness.task(taskId).slack?.statusTs).toBe('100.9');

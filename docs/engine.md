@@ -2503,14 +2503,14 @@ Slack ──event──► app.shinsa.dev /slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, "Sent to the task"
                   └─ a gate open ──► kept in its chat, "Kept for the task"
-   otherwise ──► slack.evaluate: a stream opens, the model reads
-                  ├─ small talk ──► a short reply streams in; no task
-                  └─ work ──► "On it." + slack.start_task:
+   otherwise ──► slack.evaluate: the model reads the thread
+                  ├─ not work ──► "Not a task", once per thread
+                  └─ work ──► slack.start_task:
                               task.create, as from Home
    the task moves ──► slack.status (one line, edited)
    a gate opens ──► slack.post (one line + a link to Shinsa)
-   the result ──► streamed as markdown + a link to Shinsa
-                  └─ app.shinsa.dev /__remote/slack/post, /stream ──► Slack
+   the result ──► slack.post (its start + a link to Shinsa)
+                  └─ app.shinsa.dev /__remote/slack/post ──► Slack
 ```
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
@@ -2545,23 +2545,23 @@ Slack ──event──► app.shinsa.dev /slack/events
   review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
   nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
   waits on you in Shinsa" (`held`).
-- **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the machine opens a
-  stream in the thread to the person who mentioned it (`chat.startStream` through `/__remote/slack/stream`, Slack's
-  own "thinking" shimmer) and asks the classifier model, under a fixed system prompt with the thread as data
-  (`SLACK_EVALUATION_SYSTEM`, `serializeSlackEvaluationPrompt`), whether to start a task or only reply. Greetings,
-  thanks and small talk get a reply of one or two sentences (`parseSlackEvaluation`, at most `SLACK_REPLY_LIMIT`
-  characters), streamed into the same message in short pieces (`listSlackStreamPieces`) and stopped; nothing else
-  happens. Anything someone wants done or wants to know is a task, and so is a mention the model does not answer:
-  the stream stops on "On it." and `slack.start_task` (command id `<effect key>:slack.start_task`) starts it,
-  messaging the thread's task instead when one opened meanwhile.
+- **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the machine asks
+  the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
+  `serializeSlackEvaluationPrompt`), whether the thread asks for work, and gets `task` or `none`
+  (`parseSlackEvaluation`). Shinsa does work as tasks and never chats: greetings, thanks, small talk and questions
+  about Shinsa itself are `none`, answered once per thread with the one line "Not a task, so nothing was started."
+  (`serializeSlackDeclined`; the engine remembers the threads it said it in until it restarts) and then silence, with
+  no reply of the model's own. Anything someone wants done or wants to know about their code, product or work is a
+  task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
+  key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
+  posted while it reads.
 - **Work starts a task, as Home does** (`startSlackTask`): a mention in any other thread, a task's
   closed thread included, is `task.create` with no project, kind or priority given, exactly as a request typed on Home
   with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
   (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
   Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
   `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
-  (`slack.thread_linked`, "Started from a Slack thread") with the stream's message as its status message, which its
-  first `slack.status` edits.
+  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its status message.
 - **What is posted back** (`syncSlackThreads`, after every command, for the tasks it changed): every gate a linked
   task opens that you decide or answer (question, secret, plan, review, proposal; `SLACK_POSTED_GATES`) and its result
   (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
@@ -2576,15 +2576,14 @@ Slack ──event──► app.shinsa.dev /slack/events
   - a plan: 📋 its goal in one sentence, "Review the plan in Shinsa";
   - a review: 👀 the summary's first sentence, how the checks went, "Review in Shinsa" and the pull request;
   - a proposal: 💡 the change in one line, "Decide in Shinsa";
-  - the result: streamed into a new message as markdown (`resolveSlackResultMarkdown`), cut at 3,000 characters on a
-    word (`SLACK_RESULT_LIMIT`) and ending in "Open in Shinsa" (or "Read the rest in Shinsa"); where Slack will not
-    stream, the same text is posted once as mrkdwn (`serializeSlackResult`).
+  - the result: one message in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
+    (`SLACK_RESULT_LIMIT`) and ending in "Open in Shinsa" (or "Read the rest in Shinsa").
   Slack never closes a gate: the posts say where to decide, and a mention while a gate is open is kept, not routed.
 - **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
   that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
-  → `slack.status_posted`). An edit Slack will not make (the streamed message it started on, a message gone) is
-  posted as a new status message, whose ts is recorded instead.
+  → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new status message, whose ts
+  is recorded instead.
 - **The thread's own status in Slack** (`resolveSlackSessionStatus`, `agents.sessions.setStatus` through
   `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
   loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),
@@ -2597,8 +2596,7 @@ Slack ──event──► app.shinsa.dev /slack/events
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
   workspace) is logged (`[Slack] app.shinsa.dev refused the post`) and dropped, since sending it again cannot work.
-  A stream Slack refuses or breaks off is stopped and, when it never started, sent as one plain post instead. With
-  remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
+  With remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
   in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
 - **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
   stored: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to

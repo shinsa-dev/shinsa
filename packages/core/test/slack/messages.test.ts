@@ -3,20 +3,18 @@ import {
   createSlackMessage,
   createSlackSection,
   listSlackStatusGates,
-  listSlackStreamPieces,
   resolveSlackPostMessage,
-  resolveSlackResultMarkdown,
   resolveSlackSessionStatus,
   SLACK_BLOCK_LIMITS,
   SLACK_RESULT_LIMIT,
   type SlackBlock,
   type SlackMessage,
+  serializeSlackDeclined,
   serializeSlackForwarded,
   serializeSlackGate,
   serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
-  serializeSlackReply,
   serializeSlackResult,
   serializeSlackStatus,
   type TaskShape,
@@ -265,7 +263,7 @@ describe('the result', () => {
     harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step, body });
   }
 
-  test('streams as markdown with a link to Shinsa, and posts as mrkdwn when it cannot stream', () => {
+  test('posts as mrkdwn with a link to Shinsa', () => {
     const harness = createHarness();
     const taskId = startShaped(harness, 'answer');
     deliver(
@@ -274,9 +272,6 @@ describe('the result', () => {
       '## Cause\nThe **parser** reads it all. See [the code](https://github.com/a/b).'
     );
     const task = harness.task(taskId);
-    expect(resolveSlackResultMarkdown(task, URL)).toBe(
-      `## Cause\nThe **parser** reads it all. See [the code](https://github.com/a/b).\n\n[Open in Shinsa](${URL})`
-    );
     const message = serializeSlackResult(task, URL) ?? never();
     expect(readText(message)).toBe(
       `*Cause*\nThe *parser* reads it all. See <https://github.com/a/b|the code>.\n<${URL}|Open in Shinsa>`
@@ -293,14 +288,12 @@ describe('the result', () => {
       Array.from({ length: 400 }, (_, index) => `Paragraph ${index} words`).join('\n\n'),
       'research'
     );
-    const markdown = resolveSlackResultMarkdown(harness.task(taskId), URL) ?? never();
-    expect(markdown.length).toBeLessThanOrEqual(SLACK_RESULT_LIMIT + URL.length + 40);
-    expect(markdown).toEndWith(`…\n\n[Read the rest in Shinsa](${URL})`);
     const message = serializeSlackResult(harness.task(taskId), URL) ?? never();
-    expect(readText(message)).toEndWith(`<${URL}|Read the rest in Shinsa>`);
+    expect(readText(message).length).toBeLessThanOrEqual(SLACK_RESULT_LIMIT + URL.length + 40);
+    expect(readText(message)).toEndWith(`…\n<${URL}|Read the rest in Shinsa>`);
     const unbroken = startShaped(harness, 'answer', 'Other');
     deliver(harness, unbroken, 'x'.repeat(SLACK_RESULT_LIMIT + 10));
-    expect(resolveSlackResultMarkdown(harness.task(unbroken), URL)).toStartWith(
+    expect(readText(serializeSlackResult(harness.task(unbroken), URL) ?? never())).toStartWith(
       `${'x'.repeat(SLACK_RESULT_LIMIT)}…`
     );
   });
@@ -309,31 +302,18 @@ describe('the result', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness));
     expect(serializeSlackResult(task, URL)).toBeNull();
-    expect(resolveSlackResultMarkdown(task, URL)).toBeNull();
-  });
-});
-
-describe('streaming', () => {
-  test('splits text into short pieces at word boundaries, losing nothing', () => {
-    const text = 'Hi Christo! Tell me what you need and I will start on it right away.';
-    const pieces = listSlackStreamPieces(text);
-    expect(pieces.join('')).toBe(text);
-    expect(pieces.length).toBeGreaterThan(1);
-    for (const piece of pieces) expect(piece.length).toBeLessThanOrEqual(48);
-    expect(listSlackStreamPieces('a'.repeat(100))).toEqual(['a'.repeat(100)]);
-    expect(listSlackStreamPieces('')).toEqual([]);
   });
 });
 
 describe("the bot's own replies", () => {
-  test('forwarded, held, a reply, the connect link and offline are each one short line', () => {
+  test('forwarded, held, not a task, the connect link and offline are each one short line', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness, { request: 'Fix it' }));
     expect(readText(serializeSlackForwarded(task, URL))).toBe(`↪️ Sent to <${URL}|SUP-1 · Fix it>`);
     expect(readText(serializeSlackHeld(task, URL))).toBe(
       `📌 Kept for <${URL}|SUP-1 · Fix it>. It waits on you in Shinsa.`
     );
-    expect(readText(serializeSlackReply('Hi <there>!'))).toBe('Hi &lt;there&gt;!');
+    expect(readText(serializeSlackDeclined())).toBe('Not a task, so nothing was started.');
     expect(readText(serializeSlackLinkPrompt('https://app.shinsa.dev/slack/connect'))).toEndWith(
       '<https://app.shinsa.dev/slack/connect|Connect Slack>'
     );

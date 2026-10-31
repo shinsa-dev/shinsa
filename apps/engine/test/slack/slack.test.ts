@@ -96,10 +96,8 @@ function setUp(options: { enabled?: boolean; link?: SlackThreadLink | null } = {
   });
   const relay: RelayCall[] = [];
   let posted = 0;
-  let streamed = 0;
   const answers: Setup['answers'] = {
     '/__remote/slack/post': (body) => Response.json({ ts: body?.replaceTs ?? `200.${++posted}` }),
-    '/__remote/slack/stream': (body) => Response.json({ ts: body?.ts ?? `300.${++streamed}` }),
     '/__remote/slack/session': () => Response.json({ applied: true }),
     '/__remote/slack/links': () =>
       Response.json({
@@ -110,7 +108,7 @@ function setUp(options: { enabled?: boolean; link?: SlackThreadLink | null } = {
   const waits: number[] = [];
   const clock = { now: NOW };
   const asked: Setup['asked'] = [];
-  const answer: Setup['answer'] = { value: { decision: 'task', reply: '' } };
+  const answer: Setup['answer'] = { value: { decision: 'task' } };
   const slack = new Slack({
     engine: stub.engine,
     remote: createRemote({ enabled: options.enabled }),
@@ -379,75 +377,32 @@ describe('the status message of a task', () => {
 describe('reading a mention', () => {
   const effect = { kind: 'slack.evaluate' as const, mention: MENTION };
 
-  function streamsOf(relay: RelayCall[]) {
-    return callsTo(relay, 'stream').map((call) => call.body);
-  }
-
-  test('asks the model with the thread, streams a short reply, and starts no task for small talk', async () => {
-    const { slack, stub, relay, asked, answer } = setUp();
-    answer.value = { decision: 'reply', reply: 'Hi Christo! Tell me what you need and I will start on it.' };
+  test('asks the model with the thread and starts a task for work, posting nothing itself', async () => {
+    const { slack, stub, relay, asked } = setUp();
     await slack.evaluate(effect, context('read-1'));
     expect(asked[0]?.prompt).toContain('Christo (mentioning you): the build hangs');
-    const streams = streamsOf(relay);
-    expect(streams[0]).toMatchObject({
-      ...THREAD,
-      recipientUserId: 'U1',
-      ts: null,
-      done: false,
-      markdown: null,
-    });
-    const appended = streams.slice(1, -1);
-    expect(appended.length).toBeGreaterThan(1);
-    expect(appended.map((body) => body?.markdown).join('')).toBe(
-      'Hi Christo! Tell me what you need and I will start on it.'
-    );
-    expect(appended.every((body) => body?.ts === '300.1' && body?.done === false)).toBe(true);
-    expect(streams.at(-1)).toMatchObject({ ts: '300.1', done: true, markdown: null });
+    expect(stub.dispatched).toEqual([{ type: 'slack.start_task', mention: MENTION }]);
+    expect(stub.commandIds).toEqual(['read-1:slack.start_task']);
+    expect(relay).toEqual([]);
+  });
+
+  test('says once per thread that it is not a task, then stays silent there', async () => {
+    const { slack, stub, relay, answer } = setUp();
+    answer.value = { decision: 'none' };
+    await slack.evaluate(effect, context('read-1'));
+    await slack.evaluate({ ...effect, mention: { ...MENTION, eventId: 'Ev2' } }, context('read-2'));
+    const posts = callsTo(relay, 'post');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.body).toMatchObject({ ...THREAD, replaceTs: null });
+    expect(JSON.stringify(posts[0]?.body?.message)).toContain('Not a task, so nothing was started.');
     expect(stub.dispatched).toEqual([]);
   });
 
-  test('starts a task for work, closing the stream with a short line the status message then replaces', async () => {
-    const { slack, stub, relay } = setUp();
-    await slack.evaluate(effect, context('read-1'));
-    expect(streamsOf(relay).at(-1)).toMatchObject({ ts: '300.1', done: true, markdown: 'On it.' });
-    expect(stub.dispatched).toEqual([{ type: 'slack.start_task', mention: MENTION, statusTs: '300.1' }]);
-    expect(stub.commandIds).toEqual(['read-1:slack.start_task']);
-  });
-
-  test('starts a task when the model does not answer, and posts plainly when Slack will not stream', async () => {
-    const { slack, stub, relay, answers, answer } = setUp();
+  test('starts a task when the model does not answer', async () => {
+    const { slack, stub, answer } = setUp();
     answer.value = null;
-    answers['/__remote/slack/stream'] = () =>
-      Response.json({ error: { code: 'slack_failed' } }, { status: 409 });
     await slack.evaluate(effect, context('read-1'));
-    expect(stub.dispatched).toEqual([{ type: 'slack.start_task', mention: MENTION, statusTs: null }]);
-    answer.value = { decision: 'reply', reply: 'Thanks!' };
-    await slack.evaluate(effect, context('read-2'));
-    expect(callsTo(relay, 'post').at(-1)?.body).toMatchObject({
-      replaceTs: null,
-      message: { text: 'Thanks!' },
-    });
-    expect(warnings).toHaveBeenCalledWith('[Slack] The thread could not be streamed', expect.anything());
-  });
-
-  test('stops a stream that breaks part way, and streams nothing while remote access is off', async () => {
-    const { slack, relay, answers, answer } = setUp();
-    answer.value = {
-      decision: 'reply',
-      reply: 'A reply long enough to be streamed in more than one piece, surely.',
-    };
-    answers['/__remote/slack/stream'] = (body) =>
-      body?.markdown ? new Response('busy', { status: 503 }) : Response.json({ ts: '300.1' });
-    await slack.evaluate(effect, context());
-    expect(streamsOf(relay).map((body) => [body?.markdown ?? null, body?.done])).toEqual([
-      [null, false],
-      ['A reply long enough to be streamed in more than ', false],
-      [null, true],
-    ]);
-    const off = setUp({ enabled: false });
-    off.answer.value = { decision: 'reply', reply: 'Hi.' };
-    await off.slack.evaluate(effect, context());
-    expect(off.relay).toEqual([]);
+    expect(stub.dispatched).toEqual([{ type: 'slack.start_task', mention: MENTION }]);
   });
 });
 
@@ -459,40 +414,16 @@ describe('the result of a task', () => {
     post: { kind: 'result' as const },
   };
 
-  function deliver(stub: ReturnType<typeof createStubEngine>, linked = true) {
+  test('is posted as one message with a link to the task', async () => {
+    const { slack, stub, relay } = setUp();
     stub.update((state) => {
       const task = state.tasks.t1;
-      if (!task) return;
-      task.result = { step: 'answer', body: 'It is the **buffer**.', at: NOW, runId: null };
-      if (!linked) task.slack = null;
+      if (task) task.result = { step: 'answer', body: 'It is the **buffer**.', at: NOW, runId: null };
     });
-  }
-
-  test('streams to the person who asked, ending with a link to the task', async () => {
-    const { slack, stub, relay } = setUp();
-    deliver(stub);
     await slack.post(effect);
-    const streams = callsTo(relay, 'stream').map((call) => call.body);
-    expect(streams[0]).toMatchObject({ recipientUserId: 'U1', ts: null });
-    expect(streams.map((body) => body?.markdown ?? '').join('')).toBe(
-      'It is the **buffer**.\n\n[Open in Shinsa](https://app.test/tasks/t1)'
-    );
-    expect(streams.at(-1)).toMatchObject({ done: true });
-    expect(callsTo(relay, 'post')).toEqual([]);
-  });
-
-  test('is posted as one message when Slack will not stream, or the thread is no longer linked', async () => {
-    const { slack, stub, relay, answers } = setUp();
-    deliver(stub);
-    answers['/__remote/slack/stream'] = () =>
-      Response.json({ error: { code: 'slack_failed' } }, { status: 409 });
-    await slack.post(effect);
-    expect(JSON.stringify(callsTo(relay, 'post')[0]?.body?.message)).toContain('It is the *buffer*.');
-    const plain = setUp();
-    deliver(plain.stub, false);
-    await plain.slack.post(effect);
-    expect(callsTo(plain.relay, 'stream')).toEqual([]);
-    expect(callsTo(plain.relay, 'post')).toHaveLength(1);
+    const message = JSON.stringify(callsTo(relay, 'post')[0]?.body?.message);
+    expect(message).toContain('It is the *buffer*.');
+    expect(message).toContain('<https://app.test/tasks/t1|Open in Shinsa>');
     const none = setUp();
     await none.slack.post(effect);
     expect(none.relay).toEqual([]);
@@ -500,16 +431,15 @@ describe('the result of a task', () => {
 });
 
 describe('a mention through the real engine', () => {
-  test('reads it, starts one task tied to its thread, and turns the stream into the task’s status', async () => {
+  test('reads it, starts one task tied to its thread, and posts the task’s status there', async () => {
     const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
     const posts: Record<string, unknown>[] = [];
     const slack = new Slack({
       engine,
       remote: createRemote(),
-      ask: <T>() => Promise.resolve({ decision: 'task', reply: '' } as T),
-      fetch: (input, init = {}) => {
+      ask: <T>() => Promise.resolve({ decision: 'task' } as T),
+      fetch: (_input, init = {}) => {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        if (input.endsWith('/stream')) return Promise.resolve(Response.json({ ts: body.ts ?? '300.1' }));
         posts.push(body);
         return Promise.resolve(Response.json({ ts: body.replaceTs ?? `200.${posts.length}` }));
       },
@@ -525,12 +455,14 @@ describe('a mention through the real engine', () => {
     const body = JSON.stringify(MENTION);
     expect((await slack.handleEvents(await forward(body, Date.now()))).status).toBe(202);
     expect((await slack.handleEvents(await forward(body, Date.now()))).status).toBe(202);
-    await until('the status message replaces the stream', () => posts.length > 0);
+    await until('the status message is recorded', () =>
+      Object.values(engine.state.tasks).some((task) => task.slack?.statusTs)
+    );
     const tasks = Object.values(engine.state.tasks);
     expect(tasks).toHaveLength(1);
     expect(tasks[0]?.request).toStartWith('the build hangs');
-    expect(tasks[0]?.slack).toMatchObject({ ...THREAD, userId: 'U1', statusTs: '300.1' });
-    expect(posts[0]).toMatchObject({ replaceTs: '300.1' });
+    expect(tasks[0]?.slack).toMatchObject({ ...THREAD, userId: 'U1', statusTs: '200.1' });
+    expect(posts[0]).toMatchObject({ replaceTs: null });
     engine.stop();
     await engine.settle();
   });

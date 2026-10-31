@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   parseSlackEvaluation,
   SLACK_EVALUATION_SYSTEM,
-  SLACK_REPLY_LIMIT,
   type SlackMention,
   serializeSlackEvaluationPrompt,
 } from '../../src/index.ts';
@@ -29,29 +28,22 @@ describe('the evaluation prompt', () => {
         'Mia: Export hangs.',
         'Christo (mentioning you): hi',
         '',
-        'Answer with JSON: {"decision": "task" or "reply", "reply": the reply when you only reply, else ""}.',
+        'Answer with JSON: {"decision": "task" when it asks for work, else "none"}.',
       ].join('\n')
     );
   });
 });
 
 describe('the evaluation answer', () => {
-  test('is a task, or a reply trimmed to its limit', () => {
-    expect(parseSlackEvaluation({ decision: 'task', reply: '' })).toEqual({ kind: 'task' });
-    expect(parseSlackEvaluation({ decision: 'reply', reply: ' Hi Christo! ' })).toEqual({
-      kind: 'reply',
-      text: 'Hi Christo!',
-    });
-    expect(parseSlackEvaluation({ decision: 'reply', reply: 'x'.repeat(900) })).toEqual({
-      kind: 'reply',
-      text: 'x'.repeat(SLACK_REPLY_LIMIT),
-    });
+  test('is a task or not a task, and nothing else', () => {
+    expect(parseSlackEvaluation({ decision: 'task' })).toBe('task');
+    expect(parseSlackEvaluation({ decision: 'none' })).toBe('none');
+    expect(SLACK_EVALUATION_SYSTEM).toContain('never chats');
   });
 
-  test('is unreadable without a decision it knows, or a reply without words', () => {
+  test('is unreadable without a decision it knows', () => {
     expect(parseSlackEvaluation(null)).toBeNull();
-    expect(parseSlackEvaluation({ decision: 'reply', reply: '  ' })).toBeNull();
+    expect(parseSlackEvaluation({})).toBeNull();
     expect(parseSlackEvaluation({ decision: 'reply' })).toBeNull();
-    expect(parseSlackEvaluation({ decision: 'maybe', reply: 'Hm.' })).toBeNull();
   });
 });
