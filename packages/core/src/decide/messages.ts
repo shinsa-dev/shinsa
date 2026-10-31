@@ -30,6 +30,7 @@ import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound
 import {
   acceptsFollowUp,
   answerFollowUp,
+  closeResult,
   followUpInquiry,
   noteOperation,
   restartAnswer,
@@ -239,6 +240,7 @@ function recordMessages(
 }
 
 function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: string[], request: string) {
+  if (task.stage === 'answered' && !decider.context.onBehalf) closeResult(decider, task.id);
   const round = resolveNextRoundNumber(task);
   recordMessages(decider, task.id, texts, { kind: 'new_round', round });
   queueRound(decider, task.id, {
@@ -332,7 +334,7 @@ export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.
   const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
   const task = decider.task(command.taskId);
   assertTakesMessages(task);
-  const resting = isTaskResting(task);
+  const resting = isTaskResting(task) || task.stage === 'answered';
   decider.emit({
     type: 'suggestion.settled',
     taskId: task.id,
