@@ -2,6 +2,7 @@ import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   CarriedMergeStep,
   CodeSpot,
+  FixReply,
   JudgementCall,
   PlanDocument,
   ReportCheck,
@@ -487,6 +488,31 @@ export interface Task {
   watchdogs?: Watchdog[];
   backlog?: TaskBacklog | null;
   snoozed?: TaskSnooze | null;
+  duplicate?: TaskDuplicate | null;
+  iterations?: Iteration[];
+}
+
+export type DuplicateActor = 'you' | 'shinsa';
+
+export interface TaskDuplicate {
+  of: string;
+  by: DuplicateActor;
+  why: string | null;
+}
+
+export interface IterationRequest {
+  text: string;
+  comments: number;
+  at: number;
+}
+
+export interface Iteration {
+  id: string;
+  round: number;
+  requests: IterationRequest[];
+  reply: FixReply | null;
+  runId: string | null;
+  repliedAt: number | null;
 }
 
 export interface TaskBacklog {

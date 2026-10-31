@@ -55,6 +55,11 @@ export const PLAN: PlanDocument = {
 export const IMPACT =
   'Removes the stale greeting files, two at most. The dry run lists them first; restoring them from git undoes it.';
 
+export const FIX_REPLY = {
+  headline: 'Made the change you asked for.',
+  points: [{ ask: 'The change', outcome: 'done', note: 'It is in.' }],
+};
+
 const IMPACT_REQUIRED = '`impact` is required';
 
 const NO_CODE = 'this task changes no code';
@@ -124,7 +129,10 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
     await agent.call('complete_phase', phaseReport(`Wrote the file for phase ${phase}.`));
   },
   fix: async (agent) => {
-    await agent.call('complete_fix', { summary: 'Fixed it.' });
+    await agent.call('complete_fix', { summary: 'Fixed it.' }).catch((error: Error) => {
+      if (!error.message.includes('`reply` is required')) throw error;
+      return agent.call('complete_fix', { summary: 'Fixed it.', reply: FIX_REPLY });
+    });
   },
   operate: async (agent) => {
     await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });

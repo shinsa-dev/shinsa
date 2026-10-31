@@ -28,6 +28,29 @@ describe('ChecklistBlock', () => {
     await waitFor(() => expect(box.hasAttribute('data-disabled')).toBe(false));
   });
 
+  it('renders a title as rich markdown: names in code and links you can open', () => {
+    const view = render(
+      <TooltipProvider>
+        <ChecklistBlock
+          title='Before the merge'
+          items={[
+            {
+              key: 'secret',
+              title: 'Set SLACK_TOKEN_KEY at [the Slack dashboard](https://api.slack.com/apps)',
+              detail: null,
+              command: null,
+              done: false,
+            },
+          ]}
+        />
+      </TooltipProvider>
+    );
+    expect(view.container.querySelector('code')?.textContent).toBe('SLACK_TOKEN_KEY');
+    expect(view.getByRole('link', { name: /the Slack dashboard/ }).getAttribute('href')).toBe(
+      'https://api.slack.com/apps'
+    );
+  });
+
   it('shows nothing for an empty list', () => {
     const view = render(<ChecklistBlock title='Release' items={[]} onTick={mock()} />);
     expect(view.container.textContent).toBe('');

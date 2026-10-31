@@ -21,6 +21,7 @@ import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
 import { ErrorSpecimens } from './errors.tsx';
 import { EvidenceSpecimens } from './evidence.tsx';
+import { ExchangeSpecimens } from './exchanges.tsx';
 import { INPUT_SECTIONS, InputSpecimens } from './inputs.tsx';
 import { OnboardingSpecimens } from './onboarding.tsx';
 import { OVERLAY_SECTIONS, OverlaySpecimens } from './overlays.tsx';
@@ -43,6 +44,7 @@ const SECTIONS = [
   { id: 'shinsa-setup', label: 'Setup' },
   { id: 'shinsa-accounts', label: 'Accounts' },
   { id: 'shinsa-overview', label: 'Overview cards' },
+  { id: 'shinsa-replies', label: 'Replies' },
   { id: 'shinsa-chat', label: 'Chat' },
   { id: 'shinsa-review', label: 'Review' },
   { id: 'shinsa-checks', label: 'Checks' },
@@ -207,6 +209,14 @@ export function UiPage() {
             className='flex-col items-start gap-8'
           >
             <OverviewSpecimens />
+          </Section>
+          <Section
+            id='shinsa-replies'
+            title='Shinsa composites · replies to your requests'
+            description='How the overview answers what you sent at review: the reply as a report of your points, the request in progress, and the earlier ones, from apps/web/src/components/overview/reply-report.tsx, on your requests in the Slack task.'
+            className='flex-col items-start gap-8'
+          >
+            <ExchangeSpecimens />
           </Section>
           <Section
             id='shinsa-chat'

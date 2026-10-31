@@ -25,6 +25,8 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   unsnooze: ['wake', 'resume', 'pick up', 'show', 'needs you'],
   restart: ['retry', 'rerun', 'again'],
   complete: ['complete', 'finish', 'close', 'resolve'],
+  duplicate: ['duplicate', 'same', 'repeat', 'already', 'close'],
+  notDuplicate: ['duplicate', 'start', 'reopen', 'restore'],
   cancel: ['stop', 'abandon', 'drop', 'close'],
 };
 

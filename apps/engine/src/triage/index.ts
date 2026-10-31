@@ -33,6 +33,7 @@ export interface TriageResult {
   size: TaskSize;
   branch: string;
   waitsOn: Task[];
+  duplicateOf?: string;
   shape?: TaskShape;
   priority?: TaskPriority;
   reasons?: TriageReasons;
@@ -49,6 +50,8 @@ interface TriageAnswer {
   shape_why?: unknown;
   priority_why?: unknown;
   waits_on_why?: unknown;
+  duplicate_of?: unknown;
+  duplicate_why?: unknown;
 }
 
 interface TriageAsks {
@@ -137,6 +140,20 @@ function resolveWaitsOnQuestion(open: Task[]): ChoicesQuestion {
   };
 }
 
+const NOT_A_DUPLICATE = 'none';
+
+function resolveDuplicateQuestion(open: Task[]): ChoiceQuestion | null {
+  if (open.length === 0) return null;
+  return {
+    type: 'choice',
+    instructions: `Is this request the same work as an open task, so that doing both would do the work twice? Name a task only when it would deliver the same outcome. Related, overlapping, follow-up or partly the same work is "${NOT_A_DUPLICATE}"; so is anything you are unsure of. Usually "${NOT_A_DUPLICATE}".`,
+    criteria: {
+      [NOT_A_DUPLICATE]: 'not the same work as any open task',
+      ...Object.fromEntries(open.map((task) => [task.id, task.title])),
+    },
+  };
+}
+
 function resolveAsks(task: Task): TriageAsks {
   return { ...task.auto, why: true };
 }
@@ -182,6 +199,10 @@ function resolveTriageSchema(plan: TriagePlan): JsonSchema {
   if (asks.shape) properties.shape = resolveDecisionProperty(SHAPE_QUESTION);
   if (asks.priority) properties.priority = resolveDecisionProperty(PRIORITY_QUESTION);
   if (asks.start) properties.waits_on = resolveDecisionProperty(plan.waitsOnQuestion);
+  if (plan.duplicateQuestion) {
+    properties.duplicate_of = resolveDecisionProperty(plan.duplicateQuestion);
+    properties.duplicate_why = { type: 'string', maxLength: WHY_LIMIT };
+  }
   for (const key of listWhyKeys(asks)) properties[key] = { type: 'string', maxLength: WHY_LIMIT };
   return {
     type: 'object',
@@ -353,13 +374,15 @@ function isChosenAnswer(task: Task) {
   return !task.auto.shape && resolveTaskShape(task) === 'answer';
 }
 
-function describeDecisions(waitsOn: ChoicesQuestion, asks: TriageAsks) {
-  const whys = listWhyKeys(asks);
+function describeDecisions(plan: TriagePlan) {
+  const { asks, duplicateQuestion } = plan;
+  const whys = [...listWhyKeys(asks), ...(duplicateQuestion ? ['duplicate_why'] : [])];
   return [
     describeDecisionQuestion('size', SIZE_QUESTION),
     ...(asks.shape ? [describeDecisionQuestion('shape', SHAPE_QUESTION)] : []),
     ...(asks.priority ? [describeDecisionQuestion('priority', PRIORITY_QUESTION)] : []),
-    ...(asks.start ? [describeDecisionQuestion('waits_on', waitsOn)] : []),
+    ...(asks.start ? [describeDecisionQuestion('waits_on', plan.waitsOnQuestion)] : []),
+    ...(duplicateQuestion ? [describeDecisionQuestion('duplicate_of', duplicateQuestion)] : []),
     ...(whys.length > 0 ? [`Then say why for each, in one plain sentence: ${whys.join(', ')}.`] : []),
   ];
 }
@@ -378,6 +401,7 @@ interface TriagePlan {
   optional: boolean;
   open: Task[];
   waitsOnQuestion: ChoicesQuestion;
+  duplicateQuestion: ChoiceQuestion | null;
   fallback: TriageResult;
 }
 
@@ -410,6 +434,7 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
     optional: !pinned,
     open,
     waitsOnQuestion: resolveWaitsOnQuestion(open),
+    duplicateQuestion: resolveDuplicateQuestion(open),
     fallback: {
       title,
       repoPath: bound?.path ?? null,
@@ -439,7 +464,7 @@ function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
     ...describeHumanChoices(state, task),
     '',
     'Decisions:',
-    ...describeDecisions(plan.waitsOnQuestion, plan.asks),
+    ...describeDecisions(plan),
   ].join('\n');
 }
 
@@ -458,6 +483,16 @@ function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer
   return { waitsOn, kept: { waitsOn, dropped: waitsOn.length < named.length } };
 }
 
+function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string | null) {
+  if (!plan.duplicateQuestion) return null;
+  const named = parseDecisionAnswer(plan.duplicateQuestion, answer.duplicate_of);
+  const original = plan.open.find((candidate) => candidate.id === named);
+  if (!original || !isDependencyAllowed(state, plan, original, repoPath)) return null;
+  const why =
+    parseAnswerText(answer.duplicate_why, WHY_LIMIT) ?? `It asks for the same work as “${original.title}”.`;
+  return { duplicateOf: original.id, why };
+}
+
 function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer): TriageResult {
   const { asks, fallback } = plan;
   const answered = parseRepoAnswer(plan.candidates, answer.repo, plan.optional);
@@ -465,6 +500,7 @@ function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageA
   const branch =
     typeof answer.branch === 'string' && BRANCH_PATTERN.test(answer.branch) ? answer.branch : null;
   const { waitsOn, kept } = parseWaitsOn(state, plan, answer, repoPath);
+  const duplicate = parseDuplicate(state, plan, answer, repoPath);
   const shape = asks.shape ? (parseDecisionAnswer(SHAPE_QUESTION, answer.shape) as TaskShape | null) : null;
   const priority = asks.priority
     ? (parseDecisionAnswer(PRIORITY_QUESTION, answer.priority) as TaskPriority | null)
@@ -476,9 +512,13 @@ function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageA
     size: large ? 'large' : 'small',
     branch: branch ?? fallback.branch,
     waitsOn,
+    ...(duplicate ? { duplicateOf: duplicate.duplicateOf } : {}),
     shape: shape ?? fallback.shape,
     priority: priority ?? plan.task.priority,
-    reasons: resolveAnswerReasons(answer, fallback.reasons ?? {}, asks, { shape, priority, waitsOn: kept }),
+    reasons: {
+      ...resolveAnswerReasons(answer, fallback.reasons ?? {}, asks, { shape, priority, waitsOn: kept }),
+      ...(duplicate ? { duplicate: duplicate.why } : {}),
+    },
   };
 }
 

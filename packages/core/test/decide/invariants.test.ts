@@ -978,6 +978,7 @@ type SideStream =
   | 'workspaces'
   | 'pushes'
   | 'backlog'
+  | 'duplicates'
   | null;
 
 function selectBacklogCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -1009,6 +1010,47 @@ function listBacklogMarks(state: ShinsaState) {
             ? 'inquiry started at once'
             : null
     ),
+  ]);
+}
+
+function selectDuplicateCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
+  if (!chance(random, ROUND_ODDS)) return null;
+  const tasks = Object.values(state.tasks);
+  const open = tasks.filter((task) => !isTaskSettled(task));
+  const other = (taskId: string) =>
+    pick(
+      random,
+      tasks.filter((task) => task.id !== taskId)
+    )?.id ?? taskId;
+  const commands: ShinsaCommand[] = [
+    ...open
+      .filter((task) => task.stage === 'triage' && task.branch === null)
+      .map((task) => ({
+        type: 'task.triage' as const,
+        taskId: task.id,
+        title: `Task ${task.id}`,
+        repoId: 'repo',
+        size: 'small' as const,
+        branch: `b-${task.id}`,
+        waitsOn: [],
+        duplicateOf: other(task.id),
+      })),
+    ...open.map((task) => ({
+      type: 'task.mark_duplicate' as const,
+      taskId: task.id,
+      duplicateOf: other(task.id),
+    })),
+    ...tasks
+      .filter((task) => task.duplicate)
+      .map((task) => ({ type: 'task.clear_duplicate' as const, taskId: task.id })),
+  ];
+  return pick(random, commands) ?? null;
+}
+
+function listDuplicateMarks(state: ShinsaState) {
+  return Object.values(state.tasks).flatMap((task) => [
+    task.duplicate ? `closed by ${task.duplicate.by}` : null,
+    task.activity.some((entry) => entry.text === 'Not a duplicate after all') ? 'started again' : null,
   ]);
 }
 
@@ -1101,6 +1143,8 @@ function selectSideCommand(
       return selectPushCommand(state, randoms.pushes);
     case 'backlog':
       return selectBacklogCommand(state, randoms.planner);
+    case 'duplicates':
+      return selectDuplicateCommand(state, randoms.planner);
     default:
       return null;
   }
@@ -1467,6 +1511,19 @@ describe('decide under random command sequences', () => {
         'removed from the backlog',
         'started from the backlog',
       ]);
+    },
+    SEEDS * 2_000
+  );
+
+  test(
+    'keeps every invariant while tasks are closed as duplicates and started again',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of listDuplicateMarks(state)) if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'duplicates', collect);
+      expect([...reached].sort()).toEqual(['closed by shinsa', 'closed by you', 'started again']);
     },
     SEEDS * 2_000
   );

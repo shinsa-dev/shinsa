@@ -47,6 +47,7 @@ import { removeEntry, writeEntry } from './draft.ts';
 import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
@@ -263,7 +264,8 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   });
   const closed = previous === 'answered' && event.by !== 'you';
   const answered = (previous === 'answering' || closed) && (stage === 'done' || stage === 'merged');
-  const text = answered ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
+  const duplicated = stage === 'cancelled' && Boolean(task?.duplicate);
+  const text = answered || duplicated ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
   if (text && previous !== stage) {
     record(state, event.taskId, event.at, { actor: event.by ?? 'shinsa', kind: 'stage', text });
   }
@@ -278,6 +280,22 @@ function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>
     kind: 'stage',
     text: `Set the priority to ${event.priority}`,
   });
+}
+
+function applyDuplicated(state: ShinsaState, event: EventOf<'task.duplicated'>) {
+  updateTask(state, event.taskId, event.at, { duplicate: { ...event.duplicate } });
+  const original = state.tasks[event.duplicate.of];
+  const handle = original?.handle ? `${original.handle} ` : '';
+  record(state, event.taskId, event.at, {
+    actor: event.duplicate.by,
+    kind: 'stage',
+    text: `Closed as a duplicate of ${handle}“${original?.title ?? 'another task'}”`,
+  });
+}
+
+function applyDuplicateCleared(state: ShinsaState, event: EventOf<'task.duplicate_cleared'>) {
+  updateTask(state, event.taskId, event.at, { duplicate: null, closedAt: null, cancelledFrom: null });
+  record(state, event.taskId, event.at, { actor: 'you', kind: 'stage', text: 'Not a duplicate after all' });
 }
 
 function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_changed'>) {
@@ -756,6 +774,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.prioritized':
       applyPrioritized(state, event);
       break;
+    case 'task.duplicated':
+      applyDuplicated(state, event);
+      break;
+    case 'task.duplicate_cleared':
+      applyDuplicateCleared(state, event);
+      break;
     case 'task.waits_on_changed':
       applyWaitsOnChanged(state, event);
       break;
@@ -775,6 +799,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.message_routed':
     case 'task.message_dropped':
       applyInboxEvent(state, event);
+      break;
+    case 'iteration.requested':
+    case 'iteration.answered':
+      applyIterationEvent(state, event);
       break;
     case 'task.recovered':
       updateTask(state, event.taskId, event.at, {

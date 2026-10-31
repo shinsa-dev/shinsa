@@ -55,6 +55,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
+| request (an iteration) | Something you sent the Agent after its work was in (changes at the review or merge gate, line comments, a question, a message while that fix runs), with the Agent's reply: a headline, each point you raised marked done, answered or not changed with a note, what you do now and any details. The overview shows the latest on the review card and the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `FixReply` (`complete_fix`'s `reply`), `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
 | merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it. Never shipping code: a step that stages, commits, pushes or opens a pull request is refused. Each task the merge waits on (`Task.waitsOn`) shows among them as a linked row you never tick, done once that task finishes | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
 | watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; each check is a read of that source scoped to the change, and a report it files is a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `file_report`, `report_read` | Watchdogs, Watching |
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
@@ -217,6 +218,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
 | `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
+| `duplicate?` | `{ of, by, why }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
@@ -261,6 +263,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: the pull request conflicts with its base, read by the pull request watch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
+| `iterations?` | `Iteration[]` | every request you sent after the work was in, with its reply, oldest first; kept across rounds, each with its `round` (not archived by a new round): `id`, `round`, `requests` (`text`, `comments`: the line comments sent with it, `at`), `reply` (`FixReply` \| null while open), `runId` and `repliedAt` of the fix that answered it. At most one is open, the last (`selectOpenIteration`) |
 
 **Pull request**
 
@@ -397,7 +400,8 @@ holds an active run; Shinsa's own stages hold an effect.
 | `merged`, `done`, `cancelled` | merge / none | | settled |
 
 Any working or gate stage can also hold a failure gate (paused), a monitor or a usage wait; `task.cancel` and
-`task.complete` settle from anywhere open.
+`task.complete` settle from anywhere open, and so does `task.mark_duplicate`, a cancel that records the task it
+duplicates (`task.duplicated`, then `cancelled`).
 
 **Rounds and the lifecycle.** A task's stage belongs to its active round. `merged` and `done` reached on their own
 leave the task **resting**: settled (no run, gate or worktree) but open, and a message starts its next round. A new
@@ -730,6 +734,16 @@ with core's refusal (`message.drop` with `messageIds`, a `task.message_dropped` 
 activity that keeps the text and the reason as `undelivered`). An agent's `tasks_message` is classified
 before it is dispatched, since the agent waits for the answer.
 
+**Requests and replies.** A message or a gate answer that starts a fix for you (`request_changes`, `send_back`,
+`fix`, and Request changes at the review or merge gate, verdicts and line comments included) emits
+`iteration.requested` before the fix starts (`decide/iterations.ts`, `requestIteration`); so does a message that
+steers a running fix (`purpose: fix`), whatever the fix is for. While the last iteration has no reply, a request
+joins it (same `iterationId`), so one reply answers everything sent during one fix; otherwise it opens the next.
+`complete_fix` must carry `reply` while an iteration is open (`reply_required`) and must not otherwise
+(`reply_unasked`); the reply is `iteration.answered`. A message that steers a build phase, a follow-up to an
+inquiry and a plan revision open none: plan revisions keep their feedback in `planHistory`, which the overview's
+Earlier requests lists beside the iterations (`apps/web/src/lib/overview/exchanges.ts`).
+
 ## Commands
 
 Every command has an id; a repeat is answered from its receipt. `parseUserCommand` checks a user command field by field
@@ -757,6 +771,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
+| `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
+| `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
 | `watchdog.connect` | gives a watchdog that waits for a source its server (`server`, `data`), adds it to the project's sources for the repository, and starts its window | `watchdogs connect` | agent |
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
@@ -827,7 +843,7 @@ role without the tool (`hasTool`).
 | --- | --- | --- |
 | `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`) |
 | `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls and `checkChanges?` (`check_changes`, recorded as `checks.changed`); Shinsa commits it, adds `treeHash` and `files` (the files the commit changed, kept on the `PhaseReport`) and runs the phase's checks (the last one needs the evidence) |
-| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, `walkthrough` when it changes how the change works, `checks?`: the ids to run again, `checkChanges?`, `evidenceKept?`: earlier evidence that still applies); refused while an earlier item whose files the fix changed is not replaced, removed or kept (`evidence_stale`, `docs/engine.md` → Evidence); Shinsa commits and adds `treeHash` and `files`, then runs the failing checks, those, the changed ones and the checks of every phase whose files the fix changed, or pushes when shipping |
+| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, `reply` while a request of yours is open and only then (`reply_required`, `reply_unasked`; Messages → Requests and replies), `walkthrough` when it changes how the change works, `checks?`: the ids to run again, `checkChanges?`, `evidenceKept?`: earlier evidence that still applies); refused while an earlier item whose files the fix changed is not replaced, removed or kept (`evidence_stale`, `docs/engine.md` → Evidence); Shinsa commits and adds `treeHash` and `files`, then runs the failing checks, those, the changed ones and the checks of every phase whose files the fix changed, or pushes when shipping |
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
@@ -865,7 +881,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task closes it as that task's duplicate before any work |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
@@ -921,6 +937,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
+| `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why }`); the `cancelled` stage follows |
+| `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
 | `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
@@ -970,6 +988,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `checks.started` | Shinsa started a run of checks (`checkIds`); sets `Task.runningChecks` |
 | `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
+| `iteration.requested` | you sent a request after the work was in (`iterationId`, `round`, `text`, `comments`); appends to the iteration with that id or opens it |
+| `iteration.answered` | the fix that answered it handed over its `reply` (`iterationId`, `runId`); sets `reply`, `runId` and `repliedAt` |
 | `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check; `replaces`: the ids of the pieces it replaced, which get `replacedBy`) |
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
@@ -1097,7 +1117,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | --- | --- | --- |
 | `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `impact`, `evidence`, `approval`, `operation`, `change_summary` | goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; change summary 240 |
 | `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`), `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**))), asked for on the last phase; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 300; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command) |
-| `complete_fix` | **`summary`**; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is) | summary 240; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60 |
+| `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is) | summary 240; reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60 |
 | `report_review` | **`findings`** (**`severity`**: `blocking`, `should_fix` or `optional`, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
 | `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**) | answer 8,000; request 2,000, why 240 |
 | `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |

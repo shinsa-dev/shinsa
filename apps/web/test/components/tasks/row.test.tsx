@@ -81,6 +81,7 @@ describe('the row context menu', () => {
       'Snooze',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });
