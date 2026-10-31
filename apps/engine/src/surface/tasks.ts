@@ -447,6 +447,30 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Cancelled.',
   }),
   defineCommand({
+    path: ['tasks', 'share'],
+    summary: 'Share a task by a public link on app.shinsa.dev: read-only, without its chat.',
+    command: 'task.share',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.share',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Shared. The link shows on the task once app.shinsa.dev has it.',
+  }),
+  defineCommand({
+    path: ['tasks', 'unshare'],
+    summary: 'Stop sharing a task. Its link stops working.',
+    command: 'task.unshare',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.unshare',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'No longer shared.',
+  }),
+  defineCommand({
     path: ['tasks', 'done'],
     summary: 'Mark a task as done without merging it.',
     command: 'task.complete',

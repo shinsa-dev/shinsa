@@ -709,6 +709,8 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'memory.write': readMemoryWrite,
   'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
   'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),
+  'task.share': (fields) => ({ type: 'task.share', taskId: readId(fields, 'taskId') }),
+  'task.unshare': (fields) => ({ type: 'task.unshare', taskId: readId(fields, 'taskId') }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

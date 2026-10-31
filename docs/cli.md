@@ -383,6 +383,34 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks share
+
+Share a task by a public link on app.shinsa.dev: read-only, without its chat.
+
+```
+shinsa tasks share <task> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.share`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks unshare
+
+Stop sharing a task. Its link stops working.
+
+```
+shinsa tasks unshare <task> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.unshare`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks done
 
 Mark a task as done without merging it.

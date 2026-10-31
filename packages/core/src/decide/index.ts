@@ -93,6 +93,7 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
+import { recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
@@ -223,6 +224,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return acceptMemory(decider, command);
     case 'memory.remove':
       return removeMemory(decider, command);
+    case 'task.share':
+      return shareTask(decider, command);
+    case 'task.unshare':
+      return unshareTask(decider, command);
+    case 'share.record':
+      return recordShare(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -378,6 +385,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   dispatchRuns(decider);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
+  syncShares(decider, state);
   const changes = sealDraft(decider.state);
   return {
     events: decider.events,

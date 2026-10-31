@@ -484,6 +484,12 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   backlog?: TaskBacklog | null;
+  share?: TaskShare | null;
+}
+
+export interface TaskShare {
+  at: number;
+  url: string | null;
 }
 
 export interface TaskBacklog {

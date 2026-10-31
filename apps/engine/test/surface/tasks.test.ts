@@ -340,6 +340,12 @@ describe('the task commands', () => {
     [['tasks', 'cancel', 'fix'], { type: 'task.cancel', taskId: 'task-123' }, 'Cancelled.'],
     [['tasks', 'done', 'fix'], { type: 'task.complete', taskId: 'task-123' }, 'Marked as done.'],
     [
+      ['tasks', 'share', 'fix'],
+      { type: 'task.share', taskId: 'task-123' },
+      'Shared. The link shows on the task once app.shinsa.dev has it.',
+    ],
+    [['tasks', 'unshare', 'fix'], { type: 'task.unshare', taskId: 'task-123' }, 'No longer shared.'],
+    [
       ['tasks', 'prioritize', 'fix', 'urgent'],
       { type: 'task.prioritize', taskId: 'task-123', priority: 'urgent' },
       'Priority set to urgent.',

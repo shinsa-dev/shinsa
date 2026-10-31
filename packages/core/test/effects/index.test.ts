@@ -56,6 +56,13 @@ describe('resolveEffectLane', () => {
     );
   });
 
+  test("publishing a shared task runs in its own lane, so a publish never waits behind the task's work", () => {
+    for (const kind of ['share.publish', 'share.remove'] as const) {
+      expect(resolveEffectLane({ kind, taskId: 't' })).toBe('share:t');
+      expect(resolveEffectKey({ kind, taskId: 't' }, 4)).toBe(`${kind}:t:4`);
+    }
+  });
+
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {
     const checks: ShinsaEffect = { kind: 'checks.run', taskId: 't', round: 0, checks: [], coverage: true };
     for (const effect of [...TASK_EFFECTS, checks]) {

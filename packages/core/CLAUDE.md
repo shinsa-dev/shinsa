@@ -261,6 +261,13 @@ src/
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
 │                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
+├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
+│                    from the task, its current evidence and the project's name; chats, activity, runs, gate answers,
+│                    notes, attachments and check output never; a repository whose visibility is not `public` also
+│                    loses every path, line, command and pull request address, and has no code), hasSharedCode, and
+│                    resolveSharedFingerprint, which decide's syncShares compares to republish a shared task only
+│                    when what it shows changed (decide/shares.ts: task.share and task.unshare, human-only;
+│                    share.record, the link the engine got back)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,

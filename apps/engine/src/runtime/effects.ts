@@ -238,6 +238,9 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
+      case 'share.publish':
+      case 'share.remove':
+        return Promise.reject(new Error('Sharing tasks is not available yet.'));
     }
   }
 

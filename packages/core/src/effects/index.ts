@@ -24,7 +24,9 @@ export type ShinsaEffect =
   | { kind: 'watch.suggest'; projectId: string; server: string; data: string }
   | { kind: 'run.wake'; runId: string; generation: number }
   | { kind: 'delegation.steer'; runId: string; generation: number }
-  | { kind: 'delegation.reply'; runId: string; questionId: string };
+  | { kind: 'delegation.reply'; runId: string; questionId: string }
+  | { kind: 'share.publish'; taskId: string }
+  | { kind: 'share.remove'; taskId: string };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
@@ -51,6 +53,8 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'run.wake': 'process_bound',
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
+  'share.publish': 'replay_safe',
+  'share.remove': 'replay_safe',
 };
 
 function listEffectKinds(recovery: EffectRecovery) {
@@ -99,6 +103,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'pull_request.merge':
     case 'pull_request.watch':
     case 'pull_request.close':
+    case 'share.publish':
+    case 'share.remove':
       return `${effect.kind}:${effect.taskId}:${seq}`;
   }
 }
@@ -123,6 +129,9 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `reply:${effect.runId}`;
     case 'pull_request.watch':
       return `side:${effect.taskId}`;
+    case 'share.publish':
+    case 'share.remove':
+      return `share:${effect.taskId}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
