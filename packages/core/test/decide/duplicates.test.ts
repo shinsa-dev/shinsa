@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { listActiveRuns, listOpenGates, parseUserCommand } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, readyWorktree, registerRepo } from '../harness.ts';
+import {
+  createHarness,
+  createTask,
+  type Harness,
+  proposePlan,
+  readyWorktree,
+  registerRepo,
+} from '../harness.ts';
 
 function createUntriaged(harness: Harness, request: string) {
   const repoId = Object.keys(harness.state.repos)[0] || registerRepo(harness);
@@ -142,17 +149,38 @@ describe('duplicates', () => {
     expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).not.toContain(copy);
   });
 
-  test('only a duplicate triage closed can start again', () => {
+  test('a task that is not a duplicate cannot be started as one', () => {
     const harness = createHarness();
-    const original = createTask(harness, { request: 'Add dark mode' });
     const copy = createTask(harness, { request: 'Dark theme' });
     expect(() => harness.send({ type: 'task.clear_duplicate', taskId: copy })).toThrow(
       'This task is not closed as a duplicate.'
     );
+  });
+
+  test('a duplicate you closed mid-work starts again in a fresh round on a new branch', () => {
+    const harness = createHarness();
+    const original = createTask(harness, { request: 'Add dark mode' });
+    const copy = createTask(harness, { request: 'Dark theme' });
+    proposePlan(harness, copy);
+    const branch = harness.task(copy).branch;
     harness.send({ type: 'task.mark_duplicate', taskId: copy, duplicateOf: original });
-    expect(() => harness.send({ type: 'task.clear_duplicate', taskId: copy })).toThrow(
-      'Only a task triage closed as a duplicate can start again.'
-    );
+    expect(harness.task(copy).stage).toBe('cancelled');
+    harness.send({ type: 'task.clear_duplicate', taskId: copy });
+
+    const task = harness.task(copy);
+    expect(task.duplicate).toBeNull();
+    expect(task.closedAt).toBeNull();
+    expect(task.plan).toBeNull();
+    expect(task.phaseReports).toEqual([]);
+    expect(task.rounds?.map((round) => [round.number, round.status])).toEqual([
+      [1, 'cancelled'],
+      [2, 'active'],
+    ]);
+    expect(task.rounds?.at(-1)?.request).toBe('Dark theme');
+    expect(task.branch).toBe(`${branch}-round-2`);
+    expect(task.stage).toBe('triage');
+    readyWorktree(harness, copy);
+    expect(harness.task(copy).stage).toBe('planning');
   });
 
   test('marking on your behalf says which task duplicates which', () => {

@@ -3,6 +3,7 @@ import { DomainError, type DuplicateActor, isTaskSettled, type Task } from '../d
 import { releaseInquiryFromBacklog } from './backlog.ts';
 import type { Decider } from './decider.ts';
 import { settleTask, startWork } from './lifecycle.ts';
+import { restartInNewRound } from './rounds.ts';
 import { stopAllWatchdogs } from './watchdogs.ts';
 
 function quoteOriginal(task: Task) {
@@ -60,18 +61,20 @@ export function closeTriageDuplicate(decider: Decider, task: Task, original: Tas
   closeAsDuplicate(decider, task, original, 'shinsa', why);
 }
 
+function hasStartedWork(decider: Decider, task: Task) {
+  return Object.values(decider.state.runs).some((run) => run.taskId === task.id);
+}
+
 export function clearDuplicate(decider: Decider, command: CommandOf<'task.clear_duplicate'>) {
   const task = decider.task(command.taskId);
   if (!task.duplicate) {
     throw new DomainError('not_duplicate', 'This task is not closed as a duplicate.');
   }
-  if (task.duplicate.by !== 'shinsa') {
-    throw new DomainError(
-      'duplicate_by_you',
-      'Only a task triage closed as a duplicate can start again. Create a new task with its request instead.'
-    );
-  }
   decider.emit({ type: 'task.duplicate_cleared', taskId: task.id });
+  if (hasStartedWork(decider, task)) {
+    restartInNewRound(decider, task.id);
+    return;
+  }
   releaseInquiryFromBacklog(decider, task.id);
   startWork(decider, task.id);
 }

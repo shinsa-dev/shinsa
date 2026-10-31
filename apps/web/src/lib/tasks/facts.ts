@@ -26,6 +26,12 @@ export function selectDuplicateOriginal(state: ShinsaState, task: Task) {
   return task.duplicate ? (state.tasks[task.duplicate.of] ?? null) : null;
 }
 
+export function listDuplicates(state: ShinsaState, task: Task) {
+  return Object.values(state.tasks)
+    .filter((candidate) => candidate.duplicate?.of === task.id)
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
 export function describeDuplicateHint(duplicate: NonNullable<Task['duplicate']>) {
   if (duplicate.by === 'you') return 'You closed this as a duplicate.';
   return duplicate.why

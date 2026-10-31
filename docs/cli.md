@@ -400,7 +400,7 @@ Every task agent's tool: `tasks_duplicate`. Sends `task.mark_duplicate`.
 
 #### shinsa tasks not-duplicate
 
-Start a task that triage closed as a duplicate, as if it had not.
+Start a task closed as a duplicate again. One that already worked starts a fresh round.
 
 ```
 shinsa tasks not-duplicate <task> [--json]

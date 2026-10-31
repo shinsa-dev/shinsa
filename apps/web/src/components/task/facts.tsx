@@ -51,6 +51,7 @@ import {
   describeDuplicateHint,
   describePullRequestFact,
   describeStarted,
+  listDuplicates,
   listForkSources,
   listForks,
   resolveReportFact,
@@ -564,6 +565,12 @@ export function TaskFacts({
       <ReportFact state={state} task={task} />
       <RelatedFact state={state} icon='IconFork' verb='Forked from' tasks={listForkSources(state, task)} />
       <RelatedFact state={state} icon='IconFork' verb='Forked into' tasks={listForks(state, task)} />
+      <RelatedFact
+        state={state}
+        icon='IconSquareBehindSquare2'
+        verb='Kept over'
+        tasks={listDuplicates(state, task)}
+      />
     </div>
   );
 }

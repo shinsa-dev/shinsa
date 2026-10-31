@@ -418,4 +418,18 @@ describe('a duplicate', () => {
     fireEvent.click(link);
     expect(window.location.pathname).toBe('/tasks/SW-1');
   });
+
+  it('shows on the task it duplicates which task was closed in favour of it', () => {
+    const original = createTask({ id: 'o', handle: 'SW-1', title: 'Add dark mode' });
+    const copy = createTask({
+      id: 'c',
+      handle: 'SW-3',
+      title: 'Dark theme please',
+      stage: 'cancelled',
+      duplicate: { of: 'o', by: 'shinsa', why: null },
+    });
+    renderFacts(original, [copy]);
+    fireEvent.click(screen.getByRole('button', { name: 'Kept over Dark theme please' }));
+    expect(window.location.pathname).toBe('/tasks/SW-3');
+  });
 });

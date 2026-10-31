@@ -469,7 +469,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['tasks', 'not-duplicate'],
-    summary: 'Start a task that triage closed as a duplicate, as if it had not.',
+    summary: 'Start a task closed as a duplicate again. One that already worked starts a fresh round.',
     command: 'task.clear_duplicate',
     fields: [TASK_FIELD],
     build: async (values, client) => ({

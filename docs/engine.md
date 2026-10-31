@@ -990,14 +990,15 @@ them in the composer.
 effects, gates, pull requests, worktree and scratch folder settle the same way), with `task.duplicate` recording
 the task it repeats, who closed it and why; its stage stays `cancelled`, so everything that treats a cancelled task
 as finished still does, and the page shows the status Duplicate, a Duplicates group on All tasks and a "Duplicate of"
-fact linking the original. Triage asks `duplicate_of` whenever a task is open: one choice among the open tasks it
+fact linking the original, whose own page shows a "Kept over" fact linking every task closed in its favour. Triage asks `duplicate_of` whenever a task is open: one choice among the open tasks it
 offers `waits_on`, or `none`, with a strict bar (the same outcome; related, overlapping, follow-up, partial or
 uncertain work is `none`) and a `duplicate_why`. A pick outside the offered tasks, or without a project in another
-repository, is dropped; core drops one naming a settled task, itself or a duplicate. A triage-closed duplicate never
-got a worktree or a run, so Not a duplicate (`task.clear_duplicate`, `shinsa tasks not-duplicate`) clears the mark
-and starts it as triage would have; one you closed (`task.mark_duplicate`: Close as a duplicate in the task's menu,
-`shinsa tasks duplicate <task> --of <task>`, an agent's `tasks_duplicate`) cannot restart, since its cancel may have
-removed a worktree or closed a pull request.
+repository, is dropped; core drops one naming a settled task, itself or a duplicate. You close one yourself with
+`task.mark_duplicate` (Close as a duplicate in the task's menu, `shinsa tasks duplicate <task> --of <task>`, an
+agent's `tasks_duplicate`). Not a duplicate (`task.clear_duplicate`, `shinsa tasks not-duplicate`) clears the mark
+of any duplicate and starts it again: one that never ran an agent (what triage closes) starts as triage would have,
+keeping what it waits on; one that did starts a fresh round with the same request (`restartInNewRound`: a new
+round, a new branch and an empty plan), since its cancel removed its worktree and closed its pull request.
 
 ## Steps and gates
 

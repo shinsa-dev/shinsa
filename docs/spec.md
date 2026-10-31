@@ -1035,10 +1035,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 - **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
   cancel, linked to the task it repeats, and shown as Duplicate, in its own Duplicates group on All tasks, with a
-  "Duplicate of" fact that opens the original and says who closed it and why.
+  "Duplicate of" fact that opens the original and says who closed it and why. The original shows it too, as a
+  "Kept over" fact linking every task closed in its favour.
 - **Triage catches them before any work.** It is asked whether a new request is the same work as an open task of its
-  project, with a strict bar: the same outcome only. A task it closes never got a worktree or an agent, so Not a
-  duplicate starts it as if triage had not flagged it. You close one yourself with Close as a duplicate in the
+  project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
+  as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
   task's menu or ⌘K, and agents with `tasks_duplicate`.
 - **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
   links, machines shared with other accounts and duplicates found across a team are their own tasks.

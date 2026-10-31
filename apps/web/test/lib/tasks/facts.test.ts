@@ -5,6 +5,7 @@ import {
   describeDuplicateHint,
   describePullRequestFact,
   describeStarted,
+  listDuplicates,
   listForkSources,
   listForks,
   resolveReportFact,
@@ -95,6 +96,20 @@ describe('duplicates', () => {
     expect(
       selectDuplicateOriginal(state, { ...copy, duplicate: { of: 'gone', by: 'you', why: null } })
     ).toBeNull();
+  });
+
+  it('lists the tasks closed as duplicates of a task, oldest first', () => {
+    const original = createTask({ id: 'o' });
+    const later = createTask({ id: 'b', duplicate: { of: 'o', by: 'you', why: null }, createdAt: NOW - 1 });
+    const earlier = createTask({
+      id: 'a',
+      duplicate: { of: 'o', by: 'shinsa', why: null },
+      createdAt: NOW - 2,
+    });
+    const other = createTask({ id: 'x', duplicate: { of: 'b', by: 'you', why: null } });
+    const state = createShinsaState({ tasks: [original, later, earlier, other] });
+    expect(listDuplicates(state, original).map((task) => task.id)).toEqual(['a', 'b']);
+    expect(listDuplicates(state, earlier)).toEqual([]);
   });
 
   it('says who closed it, and why when Shinsa did', () => {

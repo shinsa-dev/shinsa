@@ -167,6 +167,25 @@ function startRound(decider: Decider, task: Task, round: Round) {
   startWork(decider, task.id);
 }
 
+export function restartInNewRound(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  const current = resolveCurrentRound(task);
+  decider.emit({
+    type: 'round.queued',
+    taskId,
+    round: {
+      number: resolveNextRoundNumber(task),
+      title: current.title,
+      request: current.request,
+      why: null,
+      shipping: DEFAULT_ROUND_SHIPPING,
+      pipeline: [...resolveTaskPipeline(task)],
+    },
+  });
+  const [next] = listQueuedRounds(decider.task(taskId));
+  if (next) startRound(decider, decider.task(taskId), next);
+}
+
 export function startQueuedRounds(decider: Decider) {
   for (const task of Object.values(decider.state.tasks)) {
     const [next] = listQueuedRounds(task);

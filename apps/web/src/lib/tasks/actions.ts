@@ -54,7 +54,7 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
 }
 
 function listSettledActions(task: Task): TaskActionKey[] {
-  return task.duplicate?.by === 'shinsa' ? ['notDuplicate'] : [];
+  return task.duplicate ? ['notDuplicate'] : [];
 }
 
 function listBacklogActions(task: Task): TaskActionKey[] {

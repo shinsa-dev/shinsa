@@ -45,7 +45,10 @@ describe('listTaskActions', () => {
       duplicate: { of: 'o', by: 'shinsa', why: null },
     });
     expect(listTaskActions(closed)).toEqual([['notDuplicate']]);
-    expect(listTaskActions({ ...closed, duplicate: { of: 'o', by: 'you', why: null } })).toEqual([]);
+    expect(listTaskActions({ ...closed, duplicate: { of: 'o', by: 'you', why: null } })).toEqual([
+      ['notDuplicate'],
+    ]);
+    expect(listTaskActions({ ...closed, duplicate: null })).toEqual([]);
   });
 
   it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
