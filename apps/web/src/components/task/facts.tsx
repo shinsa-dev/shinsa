@@ -370,8 +370,10 @@ function RelatedFact({
         className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')}
       >
         <Icon size='sm' name={icon} />
-        <span className='shrink-0'>{verb}</span>
-        <Truncate>{first.title}</Truncate>
+        <span className='flex min-w-0'>
+          <span className='shrink-0 whitespace-pre'>{verb} </span>
+          <Truncate>{first.title}</Truncate>
+        </span>
       </button>
     );
   }
@@ -381,8 +383,9 @@ function RelatedFact({
       trigger={
         <>
           <Icon size='sm' name={icon} />
-          <span>{verb}</span>
-          <span className='tabular-nums'>{count}</span>
+          <span>
+            {verb} <span className='tabular-nums'>{count}</span>
+          </span>
         </>
       }
     >
@@ -443,8 +446,10 @@ function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const trigger = (
     <DropdownMenuTrigger render={<button type='button' className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')} />}>
       <Icon size='sm' name='IconHourglass' className={cn(cancelled && 'text-orange-text')} />
-      <span className='shrink-0'>Waits on</span>
-      <span className='truncate'>{waitsOn.map((blocker) => blocker.title).join(', ')}</span>
+      <span className='flex min-w-0'>
+        <span className='shrink-0 whitespace-pre'>Waits on </span>
+        <span className='truncate'>{waitsOn.map((blocker) => blocker.title).join(', ')}</span>
+      </span>
     </DropdownMenuTrigger>
   );
   return (
