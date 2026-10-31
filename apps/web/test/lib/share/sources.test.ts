@@ -1,14 +1,6 @@
-import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { SharePreview } from '@shinsa/core';
-import {
-  createPreviewSource,
-  requestPreviewSource,
-  requestSharedText,
-  requestViewerLogin,
-  SHARE_GONE,
-  ShareGoneError,
-} from '@/lib/share/sources.ts';
-import { createSharedTask, DIFF } from './fixtures.ts';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { requestSharedText, requestViewerLogin, SHARE_GONE, ShareGoneError } from '@/lib/share/sources.ts';
+import { DIFF } from './fixtures.ts';
 
 afterEach(() => {
   mock.restore();
@@ -39,21 +31,5 @@ describe('who is looking at a shared page', () => {
     expect(await requestViewerLogin(answer(Response.json({ user: null })))).toBeNull();
     expect(await requestViewerLogin(answer(new Response('', { status: 500 })))).toBeNull();
     expect(await requestViewerLogin(answer(new Error('offline')))).toBeNull();
-  });
-});
-
-describe('a preview on this machine', () => {
-  it('reads the engine’s preview and serves its files from their local addresses', async () => {
-    const preview: SharePreview = {
-      shared: createSharedTask(),
-      files: { 'shot-1': '/api/evidence/settings.png' },
-      updatedAt: 3,
-    };
-    const fetch = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(preview));
-    const source = await requestPreviewSource('task 1');
-    expect(fetch.mock.calls[0]?.[0]).toBe('/api/tasks/task%201/share/preview');
-    expect(source.resolveFileUrl('shot-1')).toBe('/api/evidence/settings.png');
-    expect(source.resolveFileUrl('diff')).toBeNull();
-    expect(createPreviewSource(preview).updatedAt).toBe(3);
   });
 });

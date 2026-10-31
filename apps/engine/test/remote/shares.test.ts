@@ -13,9 +13,6 @@ import {
   parseShareUrl,
   parseShareWelcome,
   REMOTE_KEY_ALGORITHM,
-  resolveSharePreviewApiPath,
-  resolveSharePreviewCodeApiPath,
-  resolveSharePreviewDiffApiPath,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_BYTES,
@@ -23,13 +20,13 @@ import {
   type ShareMessage,
   type ShinsaState,
   serializeBase64Url,
+  serializeShareUrl,
   type Task,
 } from '@shinsa/core';
 import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { SHARE_GONE_REASON } from '../../src/remote/share-channel.ts';
 import {
-  createSharePreviewRoutes,
   SHARE_LINK_LOST,
   SHARE_NOT_PAIRED,
   SHARE_REMOTE_CHANGED,
@@ -56,7 +53,13 @@ const SHARE_ID = 'BwcHBwcHBwcHBwcHBwcHBw';
 
 const SHARE_KEY = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk';
 
-const SHARE_URL = `https://app.shinsa.dev/share/inst1/${SHARE_ID}#${SHARE_KEY}`;
+const SHARE_URL = serializeShareUrl('https://app.shinsa.dev', {
+  instanceId: 'inst1',
+  shareId: SHARE_ID,
+  key: SHARE_KEY,
+});
+
+const SHARING = { at: 1, limit: 'none', endsAt: null } as const;
 
 let running: FakeControlPlane | null = null;
 
@@ -108,7 +111,7 @@ function shareTask(overrides: Partial<Task> = {}) {
   return createTask({
     repoId: 'repo-1',
     activity: [],
-    share: { at: 1, url: null },
+    share: { ...SHARING, url: null },
     pullRequest: {
       number: 7,
       url: 'https://github.com/acme/app/pull/7',
@@ -247,7 +250,7 @@ function sharedSetUp(options: SetUp = {}) {
   return setUp({
     ...options,
     patch: (state) => {
-      state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+      state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
       options.patch?.(state);
     },
   });
@@ -259,7 +262,9 @@ describe('making a share link', () => {
     await publisher.link('task-1', CONTEXT);
     const recorded = stub.dispatched[0] as { url: string };
     const key = serializeBase64Url(new Uint8Array(32).fill(8));
-    expect(recorded.url).toBe(`${remote.appOrigin}/share/inst1/${SHARE_ID}#${key}`);
+    expect(recorded.url).toBe(
+      serializeShareUrl(remote.appOrigin, { instanceId: 'inst1', shareId: SHARE_ID, key })
+    );
     expect(parseShareUrl(recorded.url)?.shareId).toBe(SHARE_ID);
     expect(stub.commandIds).toEqual([`${CONTEXT.key}:share.record`]);
   });
@@ -268,7 +273,16 @@ describe('making a share link', () => {
     const { stub, publisher } = sharedSetUp();
     await publisher.link('task-1', CONTEXT);
     expect(stub.dispatched).toEqual([{ type: 'share.record', taskId: 'task-1', url: null }]);
-    stub.state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL.replace('inst1', 'old') } });
+    stub.state.tasks['task-1'] = shareTask({
+      share: {
+        ...SHARING,
+        url: serializeShareUrl('https://app.shinsa.dev', {
+          instanceId: 'old',
+          shareId: SHARE_ID,
+          key: SHARE_KEY,
+        }),
+      },
+    });
     await publisher.link('task-1', CONTEXT);
     expect(parseShareUrl((stub.dispatched[1] as { url: string }).url)?.instanceId).toBe('inst1');
   });
@@ -341,7 +355,7 @@ describe('a share link opened live', () => {
     stub.notify();
     await Bun.sleep(0);
     expect(viewer.messages.length).toBe(sent);
-    stub.state.tasks['task-1'] = shareTask({ title: 'Renamed', share: { at: 1, url: SHARE_URL } });
+    stub.state.tasks['task-1'] = shareTask({ title: 'Renamed', share: { ...SHARING, url: SHARE_URL } });
     stub.notify();
     await until('the viewer reads it', () => viewer.views().length === 2);
     expect(viewer.views()[1]?.shared.task.title).toBe('Renamed');
@@ -360,10 +374,19 @@ describe('a share link opened live', () => {
     const stopped = await openViewer(publisher);
     expect(stopped.refused).toBe(SHARE_GONE_REASON);
     expect(publisher.acceptsShare(SHARE_ID)).toBe(true);
-    stub.state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+    stub.state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
     const wrong = await openViewer(publisher, SHARE_URL.replace(/#.*/, `#${'A'.repeat(43)}`));
     expect(wrong.refused).toBe(SHARE_GONE_REASON);
     expect(wrong.closed?.code).toBe(1008);
+  });
+
+  test('refuses a link whose time ran out, even before the clock ends the share', async () => {
+    const { stub, publisher } = sharedSetUp();
+    stub.state.tasks['task-1'] = shareTask({
+      share: { ...SHARING, limit: 'hour', endsAt: 0, url: SHARE_URL },
+    });
+    const expired = await openViewer(publisher);
+    expect(expired.refused).toBe(SHARE_GONE_REASON);
   });
 
   test('takes nothing from the viewer: any message after the hello closes it', async () => {
@@ -439,11 +462,11 @@ describe('when this machine is paired again', () => {
   test('every link it shared is marked as no longer working, so Share again makes a new one', async () => {
     const { stub, remote } = setUp({
       patch: (state) => {
-        state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
-        state.tasks['task-2'] = shareTask({ id: 'task-2', share: { at: 1, url: null } });
+        state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
+        state.tasks['task-2'] = shareTask({ id: 'task-2', share: { ...SHARING, url: null } });
         state.tasks['task-3'] = shareTask({
           id: 'task-3',
-          share: { at: 1, url: SHARE_URL, failure: 'Earlier.' },
+          share: { ...SHARING, url: SHARE_URL, failure: 'Earlier.' },
         });
         state.tasks['task-4'] = shareTask({ id: 'task-4', share: null });
       },
@@ -457,7 +480,7 @@ describe('when this machine is paired again', () => {
   test('a failure to record a lost link is logged, never thrown', async () => {
     const { stub, remote } = setUp({
       patch: (state) => {
-        state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+        state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
       },
     });
     stub.reject(() => true, new Error('closed'));
@@ -466,64 +489,44 @@ describe('when this machine is paired again', () => {
   });
 });
 
-describe('previewing a share', () => {
-  test('shows what a viewer would see from local addresses, before the task is shared and with nothing sent', async () => {
+async function readLiveFile(publisher: Shares, id: string) {
+  const file = (await publisher.resolveLive('task-1')).files.find((candidate) => candidate.id === id);
+  if (!file) return null;
+  return decodeText(await file.read());
+}
+
+describe('what a link shows', () => {
+  test('lists the evidence a viewer can open and the code, and leaves out what it cannot send', async () => {
     const { plane, publisher } = setUp({
       paired: false,
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ share: null });
-        state.evidence.page = createEvidence({
-          id: 'page',
-          uri: '/api/evidence/page.html',
-          attachedAt: 2,
-        });
+        state.evidence.page = createEvidence({ id: 'page', uri: '/api/evidence/page.html', attachedAt: 2 });
       },
     });
-    const preview = publisher.preview('task-1');
-    expect(preview.files).toEqual({
-      'shot-1': '/api/evidence/settings.png',
-      [SHARE_DIFF_FILE]: resolveSharePreviewDiffApiPath('task-1'),
-      [SHARE_CODE_FILE]: resolveSharePreviewCodeApiPath('task-1'),
-    });
-    expect(preview.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
-    expect(preview.shared).toMatchObject({ owner: null, machine: 'Studio', code: true });
-    expect(await publisher.previewDiff('task-1')).toBe('diff --git a/src/a.ts b/src/a.ts');
+    const { view } = await publisher.resolveLive('task-1');
+    expect(Object.keys(view.files)).toEqual(['shot-1', SHARE_DIFF_FILE, SHARE_CODE_FILE]);
+    expect(view.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
+    expect(view.shared).toMatchObject({ owner: null, machine: 'Studio', code: true });
+    expect(await readLiveFile(publisher, SHARE_DIFF_FILE)).toBe(DIFF);
     expect(plane.calls).toEqual([]);
   });
 
-  test('a task without a pull request previews with no code, and its diff is refused', async () => {
+  test('a task without a pull request shows no code and reads nothing from GitHub', async () => {
     const { publisher, github } = setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ pullRequest: null });
       },
     });
-    const preview = publisher.preview('task-1');
-    expect(preview.files).toEqual({ 'shot-1': '/api/evidence/settings.png' });
-    expect(preview.shared.code).toBe(false);
-    await expect(publisher.previewDiff('task-1')).rejects.toThrow('This task shares no code.');
+    const { view } = await publisher.resolveLive('task-1');
+    expect(Object.keys(view.files)).toEqual(['shot-1']);
+    expect(view.shared.code).toBe(false);
     expect(github.diffReads).toBe(0);
   });
 
-  test('an unknown task cannot be previewed', async () => {
+  test('an unknown task shows nothing', async () => {
     const { publisher } = setUp();
-    expect(() => publisher.preview('missing')).toThrow('No such task.');
-  });
-
-  test('the routes answer the preview as JSON and the diff and the files as plain text', async () => {
-    const { publisher } = setUp();
-    const [preview, diff, code] = createSharePreviewRoutes(publisher);
-    const previewMatch = preview?.pattern.exec(resolveSharePreviewApiPath('task-1'));
-    if (!preview || !previewMatch || !diff) throw new Error('The preview routes do not match their paths.');
-    const answer = await preview.respond(previewMatch, new Request('http://x'));
-    expect(((await answer.json()) as { shared: { code: boolean } }).shared.code).toBe(true);
-    const diffMatch = diff.pattern.exec(resolveSharePreviewDiffApiPath('task-1'));
-    if (!diffMatch) throw new Error('The diff route does not match its path.');
-    const text = await diff.respond(diffMatch, new Request('http://x'));
-    expect(text?.headers.get('content-type')).toBe('text/plain; charset=utf-8');
-    expect(await text?.text()).toBe(DIFF);
-    const codeMatch = code?.pattern.exec(resolveSharePreviewCodeApiPath('task-1'));
-    if (!code || !codeMatch) throw new Error('The code route does not match its path.');
-    expect(await (await code.respond(codeMatch, new Request('http://x'))).text()).toBe(CODE);
+    await expect(publisher.resolveLive('missing')).rejects.toThrow('No such task.');
   });
 
   test('the changed files come whole from GitHub at the pushed head, without new, removed or binary ones', async () => {
@@ -541,7 +544,7 @@ describe('previewing a share', () => {
       path === 'src/lost.ts' ? Promise.reject(new Error('Not Found')) : Promise.resolve(`${path}@${ref}`)
     );
     const { publisher } = setUp({ github });
-    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({
+    expect(JSON.parse((await readLiveFile(publisher, SHARE_CODE_FILE)) ?? '')).toEqual({
       files: { 'src/a.ts': 'src/a.ts@abc123' },
     });
     expect(github.fileReads).toEqual(['src/a.ts@abc123', 'src/lost.ts@abc123']);
@@ -552,7 +555,9 @@ describe('previewing a share', () => {
     const diff = ['diff --git a/a.ts b/a.ts', 'diff --git a/b.ts b/b.ts'].join('\n');
     const github = createGitHub(diff, (_repo, _ref, path) => Promise.resolve(path === 'a.ts' ? 'a' : big));
     const { publisher } = setUp({ github });
-    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({ files: { 'a.ts': 'a' } });
+    expect(JSON.parse((await readLiveFile(publisher, SHARE_CODE_FILE)) ?? '')).toEqual({
+      files: { 'a.ts': 'a' },
+    });
   });
 
   test('a pull request with no pushed head shares its diff and no whole files', async () => {
@@ -565,7 +570,6 @@ describe('previewing a share', () => {
         };
       },
     });
-    expect(Object.keys(publisher.preview('task-1').files)).toEqual(['shot-1', SHARE_DIFF_FILE]);
     expect(Object.keys((await publisher.resolveLive('task-1')).view.files)).toEqual([
       'shot-1',
       SHARE_DIFF_FILE,

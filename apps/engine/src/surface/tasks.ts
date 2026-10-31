@@ -4,6 +4,8 @@ import {
   type MessageKind,
   ROUND_SHIPPINGS,
   type RoundShipping,
+  SHARE_LIMITS,
+  type ShareLimit,
   TASK_PRIORITIES,
   type TaskDiff,
 } from '@shinsa/core';
@@ -451,11 +453,24 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Share a task by a link that reads it live from this machine: read-only, without its chat.',
     command: 'task.share',
     humanOnly: true,
-    fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.share',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-    }),
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'until',
+        kind: 'choice',
+        choices: SHARE_LIMITS,
+        description:
+          'How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting.',
+      },
+    ],
+    build: async (values, client) => {
+      const limit = readValue(values, 'until');
+      return {
+        type: 'task.share',
+        taskId: await findTaskId(client, readValue(values, 'task')),
+        ...(limit ? { limit: limit as ShareLimit } : {}),
+      };
+    },
     done: () => 'Shared. Its link shows on the task in a moment.',
   }),
   defineCommand({

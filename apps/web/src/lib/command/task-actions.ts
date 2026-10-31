@@ -20,6 +20,7 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   finder: ['worktree', 'files', 'folder', 'reveal'],
   fork: ['handoff', 'copy', 'follow-up', 'new task'],
   share: ['link', 'public', 'teammate', 'publish'],
+  unshare: ['link', 'private', 'revoke', 'unshare'],
   moveToBacklog: ['later', 'park', 'schedule', 'not now'],
   removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
   restart: ['retry', 'rerun', 'again'],

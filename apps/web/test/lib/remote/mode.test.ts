@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { resolveSharePagePath } from '@shinsa/core';
 import {
   clearEnrollFragment,
   isRemoteBuild,
@@ -45,11 +46,15 @@ describe('the remote page’s mode', () => {
     expect(resolveRemoteView({ pathname: '/', search: '', hash: '' })).toEqual({ kind: 'app' });
     const shareId = 'BwcHBwcHBwcHBwcHBwcHBw';
     const key = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk';
-    expect(resolveRemoteView({ pathname: `/share/k3x9/${shareId}`, search: '', hash: `#${key}` })).toEqual({
+    expect(
+      resolveRemoteView({ pathname: resolveSharePagePath('k3x9', shareId), search: '', hash: `#${key}` })
+    ).toEqual({
       kind: 'share',
       link: { instanceId: 'k3x9', shareId, key },
     });
-    expect(resolveRemoteView({ pathname: `/share/k3x9/${shareId}`, search: '', hash: '' })).toEqual({
+    expect(
+      resolveRemoteView({ pathname: resolveSharePagePath('k3x9', shareId), search: '', hash: '' })
+    ).toEqual({
       kind: 'share',
       link: null,
     });

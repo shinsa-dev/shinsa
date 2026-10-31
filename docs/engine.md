@@ -2515,8 +2515,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 
 ## Sharing a task
 
-A task you share can be read by anyone with its link,
-`https://app.shinsa.dev/share/<machine>/<share id>#<key>`, without signing in and without a device key. A link is
+A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/<token>#<key>`, without signing
+in and without a device key. A link is
 read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
 access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
 Overview, Review and Code, for a public or a private repository alike, but its chat; chats and the agent sessions never
@@ -2524,12 +2524,22 @@ leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page w
 projection and channel will serve teams.
 
 - **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
-  (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The key sits in
+  (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The path is
+  one opaque token, the share id followed by the machine's instance id, as base64url (`resolveSharePagePath`,
+  `parseShareLocation`), so the address names neither the machine nor the task. The key sits in
   the URL's fragment, which a browser never sends to a server, so neither app.shinsa.dev nor Cloudflare ever sees it.
   The channel is sealed with it end to end: Cloudflare carries ciphertext, and a stand-in for the machine cannot
   answer the handshake. The page and the connect answer carry `X-Robots-Tag: noindex, nofollow, noarchive` and every
   page `Referrer-Policy: no-referrer`, so no search engine keeps it and no page it links to learns it. Stop sharing
   ends every open link at once; sharing again later keeps the same link until the machine is paired again.
+- **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
+  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → General → Sharing, human-only,
+  so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
+  cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
+  a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock.ts`, a `StateClock`) with `share.expire`
+  (`reason: 'expired'`), and the engine refuses a link whose time has passed even before the clock fires. A finished
+  task cannot be shared `until_done` (`share_refused`), so Share task offers only the time limits for one. Changing
+  the limit of a shared task keeps its link (`task.share` with another `limit`).
 - **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
   core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
@@ -2563,7 +2573,7 @@ projection and channel will serve teams.
   | Links to other tasks (`shinsa://task/…`) | their label as plain text |
 
   A task without a repository has no Code. Check output and text an agent wrote (a summary, a finding, a testing
-  step) are kept as written; Preview is how you read them before you share.
+  step) are kept as written; open the link yourself to read what it shows.
 - **Making the link.** `task.share` emits `task.shared` and queues `share.link` (`replay_safe`, lane `share:<task>`).
   The engine (`apps/engine/src/remote/shares.ts`, `Shares.link`) makes a share id and a key for this machine's
   instance and records the URL with `share.record`; a link already made for this instance is kept (`share.record`
@@ -2603,22 +2613,21 @@ projection and channel will serve teams.
   (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
   machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
   remote access again…" (`SHARE_LINK_LOST`), and Try again makes a new link.
-- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one dialog over the task's
-  `TaskShare` and the remote snapshot, in five views: remote access needed (Open Settings), ready (Share), making the link,
-  failed (the reason, Stop sharing and Try again) and shared (the link, read-only and selectable, with Copy, Stop
-  sharing and Done). Every view but the failed one offers Preview, so you can read what a link shows before you
-  share or turn on remote access.
-- **Preview** (`/tasks/<handle>/shared`, `routes/share-preview.tsx`): the same page a link opens, from
-  `GET /api/tasks/<id>/share/preview` (`SharePreview`: the projection a link would show now, and the local
-  address of each file it would send) and `…/share/preview/diff`, so it shows exactly what the link would before
-  anything leaves the machine. Its note says it is a preview and that chats never leave the machine.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one short dialog over the task's
+  `TaskShare` and the remote snapshot, in five views: remote access needed (Open Settings), ready (Share, with Share
+  for), making the link, failed (the reason, Stop sharing and Try again) and shared (the link in a read-only field with
+  Copy inside it, Share for, Stop sharing and Done). Share task stays in the task's menu while it is shared, beside
+  Stop sharing, which asks first (`UnshareConfirm`) and is the only way a share ends early.
+- **While it is shared** (`components/task/sharing-banner.tsx`): the task's page shows a banner under its header that
+  cannot be dismissed, saying anyone with the link can watch the task and when sharing ends, with Copy link and Stop
+  sharing, until the share ends.
 - **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
-  the remote build's `/share/<machine>/<share id>` reads the key from the fragment (a link without one says the task
+  the remote build's `/share/<token>` reads the key from the fragment (a link without one says the task
   is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives
   (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
   and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one
   header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
-  app.shinsa.dev is its owner, and on the machine's Preview) and when the machine last read it. Read-only takes away
+  app.shinsa.dev is its owner) and when the machine last read it. Read-only takes away
   only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
   answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
   priority menu, services and every way into a chat; the live agent output is never shown. Its tabs are the owner's
@@ -2627,8 +2636,8 @@ projection and channel will serve teams.
 - **Nothing writes through a link.** The channel above only listens, and hiding controls is a second layer. On the
   page itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
   rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
-  can be changed from here." before anything is sent, on the public page and on the machine's Preview alike, so a
-  control added later without a `useReadOnly` check still changes nothing.
+  can be changed from here." before anything is sent, so a control added later without a `useReadOnly` check still
+  changes nothing.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
 
@@ -2657,9 +2666,9 @@ plainly what protects what.
     a failure, setup or Sign in gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `questions
     answer`, `gates answer`, `command`, which can send any gate answer);
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
-  - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
+  - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's own check commands,
+    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);

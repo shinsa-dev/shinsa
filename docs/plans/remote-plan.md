@@ -32,7 +32,7 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
    your local engine and holds no state of its own. Nothing is copied to the cloud, shared tasks included: a task you
    share is read live from the machine, by read-only remote access to that one task. Its link
-   (`app.shinsa.dev/share/‹machine›/‹share id›#‹key›`) opens a channel through the machine's tunnel that is sealed with
+   (`app.shinsa.dev/share/‹token›#‹key›`, the token naming neither the machine nor the task) opens a channel through the machine's tunnel that is sealed with
    the key in the link's fragment, which no server sees; the machine pushes the task down it the moment it changes and
    reads nothing back. A link shows what its owner sees on its Overview, Review and Code: the request, plan, phase
    reports, walkthrough, review, checks with their output, evidence, activity, notes, gates without their answers, who
@@ -87,7 +87,8 @@ anyone with a share link ──wss, sealed with the link's key──► t-‹ins
 - **A share link is a key.** Whoever holds the link reads the task, live, for as long as it is shared; Stop sharing
   ends every open link at once. app.shinsa.dev and Cloudflare never see the key (it is in the fragment) and carry
   only sealed frames, but the trusted-origin risk above applies: altered code on app.shinsa.dev could read a page's
-  key. Check output and text an agent wrote are shown as written, which is why Share task offers Preview first.
+  key. Check output and text an agent wrote are shown as written. A share ends by itself when the task is done, by
+  default, or when its time runs out, and the task's page shows a banner for as long as it lasts.
 
 ## Later
 

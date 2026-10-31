@@ -344,6 +344,11 @@ describe('the task commands', () => {
       { type: 'task.share', taskId: 'task-123' },
       'Shared. Its link shows on the task in a moment.',
     ],
+    [
+      ['tasks', 'share', 'fix', '--until', 'day'],
+      { type: 'task.share', taskId: 'task-123', limit: 'day' },
+      'Shared. Its link shows on the task in a moment.',
+    ],
     [['tasks', 'unshare', 'fix'], { type: 'task.unshare', taskId: 'task-123' }, 'No longer shared.'],
     [
       ['tasks', 'prioritize', 'fix', 'urgent'],

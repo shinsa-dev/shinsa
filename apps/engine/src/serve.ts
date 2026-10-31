@@ -45,6 +45,7 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
+import { ShareClock } from './remote/share-clock.ts';
 import { Shares } from './remote/shares.ts';
 import {
   createDiscoverer,
@@ -233,6 +234,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       new WatchdogClock(engine),
       new UsageResumeClock(engine),
       new SilenceWatch(engine, transcripts),
+      new ShareClock(engine),
     ],
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,

@@ -1,23 +1,33 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { createSettings, HOUR_MS } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
   closeShareDialog,
+  closeUnshareConfirm,
+  describeShareEnd,
+  listShareLimitItems,
   openShareDialog,
+  openUnshareConfirm,
+  resolveShareLimitChoice,
   resolveShareView,
   shareTask,
   unshareTask,
   useShareDialog,
+  useUnshareConfirm,
 } from '@/lib/share/dialog.ts';
-import { runTaskAction } from '@/lib/tasks/actions.ts';
+import { listTaskActions, runTaskAction } from '@/lib/tasks/actions.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createTask } from '../../support/state.ts';
 
 afterEach(() => {
   closeShareDialog();
+  closeUnshareConfirm();
 });
 
 const PAIRED = createRemoteSnapshot({ paired: true });
+
+const SHARING = { at: 1, limit: 'until_done', endsAt: null } as const;
 
 describe('the share dialog', () => {
   it('opens for one task from its action and closes again', () => {
@@ -36,7 +46,7 @@ describe('the share dialog', () => {
     expect(resolveShareView(task, createRemoteSnapshot({ paired: false }))).toEqual({ kind: 'unpaired' });
     expect(resolveShareView(task, PAIRED)).toEqual({ kind: 'off' });
     expect(resolveShareView(task, null)).toEqual({ kind: 'off' });
-    expect(resolveShareView({ ...task, share: { at: 1, url: null } }, PAIRED)).toEqual({
+    expect(resolveShareView({ ...task, share: { ...SHARING, url: null } }, PAIRED)).toEqual({
       kind: 'linking',
     });
   });
@@ -44,21 +54,60 @@ describe('the share dialog', () => {
   it('shows the link once it exists, and why publishing failed', () => {
     const task = createTask({ id: 't' });
     const url = 'https://app.shinsa.dev/share/abc';
-    expect(resolveShareView({ ...task, share: { at: 1, url } }, null)).toEqual({ kind: 'shared', url });
+    expect(resolveShareView({ ...task, share: { ...SHARING, url } }, null)).toEqual({ kind: 'shared', url });
     expect(
-      resolveShareView({ ...task, share: { at: 1, url, failure: 'app.shinsa.dev refused it.' } }, PAIRED)
+      resolveShareView({ ...task, share: { ...SHARING, url, failure: 'app.shinsa.dev refused it.' } }, PAIRED)
     ).toEqual({ kind: 'failed', message: 'app.shinsa.dev refused it.' });
   });
 
   it('shares and stops sharing with the human’s commands', async () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
-    await shareTask(task);
+    await shareTask(task, 'day');
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.share', taskId: 't' }],
+      [{ type: 'task.share', taskId: 't', limit: 'day' }],
       [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing. The link no longer opens this task.'],
     ]);
     spies.restore();
+  });
+});
+
+describe('how long a task is shared', () => {
+  it('defaults to the setting, keeps a shared task’s own, and never ends at once on a finished task', () => {
+    const settings = { ...createSettings(), shareLimit: 'week' as const };
+    expect(resolveShareLimitChoice(createTask({ id: 't' }), createSettings())).toBe('until_done');
+    expect(resolveShareLimitChoice(createTask({ id: 't' }), settings)).toBe('week');
+    expect(
+      resolveShareLimitChoice(
+        createTask({ id: 't', share: { ...SHARING, url: null, limit: 'hour' } }),
+        settings
+      )
+    ).toBe('hour');
+    const done = createTask({ id: 't', stage: 'done' });
+    expect(resolveShareLimitChoice(done, createSettings())).toBe('day');
+    expect(listShareLimitItems(done).map((item) => item.value)).not.toContain('until_done');
+    expect(listShareLimitItems(createTask({ id: 't' })).map((item) => item.value)).toContain('until_done');
+  });
+
+  it('says when sharing ends', () => {
+    expect(describeShareEnd({ ...SHARING, url: null })).toBe('Sharing ends when the task is done');
+    expect(describeShareEnd({ ...SHARING, url: null, limit: 'none' })).toBe('Shared until you stop it');
+    expect(describeShareEnd({ ...SHARING, url: null, limit: 'hour', endsAt: 2 * HOUR_MS }, HOUR_MS)).toBe(
+      'Sharing ends in 1h'
+    );
+  });
+});
+
+describe('stopping sharing', () => {
+  it('asks first, from the task’s action', () => {
+    const { result } = renderHook(() => useUnshareConfirm());
+    const task = createTask({ id: 't', share: { ...SHARING, url: null } });
+    expect(listTaskActions(task).flat()).toContain('unshare');
+    expect(listTaskActions(createTask({ id: 't' })).flat()).not.toContain('unshare');
+    act(() => runTaskAction(task, 'unshare'));
+    expect(result.current).toBe('t');
+    act(() => openUnshareConfirm('u'));
+    expect(result.current).toBe('u');
   });
 });

@@ -1,5 +1,5 @@
 import type { SharedTask } from '../share/index.ts';
-import { parseBase64Url } from './bytes.ts';
+import { concatBytes, decodeText, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { REMOTE_PATHS } from './contract.ts';
 
 export const SHARE_DIFF_FILE = 'diff';
@@ -45,12 +45,6 @@ export interface ShareLiveView {
   updatedAt: number;
 }
 
-export interface SharePreview {
-  shared: SharedTask;
-  files: Record<string, string>;
-  updatedAt: number;
-}
-
 export interface ShareConnectResponse {
   url: string;
   online: boolean;
@@ -58,7 +52,7 @@ export interface ShareConnectResponse {
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
-const SHARE_PAGE = new RegExp(`^${REMOTE_PATHS.sharePage}/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)$`);
+const SHARE_PAGE = new RegExp(`^${REMOTE_PATHS.sharePage}/([A-Za-z0-9_-]+)$`);
 
 function hasBytes(text: string, length: number) {
   return parseBase64Url(text)?.length === length;
@@ -68,16 +62,33 @@ export function serializeShareUrl(origin: string, link: ShareLink) {
   return `${origin}${resolveSharePagePath(link.instanceId, link.shareId)}#${link.key}`;
 }
 
+function serializeShareToken(instanceId: string, shareId: string) {
+  const id = parseBase64Url(shareId) ?? new Uint8Array();
+  return serializeBase64Url(concatBytes(id, encodeText(instanceId)));
+}
+
+function parseShareToken(token: string) {
+  const bytes = parseBase64Url(token);
+  if (!bytes || bytes.length <= SHARE_ID_BYTES) return null;
+  try {
+    const instanceId = decodeText(bytes.slice(SHARE_ID_BYTES));
+    if (!SEGMENT.test(instanceId)) return null;
+    return { instanceId, shareId: serializeBase64Url(bytes.slice(0, SHARE_ID_BYTES)) };
+  } catch {
+    return null;
+  }
+}
+
 export function resolveSharePagePath(instanceId: string, shareId: string) {
-  return `${REMOTE_PATHS.sharePage}/${encodeURIComponent(instanceId)}/${encodeURIComponent(shareId)}`;
+  return `${REMOTE_PATHS.sharePage}/${serializeShareToken(instanceId, shareId)}`;
 }
 
 export function parseShareLocation(pathname: string, hash: string): ShareLink | null {
-  const page = SHARE_PAGE.exec(pathname);
+  const token = SHARE_PAGE.exec(pathname)?.[1];
   const key = hash.replace(/^#/, '');
-  if (!(page?.[1] && page[2]) || !hasBytes(page[2], SHARE_ID_BYTES) || !hasBytes(key, SHARE_KEY_BYTES))
-    return null;
-  return { instanceId: page[1], shareId: page[2], key };
+  const parsed = token ? parseShareToken(token) : null;
+  if (!parsed || !hasBytes(key, SHARE_KEY_BYTES)) return null;
+  return { ...parsed, key };
 }
 
 export function parseShareUrl(url: string | null): ShareLink | null {
@@ -100,16 +111,4 @@ export function resolveShareConnectPath(instanceId: string) {
 
 export function resolveShareChannelUrl(tunnelUrl: string, shareId: string) {
   return `${tunnelUrl}${SHARE_CHANNEL_PATH}?${SHARE_CHANNEL_PARAM}=${encodeURIComponent(shareId)}`;
-}
-
-export function resolveSharePreviewApiPath(taskId: string) {
-  return `/api/tasks/${encodeURIComponent(taskId)}/share/preview`;
-}
-
-export function resolveSharePreviewDiffApiPath(taskId: string) {
-  return `${resolveSharePreviewApiPath(taskId)}/diff`;
-}
-
-export function resolveSharePreviewCodeApiPath(taskId: string) {
-  return `${resolveSharePreviewApiPath(taskId)}/code`;
 }

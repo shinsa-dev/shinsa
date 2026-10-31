@@ -265,9 +265,11 @@ src/
 │                    from the task, its current evidence and the project's name; everything its owner sees but
 │                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode
 │                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;
+│                    how long, ShareLimit and the shareLimit setting, ended by syncShares when a task shared
+│                    until_done settles and by share.expire;
 │                    share.record, the link the engine made; share.fail, why it could not); the link and its
 │                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,
-│                    ShareLiveView, SharePreview, SHARE_FILE_TYPES and the share paths) and
+│                    ShareLiveView, SHARE_FILE_TYPES and the share paths) and
 │                    remote/share-channel.ts (the hello and welcome HMACs with the link's key,
 │                    deriveShareSessionKey, the ShareMessage the machine alone sends)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as

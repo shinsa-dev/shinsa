@@ -1,11 +1,4 @@
-import {
-  REMOTE_PATHS,
-  type RemoteSession,
-  resolveSharePreviewApiPath,
-  type SharePreview,
-} from '@shinsa/core';
-import { requestJson } from '@/lib/connection/http.ts';
-import type { SharedSource } from '@/lib/share/view.ts';
+import { REMOTE_PATHS, type RemoteSession } from '@shinsa/core';
 
 export const SHARE_GONE =
   'This task is no longer shared, or the link is wrong. Ask whoever sent it for a new one.';
@@ -15,18 +8,6 @@ export class ShareGoneError extends Error {
     super(message);
     this.name = 'ShareGoneError';
   }
-}
-
-export function createPreviewSource(preview: SharePreview): SharedSource {
-  return {
-    shared: preview.shared,
-    updatedAt: preview.updatedAt,
-    resolveFileUrl: (fileId) => preview.files[fileId] ?? null,
-  };
-}
-
-export async function requestPreviewSource(taskId: string) {
-  return createPreviewSource(await requestJson<SharePreview>(resolveSharePreviewApiPath(taskId)));
 }
 
 export async function requestSharedText(url: string, read: typeof fetch = fetch) {

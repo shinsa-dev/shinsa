@@ -145,9 +145,13 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveShareEnd,
+  resolveShareLimit,
   resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
+  SHARE_LIMITS,
+  type ShareLimit,
   WATCHDOG_DEFAULTS,
   WATCHDOG_SETTING_LIMITS,
 } from './settings.ts';

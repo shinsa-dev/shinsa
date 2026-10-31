@@ -129,9 +129,6 @@ export {
   resolveShareChannelUrl,
   resolveShareConnectPath,
   resolveSharePagePath,
-  resolveSharePreviewApiPath,
-  resolveSharePreviewCodeApiPath,
-  resolveSharePreviewDiffApiPath,
   SHARE_CHANNEL_PARAM,
   SHARE_CHANNEL_PATH,
   SHARE_CODE_FILE,
@@ -145,7 +142,6 @@ export {
   type ShareFileType,
   type ShareLink,
   type ShareLiveView,
-  type SharePreview,
   serializeShareUrl,
 } from './shares.ts';
 export type {

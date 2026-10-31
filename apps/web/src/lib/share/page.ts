@@ -1,8 +1,6 @@
 import type { SharedTask, Task } from '@shinsa/core';
 import { listTaskTabs, type TaskTab } from '@/lib/tasks/tabs.ts';
 
-export const SHARED_PREVIEW_NOTE = 'Preview of what anyone with the link sees';
-
 export const SHARED_READ_ONLY_NOTE = 'Read-only';
 
 export function listSharedTabs(task: Task, shared: SharedTask): TaskTab[] {

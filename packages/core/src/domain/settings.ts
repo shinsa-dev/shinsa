@@ -1,4 +1,5 @@
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import { DAY_MS, HOUR_MS } from './time.ts';
 import type { AgentRole } from './types.ts';
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
@@ -23,6 +24,23 @@ export const PLAN_APPROVALS: ReadonlySet<PlanApproval> = new Set<PlanApproval>([
   'large',
   'always',
 ]);
+
+export type ShareLimit = 'until_done' | 'hour' | 'day' | 'week' | 'none';
+
+export const SHARE_LIMITS: readonly ShareLimit[] = ['until_done', 'hour', 'day', 'week', 'none'];
+
+const SHARE_LIMIT_MS: Partial<Record<ShareLimit, number>> = { hour: HOUR_MS, day: DAY_MS, week: 7 * DAY_MS };
+
+const DEFAULT_SHARE_LIMIT: ShareLimit = 'until_done';
+
+export function resolveShareLimit(settings: Settings): ShareLimit {
+  return settings.shareLimit ?? DEFAULT_SHARE_LIMIT;
+}
+
+export function resolveShareEnd(limit: ShareLimit, now: number) {
+  const span = SHARE_LIMIT_MS[limit];
+  return span === undefined ? null : now + span;
+}
 
 export interface Settings {
   defaultProvider: string;
@@ -49,6 +67,7 @@ export interface Settings {
   watchdogMaxGapHours?: number;
   taskCapacity?: number | null;
   placementPolicies?: string[];
+  shareLimit?: ShareLimit;
 }
 
 export const SETTINGS_KEYS = [
@@ -76,6 +95,7 @@ export const SETTINGS_KEYS = [
   'watchdogMaxGapHours',
   'taskCapacity',
   'placementPolicies',
+  'shareLimit',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -89,6 +109,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'fastMode',
   'agentFastModes',
   'delegationLimit',
+  'shareLimit',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -139,6 +160,7 @@ const DEFAULT_SETTINGS: Settings = {
   watchdogMaxGapHours: WATCHDOG_DEFAULTS.maxGapHours,
   taskCapacity: null,
   placementPolicies: [],
+  shareLimit: DEFAULT_SHARE_LIMIT,
 };
 
 export function createSettings(): Settings {

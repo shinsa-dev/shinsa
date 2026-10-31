@@ -253,11 +253,6 @@ describe('the tunnel entry point', () => {
         } as unknown as ShareChannel;
       },
       closeChannel: (channel: ShareChannel) => channel.close(),
-      preview: () => {
-        throw new Error('unused');
-      },
-      previewDiff: () => Promise.reject(new Error('unused')),
-      previewCode: () => Promise.reject(new Error('unused')),
     } as unknown as ShareLinks;
     const { tunnel, port, plane } = await start({ shares });
     expect((await tunnel('/share?id=s1')).status).toBe(403);

@@ -285,7 +285,7 @@ async function createPreviewShare(
   if (!seeded) return null;
   await normalizeSeedRemote(studio.engine, seeded);
   const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
-  if (!task.share) await studio.engine.dispatch({ type: 'task.share', taskId: task.id });
+  if (!task.share) await studio.engine.dispatch({ type: 'task.share', taskId: task.id, limit: 'none' });
   await studio.engine.dispatch({ type: 'share.record', taskId: task.id, url });
   return { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
 }

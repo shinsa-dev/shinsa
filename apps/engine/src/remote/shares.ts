@@ -7,8 +7,6 @@ import {
   parseUnifiedDiff,
   type Repo,
   resolveSharedTask,
-  resolveSharePreviewCodeApiPath,
-  resolveSharePreviewDiffApiPath,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_BYTES,
@@ -18,13 +16,11 @@ import {
   type SharedTask,
   type ShareFileType,
   type ShareLiveView,
-  type SharePreview,
   serializeBase64Url,
   serializeShareUrl,
   type Task,
 } from '@shinsa/core';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
-import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 import { EffectError } from '../runtime/failures.ts';
@@ -60,12 +56,6 @@ export interface ShareGitHub {
   readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
 }
 
-export interface SharePreviewer {
-  preview: (taskId: string) => SharePreview;
-  previewDiff: (taskId: string) => Promise<string>;
-  previewCode: (taskId: string) => Promise<string>;
-}
-
 export interface SharedCode {
   files: Record<string, string>;
 }
@@ -74,7 +64,7 @@ export interface ShareEffects {
   link: (taskId: string, context: EffectContext) => Promise<void>;
 }
 
-export interface ShareLinks extends SharePreviewer {
+export interface ShareLinks {
   acceptsShare: (shareId: string) => boolean;
   openChannel: (peer: ChannelPeer, shareId: string) => ShareChannel;
   closeChannel: (channel: ShareChannel) => void;
@@ -117,33 +107,6 @@ function createRandom(bytes: number) {
 
 function isListed(item: SharedTask['evidence'][number], files: Record<string, string>) {
   return !item.uri.startsWith(SHARED_EVIDENCE_PREFIX) || item.id in files;
-}
-
-export function createSharePreviewRoutes(shares: SharePreviewer): ApiRoute[] {
-  return [
-    {
-      method: 'GET',
-      pattern: /^\/api\/tasks\/([^/]+)\/share\/preview$/,
-      respond: ([, taskId = '']) =>
-        Promise.resolve(taskId).then((id) => Response.json(shares.preview(decodeURIComponent(id)))),
-    },
-    {
-      method: 'GET',
-      pattern: /^\/api\/tasks\/([^/]+)\/share\/preview\/diff$/,
-      respond: async ([, taskId = '']) =>
-        new Response(await shares.previewDiff(decodeURIComponent(taskId)), {
-          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
-        }),
-    },
-    {
-      method: 'GET',
-      pattern: /^\/api\/tasks\/([^/]+)\/share\/preview\/code$/,
-      respond: async ([, taskId = '']) =>
-        new Response(await shares.previewCode(decodeURIComponent(taskId)), {
-          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
-        }),
-    },
-  ];
 }
 
 function createTextFile(id: string, version: string, bytes: Uint8Array<ArrayBuffer>): LiveFile | null {
@@ -217,6 +180,7 @@ export class Shares implements ShareEffects, ShareLinks {
     const instanceId = this.#selectInstanceId();
     if (!instanceId) return null;
     for (const task of Object.values(this.#engine.state.tasks)) {
+      if ((task.share?.endsAt ?? Number.POSITIVE_INFINITY) <= this.#now()) continue;
       const link = parseShareUrl(task.share?.url ?? null);
       if (link?.shareId === shareId && link.instanceId === instanceId)
         return { taskId: task.id, key: link.key };
@@ -257,42 +221,6 @@ export class Shares implements ShareEffects, ShareLinks {
             key: serializeBase64Url(this.#random(SHARE_KEY_BYTES)),
           });
     await this.#engine.dispatch({ type: 'share.record', taskId, url }, { id: `${context.key}:share.record` });
-  }
-
-  preview(taskId: string): SharePreview {
-    const task = this.#findTask(taskId);
-    const { shared } = this.#resolveShared(task);
-    const files: Record<string, string> = {};
-    for (const item of shared.evidence) {
-      if (!item.uri.startsWith(SHARED_EVIDENCE_PREFIX)) continue;
-      const original = this.#engine.state.evidence[item.id];
-      if (original && this.#selectEvidencePath(item.id)) files[item.id] = original.uri;
-    }
-    if (shared.code) {
-      files[SHARE_DIFF_FILE] = resolveSharePreviewDiffApiPath(taskId);
-      if (task.pullRequest?.headSha) files[SHARE_CODE_FILE] = resolveSharePreviewCodeApiPath(taskId);
-    }
-    return {
-      shared: { ...shared, evidence: shared.evidence.filter((item) => isListed(item, files)) },
-      files,
-      updatedAt: this.#now(),
-    };
-  }
-
-  previewDiff(taskId: string) {
-    return this.#readPreviewFile(taskId, SHARE_DIFF_FILE);
-  }
-
-  previewCode(taskId: string) {
-    return this.#readPreviewFile(taskId, SHARE_CODE_FILE);
-  }
-
-  async #readPreviewFile(taskId: string, fileId: string) {
-    const task = this.#findTask(taskId);
-    const { shared, repo } = this.#resolveShared(task);
-    const file = (await this.#listCodeFiles(shared, task, repo)).find((candidate) => candidate.id === fileId);
-    if (!file) throw new DomainError('share_no_code', 'This task shares no code.');
-    return new TextDecoder().decode(await file.read());
   }
 
   async resolveLive(taskId: string): Promise<LiveShare> {

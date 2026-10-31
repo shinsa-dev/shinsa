@@ -18,6 +18,7 @@ import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { RemoteAccessSettings } from '@/components/settings/remote-access.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
+import { SharingSettings } from '@/components/settings/sharing.tsx';
 import { StatisticsRange, StatisticsSettings } from '@/components/settings/stats/index.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
@@ -72,6 +73,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
           {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
+          {!isRemoteBuild() && <SharingSettings settings={state.settings} />}
           <UpdateSettings />
           <SetupSettings />
         </>

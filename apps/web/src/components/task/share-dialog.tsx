@@ -1,4 +1,4 @@
-import type { Task } from '@shinsa/core';
+import type { ShareLimit, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
@@ -12,26 +12,40 @@ import {
 import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { SelectField } from '@/components/controls/select-field.tsx';
+import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { useTask } from '@/lib/connection/selectors.ts';
+import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   closeShareDialog,
+  closeUnshareConfirm,
+  listShareLimitItems,
+  openUnshareConfirm,
+  resolveShareLimitChoice,
   resolveShareView,
   SHARE_DESCRIPTION,
+  SHARE_LIMIT_TITLE,
   SHARE_NEEDS_REMOTE,
   SHARE_TITLE,
   type ShareView,
   shareTask,
+  UNSHARE_DESCRIPTION,
+  UNSHARE_TITLE,
   unshareTask,
   useShareDialog,
+  useUnshareConfirm,
 } from '@/lib/share/dialog.ts';
-import { navigate, resolveSharePreviewPath } from '@/router.ts';
+import { navigate } from '@/router.ts';
 
-function openPage(path: string) {
-  closeShareDialog();
-  navigate(path);
+function ShareLink({ url }: { url: string }) {
+  return (
+    <div className='relative w-full'>
+      <Input readOnly value={url} aria-label='Share link' className='selectable pr-8' />
+      <CopyButton text={url} className='absolute top-1/2 right-0.5 -translate-y-1/2' />
+    </div>
+  );
 }
 
 function ShareBody({ view }: { view: ShareView }) {
@@ -49,68 +63,102 @@ function ShareBody({ view }: { view: ShareView }) {
         </p>
       );
     case 'shared':
-      return (
-        <div className='flex w-full items-center gap-2'>
-          <Input readOnly value={view.url} aria-label='Share link' className='selectable flex-1' />
-          <CopyButton text={view.url} />
-        </div>
-      );
+      return <ShareLink url={view.url} />;
   }
 }
 
-function ShareActions({ task, view }: { task: Task; view: ShareView }) {
+function ShareLimitRow({
+  task,
+  limit,
+  onChange,
+}: {
+  task: Task;
+  limit: ShareLimit;
+  onChange: (limit: ShareLimit) => void;
+}) {
+  return (
+    <div className='flex items-center justify-between gap-3'>
+      <span className='text-fg-3 text-xs'>{SHARE_LIMIT_TITLE}</span>
+      <SelectField
+        label={SHARE_LIMIT_TITLE}
+        items={listShareLimitItems(task)}
+        value={limit}
+        onValueChange={onChange}
+      />
+    </div>
+  );
+}
+
+function ShareActions({ task, view, limit }: { task: Task; view: ShareView; limit: ShareLimit }) {
   const [busy, setBusy] = React.useState(false);
-  const act = async (send: (task: Task) => Promise<unknown>) => {
+  const share = async () => {
     setBusy(true);
-    await send(task);
+    await shareTask(task, limit);
     setBusy(false);
   };
-  const preview = (
-    <Button variant='secondary' onClick={() => openPage(resolveSharePreviewPath(task))}>
-      Preview
-    </Button>
-  );
   if (view.kind === 'unpaired') {
     return (
-      <>
-        {preview}
-        <Button onClick={() => openPage(resolveSettingsPath('general', 'Remote access'))}>
-          Open Settings
-        </Button>
-      </>
+      <Button
+        onClick={() => {
+          closeShareDialog();
+          navigate(resolveSettingsPath('general', 'Remote access'));
+        }}
+      >
+        Open Settings
+      </Button>
     );
   }
   if (view.kind === 'off') {
     return (
-      <>
-        {preview}
-        <Button loading={busy} onClick={() => void act(shareTask)}>
-          Share
-        </Button>
-      </>
+      <Button loading={busy} onClick={() => void share()}>
+        Share
+      </Button>
     );
   }
   return (
     <>
-      <Button variant='secondary' loading={busy} onClick={() => void act(unshareTask)}>
-        Stop sharing
+      <Button variant='secondary' onClick={() => openUnshareConfirm(task.id)}>
+        {UNSHARE_TITLE}
       </Button>
-      {view.kind === 'failed' && (
-        <Button loading={busy} onClick={() => void act(shareTask)}>
+      {view.kind === 'failed' ? (
+        <Button loading={busy} onClick={() => void share()}>
           Try again
         </Button>
+      ) : (
+        <DialogClose render={<Button />}>Done</DialogClose>
       )}
-      {view.kind !== 'failed' && preview}
-      {view.kind === 'shared' && <DialogClose render={<Button />}>Done</DialogClose>}
+    </>
+  );
+}
+
+function ShareContent({ task }: { task: Task }) {
+  const { snapshot } = useRemoteAccess();
+  const settings = useShinsaSelector((state) => state.settings);
+  const view = resolveShareView(task, snapshot);
+  const [picked, setPicked] = React.useState<ShareLimit | null>(null);
+  const limit =
+    task.share?.limit ?? picked ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
+  const changeLimit = (next: ShareLimit) => {
+    setPicked(next);
+    if (task.share) void shareTask(task, next);
+  };
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{SHARE_TITLE}</DialogTitle>
+        <DialogDescription>{SHARE_DESCRIPTION}</DialogDescription>
+      </DialogHeader>
+      <ShareBody view={view} />
+      {view.kind !== 'unpaired' && <ShareLimitRow task={task} limit={limit} onChange={changeLimit} />}
+      <DialogFooter>
+        <ShareActions task={task} view={view} limit={limit} />
+      </DialogFooter>
     </>
   );
 }
 
 export function ShareDialog() {
-  const taskId = useShareDialog();
-  const task = useTask(taskId);
-  const { snapshot } = useRemoteAccess();
-  const view = task ? resolveShareView(task, snapshot) : null;
+  const task = useTask(useShareDialog());
   return (
     <Dialog
       open={Boolean(task)}
@@ -118,14 +166,31 @@ export function ShareDialog() {
         if (!next) closeShareDialog();
       }}
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{SHARE_TITLE}</DialogTitle>
-          <DialogDescription>{SHARE_DESCRIPTION}</DialogDescription>
-        </DialogHeader>
-        {view && <ShareBody view={view} />}
-        <DialogFooter>{task && view && <ShareActions task={task} view={view} />}</DialogFooter>
-      </DialogContent>
+      <DialogContent>{task && <ShareContent task={task} />}</DialogContent>
     </Dialog>
+  );
+}
+
+export function UnshareConfirm() {
+  const taskId = useUnshareConfirm();
+  const task = useTask(taskId);
+  const confirming = React.useRef<Task | null>(null);
+  if (task) confirming.current = task;
+  return (
+    <ConfirmDialog
+      control={{
+        open: Boolean(task),
+        onOpenChange: (open) => {
+          if (!open) closeUnshareConfirm();
+        },
+        onOpenChangeComplete: () => undefined,
+      }}
+      title={`${UNSHARE_TITLE}?`}
+      body={UNSHARE_DESCRIPTION}
+      action={UNSHARE_TITLE}
+      onConfirm={() => {
+        if (confirming.current) void unshareTask(confirming.current);
+      }}
+    />
   );
 }

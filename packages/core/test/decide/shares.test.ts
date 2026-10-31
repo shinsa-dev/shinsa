@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseUserCommand } from '../../src/index.ts';
+import { DAY_MS, HOUR_MS, parseUserCommand } from '../../src/index.ts';
 import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
 const URL = 'https://app.shinsa.dev/share/inst/AAAAAAAAAAAAAAAAAAAAAA#key';
@@ -13,7 +13,12 @@ describe('sharing a task', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
-    expect(harness.task(taskId).share).toEqual({ at: harness.now, url: null });
+    expect(harness.task(taskId).share).toEqual({
+      at: harness.now,
+      url: null,
+      limit: 'until_done',
+      endsAt: null,
+    });
     expect(links(harness, taskId)).toBe(1);
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'you',
@@ -65,6 +70,12 @@ describe('sharing a task', () => {
       type: 'task.share',
       taskId: 't1',
     });
+    expect(parseUserCommand({ type: 'task.share', taskId: 't1', limit: 'day' })).toEqual({
+      type: 'task.share',
+      taskId: 't1',
+      limit: 'day',
+    });
+    expect(() => parseUserCommand({ type: 'task.share', taskId: 't1', limit: 'forever' })).toThrow();
     expect(parseUserCommand({ type: 'task.unshare', taskId: 't1' })).toEqual({
       type: 'task.unshare',
       taskId: 't1',
@@ -132,5 +143,76 @@ describe('stopping sharing', () => {
     ]);
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({ text: 'Stopped sharing this task' });
     expect(harness.send({ type: 'task.unshare', taskId }).events).toEqual([]);
+  });
+});
+
+describe('how long a task is shared', () => {
+  test('by default until the task finishes, then sharing stops by itself', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.share', taskId });
+    harness.send({ type: 'share.record', taskId, url: URL });
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.task(taskId).share).toBeNull();
+    expect(
+      harness
+        .task(taskId)
+        .activity.some((entry) => entry.text === 'Stopped sharing this task, since it finished')
+    ).toBe(true);
+  });
+
+  test('the setting picks the default, and a task can pick its own', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'settings.change', patch: { shareLimit: 'hour' } });
+    harness.send({ type: 'task.share', taskId });
+    expect(harness.task(taskId).share).toMatchObject({ limit: 'hour', endsAt: harness.now + HOUR_MS });
+    harness.send({ type: 'share.record', taskId, url: URL });
+    harness.send({ type: 'task.share', taskId, limit: 'day' });
+    expect(harness.task(taskId).share).toMatchObject({
+      url: URL,
+      limit: 'day',
+      endsAt: harness.now + DAY_MS,
+    });
+    expect(links(harness, taskId)).toBe(1);
+    expect(
+      harness.task(taskId).activity.filter((entry) => entry.text === 'Shared this task by link')
+    ).toHaveLength(1);
+    harness.send({ type: 'task.share', taskId, limit: 'none' });
+    expect(harness.task(taskId).share).toMatchObject({ limit: 'none', endsAt: null });
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.task(taskId).share?.url).toBe(URL);
+  });
+
+  test('a time limit ends sharing once it has passed, and not before', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.share', taskId, limit: 'hour' });
+    expect(harness.send({ type: 'share.expire', taskId }).events).toEqual([]);
+    harness.advance(HOUR_MS);
+    harness.send({ type: 'share.expire', taskId });
+    expect(harness.task(taskId).share).toBeNull();
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      actor: 'shinsa',
+      text: 'Stopped sharing this task, since its time ran out',
+    });
+    expect(harness.send({ type: 'share.expire', taskId }).events).toEqual([]);
+    expect(harness.send({ type: 'share.expire', taskId: 'missing' }).events).toEqual([]);
+  });
+
+  test('a finished task cannot be shared until it finishes, only for a time', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.cancel', taskId });
+    expect(() => harness.send({ type: 'task.share', taskId })).toThrow('Pick a time limit instead.');
+    harness.send({ type: 'task.share', taskId, limit: 'day' });
+    expect(harness.task(taskId).share?.limit).toBe('day');
+  });
+
+  test('only the human picks how long, in the settings too', () => {
+    const harness = createHarness();
+    expect(() =>
+      harness.send({ type: 'settings.change', patch: { shareLimit: 'none' } }, { onBehalf: true })
+    ).toThrow();
   });
 });

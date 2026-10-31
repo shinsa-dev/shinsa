@@ -12,7 +12,7 @@ import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { ForkDialog } from '@/components/task/fork-dialog.tsx';
-import { ShareDialog } from '@/components/task/share-dialog.tsx';
+import { ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { useCommandMenuOpen, writeCommandMenuOpen } from '@/lib/command/registry.ts';
@@ -34,7 +34,6 @@ import { AutomationPage } from '@/routes/automation.tsx';
 import { HomePage } from '@/routes/home.tsx';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { SettingsPage } from '@/routes/settings.tsx';
-import { SharePreviewPage } from '@/routes/share-preview.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { Prefetch } from '@/routes/task/prefetch.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
@@ -61,8 +60,6 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
       return <TaskPage state={state} taskId={route.reference} />;
     case 'automation':
       return <AutomationPage state={state} scheduleId={route.scheduleId} />;
-    case 'sharePreview':
-      return <SharePreviewPage state={state} reference={route.reference} />;
     case 'settings':
       return <SettingsPage state={state} />;
     case 'terminal':
@@ -87,7 +84,7 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
   const pages = [
     ...listHubViews(hubs.current, warm),
     ...tasks.current,
-    ...(route.name === 'automation' || route.name === 'sharePreview' ? [{ key, view, shownAt: 0 }] : []),
+    ...(route.name === 'automation' ? [{ key, view, shownAt: 0 }] : []),
   ];
   return (
     <>
@@ -186,6 +183,7 @@ function App({ route }: { route: PageRoute }) {
       <ErrorBoundary size='silent'>
         <ForkDialog />
         <ShareDialog />
+        <UnshareConfirm />
       </ErrorBoundary>
     </>
   );

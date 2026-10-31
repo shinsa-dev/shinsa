@@ -6,7 +6,6 @@ export type Route =
   | { name: 'home' }
   | { name: 'tasks' }
   | { name: 'task'; reference: string }
-  | { name: 'sharePreview'; reference: string }
   | { name: 'automation'; scheduleId: string }
   | { name: 'settings' }
   | { name: 'terminal' }
@@ -33,8 +32,6 @@ function parseSegment(pattern: RegExp, pathname: string) {
 export function parseRoute(pathname: string): Route {
   const reference = parseSegment(/^\/tasks\/([^/]+)$/, pathname);
   if (reference) return { name: 'task', reference };
-  const shared = parseSegment(/^\/tasks\/([^/]+)\/shared$/, pathname);
-  if (shared) return { name: 'sharePreview', reference: shared };
   const scheduleId = parseSegment(/^\/automations\/([^/]+)$/, pathname);
   if (scheduleId) return { name: 'automation', scheduleId };
   if (pathname === '/tasks') return { name: 'tasks' };
@@ -165,10 +162,6 @@ export function resolveTaskTarget(state: ShinsaState, taskId: string): TaskPathT
 
 export function resolveAutomationPath(scheduleId: string) {
   return `/automations/${encodeURIComponent(scheduleId)}`;
-}
-
-export function resolveSharePreviewPath(task: TaskPathTarget) {
-  return `/tasks/${encodeURIComponent(resolveTaskReference(task))}/shared`;
 }
 
 export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions = {}) {
