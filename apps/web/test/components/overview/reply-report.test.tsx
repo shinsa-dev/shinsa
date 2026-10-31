@@ -90,6 +90,29 @@ describe('the reply to your request on the Overview', () => {
     expect(view.getByText(/What I sent for one\./)).toBeTruthy();
   });
 
+  it('folds nothing after a reply to verdicts alone, and only the details when you sent no words', () => {
+    const verdicts = { text: '', comments: 0, at: NOW - 6_000 };
+    const bare = { ...answered('two', REPLY.headline, NOW - 5_000), requests: [verdicts] };
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_review',
+      iterations: [{ ...bare, reply: { ...REPLY, details: null } }],
+    });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'review' });
+    const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task);
+    expect(view.getByText(REPLY.headline)).toBeTruthy();
+    expect(view.queryByText('What you sent')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Expand what you sent' })).toBeNull();
+
+    view.unmount();
+    const detailed = createTask({ id: 'task-1', stage: 'awaiting_review', iterations: [bare] });
+    const again = renderOverview(createShinsaState({ tasks: [detailed], gates: [gate] }), detailed);
+    expect(again.getByText('Details')).toBeTruthy();
+    fireEvent.click(again.getByRole('button', { name: 'Expand the details' }));
+    expect(again.getByText('The section reads the remote access state.')).toBeTruthy();
+    expect(again.queryByText('What you sent')).toBeNull();
+  });
+
   it('lists a plan you asked to change with what you sent', () => {
     const task = createTask({
       id: 'task-1',

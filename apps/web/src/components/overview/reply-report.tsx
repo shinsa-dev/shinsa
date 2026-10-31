@@ -57,7 +57,6 @@ function PointList({ reply }: { reply: FixReply }) {
 }
 
 function SentText({ text }: { text: string }) {
-  if (!text) return null;
   return (
     <div className='flex flex-col gap-px'>
       <span className='text-2xs text-fg-2'>What you sent</span>
@@ -66,28 +65,33 @@ function SentText({ text }: { text: string }) {
   );
 }
 
+const MORE_TITLE = {
+  both: { label: 'the details', title: 'Details and what you sent' },
+  details: { label: 'the details', title: 'Details' },
+  sent: { label: 'what you sent', title: 'What you sent' },
+} as const;
+
 function ReplyMore({ task, iteration }: { task: Task; iteration: AnsweredIteration }) {
   const disclosure = useDisclosure(
     resolveTaskDisclosureId(task.id, 'overview', 'reply', iteration.id, 'more'),
     false
   );
   const details = iteration.reply.details;
+  const sent = describeRequestText(iteration);
+  if (!details && !sent) return null;
+  const more = MORE_TITLE[details && sent ? 'both' : details ? 'details' : 'sent'];
   return (
     <div className='flex flex-col gap-1.5'>
-      <DisclosureHeader
-        disclosure={disclosure}
-        label={details ? 'the details' : 'what you sent'}
-        className='gap-1.5 text-2xs text-fg-2'
-      >
+      <DisclosureHeader disclosure={disclosure} label={more.label} className='gap-1.5 text-2xs text-fg-2'>
         <span className='group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>
-          {details ? 'Details and what you sent' : 'What you sent'}
+          {more.title}
         </span>
         <DisclosureChevron />
       </DisclosureHeader>
       {disclosure.open && (
         <div className='flex flex-col gap-2'>
           {details && <Markdown text={details} className='text-fg-3 text-xs' />}
-          <SentText text={describeRequestText(iteration)} />
+          {sent && <SentText text={sent} />}
         </div>
       )}
     </div>
