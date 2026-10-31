@@ -81,6 +81,7 @@ function wake(decider: Decider, task: Task, monitor: Monitor) {
     phaseIndex: monitor.phaseIndex,
     monitorId: monitor.id,
     account: waited?.account ?? null,
+    continues: monitor.runId,
   });
 }
 

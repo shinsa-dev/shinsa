@@ -160,6 +160,7 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
       phaseIndex: run.phaseIndex ?? null,
       monitorId: run.monitorId ?? null,
       account: run.account ?? null,
+      continues: run.id,
     }
   );
   moveWatchCheck(decider, run.id, next.id);

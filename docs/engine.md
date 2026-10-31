@@ -3822,8 +3822,11 @@ Shutdown stops the forwarder after the effects, once no `claude` can still talk 
 
 *Boundary folds.* The Agent keeps one session for the task, but a step does not need the raw history of the steps
 before it. When the Agent's run resumes its session for a build phase, a fix or an operation (any purpose with a
-round brief, never planning; `resolveTurnFold` in `agents/turns.ts`), on the run's first attempt and with its own step
-prompt (never a restart, an answer or a delivery), with context management on its default (`fold`) on a provider whose capabilities include
+round brief, never planning, so a watchdog check in its watch session and a data source read fold the checks and reads
+before them too; `resolveTurnFold` in `agents/turns.ts`), on the run's first attempt and with its own step
+prompt (never a restart, an answer or a delivery), as a new step rather than one carrying on (core marks a run that
+continues another, after a recovery nudge, a `wait_for` wake-up or a usage-limit resume, with `Run.continues`, and
+that run never folds), with context management on its default (`fold`) on a provider whose capabilities include
 `folds` (Claude), the supervisor asks the session to fold. The session queues the fold for its session id
 (`EunoeLink.fold`) and releases it when the turn ends; on that session's next messages request that carries tools
 and has a turn before its own (never a token count, a side request without tools, or a thread with nothing to fold
@@ -3832,9 +3835,13 @@ the forwarder calls eunoe's `foldThread` at the latest turn, the step's own prom
 its prompt, the evidence and its reply, and the fold is saved in the thread state, which keeps the prefix the same for
 the rest of the step and the cache warm. In exchange the turn sends the round brief instead of the bare instruction
 (`resolveTurnPrompt` with `fold`): the request, the accepted plan and the earlier phases' hand-overs in full, without
-the house rules the session's first message still carries. So build phase 1 starts from the accepted plan rather than
+the house rules the session's first message still carries (an eunoe fold or cut keeps that message, so the check
+that decides whether a session still has its rules reads past eunoe's compaction notices and stops only at Claude
+Code's own summary). So build phase 1 starts from the accepted plan rather than
 the planning conversation, and a fix from the plan and the hand-overs rather than the whole build. A thread with
-nothing before its turn is left as it is.
+nothing before its turn is left as it is, and so is a step whose history is under 40,000 tokens (`FOLD_FLOOR_TOKENS`,
+`foldFloor`): there a fold would rewrite more of the cache than it saves, so the fold is dropped and the step reads its
+warm cache.
 
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it
 starts and passes it both as process environment and in the Agent SDK's flag-settings layer, which outranks the
@@ -3859,7 +3866,9 @@ the limit, which 1.3.0 wrote. The forwarder tells the session, which ends the tu
 recovery for that class starts a fresh session with the handoff instead of resuming the stuck one.
 
 *Notices.* eunoe compacts on the wire, so Claude Code reports nothing; the forwarder matches each request's log line
-to the sessions it serves (`thread` = `<session id>-<first turn>`) and writes a `compaction` notice with `by:
+to the session it serves by its main conversation, the thread of the session's first request that carries tools
+(`thread` = `<session id>-<first turn>`), so a subagent that shares the session id never sends the session a notice
+or ends it as stuck, and writes a `compaction` notice with `by:
 'eunoe'` for each request that moved the cut: `trigger: 'auto'` for a cut at the limit, `'fold'` for a budget fold
 or a boundary fold. Claude Code's own compactions keep their `compact_boundary` notice.
 

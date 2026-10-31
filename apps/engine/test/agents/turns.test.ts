@@ -235,6 +235,7 @@ describe('folding at a step boundary', () => {
       approxTokens: 1,
     };
     expect(folds(build, { plan: { ...resumed, handoff } })).toBe(false);
+    expect(folds(createRun({ role: 'agent', purpose: 'build', continues: 'run-0' }))).toBe(false);
   });
 
   test('a folded turn sends the round brief instead of the bare instruction, without the house rules it already has', () => {
@@ -249,5 +250,34 @@ describe('folding at a step boundary', () => {
     expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(
       'The plan in full.\n\nNow build phase 1 of 2.'
     );
+  });
+
+  test('an eunoe fold or cut keeps the session’s first message, so the house rules are not sent again; Claude Code’s own summary drops them', () => {
+    const rules = resolveHouseRules('agent');
+    const run = createRun({ id: 'run-3', sessionId: 'session-1', role: 'agent', purpose: 'build' });
+    const plan = createRun({
+      id: 'run-1',
+      sessionId: 'session-1',
+      role: 'agent',
+      purpose: 'plan',
+      startedAt: 1,
+    });
+    const build = createRun({
+      id: 'run-2',
+      sessionId: 'session-1',
+      role: 'agent',
+      purpose: 'build',
+      startedAt: 2,
+    });
+    const turn = context(run, [plan, build]);
+    turn.transcripts.record('run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const fold = { kind: 'compaction' as const, trigger: 'fold' as const, preTokens: null, summary: null };
+    turn.transcripts.record('run-2', { type: 'notice', notice: { ...fold, by: 'eunoe' as const } });
+    const prompt = `${rules}\n\nNow build phase 2 of 2.`;
+    const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 2 of 2.`;
+    const folded = 'The plan in full.\n\nNow build phase 2 of 2.';
+    expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(folded);
+    turn.transcripts.record('run-2', { type: 'notice', notice: { ...fold, trigger: 'auto' as const } });
+    expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(brief);
   });
 });

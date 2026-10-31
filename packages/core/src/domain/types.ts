@@ -516,6 +516,7 @@ export interface Run {
   resumePending?: boolean;
   continuations?: number[];
   monitorId?: string | null;
+  continues?: string;
   feedback?: string | null;
   usage?: RunUsage | null;
   meters?: RunMeter[];

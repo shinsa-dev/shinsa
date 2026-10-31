@@ -60,6 +60,7 @@ interface StartRunOptions {
   monitorId?: string | null;
   usageWaitId?: string | null;
   account?: RunAccount | null;
+  continues?: string | null;
 }
 
 interface KeptWaits {
@@ -323,6 +324,7 @@ export class Decider {
       ...(fork ? { fork } : {}),
       ...(options.feedback ? { feedback: options.feedback } : {}),
       ...(options.monitorId ? { monitorId: options.monitorId } : {}),
+      ...(options.continues ? { continues: options.continues } : {}),
       ...(options.usageWaitId ? { usageWaitId: options.usageWaitId } : {}),
       ...(account ? { account } : {}),
       ...resolveRoundStamp(task),

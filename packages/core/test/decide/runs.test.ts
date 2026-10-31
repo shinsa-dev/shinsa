@@ -18,7 +18,7 @@ describe('recovery', () => {
     const first = harness.activeRun(taskId);
     harness.send({ type: 'run.end', runId: first.id, outcome: 'completed', summary: null });
     const second = harness.activeRun(taskId);
-    expect(second).toMatchObject({ role: 'agent', purpose: 'plan' });
+    expect(second).toMatchObject({ role: 'agent', purpose: 'plan', continues: first.id });
     expect(second.sessionId).toBe('plan-1');
     expect(second.prompt).toContain('ended its turn without calling the hand-over tool');
     expect(harness.task(taskId).recoveries).toBe(1);

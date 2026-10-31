@@ -28,7 +28,13 @@ afterEach(async () => {
 function openServer(options: Partial<ConstructorParameters<typeof EunoeServer>[0]> = {}) {
   const upstream = startFakeAnthropic();
   const dir = join(createTempDir(), 'eunoe');
-  const server = new EunoeServer({ dir, upstream: upstream.url, window: SMALL_WINDOW, ...options });
+  const server = new EunoeServer({
+    dir,
+    upstream: upstream.url,
+    window: SMALL_WINDOW,
+    foldFloor: 0,
+    ...options,
+  });
   liveUpstream = upstream;
   liveServer = server;
   return { server, upstream, dir };
@@ -161,7 +167,7 @@ describe('EunoeServer', () => {
     await (await sendMessages(url, 'session-1', side)).text();
     expect(upstream.received[0]?.body.messages).toEqual(side.messages);
     const info = spyOn(log, 'info');
-    await (await sendMessages(url, 'session-1', createMessagesBody([]))).text();
+    await (await sendMessages(url, 'session-1', createMessagesBody([], 'Prompt 0'))).text();
     expect(info).toHaveBeenCalledWith('[Eunoe] Nothing to fold before this turn yet', expect.any(Object));
     info.mockRestore();
     const real = createMessagesBody([4_000, 4_000, 4_000], 'Now build phase 1.');
@@ -170,6 +176,38 @@ describe('EunoeServer', () => {
     expect(watched.notices).toEqual([
       { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
     ]);
+  });
+
+  test('a subagent sharing the session id never ends the session as stuck or folds its notices into the chat', async () => {
+    const { server } = openServer();
+    const url = await ensureUrl(server);
+    const watched = watchSession(server, 'session-1');
+    await (await sendMessages(url, 'session-1', createMessagesBody([10]))).text();
+    const subagent = createMessagesBody([100], 'y'.repeat(40_000));
+    subagent.messages[0] = { role: 'user', content: 'You are a subagent. Search the repository.' };
+    await (await sendMessages(url, 'session-1', subagent)).text();
+    expect(watched.stuck).toEqual([]);
+    expect(watched.notices).toEqual([]);
+    await (await sendMessages(url, 'session-1', createMessagesBody([100], 'y'.repeat(40_000)))).text();
+    expect(watched.stuck).toEqual(['session-1']);
+  });
+
+  test('a step whose history is too small to be worth a fold keeps its cache and drops the fold', async () => {
+    const { server, upstream } = openServer({ foldFloor: 5_000 });
+    const url = await ensureUrl(server);
+    const info = spyOn(log, 'info');
+    const body = createMessagesBody([1_000, 1_000]);
+    server.fold('session-1');
+    await (await sendMessages(url, 'session-1', body)).text();
+    expect(info).toHaveBeenCalledWith(
+      '[Eunoe] Too little before this turn to be worth a fold',
+      expect.any(Object)
+    );
+    expect(upstream.received[0]?.body.messages).toEqual(body.messages);
+    server.fold('session-1');
+    await (await sendMessages(url, 'session-1', createMessagesBody([1_000, 20_000]))).text();
+    expect(upstream.received[1]?.body.messages).not.toEqual(createMessagesBody([1_000, 20_000]).messages);
+    info.mockRestore();
   });
 
   test('a request log it cannot write is logged and the request still goes through', async () => {

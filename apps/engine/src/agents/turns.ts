@@ -140,7 +140,8 @@ export async function resolveTurnPlan(context: TurnContext): Promise<TurnPlan> {
 }
 
 function readBriefing(entry: ChatEntry, rules: string) {
-  if (entry.type === 'notice' && entry.notice.kind === 'compaction') return false;
+  if (entry.type === 'notice' && entry.notice.kind === 'compaction')
+    return entry.notice.by === 'eunoe' ? null : false;
   if (entry.type === 'user' && entry.from === 'shinsa' && entry.text.includes(rules)) return true;
   return null;
 }
@@ -178,6 +179,7 @@ export interface TurnFoldInput {
 
 export function resolveTurnFold({ run, plan, stepPrompt, firstAttempt, folds }: TurnFoldInput) {
   if (!folds || !stepPrompt || !firstAttempt || !plan.resume || plan.fork || plan.handoff) return false;
+  if (run.continues) return false;
   return run.role === 'agent' && needsRoundBrief(run);
 }
 

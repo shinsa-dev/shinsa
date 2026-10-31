@@ -25,6 +25,7 @@ export interface EunoeServerOptions {
   port?: number;
   window?: WindowLookup;
   tuning?: Partial<CoreConfig>;
+  foldFloor?: number;
 }
 
 type Entry = Record<string, unknown>;
@@ -32,6 +33,10 @@ type Entry = Record<string, unknown>;
 const STOPPING = 'Shinsa is stopping.';
 
 const IDLE_TIMEOUT_S = 255;
+
+const FOLD_FLOOR_TOKENS = 40_000;
+
+const CHARS_PER_TOKEN = 3.6;
 
 function resolveThreadFile(dir: string, key: string) {
   return join(dir, `${key.replace(/[^\w-]/g, '_')}.json`);
@@ -65,6 +70,10 @@ export function resolveCompactionNotice(entry: Entry): ChatNotice | null {
   };
 }
 
+function hasTools(body: Body) {
+  return Array.isArray(body.tools) && body.tools.length > 0;
+}
+
 export function isStuck(entry: Entry) {
   return typeof entry.stuck === 'object' && entry.stuck !== null && entry.fit === 'over';
 }
@@ -76,8 +85,10 @@ export class EunoeServer implements EunoeLink {
   readonly #window: WindowLookup;
   readonly #config: CoreConfig;
   readonly #store: ThreadStore;
+  readonly #foldFloor: number;
   readonly #watchers = new Map<string, Set<EunoeWatcher>>();
   readonly #folds = new Map<string, object>();
+  readonly #mainThreads = new Map<string, string>();
   #server: ReturnType<typeof Bun.serve> | null = null;
   #stopped = false;
 
@@ -88,6 +99,7 @@ export class EunoeServer implements EunoeLink {
     this.#window = options.window ?? createWindowLookup();
     this.#config = { ...CORE_DEFAULTS, mode: 'compact', ...options.tuning };
     this.#store = createFileStore(join(this.dir, 'threads'));
+    this.#foldFloor = options.foldFloor ?? FOLD_FLOOR_TOKENS;
   }
 
   ensure(): Promise<EunoeStatus> {
@@ -157,13 +169,25 @@ export class EunoeServer implements EunoeLink {
       window,
       mayCompact,
     });
+    if (threadId && result.threadKey && hasTools(body) && !this.#mainThreads.has(threadId)) {
+      this.#mainThreads.set(threadId, result.threadKey);
+    }
     if (!folded) return result;
     const actions = [...(result.note.actions ?? []), 'fold'];
     return { ...result, note: { ...result.note, compacted: true, actions } };
   }
 
   #foldPending(threadId: string, body: Body) {
-    if (!this.#folds.has(threadId) || !Array.isArray(body.tools) || body.tools.length === 0) return false;
+    if (!this.#folds.has(threadId) || !hasTools(body)) return false;
+    const estimate = JSON.stringify(body.messages).length / CHARS_PER_TOKEN;
+    if (estimate < this.#foldFloor) {
+      this.#folds.delete(threadId);
+      log.info('[Eunoe] Too little before this turn to be worth a fold', {
+        threadId,
+        estimate: Math.round(estimate),
+      });
+      return false;
+    }
     try {
       foldThread({ store: this.#store, threadId, messages: body.messages }, { at: 'latest' });
     } catch (error) {
@@ -187,7 +211,7 @@ export class EunoeServer implements EunoeLink {
     const stuck = isStuck(entry);
     if (!notice && !stuck) return;
     for (const [sessionId, watchers] of this.#watchers) {
-      if (!thread.startsWith(`${sessionId}-`)) continue;
+      if (this.#mainThreads.get(sessionId) !== thread) continue;
       for (const watcher of watchers) {
         if (notice) watcher.notice(notice);
         if (stuck) watcher.stuck();

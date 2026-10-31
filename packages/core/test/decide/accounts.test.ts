@@ -276,6 +276,7 @@ describe('usage-limit waits', () => {
       purpose: 'plan',
       sessionId: 'plan-session',
       usageWaitId: waitId,
+      continues: run.id,
     });
     expect(resumed.prompt).toContain('The limit has reset.');
     expect(resumed.prompt?.startsWith(run.rolePrompt ?? '')).toBe(true);

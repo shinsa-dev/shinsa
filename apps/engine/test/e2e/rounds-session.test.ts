@@ -164,7 +164,7 @@ async function openWorld() {
   let calls = 0;
   const fake = createFakeQuery((params) => agentTurn(params, calls++, home, turns));
   upstream = startFakeAnthropic();
-  eunoe = new EunoeServer({ dir, upstream: upstream.url, window: () => Promise.resolve(4_000) });
+  eunoe = new EunoeServer({ dir, upstream: upstream.url, window: () => Promise.resolve(4_000), foldFloor: 0 });
   const provider = createClaudeProvider(createFakeRuntime(fake.query), { env: {}, home, eunoe });
   world = await World.create({ checks: ['true'], providers: () => new ProviderRegistry([provider]) });
   return { w: world, turns, dir };

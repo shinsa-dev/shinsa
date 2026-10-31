@@ -464,6 +464,7 @@ executable changed line (`selectMeasuredCoverage`).
 | `failure?` | `RunFailure` | class (13), message, code, retryable, `resetAt`, `account` (a Claude account), `login` (a provider's own sign-in: `{ provider, email }`) |
 | `resumePending?`, `continuations?` | | restart continuation and its loop guard |
 | `monitorId?`, `usageWaitId?` | | the wait it was woken from |
+| `continues?` | | the run whose step it carries on (a recovery nudge, a `wait_for` wake-up, a usage-limit resume); such a run never folds the turns before it |
 | `feedback?` | string \| null | your words it carries |
 | `usage?`, `meters?` | | tokens and cost; per attempt (`RunMeter`), its window (`account:<id>` or `provider:<id>`), time span, usage and the weekly readings taken at its start and end, which teach its window's rate; its share of the weekly window is its cost at that rate (`resolveUsageShares`) |
 | `silence?` | `RunSilence` | the quiet-run mark, snooze and dismissal |

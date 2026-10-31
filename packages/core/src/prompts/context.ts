@@ -108,6 +108,19 @@ export function describePlan(task: Task) {
   );
 }
 
+export function describePlanDetail(task: Task) {
+  const document = task.plan?.document;
+  if (!document) return '';
+  const behaviour = document.behaviour.map((item) => `- ${item}`);
+  const files = document.files.map((file) => `- ${file.path}: ${file.change}`);
+  return [
+    behaviour.length > 0 ? ['How it behaves after the change:', ...behaviour].join('\n') : '',
+    files.length > 0 ? ['The files it changes:', ...files].join('\n') : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export function describeGoal(task: Task) {
   const document = task.plan?.document;
   if (!document) return '';
