@@ -23,6 +23,8 @@ const STUDIO: RemoteInstance = {
   online: true,
   lastSeenAt: NOW,
   createdAt: 0,
+  owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+  role: 'owner',
 };
 
 async function createDevice(machineKey: string): Promise<EnrolledDevice> {
@@ -30,6 +32,15 @@ async function createDevice(machineKey: string): Promise<EnrolledDevice> {
 }
 
 describe('a machine in the dashboard', () => {
+  it('names the owner of a machine someone shared with you', () => {
+    const shared: RemoteInstance = {
+      ...STUDIO,
+      owner: { id: '3', login: 'lee', name: null, avatarUrl: null },
+      role: 'member',
+    };
+    expect(describeMachine(shared, null, NOW).access).toBe('Shared by @lee · Not added on this device');
+  });
+
   it('says whether it is online and whether this browser has it in its dashboard', async () => {
     const device = await createDevice('key');
     expect(describeMachine(STUDIO, device, NOW)).toMatchObject({

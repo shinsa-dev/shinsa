@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import type { MachineCredentials } from '@shinsa/core';
+import type { HeartbeatResponse, MachineCredentials, RemoteAccess } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { RevokedError } from '../../src/remote/control.ts';
 import {
@@ -28,25 +28,37 @@ const FAST: TunnelTimings = {
   backoffMs: [2],
 };
 
+const ACCESS: RemoteAccess = {
+  owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+  members: [{ user: { id: '7', login: 'kai', name: null, avatarUrl: null }, addedAt: 3 }],
+};
+
+const ANSWER = { ok: true, ...ACCESS } as HeartbeatResponse;
+
 interface FakeConnector extends TunnelConnector {
   exit: () => void;
   stopped: boolean;
 }
 
 function createWorld(
-  options: { heartbeat?: () => Promise<void>; ping?: () => boolean; offline?: () => Promise<void> } = {}
+  options: {
+    heartbeat?: () => Promise<HeartbeatResponse>;
+    ping?: () => boolean;
+    offline?: () => Promise<void>;
+  } = {}
 ) {
   const connectors: FakeConnector[] = [];
   const heartbeats: unknown[] = [];
   const offline: string[] = [];
   const statuses: TunnelStatus[] = [];
   const revoked: number[] = [];
+  const accesses: RemoteAccess[] = [];
   const failConnects = { count: 0 };
   const supervisor = new TunnelSupervisor({
     control: {
       recordHeartbeat: (token, request) => {
         heartbeats.push({ token, request });
-        return options.heartbeat ? options.heartbeat() : Promise.resolve();
+        return options.heartbeat ? options.heartbeat() : Promise.resolve(ANSWER);
       },
       recordOffline: (token) => {
         offline.push(token);
@@ -80,10 +92,11 @@ function createWorld(
     localUrl: () => 'http://127.0.0.1:7446',
     version: '1.0.0',
     onRevoked: () => revoked.push(1),
+    onAccess: (access) => accesses.push(access),
     timings: FAST,
   });
   supervisor.subscribe((status) => statuses.push(status));
-  return { supervisor, connectors, heartbeats, offline, statuses, revoked, failConnects };
+  return { supervisor, connectors, heartbeats, offline, statuses, revoked, failConnects, accesses };
 }
 
 async function until(condition: () => boolean) {
@@ -130,6 +143,25 @@ describe('the tunnel supervisor', () => {
     expect(seen).toEqual([]);
   });
 
+  test('hands on who has access from every heartbeat, and heartbeats on request', async () => {
+    const world = createWorld();
+    world.supervisor.start(CREDENTIALS);
+    await until(() => world.accesses.length > 0);
+    expect(world.accesses[0]).toEqual(ACCESS);
+    const before = world.heartbeats.length;
+    await world.supervisor.requestHeartbeat();
+    expect(world.heartbeats.length).toBeGreaterThan(before);
+    await world.supervisor.stop();
+  });
+
+  test('passes nothing on from a heartbeat answer that names no owner', async () => {
+    const world = createWorld({ heartbeat: () => Promise.resolve({ ok: true } as HeartbeatResponse) });
+    world.supervisor.start(CREDENTIALS);
+    await until(() => world.heartbeats.length >= 2);
+    expect(world.accesses).toEqual([]);
+    await world.supervisor.stop();
+  });
+
   test('restarts the connector after failed pings, and when cloudflared exits', async () => {
     let healthy = false;
     const world = createWorld({ ping: () => healthy });
@@ -149,7 +181,7 @@ describe('the tunnel supervisor', () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     let failHeartbeat = true;
     const world = createWorld({
-      heartbeat: () => (failHeartbeat ? Promise.reject(new Error('down')) : Promise.resolve()),
+      heartbeat: () => (failHeartbeat ? Promise.reject(new Error('down')) : Promise.resolve(ANSWER)),
     });
     world.failConnects.count = 2;
     world.supervisor.start(CREDENTIALS);
@@ -179,7 +211,7 @@ describe('the tunnel supervisor', () => {
     const world = createWorld({
       heartbeat: () => {
         calls += 1;
-        return calls > 1 ? Promise.reject(new RevokedError()) : Promise.resolve();
+        return calls > 1 ? Promise.reject(new RevokedError()) : Promise.resolve(ANSWER);
       },
     });
     world.supervisor.start(CREDENTIALS);
@@ -207,7 +239,7 @@ describe('the tunnel supervisor', () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const attempts: number[] = [];
     const supervisor = new TunnelSupervisor({
-      control: { recordHeartbeat: () => Promise.resolve(), recordOffline: () => Promise.resolve() },
+      control: { recordHeartbeat: () => Promise.resolve(ANSWER), recordOffline: () => Promise.resolve() },
       connect: () => {
         attempts.push(now);
         now += 30_000;

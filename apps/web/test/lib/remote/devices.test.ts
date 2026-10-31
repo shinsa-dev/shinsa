@@ -16,6 +16,7 @@ function createMemoryStore(): KeyValueStore & { values: Map<string, unknown> } {
       values.delete(key);
       return Promise.resolve();
     },
+    listKeys: () => Promise.resolve([...values.keys()]),
   };
 }
 
@@ -43,6 +44,24 @@ describe('the devices this browser enrolled', () => {
     memory.values.set('device:d', { instanceId: 'd', machineKey: 1, enrolledAt: 1, keys });
     for (const id of ['a', 'b', 'c', 'd']) expect(await devices.selectDevice(id)).toBeNull();
   });
+
+  it('lists the devices still waiting for an answer, whatever else the store holds', async () => {
+    const keys = await createDeviceKeys();
+    const memory = createMemoryStore();
+    const devices = createDeviceStore(memory);
+    const waiting = {
+      instanceId: 'w',
+      machineKey: 'mk',
+      keys,
+      enrolledAt: 1,
+      waiting: { machineName: 'Studio' },
+    };
+    await devices.writeDevice(waiting);
+    await devices.writeDevice({ instanceId: 'a', machineKey: 'mk', keys, enrolledAt: 1 });
+    memory.values.set('other', waiting);
+    memory.values.set('device:broken', null);
+    expect(await devices.listWaitingDevices()).toEqual([waiting]);
+  });
 });
 
 describe('the IndexedDB store', () => {
@@ -51,6 +70,7 @@ describe('the IndexedDB store', () => {
     const store = createIndexedStore(fake.factory);
     await store.write('device:k3x9', { a: 1 });
     expect(await store.read('device:k3x9')).toEqual({ a: 1 });
+    expect(await store.listKeys()).toEqual(['device:k3x9']);
     await store.remove('device:k3x9');
     expect(await store.read('device:k3x9')).toBeUndefined();
     expect(fake.opened).toBe(1);

@@ -24,6 +24,8 @@ export interface ChannelOptions {
   machineKey: string;
   device: CryptoKeyPair;
   enrollSecret: string | null;
+  name?: string | null;
+  onPending?: () => void;
   openSocket?: (url: string) => WebSocket;
 }
 
@@ -277,11 +279,20 @@ export async function openRemoteChannel(options: ChannelOptions): Promise<Remote
       device,
       clientEphemeral,
     });
-  const hello = await createClientHello(options.device.publicKey, ephemeral.publicKey, enroll);
+  const hello = await createClientHello(
+    options.device.publicKey,
+    ephemeral.publicKey,
+    enroll,
+    options.name ?? null
+  );
   const socket = (options.openSocket ?? openBrowserSocket)(options.url);
   const channel = new RemoteChannel(socket, async (opened, text) => {
     const welcome = parseServerHello(text);
     if (welcome?.type === 'refused') throw new ChannelError(welcome.reason, true);
+    if (welcome?.type === 'pending') {
+      options.onPending?.();
+      return;
+    }
     if (!welcome) throw new ChannelError('Your machine answered the handshake with something else.');
     const session = await deriveClientSession({
       keys: {

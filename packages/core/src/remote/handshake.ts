@@ -15,9 +15,15 @@ export interface ClientHello {
   device: string;
   ephemeral: string;
   enroll: string | null;
+  name: string | null;
 }
 
-export type ServerHello = { type: 'welcome'; ephemeral: string } | { type: 'refused'; reason: string };
+export const DEVICE_NAME_LIMIT = 60;
+
+export type ServerHello =
+  | { type: 'welcome'; ephemeral: string }
+  | { type: 'pending' }
+  | { type: 'refused'; reason: string };
 
 export interface SessionKeys {
   send: CryptoKey;
@@ -60,12 +66,14 @@ export function parseClientHello(text: string): ClientHello | null {
   if (fields?.type !== 'hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   if (typeof fields.device !== 'string' || typeof fields.ephemeral !== 'string') return null;
   if (fields.enroll !== null && typeof fields.enroll !== 'string') return null;
+  const name = typeof fields.name === 'string' ? fields.name.trim().slice(0, DEVICE_NAME_LIMIT) : '';
   return {
     type: 'hello',
     version: REMOTE_PROTOCOL_VERSION,
     device: fields.device,
     ephemeral: fields.ephemeral,
     enroll: fields.enroll,
+    name: name || null,
   };
 }
 
@@ -73,6 +81,7 @@ export function parseServerHello(text: string): ServerHello | null {
   const fields = readFields(text);
   if (fields?.type === 'welcome' && typeof fields.ephemeral === 'string')
     return { type: 'welcome', ephemeral: fields.ephemeral };
+  if (fields?.type === 'pending') return { type: 'pending' };
   if (fields?.type === 'refused' && typeof fields.reason === 'string')
     return { type: 'refused', reason: fields.reason };
   return null;
@@ -168,7 +177,8 @@ export async function verifyEnrollProof(
 export async function createClientHello(
   device: CryptoKey,
   ephemeral: CryptoKey,
-  enroll: string | null
+  enroll: string | null,
+  name: string | null = null
 ): Promise<ClientHello> {
   return {
     type: 'hello',
@@ -176,5 +186,6 @@ export async function createClientHello(
     device: await serializePublicKey(device),
     ephemeral: await serializePublicKey(ephemeral),
     enroll,
+    name,
   };
 }

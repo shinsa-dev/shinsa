@@ -34,5 +34,6 @@ export function createIndexedStore(factory: IDBFactory): KeyValueStore {
     remove: async (key) => {
       await run('readwrite', (objects) => objects.delete(key));
     },
+    listKeys: async () => (await run('readonly', (objects) => objects.getAllKeys())).map(String),
   };
 }

@@ -1,11 +1,15 @@
 import {
   type HeartbeatRequest,
+  type HeartbeatResponse,
+  type InviteCreateResponse,
   type PairPollRequest,
   type PairPollResponse,
   type PairStartRequest,
   type PairStartResponse,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
+  type RemoteMember,
+  type RemoteUser,
 } from '@shinsa/core';
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -25,7 +29,7 @@ export class ControlError extends Error {
   readonly status: number;
 
   constructor(path: string, status: number) {
-    super(`app.shinsa.dev answered ${path} with status ${status}.`);
+    super(`Shinsa Cloud answered ${path} with status ${status}.`);
     this.name = 'ControlError';
     this.status = status;
   }
@@ -68,8 +72,28 @@ export class ControlClient {
     return this.#post<PairPollResponse>(REMOTE_PATHS.pairPoll, request, null);
   }
 
-  async recordHeartbeat(machineToken: string, request: HeartbeatRequest) {
-    await this.#post(REMOTE_PATHS.heartbeat, request, machineToken);
+  recordHeartbeat(machineToken: string, request: HeartbeatRequest) {
+    return this.#post<HeartbeatResponse>(REMOTE_PATHS.heartbeat, request, machineToken);
+  }
+
+  requestInvite(machineToken: string) {
+    return this.#post<InviteCreateResponse>(REMOTE_PATHS.machineInvites, {}, machineToken);
+  }
+
+  async requestInviteRemoval(machineToken: string) {
+    await this.#post(REMOTE_PATHS.machineInviteRemove, {}, machineToken);
+  }
+
+  requestRequester(machineToken: string, userId: string) {
+    return this.#post<RemoteUser>(REMOTE_PATHS.machineRequester, { userId }, machineToken);
+  }
+
+  requestMemberAddition(machineToken: string, userId: string) {
+    return this.#post<RemoteMember>(REMOTE_PATHS.machineMemberAdd, { userId }, machineToken);
+  }
+
+  async requestMemberRemoval(machineToken: string, userId: string) {
+    await this.#post(REMOTE_PATHS.machineMemberRemove, { userId }, machineToken);
   }
 
   async recordOffline(machineToken: string) {

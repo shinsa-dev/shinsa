@@ -14,7 +14,7 @@ import { type AccountActions, AccountsGroup } from '@/components/settings/accoun
 import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
-import { MachinesSettings } from '@/components/settings/machines.tsx';
+import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
@@ -44,6 +44,7 @@ import {
   createSampleMachineServices,
   createSampleRemote,
   createSampleRemoteActions,
+  SAMPLE_MACS,
 } from './sample-remote.ts';
 import { createSampleSlack } from './sample-slack.ts';
 import { createSampleVersions } from './sample-versions.ts';
@@ -388,7 +389,7 @@ export function SettingsSpecimens() {
   const [versions] = React.useState(createSampleVersions);
   const [memory] = React.useState(() => createMemoryScene(now));
   const [remote] = React.useState(() => createSampleRemote(now));
-  const [remoteActions] = React.useState(() => createSampleRemoteActions(now));
+  const [remoteActions] = React.useState(() => createSampleRemoteActions());
   const [machines] = React.useState(() => createSampleMachineServices(now));
   const [slack] = React.useState(() => createSampleSlack(now));
   const settings = createSettings();
@@ -418,19 +419,27 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      <Specimen label='MachinesSettings · on app.shinsa.dev: every machine of the account, two in this dashboard'>
+      <Specimen label='MachinesSettings · in Shinsa Cloud: your machines and one shared with you, three in this dashboard'>
         <div className='w-full max-w-xl'>
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
           </RemoteServicesContext.Provider>
         </div>
       </Specimen>
-      <Specimen label='PolicySettings · on app.shinsa.dev: which work runs on which machine, in plain English'>
+      <Specimen label='MachineAccessRequests · in Shinsa Cloud: requests waiting on a machine, accepted from any device'>
+        <div className='w-full max-w-xl'>
+          <MachineAccessRequests
+            machines={[{ id: 'k3x9', name: 'Studio', remote: remote[2]?.snapshot ?? null }]}
+            instances={SAMPLE_MACS}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='PolicySettings · in Shinsa Cloud: which work runs on which machine, in plain English'>
         <div className='w-full max-w-xl'>
           <PolicySettings machines={SAMPLE_POLICY_MACHINES} actions={SAMPLE_POLICY_ACTIONS} />
         </div>
       </Specimen>
-      <Specimen label='TaskFacts · on app.shinsa.dev with several machines, each task shows the machine it runs on'>
+      <Specimen label='TaskFacts · in Shinsa Cloud with several machines, each task shows the machine it runs on'>
         <FleetFactsSpecimen now={now} />
       </Specimen>
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>

@@ -118,7 +118,7 @@ export function SignInPrompt({ returnPath, error }: { returnPath: string; error:
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
         Reach the Shinsa on your machine from any browser. Use the GitHub account you paired your machine
-        with.
+        with, or the one you were invited with.
       </RemoteHero>
       <RemoteBenefits />
       {error && (
