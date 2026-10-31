@@ -20,7 +20,16 @@ import {
   respondSignInToken,
   respondSignOut,
 } from './session.ts';
-import type { CloudConfig, CloudWorld, Fetch } from './world.ts';
+import {
+  NOINDEX,
+  respondFilesCheck,
+  respondFileUpload,
+  respondPublicationRemove,
+  respondPublicationWrite,
+  respondShare,
+  respondShareFile,
+} from './shares.ts';
+import type { CloudConfig, CloudWorld, Fetch, FileBucket } from './world.ts';
 
 type Handler = (
   request: Request,
@@ -117,6 +126,36 @@ const ROUTES: Route[] = [
     pattern: exact(REMOTE_PATHS.machineRemove),
     respond: (request, _url, _match, world) => respondMachineRemove(request, world),
   },
+  {
+    method: 'POST',
+    pattern: new RegExp(`^${REMOTE_PATHS.machinePublications}/${SEGMENT}$`),
+    respond: (request, _url, match, world) => respondPublicationWrite(request, match[1] ?? '', world),
+  },
+  {
+    method: 'POST',
+    pattern: new RegExp(`^${REMOTE_PATHS.machinePublications}/${SEGMENT}/remove$`),
+    respond: (request, _url, match, world) => respondPublicationRemove(request, match[1] ?? '', world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineFilesCheck),
+    respond: (request, _url, _match, world) => respondFilesCheck(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: new RegExp(`^${REMOTE_PATHS.machineFiles}/${SEGMENT}$`),
+    respond: (request, _url, match, world) => respondFileUpload(request, match[1] ?? '', world),
+  },
+  {
+    method: 'GET',
+    pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}$`),
+    respond: (_request, _url, match, world) => respondShare(match[1] ?? '', world),
+  },
+  {
+    method: 'GET',
+    pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}/files/${SEGMENT}$`),
+    respond: (_request, _url, match, world) => respondShareFile(match[1] ?? '', match[2] ?? '', world),
+  },
 ];
 
 const API_PREFIX = '/__remote/';
@@ -166,11 +205,14 @@ export async function respond(request: Request, world: CloudWorld) {
   }
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return respondJson({ error: { code: 'method_not_allowed', message: 'Only GET is served here.' } }, 405);
-  return applySecurityHeaders(await world.assets(request));
+  const page = applySecurityHeaders(await world.assets(request));
+  if (url.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`)) page.headers.set('x-robots-tag', NOINDEX);
+  return page;
 }
 
 export interface CloudBindings {
   db: Database;
+  files: FileBucket;
   assets: (request: Request) => Promise<Response>;
   fetch: Fetch;
   now: () => number;
@@ -180,6 +222,7 @@ export interface CloudBindings {
 export function createWorld(bindings: CloudBindings): CloudWorld {
   return {
     store: createStore(bindings.db),
+    files: bindings.files,
     assets: bindings.assets,
     fetch: bindings.fetch,
     now: bindings.now,

@@ -108,6 +108,26 @@ export {
   resolveProjectMachine,
   serializePlacementPrompt,
 } from './placement.ts';
+export {
+  type FilesCheckRequest,
+  type FilesCheckResponse,
+  isShareFileId,
+  isShareFileType,
+  PUBLICATION_LIMITS,
+  type PublicationFile,
+  type PublicationRequest,
+  type PublicationResponse,
+  resolveMachineFilePath,
+  resolveMachinePublicationPath,
+  resolveMachinePublicationRemovePath,
+  resolveShareFilePath,
+  resolveSharePagePath,
+  resolveSharePath,
+  resolveShareUrl,
+  SHARE_DIFF_FILE,
+  SHARE_FILE_TYPES,
+  type SharedPublication,
+} from './shares.ts';
 export type {
   PairingView,
   RemoteDevice,

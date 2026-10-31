@@ -9,6 +9,7 @@ export interface DatabaseStatement {
 
 export interface Database {
   prepare: (sql: string) => DatabaseStatement;
+  batch: (statements: DatabaseStatement[]) => Promise<unknown>;
 }
 
 export interface UserRow {
@@ -58,6 +59,34 @@ export interface NewInstance {
   machineTokenHash: string;
   connectKey: string;
   createdAt: number;
+}
+
+export interface PublicationRow {
+  task_id: string;
+  instance_id: string;
+  link_token_hash: string | null;
+}
+
+export interface SharedPublicationRow {
+  task_id: string;
+  body: string;
+  updated_at: number;
+}
+
+export interface FileRow {
+  instance_id: string;
+  hash: string;
+  content_type: string;
+  size: number;
+}
+
+export interface PublicationWrite {
+  taskId: string;
+  instanceId: string;
+  body: string;
+  linkTokenHash: string | null;
+  updatedAt: number;
+  files: { id: string; hash: string }[];
 }
 
 const INSTANCE_COLUMNS =
@@ -242,6 +271,95 @@ export function createStore(db: Database) {
 
     async removeInstance(id: string) {
       await db.prepare('DELETE FROM instances WHERE id = ?').bind(id).run();
+    },
+
+    selectPublication(taskId: string) {
+      return db
+        .prepare('SELECT task_id, instance_id, link_token_hash FROM publications WHERE task_id = ?')
+        .bind(taskId)
+        .first<PublicationRow>();
+    },
+
+    async writePublication(write: PublicationWrite) {
+      await db.batch([
+        db
+          .prepare(
+            'INSERT INTO publications (task_id, instance_id, body, link_token_hash, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (task_id) DO UPDATE SET body = excluded.body, link_token_hash = excluded.link_token_hash, updated_at = excluded.updated_at'
+          )
+          .bind(write.taskId, write.instanceId, write.body, write.linkTokenHash, write.updatedAt),
+        db.prepare('DELETE FROM publication_files WHERE task_id = ?').bind(write.taskId),
+        ...write.files.map((file) =>
+          db
+            .prepare(
+              'INSERT INTO publication_files (task_id, file_id, instance_id, hash) VALUES (?, ?, ?, ?)'
+            )
+            .bind(write.taskId, file.id, write.instanceId, file.hash)
+        ),
+      ]);
+    },
+
+    async removePublication(taskId: string) {
+      await db.prepare('DELETE FROM publications WHERE task_id = ?').bind(taskId).run();
+    },
+
+    selectSharedPublication(linkTokenHash: string) {
+      return db
+        .prepare('SELECT task_id, body, updated_at FROM publications WHERE link_token_hash = ?')
+        .bind(linkTokenHash)
+        .first<SharedPublicationRow>();
+    },
+
+    async listPublicationFileIds(taskId: string) {
+      const { results } = await db
+        .prepare('SELECT file_id FROM publication_files WHERE task_id = ? ORDER BY file_id')
+        .bind(taskId)
+        .all<{ file_id: string }>();
+      return results.map((row) => row.file_id);
+    },
+
+    selectSharedFile(linkTokenHash: string, fileId: string) {
+      return db
+        .prepare(
+          'SELECT files.instance_id, files.hash, files.content_type, files.size FROM publications JOIN publication_files ON publication_files.task_id = publications.task_id JOIN files ON files.instance_id = publication_files.instance_id AND files.hash = publication_files.hash WHERE publications.link_token_hash = ? AND publication_files.file_id = ?'
+        )
+        .bind(linkTokenHash, fileId)
+        .first<FileRow>();
+    },
+
+    async recordFile(file: FileRow, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO files (instance_id, hash, content_type, size, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (instance_id, hash) DO UPDATE SET created_at = excluded.created_at'
+        )
+        .bind(file.instance_id, file.hash, file.content_type, file.size, now)
+        .run();
+    },
+
+    async listInstanceFileHashes(instanceId: string) {
+      const { results } = await db
+        .prepare('SELECT hash FROM files WHERE instance_id = ?')
+        .bind(instanceId)
+        .all<{ hash: string }>();
+      return results.map((row) => row.hash);
+    },
+
+    async listOrphanFileHashes(instanceId: string, createdBefore: number) {
+      const { results } = await db
+        .prepare(
+          'SELECT hash FROM files WHERE instance_id = ? AND created_at < ? AND NOT EXISTS (SELECT 1 FROM publication_files WHERE publication_files.instance_id = files.instance_id AND publication_files.hash = files.hash)'
+        )
+        .bind(instanceId, createdBefore)
+        .all<{ hash: string }>();
+      return results.map((row) => row.hash);
+    },
+
+    async removeFiles(instanceId: string, hashes: string[]) {
+      if (hashes.length === 0) return;
+      await db.batch(
+        hashes.map((hash) =>
+          db.prepare('DELETE FROM files WHERE instance_id = ? AND hash = ?').bind(instanceId, hash)
+        )
+      );
     },
   };
 }
