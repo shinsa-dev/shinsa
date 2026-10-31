@@ -157,7 +157,11 @@ Only these, and they win over anything below:
      fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
      outcome or new set of steps: core's `isHandOverTool`) the reply is the text written after the
      last hand-over, shown directly under the fold and above the card. Text written before the
-     hand-over folds into the work. An answer, diagnosis, report or outcome card is the whole reply, so
+     hand-over folds into the work, except before a fix: agents answer a question you ask during
+     review and then hand over the fix with nothing after it, so when no text follows a fix, the
+     last text written before it (since any earlier hand-over) is the reply, once the turn has ended
+     without an error. Claude Code's empty-turn filler, "No response requested.", never shows in the
+     chat and is never the reply. An answer, diagnosis, report or outcome card is the whole reply, so
      any words after it fold too and the same reply never shows twice, reworded or not (`selectReply`
      in `lib/chat/timeline.ts`). A question or suggested tasks are not the step's hand-over and keep
      the reply. A message from you starts a new turn with its own fold.

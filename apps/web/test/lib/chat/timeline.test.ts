@@ -840,6 +840,59 @@ describe('resolveTurns', () => {
     expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
   });
 
+  it('shows the answer written before a fix hand-over as the reply, never Claude Code’s empty-turn filler', () => {
+    const items = resolveTimeline(
+      [
+        createBrief('The human looked at the work and wrote: why?', 1),
+        createAgentEntry('This PR keeps sampling everywhere but one service.', 'interim', 2),
+        createCallEntry('1', shinsaTool('complete_fix', { summary: 'No code change: explained the PR.' }), 3),
+        createResultEntry('1', 'Handed over', 4),
+        createAgentEntry('No response requested.', 'final', 5),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.reply?.text).toBe('This PR keeps sampling everywhere but one service.');
+    expect(turn?.work.map((item) => item.kind)).toEqual(['instructions']);
+    expect(turn?.outcomes.map((item) => item.call.callId)).toEqual(['1']);
+  });
+
+  it('takes the answer before a fix hand-over only from after the hand-over before it', () => {
+    const items = resolveTimeline(
+      [
+        createAgentEntry('Phase words', 'interim', 1),
+        createCallEntry('1', shinsaTool('complete_phase', { summary: 'Done.' }), 2),
+        createCallEntry('2', shinsaTool('complete_fix', { summary: 'Fixed.' }), 3),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.reply).toBeNull();
+    expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
+  });
+
+  it('keeps the answer before a fix hand-over folded while the turn is live or ended in an error', () => {
+    const entries = [
+      createAgentEntry('Fixed the type error', 'interim', 1),
+      createCallEntry('1', shinsaTool('complete_fix', { summary: 'Fixed.' }), 2),
+    ];
+    expect(resolveTurns(resolveTimeline(entries, []), running, 500)[0]?.reply).toBeNull();
+    const errored = resolveTimeline([...entries, createErrorEntry('Session failed', 3)], []);
+    expect(resolveTurns(errored, finished, 500)[0]?.reply).toBeNull();
+  });
+
+  it('never shows Claude Code’s empty-turn filler in the chat', () => {
+    const items = resolveTimeline(
+      [
+        createAgentEntry('Looks right', 'interim', 1),
+        createAgentEntry(' No response requested. ', 'final', 2),
+      ],
+      []
+    );
+    expect(items.map((item) => item.kind === 'agent' && item.text)).toEqual(['Looks right']);
+    expect(resolveTurns(items, finished, 500)[0]?.reply?.text).toBe('Looks right');
+  });
+
   it('keeps the reply under a question or suggested tasks, which are not the step’s hand-over', () => {
     for (const name of ['ask', 'suggest_tasks'] as const) {
       const items = resolveTimeline(
@@ -1002,6 +1055,15 @@ describe('resolveLastAgentText', () => {
     expect(
       resolveLastAgentText([createAgentEntry('Answer', 'final', 1), createErrorEntry('Session failed', 2)])
     ).toBe('Session failed');
+  });
+
+  it('skips Claude Code’s empty-turn filler', () => {
+    expect(
+      resolveLastAgentText([
+        createAgentEntry('Answer', 'interim', 1),
+        createAgentEntry('No response requested.', 'final', 2),
+      ])
+    ).toBe('Answer');
   });
 
   it('falls back to the latest interim words', () => {
