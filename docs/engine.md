@@ -1157,8 +1157,9 @@ stops here.
   `queue.snoozed` instead of `working`, `waiting` or `backlog`, so it is not in Needs you, In progress, Waiting, the
   queue button, the guide, the Dock badge or a notification. Home shows it in a Snoozed section, folded by default
   (`QueueSection.opensOnHome`), the queue popover in a folded Snoozed section, and All tasks in a folded Snoozed
-  group ahead of every gate (`resolveTaskGroup`). An agent at work keeps working; the gate it reaches waits quietly.
-  A snoozed task that finishes drops out of the snoozed list.
+  group ahead of every gate (`resolveTaskGroup`). The task reads (`GET /api/tasks`, `shinsa tasks list`, an agent's
+  `tasks_list`) mark it `snoozed` and leave it out of `--status needs_you` (`isListed` in `http/reads.ts`). An agent
+  at work keeps working; the gate it reaches waits quietly. A snoozed task that finishes drops out of the snoozed list.
 - **Unsnoozing.** The task shows again where it is now: a gate it reached while snoozed is in Needs you at once.
 - **On your behalf.** Both are management commands an agent may send for you; the activity reads "Snoozed ‹task›"
   or "Unsnoozed ‹task›".

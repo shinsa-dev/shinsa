@@ -93,6 +93,7 @@ export function resolveTaskView(state: ShinsaState, task: Task, base: string) {
         }
       : null,
     decision: selectDecision(state, task),
+    snoozed: Boolean(task.snoozed),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     url: `${base}/tasks/${task.handle ?? task.id}`,
@@ -104,7 +105,8 @@ function isListed(state: ShinsaState, task: Task, filter: TaskFilter) {
   if (filter === 'all') return true;
   if (filter === 'settled') return isTaskSettled(task);
   if (isTaskSettled(task)) return false;
-  return filter === 'open' || selectDecision(state, task) !== null;
+  if (filter === 'open') return true;
+  return !task.snoozed && selectDecision(state, task) !== null;
 }
 
 function matchesQuery(state: ShinsaState, task: Task, words: string[]) {
