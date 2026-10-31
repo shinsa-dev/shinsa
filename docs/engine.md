@@ -1193,9 +1193,14 @@ Where you decide, above). Elsewhere, a message the classifier reads as needing n
 recorded, and a message it reads as new work queues the next round,
 and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
 on your behalf, or a schedule sends, to a task with any open gate is not delivered into the gate: core records it
-(`task.messaged`) and nothing else, the next agent's brief carries it (`resolveLaterMessages`: "Sent by an agent on
-the human’s behalf: …", or "Sent by a schedule: …"), and the on-your-behalf record reads "Left a message for the next agent on “‹title›”, which
-waits for you".
+(`task.messaged` with `kept`) and keeps it in `Task.untoldMessages`, and the next run of the task's own session (the
+Agent, an answerer, an investigator or a researcher, never the reviewer) is told it once, at the tail of its prompt
+after your own words ("While this task waited for the human, these messages were left for you…", each "Sent by an
+agent on the human’s behalf: …" or "Sent by a schedule: …"; `Decider.startRun`, `task.messages_told`). The tail
+comes after the house rules, so a resumed session that already holds them gets it too: the fix your reply at a
+review or merge gate starts, a retry at a failure gate, the next phase. Until it is told, `resolveLaterMessages`
+leaves it out, so no brief repeats it; after, the round's brief lists it with the rest. The on-your-behalf record
+reads "Left a message for the next agent on “‹title›”, which waits for you".
 
 ## Process and structure
 
@@ -2339,8 +2344,8 @@ tools and T3's MCP toolkits.
   (`repo.register` when an agent adds a repository to a project) is stamped but records no action.
 - **Decisions only you make** have no tool (the list is Who can change Shinsa, below). `MANAGE_RULES` tells an agent
   that is asked in chat to merge or approve to reply that you do it at its gate in Shinsa, with a link to the task. A
-  message it sends to a task with an open gate is kept for that task's next agent, never delivered into the gate
-  (Gates → What a message does, above).
+  message it sends to a task with an open gate is kept for that task's next agent, never delivered into the gate,
+  and told once on the next run of that task's session (Gates → What a message does, above).
 
 ## Remote access
 
@@ -2540,7 +2545,8 @@ plainly what protects what.
   gate that was open before it is no longer open after it (`assertGatesStayOpen`, run at the end of `decide`, so
   retry, complete, cancel, wait-on, keeping a split-off and the rest cannot step past an open gate; both in
   `decide/gates.ts`), or when a `settings.change` or `repo.update` touches a human-only field (`decide/settings.ts`).
-  A message sent on your behalf to a task with an open gate is kept for the next agent instead (Gates, above). So
+  A message sent on your behalf to a task with an open gate is kept for the next agent instead, and told on its next
+  turn (Gates, above). So
   even a tool that reached the command could not decide a gate or step past it.
 - **What a shell can still do.** Anything your account can. An agent that sets out to could post a command to
   `localhost:7446/api/commands` itself, or run `gh pr merge` or `git push` directly, and Shinsa would not know.
