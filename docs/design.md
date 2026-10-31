@@ -248,7 +248,7 @@ Only these, and they win over anything below:
    and a hollow ring not started, one `role="img"` labelled "Step 4 of 7: Build 1/2"
    (`describeTrackPosition`), no tooltip per dot since the row is already a button. After the dots,
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
-   shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
+   shimmering as the work card's live feed does, a parked run's too since the status already says it waits (`resolveLatestActivity`
    over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
    and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: `ShimmeringText` counts
    the ones its clipping box shows, `countVisibleChars`); otherwise the current
