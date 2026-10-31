@@ -23,6 +23,7 @@ import {
   SHAPE_PIPELINES,
   type Task,
   type TaskShape,
+  type TaskStage,
   type WatchSuggestion,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
@@ -243,6 +244,12 @@ function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
   });
 }
 
+function resolveCancelledFrom(task: Task | undefined, stage: TaskStage) {
+  if (stage !== 'cancelled') return task?.cancelledFrom ? { cancelledFrom: null } : {};
+  if (!task || task.stage === 'cancelled') return {};
+  return { cancelledFrom: task.stage };
+}
+
 function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   const task = state.tasks[event.taskId];
   const previous = task?.stage;
@@ -251,6 +258,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stage,
     stageReason: event.reason,
     stageChangedAt: event.at,
+    ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
   const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');

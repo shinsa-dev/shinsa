@@ -164,6 +164,15 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
+      <Specimen label='NowCard · a task cancelled at the merge: the steps it finished stay done, the merge shows Cancelled'>
+        <Card>
+          <NowFrame
+            eyebrow={<Eyebrow state={state} task={tasks.closed} />}
+            title={resolveNowTitle(tasks.closed, [], null, undefined)}
+            footer={<TaskTrack task={tasks.closed} />}
+          />
+        </Card>
+      </Specimen>
       <Specimen label='SilenceNote · no output for 5 minutes · orange from 15'>
         <Card>
           <SilenceNote

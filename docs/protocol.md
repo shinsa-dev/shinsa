@@ -214,6 +214,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | --- | --- | --- |
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
+| `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
