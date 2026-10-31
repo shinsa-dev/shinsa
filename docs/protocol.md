@@ -465,6 +465,8 @@ executable changed line (`selectMeasuredCoverage`).
 | `failure?` | `RunFailure` | class (13), message, code, retryable, `resetAt`, `account` (a Claude account), `login` (a provider's own sign-in: `{ provider, email }`) |
 | `resumePending?`, `continuations?` | | restart continuation and its loop guard |
 | `monitorId?`, `usageWaitId?` | | the wait it was woken from |
+| `cacheExpiresAt?` | number | when the prompt cache the run last wrote expires |
+| `continues?` | | the run whose step it carries on (a recovery nudge, a `wait_for` wake-up, a usage-limit resume); such a run never folds the turns before it |
 | `feedback?` | string \| null | your words it carries |
 | `usage?`, `meters?` | | tokens and cost; per attempt (`RunMeter`), its window (`account:<id>` or `provider:<id>`), time span, usage and the weekly readings taken at its start and end, which teach its window's rate; its share of the weekly window is its cost at that rate (`resolveUsageShares`) |
 | `silence?` | `RunSilence` | the quiet-run mark, snooze and dismissal |
@@ -971,6 +973,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.ended` | a run ended (outcome, failure) |
 | `run.interrupted`, `run.continued` | marked at shutdown; continued after a restart |
 | `run.session_lost`, `run.compacted` | a session is gone; an idle session was compacted |
+| `run.cached` | a run ended with its prompt cache's expiry known (`run.end`'s `cacheExpiresAt`), kept as `Run.cacheExpiresAt` for the next step's fold |
 | `run.metered` | usage and cost were charged, with the weekly readings (`readings`) the attempt took |
 | `run.silenced`, `run.silence_snoozed`, `run.silence_dismissed` | a run went quiet; the warning snoozed or dismissed |
 | `run.waiting` | a step's turn ended while its delegations work |
@@ -1144,6 +1147,7 @@ or `browser` (a tab, Floaty).
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
+| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing): `RemoteSnapshot` (Remote access, below) |
 
 Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
 → Terminals): binary frames carry the shell's output and what you type, text frames carry `reset { cols, rows }` and
@@ -1199,8 +1203,12 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
 | `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port; a 401 means revoked |
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
+| `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
+
+Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
+<token>`; a bearer request needs no `Origin`, since it is not a page.
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
@@ -1248,7 +1256,9 @@ arrived, never from the page.
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
 `machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`) and `devices` (`RemoteDevice`: `publicKey`,
-`name`, `enrolledAt`, `lastSeenAt`); `RemoteEnrollment` is the `url`, `name` and `expiresAt` Add browser answers.
+`name`, `enrolledAt`, `lastSeenAt`, `enrollmentId`: the id of the link that added it, null when unknown);
+`RemoteEnrollment` is the `id`, `url`, `name` and `expiresAt` Add device answers. The id is not a secret: it only
+tells the page which device its link added.
 
 ## Where it lives
 

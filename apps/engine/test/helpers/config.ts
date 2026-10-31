@@ -28,7 +28,6 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     settleDelayMs: 3_600_000,
     pushRetryMs: 10,
     overloadRetryMs: 10,
-    eunoe: { command: resolve(import.meta.dirname, 'bin/eunoe'), port: null },
     remoteOrigin: 'http://127.0.0.1:1',
     ...overrides,
   };

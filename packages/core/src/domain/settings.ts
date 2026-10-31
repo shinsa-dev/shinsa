@@ -5,16 +5,16 @@ export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 export const MERGE_METHODS: ReadonlySet<MergeMethod> = new Set<MergeMethod>(['squash', 'merge', 'rebase']);
 
-export type CompactionMode = 'eunoe_compact' | 'eunoe_default' | 'claude' | 'off';
+export type CompactionMode = 'fold' | 'compact' | 'provider' | 'off';
 
 export const COMPACTION_MODES: ReadonlySet<CompactionMode> = new Set<CompactionMode>([
-  'eunoe_compact',
-  'eunoe_default',
-  'claude',
+  'fold',
+  'compact',
+  'provider',
   'off',
 ]);
 
-const DEFAULT_COMPACTION: CompactionMode = 'eunoe_compact';
+const DEFAULT_COMPACTION: CompactionMode = 'fold';
 
 export type PlanApproval = 'when_asked' | 'large' | 'always';
 
@@ -161,6 +161,14 @@ export function resolveCompaction(settings: Settings): CompactionMode {
   return settings.compaction ?? DEFAULT_COMPACTION;
 }
 
+export function isEunoeCompaction(mode: CompactionMode) {
+  return mode === 'fold' || mode === 'compact';
+}
+
+export function isFoldingCompaction(mode: CompactionMode) {
+  return mode === 'fold';
+}
+
 export function resolveFastMode(settings: Settings) {
   return settings.fastMode ?? false;
 }
@@ -171,7 +179,7 @@ export function resolveAgentFastMode(settings: Settings, role: AgentRole) {
 
 function hasNativeCompaction(settings: Settings, provider: string) {
   const mode = resolveCompaction(settings);
-  return mode !== 'off' && (provider !== CLAUDE_PROVIDER || mode === 'claude');
+  return mode !== 'off' && (provider !== CLAUDE_PROVIDER || mode === 'provider');
 }
 
 export function resolveIdleCompaction(settings: Settings, providers: readonly string[]) {

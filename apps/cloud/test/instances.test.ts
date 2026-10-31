@@ -17,13 +17,18 @@ import {
 import { ONLINE_WINDOW_MS } from '../src/instances.ts';
 import { createHarness, type Harness, readJson } from './harness.ts';
 
-async function pairMachine(harness: Harness, session: string, name = 'Studio') {
+async function pairMachine(
+  harness: Harness,
+  session: string,
+  name = 'Studio',
+  auth: { session?: string; bearer?: string; sameOrigin?: boolean } = { session }
+) {
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
   const publicKey = await serializePublicKey(pair.publicKey);
   const start = await readJson<PairStartResponse>(
     await harness.post(REMOTE_PATHS.pairStart, { name, publicKey, version: '1' })
   );
-  await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
+  await harness.post(resolvePairApprovePath(start.claimCode), {}, auth);
   const claimed = await readJson<PairPollResponse>(
     await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
   );
@@ -180,5 +185,37 @@ describe('instances', () => {
     );
     expect(removed.status).toBe(200);
     expect(await listInstances(harness, session)).toEqual([]);
+  });
+
+  test('works with a bearer session from the native app, which sends no Origin', async () => {
+    const harness = createHarness();
+    const token = await harness.signInNative('mona', 1);
+    const auth = { bearer: token, sameOrigin: false };
+    const studio = await pairMachine(harness, '', 'Studio', auth);
+    const headers = { authorization: `Bearer ${token}` };
+    const listed = await readJson<RemoteInstance[]>(await harness.call(REMOTE_PATHS.instances, { headers }));
+    expect(listed.map((instance) => instance.name)).toEqual(['Studio']);
+    const connect = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, auth);
+    expect(connect.status).toBe(200);
+    expect((await readJson<ConnectResponse>(connect)).url).toStartWith(
+      `wss://t-${studio.instanceId}.shinsa.dev/remote?token=`
+    );
+    const removed = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, auth);
+    expect(removed.status).toBe(200);
+    expect(await readJson<RemoteInstance[]>(await harness.call(REMOTE_PATHS.instances, { headers }))).toEqual(
+      []
+    );
+  });
+
+  test('still needs this site as the Origin for a cookie session', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn('mona', 1);
+    const studio = await pairMachine(harness, session);
+    const crossSite = await harness.post(
+      resolveInstanceConnectPath(studio.instanceId),
+      {},
+      { session, sameOrigin: false }
+    );
+    expect(crossSite.status).toBe(403);
   });
 });

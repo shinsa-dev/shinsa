@@ -115,7 +115,7 @@ function withIdleCompaction(patch: (state: ShinsaState) => void) {
   return (state: ShinsaState) => {
     patch(state);
     Object.assign(state.settings, {
-      compaction: 'claude',
+      compaction: 'provider',
       idleCompaction: true,
       agentFastModes: { agent: true },
     });
@@ -407,7 +407,7 @@ describe('starting and ending runs', () => {
     });
     const first = supervisor.execute('run-1');
     await until('the first session', () => fast.started.length === 1);
-    expect(fast.started[0]?.input).toMatchObject({ compaction: 'eunoe_compact', fastMode: false });
+    expect(fast.started[0]?.input).toMatchObject({ compaction: 'fold', fastMode: false });
     fast.started[0]?.finish();
     await first;
     update((state) => {
@@ -1442,6 +1442,49 @@ describe('resume fallback', () => {
       model: 'gpt-6-astra',
       handoff: { reason: 'provider_switch', fromProvider: 'claude' },
     });
+  });
+
+  test('the Agent’s next step on its resumed session folds the turns before it and starts from the round brief', async () => {
+    const step = restoreSetup(() => undefined);
+    const running = step.supervisor.execute('run-1');
+    await until('the session', () => step.sessions.started.length > 0);
+    (step.sessions.started[0] as FakeSession).finish();
+    await running;
+    expect(step.sessions.started[0]?.input).toMatchObject({ resume: 'old', fold: true, cacheWarm: false });
+    const warm = restoreSetup((state) => {
+      const earlier = state.runs['run-0'];
+      if (earlier) earlier.cacheExpiresAt = Date.now() + 60_000;
+    });
+    const warmRun = warm.supervisor.execute('run-1');
+    await until('the warm session', () => warm.sessions.started.length > 0);
+    (warm.sessions.started[0] as FakeSession).finish();
+    await warmRun;
+    expect(warm.sessions.started[0]?.input).toMatchObject({ fold: true, cacheWarm: true });
+    const continued = restoreSetup(() => undefined);
+    await runOnce(continued);
+    expect(continued.sessions.started[0]?.input.fold).toBeUndefined();
+    const retried = restoreSetup((state) => {
+      const run = state.runs['run-1'];
+      if (run)
+        run.attempts = [
+          { attemptId: 'a', provider: 'claude', model: null, resumed: true, handoff: null, startedAt: 1 },
+        ];
+    });
+    const again = retried.supervisor.execute('run-1');
+    await until('the retried session', () => retried.sessions.started.length > 0);
+    (retried.sessions.started[0] as FakeSession).finish();
+    await again;
+    expect(retried.sessions.started[0]?.input.fold).toBeUndefined();
+    for (const compaction of ['provider', 'compact'] as const) {
+      const direct = restoreSetup((state) => {
+        state.settings.compaction = compaction;
+      });
+      const plain = direct.supervisor.execute('run-1');
+      await until('the session without folds', () => direct.sessions.started.length > 0);
+      (direct.sessions.started[0] as FakeSession).finish();
+      await plain;
+      expect(direct.sessions.started[0]?.input.fold).toBeUndefined();
+    }
   });
 
   test('a provider without a context handoff, or a history with nothing to hand over, starts plainly fresh', async () => {
@@ -3352,7 +3395,7 @@ describe('compacting an idle session', () => {
     expect(context.compacted[0]).toMatchObject({
       resume: 's1',
       account: { id: 'acc-1', configDir: '/accounts/one' },
-      compaction: 'claude',
+      compaction: 'provider',
       fastMode: true,
     });
     expect(context.leases).toHaveLength(2);

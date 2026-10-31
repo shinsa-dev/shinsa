@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "bun run --cwd ../web build:remote",
     "check-types": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev:worker": "bun run --cwd ../web build:remote && wrangler dev --port 5183",

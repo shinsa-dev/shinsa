@@ -181,21 +181,3 @@ describe('the address the command line reaches the server on', () => {
     });
   });
 });
-
-describe('the eunoe settings', () => {
-  test('runs the bundled eunoe on a port of its own unless SHINSA_EUNOE and SHINSA_EUNOE_PORT say otherwise', () => {
-    const home = createTempDir();
-    expect(resolveConfig({ SHINSA_HOME: home }).eunoe).toEqual({ command: null, port: null });
-    expect(
-      resolveConfig({ SHINSA_HOME: home, SHINSA_EUNOE: '/opt/eunoe', SHINSA_EUNOE_PORT: '38700' }).eunoe
-    ).toEqual({ command: '/opt/eunoe', port: 38_700 });
-    for (const port of ['0', '70000']) {
-      expect(() => resolveConfig({ SHINSA_HOME: home, SHINSA_EUNOE_PORT: port })).toThrow(
-        `SHINSA_EUNOE_PORT must be a port number, not "${port}".`
-      );
-    }
-    expect(() => resolveConfig({ SHINSA_HOME: home, SHINSA_EUNOE_PORT: 'next' })).toThrow(
-      'SHINSA_EUNOE_PORT must be a whole number'
-    );
-  });
-});

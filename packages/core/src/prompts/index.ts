@@ -40,7 +40,7 @@ export {
   resolveResearcherPrompt,
   resolveReviewerPrompt,
 } from './roles.ts';
-export { resolveRunBrief } from './root.ts';
+export { needsRoundBrief, resolveRunBrief } from './root.ts';
 export { REFERENCE_RULES, resolveHouseRules, splitHouseRules } from './rules.ts';
 export {
   QUESTION_WITHDRAWN,

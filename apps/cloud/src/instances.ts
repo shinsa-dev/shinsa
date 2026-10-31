@@ -10,8 +10,8 @@ import {
 import { createCloudflare } from './cloudflare.ts';
 import { resolveTokenHash } from './crypto.ts';
 import type { InstanceRow, UserRow } from './database.ts';
-import { assertSameOrigin, CloudError, readBearer, readJsonFields, readText, respondJson } from './http.ts';
-import { findSessionUser } from './session.ts';
+import { CloudError, readBearer, readJsonFields, readText, respondJson } from './http.ts';
+import { findPageUser, findSessionUser } from './session.ts';
 import type { CloudWorld } from './world.ts';
 
 export const ONLINE_WINDOW_MS = 5 * 60_000;
@@ -47,8 +47,7 @@ export async function respondInstances(request: Request, world: CloudWorld) {
 }
 
 export async function respondConnect(request: Request, instanceId: string, world: CloudWorld) {
-  assertSameOrigin(request, world.config.origin);
-  const user = await findSessionUser(request, world);
+  const user = await findPageUser(request, world);
   const row = await findOwnInstance(user, instanceId, world);
   const expiresAt = world.now() + CONNECT_TOKEN_TTL_MS;
   const token = await createConnectToken(row.connect_key, { instanceId: row.id, userId: user.id, expiresAt });
@@ -58,8 +57,7 @@ export async function respondConnect(request: Request, instanceId: string, world
 }
 
 export async function respondInstanceRemove(request: Request, instanceId: string, world: CloudWorld) {
-  assertSameOrigin(request, world.config.origin);
-  const user = await findSessionUser(request, world);
+  const user = await findPageUser(request, world);
   await removeInstance(await findOwnInstance(user, instanceId, world), world);
   return respondJson({ ok: true });
 }

@@ -9,7 +9,7 @@ import { CLAUDE_RUNTIME, type ClaudeRuntime } from './sdk.ts';
 import { startClaudeSession } from './session.ts';
 
 export { mapClaudeTool } from './map.ts';
-export type { EunoeLink, EunoeListener, EunoeMode, EunoeStatus } from './route.ts';
+export type { EunoeLink, EunoeStatus, EunoeWatcher } from './route.ts';
 
 export const CLAUDE_CAPABILITIES: ProviderCapabilities = {
   sessions: { resume: true, inspect: true, fork: true },
@@ -20,6 +20,7 @@ export const CLAUDE_CAPABILITIES: ProviderCapabilities = {
   structuredOutput: true,
   accounts: true,
   compaction: true,
+  folds: true,
   fastMode: true,
 };
 

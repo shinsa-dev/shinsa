@@ -161,7 +161,7 @@ function startCheck(decider: Decider, task: Task, watchdog: Watchdog, guidance: 
   );
   const run = decider.startRun(decider.task(task.id), 'agent', prompt, {
     purpose: 'watch',
-    resumeFrom: decider.taskSession(task.id, 'agent'),
+    resumeFrom: decider.taskSession(task.id, 'agent', 'watch'),
   });
   decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.id, runId: run.id });
 }

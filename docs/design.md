@@ -1691,11 +1691,11 @@ Only these, and they win over anything below:
       Without schedules the card holds one sentence.
     - **Fast mode** is the speed select of each agent group and role in Settings → Agents (26). **Settings →
       General** holds the **Context** group (`components/settings/context.tsx`):
-      **Compaction** (Eunoe compaction, the default, `IconMinimize`; Eunoe always fold, `IconLayersTwo`; Claude
-      Code’s compaction, `IconBubbleText`; Off, `IconPause`), then **Compact idle sessions** (Never, the default,
-      or 1, 2, 5 or 10 minutes before the cache expires), shown only where a provider summarises itself: Claude
-      agents with Claude Code’s compaction, Codex agents with anything but Off (Eunoe sits in front of the
-      Anthropic API only). The
+      **Management** ("Context management" in ⌘K; Default, `IconLayersTwo`; Compaction only, `IconMinimize`; Provider compaction,
+      `IconBubbleText`; Off, `IconPause`; each with a one-line hint in the menu, never naming one provider's
+      product), then **Compact idle sessions** (Never, the default, or 1, 2, 5 or 10 minutes before the cache
+      expires), shown only where a provider summarises itself: Claude agents with provider compaction, Codex agents
+      with anything but Off (Eunoe sits in front of the Anthropic API only). The
       product is "Eunoe" with a capital E in every string on screen; `eunoe` stays for code, commands and paths.
     - **⌘K**: a Schedules group, only while there is a schedule, with Schedules (scrolls to the section); each
       schedule matches while typing, by name with when it runs as the hint ("Every hour") and its icon (hourglass

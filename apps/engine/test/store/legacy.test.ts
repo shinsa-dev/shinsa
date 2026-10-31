@@ -271,7 +271,8 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...later]);
     expect(listLegacyEventTypes(8)).toEqual(later);
     expect(listLegacyEventTypes(9)).toEqual(['settings.changed']);
-    expect(listLegacyEventTypes(10)).toEqual([]);
+    expect(listLegacyEventTypes(10)).toEqual(['settings.changed']);
+    expect(listLegacyEventTypes(11)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -287,7 +288,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(10);
+    expect(readStoredLog(path).version).toBe(11);
   });
 });
 
@@ -315,7 +316,7 @@ describe('Approve plans saved as a switch', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(10);
+    expect(stored.version).toBe(11);
     expect(stored.rows).toEqual([
       {
         seq: 1,
@@ -323,6 +324,38 @@ describe('Approve plans saved as a switch', () => {
         payload: JSON.stringify({ type: 'settings.changed', settings: { approvePlans: 'large' } }),
       },
     ]);
+  });
+});
+
+describe('the compaction setting saved under its Eunoe names', () => {
+  test('both Eunoe modes become the default and Claude Code’s becomes provider compaction; the rest is left alone', () => {
+    expect(
+      rewrite(
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', compaction: 'eunoe_compact' } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', compaction: 'eunoe_default' } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', compaction: 'claude' } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', compaction: 'off' } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', compaction: 'compact' } }
+      ).map((row) => [row.seq, row.event.settings])
+    ).toEqual([
+      [1, { defaultProvider: 'claude', compaction: 'fold' }],
+      [2, { defaultProvider: 'claude', compaction: 'fold' }],
+      [3, { defaultProvider: 'claude', compaction: 'provider' }],
+    ]);
+  });
+
+  test('is rewritten on boot in a log of the plan approvals’ version', () => {
+    const path = writeLegacyLog([{ type: 'settings.changed', settings: { compaction: 'eunoe_compact' } }]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 10');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    expect(readStoredLog(path)).toMatchObject({
+      version: 11,
+      rows: [{ payload: JSON.stringify({ type: 'settings.changed', settings: { compaction: 'fold' } }) }],
+    });
   });
 });
 
@@ -347,7 +380,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(10);
+    expect(stored.version).toBe(11);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);

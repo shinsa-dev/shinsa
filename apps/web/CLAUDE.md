@@ -283,7 +283,8 @@ src/
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
         remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
-        expiry and its QR code as an image; connection/remote-access.ts reads and changes /api/remote),
+        expiry and its QR code as an image, the device a link added; connection/remote-access.ts reads it from the
+        socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
         server form and its checks), versions.ts (Settings → Agents → Versions: rows, statuses and the update labels)

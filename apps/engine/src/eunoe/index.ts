@@ -1,1 +1,1 @@
-export { EunoeProxy, type EunoeProxyOptions, resolveEunoeCommand } from './proxy.ts';
+export { EunoeServer, type EunoeServerOptions } from './server.ts';

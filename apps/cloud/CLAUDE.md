@@ -16,7 +16,8 @@ src/
 │                  GET to the assets with the security headers; createWorld
 ├── world.ts       CloudWorld (store, fetch, assets, now, config) and resolveCloudConfig from the Worker's environment
 ├── database.ts    The D1 queries (createStore) over the Database interface D1 and the tests' SQLite both meet
-├── session.ts     GitHub OAuth (sign-in, callback, sign-out), the session cookie
+├── session.ts     GitHub OAuth (sign-in, callback, sign-out), the native app's code and token, the session cookie
+│                  or bearer
 ├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
@@ -24,8 +25,8 @@ src/
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
 ├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, constant-time comparison
 └── log.ts         recordFailure: the one console call (Workers Logs)
-migrations/        D1's schema (wrangler d1 migrations)
-test/              One file per route group, against harness.ts: D1 on bun:sqlite with the real migration, and
+migrations/        D1's schema (wrangler d1 migrations), applied in order
+test/              One file per route group, against harness.ts: D1 on bun:sqlite with every migration, and
                    GitHub, the Cloudflare API and a machine's tunnel as fakes
 ```
 
@@ -45,6 +46,15 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   only to a browser that machine enrolled, so a stranger signed in sees an empty list and can reach nothing. The return path is parsed against
   this origin and kept only when it stays on it (a tab, a newline or a backslash cannot turn it into `//elsewhere`).
   A failed callback sends you to `/?sign_in_error=<code>`, which the sign-in page says in words.
+- **Native sign-in.** The iPhone app has no cookie jar of its own, so `/__remote/sign-in?client=native` also takes a
+  `redirect` (only `shinsa:` or `shinsa-dev:`, 200 characters at most, else 400 `invalid_redirect`) and the app's own
+  `code_challenge` (S256, else 400 `invalid_challenge`), both kept in the OAuth cookie (base64url JSON, read back
+  with the same checks). Its callback sets no session cookie: it stores the SHA-256 of a one-time code with the user,
+  the app's challenge and a 60-second expiry (`sign_in_codes`, expired rows cleared on each insert) and sends the
+  app to `<redirect>?code=<code>`, or `<redirect>?error=<code>` when the sign-in fails, so the system sheet closes.
+  `POST /__remote/sign-in/token { code, codeVerifier }` deletes the row before it checks the verifier in constant time
+  and the expiry, so a code works once even when the first try is wrong, then answers `{ token, user }` with a
+  normal 30-day session. The app then sends the token as `Authorization: Bearer`.
 - **Pairing.** The machine posts its name and public key to `pair/start` (no account yet; at most 10 waiting pairings
   per address, each for 10 minutes) and gets an 8-character claim code, a poll secret (kept only as a hash) and the
   `/pair?code=` link. You open it signed in, see the machine's name and key fingerprint (`/__remote/pairs/<code>`),
@@ -66,8 +76,10 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
   `Retry-After: 60`.
-- **Requests from a page.** Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the
-  Worker's own origin. Every response carries a strict content security policy (scripts only from the site, sockets
+- **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
+  cookie (`findSessionUser`). Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the
+  Worker's own origin, unless it carries a bearer token (`findPageUser`, `assertPageRequest`): a forged cross-site
+  request can send the cookie but never the token. Every response carries a strict content security policy (scripts only from the site, sockets
   only to `wss://*.shinsa.dev`, no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
 
 ## Running and deploying
@@ -76,7 +88,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - `bun run dev:worker` builds the web app's remote build, then runs `wrangler dev` on :5183; `APP_ORIGIN` points the
   Worker at that origin, and `SHINSA_REMOTE_ORIGIN` points an engine at it (its channel origin check, enroll and webhook
   links follow). It is not called `dev`, so the root `bun dev` (turbo) never starts it.
-- The assets are `../web/dist-remote`, the web app's remote build: `bun run --cwd apps/web build:remote` before a deploy.
+- The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
+  `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and

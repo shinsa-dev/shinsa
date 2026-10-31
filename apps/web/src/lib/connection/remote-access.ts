@@ -2,7 +2,7 @@ import type { RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
-import { isRemoteSettling, REMOTE_POLL_MS } from '@/lib/remote-access.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 interface RemoteAccessView {
@@ -10,34 +10,52 @@ interface RemoteAccessView {
   failure: string | null;
 }
 
-const signal = createSignal();
+const failureSignal = createSignal();
 
-const EMPTY: RemoteAccessView = { snapshot: null, failure: null };
+let failure: string | null = null;
 
-let view: RemoteAccessView = EMPTY;
+let view: RemoteAccessView = { snapshot: null, failure: null };
 
 let pending: Promise<void> | null = null;
 
-function publish(next: RemoteAccessView) {
-  view = next;
-  signal.publish();
+function replaceFailure(next: string | null) {
+  failure = next;
+  failureSignal.publish();
+}
+
+function subscribeRemoteAccess(listener: () => void) {
+  const releaseRemote = connection.subscribeRemote(listener);
+  const releaseFailure = failureSignal.subscribe(listener);
+  return () => {
+    releaseRemote();
+    releaseFailure();
+  };
 }
 
 export function selectRemoteAccess() {
+  const snapshot = connection.selectRemote();
+  if (view.snapshot !== snapshot || view.failure !== failure) view = { snapshot, failure };
   return view;
 }
 
 export function resetRemoteAccess() {
   pending = null;
-  publish(EMPTY);
+  replaceFailure(null);
+}
+
+function applyRemoteAccess(snapshot: RemoteSnapshot) {
+  failure = null;
+  connection.replaceRemote(snapshot);
+}
+
+function applyFirstRead(snapshot: RemoteSnapshot) {
+  if (connection.selectRemote() === null) applyRemoteAccess(snapshot);
+  else replaceFailure(null);
 }
 
 export function refreshRemoteAccess() {
   pending ??= requestJson<RemoteSnapshot>('/api/remote')
-    .then(
-      (snapshot) => publish({ snapshot, failure: null }),
-      (error: unknown) => publish({ ...view, failure: describeFailure(error) })
-    )
+    .then(applyFirstRead, (error: unknown) => replaceFailure(describeFailure(error)))
     .then(() => {
       pending = null;
     });
@@ -46,7 +64,7 @@ export function refreshRemoteAccess() {
 
 async function act(path: string, body: unknown = {}) {
   const snapshot = await requestJson<RemoteSnapshot>(`/api/remote${path}`, body);
-  publish({ snapshot, failure: null });
+  applyRemoteAccess(snapshot);
   return snapshot;
 }
 
@@ -62,15 +80,10 @@ export const REMOTE_ACCESS_ACTIONS = {
 
 export type RemoteAccessActions = typeof REMOTE_ACCESS_ACTIONS;
 
-export function useRemoteAccess(active = true) {
-  const current = React.useSyncExternalStore(signal.subscribe, selectRemoteAccess);
-  const settling = isRemoteSettling(current.snapshot);
+export function useRemoteAccess() {
+  const current = React.useSyncExternalStore(subscribeRemoteAccess, selectRemoteAccess);
   React.useEffect(() => {
-    if (!active) return;
     void refreshRemoteAccess();
-    if (!settling) return;
-    const timer = setInterval(() => void refreshRemoteAccess(), REMOTE_POLL_MS);
-    return () => clearInterval(timer);
-  }, [active, settling]);
+  }, []);
   return current;
 }

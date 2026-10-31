@@ -392,6 +392,10 @@ export function resolveEndedFailure(text: string, evidence: TurnEvidence): RunFa
   return createTransportFailure(text);
 }
 
+export function createStuckFailure(): RunFailure {
+  return createFailure('context_window_full', CONTEXT_FULL, 'eunoe_stuck');
+}
+
 export function createSetupFailure(message: string): RunFailure {
   return createFailure('setup_failed', message, 'setup_failed');
 }

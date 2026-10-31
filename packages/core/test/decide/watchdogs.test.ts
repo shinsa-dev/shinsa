@@ -269,12 +269,13 @@ describe('arming watchdogs', () => {
 });
 
 describe('a watch check', () => {
-  test('runs as a read-only turn of the task’s own session and goes back to rest after a healthy report', () => {
+  test('runs as a read-only turn of a watch session of its own and goes back to rest after a healthy report', () => {
     const { harness, taskId } = mergeWith();
     fire(harness, taskId);
     const run = harness.activeRun(taskId);
     expect(harness.task(taskId).stage).toBe('watching');
-    expect(run).toMatchObject({ role: 'agent', purpose: 'watch', sessionId: 'agent-session', resume: true });
+    expect(run).toMatchObject({ role: 'agent', purpose: 'watch', sessionId: null, resume: false });
+    expect(run.prompt).toContain('Sped up checkout.');
     expect(readInstruction(run)).toContain('the watchdog “Checkout latency”');
     expect(readInstruction(run)).toContain('the MCP server `maple`');
     expect(watchdog(harness, taskId).runId).toBe(run.id);
@@ -314,6 +315,33 @@ describe('a watch check', () => {
     expect(run.purpose).toBe('watch');
     expect(run.prompt).not.toContain('Keep the old flag.');
     expect(harness.task(taskId).untoldMessages).toHaveLength(1);
+  });
+
+  test('the next check resumes the watch session, and the Agent’s next round resumes its own, never the watch’s', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, forHours: 16 }]);
+    fire(harness, taskId);
+    linkSession(harness, taskId, 'watch-session');
+    report(harness, taskId, true);
+    fire(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({
+      purpose: 'watch',
+      sessionId: 'watch-session',
+      resume: true,
+    });
+    report(harness, taskId, true);
+    harness.send({ type: 'task.message', taskId, text: 'Cache the tax lookup too.', kind: 'new_round' });
+    harness.send({ type: 'config.record', taskId, problems: [] });
+    harness.send({
+      type: 'worktree.ready',
+      taskId,
+      path: `/wt/${taskId}`,
+      branch: harness.task(taskId).branch ?? '',
+    });
+    expect(harness.activeRun(taskId)).toMatchObject({
+      purpose: 'plan',
+      sessionId: 'agent-session',
+      resume: true,
+    });
   });
 
   test('passes once the next check would fall past its window, and later checks see the earlier ones', () => {

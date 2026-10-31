@@ -13,8 +13,8 @@ import {
 import { createCloudflare } from './cloudflare.ts';
 import { createClaimCode, createInstanceId, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
 import type { PairSessionRow } from './database.ts';
-import { assertSameOrigin, CloudError, readJsonFields, readText, respondJson } from './http.ts';
-import { findSessionUser } from './session.ts';
+import { CloudError, readJsonFields, readText, respondJson } from './http.ts';
+import { findPageUser, findSessionUser } from './session.ts';
 import type { CloudWorld } from './world.ts';
 
 export const PAIR_TTL_MS = 10 * 60_000;
@@ -112,8 +112,7 @@ export async function respondPairView(request: Request, claimCode: string, world
 }
 
 export async function respondPairApprove(request: Request, claimCode: string, world: CloudWorld) {
-  assertSameOrigin(request, world.config.origin);
-  const user = await findSessionUser(request, world);
+  const user = await findPageUser(request, world);
   const row = await findLivePairSession(claimCode, world);
   if ((await world.store.listUserInstances(user.id)).length >= MAX_INSTANCES_PER_USER)
     throw new CloudError(

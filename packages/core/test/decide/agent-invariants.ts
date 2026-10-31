@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import {
   isDelegatedRun,
+  isWatchSession,
   listActiveRuns,
   RUN_AGENT_ROLE,
   type Run,
@@ -51,7 +52,12 @@ const SESSION_ROLES: ReadonlySet<RunRole> = new Set<RunRole>([
 function selectSessionHolder(state: ShinsaState, started: Run) {
   const roles = SESSION_ROLES.has(started.role) ? SESSION_ROLES : new Set<RunRole>([started.role]);
   const runs = Object.values(state.runs).filter(
-    (run) => run.taskId === started.taskId && run.id !== started.id && !isDelegatedRun(run) && run.sessionId
+    (run) =>
+      run.taskId === started.taskId &&
+      run.id !== started.id &&
+      !isDelegatedRun(run) &&
+      run.sessionId &&
+      isWatchSession(run) === isWatchSession(started)
   );
   const ended = new Set(
     runs.filter((run) => run.failure && SESSION_ENDING.has(run.failure.class)).map((run) => run.sessionId)
@@ -68,7 +74,7 @@ function isRecoveredFresh(state: ShinsaState, started: Run) {
   let previous: Run | null = null;
   for (const run of Object.values(state.runs)) {
     if (run.taskId !== started.taskId || run.id === started.id || isDelegatedRun(run)) continue;
-    if (run.role !== started.role) continue;
+    if (run.role !== started.role || isWatchSession(run) !== isWatchSession(started)) continue;
     if (!previous || run.startedAt >= previous.startedAt) previous = run;
   }
   return Boolean(previous?.failure && FRESH_FAILURES.has(previous.failure.class));

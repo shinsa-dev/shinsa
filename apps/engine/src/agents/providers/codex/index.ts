@@ -15,6 +15,7 @@ export const CODEX_CAPABILITIES: ProviderCapabilities = {
   structuredOutput: true,
   accounts: false,
   compaction: true,
+  folds: false,
   fastMode: true,
 };
 
