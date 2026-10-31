@@ -1444,6 +1444,38 @@ describe('resume fallback', () => {
     });
   });
 
+  test('the Agent’s next step on its resumed session folds the turns before it and starts from the round brief', async () => {
+    const step = restoreSetup(() => undefined);
+    const running = step.supervisor.execute('run-1');
+    await until('the session', () => step.sessions.started.length > 0);
+    (step.sessions.started[0] as FakeSession).finish();
+    await running;
+    expect(step.sessions.started[0]?.input).toMatchObject({ resume: 'old', fold: true });
+    const continued = restoreSetup(() => undefined);
+    await runOnce(continued);
+    expect(continued.sessions.started[0]?.input.fold).toBeUndefined();
+    const retried = restoreSetup((state) => {
+      const run = state.runs['run-1'];
+      if (run)
+        run.attempts = [
+          { attemptId: 'a', provider: 'claude', model: null, resumed: true, handoff: null, startedAt: 1 },
+        ];
+    });
+    const again = retried.supervisor.execute('run-1');
+    await until('the retried session', () => retried.sessions.started.length > 0);
+    (retried.sessions.started[0] as FakeSession).finish();
+    await again;
+    expect(retried.sessions.started[0]?.input.fold).toBeUndefined();
+    const direct = restoreSetup((state) => {
+      state.settings.compaction = 'claude';
+    });
+    const plain = direct.supervisor.execute('run-1');
+    await until('the direct session', () => direct.sessions.started.length > 0);
+    (direct.sessions.started[0] as FakeSession).finish();
+    await plain;
+    expect(direct.sessions.started[0]?.input.fold).toBeUndefined();
+  });
+
   test('a provider without a context handoff, or a history with nothing to hand over, starts plainly fresh', async () => {
     const plain = restoreSetup(() => undefined, {
       capabilities: {

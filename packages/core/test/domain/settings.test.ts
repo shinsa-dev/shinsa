@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   createSettings,
   createState,
+  isEunoeCompaction,
   MAX_COMPACTION_LEAD_MINUTES,
   resolveAccountSwitchAt,
   resolveAgentFastMode,
@@ -161,6 +162,15 @@ describe('resolveIdleCompaction', () => {
     const off = { ...createSettings(), compaction: 'off' as const, idleCompaction: true };
     expect(resolveIdleCompaction(off, ['codex'])).toMatchObject({ available: false, enabled: false });
     expect(resolveIdleCompaction(off, [])).toMatchObject({ available: false });
+  });
+});
+
+describe('isEunoeCompaction', () => {
+  test('only the two Eunoe modes go through Eunoe', () => {
+    expect(isEunoeCompaction('eunoe_compact')).toBe(true);
+    expect(isEunoeCompaction('eunoe_default')).toBe(true);
+    expect(isEunoeCompaction('claude')).toBe(false);
+    expect(isEunoeCompaction('off')).toBe(false);
   });
 });
 

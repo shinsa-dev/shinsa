@@ -7,6 +7,7 @@ import {
   claudeCodeSessionId,
   createForwarder,
   createWindowLookup,
+  foldThread,
   type Prepared,
   rewriteAsync,
   type ThreadState,
@@ -76,6 +77,7 @@ export class EunoeServer implements EunoeLink {
   readonly #tuning: Partial<Omit<CoreConfig, 'mode'>>;
   readonly #store: ThreadStore;
   readonly #watchers = new Map<string, Set<EunoeWatcher>>();
+  readonly #folds = new Map<string, object>();
   #mode: EunoeMode = 'compact';
   #server: ReturnType<typeof Bun.serve> | null = null;
   #stopped = false;
@@ -112,6 +114,14 @@ export class EunoeServer implements EunoeLink {
     };
   }
 
+  fold(sessionId: string) {
+    const token = {};
+    this.#folds.set(sessionId, token);
+    return () => {
+      if (this.#folds.get(sessionId) === token) this.#folds.delete(sessionId);
+    };
+  }
+
   async stop() {
     this.#stopped = true;
     const server = this.#server;
@@ -141,7 +151,23 @@ export class EunoeServer implements EunoeLink {
     const threadId = claudeCodeSessionId(request.headers, body);
     const window = await this.#window(body.model, request.headers, this.#upstream);
     const config: CoreConfig = { ...CORE_DEFAULTS, ...this.#tuning, mode: this.#mode };
-    return rewriteAsync({ body, threadId, config, store: this.#store, window, mayCompact });
+    const folded = threadId !== null && mayCompact && this.#foldPending(threadId, body);
+    const result = await rewriteAsync({ body, threadId, config, store: this.#store, window, mayCompact });
+    if (!folded) return result;
+    const actions = [...(result.note.actions ?? []), 'fold'];
+    return { ...result, note: { ...result.note, compacted: true, actions } };
+  }
+
+  #foldPending(threadId: string, body: Body) {
+    if (!this.#folds.has(threadId)) return false;
+    this.#folds.delete(threadId);
+    try {
+      foldThread({ store: this.#store, threadId, messages: body.messages }, { at: 'latest' });
+      return true;
+    } catch (error) {
+      log.info('[Eunoe] Nothing to fold before this turn', { threadId, reason: describeError(error) });
+      return false;
+    }
   }
 
   #record(entry: Entry) {

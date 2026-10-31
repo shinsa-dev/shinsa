@@ -50,6 +50,7 @@ interface Turn {
   disallowed: string[];
   matchers: (string | undefined)[];
   edit: unknown;
+  briefed: boolean;
 }
 
 const PLAN = {
@@ -143,6 +144,7 @@ async function* agentTurn(
     disallowed: params.options?.disallowedTools ?? [],
     matchers: params.options?.hooks?.PreToolUse?.map((matcher) => matcher.matcher) ?? [],
     edit: await tryEdit(params),
+    briefed: brief.includes('Ship the round.'),
   });
   writeSessionFile(home, params.options?.cwd ?? '', sessionId);
   yield sdkMessage({ type: 'system', subtype: 'init', session_id: sessionId });
@@ -265,5 +267,11 @@ describe('a long task that keeps its sessions across rounds', () => {
       .split('\n')
       .map((line) => JSON.parse(line).thread as string);
     expect(threads.filter((thread) => thread?.startsWith(`${session}-`))).toHaveLength(agentTurns.length);
+    const folds = readFileSync(join(dir, 'requests.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .filter((line) => (JSON.parse(line).actions ?? []).includes('fold'));
+    expect(folds).toHaveLength(builders.length);
+    expect(builders.every((turn) => turn.briefed)).toBe(true);
   });
 });

@@ -113,6 +113,50 @@ describe('EunoeServer', () => {
     expect(watched.stuck).toEqual(['session-1']);
   });
 
+  test('a fold queued for a session folds every earlier turn on its next request, once', async () => {
+    const { server, upstream } = openServer({ window: () => Promise.resolve(1_000_000) });
+    const url = await ensureUrl(server);
+    const watched = watchSession(server, 'session-1');
+    server.fold('session-1');
+    const body = createMessagesBody([4_000, 4_000, 4_000], 'Now build phase 1.');
+    await (await sendMessages(url, 'session-1', body)).text();
+    const folded = upstream.received[0]?.body as { messages: unknown[] };
+    expect(folded.messages.length).toBeLessThan(body.messages.length);
+    expect(JSON.stringify(folded)).not.toContain('x'.repeat(4_000));
+    expect(watched.notices).toEqual([
+      { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
+    ]);
+    await (await sendMessages(url, 'session-1', createMessagesBody([4_000, 4_000, 4_000, 10]))).text();
+    expect(watched.notices).toHaveLength(1);
+  });
+
+  test('a token count never takes the fold, and a released fold or one with nothing before it folds nothing', async () => {
+    const { server, upstream } = openServer({ window: () => Promise.resolve(1_000_000) });
+    const url = await ensureUrl(server);
+    const watched = watchSession(server, 'session-1');
+    const release = server.fold('session-1');
+    const body = createMessagesBody([4_000, 4_000]);
+    await (
+      await fetch(`${url}/v1/messages/count_tokens`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-claude-code-session-id': 'session-1' },
+        body: JSON.stringify(body),
+      })
+    ).text();
+    expect(upstream.received[0]?.body.messages).toEqual(body.messages);
+    const stale = server.fold('session-1');
+    release();
+    stale();
+    await (await sendMessages(url, 'session-1', body)).text();
+    expect(upstream.received[1]?.body.messages).toEqual(body.messages);
+    const info = spyOn(log, 'info');
+    server.fold('session-2');
+    await (await sendMessages(url, 'session-2', createMessagesBody([]))).text();
+    expect(info).toHaveBeenCalledWith('[Eunoe] Nothing to fold before this turn', expect.any(Object));
+    info.mockRestore();
+    expect(watched.notices).toEqual([]);
+  });
+
   test('a request log it cannot write is logged and the request still goes through', async () => {
     const { server, upstream, dir } = openServer();
     const url = await ensureUrl(server);

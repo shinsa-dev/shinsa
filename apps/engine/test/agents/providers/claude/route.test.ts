@@ -14,6 +14,7 @@ function createLink(status: Awaited<ReturnType<EunoeLink['ensure']>>) {
       return Promise.resolve(status);
     },
     watch: () => () => undefined,
+    fold: () => () => undefined,
   };
   return { link, asked };
 }

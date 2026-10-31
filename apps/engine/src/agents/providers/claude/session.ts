@@ -230,6 +230,7 @@ export function startClaudeSession(
   let eunoe = false;
   let unwatch: (() => void) | null = null;
   let stuck: RunFailure | null = null;
+  let releaseFold: (() => void) | null = null;
 
   const terminate = async () => {
     if (terminated) return;
@@ -285,6 +286,9 @@ export function startClaudeSession(
     const route = await resolveClaudeRoute(input.compaction ?? 'claude', options.eunoe ?? null);
     if (route.notice) recorder.notify(route.notice);
     eunoe = route.eunoe;
+    if (eunoe && options.eunoe && input.fold && input.resume && !input.fork) {
+      releaseFold = options.eunoe.fold(input.resume);
+    }
     return runtime.runQuery({
       prompt: hasServers ? gated() : prompts,
       options: {
@@ -526,6 +530,7 @@ export function startClaudeSession(
   };
   const done = run().finally(() => {
     if (exiting) clearTimeout(exiting);
+    releaseFold?.();
   });
 
   return {

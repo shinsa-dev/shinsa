@@ -20,6 +20,7 @@ export const CLAUDE_CAPABILITIES: ProviderCapabilities = {
   structuredOutput: true,
   accounts: true,
   compaction: true,
+  folds: true,
   fastMode: true,
 };
 

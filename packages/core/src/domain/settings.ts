@@ -155,6 +155,10 @@ export function resolveCompaction(settings: Settings): CompactionMode {
   return settings.compaction ?? DEFAULT_COMPACTION;
 }
 
+export function isEunoeCompaction(mode: CompactionMode) {
+  return mode === 'eunoe_compact' || mode === 'eunoe_default';
+}
+
 export function resolveFastMode(settings: Settings) {
   return settings.fastMode ?? false;
 }

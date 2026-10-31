@@ -45,6 +45,7 @@ export interface AgentSessionInput {
   account?: SessionAccount;
   onActivity?: () => void;
   compaction?: CompactionMode;
+  fold?: boolean;
   fastMode?: boolean;
   usageBaseline?: UsageBaseline;
   extensions?: SessionExtensions;
@@ -121,6 +122,7 @@ export interface ProviderCapabilities {
   structuredOutput: boolean;
   accounts: boolean;
   compaction: boolean;
+  folds: boolean;
   fastMode: boolean;
 }
 
@@ -133,6 +135,7 @@ const MINIMAL_CAPABILITIES: ProviderCapabilities = {
   structuredOutput: false,
   accounts: false,
   compaction: false,
+  folds: false,
   fastMode: false,
 };
 

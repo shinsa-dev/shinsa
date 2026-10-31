@@ -914,6 +914,7 @@ describe('what an idle session leaves behind', () => {
 
 function createEunoe(up = true) {
   const watching: { sessionId: string; watcher: EunoeWatcher; stopped: boolean }[] = [];
+  const folds: { sessionId: string; released: boolean }[] = [];
   const link: EunoeLink = {
     ensure: () =>
       Promise.resolve(
@@ -928,8 +929,15 @@ function createEunoe(up = true) {
         entry.stopped = true;
       };
     },
+    fold: (sessionId) => {
+      const entry = { sessionId, released: false };
+      folds.push(entry);
+      return () => {
+        entry.released = true;
+      };
+    },
   };
-  return { link, watching };
+  return { link, watching, folds };
 }
 
 describe('compaction and fast mode', () => {
@@ -1036,6 +1044,39 @@ describe('compaction and fast mode', () => {
     });
     expect(interrupts).toEqual(['interrupt']);
     expect(entries.filter((entry) => entry.type === 'error')).toHaveLength(1);
+  });
+
+  test('a turn that asks for a fold queues one for the session it resumes, until the turn ends', async () => {
+    const { link, folds } = createEunoe();
+    const { input } = createInput({ compaction: 'eunoe_compact', fold: true, resume: 'sess-1' });
+    const { session, messages } = startScripted(input, { eunoe: link });
+    messages.push(init);
+    await until('the fold', () => folds.length === 1);
+    expect(folds).toEqual([{ sessionId: 'sess-1', released: false }]);
+    messages.push(success('ok'));
+    await session.done;
+    expect(folds).toEqual([{ sessionId: 'sess-1', released: true }]);
+  });
+
+  test('no fold is queued for a new session, a fork, a turn that does not ask, or a session that goes direct', async () => {
+    const cases = [
+      { link: createEunoe(), input: { compaction: 'eunoe_compact' as const, fold: true } },
+      {
+        link: createEunoe(),
+        input: { compaction: 'eunoe_compact' as const, fold: true, resume: 's', fork: true },
+      },
+      { link: createEunoe(), input: { compaction: 'eunoe_compact' as const, resume: 's' } },
+      { link: createEunoe(false), input: { compaction: 'eunoe_compact' as const, fold: true, resume: 's' } },
+      { link: createEunoe(), input: { compaction: 'claude' as const, fold: true, resume: 's' } },
+    ];
+    for (const { link, input: overrides } of cases) {
+      const { input } = createInput(overrides);
+      const { session, messages } = startScripted(input, { eunoe: link.link });
+      messages.push(init);
+      messages.push(success('ok'));
+      await session.done;
+      expect(link.folds).toEqual([]);
+    }
   });
 
   test('a stuck report after the run was cancelled leaves it cancelled', async () => {
