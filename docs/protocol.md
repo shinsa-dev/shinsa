@@ -217,6 +217,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
 | `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
+| `duplicate?` | `{ of, by, why }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
@@ -397,7 +398,8 @@ holds an active run; Shinsa's own stages hold an effect.
 | `merged`, `done`, `cancelled` | merge / none | | settled |
 
 Any working or gate stage can also hold a failure gate (paused), a monitor or a usage wait; `task.cancel` and
-`task.complete` settle from anywhere open.
+`task.complete` settle from anywhere open, and so does `task.mark_duplicate`, a cancel that records the task it
+duplicates (`task.duplicated`, then `cancelled`).
 
 **Rounds and the lifecycle.** A task's stage belongs to its active round. `merged` and `done` reached on their own
 leave the task **resting**: settled (no run, gate or worktree) but open, and a message starts its next round. A new
@@ -766,6 +768,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
+| `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
+| `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
 | `watchdog.connect` | gives a watchdog that waits for a source its server (`server`, `data`), adds it to the project's sources for the repository, and starts its window | `watchdogs connect` | agent |
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
@@ -874,7 +878,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task closes it as that task's duplicate before any work |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
@@ -930,6 +934,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
+| `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why }`); the `cancelled` stage follows |
+| `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
 | `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |

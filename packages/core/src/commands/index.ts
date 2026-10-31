@@ -80,6 +80,7 @@ export interface TriageReasons {
   shape?: string;
   priority?: string;
   start?: string;
+  duplicate?: string;
 }
 
 export type UserCommand =
@@ -110,6 +111,8 @@ export type UserCommand =
   | { type: 'task.snooze'; taskId: string }
   | { type: 'task.unsnooze'; taskId: string }
   | { type: 'task.cancel'; taskId: string }
+  | { type: 'task.mark_duplicate'; taskId: string; duplicateOf: string }
+  | { type: 'task.clear_duplicate'; taskId: string }
   | { type: 'task.complete'; taskId: string }
   | { type: 'task.retry'; taskId: string; account?: RunAccount }
   | ({ type: 'task.message'; taskId: string; text: string } & MessageRoute)
@@ -264,6 +267,7 @@ type SystemCommand =
       waitsOn: string[];
       shape?: TaskShape;
       priority?: TaskPriority;
+      duplicateOf?: string;
       reasons?: TriageReasons;
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }

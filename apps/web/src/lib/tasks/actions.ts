@@ -4,6 +4,7 @@ import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
+import { DUPLICATE_TITLE, openDuplicateDialog, startNotDuplicate } from '@/lib/tasks/duplicate.ts';
 import { FORK_TITLE, openForkDialog } from '@/lib/tasks/fork.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -21,6 +22,8 @@ export type TaskActionKey =
   | 'unsnooze'
   | 'restart'
   | 'complete'
+  | 'duplicate'
+  | 'notDuplicate'
   | 'cancel';
 
 export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName }> = {
@@ -37,6 +40,8 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   unsnooze: { label: 'Unsnooze', icon: 'IconBell' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
   complete: { label: 'Mark as done', icon: 'IconCheckCircle2' },
+  duplicate: { label: DUPLICATE_TITLE, icon: 'IconSquareBehindSquare2' },
+  notDuplicate: { label: 'Not a duplicate, start it', icon: 'IconPlayCircle' },
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
 };
 
@@ -45,9 +50,15 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
   if (task.pullRequest) links.push('pullRequest');
   if (task.branch) links.push('branch');
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
-  const lifecycle: TaskActionKey[] = isTaskSettled(task) ? [] : ['restart', 'complete', 'cancel'];
+  const lifecycle: TaskActionKey[] = isTaskSettled(task)
+    ? listSettledActions(task)
+    : ['restart', 'complete', 'duplicate', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   return [links, worktree, fork, listLaterActions(task), lifecycle].filter((group) => group.length > 0);
+}
+
+function listSettledActions(task: Task): TaskActionKey[] {
+  return task.duplicate ? ['notDuplicate'] : [];
 }
 
 function listLaterActions(task: Task): TaskActionKey[] {
@@ -101,6 +112,12 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       return;
     case 'complete':
       void sendCommandWithToast({ type: 'task.complete', taskId: task.id }, 'Marked done.');
+      return;
+    case 'duplicate':
+      openDuplicateDialog(task.id);
+      return;
+    case 'notDuplicate':
+      void startNotDuplicate(task);
       return;
     case 'cancel':
       void sendCommandWithToast({ type: 'task.cancel', taskId: task.id }, 'Cancelled.');

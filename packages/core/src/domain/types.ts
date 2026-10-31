@@ -486,7 +486,16 @@ export interface Task {
   watchdogs?: Watchdog[];
   backlog?: TaskBacklog | null;
   snoozed?: TaskSnooze | null;
+  duplicate?: TaskDuplicate | null;
   iterations?: Iteration[];
+}
+
+export type DuplicateActor = 'you' | 'shinsa';
+
+export interface TaskDuplicate {
+  of: string;
+  by: DuplicateActor;
+  why: string | null;
 }
 
 export interface IterationRequest {

@@ -36,6 +36,7 @@ describe('task action commands', () => {
       ['run', 'Snooze', undefined],
       ['run', 'Restart the current step', undefined],
       ['run', 'Mark as done', undefined],
+      ['run', 'Close as a duplicate', undefined],
       ['page', 'Cancel task', undefined],
     ]);
   });

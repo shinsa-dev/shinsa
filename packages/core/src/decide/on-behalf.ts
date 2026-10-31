@@ -66,6 +66,10 @@ const DESCRIPTIONS: Descriptions = {
   'task.snooze': (state, command) => `Snoozed ${quoteTask(state, command.taskId)}`,
   'task.unsnooze': (state, command) => `Unsnoozed ${quoteTask(state, command.taskId)}`,
   'task.cancel': (state, command) => `Cancelled ${quoteTask(state, command.taskId)}`,
+  'task.mark_duplicate': (state, command) =>
+    `Closed ${quoteTask(state, command.taskId)} as a duplicate of ${quoteTask(state, command.duplicateOf)}`,
+  'task.clear_duplicate': (state, command) =>
+    `Started ${quoteTask(state, command.taskId)} again, as not a duplicate`,
   'task.complete': (state, command) => `Marked ${quoteTask(state, command.taskId)} as done`,
   'task.retry': (state, command) => `Retried ${quoteTask(state, command.taskId)}`,
   'task.message': (state, command) =>

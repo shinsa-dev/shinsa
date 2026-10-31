@@ -383,6 +383,35 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks duplicate
+
+Close a task as a duplicate of another. It is cancelled and links the task it duplicates.
+
+```
+shinsa tasks duplicate <task> --of <text> [--json]
+```
+
+Every task agent's tool: `tasks_duplicate`. Sends `task.mark_duplicate`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `--of` | text, required | The task it duplicates: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks not-duplicate
+
+Start a task closed as a duplicate again. One that already worked starts a fresh round.
+
+```
+shinsa tasks not-duplicate <task> [--json]
+```
+
+Every task agent's tool: `tasks_not_duplicate`. Sends `task.clear_duplicate`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks done
 
 Mark a task as done without merging it.

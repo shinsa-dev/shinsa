@@ -96,6 +96,8 @@ export function resolveGateStatus(gate: Gate): Status {
 
 const WATCHING: Status = { label: 'Watching', tone: 'blue' };
 
+const DUPLICATE: Status = { label: 'Duplicate', tone: 'neutral' };
+
 function isWaitingForDelegations(state: ShinsaState, task: Task) {
   return listActiveRuns(state, task.id).some(
     (run) => run.status === 'waiting' && (run.waitingOn?.delegations.length ?? 0) > 0
@@ -118,6 +120,7 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (gate && isHeldInBacklog(state, gate))
     return { label: TASK_GROUP.backlog.title, tone: TASK_GROUP.backlog.tone };
   if (gate) return resolveGateStatus(gate);
+  if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;
@@ -162,6 +165,7 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
   const gate = selectLeadGate(state, task);
   if (gate && isHeldInBacklog(state, gate)) return TASK_GROUP.backlog.icon;
   if (gate) return resolveGateGlyph(gate).icon;
+  if (task.duplicate) return TASK_GROUP.duplicate.icon;
   if (isWatchedTask(task)) return 'IconRadar';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
   if (task.usageWait?.status === 'armed') return 'IconGauge';

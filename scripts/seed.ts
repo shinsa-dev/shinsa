@@ -5037,6 +5037,28 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       ageHours: 120,
     },
     {
+      id: 'task-duplicate-currency',
+      request: 'paywall should show euros for german users, not dollars',
+      title: 'Show euro prices on the paywall in Germany',
+      repo: paywall,
+      size: 'small',
+      stage: 'cancelled',
+      reason: 'duplicate of “Show paywall prices in the visitor’s currency”',
+      branch: 'fix/paywall-euro-prices',
+      ageHours: 1,
+      extra: [
+        {
+          type: 'task.duplicated',
+          taskId: 'task-duplicate-currency',
+          duplicate: {
+            of: 'task-paywall-euro-prices',
+            by: 'shinsa',
+            why: 'Both show paywall prices in the store’s currency for the visitor’s region.',
+          },
+        },
+      ],
+    },
+    {
       id: 'task-closed-spinner',
       request: 'let paywalls hide the native purchase spinner',
       title: 'Hide the native purchase spinner',

@@ -28,7 +28,7 @@ describe('listTaskActions', () => {
       ['editor', 'terminal', 'finder'],
       ['fork'],
       ['snooze'],
-      ['restart', 'complete', 'cancel'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
   });
 
@@ -37,17 +37,27 @@ describe('listTaskActions', () => {
       ['branch'],
       ['fork'],
       ['snooze'],
-      ['restart', 'complete', 'cancel'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
     expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork']]);
     expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([]);
+    const closed = createTask({
+      id: 't',
+      stage: 'cancelled',
+      duplicate: { of: 'o', by: 'shinsa', why: null },
+    });
+    expect(listTaskActions(closed)).toEqual([['notDuplicate']]);
+    expect(listTaskActions({ ...closed, duplicate: { of: 'o', by: 'you', why: null } })).toEqual([
+      ['notDuplicate'],
+    ]);
+    expect(listTaskActions({ ...closed, duplicate: null })).toEqual([]);
   });
 
   it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
       ['fork'],
       ['moveToBacklog', 'snooze'],
-      ['restart', 'complete', 'cancel'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
     expect(listTaskActions(createTask({ id: 't', stage: 'awaiting_plan', backlog: { at: 1 } }))[1]).toEqual([
       'removeFromBacklog',
