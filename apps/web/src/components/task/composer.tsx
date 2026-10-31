@@ -10,25 +10,33 @@ import { CARD, COMPOSER_FIELD, COMPOSER_FOOTER } from '@/components/layout/surfa
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
+import {
+  clearTaskDraft,
+  resolveTaskDraft,
+  subscribeTaskDrafts,
+  updateTaskDraft,
+} from '@/lib/chat/task-drafts.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 
 export function Composer({
+  draftKey,
   placeholder,
   submitLabel,
   onSubmit,
   aside,
   dock,
 }: {
+  draftKey: string;
   placeholder: string;
   submitLabel: string;
   onSubmit: (text: string) => Promise<boolean>;
   aside?: React.ReactNode;
   dock?: React.ReactNode;
 }) {
-  const [text, setText] = React.useState('');
+  const text = React.useSyncExternalStore(subscribeTaskDrafts, () => resolveTaskDraft(draftKey).text);
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
-  const attachments = useAttachments();
+  const attachments = useAttachments(draftKey);
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(text, attachments.drafts, busy);
 
@@ -37,10 +45,7 @@ export function Composer({
     setBusy(true);
     const sent = await onSubmit(serializeAttachments(text, attachments.ready));
     setBusy(false);
-    if (sent) {
-      setText('');
-      attachments.clear();
-    }
+    if (sent) clearTaskDraft(draftKey);
     field.current?.focus();
   }
 
@@ -53,7 +58,10 @@ export function Composer({
           <textarea
             ref={field}
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              const typed = event.target.value;
+              updateTaskDraft(draftKey, () => ({ text: typed }));
+            }}
             onPaste={onPaste}
             onKeyDown={(event) => {
               if (!isSubmitKey(event)) return;

@@ -30,7 +30,12 @@ afterEach(() => {
 function renderComposer(onSubmit: (text: string) => Promise<boolean>) {
   render(
     <TooltipProvider>
-      <Composer placeholder='Tell the agent something' submitLabel='Send' onSubmit={onSubmit} />
+      <Composer
+        draftKey='task-1'
+        placeholder='Tell the agent something'
+        submitLabel='Send'
+        onSubmit={onSubmit}
+      />
     </TooltipProvider>
   );
   return screen.getByRole('textbox', { name: 'Tell the agent something' });
@@ -75,5 +80,58 @@ describe('Composer attachments', () => {
     expect(onSubmit.mock.calls[0]?.[0]).toStartWith('Look at this\n\n<attachments>');
     expect((field as HTMLTextAreaElement).value).toBe('Look at this');
     expect(screen.getByRole('img', { name: 'shot.png' })).toBeTruthy();
+  });
+});
+
+describe('Composer drafts', () => {
+  function renderPair(onSubmit: (text: string) => Promise<boolean>) {
+    render(
+      <TooltipProvider>
+        <Composer draftKey='task-1' placeholder='On overview' submitLabel='Send' onSubmit={onSubmit} />
+        <Composer draftKey='task-1' placeholder='On chat' submitLabel='Send from chat' onSubmit={onSubmit} />
+        <Composer draftKey='task-2' placeholder='Another task' submitLabel='Send there' onSubmit={onSubmit} />
+      </TooltipProvider>
+    );
+    return {
+      overview: screen.getByRole('textbox', { name: 'On overview' }) as HTMLTextAreaElement,
+      chat: screen.getByRole('textbox', { name: 'On chat' }) as HTMLTextAreaElement,
+      other: screen.getByRole('textbox', { name: 'Another task' }) as HTMLTextAreaElement,
+    };
+  }
+
+  it('shares the text and the files of one task, and sending clears them in every input', async () => {
+    const onSubmit = mock(async (_text: string) => true);
+    const { overview, chat, other } = renderPair(onSubmit);
+    fireEvent.change(overview, { target: { value: 'Look at this' } });
+    expect(chat.value).toBe('Look at this');
+    expect(other.value).toBe('');
+    fireEvent.paste(chat, {
+      clipboardData: { files: [new File(['data'], 'shot.png', { type: 'image/png' })] },
+    });
+    expect(screen.getAllByRole('list', { name: 'Attachments' })).toHaveLength(2);
+    await waitFor(() => expect(sendButton().disabled).toBe(false));
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0]).toStartWith('Look at this\n\n<attachments>');
+    await waitFor(() => expect(chat.value).toBe(''));
+    expect(overview.value).toBe('');
+    expect(screen.queryByRole('list', { name: 'Attachments' })).toBeNull();
+  });
+
+  it('keeps a task’s draft when its input goes and comes back', () => {
+    const onSubmit = mock(async (_text: string) => true);
+    const first = render(
+      <TooltipProvider>
+        <Composer draftKey='task-1' placeholder='Before' submitLabel='Send' onSubmit={onSubmit} />
+      </TooltipProvider>
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Before' }), {
+      target: { value: 'Half a thought' },
+    });
+    first.unmount();
+    renderComposer(onSubmit);
+    expect(
+      (screen.getByRole('textbox', { name: 'Tell the agent something' }) as HTMLTextAreaElement).value
+    ).toBe('Half a thought');
   });
 });
