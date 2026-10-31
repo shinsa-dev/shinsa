@@ -16,8 +16,11 @@ import {
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
   createSettings,
+  type NativeSignInTokenResponse,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
+  REMOTE_NATIVE_CLIENT,
+  REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
   resolveKeyFingerprint,
@@ -209,6 +212,10 @@ function respondStatic(pathname: string) {
 function respondIndex(machines: Machine[]) {
   const links = [
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
+    [
+      'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
+      `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
+    ],
     ...machines.map((machine) => [
       `Add this device to ${machine.name} (a fresh one-time link)`,
       `/__preview/enroll/${machine.id}`,
@@ -246,9 +253,28 @@ async function respondConnect(machine: Machine) {
   });
 }
 
+function respondNativeSignIn(url: URL) {
+  const redirect = URL.parse(url.searchParams.get('redirect') ?? '');
+  if (!redirect || !REMOTE_NATIVE_REDIRECT_SCHEMES.some((scheme) => scheme === redirect.protocol))
+    return Response.json(
+      {
+        error: { code: 'invalid_redirect', message: 'The app can only be sent back to a shinsa:// address.' },
+      },
+      { status: 400 }
+    );
+  redirect.searchParams.set('code', 'preview');
+  return new Response(null, { status: 302, headers: { location: redirect.toString() } });
+}
+
 async function respondDashboard(request: Request, url: URL, machines: Machine[]) {
   const { pathname } = url;
   if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
+  if (pathname === REMOTE_PATHS.signIn && url.searchParams.get('client') === REMOTE_NATIVE_CLIENT)
+    return respondNativeSignIn(url);
+  if (pathname === REMOTE_PATHS.signInToken && request.method === 'POST') {
+    const answer: NativeSignInTokenResponse = { token: 'preview', user: USER };
+    return Response.json(answer);
+  }
   if (pathname === REMOTE_PATHS.signIn)
     return Response.redirect(`${ORIGIN}${url.searchParams.get('return') ?? REMOTE_PATHS.app}`, 302);
   if (pathname === REMOTE_PATHS.signOut) return Response.json({});
