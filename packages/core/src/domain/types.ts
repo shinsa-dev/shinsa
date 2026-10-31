@@ -2,6 +2,7 @@ import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   CarriedMergeStep,
   CodeSpot,
+  FixReply,
   JudgementCall,
   PlanDocument,
   ReportCheck,
@@ -477,6 +478,22 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   backlog?: TaskBacklog | null;
+  iterations?: Iteration[];
+}
+
+export interface IterationRequest {
+  text: string;
+  comments: number;
+  at: number;
+}
+
+export interface Iteration {
+  id: string;
+  round: number;
+  requests: IterationRequest[];
+  reply: FixReply | null;
+  runId: string | null;
+  repliedAt: number | null;
 }
 
 export interface TaskBacklog {

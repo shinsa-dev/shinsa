@@ -22,6 +22,7 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
 } from '../harness.ts';
 
 const SECRET: MergeStep = {
@@ -113,6 +114,7 @@ function reviseSteps(harness: Harness, taskId: string, steps: MergeStep[]) {
     type: 'agent.complete_fix',
     runId: harness.activeRun(taskId).id,
     summary: 'Changed the steps.',
+    reply: REPLY,
     walkthrough: { steps },
   });
 }
@@ -310,6 +312,7 @@ describe('the steps around the merge', () => {
       type: 'agent.complete_fix',
       runId: harness.activeRun(taskId).id,
       summary: 'Added the flag.',
+      reply: REPLY,
       walkthrough: { steps: [SECRET, FLAG] },
     });
     expect(listMergeSteps(harness.task(taskId)).map((step) => [step.title, step.done])).toEqual([

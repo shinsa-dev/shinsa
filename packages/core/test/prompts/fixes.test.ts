@@ -71,8 +71,9 @@ describe('fix prompts', () => {
       'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.'
     );
     expect(resolveHumanFixPrompt('Start the dev server so I can try it.', [])).toContain(
-      'Start the dev server so I can try it.\n\nWhen it asks you to run or start something so the human can try the work (a dev server, a service), to check something or to answer a question, rather than to change the work, do that, say what you did in the summary, and call `complete_fix` all the same.'
+      'Start the dev server so I can try it.\n\nWhen it asks you to run or start something so the human can try the work (a dev server, a service), to check something or to answer a question, rather than to change the work, do that, say what you did in the reply, and call `complete_fix` all the same.'
     );
+    expect(resolveHumanFixPrompt('Rename it.', [])).toContain('so `complete_fix` also takes `reply`');
   });
 
   test('a checks fix names each failing check by id, leaves out what fails on the base branch, and says what comes next', () => {

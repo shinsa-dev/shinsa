@@ -557,12 +557,68 @@ describe('validateFixHandOver', () => {
   test('needs a summary', () => {
     expect(readValue(validateFixHandOver({ summary: 'Fixed CI.' }))).toEqual({
       summary: 'Fixed CI.',
+      reply: null,
       walkthrough: null,
       checks: [],
       checkChanges: [],
       evidenceKept: [],
     });
     expect(errorsOf(validateFixHandOver({}))).toEqual(['summary is required.']);
+  });
+
+  test('reads the reply to the human: a headline, each point with its outcome, then what to do', () => {
+    expect(
+      readValue(
+        validateFixHandOver({
+          summary: 'Moved Slack.',
+          reply: {
+            headline: ' Slack is under Remote access now. ',
+            points: [
+              { ask: 'Move Slack', outcome: 'done', note: 'Settings → General.' },
+              { ask: 'Does it need a setting?', outcome: 'answered', note: 'Agents & AI Apps.' },
+            ],
+            next: 'Restart the engine.',
+          },
+        })
+      ).reply
+    ).toEqual({
+      headline: 'Slack is under Remote access now.',
+      points: [
+        { ask: 'Move Slack', outcome: 'done', note: 'Settings → General.' },
+        { ask: 'Does it need a setting?', outcome: 'answered', note: 'Agents & AI Apps.' },
+      ],
+      next: 'Restart the engine.',
+      details: null,
+    });
+  });
+
+  test('names every broken part of a reply', () => {
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', reply: 'Done.' }))).toEqual([
+      'reply must be an object.',
+      'reply.headline is required.',
+      'reply.points must be a list.',
+    ]);
+    expect(
+      errorsOf(
+        validateFixHandOver({
+          summary: 'Fixed.',
+          reply: {
+            headline: 'x'.repeat(PROTOCOL_LIMITS.replyHeadline + 1),
+            points: [{ ask: '', outcome: 'maybe', note: 'x'.repeat(PROTOCOL_LIMITS.replyNote + 1) }],
+            details: 'x'.repeat(PROTOCOL_LIMITS.replyDetails + 1),
+          },
+        })
+      )
+    ).toEqual([
+      `reply.headline is ${PROTOCOL_LIMITS.replyHeadline + 1} characters; the limit is ${PROTOCOL_LIMITS.replyHeadline}.`,
+      'reply.points[0].ask is required.',
+      'reply.points[0].outcome must be one of done, answered, not_changed.',
+      `reply.points[0].note is ${PROTOCOL_LIMITS.replyNote + 1} characters; the limit is ${PROTOCOL_LIMITS.replyNote}.`,
+      `reply.details is ${PROTOCOL_LIMITS.replyDetails + 1} characters; the limit is ${PROTOCOL_LIMITS.replyDetails}.`,
+    ]);
+    expect(
+      errorsOf(validateFixHandOver({ summary: 'Fixed.', reply: { headline: 'Did it.', points: [] } }))
+    ).toEqual(['reply.points needs at least 1 item.']);
   });
 
   test('names the earlier evidence that still applies, each once', () => {

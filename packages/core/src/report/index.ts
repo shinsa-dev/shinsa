@@ -70,6 +70,7 @@ export {
   MERGE_STEP_KINDS,
   MERGE_STEP_TIMINGS,
   PROTOCOL_LIMITS,
+  REPLY_OUTCOMES,
   type Validation,
   validateDelivery,
   validateEvidence,

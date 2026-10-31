@@ -54,6 +54,7 @@ import type {
 import type { SourceReport } from '../domain/schedules.ts';
 import type {
   CheckChange,
+  FixReply,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -133,6 +134,15 @@ type EventBody =
       round?: number;
       suggestionId?: string;
     }
+  | {
+      type: 'iteration.requested';
+      taskId: string;
+      iterationId: string;
+      round: number;
+      text: string;
+      comments: number;
+    }
+  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: FixReply; runId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }
   | { type: 'task.message_dropped'; taskId: string; messageId: string; reason: string }

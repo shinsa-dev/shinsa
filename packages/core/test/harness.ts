@@ -3,6 +3,7 @@ import {
   type ConfigProblem,
   createState,
   decide,
+  type FixReply,
   listActiveRuns,
   listOpenGates,
   type PlanDocument,
@@ -15,6 +16,7 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  selectOpenIteration,
   splitHouseRules,
 } from '../src/index.ts';
 
@@ -117,6 +119,19 @@ export function registerRepo(
     projectName,
   });
   return Object.values(harness.state.repos).find((repo) => repo.name === name)?.id ?? '';
+}
+
+export const REPLY: FixReply = {
+  headline: 'Made the change you asked for.',
+  points: [{ ask: 'The change', outcome: 'done', note: 'It is in.' }],
+  next: null,
+  details: null,
+};
+
+export function resolveReply(harness: Harness, runId: string) {
+  const run = harness.state.runs[runId];
+  const task = run ? harness.state.tasks[run.taskId] : undefined;
+  return task && selectOpenIteration(task) ? { reply: REPLY } : {};
 }
 
 export const PLAN: PlanDocument = {
@@ -242,7 +257,8 @@ export function reachShipping(harness: Harness, taskId: string) {
 }
 
 export function pushFix(harness: Harness, taskId: string, summary = 'Fixed it.') {
-  harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary });
+  const runId = harness.activeRun(taskId).id;
+  harness.send({ type: 'agent.complete_fix', runId, summary, ...resolveReply(harness, runId) });
   pushed(harness, taskId);
 }
 
