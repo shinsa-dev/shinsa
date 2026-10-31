@@ -46,6 +46,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   only to a browser that machine enrolled, so a stranger signed in sees an empty list and can reach nothing. The return path is parsed against
   this origin and kept only when it stays on it (a tab, a newline or a backslash cannot turn it into `//elsewhere`).
   A failed callback sends you to `/?sign_in_error=<code>`, which the sign-in page says in words.
+  Each sign-in writes your GitHub login, avatar and display name to `users` (`name`, trimmed, null when GitHub has none
+  or it is blank, so clients show the login instead); a rename on GitHub shows at the next sign-in.
 - **Native sign-in.** The iPhone app has no cookie jar of its own, so `/__remote/sign-in?client=native` also takes a
   `redirect` (only `shinsa:` or `shinsa-dev:`, 200 characters at most, else 400 `invalid_redirect`) and the app's own
   `code_challenge` (S256, else 400 `invalid_challenge`), both kept in the OAuth cookie (base64url JSON, read back

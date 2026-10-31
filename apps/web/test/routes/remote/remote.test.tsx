@@ -11,7 +11,7 @@ import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
 
-const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
+const USER: RemoteSession = { user: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null } };
 
 const STUDIO: RemoteInstance = {
   id: 'k3x9',
