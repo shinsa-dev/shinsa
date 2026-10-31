@@ -59,7 +59,9 @@ function measureItem(el: HTMLElement, root: HTMLElement): Box {
  * size and its scale drops back to 1, so its corners never rest stretched. An
  * indicator with no size yet (an item not measured) is laid out at once.
  * The item selected when it mounts shows at once, with no fade or slide; it
- * moves only when the selection changes after that.
+ * moves only when the selection changes after that. Cleaning up parks the
+ * indicator, so a list hidden in a React `Activity` and shown again never
+ * keeps a box over an item that left while it was hidden.
  *
  * Items get `data-indicator-here` while the indicator sits on them, so they
  * can style their own text/icon color for the highlighted state. The
@@ -224,7 +226,7 @@ export function useAnimatedIndicator<T extends HTMLElement>(
       indicator.removeEventListener('transitionend', settle);
       root.removeEventListener('pointerdown', onPointerDown);
       release();
-      activeEl?.removeAttribute('data-indicator-here');
+      park();
     };
   }, [rootRef, attribute, value, press, parkWhenEmpty]);
 

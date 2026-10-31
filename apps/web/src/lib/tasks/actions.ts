@@ -18,6 +18,8 @@ export type TaskActionKey =
   | 'fork'
   | 'moveToBacklog'
   | 'removeFromBacklog'
+  | 'snooze'
+  | 'unsnooze'
   | 'restart'
   | 'complete'
   | 'duplicate'
@@ -34,6 +36,8 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   fork: { label: FORK_TITLE, icon: 'IconFork' },
   moveToBacklog: { label: 'Move to the backlog', icon: 'IconArchive' },
   removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
+  snooze: { label: 'Snooze', icon: 'IconClockSnooze' },
+  unsnooze: { label: 'Unsnooze', icon: 'IconBell' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
   complete: { label: 'Mark as done', icon: 'IconCheckCircle2' },
   duplicate: { label: DUPLICATE_TITLE, icon: 'IconSquareBehindSquare2' },
@@ -50,16 +54,18 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
     ? listSettledActions(task)
     : ['restart', 'complete', 'duplicate', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
-  return [links, worktree, fork, listBacklogActions(task), lifecycle].filter((group) => group.length > 0);
+  return [links, worktree, fork, listLaterActions(task), lifecycle].filter((group) => group.length > 0);
 }
 
 function listSettledActions(task: Task): TaskActionKey[] {
   return task.duplicate ? ['notDuplicate'] : [];
 }
 
-function listBacklogActions(task: Task): TaskActionKey[] {
-  if (task.backlog) return ['removeFromBacklog'];
-  return resolveBacklogRefusal(task) === null ? ['moveToBacklog'] : [];
+function listLaterActions(task: Task): TaskActionKey[] {
+  if (isTaskSettled(task)) return [];
+  const snooze: TaskActionKey = task.snoozed ? 'unsnooze' : 'snooze';
+  if (task.backlog) return ['removeFromBacklog', snooze];
+  return resolveBacklogRefusal(task) === null ? ['moveToBacklog', snooze] : [snooze];
 }
 
 export function runTaskAction(task: Task, key: TaskActionKey) {
@@ -91,6 +97,15 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
         { type: 'task.remove_from_backlog', taskId: task.id },
         'Removed from the backlog. Its plan now waits for your approval.'
       );
+      return;
+    case 'snooze':
+      void sendCommandWithToast(
+        { type: 'task.snooze', taskId: task.id },
+        'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.'
+      );
+      return;
+    case 'unsnooze':
+      void sendCommandWithToast({ type: 'task.unsnooze', taskId: task.id }, 'Unsnoozed.');
       return;
     case 'restart':
       void sendCommandWithToast({ type: 'task.retry', taskId: task.id }, 'Restarted.');

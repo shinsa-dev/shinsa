@@ -498,6 +498,34 @@ Every task agent's tool: `tasks_remove_from_backlog`. Sends `task.remove_from_ba
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks snooze
+
+Snooze a task: it keeps its step and its work, and leaves Needs you and Home until you unsnooze it.
+
+```
+shinsa tasks snooze <task> [--json]
+```
+
+Every task agent's tool: `tasks_snooze`. Sends `task.snooze`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks unsnooze
+
+Unsnooze a task: it shows again where it was, in Needs you when it waits for you.
+
+```
+shinsa tasks unsnooze <task> [--json]
+```
+
+Every task agent's tool: `tasks_unsnooze`. Sends `task.unsnooze`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks bind
 
 Run a task on one Claude account, or on any account again.

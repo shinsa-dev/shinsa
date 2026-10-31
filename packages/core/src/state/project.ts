@@ -322,6 +322,15 @@ function applyBacklogChanged(state: ShinsaState, event: EventOf<'task.backlog_ch
   });
 }
 
+function applySnoozeChanged(state: ShinsaState, event: EventOf<'task.snooze_changed'>) {
+  updateTask(state, event.taskId, event.at, { snoozed: event.snoozed ? { at: event.at } : null });
+  record(state, event.taskId, event.at, {
+    actor: 'you',
+    kind: 'stage',
+    text: event.snoozed ? 'Snoozed: it keeps its place, out of Needs you and Home' : 'Unsnoozed',
+  });
+}
+
 function listPlanHistory(task: Task | undefined) {
   const previous = task?.plan;
   if (!previous) return task?.planHistory ?? [];
@@ -774,6 +783,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);
+      break;
+    case 'task.snooze_changed':
+      applySnoozeChanged(state, event);
       break;
     case 'task.noted':
       applyNoted(state, event);

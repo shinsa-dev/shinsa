@@ -68,6 +68,7 @@ const queue: Queue = {
   working: [tools],
   waiting: [],
   backlog: [],
+  snoozed: [],
 };
 
 describe('describeBriefingPrompt', () => {

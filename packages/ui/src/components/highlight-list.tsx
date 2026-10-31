@@ -112,6 +112,7 @@ function HoverHighlight({
       observer.disconnect();
       root.removeEventListener('pointerover', onOver);
       root.removeEventListener('pointerleave', onLeave);
+      mark(null);
     };
   }, []);
 

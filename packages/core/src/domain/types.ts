@@ -484,6 +484,7 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   backlog?: TaskBacklog | null;
+  snoozed?: TaskSnooze | null;
   duplicate?: TaskDuplicate | null;
 }
 
@@ -496,6 +497,10 @@ export interface TaskDuplicate {
 }
 
 export interface TaskBacklog {
+  at: number;
+}
+
+export interface TaskSnooze {
   at: number;
 }
 

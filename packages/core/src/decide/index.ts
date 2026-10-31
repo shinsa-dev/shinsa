@@ -95,6 +95,7 @@ import {
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
+import { snoozeTask, unsnoozeTask } from './snooze.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
   cancelTask,
@@ -159,6 +160,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':
       return removeFromBacklog(decider, command);
+    case 'task.snooze':
+      return snoozeTask(decider, command);
+    case 'task.unsnooze':
+      return unsnoozeTask(decider, command);
     case 'task.cancel':
       return cancelTask(decider, command);
     case 'task.mark_duplicate':

@@ -655,6 +655,8 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     type: 'task.remove_from_backlog',
     taskId: readId(fields, 'taskId'),
   }),
+  'task.snooze': (fields) => ({ type: 'task.snooze', taskId: readId(fields, 'taskId') }),
+  'task.unsnooze': (fields) => ({ type: 'task.unsnooze', taskId: readId(fields, 'taskId') }),
   'task.cancel': (fields) => ({ type: 'task.cancel', taskId: readId(fields, 'taskId') }),
   'task.mark_duplicate': (fields) => ({
     type: 'task.mark_duplicate',

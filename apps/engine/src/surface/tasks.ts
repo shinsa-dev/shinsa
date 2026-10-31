@@ -557,6 +557,29 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Removed from the backlog. Its plan now waits for your approval.',
   }),
   defineCommand({
+    path: ['tasks', 'snooze'],
+    summary:
+      'Snooze a task: it keeps its step and its work, and leaves Needs you and Home until you unsnooze it.',
+    command: 'task.snooze',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.snooze',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
+  }),
+  defineCommand({
+    path: ['tasks', 'unsnooze'],
+    summary: 'Unsnooze a task: it shows again where it was, in Needs you when it waits for you.',
+    command: 'task.unsnooze',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.unsnooze',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Unsnoozed.',
+  }),
+  defineCommand({
     path: ['tasks', 'bind'],
     summary: 'Run a task on one Claude account, or on any account again.',
     command: 'task.bind_account',

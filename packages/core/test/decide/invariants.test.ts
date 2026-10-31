@@ -892,6 +892,7 @@ function assertInvariants(state: ShinsaState, now: number) {
   for (const task of queue.working) place(task.id, 'working');
   for (const task of queue.waiting) place(task.id, 'waiting');
   for (const task of queue.backlog) place(task.id, 'backlog');
+  for (const task of queue.snoozed) place(task.id, 'snoozed');
 
   assertScheduleInvariants(state);
   assertHandleInvariants(state);
@@ -989,6 +990,10 @@ function selectBacklogCommand(state: ShinsaState, random: Random): ShinsaCommand
     { type: 'task.create', request: 'What is this?', repoId: 'repo', mode: 'ask', backlog: true },
     ...tasks.map((task) => ({ type: 'task.move_to_backlog' as const, taskId: task.id })),
     ...parked.map((task) => ({ type: 'task.remove_from_backlog' as const, taskId: task.id })),
+    ...tasks.map((task) => ({
+      type: task.snoozed ? ('task.unsnooze' as const) : ('task.snooze' as const),
+      taskId: task.id,
+    })),
   ];
   return pick(random, commands) ?? null;
 }
