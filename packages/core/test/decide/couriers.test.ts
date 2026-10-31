@@ -173,7 +173,7 @@ describe('a courier task', () => {
     });
     expect(harness.task(createdId).stage).toBe('waiting_on_tasks');
     harness.send({ type: 'agent.deliver', runId: investigator.id, step: 'investigate', body: 'It buffers.' });
-    expect(harness.task(taskId).stage).toBe('done');
+    expect(harness.task(taskId).stage).toBe('answered');
     expect(harness.task(createdId).stage).not.toBe('waiting_on_tasks');
   });
 

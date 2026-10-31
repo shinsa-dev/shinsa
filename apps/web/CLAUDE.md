@@ -55,7 +55,8 @@ src/
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
-│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares), review draft, the
+│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
+│                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
 │                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
@@ -185,7 +186,8 @@ src/
     │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
     │                    60 s while watched and the page is visible)
     ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
-    │                    limits, what is ready, whether it can send), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
+    │                    limits, what is ready, whether it can send), task-drafts.ts (one draft per task, in memory: the
+    │                    text, attachments and their files every tab's composer reads, and the caret a tab click carries), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
     │                    the transcript's blocks and the window of them rendered (window.ts), prefetch.ts (a

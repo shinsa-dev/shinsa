@@ -21,6 +21,7 @@ export type TaskGroupKey =
   | 'change'
   | 'operation'
   | 'answer'
+  | 'answered'
   | 'paused'
   | 'working'
   | 'waiting'
@@ -56,6 +57,7 @@ export const TASK_GROUPS: TaskGroup[] = [
     defaultOpen: true,
   },
   { key: 'answer', title: 'Needs your answer', icon: 'IconBubbleQuestion', tone: 'blue', defaultOpen: true },
+  { key: 'answered', title: 'Answered', icon: 'IconBubbleCheck', tone: 'blue', defaultOpen: true },
   { key: 'paused', title: 'Paused', icon: 'IconPause', tone: 'orange', defaultOpen: true },
   { key: 'working', title: 'In progress', icon: 'IconRobot', tone: 'blue', defaultOpen: true },
   {
@@ -95,6 +97,7 @@ export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
     if (gate.type === 'proposal') return 'change';
     if (gate.type === 'operation') return 'operation';
     if (isAgentQuestion(gate)) return 'answer';
+    if (gate.type === 'result') return 'answered';
     if (gate.type === 'merge') return 'merge';
     if (gate.type === 'review') return 'review';
     return 'plan';

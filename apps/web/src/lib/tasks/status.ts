@@ -42,6 +42,7 @@ const GATE_GLYPH: Record<GateType, Glyph> = {
   configuration: { icon: 'IconToolbox', tone: 'orange' },
   sign_in: { icon: 'IconUserKey', tone: 'orange' },
   post_merge: { icon: 'IconChecklist', tone: 'amber' },
+  result: { icon: 'IconBubbleCheck', tone: 'blue' },
 };
 
 const GATE_STATUS: Record<GateType, Status> = {
@@ -56,6 +57,7 @@ const GATE_STATUS: Record<GateType, Status> = {
   configuration: { label: 'Setup incomplete', tone: 'orange' },
   sign_in: { label: 'Sign in needed', tone: 'orange' },
   post_merge: { label: 'Post-merge', tone: 'amber' },
+  result: { label: 'Answered', tone: 'blue' },
 };
 
 const RESOLVING_CONFLICTS = 'Resolving conflicts';
@@ -156,6 +158,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
   watching: 'IconRadar',
   awaiting_proposal: GATE_GLYPH.proposal.icon,
   awaiting_operation: GATE_GLYPH.operation.icon,
+  answered: GATE_GLYPH.result.icon,
   merged: 'IconMerged',
   done: 'IconCheckCircle2',
   cancelled: 'IconCircleX',

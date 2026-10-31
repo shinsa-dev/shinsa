@@ -24,7 +24,7 @@ import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
 import { retryTask } from './retry.ts';
 import { assertSecretAnswer } from './secrets.ts';
-import { answerOperation, answerProposal, startAfterPlan } from './shapes.ts';
+import { answerOperation, answerProposal, closeResult, startAfterPlan } from './shapes.ts';
 
 interface AnswerOptions {
   planVersion?: number;
@@ -50,9 +50,21 @@ function findOpenGate(decider: Decider, gateId: string) {
   return gate;
 }
 
+function isFollowedUp(decider: Decider, gate: Gate) {
+  const task = decider.state.tasks[gate.taskId];
+  return (
+    gate.type === 'result' &&
+    decider.state.gates[gate.id]?.status === 'withdrawn' &&
+    task !== undefined &&
+    !isTaskSettled(task)
+  );
+}
+
 export function assertGatesStayOpen(decider: Decider, before: ShinsaState) {
   if (!decider.context.onBehalf) return;
-  const closed = listOpenGates(before).some((gate) => decider.state.gates[gate.id]?.status !== 'open');
+  const closed = listOpenGates(before).some(
+    (gate) => decider.state.gates[gate.id]?.status !== 'open' && !isFollowedUp(decider, gate)
+  );
   if (!closed) return;
   throw new DomainError(
     'human_only',
@@ -250,6 +262,9 @@ export function answerGate(
       return;
     case 'operation':
       answerOperation(decider, gate, decision, response);
+      return;
+    case 'result':
+      closeResult(decider, gate.taskId);
       return;
     case 'plan':
     case 'review':

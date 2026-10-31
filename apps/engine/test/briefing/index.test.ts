@@ -121,6 +121,7 @@ describe('what the model is told', () => {
           entry(tools, 'operation', 0, 72),
           entry({ ...tools, id: 't-q2', repoId: null } as Task, 'failure'),
           entry({ ...tools, id: 't-steps' } as Task, 'post_merge'),
+          entry({ ...tools, id: 't-read' } as Task, 'result'),
         ],
         working: [],
         waiting: [waiting, orphan],
@@ -139,6 +140,9 @@ describe('what the model is told', () => {
     expect(prompt).toContain('paused after a failure, needs a decision: Decide; waiting 3 hours.');
     expect(prompt).toContain(
       'after the merge: merged, and the task is done once the developer does the steps it left them: Decide'
+    );
+    expect(prompt).toContain(
+      'answered: the answer, report or diagnosis is ready, and the task is done once the developer reads and closes it: Decide'
     );
     expect(prompt).toContain('(nothing)');
     expect(prompt).toContain('- “Later work”, not started: waiting for “Embedded chat rework” to finish');

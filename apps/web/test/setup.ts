@@ -5,6 +5,7 @@ GlobalRegistrator.register({ url: 'http://localhost/' });
 const { afterEach } = await import('bun:test');
 const { cleanup } = await import('@testing-library/react');
 const { toast } = await import('@shinsa/ui/components/sonner');
+const { resetTaskDrafts } = await import('@/lib/chat/task-drafts.ts');
 const { resetHighlights } = await import('@/lib/code/highlight.ts');
 const { resetAgentProviders } = await import('@/lib/connection/models.ts');
 const { resetRemoteAccess } = await import('@/lib/connection/remote-access.ts');
@@ -23,6 +24,7 @@ afterEach(() => {
   toast.dismiss();
   connection.reset();
   resetHighlights();
+  resetTaskDrafts();
   resetEvidenceTexts();
   resetAgentProviders();
   resetRemoteAccess();

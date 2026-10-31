@@ -263,7 +263,8 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
-  const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
+  const closed = previous === 'answered' && event.by !== 'you';
+  const answered = (previous === 'answering' || closed) && (stage === 'done' || stage === 'merged');
   const duplicated = stage === 'cancelled' && Boolean(task?.duplicate);
   const text = answered || duplicated ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
   if (text && previous !== stage) {
