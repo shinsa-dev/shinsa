@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import type { AccountsSnapshot, ChatEntry, TerminalsSnapshot, UserCommand, WireState } from '@shinsa/core';
+import type {
+  AccountsSnapshot,
+  ChatEntry,
+  RemoteSnapshot,
+  TerminalsSnapshot,
+  UserCommand,
+  WireState,
+} from '@shinsa/core';
 import { createState } from '@shinsa/core';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
@@ -26,6 +33,7 @@ class FakeConnection implements ShinsaConnection {
   readonly calls: string[] = [];
   accounts: AccountsSnapshot | null = null;
   terminals: TerminalsSnapshot | null = null;
+  remote: RemoteSnapshot | null = null;
   desktop = false;
   transcript: ChatEntry[] = [];
   readonly signal = createSignal();
@@ -57,6 +65,11 @@ class FakeConnection implements ShinsaConnection {
   selectTerminals = () => this.terminals;
   replaceTerminals = (terminals: TerminalsSnapshot) => {
     this.terminals = terminals;
+  };
+  subscribeRemote = (listener: () => void) => this.signal.subscribe(listener);
+  selectRemote = () => this.remote;
+  replaceRemote = (remote: RemoteSnapshot) => {
+    this.remote = remote;
   };
   selectMachine = () => null;
   listMachines = () => [];
@@ -260,15 +273,19 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.listUnreachableMachines()).toEqual([{ id: 'm3', name: 'Build box' }]);
   });
 
-  it('reads accounts and terminals from the first machine, and is quiet while any machine has its desktop app open', () => {
+  it('reads accounts, terminals and remote access from the first machine, and is quiet while any machine has its desktop app open', () => {
     const { fleet, studio, laptop } = createFleet();
     const accounts = { accounts: [] } as unknown as AccountsSnapshot;
     const terminals = { terminals: [] } as unknown as TerminalsSnapshot;
+    const remote = { devices: [] } as unknown as RemoteSnapshot;
     fleet.replaceAccounts(accounts);
     fleet.replaceTerminals(terminals);
+    fleet.replaceRemote(remote);
     expect(fleet.selectAccounts()).toBe(accounts);
     expect(fleet.selectTerminals()).toBe(terminals);
+    expect(fleet.selectRemote()).toBe(remote);
     expect(studio.connection.accounts).toBe(accounts);
+    expect(studio.connection.remote).toBe(remote);
     expect(fleet.isDesktopConnected()).toBe(false);
     laptop.connection.desktop = true;
     expect(fleet.isDesktopConnected()).toBe(true);
@@ -278,12 +295,13 @@ describe('sending to the machine that owns it', () => {
       fleet.subscribeAccounts,
       fleet.subscribeSurfaces,
       fleet.subscribeTerminals,
+      fleet.subscribeRemote,
     ])
       subscribe(() => {
         heard += 1;
       });
     laptop.connection.push(laptop.connection.current);
-    expect(heard).toBe(4);
+    expect(heard).toBe(5);
   });
 
   it('starts, flushes and resets every machine, and drops one that no longer accepts this browser', async () => {
@@ -308,6 +326,8 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.selectTranscript('run')).toEqual([]);
     expect(fleet.selectAccounts()).toBeNull();
     expect(fleet.selectTerminals()).toBeNull();
+    expect(fleet.selectRemote()).toBeNull();
+    fleet.replaceRemote({ devices: [] } as unknown as RemoteSnapshot);
     fleet.replaceAccounts(null);
     fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
     fleet.watchTranscript('run')();

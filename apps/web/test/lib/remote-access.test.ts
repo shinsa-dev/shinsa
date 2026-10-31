@@ -2,9 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import {
   describeDeviceSeen,
   describeEnrollmentExpiry,
+  describeEnrollmentStep,
   describeRemoteStatus,
-  isRemoteSettling,
+  isEnrollmentExpired,
   resolveQrImage,
+  selectEnrolledDevice,
 } from '@/lib/remote-access.ts';
 import { createRemoteSnapshot } from '../support/remote-access.ts';
 
@@ -51,15 +53,19 @@ describe('remote access words', () => {
     });
   });
 
-  it('keeps reading while pairing or while the tunnel comes up, and stops once it settles', () => {
-    expect(isRemoteSettling(null)).toBe(false);
-    expect(
-      isRemoteSettling(createRemoteSnapshot({ pairing: { claimCode: 'K7PQ', url: 'u', expiresAt: 1 } }))
-    ).toBe(true);
-    expect(isRemoteSettling(createRemoteSnapshot({ status: 'starting' }))).toBe(true);
-    expect(isRemoteSettling(createRemoteSnapshot({ status: 'reconnecting' }))).toBe(true);
-    expect(isRemoteSettling(createRemoteSnapshot({ status: 'reconnecting', enabled: false }))).toBe(false);
-    expect(isRemoteSettling(createRemoteSnapshot())).toBe(false);
+  it('finds the device a link added by the link, never by its name', () => {
+    const enrollment = { id: 'link-2', url: 'u', name: 'iPhone', expiresAt: NOW };
+    const earlier = {
+      publicKey: 'a',
+      name: 'iPhone',
+      enrolledAt: NOW,
+      lastSeenAt: null,
+      enrollmentId: 'link-1',
+    };
+    const added = { ...earlier, publicKey: 'b', enrollmentId: 'link-2' };
+    expect(selectEnrolledDevice([earlier], enrollment)).toBeNull();
+    expect(selectEnrolledDevice([earlier, added], enrollment)).toBe(added);
+    expect(selectEnrolledDevice([earlier, added], null)).toBeNull();
   });
 
   it('says when a device was added or last used, and when a link stops working', () => {
@@ -74,6 +80,14 @@ describe('remote access words', () => {
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
     expect(describeEnrollmentExpiry(NOW + 600_000, NOW)).toStartWith('It works once and expires');
     expect(describeEnrollmentExpiry(NOW, NOW)).toBe('This link expired. Make a new one.');
+    expect(isEnrollmentExpired(NOW + 1, NOW)).toBe(false);
+    expect(isEnrollmentExpired(NOW, NOW)).toBe(true);
+    const enrollment = { id: 'link-1', url: 'u', name: 'iPhone', expiresAt: NOW };
+    expect(describeEnrollmentStep(null, false)).toStartWith('Name the device you are adding');
+    expect(describeEnrollmentStep(enrollment, false)).toStartWith('Scan this on the phone');
+    expect(describeEnrollmentStep(enrollment, true)).toBe(
+      'This link expired before a device used it. Make a new one to add iPhone.'
+    );
   });
 
   it('draws the link as a square QR code on white, one black cell per dark module', () => {

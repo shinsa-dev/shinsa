@@ -17,7 +17,8 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { requestWithToast } from '@/lib/connection/commands.ts';
+import { useNow } from '@/hooks/use-now.ts';
+import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import {
   REMOTE_ACCESS_ACTIONS,
   type RemoteAccessActions,
@@ -28,11 +29,16 @@ import { resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
 import {
   describeDeviceSeen,
   describeEnrollmentExpiry,
+  describeEnrollmentStep,
   describeRemoteStatus,
+  isEnrollmentExpired,
   REMOTE_ACCESS_SECTION,
   resolveQrImage,
+  selectEnrolledDevice,
 } from '@/lib/remote-access.ts';
 import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+
+const NO_DEVICES: RemoteDevice[] = [];
 
 const DESCRIPTION =
   'Reach this machine from any device at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once.';
@@ -42,7 +48,7 @@ function QrCode({ text }: { text: string }) {
   return <img src={image} alt='QR code for the link' className='size-48 rounded-md' />;
 }
 
-function EnrollmentView({ enrollment }: { enrollment: RemoteEnrollment }) {
+function EnrollmentView({ enrollment, now }: { enrollment: RemoteEnrollment; now: number }) {
   return (
     <div className='flex w-full flex-col items-center gap-3'>
       <QrCode text={enrollment.url} />
@@ -50,22 +56,35 @@ function EnrollmentView({ enrollment }: { enrollment: RemoteEnrollment }) {
         <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{enrollment.url}</Truncate>
         <CopyButton text={enrollment.url} />
       </div>
-      <p className='text-2xs text-fg-2'>{describeEnrollmentExpiry(enrollment.expiresAt)}</p>
+      <p className='text-2xs text-fg-2'>{describeEnrollmentExpiry(enrollment.expiresAt, now)}</p>
     </div>
   );
 }
 
 function AddDeviceDialog({
   control,
+  devices,
   onCreate,
+  onAdded,
 }: {
   control: DialogControl;
+  devices: RemoteDevice[];
   onCreate: RemoteAccessActions['createEnrollment'];
+  onAdded: () => void;
 }) {
   const [name, setName] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [enrollment, setEnrollment] = React.useState<RemoteEnrollment | null>(null);
   const formId = React.useId();
+  const now = useNow();
+  const expired = enrollment !== null && isEnrollmentExpired(enrollment.expiresAt, now);
+  const addedKey = selectEnrolledDevice(devices, enrollment)?.publicKey ?? null;
+
+  React.useEffect(() => {
+    if (!(addedKey && enrollment)) return;
+    confirmDone(`${enrollment.name} is added.`);
+    onAdded();
+  }, [addedKey, enrollment, onAdded]);
 
   async function create() {
     setBusy(true);
@@ -78,15 +97,10 @@ function AddDeviceDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a device'}</DialogTitle>
-          <DialogDescription>
-            {enrollment
-              ? 'Scan this on the phone, or open the link on the device you are adding, and sign in with GitHub.'
-              : 'Name the device you are adding, a browser or a phone. Shinsa makes a one-time link for it.'}
-          </DialogDescription>
+          <DialogDescription>{describeEnrollmentStep(enrollment, expired)}</DialogDescription>
         </DialogHeader>
-        {enrollment ? (
-          <EnrollmentView enrollment={enrollment} />
-        ) : (
+        {enrollment && !expired && <EnrollmentView enrollment={enrollment} now={now} />}
+        {!enrollment && (
           <form
             id={formId}
             className='w-full'
@@ -107,7 +121,7 @@ function AddDeviceDialog({
           </form>
         )}
         <DialogFooter>
-          {enrollment ? (
+          {enrollment && !expired && (
             <>
               <Button
                 variant='secondary'
@@ -118,7 +132,16 @@ function AddDeviceDialog({
               </Button>
               <DialogClose render={<Button />}>Done</DialogClose>
             </>
-          ) : (
+          )}
+          {expired && (
+            <>
+              <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
+              <Button loading={busy} onClick={() => void create()}>
+                Make new link
+              </Button>
+            </>
+          )}
+          {!enrollment && (
             <>
               <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
               <Button type='submit' form={formId} disabled={!name.trim()} loading={busy}>
@@ -229,14 +252,23 @@ type RemoteDialog = { kind: 'add' } | { kind: 'remove' } | { kind: 'forget'; dev
 
 function RemoteDialogs({
   dialog,
+  devices,
   actions,
 }: {
   dialog: ReturnType<typeof useDialogState<RemoteDialog>>;
+  devices: RemoteDevice[];
   actions: RemoteAccessActions;
 }) {
   const { value } = dialog;
   if (value?.kind === 'add')
-    return <AddDeviceDialog control={dialog.control} onCreate={actions.createEnrollment} />;
+    return (
+      <AddDeviceDialog
+        control={dialog.control}
+        devices={devices}
+        onCreate={actions.createEnrollment}
+        onAdded={dialog.close}
+      />
+    );
   if (value?.kind === 'forget')
     return (
       <ConfirmDialog
@@ -314,7 +346,7 @@ export function RemoteAccessGroup({
           onForget={() => dialog.show({ kind: 'forget', device })}
         />
       ))}
-      <RemoteDialogs dialog={dialog} actions={actions} />
+      <RemoteDialogs dialog={dialog} devices={snapshot?.devices ?? NO_DEVICES} actions={actions} />
     </SettingsGroup>
   );
 }
