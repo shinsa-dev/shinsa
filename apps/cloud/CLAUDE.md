@@ -30,6 +30,8 @@ src/
 │                  tokens sealed with AES-GCM, Slack's request signature
 └── log.ts         recordFailure: the one console call (Workers Logs)
 migrations/        D1's schema (wrangler d1 migrations)
+slack-manifest.json The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
+                   keeps its scopes, redirects and events in step with the code
 test/              One file per route group, against harness.ts: D1 on bun:sqlite with the real migrations, and
                    GitHub, the Cloudflare API, Slack and a machine's tunnel as fakes
 ```
@@ -102,7 +104,10 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json` and `SLACK_CLIENT_ID`,
-  `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` and `SLACK_TOKEN_KEY` (32 random bytes in base64url).
+  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json`, with public distribution on
+  (Manage Distribution) so other workspaces can add it, the `0002_slack.sql` migration, and the secrets
+  `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
+  (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
+  later makes every stored bot token unreadable, so each workspace has to add the app again.
 - The custom domain `app.shinsa.dev` is created by `wrangler deploy` (it needs the `shinsa.dev` zone on the same
   account). The GitHub OAuth app's callback URL must be exactly `https://app.shinsa.dev/__remote/sign-in/callback`.

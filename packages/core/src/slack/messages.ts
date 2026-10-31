@@ -82,10 +82,8 @@ function resolveStatusMark(task: Task, attention: Gate | null) {
 function describeStatusLine(task: Task, attention: Gate | null) {
   const mark = resolveStatusMark(task, attention);
   if (attention) return `${mark} *Needs you*  ${escapeSlackText(attention.title)}`;
-  const stage = capitalise(STAGE_WORDS[task.stage]);
   const reason = task.stageReason.trim();
-  const detail = reason.length > 0 && reason.toLowerCase() !== STAGE_WORDS[task.stage] ? reason : '';
-  return detail ? `${mark} *${stage}*  ${escapeSlackText(detail)}` : `${mark} *${stage}*`;
+  return `${mark} *${escapeSlackText(capitalise(reason || STAGE_WORDS[task.stage]))}*`;
 }
 
 function describePhase(phase: DisplayPhase) {

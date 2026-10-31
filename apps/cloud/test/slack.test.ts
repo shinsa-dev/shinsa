@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   type MachineCredentials,
   type PairPollResponse,
@@ -15,6 +17,7 @@ import {
 } from '@shinsa/core';
 import { createSlackSignature } from '../src/crypto.ts';
 import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack.ts';
+import { SLACK_BOT_SCOPES, SLACK_USER_SCOPES } from '../src/slack-api.ts';
 import { createHarness, type Harness, readJson, TEST_CONFIG } from './harness.ts';
 
 type Fields = Record<string, unknown>;
@@ -214,6 +217,35 @@ beforeEach(() => {
 
 afterEach(() => {
   failures.mockRestore();
+});
+
+describe('the Slack app’s manifest', () => {
+  test('asks for the scopes, redirects and events the relay uses, on app.shinsa.dev', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../slack-manifest.json'), 'utf8')
+    ) as {
+      oauth_config: { redirect_urls: string[]; scopes: { bot: string[]; user: string[] } };
+      settings: {
+        event_subscriptions: { request_url: string; bot_events: string[] };
+        socket_mode_enabled: boolean;
+      };
+    };
+    expect(manifest.oauth_config.scopes.bot).toEqual([...SLACK_BOT_SCOPES]);
+    expect(manifest.oauth_config.scopes.user).toEqual([...SLACK_USER_SCOPES]);
+    expect(manifest.oauth_config.redirect_urls).toEqual([
+      `${TEST_CONFIG.origin}${SLACK_RELAY_PATHS.connectCallback}`,
+      `${TEST_CONFIG.origin}${SLACK_RELAY_PATHS.installCallback}`,
+    ]);
+    expect(manifest.settings.event_subscriptions.request_url).toBe(
+      `${TEST_CONFIG.origin}${SLACK_RELAY_PATHS.events}`
+    );
+    expect(manifest.settings.event_subscriptions.bot_events).toEqual([
+      'app_mention',
+      'app_uninstalled',
+      'tokens_revoked',
+    ]);
+    expect(manifest.settings.socket_mode_enabled).toBe(false);
+  });
 });
 
 describe('connecting Slack to a machine', () => {

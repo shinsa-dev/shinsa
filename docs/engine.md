@@ -2483,6 +2483,111 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
 
+## Slack
+
+Mention the Shinsa bot in Slack and the machine of the person who mentioned it does the work. There is one Slack app
+for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
+mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
+needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
+relay with its machine token. No machine holds a Slack token. The rules are core's (`packages/core/src/slack/`,
+`decide/slack.ts`, `state/slack.ts`); the relay is `apps/cloud` (`slack.ts`, `slack-link.ts`, `apps/cloud/CLAUDE.md`);
+the machine side is `apps/engine/src/slack/`.
+
+```
+Slack ──event──► app.shinsa.dev /slack/events
+                  ├─ Slack's signature, the event id seen once
+                  ├─ author not connected ──► private "Connect Slack"
+                  ├─ machine offline ───────► "<machine> is offline"
+                  └─ the thread, signed ──► t-<id>.shinsa.dev
+                                             /api/slack/events
+                                               └─ slack.mention
+   thread holds an open task ──► task.message, "Sent to the task"
+   otherwise ──► slack.evaluate: "Reading the thread…", the classifier
+                  ├─ work ──► task.create + slack.thread_linked
+                  └─ not  ──► the reason, in place of "Reading…"
+   the task moves ──► slack.status (one message, edited)
+   a gate opens, a result ──► slack.post (a new message)
+                  └─ POST app.shinsa.dev /__remote/slack/post ──► Slack
+```
+
+- **Connecting** (Settings → Integrations → Slack, `components/settings/slack.tsx`): with remote access on, Connect
+  Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
+  with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
+  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `groups:history`,
+  `chat:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
+  linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
+  says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
+  (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
+  on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
+  reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
+  link of this machine; both are refused from off the machine (`local-only.ts`, writes only).
+- **The project for new tasks** is the human-only setting `slackProjectId` (Settings → Integrations → Slack, "Project
+  for new tasks"): a project, or null for the focus project at the time of the mention. Core refuses a project that
+  does not exist (`settings_invalid`) and clears the setting when its project is removed. Triage picks the repository
+  in it as for any task.
+- **A mention reaches the machine** as `SlackMention` (`slack/contract.ts`): the event id, the workspace, channel and
+  thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
+  author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
+  (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route
+  `POST /api/slack/events` (`remote/guard.ts`) is 404 while remote access is off, refuses a body over 1 MB and a
+  forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
+  whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
+  dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its
+  receipt.
+- **How a thread maps to a task** (`Task.slack`, `SlackThreadLink`: workspace, channel, thread, author, permalink and
+  the status message's ts; the key is `resolveSlackThreadKey`, `team:channel:threadTs`). A thread holds at most one
+  open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
+  write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
+  as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
+  work a new round. The bot answers "Sent to …" in the thread. A mention in any other thread, a task's closed thread
+  included, is evaluated first.
+- **The evaluation** (`slack.evaluate`, `slack/evaluation.ts`): the bot posts "Reading the thread…" in the thread, then
+  one quick call with the classifier triage uses reads the whole thread under a fixed system prompt
+  (`SLACK_EVALUATION_SYSTEM`, the thread as data, never instructions) and answers `task` with the request as the person
+  would write it, or `none` with a one-sentence reason (`parseSlackEvaluation`, `SLACK_EVALUATION_LIMITS`). A bare
+  mention under a bug report is work; thanks and small talk are not. When no provider answers, the answer is `none`
+  with "I could not read the thread just now…", so a mention never hangs on Reading. The result comes back as
+  `slack.record_evaluation` with the reading post's ts: `none` replaces that post with the reason; `task` creates a
+  task (`task.create` in the project for new tasks, its request the evaluation's words, who asked with the permalink,
+  and the thread fenced in a nonce-tagged `<slack-thread-…>` element marked as untrusted data,
+  `serializeSlackRequest`) and links it to the thread (`slack.thread_linked`, "Started from a Slack thread"), and the
+  reading post becomes the task's status message. A task that opened in the meantime takes the mention as a message
+  instead.
+- **What is posted back** (`syncSlackThreads`, after every command, for the tasks it changed): every gate a linked
+  task opens that you decide or answer (question, secret, plan, review, proposal; `SLACK_POSTED_GATES`) and its result
+  (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
+  Slack notifies; every change to the task is one `slack.status`, the status message edited in place. Each message is
+  built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
+  and every one ends in Open in Shinsa, a link to the task on app.shinsa.dev (`resolveSlackTaskUrl`):
+  - the status message: the task's handle and title, what it is doing now (its stage reason, else its stage) with a
+    coloured mark, the steps of its pipeline
+    (done, at work, waiting for you, to come), its pull request, and what needs you when a question waits or it
+    paused;
+  - a question: the question, its context, the choices with the recommended one marked, "Answer in Shinsa";
+  - a secret: what is asked and why, and never to paste a secret in Slack;
+  - a plan: its goal, its phases numbered, its size, "Review the plan";
+  - a review: like the pull request's description, from the same report: the summary, the approach, the checks and
+    coverage, the reviewer's findings, the steps around the merge and the risks, the pull request, "Review in Shinsa";
+  - a proposal: the change proposed and why;
+  - the result: in full in Slack's mrkdwn (`serializeSlackMrkdwn`, links to Shinsa files as their text), cut at 12,000
+    characters with a pointer to the rest (`SLACK_RESULT_LIMIT`).
+  Slack never closes a gate: the posts say where to decide, and a reply in the thread is a message to the task.
+- **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
+  (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
+  that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
+  → `slack.status_posted`).
+- **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
+  (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
+  at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
+  workspace) is logged (`[Slack] app.shinsa.dev refused the post`) and dropped, since sending it again cannot work.
+  With remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
+  in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
+- **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
+  stored: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
+  account and machine), which threads were sent to which machine and which messages each machine posted (so a machine
+  posts only in its own threads and edits only its own messages), and Slack's event ids for a day. The sealed channel
+  of remote access is not involved; this is the one path where the Worker reads what goes by.
+
 ## Who can change Shinsa
 
 Shinsa is a local server for one person, and every agent runs as that person, on that machine, with a shell. There

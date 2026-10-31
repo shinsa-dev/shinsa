@@ -22,8 +22,9 @@ apps/desktop/     → @shinsa/desktop Shinsa for Mac, how Shinsa runs: carries t
                                     job, shows its interface, and adds the Dock badge, notifications, `shinsa://` links,
                                     the menu and its own updates. See apps/desktop/CLAUDE.md
 apps/cloud/       → @shinsa/cloud   The Worker on app.shinsa.dev that remote access runs through: GitHub sign-in,
-                                    pairing, each machine's Cloudflare tunnel, connect tokens, webhooks, the web app's
-                                    remote build. Holds no task state and can read none. See apps/cloud/CLAUDE.md
+                                    pairing, each machine's Cloudflare tunnel, connect tokens, webhooks, the Slack bot's
+                                    relay, the web app's remote build. Holds no task state and can read none. See
+                                    apps/cloud/CLAUDE.md
 apps/marketing/   → @shinsa/marketing The one-page site: Astro, static, whose demos are the web app's own components on
                                     sample data, against a stand-in server in the browser. See apps/marketing/CLAUDE.md
 packages/core/    → @shinsa/core    Pure domain, one folder per concern under src/ (domain, agent-models, events,

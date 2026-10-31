@@ -86,14 +86,14 @@ describe('the status message', () => {
       accessory: { type: 'button', text: { text: 'Open in Shinsa' }, url: URL },
     });
     expect(section?.type === 'section' && section.text.text).toStartWith(
-      `*<${URL}|Fix the &lt;export&gt; &amp; hang>*\n🔵 *Planning*`
+      `*<${URL}|Fix the &lt;export&gt; &amp; hang>*\n🔵 *Planning the phases*`
     );
     const handle = harness.task(taskId).handle;
     expect(context?.type === 'context' && context.elements.map((element) => element.text)).toEqual([
       `*${handle}*`,
       expect.stringContaining('● Plan'),
     ]);
-    expect(message.text).toStartWith(`${handle} · Fix the &lt;export&gt; &amp; hang: 🔵 Planning`);
+    expect(message.text).toBe(`${handle} · Fix the &lt;export&gt; &amp; hang: 🔵 Planning the phases`);
   });
 
   test('marks a step that waits for you, and counts phases as they finish', () => {
@@ -101,7 +101,7 @@ describe('the status message', () => {
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
     const text = readText(statusOf(harness, taskId));
-    expect(text).toContain('🟣 *Changes to review*');
+    expect(text).toContain('🟣 *Changes ready for your review*');
     expect(text).toContain('✓ Plan');
     expect(text).toContain('◐ Your review');
   });
@@ -129,18 +129,18 @@ describe('the status message', () => {
     approve(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
     const text = readText(statusOf(harness, taskId));
-    expect(text).toContain('✅ *Merged*');
+    expect(text).toContain('✅ *Pull request merged*');
     expect(text).toContain(`|Pull request #${harness.task(taskId).pullRequest?.number}>`);
     const other = createTask(harness, { request: 'Other' });
     harness.send({ type: 'task.cancel', taskId: other });
-    expect(readText(statusOf(harness, other))).toContain('⚪ *Cancelled*');
+    expect(readText(statusOf(harness, other))).toContain('⚪ *Cancelled by you*');
   });
 
   test('a task that waits on another says so with an hourglass', () => {
     const harness = createHarness();
     const first = createTask(harness, { request: 'First' });
     const second = createTask(harness, { request: 'Second', waitsOn: [first] });
-    expect(readText(statusOf(harness, second))).toContain('⏳ *Waiting on another task*');
+    expect(readText(statusOf(harness, second))).toContain('⏳ *Waiting for “First” to finish*');
   });
 });
 

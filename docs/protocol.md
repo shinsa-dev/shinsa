@@ -297,6 +297,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
 | `watchHome?` | boolean | the home a watch reads in: no handle, no triage, on no list, takes no messages (`docs/engine.md` → Schedules and webhooks) |
+| `slack?` | `SlackThreadLink` \| null | the Slack thread it was started from: `teamId`, `channelId`, `threadTs`, the author's `userId`, the `permalink` and `statusTs`, the status message edited in place (`docs/engine.md` → Slack) |
 | `sourceReport?` | `SourceReport` \| null | the report it was filed from: `scheduleId` (a watch's) or `watchdogId` (a watchdog's; the other is null), `server`, `reportId`, `link` (one of the two is set), `author`, `postedAt`, `text` (`docs/engine.md` → Schedules and webhooks) |
 
 **Rounds**
@@ -893,6 +894,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
+| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread, else asks for `slack.evaluate` |
+| `slack.record_evaluation` | the `slack.evaluate` effect | the classifier's `SlackEvaluation` (`task` with the request, or `none` with the reason) and the reading post's `statusTs`: starts and links a task, or posts the reason in its place |
+| `slack.record_status` | the `slack.status` effect | the ts of the task's status message, once Slack has it |
 
 ## Events
 
@@ -990,6 +994,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watch_suggestion.recorded`, `watch_suggestion.accepted`, `watch_suggestion.dismissed`, `watch_suggestion.removed` | a watch was suggested (the whole `suggestion`; an agent's is recorded in its task's activity); you accepted it (with the `scheduleId` it became) or dismissed it; an open one was dropped with its integration, or any with its project |
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
+| `slack.thread_linked` | a task was started from a Slack thread (the whole `link`, `Task.slack`; "Started from a Slack thread") |
+| `slack.status_posted` | the task's status message has this `ts` now |
 
 ## Effects
 
@@ -1018,6 +1024,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `question.resolve` | process_bound | `gate:<id>` | none: releases the waiting `ask` call |
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
+| `slack.evaluate` | replay_safe | `slack:<thread key>` | posts "Reading the thread…", asks the classifier, then `slack.record_evaluation` |
+| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a gate, the result, "Sent to …" or the declined reason through app.shinsa.dev (`replaceTs` edits a post instead) |
+| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new status message; edits it at most every 5 s |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 
@@ -1246,6 +1255,28 @@ arrived, never from the page.
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
 `machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`) and `devices` (`RemoteDevice`: `publicKey`,
 `name`, `enrolledAt`, `lastSeenAt`); `RemoteEnrollment` is the `url`, `name` and `expiresAt` Add browser answers.
+
+## Slack
+
+What the engine, the Worker on app.shinsa.dev and the web share for the Slack bot is in `packages/core/src/slack/`
+(how it behaves is `docs/engine.md` → Slack). Like remote access's contract it is append-only.
+
+| Path (`SLACK_RELAY_PATHS`, `SLACK_ENGINE_EVENTS_PATH`) | Who calls it | What it does |
+| --- | --- | --- |
+| `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack for one of your machines (the one seen last without `instance`) |
+| `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
+| `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
+| `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
+| `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
+| `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
+
+| Shape | Fields |
+| --- | --- |
+| `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`) |
+| `SlackEvaluation` (`evaluation.ts`) | `{ kind: 'task', request }` (2,000 characters) or `{ kind: 'none', reason }` (240) |
+| `SlackPost` (`posts.ts`) | `gate` with its `gateId`, `result`, `forwarded`, `declined` with its `reason` |
+| `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section) |
+| `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
 
 ## Where it lives
 
