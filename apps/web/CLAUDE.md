@@ -35,7 +35,7 @@ src/
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
 │   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
-│   │                    device, the benefits card and Check again), share.tsx (/t/<token>#<key>: a
+│   │                    device, the benefits card and Check again), share.tsx (/share/t/<token>#<key>: a
 │   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with

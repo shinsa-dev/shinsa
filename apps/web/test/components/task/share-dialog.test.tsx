@@ -23,7 +23,7 @@ function showTask(overrides: Partial<Task> = {}, paired = true) {
   act(() => openShareDialog('source'));
 }
 
-const URL = 'https://app.shinsa.dev/t/abc';
+const URL = 'https://app.shinsa.dev/share/t/abc';
 
 const SHARING = { at: 1, limit: 'until_done', endsAt: null } as const;
 
@@ -104,5 +104,14 @@ describe('the sharing banner', () => {
     expect(await screen.findByRole('alertdialog')).toBeTruthy();
     rerender(<SharingBanner task={createTask({ id: 'source' })} />);
     expect(screen.queryByText('Anyone with the link can watch this task.')).toBeNull();
+  });
+  it('says how soon a timed share ends, never a date for an hour away', () => {
+    const endsAt = Date.now() + 60 * 60 * 1000;
+    render(
+      <SharingBanner task={createTask({ id: 'source', share: { at: 1, limit: 'hour', endsAt, url: URL } })} />
+    );
+    const banner = screen.getByRole('status');
+    expect(banner.textContent).toContain('Sharing ends in 1h.');
+    expect(banner.querySelector('time')?.getAttribute('datetime')).toBe(new Date(endsAt).toISOString());
   });
 });

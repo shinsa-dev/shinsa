@@ -32,7 +32,7 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
    your local engine and holds no state of its own. Nothing is copied to the cloud, shared tasks included: a task you
    share is read live from the machine, by read-only remote access to that one task. Its link
-   (`app.shinsa.dev/t/‹token›#‹key›`, one opaque token rather than a readable machine or task name) opens a channel through the machine's tunnel that is sealed with
+   (`app.shinsa.dev/share/t/‹token›#‹key›`, one opaque token rather than a readable machine or task name) opens a channel through the machine's tunnel that is sealed with
    the key in the link's fragment, which no server sees; the machine pushes the task down it the moment it changes and
    reads nothing back. A link shows what its owner sees on its Overview, Review and Code: the request, plan, phase
    reports, walkthrough, review, checks with their output, evidence, activity, notes, gates without their answers, who

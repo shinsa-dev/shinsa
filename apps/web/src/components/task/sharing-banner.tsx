@@ -4,7 +4,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { useMinute } from '@/hooks/use-minute.ts';
+import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeShareEnd, openUnshareConfirm, SHARING_NOTE, UNSHARE_TITLE } from '@/lib/share/dialog.ts';
 
 function CopyLinkButton({ url }: { url: string }) {
@@ -17,7 +17,6 @@ function CopyLinkButton({ url }: { url: string }) {
 }
 
 export function SharingBanner({ task }: { task: Task }) {
-  const now = useMinute();
   const share = task.share;
   if (!share) return null;
   return (
@@ -27,7 +26,13 @@ export function SharingBanner({ task }: { task: Task }) {
     >
       <Icon size='sm' name='IconShareOs' className='text-primary-text' />
       <span className='min-w-48 flex-1 text-fg-3'>
-        <span className='text-fg-4'>{SHARING_NOTE}</span> {describeShareEnd(share, now)}.
+        <span className='text-fg-4'>{SHARING_NOTE}</span>{' '}
+        {share.endsAt === null ? (
+          describeShareEnd(share)
+        ) : (
+          <TimeAgo at={share.endsAt} text={(now) => describeShareEnd(share, now)} />
+        )}
+        .
       </span>
       <div className='ms-auto flex shrink-0 items-center gap-2'>
         {share.url && <CopyLinkButton url={share.url} />}

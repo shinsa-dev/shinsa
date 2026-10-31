@@ -44,9 +44,9 @@ describe('a task described for an agent', () => {
     expect(serializeTaskDetail(harness.state, taskId)).toContain(
       'Shared by link, waiting for app.shinsa.dev to make the link'
     );
-    harness.send({ type: 'share.record', taskId, url: 'https://app.shinsa.dev/t/abc' });
+    harness.send({ type: 'share.record', taskId, url: 'https://app.shinsa.dev/share/t/abc' });
     expect(serializeTaskDetail(harness.state, taskId)).toContain(
-      'Shared by link: https://app.shinsa.dev/t/abc'
+      'Shared by link: https://app.shinsa.dev/share/t/abc'
     );
     harness.send({ type: 'share.fail', taskId, detail: 'Turn on remote access.' });
     expect(serializeTaskDetail(harness.state, taskId)).toContain(

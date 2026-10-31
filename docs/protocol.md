@@ -1226,7 +1226,7 @@ stored file's `uri` is `shared-evidence:<id>`, `SHARED_EVIDENCE_PREFIX`), `repo`
 path, folders or description), `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository
 with an open or merged pull request), the same for a public or a private repository (`docs/engine.md` → Sharing a
 task has the table). A link is `ShareLink` (`instanceId`, `shareId` of `SHARE_ID_BYTES`, `key` of `SHARE_KEY_BYTES`),
-written `https://app.shinsa.dev/t/<token>#<key>`, the token the share id's bytes followed by the instance id's, as
+written `https://app.shinsa.dev/share/t/<token>#<key>`, the token the share id's bytes followed by the instance id's, as
 base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the tunnel's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
 `resolveShareChannelUrl`): the page sends one `ShareHello` (`share`, a fresh P-256 `ephemeral`, `proof`: an HMAC with
 the key), the machine answers `ShareWelcome` (`welcome` with its fresh key and a proof over both, or `refused`), both

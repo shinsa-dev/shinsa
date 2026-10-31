@@ -378,7 +378,7 @@ the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashb
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
-`app.shinsa.dev/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
+`app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
 access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
 Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads

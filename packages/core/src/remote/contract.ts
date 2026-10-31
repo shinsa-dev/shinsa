@@ -26,7 +26,7 @@ export const REMOTE_PATHS = {
   hooks: '/hooks/',
   signInToken: '/__remote/sign-in/token',
   shares: '/__remote/shares',
-  sharePage: '/t',
+  sharePage: '/share/t',
 } as const;
 
 export const REMOTE_NATIVE_CLIENT = 'native';

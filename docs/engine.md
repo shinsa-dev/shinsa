@@ -2515,7 +2515,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 
 ## Sharing a task
 
-A task you share can be read by anyone with its link, `https://app.shinsa.dev/t/<token>#<key>`, without signing
+A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/t/<token>#<key>`, without signing
 in and without a device key. A link is
 read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
 access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
@@ -2622,7 +2622,7 @@ projection and channel will serve teams.
   cannot be dismissed, saying anyone with the link can watch the task and when sharing ends, with Copy link and Stop
   sharing, until the share ends.
 - **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
-  the remote build's `/t/<token>` reads the key from the fragment (a link without one says the task
+  the remote build's `/share/t/<token>` reads the key from the fragment (a link without one says the task
   is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives
   (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
   and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one

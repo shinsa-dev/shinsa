@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
+import { Field, FieldLabel } from '@shinsa/ui/components/field';
 import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
@@ -75,15 +76,17 @@ function ShareLimitRow({
   onChange: (limit: ShareLimit) => void;
 }) {
   return (
-    <div className='flex w-full items-center justify-between gap-3 self-stretch'>
-      <span className='text-fg-3 text-xs'>{SHARE_LIMIT_TITLE}</span>
+    <Field className='w-full'>
+      <FieldLabel>{SHARE_LIMIT_TITLE}</FieldLabel>
       <SelectField
         label={SHARE_LIMIT_TITLE}
+        align='start'
+        className='w-full'
         items={listShareLimitItems(task)}
         value={limit}
         onValueChange={onChange}
       />
-    </div>
+    </Field>
   );
 }
 
