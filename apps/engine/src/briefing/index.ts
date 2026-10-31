@@ -69,6 +69,8 @@ const GATE_FACTS: Record<GateType, (gate: Gate) => string> = {
   sign_in: (gate) => `paused until the developer signs in again: ${gate.title}`,
   post_merge: (gate) =>
     `after the merge: merged, and the task is done once the developer does the steps it left them: ${gate.title}`,
+  result: (gate) =>
+    `answered: the answer, report or diagnosis is ready, and the task is done once the developer reads and closes it: ${gate.title}`,
 };
 
 function describeGate(gate: Gate) {

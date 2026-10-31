@@ -242,7 +242,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
   and file chips, an answer's under the question it answers, and the agent gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
-  say in the chat what to change), Review (§5), Merge, Question, a proposed change.
+  say in the chat what to change), Review (§5), Merge, Question, a proposed change. Once you sent changes back,
+  the review card leads with the Agent's reply to them, point by point.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
   progress, evidence, the pull request), Code (the review and every changed file) and Chat (the
   agents' transcripts; you can write to the agent).
@@ -267,7 +268,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
 - **All tasks.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
-  that handle several parents), the backlog, then done and cancelled, collapsed. Priority then age
+  that handle several parents), then snoozed, the backlog, done and cancelled, collapsed. Priority then age
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
@@ -278,6 +279,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   and builds; Remove from the backlog (the task's menu or ⌘K) makes it a plan to approve. You put work there yourself (When to start → Backlog,
   Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
   Shinsa never decides it for you. Questions, research and investigations never wait there.
+- **Snoozing.** Snooze (the task's menu, a row's menu, ⌘K or `shinsa tasks snooze`) takes an open task in any step
+  out of Needs you, In progress, the queue, the guide, the Dock badge and notifications, and changes nothing else:
+  its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
+  section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
+  its own.
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and
@@ -1030,6 +1036,34 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   several at once, whatever project the box shows) and Backlog.
 - **No roadmap.** The word named nothing Shinsa has; the page is All tasks, its sections are task groups, and the
   backlog is the closest thing to a roadmap there is.
+
+### Duplicates (2026-10-31)
+
+- **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
+  cancel, linked to the task it repeats, and shown as Duplicate, in its own Duplicates group on All tasks, with a
+  "Duplicate of" fact that opens the original and says who closed it and why. The original shows it too, as a
+  "Kept over" fact linking every task closed in its favour.
+- **Triage catches them before any work.** It is asked whether a new request is the same work as an open task of its
+  project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
+  as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
+  task's menu or ⌘K, and agents with `tasks_duplicate`.
+- **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
+  links, machines shared with other accounts and duplicates found across a team are their own tasks.
+
+### Replies on the Overview, not in the chat (2026-10-31)
+
+- **The goal is never to need the chat.** At review you iterate: you ask for a change, ask a question, add a second
+  thought. Whether the Agent addressed it was only in the chat, so every round meant scrolling a transcript. Now
+  each thing you send after the work is in is a request, and the fix that answers it must hand over a reply
+  (`complete_fix`'s `reply`, `docs/engine.md` → Your requests and their replies).
+- **Confirmations, not a thread.** Five designs were tried in `/ui`; the one chosen reads as a report: a headline,
+  each point you raised marked Done, Answered or Not changed with a note, then What to do now. What you sent folds
+  above it as a quote of your own words; no bubbles, no inline chat: the plan and the reply are one shared record, and
+  earlier requests (plan feedback included) fold below as the same report. Every fact on the card is a live link
+  (the pull request with its hover card), never plain text that names one.
+- **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
+  pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
+  cards).
 
 ## 11. Open questions
 

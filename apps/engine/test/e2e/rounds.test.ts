@@ -408,8 +408,10 @@ describe('a task with no repository', () => {
     };
     await w.engine.dispatch({ type: 'task.create', request: 'Hey', repoId: null });
     const taskId = Object.keys(w.state.tasks)[0] ?? '';
-    await w.untilStage(taskId, 'done');
+    await w.untilStage(taskId, 'answered');
     expect(w.task(taskId)).toMatchObject({ repoId: null, worktreePath: null, pipeline: ['answer'] });
+    await w.answer(await w.untilGate(taskId, 'result'), 'approve');
+    await w.untilStage(taskId, 'done');
     const [answerer] = w.agents.of('answerer');
     expect(answerer?.cwd).toBe(join(w.config.dataDir, 'scratch', taskId));
     expect(answerer?.prompt).toContain('This task works in no repository.');

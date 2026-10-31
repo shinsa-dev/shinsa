@@ -36,6 +36,13 @@ describe('resolveTaskAction', () => {
     });
   });
 
+  it('opens an answered task to read the result, named by the gate', () => {
+    expect(actionFor({ type: 'result', title: 'Read the report' })).toEqual({
+      label: 'Read the report',
+      path: '/tasks/t',
+    });
+  });
+
   it('opens the task to decide on a proposed change, where the proposal is', () => {
     expect(actionFor({ type: 'proposal', runId: 'run-1' })).toEqual({
       label: 'Decide on the change',

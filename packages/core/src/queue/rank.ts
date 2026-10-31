@@ -38,6 +38,7 @@ const GATE_RANK: Record<GateType, number> = {
   configuration: 4,
   sign_in: 4,
   post_merge: 3,
+  result: 3,
 };
 
 const WORKING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
@@ -113,7 +114,9 @@ function countDependents(state: ShinsaState) {
 }
 
 function listQueuedGates(state: ShinsaState): QueuedGate[] {
-  const open = listOpenGates(state).filter((gate) => !isHeldInBacklog(state, gate));
+  const open = listOpenGates(state).filter(
+    (gate) => !isHeldInBacklog(state, gate) && !state.tasks[gate.taskId]?.snoozed
+  );
   const dependents = open.length > 0 ? countDependents(state) : new Map<string, number>();
   return open.flatMap((gate) => {
     const task = state.tasks[gate.taskId];
@@ -138,9 +141,11 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const working: Task[] = [];
   const waiting: Task[] = [];
   const backlog: Task[] = [];
+  const snoozed: Task[] = [];
   for (const task of Object.values(state.tasks)) {
     if (tasksWithGates.has(task.id) || !isListedInFocus(state, task, now)) continue;
-    if (task.backlog && !isTaskSettled(task)) backlog.push(task);
+    if (task.snoozed && !isTaskSettled(task)) snoozed.push(task);
+    else if (task.backlog && !isTaskSettled(task)) backlog.push(task);
     else if (listWaitsOn(state, task).length > 0) waiting.push(task);
     else if (isMoving(task, running)) working.push(task);
   }
@@ -155,5 +160,6 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
     working: working.sort(compareTasks),
     waiting: waiting.sort(compareTasks),
     backlog: backlog.sort(compareTasks),
+    snoozed: snoozed.sort(compareTasks),
   };
 }

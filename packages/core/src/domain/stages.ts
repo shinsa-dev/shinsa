@@ -29,7 +29,7 @@ export function isTaskSettled(task: Pick<Task, 'stage'>) {
 }
 
 export function isTaskComplete(task: Task) {
-  return task.stage === 'merged' || task.stage === 'done';
+  return task.stage === 'answered' || task.stage === 'merged' || task.stage === 'done';
 }
 
 export function hasArmedWait(task: Task) {

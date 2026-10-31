@@ -21,6 +21,7 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
   reachReviewGate,
   reachShipping,
   readInstruction,
@@ -122,7 +123,13 @@ describe('answering a gate', () => {
     const run = harness.activeRun(taskId);
     expect(run).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(run.prompt).toContain('Dark mode.');
-    harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Added dark mode.', checks: ['c1'] });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: run.id,
+      summary: 'Added dark mode.',
+      checks: ['c1'],
+      reply: REPLY,
+    });
     expect(harness.task(taskId).stage).toBe('checking');
     harness.send({ type: 'checks.record', taskId, results: [checkResult('c1', 'pass')] });
     expect(harness.activeRun(taskId).role).toBe('reviewer');
@@ -138,7 +145,12 @@ describe('answering a gate', () => {
       decision: 'revise',
       response: 'Fix the copy.',
     });
-    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Reworded.' });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Reworded.',
+      reply: REPLY,
+    });
     expect(harness.task(taskId).stage).toBe('reviewing');
     expect(harness.effectsOf('checks.run')).toHaveLength(1);
   });

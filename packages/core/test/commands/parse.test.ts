@@ -164,6 +164,14 @@ describe('parseUserCommand', () => {
         { type: 'task.remove_from_backlog', taskId: 't1' },
       ],
       [
+        { type: 'task.snooze', taskId: 't1' },
+        { type: 'task.snooze', taskId: 't1' },
+      ],
+      [
+        { type: 'task.unsnooze', taskId: 't1' },
+        { type: 'task.unsnooze', taskId: 't1' },
+      ],
+      [
         { type: 'task.cancel', taskId: 't1' },
         { type: 'task.cancel', taskId: 't1' },
       ],

@@ -27,7 +27,8 @@ describe('listTaskActions', () => {
       ['pullRequest', 'branch'],
       ['editor', 'terminal', 'finder'],
       ['fork'],
-      ['restart', 'complete', 'cancel'],
+      ['snooze'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
   });
 
@@ -35,21 +36,38 @@ describe('listTaskActions', () => {
     expect(listTaskActions(createTask({ id: 't', branch: 'fix/tabs' }))).toEqual([
       ['branch'],
       ['fork'],
-      ['restart', 'complete', 'cancel'],
+      ['snooze'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
     expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork']]);
     expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([]);
+    const closed = createTask({
+      id: 't',
+      stage: 'cancelled',
+      duplicate: { of: 'o', by: 'shinsa', why: null },
+    });
+    expect(listTaskActions(closed)).toEqual([['notDuplicate']]);
+    expect(listTaskActions({ ...closed, duplicate: { of: 'o', by: 'you', why: null } })).toEqual([
+      ['notDuplicate'],
+    ]);
+    expect(listTaskActions({ ...closed, duplicate: null })).toEqual([]);
   });
 
   it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
       ['fork'],
-      ['moveToBacklog'],
-      ['restart', 'complete', 'cancel'],
+      ['moveToBacklog', 'snooze'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
     expect(listTaskActions(createTask({ id: 't', stage: 'awaiting_plan', backlog: { at: 1 } }))[1]).toEqual([
       'removeFromBacklog',
+      'snooze',
     ]);
+  });
+
+  it('offers Unsnooze on a snoozed task, and neither once it is settled', () => {
+    expect(listTaskActions(createTask({ id: 't', snoozed: { at: 1 } }))[1]).toEqual(['unsnooze']);
+    expect(listTaskActions(createTask({ id: 't', stage: 'merged', snoozed: { at: 1 } }))).toEqual([['fork']]);
   });
 
   it('labels every action with its icon', () => {
@@ -109,6 +127,18 @@ describe('runTaskAction', () => {
       [{ type: 'task.retry', taskId: 'full' }, 'Restarted.'],
       [{ type: 'task.complete', taskId: 'full' }, 'Marked done.'],
       [{ type: 'task.cancel', taskId: 'full' }, 'Cancelled.'],
+    ]);
+  });
+
+  it('snoozes a task and unsnoozes it, with a toast for each', () => {
+    runTaskAction(FULL, 'snooze');
+    runTaskAction(FULL, 'unsnooze');
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'task.snooze', taskId: 'full' },
+        'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
+      ],
+      [{ type: 'task.unsnooze', taskId: 'full' }, 'Unsnoozed.'],
     ]);
   });
 

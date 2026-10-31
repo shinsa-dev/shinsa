@@ -388,7 +388,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 
 1. **Classify.** One Sonnet call picks the title, the repository or none (A task without a repository,
    below), size, branch and, given every open task, the tasks this one waits on (`waits_on`, a list, usually
-   empty). Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
+   empty) and whether it is the same work as one of them (`duplicate_of`, Duplicates, below). A duplicate is
+   closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
@@ -643,8 +644,8 @@ them in the order they need:
   task wait on this one (the other part uses what this task adds); any run may set it, since it never holds this
   task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`). A wait ends
   when the task waited on is finished, merged or done (`isTaskComplete`), so a task that ships no pull request
-  releases its waiters too: an answer, research or investigation settles as done when it hands over (or when you
-  veto its proposal), an operation when it ends, and one whose proposal you approve becomes a change that merges.
+  releases its waiters too: an answer, research or investigation once it hands over (it waits as answered for
+  you to close it, and counts as finished) or when you veto its proposal, an operation when it ends, and one whose proposal you approve becomes a change that merges.
 - **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
@@ -920,8 +921,17 @@ folds in `state/shapes.ts`).
   Otherwise the planning run ends, `task.reshaped` records the steps (`by: agent`, its reason), and the first new step
   starts: when the work step changed (a change became an operation, or the other way), the setup is verified again
   first, so a change gets its default branch verified and the Agent plans again, on the same session, with the right prompt.
-- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); an inquiry step has
-  no gate of its own, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
+- **Answered, not done.** An answer, research or investigation that hands over with nothing after it (no `your_ok`,
+  no plan, no proposal) does not settle: it moves to the stage `answered` and opens a `result` gate titled "Read the
+  answer", "Read the report" or "Read the diagnosis" (`openResultGate`, `decide/shapes.ts`), so it waits in Needs you
+  until you have read it. Done means you have. Close (the gate's one decision, approve) settles it as done
+  (`closeResult`, "closed by you") without closing it, so it still takes follow-ups; marking it done closes it as
+  any task. A message asks a follow-up (`follow_up`: the gate is withdrawn, the inquiry agent answers again and the
+  task comes back to answered); new work in the chat closes it first, then starts the next round. A task waiting on
+  it starts once it is answered (`isTaskComplete`). Vetoing a proposal and a follow-up on merged or finished work
+  still finish as done: you just acted on them.
+- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); a proposal never
+  goes through the result gate, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
   goes on and asks it to end with what the next step should do. When it hands over, Shinsa records a proposal (the agent's own `propose_change`, or the Agent's reason and what comes next: "Plan the
   operation. You approve the plan before anything runs.") and opens the proposal gate ("Run an operation from this
   diagnosis?", or "Turn this investigation into a fix?" before a change). Approving records `task.change_approved` (the
@@ -984,6 +994,20 @@ them in the composer.
   change in one command (`task.wait_on`, `task.prioritize`); a part you changed is yours, not Auto, from then on; the
   kind does not change after triage except through the Agent while it plans and your OK. Without a
   model (off, failed or unreadable) the task stays a change at its priority, starting now, and the why says so.
+
+**Duplicates.** A task that repeats another is closed as its duplicate: cancelled like any cancel (its runs,
+effects, gates, pull requests, worktree and scratch folder settle the same way), with `task.duplicate` recording
+the task it repeats, who closed it and why; its stage stays `cancelled`, so everything that treats a cancelled task
+as finished still does, and the page shows the status Duplicate, a Duplicates group on All tasks and a "Duplicate of"
+fact linking the original, whose own page shows a "Kept over" fact linking every task closed in its favour. Triage asks `duplicate_of` whenever a task is open: one choice among the open tasks it
+offers `waits_on`, or `none`, with a strict bar (the same outcome; related, overlapping, follow-up, partial or
+uncertain work is `none`) and a `duplicate_why`. A pick outside the offered tasks, or without a project in another
+repository, is dropped; core drops one naming a settled task, itself or a duplicate. You close one yourself with
+`task.mark_duplicate` (Close as a duplicate in the task's menu, `shinsa tasks duplicate <task> --of <task>`, an
+agent's `tasks_duplicate`). Not a duplicate (`task.clear_duplicate`, `shinsa tasks not-duplicate`) clears the mark
+of any duplicate and starts it again: one that never ran an agent (what triage closes) starts as triage would have,
+keeping what it waits on; one that did starts a fresh round with the same request (`restartInNewRound`: a new
+round, a new branch and an empty plan), since its cancel removed its worktree and closed its pull request.
 
 ## Steps and gates
 
@@ -1140,12 +1164,37 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
 - **On your behalf.** Both moves are management commands an agent may send for you; the activity reads "Moved
   ‹task› to the backlog" or "out of the backlog". Starting is a plan approval, which only you make.
 
+### Snoozing a task
+
+Snoozing hides an open task from what asks for your attention, in any step, and changes nothing else: its stage,
+gates, plan, branch, worktree, pull request and agent session stay as they are (`decide/snooze.ts`). It is for work
+that is fine but not a priority for a few days, where cancelling would throw it away and the backlog would not take
+it (a task past its plan). It is not pausing: "Paused" already names a step that stopped and needs you, and nothing
+stops here.
+
+- **Snoozing and unsnoozing.** `Task.snoozed` (`{ at }`, or null) changes only through `task.snooze_changed`
+  (`snoozed`). `task.snooze` (Snooze in the task menu, a row's menu and ⌘K, `shinsa tasks snooze`) sets it, and is
+  refused for a settled task (`task_settled`); `task.unsnooze` (Unsnooze, `shinsa tasks unsnooze`) clears it. A
+  repeat records nothing. Each asks for a fresh Home guide. Only you unsnooze a task, or an agent you asked: nothing
+  wakes it on its own.
+- **While snoozed.** `resolveQueue` leaves every open gate of a snoozed task out of `ready` and lists the task in
+  `queue.snoozed` instead of `working`, `waiting` or `backlog`, so it is not in Needs you, In progress, Waiting, the
+  queue button, the guide, the Dock badge or a notification. Home shows it in a Snoozed section, folded by default
+  (`QueueSection.opensOnHome`), the queue popover in a folded Snoozed section, and All tasks in a folded Snoozed
+  group ahead of every gate (`resolveTaskGroup`). The task reads (`GET /api/tasks`, `shinsa tasks list`, an agent's
+  `tasks_list`) mark it `snoozed` and leave it out of `--status needs_you` (`isListed` in `http/reads.ts`). An agent
+  at work keeps working; the gate it reaches waits quietly. A snoozed task that finishes drops out of the snoozed list.
+- **Unsnoozing.** The task shows again where it is now: a gate it reached while snoozed is in Needs you at once.
+- **On your behalf.** Both are management commands an agent may send for you; the activity reads "Snoozed ‹task›"
+  or "Unsnoozed ‹task›".
+
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
 `question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
 agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
-above), and `operation` an operation after the merge waiting for your OK on the merged commit. `failure` means the
+above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
+answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
 reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
@@ -1165,7 +1214,7 @@ Each gate takes only the answers that mean something for it (`gate.answer` refus
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
 words in it; a secret takes `reply` with a secret ref or reject; your OK takes approve or reject; an operation after the
 merge takes approve (run it with the notes on the gate), `reply` (replace the notes with your words, empty clears
-them, then run) or reject (finish without it); a failure or Sign in gate takes approve (retry), `reply` (retry with
+them, then run) or reject (finish without it); a result gate takes approve (Close); a failure or Sign in gate takes approve (retry), `reply` (retry with
 your words as guidance) or reject, which cancels the task; the setup gate takes approve (verify the setup again)
 or reject. `reply` is the one decision that takes words. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A
 question belongs to the run that asked it: when that run ends for any reason the question is withdrawn and the
@@ -1193,7 +1242,7 @@ sending does:
 | operation gate | `operation_notes` | replaces the gate's notes for the operation (`gate.noted`); nothing runs |
 | a working stage with no agent | `restart_step` | starts the step again with it |
 | triage or waiting on another task | `kept` | is kept for the first agent's brief |
-| a resting task (a finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
+| a resting task (an answered or finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
 | a closed task (marked done, cancelled) | `closed` | refused: "This task is finished." |
 
 That is what feedback does, and at a failure, Sign in, setup, question, plan, review, your OK or operation gate, and
@@ -1201,7 +1250,9 @@ while planning with no agent running, it is all a message does, whatever the cla
 Where you decide, above). Elsewhere, a message the classifier reads as needing nothing (`acknowledge`) is only
 recorded, and a message it reads as new work queues the next round,
 and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
-on your behalf, or a schedule sends, to a task with any open gate is not delivered into the gate: core records it
+on your behalf, or a schedule sends, to a task with any open gate but the result gate is not delivered into the gate (at an
+answered task it asks the follow-up, which brings the gate back with the new answer, and new work there, a kept
+suggestion too, queues its round, which starts once you close the answer): core records it
 (`task.messaged` with `kept`) and keeps it in `Task.untoldMessages`, and the next run of the task's own session (the
 Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
 which can only report) is told it once, at the tail of its prompt
@@ -1277,6 +1328,34 @@ with both the approach and the flow starts one on the latest phase report (risks
 is ignored. `assembleReport` reads the result as before, and a new round starts without phase reports, so a revision
 never reaches an earlier round's report. The `walkthrough` schema is static like every tool's (Caching, below).
 
+### Your requests and their replies
+
+Once the work is in, you steer it by sending things back: changes at the review gate, line comments, a question, a
+second thought while the Agent fixes. Each answer used to live only in the chat. Now every one is a request with a
+reply you read on the Overview, so the chat is never where you learn what changed.
+
+- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). A message or a
+  gate answer that starts a fix for you opens one before the fix starts; anything you send while that fix runs
+  joins it (a steer of a run with `purpose: fix`), so one reply covers everything said during one fix. A steer of a
+  build phase, a follow-up to an inquiry and a plan revision open none.
+- **The reply is a hand-over field.** While a request is open, `complete_fix` must carry `reply`: a `headline`, each
+  point you raised as `points` (in your words cut short, marked `done`, `answered` or `not_changed`, each with a
+  `note`: where it is now, the answer, or why it was left), `next` (what you do now, with the commands in `bash run`
+  blocks and full links). Core refuses the fix without one (`reply_required`) and refuses one on a fix
+  nobody asked for (`reply_unasked`), so an automatic checks or review fix never invents an answer. The schema stays
+  static and optional (Caching, below); the human fix prompts (`REPLY_INSTRUCTION`, `prompts/fixes.ts`) and the
+  handover skill say what each field holds.
+- **On the Overview** the review and merge cards lead with the latest reply (`ReplyReport`,
+  `components/overview/reply-report.tsx`): What you sent, folded above it as a quote of your words, then the
+  headline, each point with its outcome and What to do now. Facts the cards add are live links: the pull request at
+  the merge gate with its hover card, whether it conflicts and how its checks stand; the agent review's count is
+  left out when its findings show right below. While the Agent works on one, the work
+  card shows "Your request". Earlier requests, a panel below, lists every earlier reply and every plan revision you
+  gave feedback on (its change summary as the headline), newest first, each folded to its headline and a count of
+  its outcomes (`listEarlierExchanges`, `lib/overview/exchanges.ts`; `RequestsPanel`). The checks fold to one line on these cards, open by
+  themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`); opened, they show
+  the list itself, with a stage's header only when there is more than one stage.
+
 ### Steps around the merge
 
 The two kinds have standard names, like a pre-commit and a post-commit hook. A **pre-merge step** is done before the
@@ -1338,6 +1417,9 @@ steps takes its step out again.
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
   steps while the later round works. Steps ticked before a round starts are dropped.
+- **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
+  your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
+  names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.
 - **Visible to agents.** `read_task` (`serializeTaskDetail`) numbers the steps with their ticks, the review gate's body
   and the pull request's description list them as task lists (`serializeMergeStepsMarkdown`), and the activity
   records each tick. Nothing runs a step for you: a step's command opens in a terminal only when you ask (Run in
@@ -3985,7 +4067,8 @@ it means, and the parser, which refuses an answer with anything outside the opti
 are used for triage's `size` (`small` or `large`), `shape` (the six task shapes, each with what it means), `priority`
 and `waits_on` (the open tasks triage offers, Automatic options, each by its id with its title as its meaning;
 refused whole, it waits on nothing), the last three asked only for what the task left on Auto and each with a short why (Task shapes → Automatic
-options), the briefing's `now.task` and every `next[].task` (a
+options), triage's `duplicate_of` (a choice among the same open tasks and `none`, asked whenever one is open, with
+a `duplicate_why`; Duplicates), the briefing's `now.task` and every `next[].task` (a
 choice among the listed decisions' ids; `parseBriefing` still validates), and each setup question that takes one
 option (`model`, `merge`, `plans`, `accounts`, `prerequisites`: its option values plus `unclear`).
 
@@ -4625,7 +4708,9 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
   `instance/bundle.ts` as `BUNDLE`, null when running from source): a compiled engine cannot read core's sources or
   the SDK's `package.json`. `shinsa eunoe …` runs eunoe's CLI from the same executable (the agents' `eunoe load` and
-  `eunoe peek`); the forwarder itself is the library, in the engine.
+  `eunoe peek`), importing its `src/cli/main.ts` by path through `node_modules`, since eunoe's `exports` map lists only
+  the library; the Test workflow bundles `scripts/engine-main.ts` so a dependency bump that breaks the import fails
+  before merge. The forwarder itself is the library, in the engine.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
 - **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a

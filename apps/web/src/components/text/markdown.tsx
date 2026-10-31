@@ -99,9 +99,15 @@ const INLINE_COMPONENTS: Components = {
     ),
 };
 
+const LINKED_INLINE_COMPONENTS: Components = {
+  a: BLOCK_COMPONENTS.a,
+};
+
 const blocks = createCache<React.ReactElement>(PARSED_LIMIT);
 
 const inlines = createCache<React.ReactElement>(PARSED_LIMIT);
+
+const linkedInlines = createCache<React.ReactElement>(PARSED_LIMIT);
 
 function parseBlock(text: string) {
   return blocks.read(text, () =>
@@ -114,14 +120,14 @@ function parseBlock(text: string) {
   );
 }
 
-function parseInline(text: string) {
-  return inlines.read(text, () =>
+function parseInline(text: string, linked: boolean) {
+  return (linked ? linkedInlines : inlines).read(text, () =>
     renderMarkdown({
       children: markInlineCode(text),
       remarkPlugins: REMARK_PLUGINS,
       allowedElements: INLINE_ELEMENTS,
       unwrapDisallowed: true,
-      components: INLINE_COMPONENTS,
+      components: linked ? LINKED_INLINE_COMPONENTS : INLINE_COMPONENTS,
       urlTransform: transformUrl,
     })
   );
@@ -156,5 +162,21 @@ export const InlineMarkdown = React.memo(function InlineMarkdownText({
   text: string;
   className?: string;
 }) {
-  return <span className={cn('prose-shinsa min-w-0 break-words', className)}>{parseInline(text)}</span>;
+  return (
+    <span className={cn('prose-shinsa min-w-0 break-words', className)}>{parseInline(text, false)}</span>
+  );
+});
+
+export const LinkedInlineMarkdown = React.memo(function LinkedInlineMarkdownText({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  return (
+    <span className={cn('prose-shinsa min-w-0 break-words', className)}>
+      {parseInline(useReferenceMarkdown(text), true)}
+    </span>
+  );
 });

@@ -11,6 +11,7 @@ import {
   PLAN,
   proposePlan,
   registerRepo,
+  resolveReply,
 } from '../harness.ts';
 
 const THREE_PHASES: PlanDocument = {
@@ -274,6 +275,7 @@ describe('what blocks', () => {
         runId: harness.activeRun(taskId).id,
         summary: 'Fixed.',
         checks,
+        ...resolveReply(harness, harness.activeRun(taskId).id),
         ...(files ? { files } : {}),
       });
     };

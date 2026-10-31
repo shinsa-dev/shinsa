@@ -14,6 +14,7 @@ import {
   pullRequest,
   pushed,
   pushFix,
+  REPLY,
   reachReviewGate,
   reachShipping,
   readInstruction,
@@ -81,7 +82,13 @@ describe('your edits in the Code tab', () => {
     expect(readInstruction(fix)).toContain('Tidy it.');
     expect(harness.task(taskId).untoldEdits).toEqual([]);
     expect(harness.task(taskId).editedPaths).toEqual(['src/a.ts', 'src/b.ts']);
-    harness.send({ type: 'agent.complete_fix', runId: fix.id, summary: 'Done.', treeHash: 'tree-2' });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: fix.id,
+      summary: 'Done.',
+      treeHash: 'tree-2',
+      reply: REPLY,
+    });
     expect(harness.task(taskId).editedPaths).toEqual([]);
   });
 

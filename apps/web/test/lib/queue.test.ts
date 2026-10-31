@@ -38,11 +38,13 @@ function createWorld() {
         waitsOn: ['building'],
         createdAt: NOW - 1_000,
       }),
+      createTask({ id: 'aside', repoId: 'app', stage: 'awaiting_review', snoozed: { at: NOW - 4_000 } }),
     ],
     gates: [
       createGate({ id: 'g-review', taskId: 'review', type: 'review', openedAt: NOW - 3_000 }),
       createGate({ id: 'g-merge', taskId: 'merge', type: 'merge', openedAt: NOW - 2_000 }),
       createGate({ id: 'g-elsewhere', taskId: 'elsewhere', type: 'review' }),
+      createGate({ id: 'g-aside', taskId: 'aside', type: 'review' }),
     ],
     repos: [createRepo({ id: 'app', projectId: 'work' }), createRepo({ id: 'site', projectId: 'home' })],
     projects: [createProject({ id: 'work' }), createProject({ id: 'home' })],
@@ -62,17 +64,19 @@ function sectionOf(key: QueueSection['key']) {
 }
 
 describe('listQueueSections', () => {
-  it('lists Needs you, In progress and Waiting on another task, all within the focus project', () => {
+  it('lists Needs you, In progress, Waiting on another task and Snoozed, all within the focus project', () => {
     const sections = sectionsFor();
     expect(sections.map((section) => [section.key, section.title])).toEqual([
       ['needs', 'Needs you'],
       ['working', 'In progress'],
       ['waiting', 'Waiting on another task'],
+      ['snoozed', 'Snoozed'],
     ]);
     expect(sections.map((section) => section.items.map((item) => item.key))).toEqual([
       ['g-merge', 'g-review'],
       ['building'],
       ['parent', 'child'],
+      ['aside'],
     ]);
   });
 
@@ -80,6 +84,18 @@ describe('listQueueSections', () => {
     const [, working, waiting] = sectionsFor();
     expect(working).toMatchObject({ icon: 'IconRobot', tone: 'blue', startsCollapsed: false });
     expect(waiting).toMatchObject({ icon: 'IconHourglass', tone: 'neutral', startsCollapsed: true });
+  });
+
+  it('keeps Snoozed folded on Home and in the queue, dated from when you snoozed it', () => {
+    const snoozed = sectionOf('snoozed');
+    expect(snoozed).toMatchObject({
+      icon: 'IconClockSnooze',
+      startsCollapsed: true,
+      opensOnHome: false,
+      empty: null,
+    });
+    expect(snoozed.items[0]).toMatchObject({ kind: 'idle', since: NOW - 4_000, sinceLabel: 'Snoozed' });
+    expect(sectionOf('waiting').opensOnHome).toBe(true);
   });
 
   it('dates each row from when it started waiting on you, its step started, or it was asked for', () => {

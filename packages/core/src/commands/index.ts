@@ -38,6 +38,7 @@ import type {
 import type {
   CheckChangeHandOver,
   CodeSpot,
+  FixReply,
   JudgementCall,
   LinkedEvidenceKind,
   PlanDocument,
@@ -79,6 +80,7 @@ export interface TriageReasons {
   shape?: string;
   priority?: string;
   start?: string;
+  duplicate?: string;
 }
 
 export type UserCommand =
@@ -106,7 +108,11 @@ export type UserCommand =
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
   | { type: 'task.move_to_backlog'; taskId: string }
   | { type: 'task.remove_from_backlog'; taskId: string }
+  | { type: 'task.snooze'; taskId: string }
+  | { type: 'task.unsnooze'; taskId: string }
   | { type: 'task.cancel'; taskId: string }
+  | { type: 'task.mark_duplicate'; taskId: string; duplicateOf: string }
+  | { type: 'task.clear_duplicate'; taskId: string }
   | { type: 'task.complete'; taskId: string }
   | { type: 'task.retry'; taskId: string; account?: RunAccount }
   | ({ type: 'task.message'; taskId: string; text: string } & MessageRoute)
@@ -161,6 +167,7 @@ type AgentCommand =
       type: 'agent.complete_fix';
       runId: string;
       summary: string;
+      reply?: FixReply | null;
       walkthrough?: ReportWalkthroughRevision | null;
       checks?: string[];
       checkChanges?: CheckChangeHandOver[];
@@ -260,6 +267,7 @@ type SystemCommand =
       waitsOn: string[];
       shape?: TaskShape;
       priority?: TaskPriority;
+      duplicateOf?: string;
       reasons?: TriageReasons;
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }

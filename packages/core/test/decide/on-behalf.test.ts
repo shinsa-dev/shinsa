@@ -18,6 +18,7 @@ import {
   PASSING,
   proposePlan,
   pullRequest,
+  REPLY,
   reachReviewGate,
   reachShipping,
   registerRepo,
@@ -252,7 +253,7 @@ describe('acting for the human', () => {
     expect(instruction).toContain(KEPT_NOTE);
     expect(instruction.indexOf('hello')).toBeLessThan(instruction.indexOf(KEPT_NOTE));
     expect(harness.task(taskId).untoldMessages).toEqual([]);
-    harness.send({ type: 'agent.complete_fix', runId: fix.id, summary: 'Kept the flag.' });
+    harness.send({ type: 'agent.complete_fix', runId: fix.id, summary: 'Kept the flag.', reply: REPLY });
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     const reviewer = harness.activeRun(taskId);
     expect(reviewer.role).toBe('reviewer');
@@ -442,6 +443,8 @@ describe('the summary of each action', () => {
       [{ type: 'task.wait_on', taskId, waitsOn: [other] }, 'Changed what “Fix tab group scroll” waits on'],
       [{ type: 'task.move_to_backlog', taskId: other }, 'Moved “Second” to the backlog'],
       [{ type: 'task.remove_from_backlog', taskId: other }, 'Moved “Second” out of the backlog'],
+      [{ type: 'task.snooze', taskId: other }, 'Snoozed “Second”'],
+      [{ type: 'task.unsnooze', taskId: other }, 'Unsnoozed “Second”'],
       [
         { type: 'task.bind_account', taskId: other, account: { id: 'acc-1', email: 'me@example.com' } },
         'Set “Second” to run on me@example.com',

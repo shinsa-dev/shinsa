@@ -11,6 +11,7 @@ import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
+import { RequestsPanel } from '@/components/overview/reply-report.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
@@ -20,6 +21,7 @@ import { Composer } from '@/components/task/composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
+import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
@@ -29,6 +31,11 @@ import { isCodeTask } from '@/lib/tasks/shapes.ts';
 import { hasReview } from '@/lib/tasks/tabs.ts';
 
 const FIRST_ACTIVITY = 24;
+
+function resolveShownReplyId(state: ShinsaState, task: Task, gate: Gate | undefined) {
+  if (resolveNowKind(state, task, gate) !== 'gate') return null;
+  return selectShownReply(task, gate)?.id ?? null;
+}
 
 function EvidencePlace({
   state,
@@ -141,6 +148,7 @@ export function OverviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
+          <RequestsPanel task={task} shownId={resolveShownReplyId(state, task, gate)} />
           <SuggestionsPanel task={task} />
           <PostMergePanel state={state} task={task} gate={gate} />
           <WatchdogsPanel state={state} task={task} />
@@ -165,6 +173,7 @@ export function OverviewTab({
       </PageScroll>
       {hint && (
         <Composer
+          draftKey={task.id}
           placeholder={hint.placeholder}
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}

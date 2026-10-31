@@ -57,6 +57,12 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
    so that a failure there (a token without R2 access, an R2 outage) leaves the published release alone, and
    Re-run failed jobs retries only the copy. After a canary, the same job removes the GitHub releases and tags of all
    but the newest five canaries (`scripts/release-prune.ts`), even when the copy failed.
+7. Reports the release on the commit it built, as a commit status named `Release` linked to the run, so it shows
+   beside lint and test on GitHub and turns the commit red when it fails. Check runs of a `workflow_run` workflow
+   never count in the commit's status, so the jobs post it through the statuses API (`statuses: write`): the `mac`
+   job sets `pending` as it starts, and a closing `status` job (`if: always()`) sets `success` once the downloads are
+   updated, `failure` when the decision, the build or the downloads failed, or `error` when the run was cancelled,
+   such as a canary a newer merge replaced. A run that decides not to build posts nothing.
 
 ## Canary builds
 

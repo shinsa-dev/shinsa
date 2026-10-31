@@ -338,6 +338,16 @@ describe('the task commands', () => {
       'Running this step again on acc-1.',
     ],
     [['tasks', 'cancel', 'fix'], { type: 'task.cancel', taskId: 'task-123' }, 'Cancelled.'],
+    [
+      ['tasks', 'duplicate', 'fix', '--of', 'search'],
+      { type: 'task.mark_duplicate', taskId: 'task-123', duplicateOf: 'task-456' },
+      'Closed as a duplicate.',
+    ],
+    [
+      ['tasks', 'not-duplicate', 'fix'],
+      { type: 'task.clear_duplicate', taskId: 'task-123' },
+      'Started it again.',
+    ],
     [['tasks', 'done', 'fix'], { type: 'task.complete', taskId: 'task-123' }, 'Marked as done.'],
     [
       ['tasks', 'prioritize', 'fix', 'urgent'],
@@ -364,6 +374,12 @@ describe('the task commands', () => {
       { type: 'task.remove_from_backlog', taskId: 'task-123' },
       'Removed from the backlog. Its plan now waits for your approval.',
     ],
+    [
+      ['tasks', 'snooze', 'fix'],
+      { type: 'task.snooze', taskId: 'task-123' },
+      'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
+    ],
+    [['tasks', 'unsnooze', 'fix'], { type: 'task.unsnooze', taskId: 'task-123' }, 'Unsnoozed.'],
     [
       ['tasks', 'bind', 'fix', 'any'],
       { type: 'task.bind_account', taskId: 'task-123', account: null },
