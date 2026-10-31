@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { DisplayPhase, ReportCheck } from '@shinsa/core';
+import type { DisplayPhase } from '@shinsa/core';
 import {
   describeAgentReviewFact,
   describeFollowUpNote,
@@ -19,20 +19,6 @@ import { createGate, createRun, createShinsaState, createTask } from '../../supp
 function phase(overrides: Partial<DisplayPhase>): DisplayPhase {
   return { key: 'build', title: 'Build', detail: null, status: 'active', planned: false, ...overrides };
 }
-
-function check(outcome: ReportCheck['outcome']): ReportCheck {
-  return { id: `c-${outcome}`, label: `check ${outcome}`, command: 'bun test', outcome, detail: null };
-}
-
-const PULL_REQUEST = {
-  number: 4531,
-  url: 'https://github.com/acme/app/pull/4531',
-  state: 'open' as const,
-  checks: 'passing' as const,
-  unresolvedComments: 0,
-  mergeable: true,
-  updatedAt: 0,
-};
 
 describe('resolveNowTitle', () => {
   it('leaves a finished result to its own card and names the settled stage instead', () => {

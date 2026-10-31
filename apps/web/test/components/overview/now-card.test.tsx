@@ -177,7 +177,9 @@ describe('NowCard on the Overview', () => {
     const { view } = renderOverview(state, task, gate);
     const card = within(view.container.querySelector('section') as HTMLElement);
     expect(card.getByText('Agent review found nothing')).toBeTruthy();
-    expect(card.getByText('#42').closest('a')?.getAttribute('href')).toBe('https://github.com/you/app/pull/42');
+    expect(card.getByText('#42').closest('a')?.getAttribute('href')).toBe(
+      'https://github.com/you/app/pull/42'
+    );
     expect(card.getByText('No conflicts')).toBeTruthy();
     expect(card.getByText('Checks passing')).toBeTruthy();
   });
