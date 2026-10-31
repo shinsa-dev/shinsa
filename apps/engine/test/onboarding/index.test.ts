@@ -142,7 +142,7 @@ describe('Onboarding', () => {
     }
   });
 
-  test('opens the install terminal for a check, and refuses without one or without terminals', () => {
+  test('opens the install terminal for a check, refuses a command no help task replied with, and refuses without terminals', async () => {
     const opened: string[] = [];
     const terminals: InstallTerminals = {
       snapshot: () => ({ terminals: [], services: [], home: '/' }),
@@ -154,14 +154,20 @@ describe('Onboarding', () => {
       close: () => undefined,
     };
     const { onboarding, config } = setup(undefined, terminals);
-    expect(onboarding.openInstall({ id: 'gh' })).toEqual({
+    expect(await onboarding.openInstall({ id: 'gh' })).toEqual({
       terminal: expect.objectContaining({ id: 't1', cwd: config.userHome, name: 'Set up GitHub CLI' }),
     });
     expect(opened).toEqual(['brew install gh; exit']);
-    expect(() => onboarding.openInstall({ id: 3 })).toThrow('Send “id” as the check to fix, such as gh.');
-    expect(() => setup().onboarding.openInstall({ id: 'gh' })).toThrow(
+    expect(onboarding.openInstall({ command: 'rm -rf ~' })).rejects.toThrow(
+      'Shinsa runs only the commands the help task’s agent replied with.'
+    );
+    expect(onboarding.openInstall({ id: 3 })).rejects.toThrow(
+      'Send “id” as the check to fix, such as gh, or a “command” from the help task.'
+    );
+    expect(setup().onboarding.openInstall({ id: 'gh' })).rejects.toThrow(
       'Terminals are off, so run the command yourself.'
     );
+    expect(opened).toEqual(['brew install gh; exit']);
   });
 
   test('resolveChosenRoots expands ~ and drops duplicates', () => {

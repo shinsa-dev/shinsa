@@ -1,11 +1,5 @@
-import type { AccountImport, AccountSummary, ProviderLogin } from '@shinsa/core';
+import type { AccountSummary, ProviderLogin } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@shinsa/ui/components/dropdown-menu';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
@@ -14,9 +8,7 @@ import { PathRow, SETTING_ROW, SettingsCard, SettingsEmpty } from '@/components/
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import {
   ACCOUNT_LABEL,
-  describeImport,
   describeRemoval,
-  IMPORT_ICON,
   resolveAccountLabel,
   resolveProviderIcon,
 } from '@/lib/accounts/account.ts';
@@ -24,9 +16,7 @@ import { describeAccountSource, describeProviderSource, resolveProviderChoice } 
 
 export interface OnboardingAccountActions {
   signIn: (accountId: string | null) => void;
-  importLogin: (entry: AccountImport) => void;
   remove: (accountId: string) => void;
-  copy: (text: string) => void;
 }
 
 function AccountActions({
@@ -80,69 +70,11 @@ function ProviderRow({ login }: { login: ProviderLogin }) {
   );
 }
 
-export function OnboardingAddAccount({
-  accounts,
-  imports,
-  providers,
-  actions,
-}: {
-  accounts: AccountSummary[] | null;
-  imports: AccountImport[];
-  providers: ProviderLogin[];
-  actions: OnboardingAccountActions;
-}) {
-  const claude = accounts?.length === 0 ? 'Sign in to Claude' : 'Claude account';
+export function OnboardingAddAccount({ actions }: { actions: OnboardingAccountActions }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button variant='secondary' icon='IconUserAdd'>
-            {ACCOUNT_LABEL.add}
-          </Button>
-        }
-      />
-      <DropdownMenuContent align='end' className='min-w-64'>
-        <DropdownMenuItem icon='IconClaudeai' onClick={() => actions.signIn(null)}>
-          <span className='flex min-w-0 flex-1 flex-col'>
-            <span className='text-fg-4'>{claude}</span>
-            <span className='text-2xs text-fg-2'>Opens the Claude sign-in</span>
-          </span>
-        </DropdownMenuItem>
-        {imports.map((entry) => {
-          const { label, detail } = describeImport(entry);
-          return (
-            <DropdownMenuItem
-              key={`${entry.origin}-${entry.email}`}
-              icon={IMPORT_ICON}
-              onClick={() => actions.importLogin(entry)}
-            >
-              <span className='flex min-w-0 flex-1 flex-col'>
-                <span className='text-fg-4'>{label}</span>
-                <span className='text-2xs text-fg-2'>{detail}</span>
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-        {providers.map((login) => {
-          const choice = resolveProviderChoice(login);
-          return (
-            <DropdownMenuItem
-              key={login.provider}
-              icon={resolveProviderIcon(login.provider)}
-              disabled={choice.command === null}
-              onClick={() => {
-                if (choice.command) actions.copy(choice.command);
-              }}
-            >
-              <span className='flex min-w-0 flex-1 flex-col'>
-                <span className='text-fg-4'>{choice.label}</span>
-                <span className='text-2xs text-fg-2'>{choice.detail}</span>
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button variant='secondary' icon='IconUserAdd' onClick={() => actions.signIn(null)}>
+      {ACCOUNT_LABEL.add}
+    </Button>
   );
 }
 
@@ -160,8 +92,19 @@ function AccountRows({
       </div>
     );
   }
-  if (accounts.length === 0)
-    return <SettingsEmpty>Shinsa found no Claude login on this machine.</SettingsEmpty>;
+  if (accounts.length === 0) {
+    return (
+      <SettingsEmpty
+        action={
+          <Button icon='IconClaudeai' onClick={() => actions.signIn(null)}>
+            Sign in with Claude
+          </Button>
+        }
+      >
+        No Claude account yet. Agents need one to work.
+      </SettingsEmpty>
+    );
+  }
   return (
     <ul className='flex flex-col'>
       {accounts.map((account) => (

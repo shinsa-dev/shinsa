@@ -1,5 +1,4 @@
 import type {
-  AccountImport,
   AccountSummary,
   OnboardingFlow,
   OnboardingProjectChoice,
@@ -21,6 +20,7 @@ import {
 } from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OnboardingDefaults } from '@/components/onboarding/defaults.tsx';
+import { OnboardingHelp } from '@/components/onboarding/help.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
 import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingFiledProjects, OnboardingProjectsChat } from '@/components/onboarding/projects-chat.tsx';
@@ -29,6 +29,8 @@ import { SETTING_ROW } from '@/components/settings/group.tsx';
 import { useWindowReturn } from '@/hooks/use-window-return.ts';
 import {
   ACCESS_KEY,
+  HELP_KEY,
+  isStepInstalled,
   listChosenValues,
   listReadableRoots,
   REFRESH_KEY,
@@ -61,11 +63,11 @@ export interface OnboardingStepActions {
   revise: (text: string, projects: OnboardingProjectChoice[]) => Promise<boolean>;
   open: (stepId: OnboardingStepId) => void;
   refresh: () => void;
+  help: () => void;
 }
 
 export interface OnboardingAccountsView {
   list: AccountSummary[] | null;
-  imports: AccountImport[];
   providers: ProviderLogin[];
   actions: OnboardingAccountActions;
   refresh: () => void;
@@ -234,6 +236,7 @@ function StepBody({
     );
   }
   if (step.id === 'accounts') {
+    if (!isStepInstalled(step)) return <OnboardingChecks checks={step.checks} onRecheck={actions.refresh} />;
     return (
       <OnboardingAccounts
         accounts={accounts.list}
@@ -242,7 +245,21 @@ function StepBody({
       />
     );
   }
-  return <OnboardingChecks checks={step.checks} />;
+  return (
+    <>
+      <OnboardingChecks checks={step.checks} onRecheck={actions.refresh} />
+      {!step.ready && (
+        <OnboardingHelp
+          help={step.help}
+          userHome={userHome}
+          asking={pending === HELP_KEY}
+          disabled={pending !== null}
+          onAsk={actions.help}
+          onRecheck={actions.refresh}
+        />
+      )}
+    </>
+  );
 }
 
 function StepAction({
@@ -257,14 +274,8 @@ function StepAction({
   actions: OnboardingStepActions;
 }) {
   if (step.id === 'accounts') {
-    return (
-      <OnboardingAddAccount
-        accounts={accounts.list}
-        imports={accounts.imports}
-        providers={accounts.providers}
-        actions={accounts.actions}
-      />
-    );
+    if (!isStepInstalled(step) || (accounts.list ?? []).length === 0) return null;
+    return <OnboardingAddAccount actions={accounts.actions} />;
   }
   if (step.id !== 'prerequisites') return null;
   return (
@@ -318,6 +329,7 @@ function StepFooter({
 }) {
   const previous = flow.steps[flow.index - 1];
   const submit = resolveSubmit(step, values, drafts);
+  const signInFirst = step.id === 'accounts' && isStepInstalled(step) && accounts.list?.length === 0;
   return (
     <>
       {previous ? (
@@ -340,6 +352,7 @@ function StepFooter({
         )}
         <StepAction step={step} pending={pending} accounts={accounts} actions={actions} />
         <Button
+          variant={signInFirst ? 'secondary' : 'primary'}
           icon={{ name: 'IconArrowRight', position: 'inline-end' }}
           disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
           loading={pending === SUBMIT_KEY}
@@ -382,8 +395,10 @@ export function OnboardingStepView({
   const waiting = step.access.length > 0 || step.id === 'prerequisites' || step.id === 'accounts';
   useWindowReturn(() => {
     if (pending !== null) return;
-    if (step.id === 'accounts') accounts.refresh();
-    else if (step.id === 'prerequisites') actions.refresh();
+    if (step.id === 'accounts') {
+      accounts.refresh();
+      actions.refresh();
+    } else if (step.id === 'prerequisites') actions.refresh();
     else actions.answer(step.id, listChosenValues(step), ACCESS_KEY);
   }, waiting);
   return (

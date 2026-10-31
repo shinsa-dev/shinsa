@@ -21,7 +21,7 @@ import { runCommand } from '../shell/index.ts';
 import { refreshInstallFolders } from '../shell/login.ts';
 import type { AccountSource } from './accounts.ts';
 import { type FlowContext, OnboardingSetup } from './flow.ts';
-import { type InstallTerminals, openInstallTerminal } from './install.ts';
+import { type InstallTerminals, openInstallTerminal, openReplyTerminal } from './install.ts';
 import { type CommandRunner, isBunUsed, resolvePrerequisites } from './prerequisites.ts';
 import {
   createChosenProjects,
@@ -204,12 +204,19 @@ export class Onboarding {
     return resolvePrerequisites(config.userHome, run, { bun: isBunUsed(await roots.listRoots()) });
   }
 
-  openInstall(fields: JsonObject) {
-    const { terminals, config } = this.#context;
-    if (typeof fields.id !== 'string')
-      throw new DomainError('body_invalid', 'Send “id” as the check to fix, such as gh.');
+  async openInstall(fields: JsonObject) {
+    const { terminals, config, engine } = this.#context;
+    if (typeof fields.id !== 'string' && typeof fields.command !== 'string')
+      throw new DomainError(
+        'body_invalid',
+        'Send “id” as the check to fix, such as gh, or a “command” from the help task.'
+      );
     if (!terminals) throw new DomainError('terminals_off', 'Terminals are off, so run the command yourself.');
-    return { terminal: openInstallTerminal(terminals, fields.id, config.userHome) };
+    if (typeof fields.id === 'string')
+      return { terminal: openInstallTerminal(terminals, fields.id, config.userHome) };
+    const helpId = await this.setup.selectHelp();
+    const body = (helpId && engine.state.tasks[helpId]?.result?.body) || null;
+    return { terminal: openReplyTerminal(terminals, body, String(fields.command), config.userHome) };
   }
 
   #resolveContext(revision: ProjectRevision | null): FlowContext {

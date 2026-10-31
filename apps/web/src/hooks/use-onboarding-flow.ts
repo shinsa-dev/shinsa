@@ -9,13 +9,15 @@ import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { replyToOnboarding, requestOnboardingFlow } from '@/lib/connection/onboarding.ts';
 import {
+  HELP_KEY,
   REFRESH_KEY,
   REVISE_KEY,
+  resolveSetupEndPath,
   resolveStepDirection,
   type StepDirection,
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
-import { replaceRoute } from '@/router.ts';
+import { navigate, replaceRoute } from '@/router.ts';
 
 export function useOnboardingFlow() {
   const [flow, setFlow] = React.useState<OnboardingFlow | null>(null);
@@ -52,7 +54,9 @@ export function useOnboardingFlow() {
   async function run(key: string, request: () => Promise<OnboardingFlow>) {
     setPending(key);
     try {
-      show(await request());
+      const next = await request();
+      if (next.step === null) navigate(resolveSetupEndPath(next));
+      else show(next);
       return true;
     } catch (error) {
       toast.error(describeFailure(error));
@@ -80,6 +84,7 @@ export function useOnboardingFlow() {
     revise: (text: string, projects: OnboardingProjectChoice[]) =>
       send({ type: 'revise', stepId: 'projects', text, projects }, REVISE_KEY),
     open: (stepId: OnboardingStepId) => send({ type: 'open', stepId }, `open:${stepId}`),
+    help: (stepId: OnboardingStepId) => send({ type: 'help', stepId }, HELP_KEY),
     refresh: () => run(REFRESH_KEY, requestOnboardingFlow),
     retry: () => setAttempt(attempt + 1),
   };

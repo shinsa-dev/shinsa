@@ -37,7 +37,7 @@ Only these, and they win over anything below:
    choice, select field, copy button, options trigger, info popover, status tiles and marks, times, code text,
    the health banner's card, the choice buttons, the confirm dialog, Home's composer) are on
    `/ui` under Shinsa composites (smart links are not), and so are the feature pieces, each in
-   every state from sample data: the setup steps and the finished page (`routes/ui/onboarding.tsx`, 24), accounts (usage bars and figures, the usage menu, account status, the
+   every state from sample data: the setup steps (`routes/ui/onboarding.tsx`, 24), accounts (usage bars and figures, the usage menu, account status, the
    percent and sign-in dialogs at each phase, the Run on account choices and the run label's account), the
    overview's now cards on `NowFrame` (setup, sign-in, usage wait, wait, secret, paused for a failure, a cost
    limit and a wait out of checks, a question with choices, an escalated review's verdicts, a revised plan),
@@ -1166,21 +1166,22 @@ Only these, and they win over anything below:
     land on setup. A run you started again from Settings (Settings → Setup, ⌘K's Run setup again, `restartOnboarding`)
     is not locked: setup is already complete, and each step's footer has Close setup beside its button, which goes to
     Settings.
-    - **The steps along the top** (`OnboardingStepper`, items from `listStepperItems`): one 26px segmented `Choice`
-      with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
-      slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
-      answered has no mark, only its answer as the tooltip ("Opus 5.5 · Squash · Plan first"), and so has a step
-      you reached but have not answered again (after going back); both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
-      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 3 of 5: Defaults",
-      `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
-      height on every step and on the finished page.
-    - **Each step** (`OnboardingSection`, shared with the finished page) is the `PageHeading` (the question itself as
+    - **Setup reads as your first task** (`OnboardingHeader`): above the steps, the page's own `PageHeading`, "Set up
+      Shinsa", with "Your first task. Pass each step below and Shinsa is ready for real work." under it ("Open any
+      step to change it…" on a run again), then the steps as the task page's path of gates (`OnboardingPath`, items
+      from `listOnboardingPath`): the progress track's own marks (`StepMark`) and connectors, a step you passed done
+      (the green tick, its connector green), the one on screen current (the blue pulse, its label `font-medium`,
+      `aria-current="step"`), the rest pending. A passed step, and one you reached but have not answered again, are
+      buttons that open it, with its answer as the tooltip ("Opus 5.5 · Squash · Plan first"); a step not reached yet
+      and the one on screen are disabled. A hairline under the path closes the header. Below `sm` only the current
+      step keeps its label, as on the progress track. The header sits outside the step, so it never slides.
+    - **Each step** (`OnboardingSection`) is the `PageHeading` (the question itself as
       the `text-base` title, "How should agents work?", its one line of description in `text-xs` `fg-2`
       under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
       action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
       "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
-      The first step you open, and the finished page when you load it, are simply there. Moving to another step
+      The first step you open is simply there. Moving to another step
       slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
       (the other way when you go back), both the full width of the column and 360ms on the standard curve
       (`cubic-bezier(0.4, 0, 0.2, 1)`: it eases in and out without the long settle of a strong ease-out), and
@@ -1220,24 +1221,37 @@ Only these, and they win over anything below:
       private" in `text-xs` `fg-4` over why in `text-2xs` `fg-3`) offers Open System Settings (Full Disk Access),
       Check again and Leave it out, `sm` secondary buttons; your picks stay checked, and coming back to the window
       checks again by itself (`useWindowReturn`).
-    - **Accounts** are the ones you signed in to, never imported for you: one Settings card of your Claude accounts
-      from the socket, each a `PathRow` (the Claude mark, the email, where it came from and its plan in `text-2xs`
-      `fg-2`: "Signed in through Shinsa · Max plan", "From claude-swap"), Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
-      words), then Codex's login as a row of its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus
-      plan" or "Not signed in", and the `CopyButton` of `codex login` while it is not). Until the socket has the
-      accounts the card holds one row with a delayed `LoadingLine`, never "no login found". Add account in the footer
-      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, and so does
-      each claude-swap account ("Sign in to ‹email›", "From claude-swap"), which signs in to that email; a Codex
-      account copies `codex login` to run in a terminal (off once Codex is signed in, with how it is). Coming back to
-      the window reads the accounts again, so a Codex login you finished in a terminal shows.
+    - **Claude** is the accounts you sign in to, never found or imported for you. While Claude Code is missing the
+      step shows only its check, with Install (below), and no sign-in, since signing in needs it. Once it is there:
+      one Settings card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where
+      it came from and its plan in `text-2xs` `fg-2`: "Signed in through Shinsa · Max plan"), Sign in again on a
+      signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s words), then Codex's login as a row of
+      its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus plan" or "Not signed in", and the
+      `CopyButton` of `codex login` while it is not). With no account the card is one `SettingsEmpty` row, "No Claude
+      account yet. Agents need one to work.", with the one primary Sign in with Claude (the Claude mark), which opens
+      the sign-in dialog; the footer's button is then Skip for now. With an account, Add account in the footer opens
+      the same dialog; there is no menu and no claude-swap entry (Settings keeps those). Until the socket has the
+      accounts the card holds one row with a delayed `LoadingLine`. Coming back to the window reads the accounts and
+      the check again, so a Codex login you finished in a terminal shows.
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
       the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
-      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in
-      `TOKEN_TEXT`. Check again is in the footer, and coming back to the window checks again by itself. An optional check that fails (codex
-      and its sign-in) is a skipped row, never a fail, and never holds setup back.
-    - **Finished** (`OnboardingFinished`) is "Shinsa is ready" with its line, what you set up as `SettingRow`s in a
-      Settings card (Folders, Projects, Defaults, Accounts, the answer at the right in `fg-3`) and Go to Home.
-      Opening `/onboarding` once the server's run is finished (setup done and not started again) goes Home instead.
+      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`. At the right a passed or optional check shows
+      its version or state in `TOKEN_TEXT`; a failed one shows a `sm` secondary Install (the console icon), which asks
+      the engine to run that check's own command (`POST /api/onboarding/install`, never a command from the page) and
+      opens its terminal inside the card under the row: a 224px pane with the item corner and a hairline, the
+      terminal's own background, and when the command ends one `text-xs` `fg-2` line under it ("Finished. Shinsa
+      checked the tools again.", or its exit code and to ask for help), at which point the checks are read again by
+      themselves. Check again is in the footer, and coming back to the window checks again by itself. An optional
+      check that fails (codex and its sign-in) is a skipped row, never a fail, and never holds setup back.
+    - **Help** (`OnboardingHelp`): while a required check still fails, a line under the card ("Stuck on an install?
+      An agent reads the failing checks and replies with the commands to run.") with a secondary Ask an agent for
+      help (the question bubble). Asking starts a question task, and the line turns into a Settings card that holds a
+      delayed `LoadingLine` until the agent replies and then its reply as `Markdown`, whose shell blocks marked run get
+      Run in terminal: the engine runs a command only when it is in one of that reply's run blocks, in the same
+      in-card terminal, and the checks are read again when it ends. The task itself waits on Home with the rest.
+    - **Finishing** opens the welcome task the engine records ("Welcome to Shinsa", done), whose result says what you
+      set up; a run started again goes Home instead. Opening `/onboarding` once the server's run is finished (setup
+      done and not started again) goes Home.
     Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
     as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,
     checked when chosen). No folder path is ever written into the code; the ones on screen come from the server.

@@ -1,5 +1,4 @@
 import type {
-  AccountImport,
   AccountSummary,
   OnboardingFlow,
   OnboardingStep,
@@ -8,9 +7,8 @@ import type {
 } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { OnboardingFinished } from '@/components/onboarding/finished.tsx';
+import { OnboardingHeader } from '@/components/onboarding/header.tsx';
 import { ONBOARDING_COLUMN, OnboardingStepView } from '@/components/onboarding/step.tsx';
-import { OnboardingStepper } from '@/components/onboarding/stepper.tsx';
 import { createSampleAccounts } from './sample-accounts.ts';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
@@ -216,17 +214,51 @@ const DEFAULTS = createSampleStep({
   ],
 });
 
+const CLAUDE_CODE = {
+  id: 'claude',
+  label: 'Claude Code',
+  ok: true,
+  detail: '2.1.314 (Claude Code)',
+  fix: null,
+  command: null,
+};
+
 const ACCOUNTS = createSampleStep({
   id: 'accounts',
-  title: 'Which accounts can agents use?',
+  title: 'Sign in with Claude',
   description:
-    'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.',
+    'Agents work under these Claude accounts. When one runs out of usage, Shinsa moves the work to the next.',
+  checks: [CLAUDE_CODE],
+});
+
+const NO_ACCOUNTS = createSampleStep({
+  ...ACCOUNTS,
+  description:
+    'Sign in to the Claude account agents work under. You can add more accounts later in Settings.',
+  submitLabel: 'Skip for now',
+});
+
+const NO_CLAUDE_CODE = createSampleStep({
+  ...NO_ACCOUNTS,
+  description:
+    'Agents run on Claude Code. Install it here, then sign in to the Claude account agents work under.',
+  ready: false,
+  checks: [
+    {
+      ...CLAUDE_CODE,
+      ok: false,
+      detail: 'Not installed.',
+      fix: 'Install Claude Code, which agents run on.',
+      command: 'curl -fsSL https://claude.ai/install.sh | bash',
+    },
+  ],
 });
 
 const TOOLS = createSampleStep({
   id: 'prerequisites',
   title: 'The tools Shinsa runs',
-  description: 'Some tools are missing. Each one says how to install it; check again when you are done.',
+  description:
+    'Some tools are missing. Install each one here, or ask an agent for help when an install fails.',
   ready: false,
   submitLabel: 'Finish anyway',
   checks: [
@@ -236,7 +268,7 @@ const TOOLS = createSampleStep({
       label: 'Signed in to GitHub',
       ok: false,
       detail: 'Not signed in.',
-      fix: 'Sign in to GitHub in a terminal.',
+      fix: 'Sign in to GitHub, so Shinsa can open and merge pull requests.',
       command: 'gh auth login',
     },
     {
@@ -268,6 +300,7 @@ const ACTIONS = {
   answer: () => void acknowledgeSample(),
   open: () => void acknowledgeSample(),
   refresh: () => void acknowledgeSample(),
+  help: () => void acknowledgeSample(),
   openPrivacy: () => void acknowledgeSample(),
   revise: () => acknowledgeSample(),
 };
@@ -284,21 +317,25 @@ const SAMPLE_PROVIDERS: ProviderLogin[] = [
   },
 ];
 
-const SAMPLE_IMPORTS: AccountImport[] = [{ origin: 'cswap', email: 'swap@superwall.com', plan: null }];
-
 const ACCOUNT_ACTIONS = {
   signIn: () => void acknowledgeSample(),
-  importLogin: () => void acknowledgeSample(),
   remove: () => void acknowledgeSample(),
-  copy: () => void acknowledgeSample(),
 };
 
-function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit?: boolean }) {
-  const [accounts] = React.useState(() => listSampleAccounts());
+function StepSpecimen({
+  step,
+  revisit = false,
+  signedIn = true,
+}: {
+  step: OnboardingStep;
+  revisit?: boolean;
+  signedIn?: boolean;
+}) {
+  const [accounts] = React.useState(() => (signedIn ? listSampleAccounts() : []));
   const flow = createSampleFlow(step, revisit);
   return (
     <div className={cn(ONBOARDING_COLUMN, 'mx-0 px-0')}>
-      <OnboardingStepper flow={flow} step={step} onOpen={() => void acknowledgeSample()} />
+      <OnboardingHeader flow={flow} onOpen={() => void acknowledgeSample()} />
       <OnboardingStepView
         flow={flow}
         step={step}
@@ -306,7 +343,6 @@ function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit
         userHome={USER_HOME}
         accounts={{
           list: accounts,
-          imports: SAMPLE_IMPORTS,
           providers: SAMPLE_PROVIDERS,
           actions: ACCOUNT_ACTIONS,
           refresh: () => void acknowledgeSample(),
@@ -334,16 +370,20 @@ export function OnboardingSpecimens() {
       <Specimen label='Defaults · the recommended choice picked in each group, Continue keeps them all; run again from Settings'>
         <StepSpecimen step={DEFAULTS} revisit />
       </Specimen>
-      <Specimen label='Accounts · each one signed in here, one signed out, each removable'>
+      <Specimen label='Claude · Claude Code missing, installed here first with its Install button'>
+        <StepSpecimen step={NO_CLAUDE_CODE} signedIn={false} />
+      </Specimen>
+      <Specimen label='Claude · no account yet, one Sign in with Claude button'>
+        <StepSpecimen step={NO_ACCOUNTS} signedIn={false} />
+      </Specimen>
+      <Specimen label='Claude · each account signed in here, one signed out, each removable'>
         <StepSpecimen step={ACCOUNTS} />
       </Specimen>
-      <Specimen label='Tools · passed, failed with its fix and the command to copy, optional and missing'>
+      <Specimen label='Tools · passed, missing with Install, optional, and asking an agent for help'>
         <StepSpecimen step={TOOLS} />
       </Specimen>
-      <Specimen label='Finished · what you set up and the way home'>
-        <div className={cn(ONBOARDING_COLUMN, 'mx-0 px-0')}>
-          <OnboardingFinished flow={createSampleFlow(null)} onHome={() => void acknowledgeSample()} />
-        </div>
+      <Specimen label='Tools · an agent looking into the failing checks'>
+        <StepSpecimen step={createSampleStep({ ...TOOLS, help: 'help-task' })} />
       </Specimen>
     </>
   );

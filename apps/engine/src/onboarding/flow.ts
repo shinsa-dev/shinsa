@@ -156,6 +156,10 @@ export class OnboardingSetup {
     return this.#serial(async () => this.#present(this.#open()));
   }
 
+  selectHelp(): Promise<string | null> {
+    return this.#serial(async () => this.#open().help);
+  }
+
   reply(fields: JsonObject): Promise<OnboardingFlow> {
     return this.#serial(async () => {
       const reply = parseOnboardingReply(fields, this.#options.steps);

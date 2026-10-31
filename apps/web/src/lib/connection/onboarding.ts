@@ -1,4 +1,10 @@
-import type { OnboardingFlow, OnboardingReply, OnboardingStatus, RootSuggestions } from '@shinsa/core';
+import type {
+  OnboardingFlow,
+  OnboardingReply,
+  OnboardingStatus,
+  RootSuggestions,
+  TerminalInfo,
+} from '@shinsa/core';
 import * as React from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
@@ -66,6 +72,11 @@ export async function replyToOnboarding(reply: OnboardingReply) {
   const flow = await requestJson<OnboardingFlow>('/api/onboarding/flow', reply);
   await refreshOnboardingStatus();
   return flow;
+}
+
+export async function requestOnboardingInstall(fix: { id: string } | { command: string }) {
+  const answer = await requestJson<{ terminal: TerminalInfo }>('/api/onboarding/install', fix);
+  return answer.terminal;
 }
 
 export async function restartOnboarding() {

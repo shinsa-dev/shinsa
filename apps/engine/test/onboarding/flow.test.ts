@@ -363,6 +363,7 @@ describe('asking for help', () => {
     );
     expect(task?.request).not.toContain('Git');
     expect((await world.open().onboarding.setup.resolve()).step?.help).toBe(taskId);
+    expect(await world.onboarding.setup.selectHelp()).toBe(taskId);
   });
 
   test('refuses when every check passes, or for a step that is not on screen', async () => {

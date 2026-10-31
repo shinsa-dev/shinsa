@@ -337,7 +337,7 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
       respond: async (_match, request) => {
         if (request.headers.get('origin') === null)
           throw new DomainError('browser_only', 'Only Shinsa’s own page installs the tools setup checks.');
-        return respondJson(onboarding.openInstall(await readJsonObject(request)));
+        return respondJson(await onboarding.openInstall(await readJsonObject(request)));
       },
     },
     {
