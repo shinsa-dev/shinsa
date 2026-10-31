@@ -148,10 +148,7 @@ export class Remote {
 
   async startPairing() {
     if (this.store.file.credentials)
-      throw new DomainError(
-        'remote_paired',
-        'This machine is already paired. Remove it first to pair it again.'
-      );
+      throw new DomainError('remote_paired', 'This machine is already paired.');
     if (this.#pairing) return this.#pairing.view;
     const machine = await this.store.resolveMachineKey();
     const start = await this.control.requestPairStart({

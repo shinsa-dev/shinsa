@@ -65,7 +65,7 @@ describe('duplicates', () => {
     const first = createTask(harness, { request: 'Dark theme' });
     const second = createTask(harness, { request: 'Night mode' });
     expect(() => harness.send({ type: 'task.mark_duplicate', taskId: first, duplicateOf: first })).toThrow(
-      'cannot be a duplicate of itself'
+      'cannot duplicate itself'
     );
     harness.send({ type: 'task.mark_duplicate', taskId: first, duplicateOf: original });
     expect(() => harness.send({ type: 'task.mark_duplicate', taskId: second, duplicateOf: first })).toThrow(

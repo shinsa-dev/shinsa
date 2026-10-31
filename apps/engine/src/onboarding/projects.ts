@@ -92,19 +92,16 @@ function resolveChoices(suggestions: ProjectSuggestion[], choices: OnboardingPro
   return choices.map((choice) => {
     const suggestion = suggestions.find((entry) => entry.id === choice.id);
     if (!suggestion) {
-      throw new DomainError('projects_stale', 'The suggested projects changed. Look them over again.');
+      throw new DomainError('projects_stale', 'The suggestions changed. Look again.');
     }
     const name = choice.name.trim();
     if (name.length === 0) throw new DomainError('project_name_required', 'Name every project you keep.');
     if (name.length > PROJECT_LIMITS.name) {
-      throw new DomainError(
-        'project_invalid',
-        `A project name is at most ${PROJECT_LIMITS.name} characters.`
-      );
+      throw new DomainError('project_invalid', `Keep the name to ${PROJECT_LIMITS.name} characters.`);
     }
     const repos = suggestion.repos.filter((repo) => choice.repos.includes(repo.path));
     if (repos.length === 0) {
-      throw new DomainError('projects_invalid', `Keep at least one repository in ${name}, or leave it out.`);
+      throw new DomainError('projects_invalid', `Keep a repository in ${name}.`);
     }
     return { suggestion, name, repos };
   });

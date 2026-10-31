@@ -8831,7 +8831,7 @@ Mistakes that were made before and must not come back:
 
 | Wrong | Why | Right |
 | --- | --- | --- |
-| "Approve it, ask for changes or reject it." under an agent's question | The answer options of another kind of decision | "Answer the question." |
+| "Approve, ask for changes or reject." under an agent's question | The answer options of another kind of decision | "Answer the question." |
 | "opening the pull request" while pushing to one already open | Says the wrong thing is happening | "pushing the changes" |
 | "Building started" logged for every phase | Activity repeats a stage that did not change | Log a stage only when it changes; a phase has its own "Finished: …" line |
 | "All 1 checks passed" | The count does not fit its noun | "The check passed" |
@@ -8984,7 +8984,7 @@ Mistakes that were made before and must not come back:
 | Empty state title | What is missing, short | No | "No tasks yet", "Nothing matches", "No terminals in Shop", "Nothing needs you" |
 | Empty state description | One or two sentences: why, and how to fill it | Yes | "A terminal keeps running when you close Shinsa." |
 | Error title | What happened | Yes when a sentence | "This page hit an error.", "This part of Shinsa hit an error." |
-| Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "“Base” was cancelled, so there is nothing to wait for.", "This task is finished. Start a new one." |
+| Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "That task was cancelled.", "This task is finished." |
 | Failure decision | Title says what stopped; body says why and what Retry does | Title no, body yes | "Out of automatic fix rounds" |
 | Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its own and agents pick up where they were." |
 | Disabled reason | Plain sentence | No | "Send your line comments to the agent or remove them first" |

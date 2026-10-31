@@ -15,14 +15,11 @@ export function resolveDependencies(decider: Decider, task: Task | null, ids: st
       continue;
     }
     if (dependency.stage === 'cancelled') {
-      throw new DomainError(
-        'dependency_cancelled',
-        `“${dependency.title}” was cancelled, so there is nothing to wait for.`
-      );
+      throw new DomainError('dependency_cancelled', 'That task was cancelled.');
     }
     if (isTaskComplete(dependency)) continue;
     if (task && isDependencyOf(decider.state, task.id, id)) {
-      throw new DomainError('dependency_cycle', `“${dependency.title}” already waits on this task.`);
+      throw new DomainError('dependency_cycle', 'That task already waits on this one.');
     }
     kept.push(id);
   }

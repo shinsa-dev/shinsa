@@ -205,7 +205,7 @@ describe('running one step on a chosen account', () => {
     completePhase(harness, taskId);
     expect(harness.task(taskId).stage).toBe('checking');
     expect(() => harness.send({ type: 'task.retry', taskId, account: HOME })).toThrow(
-      'No agent works on this step, so there is nothing to run on another account.'
+      'No agent works on this step.'
     );
     expect(() => harness.send({ type: 'task.retry', taskId })).not.toThrow();
   });
@@ -448,7 +448,7 @@ describe('usage-limit waits', () => {
     expect(harness.activeRun(taskId).sessionId).toBe('plan-session');
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('Resumed before the usage limit reset');
     expect(() => harness.send({ type: 'usage_wait.resume_now', taskId })).toThrow(
-      'Nothing on this task is waiting for a usage limit to reset.'
+      'Nothing here waits for a usage reset.'
     );
   });
 
@@ -474,7 +474,7 @@ describe('usage-limit waits', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     expect(() => harness.send({ type: 'usage_wait.change', taskId, autoResume: false })).toThrow(
-      'Nothing on this task is waiting for a usage limit to reset.'
+      'Nothing here waits for a usage reset.'
     );
   });
 

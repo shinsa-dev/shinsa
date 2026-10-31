@@ -250,7 +250,7 @@ describe('the onboarding endpoints', () => {
     const refused = (await (
       await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: ['/no/such'] })
     ).json()) as OnboardingFlow;
-    expect(refused.step).toMatchObject({ id: 'roots', problem: '/no/such is not a folder on this machine.' });
+    expect(refused.step).toMatchObject({ id: 'roots', problem: 'That is not a folder on this machine.' });
     const stale = await post('/api/onboarding/flow', {
       type: 'answer',
       stepId: 'defaults',
@@ -258,7 +258,7 @@ describe('the onboarding endpoints', () => {
     });
     expect(stale.status).toBe(400);
     expect(await stale.json()).toEqual({
-      error: { code: 'step_stale', message: 'That step is no longer open. Answer the step on screen.' },
+      error: { code: 'step_stale', message: 'That step has closed.' },
     });
   });
 });

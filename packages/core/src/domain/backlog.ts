@@ -13,10 +13,8 @@ export type BacklogRefusal = 'task_settled' | 'backlog_inquiry' | 'backlog_start
 
 export const BACKLOG_REFUSAL_TEXT: Record<BacklogRefusal, string> = {
   task_settled: 'This task is finished.',
-  backlog_inquiry:
-    'Only work that builds or runs an operation waits in the backlog. A question, research or an investigation starts at once.',
-  backlog_started:
-    'This task has started building, so it cannot move to the backlog. Cancel it, or let it finish.',
+  backlog_inquiry: 'Only builds and operations can wait.',
+  backlog_started: 'This task has started building.',
 };
 
 export function canWaitInBacklog(task: Task) {

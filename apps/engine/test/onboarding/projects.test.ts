@@ -149,19 +149,13 @@ describe('the projects step', () => {
     const world = await setup();
     await answerFolders(world);
     for (const [choice, problem] of [
-      [
-        { id: 'owner:gone', name: 'Gone', repos: [] },
-        'The suggested projects changed. Look them over again.',
-      ],
+      [{ id: 'owner:gone', name: 'Gone', repos: [] }, 'The suggestions changed. Look again.'],
       [{ id: 'personal', name: ' ', repos: [world.repos.notes] }, 'Name every project you keep.'],
       [
         { id: 'personal', name: 'x'.repeat(81), repos: [world.repos.notes] },
-        'A project name is at most 80 characters.',
+        'Keep the name to 80 characters.',
       ],
-      [
-        { id: 'personal', name: 'Mine', repos: ['/somewhere/else'] },
-        'Keep at least one repository in Mine, or leave it out.',
-      ],
+      [{ id: 'personal', name: 'Mine', repos: ['/somewhere/else'] }, 'Keep a repository in Mine.'],
     ] as const) {
       const flow = await answerProjects(world.onboarding, [{ ...choice, repos: [...choice.repos] }]);
       expect(flow.step).toMatchObject({ id: 'projects', problem });
@@ -376,10 +370,10 @@ describe('changing the suggested projects in words', () => {
     await answerFolders(world);
     for (const [text, problem] of [
       ['   ', 'Say what to change about the projects.'],
-      ['x'.repeat(501), 'Keep the request to 500 characters or fewer.'],
-      ['split it', 'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'],
-      ['split it', 'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'],
-      ['split it', 'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'],
+      ['x'.repeat(501), 'Keep it to 500 characters.'],
+      ['split it', 'Couldn’t reach a model. Try again.'],
+      ['split it', 'Couldn’t reach a model. Try again.'],
+      ['split it', 'Couldn’t reach a model. Try again.'],
     ] as const) {
       const flow = await revise(world.onboarding, text);
       expect(flow.step).toMatchObject({ problem, conversation: [] });

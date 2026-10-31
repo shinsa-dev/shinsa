@@ -161,7 +161,7 @@ export class OnboardingSetup {
         return this.#present(draft);
       }
       if (index !== draft.index) {
-        throw new DomainError('step_stale', 'That step is no longer open. Answer the step on screen.');
+        throw new DomainError('step_stale', 'That step has closed.');
       }
       if (reply.type === 'revise') {
         await this.#revise(draft, reply.stepId, reply.text, reply.projects);
@@ -210,7 +210,7 @@ export class OnboardingSetup {
 
   #assertReached(draft: Draft, index: number) {
     if (draft.index >= this.#options.steps.length) {
-      throw new DomainError('setup_finished', 'Setup is finished. Start it again from Settings.');
+      throw new DomainError('setup_finished', 'Setup is done. Restart it in Settings.');
     }
     if (!draft.revisit && index > draft.furthest) {
       throw new DomainError('step_unreached', 'Answer the steps before this one first.');
@@ -233,7 +233,7 @@ export class OnboardingSetup {
     projects: OnboardingProjectChoice[] | undefined
   ) {
     if (stepId !== 'projects') {
-      throw new DomainError('revise_invalid', 'Only the suggested projects can be changed in words.');
+      throw new DomainError('revise_invalid', 'Only suggested projects can change.');
     }
     try {
       draft.revision = await this.#options.reviseProjects(draft.revision, text, projects);

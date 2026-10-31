@@ -187,18 +187,12 @@ export async function requestRevision(
   const request = text.trim();
   if (request.length === 0) throw new DomainError('request_empty', 'Say what to change about the projects.');
   if (request.length > ONBOARDING_REQUEST_LIMIT) {
-    throw new DomainError(
-      'request_invalid',
-      `Keep the request to ${ONBOARDING_REQUEST_LIMIT} characters or fewer.`
-    );
+    throw new DomainError('request_invalid', `Keep it to ${ONBOARDING_REQUEST_LIMIT} characters.`);
   }
   const { ids, prompt } = serializePrompt(suggestions, resolveBase(suggestions, choices), request);
   const answer = parseAnswer(await ask<unknown>(REVISE_SYSTEM, prompt, REVISE_SCHEMA), ids);
   if (!answer) {
-    throw new DomainError(
-      'revision_failed',
-      'Shinsa could not reach a model to change the projects. Try again, or edit them by hand.'
-    );
+    throw new DomainError('revision_failed', 'Couldn’t reach a model. Try again.');
   }
   const turns = [...(revision?.turns ?? []), { request, reply: answer.reply }].slice(-MAX_TURNS);
   const seen = new Set([...(revision?.seen ?? []), ...listAllRepos(suggestions).map((repo) => repo.path)]);

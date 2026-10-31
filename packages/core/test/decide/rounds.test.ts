@@ -307,7 +307,7 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     expect(task.activity.at(-1)).toMatchObject({ kind: 'message', detail: 'Also redesign the billing page' });
     expect(() =>
       harness.send({ type: 'suggestion.keep', taskId, suggestionId: suggestion?.id ?? '' })
-    ).toThrow('already been added or dismissed');
+    ).toThrow('already added or dismissed');
   });
 
   test('keeping a split-off at the review gate asks for the change before the merge', () => {
@@ -448,7 +448,7 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     for (let index = 0; index < 5; index += 1) newIdea(harness, taskId, `Idea ${index}`);
-    expect(() => newIdea(harness, taskId, 'One too many')).toThrow('already has 5 rounds waiting');
+    expect(() => newIdea(harness, taskId, 'One too many')).toThrow('5 rounds already wait to start');
   });
 });
 
@@ -509,7 +509,7 @@ describe('changing the queue of rounds', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     expect(() => harness.send({ type: 'round.remove', taskId, number: 1 })).toThrow(
-      'Round 1 has already started, so it can no longer be changed or removed.'
+      'Round 1 has already started.'
     );
     expect(() => harness.send({ type: 'round.update', taskId, number: 4, request: 'x' })).toThrow(
       'This task has no round 4.'
@@ -559,10 +559,10 @@ describe('how a round ships', () => {
     });
     approve(harness, taskId);
     expect(() => harness.send({ type: 'round.ship', taskId, number: 2, shipping: 'stacked' })).toThrow(
-      'Round 2 has already gone to its pull request'
+      'Round 2 has already shipped.'
     );
     expect(() => harness.send({ type: 'round.ship', taskId, number: 1, shipping: 'stacked' })).toThrow(
-      'Round 1 has already gone to its pull request'
+      'Round 1 has already shipped.'
     );
   });
 
@@ -752,9 +752,7 @@ describe('ending a task', () => {
       [1, 'shipped'],
       [2, 'active'],
     ]);
-    expect(() => harness.send({ type: 'task.complete', taskId })).toThrow(
-      'Pull request #42 of round 1 is still open. Merge it before the task is marked done, or cancel the task.'
-    );
+    expect(() => harness.send({ type: 'task.complete', taskId })).toThrow('Pull request #42 is still open.');
     harness.send({ type: 'task.cancel', taskId });
     expect(listStatuses(harness.task(taskId))).toEqual([
       [1, 'cancelled'],
@@ -767,13 +765,13 @@ describe('ending a task', () => {
     const taskId = createTask(harness);
     newIdea(harness, taskId, 'Next');
     expect(() => harness.send({ type: 'task.complete', taskId }, { onBehalf: true, byTask: taskId })).toThrow(
-      'still has rounds waiting to start'
+      'Rounds are still waiting to start'
     );
     const shipped = createTask(harness, { request: 'Shipped' });
     reachMergeGate(harness, shipped);
     const mergeGate = harness.openGate(shipped).id;
     expect(() => harness.send({ type: 'task.complete', taskId: shipped }, { onBehalf: true })).toThrow(
-      'Pull request #42 of this task is still open.'
+      'Pull request #42 is still open.'
     );
     expect(harness.state.gates[mergeGate]?.status).toBe('open');
     const checking = createTask(harness, { request: 'Checking' });
@@ -784,7 +782,7 @@ describe('ending a task', () => {
       pullRequest: pullRequest({ checks: 'pending' }),
     });
     expect(() => harness.send({ type: 'task.complete', taskId: checking }, { onBehalf: true })).toThrow(
-      'Pull request #42 of this task is still open.'
+      'Pull request #42 is still open.'
     );
     const resting = createTask(harness, { request: 'Resting' });
     shipAndMerge(harness, resting);

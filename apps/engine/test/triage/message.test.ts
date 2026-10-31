@@ -386,7 +386,7 @@ describe('a round that starts without a kind of task', () => {
     expect(lastPipeline(engine, taskId)).toEqual([...SHAPE_PIPELINES.research]);
     await expect(
       routeUserCommand(engine, { type: 'suggestion.keep', taskId, suggestionId: shaped }, null, never)
-    ).rejects.toThrow('already been added or dismissed');
+    ).rejects.toThrow('already added or dismissed');
     await expect(
       routeUserCommand(engine, { type: 'suggestion.keep', taskId, suggestionId: 'nope' }, null, never)
     ).rejects.toThrow('No suggestion nope');

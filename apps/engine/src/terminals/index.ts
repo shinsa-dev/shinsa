@@ -115,7 +115,7 @@ export class Terminals {
 
   #assertWritable() {
     if (this.#options.readOnly)
-      throw new DomainError('inspect_read_only', 'Terminals are off while Shinsa only shows saved state.');
+      throw new DomainError('inspect_read_only', 'Terminals are off in inspect mode.');
   }
 
   get home() {
@@ -229,10 +229,7 @@ export class Terminals {
 
   #open(start: TerminalStart, service: ServiceDefinition | null) {
     if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
-      throw new DomainError(
-        'terminal_limit',
-        `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most. Close one to open another.`
-      );
+      throw new DomainError('terminal_limit', `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`);
     const info: TerminalInfo = {
       id: this.#newId(),
       ...start,
@@ -291,8 +288,7 @@ export class Terminals {
   run(id: string, command: string) {
     this.#assertWritable();
     const session = this.find(id);
-    if (!session.running)
-      throw new DomainError('terminal_ended', 'That terminal has ended. Start it again first.');
+    if (!session.running) throw new DomainError('terminal_ended', 'That terminal has ended.');
     session.type(command);
   }
 
@@ -345,10 +341,7 @@ export class Terminals {
   addService(projectId: string, input: ServiceInput) {
     this.#assertWritable();
     if (this.#services.size >= SERVICE_LIMITS.services)
-      throw new DomainError(
-        'service_limit',
-        `Shinsa keeps ${SERVICE_LIMITS.services} services at most. Remove one to add another.`
-      );
+      throw new DomainError('service_limit', `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`);
     const service: ServiceDefinition = { id: this.#newId(), projectId, ...input };
     this.#services.set(service.id, service);
     this.#saveServices();

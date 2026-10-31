@@ -114,21 +114,25 @@ describe('setting a schedule', () => {
   });
 
   test.each<[string, Partial<CommandOf<'agent.set_schedule'>>, string]>([
-    ['an unknown time zone', { timeZone: 'Mars/Olympus' }, 'is not a time zone'],
+    ['an unknown time zone', { timeZone: 'Mars/Olympus' }, 'Use a time zone such as'],
     ['no trigger', { trigger: null }, 'Say when it runs'],
     ['no message', { text: '  ' }, 'needs a message'],
-    ['a message past the limit', { text: 'x'.repeat(SCHEDULE_LIMITS.text + 1) }, 'the limit is'],
+    ['a message past the limit', { text: 'x'.repeat(SCHEDULE_LIMITS.text + 1) }, 'The message is over'],
     ['a time long gone', { trigger: { kind: 'once', at: 0 } }, 'already passed'],
-    ['a time years away', { trigger: { kind: 'once', at: 10 ** 13 } }, 'at most a year'],
+    ['a time years away', { trigger: { kind: 'once', at: 10 ** 13 } }, 'within a year'],
     ['an interval of zero', { trigger: { kind: 'interval', everyMinutes: 0 } }, 'every 1 to'],
     ['an interval in fractions', { trigger: { kind: 'interval', everyMinutes: 1.5 } }, 'every 1 to'],
     [
       'a made-up time of day',
       { trigger: { kind: 'daily', time: '25:00', weekdays: [] } },
-      'not a time of day',
+      'Use 24-hour HH:MM',
     ],
-    ['a weekday out of range', { trigger: { kind: 'daily', time: '09:00', weekdays: [7] } }, 'Weekdays are'],
-    ['a weekday twice', { trigger: { kind: 'daily', time: '09:00', weekdays: [1, 1] } }, 'Weekdays are'],
+    [
+      'a weekday out of range',
+      { trigger: { kind: 'daily', time: '09:00', weekdays: [7] } },
+      'Weekdays run from',
+    ],
+    ['a weekday twice', { trigger: { kind: 'daily', time: '09:00', weekdays: [1, 1] } }, 'Weekdays run from'],
     [
       'a signature header with spaces',
       {
@@ -138,7 +142,7 @@ describe('setting a schedule', () => {
           replayKey: null,
         },
       },
-      'letters, digits and dashes',
+      'Name the header with letters and dashes',
     ],
     [
       'a signature prefix past the limit',
@@ -149,12 +153,12 @@ describe('setting a schedule', () => {
           replayKey: null,
         },
       },
-      'prefix can be at most',
+      'prefix is at most',
     ],
     [
       'a replay key without a placeholder',
       { trigger: { kind: 'webhook', signature: null, replayKey: 'static' } },
-      'must name a part of the request',
+      'The key needs a {{…}} placeholder.',
     ],
     ['max runs of zero', { maxRuns: 0 }, 'max_runs is 1 to'],
     ['a task that does not exist', { target: { kind: 'task', taskId: 'nope' } }, 'No task nope'],
@@ -205,7 +209,7 @@ describe('setting a schedule', () => {
     const { harness, taskId } = createScheduling();
     for (let index = 0; index < SCHEDULE_LIMITS.perTask; index += 1)
       schedule(harness, taskId, { name: `S${index}` });
-    expect(() => schedule(harness, taskId)).toThrow('as many schedules as Shinsa keeps');
+    expect(() => schedule(harness, taskId)).toThrow('Too many schedules');
   });
 });
 
@@ -289,7 +293,9 @@ describe('changing a schedule', () => {
     harness.advance(30 * MINUTE);
     harness.send({ type: 'schedule.fire', scheduleId: id, dueAt: only(harness).nextRunAt ?? 0 });
     expect(only(harness).stopped).toBe('finished');
-    expect(() => schedule(harness, taskId, { scheduleId: id, enabled: true })).toThrow('Raise max_runs');
+    expect(() => schedule(harness, taskId, { scheduleId: id, enabled: true })).toThrow(
+      'It has used all its runs'
+    );
     schedule(harness, taskId, { scheduleId: id, maxRuns: 5, enabled: true, trigger: null });
     expect(only(harness).stopped).toBeNull();
   });
@@ -859,9 +865,9 @@ describe('writing a schedule from Settings', () => {
   });
 
   test.each<[string, Partial<CommandOf<'schedule.write'>>, string]>([
-    ['an unknown time zone', { timeZone: 'Mars/Olympus' }, 'is not a time zone'],
+    ['an unknown time zone', { timeZone: 'Mars/Olympus' }, 'Use a time zone such as'],
     ['a schedule that does not exist', { scheduleId: 'nope' }, 'No schedule nope'],
-    ['a new one without a target', { target: null }, 'Say what it does'],
+    ['a new one without a target', { target: null }, 'Pick a new task or a task to message'],
     [
       'a repository that does not exist',
       { target: { kind: 'new_task', repoId: 'gone', priority: 'normal', mode: 'build' } },
@@ -884,7 +890,7 @@ describe('writing a schedule from Settings', () => {
   test('stops at the number of live schedules Shinsa keeps', () => {
     const { harness } = createScheduling();
     for (let index = 0; index < SCHEDULE_LIMITS.live; index += 1) write(harness, { name: `S${index}` });
-    expect(() => write(harness)).toThrow('as many schedules as Shinsa keeps');
+    expect(() => write(harness)).toThrow('Too many schedules');
     const id = Object.keys(harness.state.schedules)[0] ?? '';
     write(harness, { scheduleId: id, name: 'Still editable', trigger: null });
     expect(harness.state.schedules[id]?.name).toBe('Still editable');

@@ -70,12 +70,9 @@ function readSearch(url: URL): SearchQuery {
   const query = url.searchParams.get('q') ?? '';
   const glob = url.searchParams.get('glob')?.trim() || null;
   if (!query || query.length > CODE_LIMITS.queryLength || query.includes('\0'))
-    throw new DomainError(
-      'query_invalid',
-      `Search for some text, up to ${CODE_LIMITS.queryLength} characters.`
-    );
+    throw new DomainError('query_invalid', `Search for up to ${CODE_LIMITS.queryLength} characters.`);
   if (glob && (glob.length > MAX_GLOB_LENGTH || /^[-:]|\0/.test(glob)))
-    throw new DomainError('glob_invalid', 'Name the files to search as a pattern such as src/**/*.ts.');
+    throw new DomainError('glob_invalid', 'Use a pattern such as src/**/*.ts.');
   return {
     query,
     regex: readFlag(url, 'regex'),

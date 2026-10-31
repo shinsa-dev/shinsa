@@ -141,7 +141,7 @@ function readIdempotencyKey(request: Request) {
 function readOpenRequest(body: JsonObject) {
   const { target, path, line } = body;
   if (!OPEN_TARGETS.has(target as OpenTarget))
-    throw new DomainError('target_invalid', 'Open it in the editor, Finder or Terminal.');
+    throw new DomainError('target_invalid', 'Pick the editor, Finder or Terminal.');
   return {
     target: target as OpenTarget,
     path: typeof path === 'string' && path ? path : null,
@@ -191,7 +191,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
 
 function readRestartWhen(body: JsonObject): EngineRestartWhen {
   if (body.when === 'now' || body.when === 'idle') return body.when;
-  throw new DomainError('when_invalid', 'Restart the engine now or once agents are idle.');
+  throw new DomainError('when_invalid', 'Restart now or once agents are idle.');
 }
 
 function createServerRoutes(context: ApiContext): ApiRoute[] {
@@ -252,7 +252,7 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       respond: async (_match, request) => {
         const when = readRestartWhen(await readJsonObject(request));
         if (!restarter) {
-          throw new DomainError('restart_unsupported', 'This Shinsa cannot restart its engine from the app.');
+          throw new DomainError('restart_unsupported', 'This Shinsa cannot restart its engine.');
         }
         return respondJson(await restarter.request(when));
       },

@@ -17,7 +17,7 @@ A stage reason says what is happening to the task now. A gate says what is being
 
 | Rejected | Why | Written right |
 | --- | --- | --- |
-| "Approve it, ask for changes or reject it." for an agent's question | The answer options of another gate | "Answer the question." |
+| "Approve, ask for changes or reject." for an agent's question | The answer options of another gate | "Answer the question." |
 | "opening the pull request" while pushing to an open one | Says the wrong thing is happening | "pushing the changes" |
 | "Building started" logged for every phase | Activity repeats a stage that did not change | Log a stage when the stage changes; the phase has its own "Finished: …" line |
 | "All 1 checks passed" | A count that does not fit its noun | "The check passed" |
@@ -50,7 +50,7 @@ A stage reason says what is happening to the task now. A gate says what is being
 **Toast**: one short line, the outcome in a few words, past tense or present continuous: "Request declined.", "Device revoked.", "Kai Lane joined.", "Approved. Building now.". At most 40 characters (an inserted name or count counts as 12), never a description line under it, never the consequence the screen already shows; it must not wrap at the toaster's width. `bun lint:conventions` rejects a longer one (`scripts/lint-toast.ts`).
 **Stage reason** (`task.stageReason`): lower case, a few words, what is happening now: "waiting for CI", "fixing the pull request", "merging". The web capitalises it.
 **Activity entry**: a short past-tense sentence, sentence case, no full stop: "Opened pull request #42", "Agent review found 2 issues, 1 blocking".
-**DomainError message**: what is wrong and, when it is not obvious, what to do. One the web's commands and requests can return becomes an error toast, so it is one short sentence too ("This task is finished."); the guidance an agent needs belongs in the refusals only agents receive: "“Base” was cancelled, so there is nothing to wait for." "This task is finished. Start a new one." The code (`task_settled`) is for programs; the message is for people and agents.
+**DomainError message**: what is wrong and, when it is not obvious, what to do. One the web's commands and requests can return becomes an error toast, so it is one short sentence too ("This task is finished."); the guidance an agent needs belongs in the refusals only agents receive: "A newer attempt of this step has taken over. End your turn." The code (`task_settled`) is for programs; the message is for people and agents.
 **Failure gate**: the title says what stopped ("Out of automatic fix rounds"), the body says why and what Retry will do.
 **The Home guide** (`packages/core/src/briefing`): one plain sentence per item, a reason a person would say out loud; never a position ("item three"), an id, or a claim the gate does not support (a review is not "ready to merge").
 **Agent prompts** (`packages/core/src/prompts`): imperative, one instruction per sentence, the tool to call named in backticks, limits stated as numbers. Keep each fix prompt's first words stable: the web reads them to label the run ("The checks failed", "The agent review found", "The human looked at the work", "Pull request #"). Agents speak as themselves, in the first person, and the hand-over is their reply: no prompt or tool text may have an agent say "Shinsa knows…" about itself or invite a line after the hand-over (`VOICE_RULE` in `prompts/rules.ts`). Name Shinsa to the human only where they act in it.
