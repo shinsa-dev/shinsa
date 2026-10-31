@@ -89,7 +89,7 @@ export const PROTOCOL_LIMITS = {
   watchdogCheck: 600,
   watchdogServer: 128,
   watchdogData: 200,
-  watchdogEvidence: 300,
+  watchdogEvidence: 600,
   watchdogSuggestions: 4,
   watchdogSuggestion: 160,
   watchdogFirstCheckMinutes: WATCHDOG_SETTING_LIMITS.firstCheckMinutes,
@@ -472,6 +472,31 @@ function readSourceRequest(reader: Reader, value: unknown, path: string): Watchd
     evidence: reader.text(record.evidence, `${path}.evidence`, PROTOCOL_LIMITS.watchdogEvidence),
     suggestions,
   };
+}
+
+function isNamedIn(text: string, server: string) {
+  const escaped = server.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, 'i').test(text);
+}
+
+export function listHeldSourceRequests(
+  watchdogs: readonly WatchdogSpec[],
+  serverNames: readonly string[],
+  path = 'walkthrough.watchdogs'
+) {
+  return watchdogs.flatMap((watchdog, index) => {
+    const request = watchdog.sourceRequest;
+    if (!request) return [];
+    const held = serverNames.filter(
+      (server) =>
+        request.suggestions.some((suggestion) => isNamedIn(suggestion, server)) &&
+        !isNamedIn(request.evidence, server)
+    );
+    return held.map(
+      (server) =>
+        `${path}[${index}].source_request suggests \`${server}\`, a server you already have. Check with its tools whether it reaches the data and give it as the \`source\`; only when it cannot, say in \`evidence\` that you checked \`${server}\` and why it falls short.`
+    );
+  });
 }
 
 function readWatchdog(reader: Reader, raw: unknown, path: string): WatchdogSpec {

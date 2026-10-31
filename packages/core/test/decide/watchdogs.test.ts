@@ -240,17 +240,11 @@ describe('arming watchdogs', () => {
     expect(plain.harness.task(plain.taskId).watchdogs).toBeUndefined();
   });
 
-  test('a source the project already lists for every repository is not written again', () => {
+  function mergeOverSource(data: string) {
     const harness = createHarness();
     const taskId = createTask(harness);
     const project = projectOf(harness, taskId);
-    harness.send({
-      type: 'watch_source.write',
-      projectId: project.id,
-      server: 'maple',
-      data: 'All telemetry',
-      repoIds: [],
-    });
+    harness.send({ type: 'watch_source.write', projectId: project.id, server: 'maple', data, repoIds: [] });
     handOver(harness, taskId, [LATENCY]);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
@@ -262,9 +256,32 @@ describe('arming watchdogs', () => {
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
-    expect(projectOf(harness, taskId).watchSources).toEqual([
-      { server: 'maple', data: 'All telemetry', repoIds: [], addedBy: 'you', addedAt: expect.any(Number) },
+    return projectOf(harness, taskId).watchSources;
+  }
+
+  test('a source the project already lists with what the watchdog reads is not written again', () => {
+    expect(mergeOverSource('OpenTelemetry traces and logs of the API and the web app')).toEqual([
+      {
+        server: 'maple',
+        data: 'OpenTelemetry traces and logs of the API and the web app',
+        repoIds: [],
+        addedBy: 'you',
+        addedAt: expect.any(Number),
+      },
     ]);
+  });
+
+  test('a source the project lists more narrowly is widened to what the watchdog reads there', () => {
+    expect(mergeOverSource('Logs of the billing Worker')).toEqual([
+      {
+        server: 'maple',
+        data: 'Logs of the billing Worker; OpenTelemetry traces and logs of the API',
+        repoIds: [],
+        addedBy: 'you',
+        addedAt: expect.any(Number),
+      },
+    ]);
+    expect(mergeOverSource('x'.repeat(180))?.[0]?.data).toBe('OpenTelemetry traces and logs of the API');
   });
 });
 
