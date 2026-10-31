@@ -154,9 +154,9 @@ src/
 │                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
 │                        resume.ts (the usage-wait clock), routes.ts (/api/accounts), index.ts (the Accounts
 │                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
-├── eunoe/               The eunoe proxy Shinsa runs for its Claude sessions: proxy.ts (EunoeProxy: start on a port
-│                        of its own in data/eunoe, config.json, health, adopt an orphan, stop; resolveEunoeCommand),
-│                        requests.ts (tails eunoe's request log into compaction notices per session)
+├── eunoe/               Eunoe's core (`@chroxify/eunoe`) served inside the engine for its Claude sessions: server.ts
+│                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; thread state
+│                        and the request log in data/eunoe; compaction notices and the stuck signal per session)
 ├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
 │                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
@@ -380,7 +380,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
-  continuation). The eunoe proxy stops after the effects, once no `claude` can still talk to it. Your terminals' shells
+  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Your terminals' shells
   are hung up before the clocks stop, and their screens saved. Anything new that starts a process or a timer is
   stopped there too.
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
@@ -433,13 +433,12 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `FAKE_LOGIN_SHELL_HANG`, `FAKE_LOGIN_SHELL_SILENT` and `FAKE_LOGIN_SHELL_LOG` hang, fail or record the call,
   `FAKE_LOGIN_SHELL_EXEC_INTERACTIVE` prints nothing for `-lic`, as a `.zshrc` that execs fish does; a fake fish
   in `test/helpers/fish`, off the `PATH`, that `FAKE_FISH_SILENT` fails and `FAKE_FISH_LOG` records);
-  `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` (every
-  config's `eunoe.command`,
-  `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
+  `test/helpers/bin` also holds fake `claude`, `codex` and `cswap`, so no test runs the real ones,
+  `test/helpers/anthropic.ts` is the Anthropic API Eunoe's forwarder talks to in tests, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last
   parameters (`startSession`, `providers`, `triage`, `resolveLogin`, `ask`, `runQuery`, `launch`, `discover`,
   `runPrerequisite`, `accounts`, `accountOptions`).
-- **A test leaves no process running.** Every fake `gh`, `codex` and `eunoe` and the MCP stdio fake registers itself
+- **A test leaves no process running.** Every fake `gh` and `codex` and the MCP stdio fake registers itself
   with the preload, and a test that ends with one still running fails (the stray is killed): stop and await the work that runs it (`await runner.stop()`,
   `engine.settle()`). The fake `gh` gives up on a state folder that is gone and breaks a lock its killed holder left
   behind.
@@ -447,7 +446,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   ends, and removes every `createTempDir` folder after each test (`test/helpers/temp.ts`). A hook lives in the
   preload or a test file: Bun never runs an `afterEach` that a helper module registers. Leftover folders slow every
   test that starts a fake: Bun reads each folder above its working directory when it starts, so a `TMPDIR` holding
-  a hundred thousand of them adds a second to each fake `gh`, `codex` or `eunoe`.
+  a hundred thousand of them adds a second to each fake `gh` or `codex`.
 - **A test starts as few processes as it can.** Under load each one costs about a second, so a test that runs one
   scenario after another through the fake `codex` passes a runtime or runner that answers in process where the
   scenario is about Shinsa's reading (`readCodexLogin`'s runner, a `resolveExecutable` that says what it found), and

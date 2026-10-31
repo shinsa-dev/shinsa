@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type { HookInput, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -10,14 +10,18 @@ import { resolveClaudeProjectName } from '../../src/agents/providers/claude/arti
 import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts';
 import { ProviderRegistry } from '../../src/agents/providers/index.ts';
 import { Transcripts } from '../../src/agents/transcripts/index.ts';
-import { EunoeProxy } from '../../src/eunoe/index.ts';
+import { EunoeServer } from '../../src/eunoe/index.ts';
+import {
+  createMessagesBody,
+  type FakeAnthropic,
+  sendMessages,
+  startFakeAnthropic,
+} from '../helpers/anthropic.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { createFakeQuery, createFakeRuntime, type QueryParams, sdkMessage } from '../helpers/query.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(60_000);
-
-const FAKE_EUNOE = resolve(import.meta.dirname, '../helpers/bin/eunoe');
 
 const ROUNDS = 8;
 
@@ -25,13 +29,17 @@ const RESTART_AT = 4;
 
 let world: World | null = null;
 
-let proxy: EunoeProxy | null = null;
+let eunoe: EunoeServer | null = null;
+
+let upstream: FakeAnthropic | null = null;
 
 afterEach(async () => {
   await world?.dispose();
-  await proxy?.stop();
+  await eunoe?.stop();
+  await upstream?.stop();
   world = null;
-  proxy = null;
+  eunoe = null;
+  upstream = null;
 });
 
 interface Turn {
@@ -140,11 +148,8 @@ async function* agentTurn(
   yield sdkMessage({ type: 'system', subtype: 'init', session_id: sessionId });
   const baseUrl = params.options?.env?.ANTHROPIC_BASE_URL ?? '';
   if (baseUrl.startsWith('http://127.0.0.1')) {
-    await fetch(`${baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers: { 'x-claude-code-session-id': sessionId },
-      body: JSON.stringify({ fold: purpose === 'plan' ? 'roll' : 'cut' }),
-    });
+    const outputs = Array.from({ length: 3 + call }, () => 4_000);
+    await (await sendMessages(baseUrl, sessionId, createMessagesBody(outputs, `Turn ${call}`))).text();
   }
   await hand(params, brief, purpose, round);
   yield sdkMessage({ type: 'result', subtype: 'success', result: 'Done.', is_error: false });
@@ -156,8 +161,9 @@ async function openWorld() {
   const turns: Turn[] = [];
   let calls = 0;
   const fake = createFakeQuery((params) => agentTurn(params, calls++, home, turns));
-  proxy = new EunoeProxy({ dir, command: [FAKE_EUNOE], pollMs: 5 });
-  const provider = createClaudeProvider(createFakeRuntime(fake.query), { env: {}, home, eunoe: proxy });
+  upstream = startFakeAnthropic();
+  eunoe = new EunoeServer({ dir, upstream: upstream.url, window: () => Promise.resolve(4_000) });
+  const provider = createClaudeProvider(createFakeRuntime(fake.query), { env: {}, home, eunoe });
   world = await World.create({ checks: ['true'], providers: () => new ProviderRegistry([provider]) });
   return { w: world, turns, dir };
 }
@@ -258,6 +264,6 @@ describe('a long task that keeps its sessions across rounds', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line).thread as string);
-    expect(threads.filter((thread) => thread === `${session}-fingerprint`)).toHaveLength(agentTurns.length);
+    expect(threads.filter((thread) => thread?.startsWith(`${session}-`))).toHaveLength(agentTurns.length);
   });
 });

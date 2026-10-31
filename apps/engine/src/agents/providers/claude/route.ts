@@ -10,11 +10,14 @@ export type EunoeMode = 'compact' | 'default';
 
 export type EunoeStatus = { ok: true; url: string; dir: string } | { ok: false; reason: string };
 
-export type EunoeListener = (notice: ChatNotice) => void;
+export interface EunoeWatcher {
+  notice: (notice: ChatNotice) => void;
+  stuck: () => void;
+}
 
 export interface EunoeLink {
-  ensure: (mode: EunoeMode, configDir: string | null) => Promise<EunoeStatus>;
-  watch: (sessionId: string, listener: EunoeListener) => () => void;
+  ensure: (mode: EunoeMode) => Promise<EunoeStatus>;
+  watch: (sessionId: string, watcher: EunoeWatcher) => () => void;
 }
 
 interface ClaudeRoute {
@@ -40,13 +43,12 @@ function resolveDirectRoute(autoCompact: boolean, notice: ChatNotice | null = nu
 
 export async function resolveClaudeRoute(
   compaction: CompactionMode,
-  eunoe: EunoeLink | null,
-  configDir: string | null
+  eunoe: EunoeLink | null
 ): Promise<ClaudeRoute> {
   const mode = EUNOE_MODES[compaction];
   if (!mode) return resolveDirectRoute(compaction === 'claude');
   let status: EunoeStatus = { ok: false, reason: 'Eunoe is not set up in this Shinsa.' };
-  if (eunoe) status = await eunoe.ensure(mode, configDir);
+  if (eunoe) status = await eunoe.ensure(mode);
   if (!status.ok) {
     return resolveDirectRoute(true, {
       kind: 'proxy',

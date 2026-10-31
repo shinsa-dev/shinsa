@@ -31,12 +31,6 @@ export interface ServerConfig {
   settleDelayMs: number;
   pushRetryMs: number;
   overloadRetryMs: number;
-  eunoe: EunoeConfig;
-}
-
-interface EunoeConfig {
-  command: string | null;
-  port: number | null;
 }
 
 const DATABASE_FILE = 'shinsa.sqlite';
@@ -58,14 +52,6 @@ function readNumber(env: Env, key: string, fallback: number) {
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 0) throw new Error(`${key} must be a whole number, not "${raw}".`);
   return value;
-}
-
-function resolveEunoe(env: Env): EunoeConfig {
-  const port = env.SHINSA_EUNOE_PORT ? readNumber(env, 'SHINSA_EUNOE_PORT', 0) : null;
-  if (port !== null && (port === 0 || port > 65_535)) {
-    throw new Error(`SHINSA_EUNOE_PORT must be a port number, not "${port}".`);
-  }
-  return { command: env.SHINSA_EUNOE || null, port };
 }
 
 function resolvePortFrom(env: Env, machine: MachineConfig) {
@@ -128,7 +114,6 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
     settleDelayMs: readNumber(env, 'SHINSA_SETTLE_DELAY_MS', 15_000),
     pushRetryMs: readNumber(env, 'SHINSA_PUSH_RETRY_MS', 30_000),
     overloadRetryMs: readNumber(env, 'SHINSA_OVERLOAD_RETRY_MS', 15_000),
-    eunoe: resolveEunoe(env),
   };
 }
 

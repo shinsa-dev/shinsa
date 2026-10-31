@@ -22,7 +22,7 @@ import {
 import { createQuickCalls } from './agents/quick/index.ts';
 import { Briefings } from './briefing/index.ts';
 import { ConfigStore, prepareDataDir, type ServerConfig } from './config/index.ts';
-import { EunoeProxy, resolveEunoeCommand } from './eunoe/index.ts';
+import { EunoeServer } from './eunoe/index.ts';
 import { Extensions, type ExtensionsOptions } from './extensions/index.ts';
 import { resolveServerUrl, startServer } from './http/index.ts';
 import {
@@ -106,11 +106,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
   });
   const transcripts = new Transcripts(config.transcriptsDir);
   const evidence = new EvidenceStore(config.evidenceDir);
-  const eunoe = new EunoeProxy({
-    dir: join(config.dataDir, 'eunoe'),
-    command: resolveEunoeCommand(config.eunoe.command),
-    port: config.eunoe.port,
-  });
+  const eunoe = new EunoeServer({ dir: join(config.dataDir, 'eunoe') });
   const providers = options.providers ?? new ProviderRegistry(listDefaultProviders(eunoe));
   const accounts = new Accounts({
     engine,

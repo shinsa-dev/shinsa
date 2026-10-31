@@ -26,6 +26,7 @@ import {
   appendStderr,
   cleanProcessError,
   createSetupFailure,
+  createStuckFailure,
   createTurnEvidence,
   recordAssistantError,
   recordRateLimit,
@@ -228,6 +229,7 @@ export function startClaudeSession(
   let exiting: ReturnType<typeof setTimeout> | null = null;
   let eunoe = false;
   let unwatch: (() => void) | null = null;
+  let stuck: RunFailure | null = null;
 
   const terminate = async () => {
     if (terminated) return;
@@ -280,7 +282,7 @@ export function startClaudeSession(
     const process = await resolveClaudeProcess(runtime.resolveExecutable);
     ledger.echoes = process.version !== null;
     const configDir = input.account?.configDir ?? null;
-    const route = await resolveClaudeRoute(input.compaction ?? 'claude', options.eunoe ?? null, configDir);
+    const route = await resolveClaudeRoute(input.compaction ?? 'claude', options.eunoe ?? null);
     if (route.notice) recorder.notify(route.notice);
     eunoe = route.eunoe;
     return runtime.runQuery({
@@ -346,7 +348,7 @@ export function startClaudeSession(
     if (fast) recorder.notify(fast);
     if (!eunoe || !options.eunoe) return;
     unwatch?.();
-    unwatch = options.eunoe.watch(message.session_id, recorder.notify);
+    unwatch = options.eunoe.watch(message.session_id, { notice: recorder.notify, stuck: stopStuck });
   };
 
   const observe = (message: SDKMessage) => {
@@ -396,6 +398,41 @@ export function startClaudeSession(
     }
   };
 
+  const interrupt = async () => {
+    close();
+    const active = session;
+    if (!active) return;
+    const timeout = Promise.withResolvers<'timeout'>();
+    const timer = setTimeout(
+      () => timeout.resolve('timeout'),
+      options.interruptTimeoutMs ?? INTERRUPT_TIMEOUT_MS
+    );
+    try {
+      const stopped = await Promise.race([
+        active.interrupt().then(() => 'interrupted' as const),
+        timeout.promise,
+      ]);
+      if (stopped === 'timeout') await terminate();
+    } catch {
+      await terminate();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const stopStuck = () => {
+    if (stuck || cancelled) return;
+    stuck = createStuckFailure();
+    input.onEntry({ type: 'error', text: stuck.message });
+    void interrupt();
+  };
+
+  const resolveStopped = (text: string | null, undelivered: string[]): AgentSessionResult | null => {
+    if (cancelled) return { outcome: 'cancelled', summary: text, undelivered };
+    if (stuck) return { outcome: 'failed', summary: stuck.message, failure: stuck, undelivered };
+    return null;
+  };
+
   const endEarly = (text: string, undelivered: string[]): AgentSessionResult => {
     const failure = resolveEndedFailure(text, evidence);
     input.onEntry({ type: 'error', text });
@@ -409,7 +446,8 @@ export function startClaudeSession(
     if (terminated && finished && !cancelled) return finish();
     recorder.flush('interim');
     const undelivered = ledger.listUndelivered();
-    if (cancelled) return { outcome: 'cancelled', summary: null, undelivered };
+    const stopped = resolveStopped(null, undelivered);
+    if (stopped) return stopped;
     if (settled) return { outcome: 'failed', summary, failure: settled, undelivered };
     return endEarly(cleanProcessError(appendStderr(describeError(error), child.readStderr())), undelivered);
   };
@@ -417,7 +455,8 @@ export function startClaudeSession(
   const finish = (): AgentSessionResult => {
     recorder.flush('interim');
     const undelivered = ledger.listUndelivered();
-    if (cancelled) return { outcome: 'cancelled', summary, undelivered };
+    const stopped = resolveStopped(summary, undelivered);
+    if (stopped) return stopped;
     if (!verdict) return endEarly(STREAM_ENDED, undelivered);
     const failure: RunFailure | null = verdict.failure;
     return {
@@ -520,25 +559,7 @@ export function startClaudeSession(
     },
     cancel: async () => {
       cancelled = true;
-      close();
-      const active = session;
-      if (!active) return;
-      const timeout = Promise.withResolvers<'timeout'>();
-      const timer = setTimeout(
-        () => timeout.resolve('timeout'),
-        options.interruptTimeoutMs ?? INTERRUPT_TIMEOUT_MS
-      );
-      try {
-        const stopped = await Promise.race([
-          active.interrupt().then(() => 'interrupted' as const),
-          timeout.promise,
-        ]);
-        if (stopped === 'timeout') await terminate();
-      } catch {
-        await terminate();
-      } finally {
-        clearTimeout(timer);
-      }
+      await interrupt();
     },
   };
 }

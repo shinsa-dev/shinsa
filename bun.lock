@@ -38,7 +38,7 @@
       },
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.280",
-        "@chroxify/eunoe": "1.2.1",
+        "@chroxify/eunoe": "1.3.0",
         "@modelcontextprotocol/sdk": "1.29.0",
         "@shinsa/core": "workspace:*",
         "@xterm/addon-serialize": "^0.14.0",
@@ -316,7 +316,7 @@
 
     "@central-icons-react/all": ["@central-icons-react/all@1.2.19", "", { "peerDependencies": { "react": ">=16.6.0 <20" } }, "sha512-ln9dPk/jw9gnOIYn4GaiscbwjkalD8hwxSO9N0aHP2g4rU69n+x4pU2RiqmIG+aHMz29NPKcQ9Z9yg4OphyE3w=="],
 
-    "@chroxify/eunoe": ["@chroxify/eunoe@1.2.1", "", { "bin": { "ee": "src/cli/main.ts", "eunoe": "src/cli/main.ts" } }, "sha512-TXO4z5t3u6w1NYv6y532ZmWREHzKo7wDo8J+qIACxX3GIeh4J06tvlqTsxtW8wTZE4irzlvyOsPFLPzlRCkWBw=="],
+    "@chroxify/eunoe": ["@chroxify/eunoe@1.3.0", "", { "bin": { "ee": "src/cli/main.ts", "eunoe": "src/cli/main.ts" } }, "sha512-b1nc4IXWv286WHKiErG5N7C7zl2j2F1vgjhl5yoJgeFtu2Y12z5ySboNpG7jN8f+V6hIAe7EEI7RhaahY8smzQ=="],
 
     "@clack/core": ["@clack/core@1.5.1", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ=="],
 

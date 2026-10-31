@@ -14,8 +14,6 @@ const ghRegistry = join(home, 'gh-processes');
 mkdirSync(ghRegistry);
 const codexRegistry = join(home, 'codex-processes');
 mkdirSync(codexRegistry);
-const eunoeRegistry = join(home, 'eunoe-processes');
-mkdirSync(eunoeRegistry);
 const mcpRegistry = join(home, 'mcp-processes');
 mkdirSync(mcpRegistry);
 writeFileSync(
@@ -33,7 +31,6 @@ process.env.CLAUDE_CONFIG_DIR = join(home, 'claude');
 process.env.CODEX_HOME = join(home, 'codex');
 process.env.FAKE_GH_REGISTRY = ghRegistry;
 process.env.FAKE_CODEX_REGISTRY = codexRegistry;
-process.env.FAKE_EUNOE_REGISTRY = eunoeRegistry;
 process.env.FAKE_MCP_REGISTRY = mcpRegistry;
 delete process.env.CODEX_EXECUTABLE;
 
@@ -86,7 +83,6 @@ async function assertNoStray(registry: string, program: string) {
 async function assertNoStrays() {
   await assertNoStray(ghRegistry, 'gh');
   await assertNoStray(codexRegistry, 'codex');
-  await assertNoStray(eunoeRegistry, 'eunoe');
   await assertNoStray(mcpRegistry, 'MCP stdio server');
 }
 

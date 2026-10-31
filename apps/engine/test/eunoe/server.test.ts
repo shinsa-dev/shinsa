@@ -1,0 +1,156 @@
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { ChatNotice } from '@shinsa/core';
+import { createFileStore, EunoeServer, resolveCompactionNotice } from '../../src/eunoe/server.ts';
+import { log } from '../../src/log/index.ts';
+import {
+  createMessagesBody,
+  type FakeAnthropic,
+  sendMessages,
+  startFakeAnthropic,
+} from '../helpers/anthropic.ts';
+import { createTempDir } from '../helpers/index.ts';
+
+const SMALL_WINDOW = () => Promise.resolve(4_000);
+
+let liveUpstream: FakeAnthropic | null = null;
+
+let liveServer: EunoeServer | null = null;
+
+afterEach(async () => {
+  await liveServer?.stop();
+  await liveUpstream?.stop();
+  liveServer = null;
+  liveUpstream = null;
+});
+
+function openServer(options: Partial<ConstructorParameters<typeof EunoeServer>[0]> = {}) {
+  const upstream = startFakeAnthropic();
+  const dir = join(createTempDir(), 'eunoe');
+  const server = new EunoeServer({ dir, upstream: upstream.url, window: SMALL_WINDOW, ...options });
+  liveUpstream = upstream;
+  liveServer = server;
+  return { server, upstream, dir };
+}
+
+function watchSession(eunoe: EunoeServer, sessionId: string) {
+  const notices: ChatNotice[] = [];
+  const stuck: string[] = [];
+  const stop = eunoe.watch(sessionId, {
+    notice: (notice) => notices.push(notice),
+    stuck: () => stuck.push(sessionId),
+  });
+  return { notices, stuck, stop };
+}
+
+async function ensureUrl(eunoe: EunoeServer, mode: 'compact' | 'default' = 'compact') {
+  const status = await eunoe.ensure(mode);
+  if (!status.ok) throw new Error(status.reason);
+  return status.url;
+}
+
+describe('EunoeServer', () => {
+  test('serves the forwarder on a loopback port of its own and passes a request it cannot thread through untouched', async () => {
+    const { server, upstream, dir } = openServer();
+    const status = await server.ensure('compact');
+    expect(status).toEqual({ ok: true, url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/), dir });
+    const again = await server.ensure('default');
+    expect(again).toEqual(status);
+    const body = createMessagesBody([10]);
+    const response = await sendMessages(status.ok ? status.url : '', null, body);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: 'msg_fake' });
+    expect(upstream.received).toHaveLength(1);
+    expect(upstream.received[0]?.headers.get('authorization')).toBe('Bearer token');
+    expect(upstream.received[0]?.body).toEqual(body);
+  });
+
+  test('compact mode cuts a session over the window, tells the session, and keeps its state and log in its folder', async () => {
+    const { server, upstream, dir } = openServer();
+    const url = await ensureUrl(server);
+    const watched = watchSession(server, 'session-1');
+    const other = watchSession(server, 'session-2');
+    const body = createMessagesBody([4_000, 4_000, 4_000]);
+    await (await sendMessages(url, 'session-1', body)).text();
+    const sent = upstream.received[0]?.body as { messages: unknown[] };
+    expect(sent.messages.length).toBeLessThan(body.messages.length);
+    expect(watched.notices).toEqual([
+      { kind: 'compaction', trigger: 'auto', preTokens: null, summary: null, by: 'eunoe' },
+    ]);
+    expect(watched.stuck).toEqual([]);
+    expect(other.notices).toEqual([]);
+    expect(readdirSync(join(dir, 'threads'))).toHaveLength(1);
+    const logged = readFileSync(join(dir, 'requests.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(logged.at(-1)).toMatchObject({ mode: 'compact', compacted: true, actions: ['cut'] });
+  });
+
+  test('always-fold mode rolls finished turns once their detail passes the budget, as a quiet fold', async () => {
+    const { server } = openServer({
+      window: () => Promise.resolve(1_000_000),
+      tuning: { budget: 1_000, keep: 1 },
+    });
+    const url = await ensureUrl(server, 'default');
+    const watched = watchSession(server, 'session-1');
+    await (await sendMessages(url, 'session-1', createMessagesBody([4_000, 4_000, 4_000]))).text();
+    expect(watched.notices).toEqual([
+      { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
+    ]);
+  });
+
+  test('a thread whose live turn alone is over the window is reported stuck, until the session stops watching', async () => {
+    const { server } = openServer();
+    const url = await ensureUrl(server);
+    const watched = watchSession(server, 'session-1');
+    const body = createMessagesBody([100], 'y'.repeat(40_000));
+    await (await sendMessages(url, 'session-1', body)).text();
+    expect(watched.stuck).toEqual(['session-1']);
+    watched.stop();
+    await (await sendMessages(url, 'session-1', body)).text();
+    expect(watched.stuck).toEqual(['session-1']);
+  });
+
+  test('a request log it cannot write is logged and the request still goes through', async () => {
+    const { server, upstream, dir } = openServer();
+    const url = await ensureUrl(server);
+    mkdirSync(join(dir, 'requests.jsonl'));
+    const warn = spyOn(log, 'warn');
+    const response = await sendMessages(url, 'session-1', createMessagesBody([4_000, 4_000, 4_000]));
+    expect(response.status).toBe(200);
+    expect(upstream.received).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith('[Eunoe] Could not write the request log', expect.any(Object));
+    warn.mockRestore();
+  });
+
+  test('a port it cannot take leaves runs to talk to Claude directly, and a stopped server never starts again', async () => {
+    const taken = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('') });
+    const { server } = openServer({ port: taken.port });
+    const status = await server.ensure('compact');
+    expect(status).toEqual({ ok: false, reason: expect.stringMatching(/^Eunoe could not start: /) });
+    await taken.stop(true);
+    await server.stop();
+    expect(await server.ensure('compact')).toEqual({ ok: false, reason: 'Shinsa is stopping.' });
+  });
+});
+
+describe('createFileStore', () => {
+  test('keeps each thread in a file named after its key and reads an unknown or damaged one as empty', () => {
+    const dir = join(createTempDir(), 'threads');
+    const store = createFileStore(dir);
+    expect(store.read('missing')).toEqual({});
+    store.save('session/1-abc', { keep: 2 });
+    expect(existsSync(join(dir, 'session_1-abc.json'))).toBe(true);
+    expect(store.read('session/1-abc')).toEqual({ keep: 2 });
+  });
+});
+
+describe('resolveCompactionNotice', () => {
+  test('only a request that moved the cut is a notice: a cut at the limit is automatic, anything else a fold', () => {
+    expect(resolveCompactionNotice({ compacted: false })).toBeNull();
+    expect(resolveCompactionNotice({ compacted: true, actions: ['cut'] })).toMatchObject({ trigger: 'auto' });
+    expect(resolveCompactionNotice({ compacted: true })).toMatchObject({ trigger: 'fold' });
+  });
+});
