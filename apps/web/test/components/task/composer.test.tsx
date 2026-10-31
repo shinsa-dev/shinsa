@@ -138,12 +138,19 @@ describe('Composer drafts', () => {
   function renderTabs(shown: 'overview' | 'review', onSubmit: (text: string) => Promise<boolean>) {
     return (
       <TooltipProvider>
+        <div data-task-tabs>
+          <div role='tablist'>
+            <button type='button' role='tab'>
+              Review
+            </button>
+          </div>
+        </div>
         <div role='tablist'>
           <button type='button' role='tab'>
-            Review
+            Fix
           </button>
-          <button type='button'>Elsewhere</button>
         </div>
+        <button type='button'>Elsewhere</button>
         <Composer key={shown} draftKey='task-1' placeholder={shown} submitLabel='Send' onSubmit={onSubmit} />
       </TooltipProvider>
     );
@@ -164,11 +171,12 @@ describe('Composer drafts', () => {
     expect([review.value, review.selectionStart, review.selectionEnd]).toEqual(['Keep typing', 4, 4]);
   });
 
-  it('leaves the focus alone when the input lost it to anything but a tab', () => {
+  it('leaves the focus alone when the input lost it to anything but a task tab', () => {
     const onSubmit = mock(async (_text: string) => true);
     const view = render(renderTabs('overview', onSubmit));
     const overview = screen.getByRole('textbox', { name: 'overview' });
     const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    fireEvent.blur(overview, { relatedTarget: screen.getByRole('tab', { name: 'Fix' }) });
     fireEvent.blur(overview, { relatedTarget: elsewhere });
     fireEvent.blur(overview, { relatedTarget: null });
     elsewhere.focus();

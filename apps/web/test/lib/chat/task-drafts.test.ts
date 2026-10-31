@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import {
   carryDraftFocus,
   clearTaskDraft,
+  removeCarriedCaret,
   resetTaskDrafts,
   resolveTaskDraft,
   subscribeTaskDrafts,
@@ -61,6 +62,19 @@ describe('task drafts', () => {
     expect(takeCarriedCaret('task-a')).toBeNull();
     carryDraftFocus('task-a', { start: 2, end: 4 });
     expect(takeCarriedCaret('task-a')).toEqual({ start: 2, end: 4 });
+    expect(takeCarriedCaret('task-a')).toBeNull();
+    expect(resolveTaskDraft('task-a').text).toBe('Hello');
+  });
+
+  it('drops a carried caret no input took, and leaves the rest of the draft', () => {
+    const listener = mock(() => undefined);
+    const stop = subscribeTaskDrafts(listener);
+    removeCarriedCaret('task-a');
+    expect(listener).not.toHaveBeenCalled();
+    updateTaskDraft('task-a', () => ({ text: 'Hello' }));
+    carryDraftFocus('task-a', { start: 1, end: 1 });
+    removeCarriedCaret('task-a');
+    stop();
     expect(takeCarriedCaret('task-a')).toBeNull();
     expect(resolveTaskDraft('task-a').text).toBe('Hello');
   });

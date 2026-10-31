@@ -44,8 +44,12 @@ export function carryDraftFocus(key: string, caret: DraftCaret) {
 
 export function takeCarriedCaret(key: string) {
   const caret = resolveTaskDraft(key).carriedCaret;
-  if (caret) updateTaskDraft(key, () => ({ carriedCaret: null }));
+  removeCarriedCaret(key);
   return caret;
+}
+
+export function removeCarriedCaret(key: string) {
+  if (resolveTaskDraft(key).carriedCaret) updateTaskDraft(key, () => ({ carriedCaret: null }));
 }
 
 export function clearTaskDraft(key: string) {

@@ -21,7 +21,7 @@ import {
 import { isSubmitKey } from '@/lib/keys.ts';
 
 function isTabSwitch(target: EventTarget | null) {
-  return target instanceof Element && target.closest('[role="tab"]') !== null;
+  return target instanceof Element && target.closest('[data-task-tabs] [role="tab"]') !== null;
 }
 
 function useCarriedFocus(draftKey: string, field: React.RefObject<HTMLTextAreaElement | null>) {

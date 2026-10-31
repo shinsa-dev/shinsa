@@ -1385,7 +1385,7 @@ Only these, and they win over anything below:
     - **One draft per task.** The composer docks at the foot of Overview, Review and Chat, and the three are one
       draft (`lib/chat/task-drafts.ts`, keyed by the task's id, in memory until a reload): the text, the attachments
       and their uploads carry across tabs and survive leaving the task, and sending from any tab clears it everywhere.
-      When the box loses focus to a tab click, the next tab's box takes it with the caret where it was. The Code tab
+      When the box loses focus to a click on the task's own tabs, the next tab's box takes it with the caret where it was; leaving the task drops that. The Code tab
       has no composer; Home's new-task box and the answer box keep their own.
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
