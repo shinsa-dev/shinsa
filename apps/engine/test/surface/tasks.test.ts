@@ -365,6 +365,16 @@ describe('the task commands', () => {
       'Removed from the backlog. Its plan now waits for your approval.',
     ],
     [
+      ['tasks', 'snooze', 'fix'],
+      { type: 'task.snooze', taskId: 'task-123' },
+      'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
+    ],
+    [
+      ['tasks', 'unsnooze', 'fix'],
+      { type: 'task.unsnooze', taskId: 'task-123' },
+      'Unsnoozed.',
+    ],
+    [
       ['tasks', 'bind', 'fix', 'any'],
       { type: 'task.bind_account', taskId: 'task-123', account: null },
       'Saved the account.',
