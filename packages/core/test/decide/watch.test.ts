@@ -258,6 +258,33 @@ describe('evaluatePullRequestWatch', () => {
     expect(evaluatePullRequestWatch(report.next, detail(), comments, VIEWER).changes).toEqual([]);
   });
 
+  test('a bot’s own comment on the conversation never wakes the agent, its reviews and inline comments do', () => {
+    const bot = (overrides: Partial<PullRequestRemark>) => ({
+      ...remark('cloudflare-workers-and-pages', '2026-10-02T12:06:00Z', 'Deploying preview.'),
+      bot: true,
+      ...overrides,
+    });
+    const notice = bot({ id: 'notice', path: null });
+    const inline = bot({ id: 'inline', author: 'maple-review-bot' });
+    const review = bot({ id: 'review', author: 'maple-review-bot', path: null, reviewState: 'commented' });
+    const human = { ...remark('reviewer', '2026-10-02T12:06:00Z'), path: null };
+    const report = evaluatePullRequestWatch(watch(), detail(), [notice, inline, review, human], VIEWER);
+    expect(report.changes).toEqual([{ kind: 'remarks', remarks: [inline, review, human] }]);
+  });
+
+  test('a bot editing a remark it already posted is not news, a person editing one is', () => {
+    const posted = { ...remark('maple-review-bot', '2026-10-02T12:06:00Z'), bot: true };
+    const first = evaluatePullRequestWatch(watch(), detail(), [posted], VIEWER);
+    const edited = { ...posted, editedAt: '2026-10-02T12:30:00Z', body: 'Updated.' };
+    expect(evaluatePullRequestWatch(first.next, detail(), [edited], VIEWER).changes).toEqual([]);
+    const person = remark('reviewer', '2026-10-02T12:06:00Z');
+    const seen = evaluatePullRequestWatch(watch(), detail(), [person], VIEWER);
+    const rewritten = { ...person, editedAt: '2026-10-02T12:30:00Z' };
+    expect(evaluatePullRequestWatch(seen.next, detail(), [rewritten], VIEWER).changes).toEqual([
+      { kind: 'remarks', remarks: [rewritten] },
+    ]);
+  });
+
   test('a new watch takes every remark as news, at the second boundary as well', () => {
     const report = evaluatePullRequestWatch(
       createPullRequestWatch(1),

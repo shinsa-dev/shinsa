@@ -239,6 +239,7 @@ export {
   isHandOverTool,
   isShinsaToolName,
   isTaskSessionRole,
+  isWatchSession,
   listCallableToolNames,
   listToolNames,
   PURPOSE_HAND_OVERS,

@@ -77,7 +77,7 @@ async function fire(w: World, taskId: string) {
 }
 
 describe('watchdogs after a merge', () => {
-  test('a check is a read-only turn of the task’s session in the repository, and a report it files becomes a forked task', async () => {
+  test('a check is a read-only turn of a watch session of its own in the repository, and a report it files becomes a forked task', async () => {
     const { w, taskId } = await merged();
     expect(w.task(taskId).watchdogs?.[0]).toMatchObject({ title: 'Greeting renders', status: 'watching' });
     const agentSession = w.agents.of('plan')[0]?.sessionId;
@@ -85,7 +85,8 @@ describe('watchdogs after a merge', () => {
     await fire(w, taskId);
     await w.until('the healthy check', () => (w.task(taskId).watchdogs?.[0]?.checks.length ?? 0) === 1);
     const [check] = w.agents.of('watch');
-    expect(check).toMatchObject({ readOnly: true, resume: agentSession });
+    expect(check).toMatchObject({ readOnly: true, resume: null });
+    expect(check?.sessionId).not.toBe(agentSession);
     expect(check?.cwd).toBe(w.state.repos[w.task(taskId).repoId ?? '']?.path);
     expect(check?.prompt).toContain('the watchdog “Greeting renders”');
     await w.untilStage(taskId, 'merged');
@@ -102,6 +103,7 @@ describe('watchdogs after a merge', () => {
     });
     await fire(w, taskId);
     await w.until('the tripped watchdog', () => w.task(taskId).watchdogs?.[0]?.status === 'tripped');
+    expect(w.agents.of('watch')[1]?.resume).toBe(check?.sessionId);
     const [forkId = ''] = w.task(taskId).watchdogs?.[0]?.forkTaskIds ?? [];
     expect(w.task(forkId)).toMatchObject({
       forkOf: taskId,

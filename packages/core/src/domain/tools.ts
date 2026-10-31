@@ -176,6 +176,10 @@ export function isTaskSessionRole(role: RunRole) {
   return TASK_SESSION_ROLES.includes(role);
 }
 
+export function isWatchSession(run: Pick<Run, 'role' | 'purpose'>) {
+  return run.role === 'agent' && run.purpose === 'watch';
+}
+
 export function listCallableToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
   if (depth > 0 || !isStepRole(role)) {
     return [...DELEGATE_TOOLS, ...(depth < DELEGATION_LIMITS.depth ? DELEGATION_TOOLS : [])];
