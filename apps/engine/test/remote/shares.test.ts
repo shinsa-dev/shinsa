@@ -402,6 +402,29 @@ describe('a share link opened live', () => {
     expect(live.view.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
   });
 
+  test('a pull request GitHub cannot read leaves the code out, keeps the link open and is read again on the next change', async () => {
+    const github = createGitHub();
+    let down = true;
+    const readDiff = github.readDiff;
+    github.readDiff = (repo, number) => {
+      if (!down) return readDiff(repo, number);
+      github.diffReads += 1;
+      return Promise.reject(new Error('gh: not logged in'));
+    };
+    const { stub, publisher } = sharedSetUp({ github });
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads it', () => viewer.views().length === 1);
+    expect(Object.keys(viewer.views()[0]?.files ?? {})).toEqual(['shot-1']);
+    expect(viewer.closed).toBeNull();
+    down = false;
+    stub.notify();
+    await until('the viewer reads the code', () =>
+      viewer.messages.some((message) => message.t === 'end' && message.id === SHARE_CODE_FILE)
+    );
+    expect(github.diffReads).toBe(2);
+    expect(viewer.closed).toBeNull();
+  });
+
   test('a closed channel is forgotten', async () => {
     const { stub, publisher } = sharedSetUp();
     const viewer = await openViewer(publisher);

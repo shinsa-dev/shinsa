@@ -300,7 +300,7 @@ export class Shares implements ShareEffects, ShareLinks {
     const { shared, repo } = this.#resolveShared(task);
     const files = [
       ...(await this.#listEvidenceFiles(shared)),
-      ...(await this.#listCodeFiles(shared, task, repo)),
+      ...(await this.#listLiveCodeFiles(shared, task, repo)),
     ];
     const listed = Object.fromEntries(files.map((file) => [file.id, file.id]));
     const view: ShareLiveView = {
@@ -362,6 +362,18 @@ export class Shares implements ShareEffects, ShareLinks {
     const hash = resolveBytesHash(await read());
     this.#hashes.set(path, { size: stat.size, modifiedAt: stat.mtimeMs, hash });
     return hash;
+  }
+
+  async #listLiveCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
+    try {
+      return await this.#listCodeFiles(shared, task, repo);
+    } catch (error) {
+      log.warn('[Share] Could not read the pull request from GitHub', {
+        taskId: task.id,
+        error: describeError(error),
+      });
+      return [];
+    }
   }
 
   async #listCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
