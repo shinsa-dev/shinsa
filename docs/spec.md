@@ -242,7 +242,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
   and file chips, an answer's under the question it answers, and the agent gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
-  say in the chat what to change), Review (§5), Merge, Question, a proposed change.
+  say in the chat what to change), Review (§5), Merge, Question, a proposed change. Once you sent changes back,
+  the review card leads with the Agent's reply to them, point by point.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
   progress, evidence, the pull request), Code (the review and every changed file) and Chat (the
   agents' transcripts; you can write to the agent).
@@ -1030,6 +1031,20 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   several at once, whatever project the box shows) and Backlog.
 - **No roadmap.** The word named nothing Shinsa has; the page is All tasks, its sections are task groups, and the
   backlog is the closest thing to a roadmap there is.
+
+### Replies on the Overview, not in the chat (2026-10-31)
+
+- **The goal is never to need the chat.** At review you iterate: you ask for a change, ask a question, add a second
+  thought. Whether the Agent addressed it was only in the chat, so every round meant scrolling a transcript. Now
+  each thing you send after the work is in is a request, and the fix that answers it must hand over a reply
+  (`complete_fix`'s `reply`, `docs/engine.md` → Your requests and their replies).
+- **Confirmations, not a thread.** Five designs were tried in `/ui`; the one chosen reads as a report: a headline,
+  each point you raised marked Done, Answered or Not changed with a note, then What to do now. No quoted message, no
+  bubbles, no inline chat: the plan and the reply are one shared record, and earlier requests (plan feedback
+  included) fold below as the same report.
+- **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
+  pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
+  cards).
 
 ## 11. Open questions
 
