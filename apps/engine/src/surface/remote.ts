@@ -1,4 +1,4 @@
-import { type AccessRequest, DomainError, type LinkKind, type RemoteUser } from '@shinsa/core';
+import { type AccessRequest, DomainError, type RemoteUser } from '@shinsa/core';
 import type { RemoteSnapshot } from '../remote/index.ts';
 import type { RemoteDevice } from '../remote/store.ts';
 import type { SurfaceClient } from './client.ts';
@@ -29,7 +29,7 @@ function describeDevice(snapshot: RemoteSnapshot, device: RemoteDevice) {
 function describeMembers(snapshot: RemoteSnapshot) {
   const members = snapshot.access?.members ?? [];
   if (members.length === 0)
-    return ['No one else has access. Invite someone with `shinsa remote link invite`.'];
+    return ['No one else has access. Share the link from `shinsa remote link` to let someone ask.'];
   return ['Members:', ...members.map((member) => `  ${describeUser(member.user)}`)];
 }
 
@@ -43,19 +43,14 @@ function formatRemote(snapshot: RemoteSnapshot) {
     'Open it in Shinsa Cloud at https://app.shinsa.dev.',
   ];
   if (snapshot.devices.length === 0)
-    lines.push('No devices are added. Make a link with `shinsa remote link device`.');
+    lines.push('No devices are added. Make a link with `shinsa remote link`.');
   else lines.push('Added devices:', ...snapshot.devices.map((device) => describeDevice(snapshot, device)));
   lines.push(...describeMembers(snapshot), ...describeLinks(snapshot), ...describeRequests(snapshot));
   return lines.join('\n');
 }
 
-const LINK_WORDS: Record<LinkKind, string> = {
-  device: 'Add device (your own account)',
-  invite: 'Invite someone (any GitHub account)',
-};
-
 function describeLinks(snapshot: RemoteSnapshot) {
-  return snapshot.links.map((link) => `${LINK_WORDS[link.kind]} link: ${link.url}`);
+  return snapshot.link ? [`Invite link: ${snapshot.link.url}`] : [];
 }
 
 function describeRequest(request: AccessRequest) {
@@ -70,13 +65,11 @@ function describeRequests(snapshot: RemoteSnapshot) {
   ];
 }
 
-function formatLink(snapshot: RemoteSnapshot, kind: LinkKind) {
-  const link = snapshot.links.find((entry) => entry.kind === kind);
-  const intro =
-    kind === 'invite'
-      ? 'Share this link. Anyone who opens it signs in with GitHub and asks for access, which you accept or decline:'
-      : 'Open this link on your device and sign in as you. Each device asks for access, which you accept or decline:';
-  return [intro, link?.url ?? 'No link was made.'].join('\n');
+function formatLink(snapshot: RemoteSnapshot) {
+  return [
+    'Open this link on your own device, or share it. Whoever opens it signs in with GitHub and asks for access, which you accept or decline:',
+    snapshot.link?.url ?? 'No link was made.',
+  ].join('\n');
 }
 
 async function findRequestId(client: SurfaceClient, ref: string) {
@@ -93,15 +86,6 @@ async function findRequestId(client: SurfaceClient, ref: string) {
       : `No access request matches ${ref}`;
   throw new DomainError('request_not_found', `${problem}. See them with \`shinsa remote status\`.`);
 }
-
-const LINK_FIELD = {
-  name: 'kind',
-  kind: 'choice',
-  choices: ['device', 'invite'],
-  positional: 'one',
-  required: true,
-  description: 'device for your own devices, invite for someone else’s GitHub account.',
-} as const;
 
 const REQUEST_FIELD = {
   name: 'request',
@@ -173,30 +157,27 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'link'],
-    summary: 'Make the reusable link that asks for access to this machine, replacing the one before.',
+    summary: 'Show the reusable invite link that asks for access to this machine, making it if it is off.',
     humanOnly: true,
-    fields: [LINK_FIELD],
-    act: async (client, values) => {
-      const kind = readValue(values, 'kind') as LinkKind;
-      const data = await client.post<RemoteSnapshot>('/api/remote/links/create', { kind });
-      return { data, text: formatLink(data, kind) };
+    fields: [],
+    act: async (client) => {
+      const data = await client.post<RemoteSnapshot>('/api/remote/link/create', {});
+      return { data, text: formatLink(data) };
     },
   }),
   defineAction({
     path: ['remote', 'link-off'],
-    summary: 'Turn a link off, so nobody can ask for access with it any more.',
+    summary: 'Turn the invite link off, so nobody can ask for access with it any more.',
     humanOnly: true,
-    fields: [LINK_FIELD],
-    act: async (client, values) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/links/remove', {
-        kind: readValue(values, 'kind'),
-      });
+    fields: [],
+    act: async (client) => {
+      const data = await client.post<RemoteSnapshot>('/api/remote/link/remove', {});
       return { data, text: formatRemote(data) };
     },
   }),
   defineAction({
     path: ['remote', 'accept'],
-    summary: 'Accept an access request: add its device, and for an invite make its account a member.',
+    summary: 'Accept an access request: add its device, and make its account a member when it is not yours.',
     humanOnly: true,
     fields: [REQUEST_FIELD],
     act: async (client, values) => {

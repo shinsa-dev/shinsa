@@ -16,17 +16,13 @@ export interface RemoteDevice {
   userId: string | null;
 }
 
-export type LinkKind = 'device' | 'invite';
-
 export interface RemoteLink {
-  kind: LinkKind;
   url: string;
   createdAt: number;
 }
 
 export interface AccessRequest {
   id: string;
-  kind: LinkKind;
   publicKey: string;
   deviceName: string;
   user: RemoteUser;
@@ -44,6 +40,6 @@ export interface RemoteSnapshot {
   pairing: PairingView | null;
   devices: RemoteDevice[];
   access: RemoteAccess | null;
-  links: RemoteLink[];
+  link: RemoteLink | null;
   requests: AccessRequest[];
 }

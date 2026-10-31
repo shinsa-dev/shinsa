@@ -13,8 +13,12 @@ const AGENTS = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36 Edg/130.0',
   pixel:
     'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36',
+  reducedPhone:
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36',
   tablet:
-    'Mozilla/5.0 (Linux; Android 15; Tab) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+  galaxy:
+    'Mozilla/5.0 (Linux; Android 14; SM-S921B Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36',
   linux: 'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0',
   chromebook: 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) OPR/100.0',
 };
@@ -26,7 +30,9 @@ describe('the device name a request starts with', () => {
     expect(resolveDeviceName(AGENTS.ipad, false, null)).toBe('Safari on Mac');
     expect(resolveDeviceName(AGENTS.mac, false, null)).toBe('Chrome on Mac');
     expect(resolveDeviceName(AGENTS.windows, false, null)).toBe('Edge on Windows PC');
-    expect(resolveDeviceName(AGENTS.pixel, true, null)).toBe('Android phone');
+    expect(resolveDeviceName(AGENTS.pixel, true, null)).toBe('Pixel 9');
+    expect(resolveDeviceName(AGENTS.galaxy, true, null)).toBe('SM-S921B');
+    expect(resolveDeviceName(AGENTS.reducedPhone, true, null)).toBe('Android phone');
     expect(resolveDeviceName(AGENTS.tablet, true, null)).toBe('Android tablet');
     expect(resolveDeviceName(AGENTS.linux, false, null)).toBe('Firefox on Linux PC');
     expect(resolveDeviceName(AGENTS.chromebook, false, null)).toBe('Opera on Chromebook');

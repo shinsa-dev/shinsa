@@ -54,6 +54,7 @@ export interface ChannelHost {
     keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>,
     name: string | null
   ) => Promise<AccessAnswer>;
+  resumeAccess: (device: string) => AccessAnswer | null;
   recordSeen: (device: string) => void;
   hub: ChannelHub;
   respond: (request: Request) => Promise<Response>;
@@ -159,15 +160,20 @@ export class RemoteChannel {
     this.fail(reason);
   }
 
+  #requestAnswer(hello: ClientHello, keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>) {
+    if (hello.enroll === null) return Promise.resolve(this.#host.resumeAccess(hello.device));
+    return this.#host.requestAccess(hello.enroll, keys, hello.name);
+  }
+
   async #awaitAccess(
     hello: ClientHello,
     keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
   ) {
-    if (hello.enroll === null) {
-      this.#refuse('This device is not added to this machine. Open an Add device link from it first.');
+    const answer = await this.#requestAnswer(hello, keys);
+    if (answer === null) {
+      this.#refuse('This device is not added to this machine. Ask for access with its link first.');
       return false;
     }
-    const answer = await this.#host.requestAccess(hello.enroll, keys, hello.name);
     if (answer.kind === 'refused') {
       this.#refuse(answer.reason);
       return false;

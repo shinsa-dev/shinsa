@@ -25,11 +25,9 @@ describe('the /ui remote access samples', () => {
     await expect(actions.pair()).rejects.toThrow(REFUSED);
     for (const refused of [actions.cancelPairing, actions.resume, actions.pause, actions.remove])
       await expect(refused()).rejects.toThrow(REFUSED);
-    await expect(actions.forgetDevice('dev-1')).rejects.toThrow(REFUSED);
-    for (const kind of ['device', 'invite'] as const) {
-      await expect(actions.createLink(kind)).rejects.toThrow(REFUSED);
-      await expect(actions.removeLink(kind)).rejects.toThrow(REFUSED);
-    }
+    await expect(actions.revokeDevice('dev-1')).rejects.toThrow(REFUSED);
+    await expect(actions.createLink()).rejects.toThrow(REFUSED);
+    await expect(actions.removeLink()).rejects.toThrow(REFUSED);
     await expect(actions.acceptRequest('request-1')).rejects.toThrow(REFUSED);
     await expect(actions.declineRequest('request-1')).rejects.toThrow(REFUSED);
   });
@@ -45,6 +43,7 @@ describe('the /ui remote access samples', () => {
     ]);
     expect(await devices.selectDevice('k3x9')).toMatchObject({ instanceId: 'k3x9' });
     expect(await devices.selectDevice('w4t8')).toBeNull();
+    expect(await devices.listWaitingDevices()).toEqual([]);
     await expect(dashboard.readSession()).rejects.toThrow(REFUSED);
   });
 

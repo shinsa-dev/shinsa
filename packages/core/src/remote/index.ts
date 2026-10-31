@@ -121,7 +121,6 @@ export {
 } from './placement.ts';
 export type {
   AccessRequest,
-  LinkKind,
   PairingView,
   RemoteDevice,
   RemoteLink,

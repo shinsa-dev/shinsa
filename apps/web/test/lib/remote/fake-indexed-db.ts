@@ -31,6 +31,7 @@ export function createFakeIndexedDb(options: { fail?: boolean; error?: DOMExcept
       values.delete(key);
       return settle(undefined);
     },
+    getAllKeys: () => settle([...values.keys()]),
   };
 
   const database = {

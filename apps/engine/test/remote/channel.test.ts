@@ -24,7 +24,7 @@ interface Harness {
   machineKey: string;
   enrolled: Set<string>;
   seen: string[];
-  access: { answer: AccessAnswer; asked: (string | null)[] };
+  access: { answer: AccessAnswer; asked: (string | null)[]; waiting: AccessAnswer | null };
 }
 
 async function createHarness(respond?: (request: Request) => Promise<Response>, maxBodyBytes = 1024) {
@@ -42,7 +42,7 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
     machineKey,
     enrolled: new Set<string>(),
     seen: [],
-    access: { answer: { kind: 'refused', reason: 'This link was turned off.' }, asked: [] },
+    access: { answer: { kind: 'refused', reason: 'This link was turned off.' }, asked: [], waiting: null },
   } as unknown as Harness;
   const host: ChannelHost = {
     resolveMachineKey: () => Promise.resolve({ publicKey: machineKey, privateKey: machine.privateKey }),
@@ -51,6 +51,7 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
       harness.access.asked.push(name);
       return Promise.resolve(harness.access.answer);
     },
+    resumeAccess: () => harness.access.waiting,
     recordSeen: (device) => harness.seen.push(device),
     hub: {
       open: (socket) => {
@@ -160,6 +161,21 @@ describe('the sealed channel', () => {
     await until(() => harness.sent.length > 0);
     expect(JSON.parse(harness.sent[0] as string)).toEqual({ type: 'pending' });
     expect(harness.access.asked).toEqual(['Bob iPhone']);
+    decision.decide(true);
+    await until(() => harness.sent.length >= 3);
+    const session = await start.finish(harness.sent[1] as string);
+    expect(await session.open(harness.sent[2] as Bytes)).toEqual({ t: 'ready' });
+  });
+
+  test('a device that asked before comes back without its link and waits on the same request', async () => {
+    const harness = await createHarness();
+    const decision = createDecision();
+    harness.access.waiting = decision.answer;
+    const start = await startHandshake({ machineKey: harness.machineKey, device: await createKeyPair() });
+    void harness.channel.receive(start.hello);
+    await until(() => harness.sent.length > 0);
+    expect(JSON.parse(harness.sent[0] as string)).toEqual({ type: 'pending' });
+    expect(harness.access.asked).toEqual([]);
     decision.decide(true);
     await until(() => harness.sent.length >= 3);
     const session = await start.finish(harness.sent[1] as string);

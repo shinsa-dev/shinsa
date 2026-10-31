@@ -5,12 +5,10 @@ import {
   describeAccessRequest,
   describeDeviceDetail,
   describeDeviceSeen,
-  describeLinkAge,
   describeMemberSince,
   describeRemoteStatus,
   LINK_COPY,
   resolveQrImage,
-  selectLink,
 } from '@/lib/remote-access.ts';
 import { createRemoteSnapshot } from '../support/remote-access.ts';
 
@@ -69,41 +67,28 @@ describe('remote access words', () => {
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
   });
 
-  it('finds each kind of link and says how old it is', () => {
-    const link = { kind: 'invite' as const, url: 'u', createdAt: NOW - 3_600_000 };
-    const snapshot = createRemoteSnapshot({ links: [link] });
-    expect(selectLink(snapshot, 'invite')).toBe(link);
-    expect(selectLink(snapshot, 'device')).toBeNull();
-    expect(selectLink(null, 'device')).toBeNull();
-    expect(describeLinkAge(link, NOW)).toMatch(/^Made .*\. It works until you turn it off\.$/);
-    expect(LINK_COPY.device.intro).toContain('your own devices');
-    expect(LINK_COPY.invite.share).toContain('nothing opens until you accept');
+  it('says what the one link does', () => {
+    expect(LINK_COPY.intro).toContain('your own devices and for other people');
+    expect(LINK_COPY.share).toContain('The link works until you turn it off.');
   });
 
-  it('says who asks for what, and what accepting does', () => {
+  it('says what each request asks for, and what accepting does, in a few words', () => {
     const kai = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
     const mona = { id: '1', login: 'mona', name: null, avatarUrl: null };
     const request = {
       id: 'r1',
-      kind: 'invite' as const,
       publicKey: 'k',
       deviceName: 'Kai iPhone',
       user: kai,
       requestedAt: NOW - 60_000,
     };
-    expect(describeAccessRequest(request, NOW)).toMatch(/^Kai iPhone · Invite · Asked /);
-    expect(describeAccessRequest({ ...request, kind: 'device' }, NOW)).toContain(' · Add device · ');
+    expect(describeAccessRequest(request, NOW)).toMatch(/^Kai iPhone · Asked /);
     const access = { owner: mona, members: [] };
-    expect(describeAcceptOutcome(request, access)).toBe(
-      '@kai joins this machine with full control, and Kai iPhone is added.'
-    );
+    expect(describeAcceptOutcome(request, access)).toBe('Kai Lane joined.');
     const member = { ...access, members: [{ user: kai, addedAt: 0 }] };
-    expect(describeAcceptOutcome(request, member)).toBe('Kai iPhone is added for @kai.');
-    expect(describeAcceptOutcome({ ...request, user: mona }, access)).toBe('Kai iPhone is added for @mona.');
-    expect(describeAcceptOutcome({ ...request, kind: 'device' }, access)).toBe(
-      'Kai iPhone is added for @kai.'
-    );
-    expect(describeAcceptOutcome(request, null)).toBe('Kai iPhone is added for @kai.');
+    expect(describeAcceptOutcome(request, member)).toBe('Kai iPhone is added.');
+    expect(describeAcceptOutcome({ ...request, user: mona }, access)).toBe('Kai iPhone is added.');
+    expect(describeAcceptOutcome(request, null)).toBe('Kai iPhone is added.');
   });
 
   it('says which member added a device and when a member joined', () => {

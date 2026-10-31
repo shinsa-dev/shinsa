@@ -1,4 +1,4 @@
-import { DomainError, type LinkKind } from '@shinsa/core';
+import { DomainError } from '@shinsa/core';
 import { type JsonObject, readJsonObject } from '../http/body.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import type { Remote } from './index.ts';
@@ -7,15 +7,6 @@ function readText(fields: JsonObject, name: string, message: string) {
   const value = fields[name];
   if (typeof value !== 'string' || !value.trim()) throw new DomainError(`${name}_invalid`, message);
   return value;
-}
-
-function readLinkKind(fields: JsonObject): LinkKind {
-  const kind = fields.kind;
-  if (kind === 'device' || kind === 'invite') return kind;
-  throw new DomainError(
-    'kind_invalid',
-    'Say which link: device for your own devices, or invite for someone else.'
-  );
 }
 
 export function createRemoteRoutes(remote: Remote): ApiRoute[] {
@@ -45,12 +36,8 @@ export function createRemoteRoutes(remote: Remote): ApiRoute[] {
     }),
     post('/disable', () => remote.disable()),
     post('/remove', () => remote.remove()),
-    post('/links/create', async (fields) => {
-      await remote.createLink(readLinkKind(fields));
-    }),
-    post('/links/remove', async (fields) => {
-      await remote.removeLink(readLinkKind(fields));
-    }),
+    post('/link/create', () => remote.createLink()),
+    post('/link/remove', () => remote.removeLink()),
     post('/requests/accept', async (fields) => {
       await remote.acceptRequest(readText(fields, 'requestId', 'Name the access request to accept.'));
     }),

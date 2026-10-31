@@ -28,6 +28,7 @@ export function startFakeControlPlane(): FakeControlPlane {
       if (path === REMOTE_PATHS.pairStart)
         return Response.json({ claimCode: 'c', pollSecret: 's', url: 'u', expiresAt: 1 });
       if (path === REMOTE_PATHS.pairPoll) return Response.json({ status: 'pending' });
+      if (path === REMOTE_PATHS.machineInvites) return Response.json({ token: 'invite-token' });
       return Response.json({ ok: true });
     },
   });

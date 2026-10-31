@@ -139,7 +139,7 @@ src/
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (requestDeviceAccess: a link's access request, through an invite's connect token for an invite, asked again with the same key while it waits), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, login and initial, the member who added a device), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, login and initial, the member who added a device), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)
@@ -283,7 +283,7 @@ src/
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
         remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of
-        Add device's and Invite someone's links, a link's age and its QR code as an image, an access request and what accepting it does; connection/remote-access.ts reads it from the
+        the invite link's dialog and its QR code as an image, an access request and the short toast accepting it shows; connection/remote-access.ts reads it from the
         socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the

@@ -4,6 +4,7 @@ export interface KeyValueStore {
   read: (key: string) => Promise<unknown>;
   write: (key: string, value: unknown) => Promise<void>;
   remove: (key: string) => Promise<void>;
+  listKeys: () => Promise<string[]>;
 }
 
 export interface EnrolledDevice {
@@ -12,6 +13,7 @@ export interface EnrolledDevice {
   keys: CryptoKeyPair;
   enrolledAt: number;
   onMachine?: true;
+  waiting?: { machineName: string };
 }
 
 const DEVICE_PREFIX = 'device:';
@@ -33,10 +35,18 @@ export function createDeviceKeys() {
 }
 
 export function createDeviceStore(store: KeyValueStore) {
+  async function selectDevice(instanceId: string) {
+    const value = await store.read(`${DEVICE_PREFIX}${instanceId}`);
+    return isEnrolledDevice(value) && value.instanceId === instanceId ? value : null;
+  }
   return {
-    async selectDevice(instanceId: string) {
-      const value = await store.read(`${DEVICE_PREFIX}${instanceId}`);
-      return isEnrolledDevice(value) && value.instanceId === instanceId ? value : null;
+    selectDevice,
+    async listWaitingDevices() {
+      const ids = (await store.listKeys())
+        .filter((key) => key.startsWith(DEVICE_PREFIX))
+        .map((key) => key.slice(DEVICE_PREFIX.length));
+      const devices = await Promise.all(ids.map(selectDevice));
+      return devices.filter((device): device is EnrolledDevice => device?.waiting !== undefined);
     },
     writeDevice: (device: EnrolledDevice) => store.write(`${DEVICE_PREFIX}${device.instanceId}`, device),
     removeDevice: (instanceId: string) => store.remove(`${DEVICE_PREFIX}${instanceId}`),

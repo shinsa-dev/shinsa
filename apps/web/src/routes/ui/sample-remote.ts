@@ -50,22 +50,13 @@ export function createSampleRemote(now: number) {
       },
     ],
     access: { owner: SAMPLE_OWNER, members: [{ user: SAMPLE_MEMBER, addedAt: now - 30 * HOUR_MS }] },
-    links: [
-      {
-        kind: 'device',
-        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
-        createdAt: now - 2 * HOUR_MS,
-      },
-      {
-        kind: 'invite',
-        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH.Qm9iLWludml0ZS10b2tlbg',
-        createdAt: now - 26 * HOUR_MS,
-      },
-    ],
+    link: {
+      url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH.Qm9iLWludml0ZS10b2tlbg',
+      createdAt: now - 26 * HOUR_MS,
+    },
     requests: [
       {
         id: 'request-1',
-        kind: 'invite',
         publicKey: 'dev-4',
         deviceName: 'Bob iPhone',
         user: { id: '4', login: 'bob', name: 'Bob Stone', avatarUrl: null },
@@ -73,9 +64,8 @@ export function createSampleRemote(now: number) {
       },
       {
         id: 'request-2',
-        kind: 'device',
         publicKey: 'dev-5',
-        deviceName: 'Safari on Mac',
+        deviceName: 'Safari on iPad',
         user: SAMPLE_OWNER,
         requestedAt: now - 60_000,
       },
@@ -121,7 +111,7 @@ export function createSampleRemote(now: number) {
         ...connected,
         devices: [],
         access: { owner: SAMPLE_OWNER, members: [] },
-        links: [],
+        link: null,
         requests: [],
       },
     },
@@ -137,7 +127,7 @@ export function createSampleRemoteActions(): RemoteAccessActions {
     resume: answer,
     pause: answer,
     remove: answer,
-    forgetDevice: answer,
+    revokeDevice: answer,
     removeMember: answer,
     createLink: answer,
     removeLink: answer,
@@ -148,7 +138,7 @@ export function createSampleRemoteActions(): RemoteAccessActions {
 
 const SAMPLE_PARTNER = { id: '3', login: 'lee', name: 'Lee Park', avatarUrl: null };
 
-const SAMPLE_MACS: RemoteInstance[] = [
+export const SAMPLE_MACS: RemoteInstance[] = [
   {
     id: 'k3x9',
     name: 'Studio',
@@ -216,6 +206,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
             ? { instanceId: id, machineKey: 'key', keys: {} as CryptoKeyPair, enrolledAt: 0 }
             : null
         ),
+      listWaitingDevices: () => Promise.resolve([]),
       writeDevice: refuse,
       removeDevice: refuse,
     },

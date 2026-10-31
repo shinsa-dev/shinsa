@@ -1,16 +1,8 @@
-import type {
-  AccessRequest,
-  LinkKind,
-  RemoteAccess,
-  RemoteDevice,
-  RemoteLink,
-  RemoteMember,
-  RemoteSnapshot,
-} from '@shinsa/core';
+import type { AccessRequest, RemoteAccess, RemoteDevice, RemoteMember, RemoteSnapshot } from '@shinsa/core';
 import { encode } from 'uqr';
 import { formatSince, formatUntil } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
-import { selectDeviceMember } from '@/lib/remote/users.ts';
+import { describeUserName, selectDeviceMember } from '@/lib/remote/users.ts';
 
 export const REMOTE_ACCESS_SECTION = 'Remote access';
 
@@ -60,7 +52,7 @@ export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
 export function describeDeviceDetail(device: RemoteDevice, access: RemoteAccess | null, now = Date.now()) {
   const member = selectDeviceMember(access, device);
   const seen = describeDeviceSeen(device, now);
-  return member ? `${seen} · Added by @${member.login}` : seen;
+  return member ? `${seen} · Added by ${describeUserName(member)}` : seen;
 }
 
 export function describeMemberSince(member: RemoteMember, now = Date.now()) {
@@ -71,58 +63,29 @@ export function canEnrollDevices(snapshot: RemoteSnapshot | null) {
   return snapshot?.paired === true && snapshot.enabled && snapshot.status !== 'revoked';
 }
 
-interface LinkCopy {
-  title: string;
-  intro: string;
-  share: string;
-  off: string;
-}
-
-export const LINK_COPY: Record<LinkKind, LinkCopy> = {
-  device: {
-    title: 'Add a device',
-    intro:
-      'Make a link for your own devices. Open it on a browser or a phone, sign in with your GitHub account and ask for access. You accept each request here.',
-    share:
-      'Scan this on the phone, or open the link on the device you are adding. Each device names itself and asks for access, which you accept here. The link works until you turn it off.',
-    off: 'Nobody can ask for access with the old link any more.',
-  },
-  invite: {
-    title: 'Invite someone',
-    intro:
-      'Make a link for other people. Whoever opens it signs in with their own GitHub account and asks for access. Accepting gives them full control of this machine.',
-    share:
-      'Share this link with the people you want on this machine. Each asks for access with their GitHub account, and nothing opens until you accept. The link works until you turn it off.',
-    off: 'Nobody can ask to join with the old link any more.',
-  },
-};
-
-export function selectLink(snapshot: RemoteSnapshot | null, kind: LinkKind) {
-  return snapshot?.links.find((link) => link.kind === kind) ?? null;
-}
-
-export function describeLinkAge(link: RemoteLink, now = Date.now()) {
-  return `${formatSince('Made', link.createdAt, now)}. It works until you turn it off.`;
-}
-
-const REQUEST_KIND: Record<LinkKind, string> = {
-  device: 'Add device',
-  invite: 'Invite',
+export const LINK_COPY = {
+  title: 'Invite link',
+  intro:
+    'Make one link for your own devices and for other people. Whoever opens it signs in with GitHub and asks for access. Nothing opens until you accept.',
+  share:
+    'Open it on your own device, or share it. Whoever opens it signs in with GitHub and asks for access, which you accept here. Accepting someone else gives them full control. The link works until you turn it off.',
 };
 
 export function describeAccessRequest(request: AccessRequest, now = Date.now()) {
-  return `${request.deviceName} · ${REQUEST_KIND[request.kind]} · ${formatSince('Asked', request.requestedAt, now)}`;
+  return `${request.deviceName} · ${formatSince('Asked', request.requestedAt, now)}`;
+}
+
+function joinsMachine(request: AccessRequest, access: RemoteAccess | null) {
+  return (
+    access !== null &&
+    access.owner.id !== request.user.id &&
+    !access.members.some((member) => member.user.id === request.user.id)
+  );
 }
 
 export function describeAcceptOutcome(request: AccessRequest, access: RemoteAccess | null) {
-  const joins =
-    request.kind === 'invite' &&
-    access !== null &&
-    access.owner.id !== request.user.id &&
-    !access.members.some((member) => member.user.id === request.user.id);
-  return joins
-    ? `@${request.user.login} joins this machine with full control, and ${request.deviceName} is added.`
-    : `${request.deviceName} is added for @${request.user.login}.`;
+  if (joinsMachine(request, access)) return `${describeUserName(request.user)} joined.`;
+  return `${request.deviceName} is added.`;
 }
 
 function resolveQrPath(text: string) {

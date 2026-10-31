@@ -1264,10 +1264,10 @@ arrived, never from the page.
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
 `machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`), `devices` (`RemoteDevice`: `publicKey`,
 `name`, `enrolledAt`, `lastSeenAt`, `userId`: the GitHub account the device was added for, null for a device from
-before members), `access` (the `RemoteAccess` the last heartbeat answered, null until one did), `links`
-(`RemoteLink`: `kind`, a `LinkKind`, `device` for Add device or `invite` for Invite someone, `url` and `createdAt`)
-and `requests` (`AccessRequest`: `id`, `kind`, `publicKey`, `deviceName`, `user`, a `RemoteUser`, and
-`requestedAt`).
+before members), `access` (the `RemoteAccess` the last heartbeat answered, null until one did), `link`
+(`RemoteLink`: `url` and `createdAt`, the one invite link, or null while it is off) and `requests` (`AccessRequest`:
+`id`, `publicKey`, `deviceName`, `user`, a `RemoteUser`, and `requestedAt`). The enroll fragment
+(`EnrollFragment`) is `<instance>.<machine key>.<secret>.<invite token>`, all four parts required.
 
 ## Where it lives
 

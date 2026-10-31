@@ -210,20 +210,18 @@ export interface EnrollFragment {
   instanceId: string;
   machineKey: string;
   secret: string;
-  invite: string | null;
+  invite: string;
 }
 
 export function serializeEnrollFragment(fragment: EnrollFragment) {
-  const parts = [fragment.instanceId, fragment.machineKey, fragment.secret];
-  return [...parts, ...(fragment.invite ? [fragment.invite] : [])].join('.');
+  return [fragment.instanceId, fragment.machineKey, fragment.secret, fragment.invite].join('.');
 }
 
 export function parseEnrollFragment(fragment: string): EnrollFragment | null {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length < 3 || parts.length > 4 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part)))
-    return null;
-  const [instanceId, machineKey, secret, invite] = parts as [string, string, string, string?];
-  return { instanceId, machineKey, secret, invite: invite ?? null };
+  if (parts.length !== 4 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
+  const [instanceId, machineKey, secret, invite] = parts as [string, string, string, string];
+  return { instanceId, machineKey, secret, invite };
 }
 
 export function resolveEnrollUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {

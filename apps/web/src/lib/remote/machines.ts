@@ -17,6 +17,11 @@ export interface MachineRow {
   access: string;
 }
 
+function resolveDeviceAccess(device: EnrolledDevice | null) {
+  if (!device) return 'Not added on this device';
+  return device.waiting ? 'Waiting for an answer' : 'In this dashboard';
+}
+
 export function describeMachine(
   instance: RemoteInstance,
   device: EnrolledDevice | null,
@@ -25,7 +30,7 @@ export function describeMachine(
   const seen =
     instance.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', instance.lastSeenAt, now);
   const current = device?.onMachine === true;
-  const added = device ? 'In this dashboard' : 'Not added on this device';
+  const added = resolveDeviceAccess(device);
   const access =
     instance.role === 'member' ? `Shared by ${describeUserName(instance.owner)} · ${added}` : added;
   return {

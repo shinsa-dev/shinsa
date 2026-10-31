@@ -5,7 +5,6 @@ import { createFakeClient, runSpec } from './fixtures.ts';
 
 const REQUEST = {
   id: 'r1',
-  kind: 'invite',
   publicKey: 'dev-3',
   deviceName: 'Kai iPhone',
   user: { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null },
@@ -23,7 +22,7 @@ const OFF: RemoteSnapshot = {
   pairing: null,
   devices: [],
   access: null,
-  links: [],
+  link: null,
   requests: [],
 };
 
@@ -87,7 +86,9 @@ describe('shinsa remote', () => {
     );
     expect(paused.text).toContain('Remote access is paused for Studio, signed in as unknown.');
     expect(paused.text).toContain('No devices are added.');
-    expect(paused.text).toContain('No one else has access. Invite someone with `shinsa remote link invite`.');
+    expect(paused.text).toContain(
+      'No one else has access. Share the link from `shinsa remote link` to let someone ask.'
+    );
   });
 
   test('turns it on, removes it and forgets devices through their routes', async () => {
@@ -106,39 +107,31 @@ describe('shinsa remote', () => {
     ]);
   });
 
-  test('makes and turns off links, and shows them with the waiting requests', async () => {
+  test('makes and turns off the link, and shows it with the waiting requests', async () => {
     const linked: RemoteSnapshot = {
       ...ON,
-      links: [
-        { kind: 'device', url: 'https://app.shinsa.dev/enroll#k3x9.key.secret', createdAt: 0 },
-        { kind: 'invite', url: 'https://app.shinsa.dev/enroll#k3x9.key.secret.invite', createdAt: 0 },
-      ],
+      link: { url: 'https://app.shinsa.dev/enroll#k3x9.key.secret.invite', createdAt: 0 },
       requests: [REQUEST],
     };
     const fake = createFakeClient({
-      '/api/remote/links/create': linked,
-      '/api/remote/links/remove': ON,
+      '/api/remote/link/create': linked,
+      '/api/remote/link/remove': ON,
       '/api/remote': linked,
     });
-    const device = await runSpec(fake, ['remote', 'link', 'device']);
-    expect(device.text).toBe(
-      'Open this link on your device and sign in as you. Each device asks for access, which you accept or decline:\nhttps://app.shinsa.dev/enroll#k3x9.key.secret'
+    const link = await runSpec(fake, ['remote', 'link']);
+    expect(link.text).toBe(
+      'Open this link on your own device, or share it. Whoever opens it signs in with GitHub and asks for access, which you accept or decline:\nhttps://app.shinsa.dev/enroll#k3x9.key.secret.invite'
     );
-    const invite = await runSpec(fake, ['remote', 'link', 'invite']);
-    expect(invite.text).toContain('Anyone who opens it signs in with GitHub');
-    await runSpec(fake, ['remote', 'link-off', 'invite']);
+    await runSpec(fake, ['remote', 'link-off']);
     expect(fake.posts).toEqual([
-      { path: '/api/remote/links/create', body: { kind: 'device' } },
-      { path: '/api/remote/links/create', body: { kind: 'invite' } },
-      { path: '/api/remote/links/remove', body: { kind: 'invite' } },
+      { path: '/api/remote/link/create', body: {} },
+      { path: '/api/remote/link/remove', body: {} },
     ]);
     const status = await runSpec(fake, ['remote', 'status']);
-    expect(status.text).toContain(
-      'Add device (your own account) link: https://app.shinsa.dev/enroll#k3x9.key.secret'
-    );
+    expect(status.text).toContain('Invite link: https://app.shinsa.dev/enroll#k3x9.key.secret.invite');
     expect(status.text).toContain('  r1 Kai Lane (@kai) asks to add Kai iPhone');
-    const none = createFakeClient({ '/api/remote/links/create': ON });
-    expect((await runSpec(none, ['remote', 'link', 'device'])).text).toContain('No link was made.');
+    const none = createFakeClient({ '/api/remote/link/create': ON });
+    expect((await runSpec(none, ['remote', 'link'])).text).toContain('No link was made.');
   });
 
   test('accepts and declines a request by its id or by the login that asked', async () => {

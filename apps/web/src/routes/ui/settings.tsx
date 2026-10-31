@@ -41,6 +41,7 @@ import {
   createSampleMachineServices,
   createSampleRemote,
   createSampleRemoteActions,
+  SAMPLE_MACS,
 } from './sample-remote.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
@@ -405,6 +406,7 @@ export function SettingsSpecimens() {
         <div className='w-full max-w-xl'>
           <MachineAccessRequests
             machines={[{ id: 'k3x9', name: 'Studio', remote: remote[2]?.snapshot ?? null }]}
+            instances={SAMPLE_MACS}
           />
         </div>
       </Specimen>

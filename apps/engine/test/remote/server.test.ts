@@ -162,7 +162,7 @@ async function openChannel(
   port: number | undefined,
   enrollSecret: string,
   machineKey: string,
-  as: { userId?: string; device?: CryptoKeyPair; name?: string; onPending?: () => void } = {}
+  as: { userId?: string; device?: CryptoKeyPair; name?: string; onPending?: (socket: WebSocket) => void } = {}
 ): Promise<OpenChannel> {
   const token = await createToken(undefined, as.userId);
   const socket = new WebSocket(`ws://127.0.0.1:${port}/remote?token=${encodeURIComponent(token)}`, {
@@ -200,7 +200,7 @@ async function openChannel(
   socket.send(handshake.hello);
   let first = (await take()) as string;
   if (first === '{"type":"pending"}') {
-    as.onPending?.();
+    as.onPending?.(socket);
     first = (await take()) as string;
   }
   const session = await handshake.finish(first);
@@ -496,9 +496,7 @@ describe('managing remote access on the machine', () => {
     for (const route of ['/api/remote/enable', '/api/remote/disable', '/api/remote/remove']) {
       expect(await readError(await local(route, {}))).toBe('remote_not_paired');
     }
-    expect(await readError(await local('/api/remote/links/create', { kind: 'device' }))).toBe(
-      'remote_not_paired'
-    );
+    expect(await readError(await local('/api/remote/link/create', {}))).toBe('remote_not_paired');
     warn.mockRestore();
   });
 
@@ -548,9 +546,8 @@ describe('links, access requests and members', () => {
     return () => Response.json({ ok: true, ...access });
   }
 
-  async function readLink(remote: Remote, kind: 'device' | 'invite') {
-    const link = remote.snapshot().links.find((entry) => entry.kind === kind);
-    return parseEnrollFragment(new URL(link?.url ?? 'https://x').hash);
+  function readLink(remote: Remote) {
+    return parseEnrollFragment(new URL(remote.snapshot().link?.url ?? 'https://x').hash);
   }
 
   async function waitForRequest(remote: Remote) {
@@ -558,17 +555,16 @@ describe('links, access requests and members', () => {
     return remote.snapshot().requests[0]?.id ?? '';
   }
 
-  test('a device link is reusable, asks for access, and adds the device once accepted', async () => {
-    const { remote, local, port } = await start();
-    expect(await readError(await local('/api/remote/links/create', { kind: 'other' }))).toBe('kind_invalid');
-    const made = await readSnapshot(await local('/api/remote/links/create', { kind: 'device' }));
-    expect(made.links).toEqual([expect.objectContaining({ kind: 'device' })]);
-    const replaced = await readLink(remote, 'device');
-    await local('/api/remote/links/create', { kind: 'device' });
-    const fragment = await readLink(remote, 'device');
-    expect(fragment).toMatchObject({ instanceId: 'k3x9', invite: null });
-    expect(fragment?.secret).not.toBe(replaced?.secret);
-    expect(remote.snapshot().links).toHaveLength(1);
+  test('the one link is reusable, kept until turned off, and adds the owner’s device once accepted', async () => {
+    const { remote, local, port, plane } = await start();
+    const made = await readSnapshot(await local('/api/remote/link/create', {}));
+    expect(made.link).toEqual(expect.objectContaining({ url: expect.stringContaining('/enroll#k3x9.') }));
+    const first = readLink(remote);
+    await local('/api/remote/link/create', {});
+    const fragment = readLink(remote);
+    expect(fragment).toMatchObject({ instanceId: 'k3x9', invite: 'invite-token' });
+    expect(fragment?.secret).toBe(first?.secret);
+    expect(plane.calls.filter((call) => call.path === REMOTE_PATHS.machineInvites)).toHaveLength(1);
     const machine = await remote.store.resolveMachineKey();
     for (const name of ['iPhone', 'Mac']) {
       let pending = false;
@@ -579,7 +575,7 @@ describe('links, access requests and members', () => {
         },
       });
       const requestId = await waitForRequest(remote);
-      expect(remote.snapshot().requests[0]).toMatchObject({ kind: 'device', deviceName: name, user: OWNER });
+      expect(remote.snapshot().requests[0]).toMatchObject({ deviceName: name, user: OWNER });
       const accepted = await readSnapshot(await local('/api/remote/requests/accept', { requestId }));
       expect(accepted.requests).toEqual([]);
       const channel = await opening;
@@ -595,8 +591,8 @@ describe('links, access requests and members', () => {
 
   test('a device that asks again keeps its one request, and several requests wait side by side', async () => {
     const { remote, local, port } = await start();
-    await local('/api/remote/links/create', { kind: 'device' });
-    const secret = (await readLink(remote, 'device'))?.secret ?? '';
+    await local('/api/remote/link/create', {});
+    const secret = readLink(remote)?.secret ?? '';
     const machine = await remote.store.resolveMachineKey();
     const phone = await createKeyPair();
     const first = settleChannel(
@@ -623,10 +619,35 @@ describe('links, access requests and members', () => {
     expect(await laptop).toContain('declined');
   });
 
+  test('a device that left comes back without the link and waits on its request, or is refused once it is gone', async () => {
+    const { remote, local, port } = await start();
+    await local('/api/remote/link/create', {});
+    const secret = readLink(remote)?.secret ?? '';
+    const machine = await remote.store.resolveMachineKey();
+    const phone = await createKeyPair();
+    const left = settleChannel(
+      openChannel(remote.appOrigin, port, secret, machine.publicKey, {
+        device: phone,
+        onPending: (socket) => socket.close(),
+      })
+    );
+    const requestId = await waitForRequest(remote);
+    expect(await left).toBe('The channel closed.');
+    const back = settleChannel(openChannel(remote.appOrigin, port, '', machine.publicKey, { device: phone }));
+    const other = settleChannel(
+      openChannel(remote.appOrigin, port, '', machine.publicKey, { device: phone, userId: KAI.id })
+    );
+    expect(await other).toContain('not added');
+    await local('/api/remote/requests/accept', { requestId });
+    expect(await back).toBe('opened');
+    const stranger = settleChannel(openChannel(remote.appOrigin, port, '', machine.publicKey));
+    expect(await stranger).toContain('Ask for access with its link first');
+  });
+
   test('a declined request is forgotten and the browser is told', async () => {
     const { remote, local, port } = await start();
-    await local('/api/remote/links/create', { kind: 'device' });
-    const fragment = await readLink(remote, 'device');
+    await local('/api/remote/link/create', {});
+    const fragment = readLink(remote);
     const machine = await remote.store.resolveMachineKey();
     const opening = settleChannel(
       openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey)
@@ -639,41 +660,37 @@ describe('links, access requests and members', () => {
     expect(remote.snapshot().devices).toEqual([]);
   });
 
-  test('a device link is refused for another account, before the owner is known, and once turned off', async () => {
-    const { remote, local, port } = await start();
-    await local('/api/remote/links/create', { kind: 'device' });
-    const secret = (await readLink(remote, 'device'))?.secret ?? '';
+  test('the link is refused before the owner is known and once turned off', async () => {
+    const { remote, local, port, plane } = await start();
+    await local('/api/remote/link/create', {});
+    const secret = readLink(remote)?.secret ?? '';
     const machine = await remote.store.resolveMachineKey();
-    await expect(
-      openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id })
-    ).rejects.toThrow('owner of this machine only');
     await expect(openChannel(remote.appOrigin, port, '', machine.publicKey)).rejects.toThrow('not added');
-    const off = await readSnapshot(await local('/api/remote/links/remove', { kind: 'device' }));
-    expect(off.links).toEqual([]);
+    const off = await readSnapshot(await local('/api/remote/link/remove', {}));
+    expect(off.link).toBeNull();
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineInviteRemove)).toBe(true);
     await expect(openChannel(remote.appOrigin, port, secret, machine.publicKey)).rejects.toThrow(
       'turned off'
     );
     const unknown = await start({ access: null });
-    await unknown.local('/api/remote/links/create', { kind: 'device' });
+    await unknown.local('/api/remote/link/create', {});
     const unknownKey = await unknown.remote.store.resolveMachineKey();
     await expect(
       openChannel(
         unknown.remote.appOrigin,
         unknown.port,
-        (await readLink(unknown.remote, 'device'))?.secret ?? '',
+        readLink(unknown.remote)?.secret ?? '',
         unknownKey.publicKey
       )
     ).rejects.toThrow('still connecting');
   });
 
-  test('accepting an invite request makes the account a member and adds its device for it', async () => {
+  test('accepting a request from another account makes it a member and adds its device for it', async () => {
     const { remote, local, port, plane } = await start();
-    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
     plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => Response.json({ user: KAI, addedAt: 5 }));
-    await local('/api/remote/links/create', { kind: 'invite' });
-    const fragment = await readLink(remote, 'invite');
-    expect(fragment?.invite).toBe('invite-token');
+    await local('/api/remote/link/create', {});
+    const fragment = readLink(remote);
     const machine = await remote.store.resolveMachineKey();
     const opening = openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
       userId: KAI.id,
@@ -681,7 +698,6 @@ describe('links, access requests and members', () => {
     });
     const requestId = await waitForRequest(remote);
     expect(remote.snapshot().requests[0]).toMatchObject({
-      kind: 'invite',
       user: KAI,
       deviceName: 'Kai iPhone',
     });
@@ -694,24 +710,17 @@ describe('links, access requests and members', () => {
     expect(remote.snapshot().devices).toEqual([
       expect.objectContaining({ name: 'Kai iPhone', userId: KAI.id }),
     ]);
-    await local('/api/remote/links/remove', { kind: 'invite' });
-    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineInviteRemove)).toBe(true);
   });
 
-  test('accepting an invite request on a machine with every member place taken says so and keeps the request', async () => {
+  test('accepting a request on a machine with every member place taken says so and keeps the request', async () => {
     const { remote, local, port, plane } = await start();
-    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
     plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => new Response('', { status: 409 }));
-    await local('/api/remote/links/create', { kind: 'invite' });
+    await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
-    void openChannel(
-      remote.appOrigin,
-      port,
-      (await readLink(remote, 'invite'))?.secret ?? '',
-      machine.publicKey,
-      { userId: KAI.id }
-    ).catch((error: unknown) => error);
+    void openChannel(remote.appOrigin, port, readLink(remote)?.secret ?? '', machine.publicKey, {
+      userId: KAI.id,
+    }).catch((error: unknown) => error);
     const requestId = await waitForRequest(remote);
     expect(await readError(await local('/api/remote/requests/accept', { requestId }))).toBe('members_full');
     expect(remote.snapshot().requests.map((entry) => entry.id)).toEqual([requestId]);
@@ -723,14 +732,13 @@ describe('links, access requests and members', () => {
     remote.declineRequest(requestId);
   });
 
-  test('an invite request from the owner or a member adds only the device', async () => {
+  test('a request from a member adds only the device', async () => {
     const { remote, local, port, plane } = await start({
       access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
     });
-    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
-    await local('/api/remote/links/create', { kind: 'invite' });
-    const fragment = await readLink(remote, 'invite');
+    await local('/api/remote/link/create', {});
+    const fragment = readLink(remote);
     const machine = await remote.store.resolveMachineKey();
     const opening = openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
       userId: KAI.id,
@@ -740,41 +748,29 @@ describe('links, access requests and members', () => {
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
   });
 
-  test('an invite request is refused when the machine cannot check who asked', async () => {
+  test('a request is refused when the machine cannot check who asked', async () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, local, port, plane } = await start();
-    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => new Response('', { status: 404 }));
-    await local('/api/remote/links/create', { kind: 'invite' });
+    await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
     await expect(
-      openChannel(
-        remote.appOrigin,
-        port,
-        (await readLink(remote, 'invite'))?.secret ?? '',
-        machine.publicKey,
-        {
-          userId: KAI.id,
-        }
-      )
+      openChannel(remote.appOrigin, port, readLink(remote)?.secret ?? '', machine.publicKey, {
+        userId: KAI.id,
+      })
     ).rejects.toThrow('could not check who you are');
     warn.mockRestore();
   });
 
   test('approving works from a device that reaches the machine remotely, and links stay at the keyboard', async () => {
     const { remote, local, port } = await start();
-    await local('/api/remote/links/create', { kind: 'device' });
+    await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
     const admin = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
       device: await addDevice(remote),
     });
     expect(await admin.next()).toEqual({ t: 'ready' });
-    const opening = openChannel(
-      remote.appOrigin,
-      port,
-      (await readLink(remote, 'device'))?.secret ?? '',
-      machine.publicKey
-    );
+    const opening = openChannel(remote.appOrigin, port, readLink(remote)?.secret ?? '', machine.publicKey);
     const requestId = await waitForRequest(remote);
     const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
     const post = async (id: string, path: string, json: unknown) => {
@@ -792,7 +788,7 @@ describe('links, access requests and members', () => {
         if (message.t === 'response' && message.id === id) return message.status;
       }
     };
-    expect(await post('a', '/api/remote/links/create', { kind: 'invite' })).toBe(403);
+    expect(await post('a', '/api/remote/link/create', {})).toBe(403);
     expect(await post('b', '/api/remote/requests/accept', { requestId })).toBe(200);
     expect(await (await opening).next()).toEqual({ t: 'ready' });
   });
@@ -891,14 +887,14 @@ describe('links, access requests and members', () => {
 
   test('removing the machine forgets who has access, its links and its requests, and tells waiting browsers no', async () => {
     const { remote, local, port } = await start();
-    await local('/api/remote/links/create', { kind: 'device' });
+    await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
     const opening = settleChannel(
-      openChannel(remote.appOrigin, port, (await readLink(remote, 'device'))?.secret ?? '', machine.publicKey)
+      openChannel(remote.appOrigin, port, readLink(remote)?.secret ?? '', machine.publicKey)
     );
     await waitForRequest(remote);
     const removed = await readSnapshot(await local('/api/remote/remove', {}));
-    expect(removed).toMatchObject({ access: null, links: [], requests: [] });
+    expect(removed).toMatchObject({ access: null, link: null, requests: [] });
     expect(await opening).toBe('The channel closed.');
   });
 });

@@ -38,7 +38,7 @@ const ORIGIN = `http://${HOST}:${PORT}`;
 const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
-const USER: RemoteUser = { id: '1', login: 'you', name: null, avatarUrl: null };
+const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 const PLACE = createPlacementAsker(createQuickCalls(new ProviderRegistry(), createSettings).classify);
 
 const LAPTOP_TASKS = [
@@ -398,8 +398,8 @@ async function main() {
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {
-        await enrolling.remote.createLink('device');
-        const link = enrolling.remote.snapshot().links.find((entry) => entry.kind === 'device');
+        await enrolling.remote.createLink();
+        const { link } = enrolling.remote.snapshot();
         const onMachine = url.searchParams.has('on');
         const target = link?.url ?? REMOTE_PATHS.app;
         return Response.redirect(onMachine ? target.replace('#', '?on=machine#') : target, 302);

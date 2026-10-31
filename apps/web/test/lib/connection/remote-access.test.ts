@@ -70,8 +70,8 @@ describe('remote access on this machine', () => {
       '/remove',
       '/devices/remove',
       '/members/remove',
-      '/links/create',
-      '/links/remove',
+      '/link/create',
+      '/link/remove',
       '/requests/accept',
       '/requests/decline',
     ])
@@ -81,9 +81,9 @@ describe('remote access on this machine', () => {
     await REMOTE_ACCESS_ACTIONS.resume();
     await REMOTE_ACCESS_ACTIONS.pause();
     await REMOTE_ACCESS_ACTIONS.remove();
-    await REMOTE_ACCESS_ACTIONS.forgetDevice('dev-1');
-    await REMOTE_ACCESS_ACTIONS.createLink('invite');
-    await REMOTE_ACCESS_ACTIONS.removeLink('device');
+    await REMOTE_ACCESS_ACTIONS.revokeDevice('dev-1');
+    await REMOTE_ACCESS_ACTIONS.createLink();
+    await REMOTE_ACCESS_ACTIONS.removeLink();
     await REMOTE_ACCESS_ACTIONS.acceptRequest('r1');
     await REMOTE_ACCESS_ACTIONS.declineRequest('r2');
     await REMOTE_ACCESS_ACTIONS.removeMember('7');
@@ -95,8 +95,8 @@ describe('remote access on this machine', () => {
       ['/api/remote/disable', {}],
       ['/api/remote/remove', {}],
       ['/api/remote/devices/remove', { publicKey: 'dev-1' }],
-      ['/api/remote/links/create', { kind: 'invite' }],
-      ['/api/remote/links/remove', { kind: 'device' }],
+      ['/api/remote/link/create', {}],
+      ['/api/remote/link/remove', {}],
       ['/api/remote/requests/accept', { requestId: 'r1' }],
       ['/api/remote/requests/decline', { requestId: 'r2' }],
       ['/api/remote/members/remove', { userId: '7' }],

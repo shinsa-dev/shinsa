@@ -46,9 +46,9 @@ describe('the remote contract', () => {
     expect(resolveRemoteHookUrl('k3x9', 's', 't', 'http://127.0.0.1:5183')).toBe(
       'http://127.0.0.1:5183/hooks/k3x9/s/t'
     );
-    const fragment = { instanceId: 'k3x9', machineKey: 'key', secret: 'secret', invite: null };
+    const fragment = { instanceId: 'k3x9', machineKey: 'key', secret: 'secret', invite: 'tok' };
     expect(resolveEnrollUrl(fragment, 'http://127.0.0.1:5183')).toBe(
-      'http://127.0.0.1:5183/enroll#k3x9.key.secret'
+      'http://127.0.0.1:5183/enroll#k3x9.key.secret.tok'
     );
   });
 
@@ -65,14 +65,7 @@ describe('the remote contract', () => {
     expect(parseRemoteHookPath('/hooks/a/b/c/d')).toBeNull();
   });
 
-  test('puts the enrollment secret and machine key in the fragment, never the path', () => {
-    const fragment = { instanceId: 'k3x9', machineKey: 'machine-key', secret: 'secret_1', invite: null };
-    const url = resolveEnrollUrl(fragment);
-    expect(url).toBe('https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1');
-    expect(parseEnrollFragment(new URL(url).hash)).toEqual(fragment);
-  });
-
-  test('carries an invite token as a fourth part of the fragment', () => {
+  test('puts the secret, the machine key and the invite token in the fragment, never the path', () => {
     const fragment = { instanceId: 'k3x9', machineKey: 'machine-key', secret: 'secret_1', invite: 'tok_2' };
     const url = resolveEnrollUrl(fragment);
     expect(url).toBe('https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1.tok_2');
@@ -81,6 +74,7 @@ describe('the remote contract', () => {
 
   test('refuses a broken enrollment fragment', () => {
     expect(parseEnrollFragment('#a.b')).toBeNull();
+    expect(parseEnrollFragment('#a.b.c')).toBeNull();
     expect(parseEnrollFragment('#a..c')).toBeNull();
     expect(parseEnrollFragment('#a.b.c=')).toBeNull();
     expect(parseEnrollFragment('#a.b.c.d.e')).toBeNull();

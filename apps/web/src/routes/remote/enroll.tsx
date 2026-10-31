@@ -10,7 +10,7 @@ import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { type EnrollInput, requestDeviceAccess } from '@/lib/remote/enroll.ts';
 import { clearEnrollFragment, MACHINE_ICON } from '@/lib/remote/mode.ts';
-import { RemoteBenefits, RemoteHero } from './shell.tsx';
+import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
 const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [
   {
@@ -40,14 +40,34 @@ function resolveBrowserDeviceName(invitee: RemoteUser | null) {
   return resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, invitee);
 }
 
-function WaitingNote({ invite }: { invite: boolean }) {
+function WaitingNote({ joining }: { joining: boolean }) {
   return (
     <p role='status' className='w-full text-pretty text-fg-2 text-xs'>
-      {invite
-        ? 'Request sent. Keep this page open until the machine’s owner accepts it.'
-        : 'Request sent. Accept it in Settings, Remote access on the machine, or on any device already added to it. Keep this page open.'}
+      {joining
+        ? 'Request sent. Once it is accepted, the machine shows up in Shinsa Cloud. You can close this page.'
+        : 'Request sent. Accept it in Settings > Remote access on the machine. You can close this page.'}
     </p>
   );
+}
+
+function useJoining(link: EnrollInput | null, dashboard: Pick<DashboardClient, 'listInstances'>) {
+  const [joining, setJoining] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!link) return;
+    let live = true;
+    dashboard.listInstances().then(
+      (instances) => {
+        if (live) setJoining(!instances.some((instance) => instance.id === link.instanceId));
+      },
+      () => {
+        if (live) setJoining(true);
+      }
+    );
+    return () => {
+      live = false;
+    };
+  }, [link, dashboard]);
+  return joining;
 }
 
 export function EnrollPage({
@@ -60,14 +80,16 @@ export function EnrollPage({
 }: {
   link: EnrollInput | null;
   user: RemoteUser;
-  dashboard: Pick<DashboardClient, 'requestConnect' | 'acceptInvite'>;
+  dashboard: Pick<DashboardClient, 'acceptInvite' | 'listInstances'>;
   devices: Pick<DeviceStore, 'writeDevice'>;
   request?: typeof requestDeviceAccess;
   resolveName?: (invitee: RemoteUser | null) => string;
 }) {
   const [state, setState] = React.useState<EnrollState>({ kind: 'ready' });
   const [fingerprint, setFingerprint] = React.useState<string | null>(null);
-  const [name, setName] = React.useState(() => resolveName(link?.invite ? user : null));
+  const joining = useJoining(link, dashboard);
+  const [edited, setEdited] = React.useState<string | null>(null);
+  const name = edited ?? resolveName(joining ? user : null);
   React.useEffect(() => {
     if (link) void resolveKeyFingerprint(link.machineKey).then(setFingerprint);
   }, [link]);
@@ -75,8 +97,7 @@ export function EnrollPage({
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a device'>
-          It is incomplete. On the machine, open Settings, Remote access and copy its Add device or Invite
-          someone link again.
+          {'It is incomplete. On the machine, open Settings > Remote access and copy its invite link again.'}
         </RemoteHero>
         <RemoteBenefits />
         <Button
@@ -89,6 +110,7 @@ export function EnrollPage({
         </Button>
       </section>
     );
+  if (joining === null) return <RemoteLoading label='Reading the link' />;
   const busy = state.kind === 'requesting' || state.kind === 'waiting';
   const submit = () => {
     setState({ kind: 'requesting' });
@@ -107,7 +129,7 @@ export function EnrollPage({
   };
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      {link.invite ? (
+      {joining ? (
         <RemoteHero icon='IconUserAdd' title='Join a shared machine'>
           Ask for access with your GitHub account. Once the machine’s owner accepts, this device has full
           control of that machine from anywhere.
@@ -142,7 +164,7 @@ export function EnrollPage({
             aria-label='Device name'
             maxLength={DEVICE_NAME_LIMIT}
             disabled={busy}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => setEdited(event.target.value)}
           />
         </Field>
         {state.kind === 'failed' && (
@@ -150,7 +172,7 @@ export function EnrollPage({
             {state.message}
           </p>
         )}
-        {state.kind === 'waiting' && <WaitingNote invite={link.invite !== null} />}
+        {state.kind === 'waiting' && <WaitingNote joining={joining} />}
         <Button type='submit' className='w-full' loading={busy} disabled={!name.trim()}>
           Request access
         </Button>

@@ -59,28 +59,19 @@ describe('remote.json', () => {
             'nope',
           ],
         },
-        links: [
-          { kind: 'device', secret: 's1', invite: null, createdAt: 1 },
-          { kind: 'invite', secret: 's2', invite: 'tok', createdAt: 2 },
-          { kind: 'invite', secret: 's3', createdAt: 3 },
-          { kind: 'other', secret: 's4', createdAt: 4 },
-          { kind: 'device', secret: 's5' },
-          'nope',
-        ],
+        link: { secret: 's2', invite: 'tok', createdAt: 2 },
         requests: [
           {
             id: 'r1',
-            kind: 'invite',
             publicKey: 'k1',
             deviceName: 'Bob iPhone',
             user: { id: '7', login: 'kai' },
             requestedAt: 9,
           },
-          { id: 'r2', kind: 'device', publicKey: 'k2', deviceName: 'Mac', user: { id: '1' }, requestedAt: 9 },
-          { id: 'r3', kind: 'device', publicKey: 'k3', deviceName: 'Mac', user: { id: '1', login: 'mona' } },
+          { id: 'r2', publicKey: 'k2', deviceName: 'Mac', user: { id: '1' }, requestedAt: 9 },
+          { id: 'r3', publicKey: 'k3', deviceName: 'Mac', user: { id: '1', login: 'mona' } },
           {
             id: 'r4',
-            kind: 'device',
             publicKey: 4,
             deviceName: 'Mac',
             user: { id: '1', login: 'mona' },
@@ -110,14 +101,10 @@ describe('remote.json', () => {
         owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
         members: [{ user: { id: '7', login: 'kai', name: null, avatarUrl: 'https://a/7' }, addedAt: 5 }],
       },
-      links: [
-        { kind: 'device', secret: 's1', invite: null, createdAt: 1 },
-        { kind: 'invite', secret: 's2', invite: 'tok', createdAt: 2 },
-      ],
+      link: { secret: 's2', invite: 'tok', createdAt: 2 },
       requests: [
         {
           id: 'r1',
-          kind: 'invite',
           publicKey: 'k1',
           deviceName: 'Bob iPhone',
           user: { id: '7', login: 'kai', name: null, avatarUrl: null },
@@ -145,9 +132,16 @@ describe('remote.json', () => {
     expect(warn).toHaveBeenCalled();
     writeFileSync(
       path,
-      JSON.stringify({ credentials: 'x', devices: 'x', access: { owner: 'mona' }, links: 'x', requests: 'x' })
+      JSON.stringify({
+        credentials: 'x',
+        devices: 'x',
+        access: { owner: 'mona' },
+        link: { secret: 's', invite: 'i' },
+        requests: 'x',
+      })
     );
     expect(readRemoteFile(path).credentials).toBeNull();
+    expect(readRemoteFile(path).link).toBeNull();
     expect(readRemoteFile(path).access).toBeNull();
     writeFileSync(path, JSON.stringify({ access: { owner: { id: '1', login: 'mona' }, members: 'x' } }));
     expect(readRemoteFile(path).access).toEqual({

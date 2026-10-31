@@ -2374,7 +2374,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
   `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, the enrolled devices (public key, name,
   enrolled and last seen, the GitHub account that added it), `access`, the owner and members the last heartbeat
-  answered, the two links (`links`: the kind, its secret, an invite's token and when it was made) and the access
+  answered, the one invite link (`link`: its secret, its invite token and when it was made) and the access
   requests waiting for an answer (`requests`). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
 - **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
   `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
@@ -2397,9 +2397,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
   off the endpoint; trust rests on the handshake.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
-  added is refused unless the hello carries a proof made with one of the machine's link secrets, which turns it into
-  an access request: the engine answers `pending` and holds the channel until the request is accepted (it then
-  finishes the handshake with `welcome`) or declined (`refused`). Both sides derive one AES-GCM key per
+  added is refused unless the hello carries a proof made with the machine's link secret, which turns it into
+  an access request, or the key already has a request waiting under the same GitHub account (a browser that asked,
+  left and came back, `resumeAccess`): the engine answers `pending` and holds the channel until the request is
+  accepted (it then finishes the handshake with `welcome`) or declined (`refused`). Both sides derive one AES-GCM key per
   direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
   fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
@@ -2412,32 +2413,35 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
   `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
-- **Links and access requests** (`Remote.createLink`, `removeLink`, `acceptRequest`, `declineRequest`): a machine
-  has at most two links, each a reusable secret (32 random bytes) kept in `remote.json` until it is turned off or made
-  again: Add device (`device`), for the owner's own devices, and Invite someone (`invite`), for any GitHub account,
-  which also asks Shinsa Cloud for an invite token over the machine token (`ControlClient.requestInvite`; turning it
-  off removes it there, `requestInviteRemoval`). The link is
-  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>`, an invite's with `.<invite token>` after it, and
-  everything after `#` stays in the browser. `shinsa remote link device|invite` makes one (replacing the one
-  before) and `shinsa remote link-off device|invite` turns it off. Whoever opens a link signs in with GitHub, names
-  the device (filled in from the browser and system, for an invite with their GitHub first name in front,
-  `resolveDeviceName`) and asks for access: the hello carries the link's proof and the name (`DEVICE_NAME_LIMIT`, 60).
-  The engine checks the proof against each link (`verifyEnrollProof`), then who asks: a device link only for the
-  owner's account (anyone else is refused, and so is anyone before the first heartbeat said who the owner is), an
-  invite for whoever Shinsa Cloud vouches asked through it (`requestRequester`, which answers the GitHub user only
-  for an account that opened this machine's invite, a member or the owner). It records the request (`AccessRequest`:
-  id, kind, the device's public key, its name, the GitHub user, when; at most 20, the oldest dropped; a device that
-  asks again keeps its one request) and pushes it to every page. Accepting enrolls the device for that account
-  (`RemoteDevice.userId`) and, for an invite from someone not yet on the machine, first makes the account a member
-  at Shinsa Cloud (`requestMemberAddition`), so its connect tokens work from then on; declining forgets the request.
-  Either answers the waiting browser. A request is answered from Settings → Remote access on the machine, from
-  Settings → Machines on any device that already reaches it, or with `shinsa remote accept <request>` and `shinsa
-  remote decline <request>` (by its id or the login that asked). Accepting is the one change to remote access a
-  device away from the machine may make: the machine's own trust is unchanged, since it alone decides which device
-  keys it takes. `shinsa remote forget-device <key>` forgets a device. A device is a browser or a phone, a way in that
-  runs nothing; a machine runs the engine. Each device opens only under the token of the account that added it; a
-  device from before members has none and counts as the owner's.
-- **Members** (`Remote.removeMember`): an account becomes a member when you accept its invite request. Every
+- **The invite link and access requests** (`Remote.createLink`, `removeLink`, `acceptRequest`, `declineRequest`):
+  a machine has one link, for your own devices and for other people alike, since nobody gets in until you accept
+  them. It is a reusable secret (32 random bytes) kept in `remote.json` with the invite token Shinsa Cloud gives over
+  the machine token (`ControlClient.requestInvite`), until you turn it off (`requestInviteRemoval` removes the token
+  there too); making it while it is on keeps the one there, so a new link only comes after turning it off. The link
+  is `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>.<invite token>`, and everything after `#` stays
+  in the browser. `shinsa remote link` shows it (making it when it is off) and `shinsa remote link-off` turns it off.
+  Whoever opens it signs in with GitHub, names the device (filled in from the browser and system, `resolveDeviceName`:
+  the browser and the device off a phone or tablet, the model an Android phone names; for someone this machine is new
+  to, with their GitHub first name in front) and asks for access: the page accepts the invite at Shinsa Cloud for a
+  connect token, and the hello carries the link's proof and the name (`DEVICE_NAME_LIMIT`, 60). The engine checks the
+  proof (`verifyEnrollProof`), then who asks: the owner as they are, anyone else only when Shinsa Cloud vouches they
+  asked through this machine's invite (`requestRequester`, which answers the GitHub user only for an account that
+  opened it, a member or the owner), and nobody before the first heartbeat said who the owner is. It records the
+  request (`AccessRequest`: id, the device's public key, its name, the GitHub user, when; at most 20, the oldest
+  dropped; a device that asks again keeps its one request and its place) and pushes it to every page. The request
+  stays when the browser leaves: the page keeps the device key at once (`EnrolledDevice.waiting`, with the machine's
+  name) and says it can be closed, and the dashboard asks again without the link the next time it opens
+  (`requestWaitingAnswer`). Accepting enrolls the device for that account (`RemoteDevice.userId`) and, for an account
+  not yet on the machine, first makes it a member at Shinsa Cloud (`requestMemberAddition`; 409 is
+  `members_full`), so its connect tokens work from then on; declining forgets the request. Either answers a browser
+  still waiting. A request is answered from Settings → Remote access on the machine, from Settings → Machines on any
+  device that already reaches it, or with the `accept` and `decline` actions of `shinsa remote` (by the request's id
+  or the login that asked). Accepting is the one change to remote access a device away from the machine may make:
+  the machine's own trust is unchanged, since it alone decides which device keys it takes. `forget-device <key>`
+  revokes a device. A device is a browser or a phone, a way in that runs nothing; a machine runs the engine. Each
+  device opens only under the token of the account that added it; a device from before members has none and counts
+  as the owner's.
+- **Members** (`Remote.removeMember`): an account becomes a member when you accept its first request. Every
   heartbeat's answer (`HeartbeatResponse`: the owner and the members as `RemoteUser`s) is kept as `access`
   (`#recordAccess`): every device whose account is no longer listed is forgotten and its channels close, so a member
   who leaves in Shinsa Cloud loses their devices within one heartbeat (about two minutes). Remove member, or `shinsa
@@ -2450,17 +2454,17 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used, which member added it, and Forget, the people who can reach the
-  machine (the owner, then each member with their GitHub avatar, name, login, when they joined and Remove, which asks
-  first), the access requests waiting for an answer (each with the GitHub avatar, name and login, the device's name,
-  the link it came through and when, and Decline and Accept, whose toast says what accepting did), and Invite someone
-  and Add device (only while it is on: `canEnrollDevices`). Each opens its link's dialog: Make link when there is
-  none, else the link as a QR code with Copy, how long ago it was made, Turn off link and Make new link (the old one
-  stops working), and for Add device also Add this device for the browser in front of you. That link
+  added devices with when each was last used, which member added it (by name), and Revoke, the people who can reach
+  the machine (you as the owner, then each member with their GitHub avatar, name, login, when they joined and Remove,
+  which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
+  else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
+  link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
+  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you. Every toast here is
+  a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
   wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. Every change to remote access reaches every open page at once:
-  `Remote` notifies on each one (a device added or forgotten, a link made or turned off, a request, pausing, resuming,
+  `Remote` notifies on each one (a device added or revoked, a link made or turned off, a request, pausing, resuming,
   removing, the tunnel's status, a pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
   The remote build leaves the section out, since every change to it but answering a request is refused from off the
@@ -2468,9 +2472,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   dashboard with requests waiting, read from that machine's own `remote` push (`Fleet.listMachineAccess`), and the
   answer sent to that machine (`?machine=<instance>` on the request, which the fleet routes by, `resolveRequestOwner`).
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
-  owner, the machine's name and public key, a pairing under way, the devices, who has access, the links, the requests),
-  `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/links/create` and `/links/remove`
-  (`{ kind }`), `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
+  owner, the machine's name and public key, a pairing under way, the devices, who has access, the link, the requests),
+  `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
+  `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
   `/devices/remove` (`{ publicKey }`).
 - **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
   Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
@@ -2497,7 +2501,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   app.shinsa.dev sends it back to `shinsa://signed-in?code=<one-time code>`, which it trades with its PKCE verifier at
   `POST /__remote/sign-in/token` for a session token, then calls every signed-in route with `Authorization: Bearer`
   (`apps/cloud/CLAUDE.md` → Sign-in). Nothing changes on the machine: the app sends `Origin: https://app.shinsa.dev` on
-  the channel's socket, and it is added like any device, by scanning Add device's QR code.
+  the channel's socket, and it is added like any device, by scanning the invite link's QR code.
 - **One dashboard over every machine** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every machine
   of your account that this browser was added to joins one `Fleet`, each over its own sealed channel (`RemoteLink`,
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
@@ -2515,10 +2519,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
   Every machine you are a member of joins it as your own do, once this browser is added there. The enroll page
   (`routes/remote/enroll.tsx`, `lib/remote/enroll.ts`) shows the device name to edit and Request access, then says
-  the request was sent and to keep the page open; an invite's page says you are joining a shared machine and opens
-  the channel with the connect token `acceptInvite` answers. A connection that drops while the request waits is
-  opened again with the same device key (`requestDeviceAccess`), and once it is accepted the device is kept and the
-  dashboard opens. Settings → General → Machines lists every machine in rows like
+  the request was sent, where to accept it and that the page can be closed; for a machine not yet in your list it says
+  you are joining a shared machine. It opens the channel with the connect token `acceptInvite` answers. A connection
+  that drops while the request waits is opened again with the same device key (`requestDeviceAccess`), and once it is
+  accepted the device is kept and the dashboard opens. A device that left while it waited shows Waiting for an answer
+  in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
+  which forgets its key. Settings → General → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open

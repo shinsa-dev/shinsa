@@ -1,4 +1,4 @@
-import type { LinkKind, RemoteSnapshot } from '@shinsa/core';
+import type { RemoteSnapshot } from '@shinsa/core';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
@@ -74,9 +74,9 @@ export const REMOTE_ACCESS_ACTIONS = {
   resume: () => act('/enable'),
   pause: () => act('/disable'),
   remove: () => act('/remove'),
-  forgetDevice: (publicKey: string) => act('/devices/remove', { publicKey }),
-  createLink: (kind: LinkKind) => act('/links/create', { kind }),
-  removeLink: (kind: LinkKind) => act('/links/remove', { kind }),
+  revokeDevice: (publicKey: string) => act('/devices/remove', { publicKey }),
+  createLink: () => act('/link/create'),
+  removeLink: () => act('/link/remove'),
   acceptRequest: (requestId: string) => act('/requests/accept', { requestId }),
   declineRequest: (requestId: string) => act('/requests/decline', { requestId }),
   removeMember: (userId: string) => act('/members/remove', { userId }),

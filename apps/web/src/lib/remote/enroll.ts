@@ -6,12 +6,12 @@ export interface EnrollInput {
   instanceId: string;
   machineKey: string;
   secret: string;
-  invite: string | null;
+  invite: string;
   onMachine: boolean;
 }
 
 export interface EnrollOptions {
-  dashboard: Pick<DashboardClient, 'requestConnect' | 'acceptInvite'>;
+  dashboard: Pick<DashboardClient, 'acceptInvite'>;
   devices: Pick<DeviceStore, 'writeDevice'>;
   name: string;
   onPending: () => void;
@@ -21,24 +21,26 @@ export interface EnrollOptions {
   openChannel?: (options: ChannelOptions) => Promise<RemoteChannel>;
 }
 
-async function resolveConnectUrl(input: EnrollInput, options: EnrollOptions) {
-  if (input.invite) return (await options.dashboard.acceptInvite(input.invite)).connect.url;
-  return (await options.dashboard.requestConnect(input.instanceId)).url;
-}
-
 const RETRY_MS = 2_000;
 
-async function openWhenAccepted(input: EnrollInput, options: EnrollOptions, keys: CryptoKeyPair) {
+async function openWhenAccepted(
+  input: EnrollInput,
+  options: EnrollOptions,
+  device: EnrolledDevice
+): Promise<RemoteChannel> {
   let pending = false;
   for (;;) {
     try {
+      const accepted = await options.dashboard.acceptInvite(input.invite);
       return await (options.openChannel ?? openRemoteChannel)({
-        url: await resolveConnectUrl(input, options),
+        url: accepted.connect.url,
         machineKey: input.machineKey,
-        device: keys,
+        device: device.keys,
         enrollSecret: input.secret,
         name: options.name,
         onPending: () => {
+          if (!pending)
+            void options.devices.writeDevice({ ...device, waiting: { machineName: accepted.name } });
           pending = true;
           options.onPending();
         },
@@ -54,16 +56,57 @@ export async function requestDeviceAccess(
   input: EnrollInput,
   options: EnrollOptions
 ): Promise<EnrolledDevice> {
-  const keys = await (options.createKeys ?? createDeviceKeys)();
-  const channel = await openWhenAccepted(input, options, keys);
-  channel.close();
   const device: EnrolledDevice = {
     instanceId: input.instanceId,
     machineKey: input.machineKey,
-    keys,
+    keys: await (options.createKeys ?? createDeviceKeys)(),
     enrolledAt: (options.now ?? Date.now)(),
     ...(input.onMachine ? { onMachine: true } : {}),
   };
+  const channel = await openWhenAccepted(input, options, device);
+  channel.close();
   await options.devices.writeDevice(device);
   return device;
+}
+
+export type WaitingAnswer = 'accepted' | 'waiting' | 'declined';
+
+export interface WaitingOptions {
+  dashboard: Pick<DashboardClient, 'requestConnect'>;
+  devices: Pick<DeviceStore, 'writeDevice' | 'removeDevice'>;
+  openChannel?: (options: ChannelOptions) => Promise<RemoteChannel>;
+  openSocket: (url: string) => WebSocket;
+}
+
+export async function requestWaitingAnswer(
+  device: EnrolledDevice,
+  options: WaitingOptions
+): Promise<WaitingAnswer> {
+  let socket: WebSocket | null = null;
+  let pending = false;
+  try {
+    const { url } = await options.dashboard.requestConnect(device.instanceId);
+    const channel = await (options.openChannel ?? openRemoteChannel)({
+      url,
+      machineKey: device.machineKey,
+      device: device.keys,
+      enrollSecret: null,
+      openSocket: (target) => {
+        socket = options.openSocket(target);
+        return socket;
+      },
+      onPending: () => {
+        pending = true;
+        socket?.close();
+      },
+    });
+    channel.close();
+    const { waiting: _waiting, ...accepted } = device;
+    await options.devices.writeDevice(accepted);
+    return 'accepted';
+  } catch (error) {
+    if (pending || !(error instanceof ChannelError && error.refused)) return 'waiting';
+    await options.devices.removeDevice(device.instanceId);
+    return 'declined';
+  }
 }

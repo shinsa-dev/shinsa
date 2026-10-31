@@ -78,7 +78,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `instance_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
   in. `POST /__remote/machine/invites` (machine token) answers the machine's one reusable invite token, replacing the
   one before, of which D1 keeps only the SHA-256 (`instance_invites`, one row per machine);
-  `/__remote/machine/invites/remove` turns it off. The machine puts it in its Invite someone link; whoever opens the
+  `/__remote/machine/invites/remove` turns it off. The machine puts it in its one invite link, for its owner's devices and other people alike; whoever opens the
   link signs in with any GitHub account and the page sends `POST /__remote/invites/accept { token }`, which records
   that this account asked (`instance_requesters`), makes it no member, and answers the machine's id, name and owner,
   the account's user and a connect token for that account alone, so the browser can ask the machine over the sealed

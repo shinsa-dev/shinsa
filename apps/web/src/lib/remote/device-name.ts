@@ -3,8 +3,6 @@ import { DEVICE_NAME_LIMIT, type RemoteUser } from '@shinsa/core';
 const DEVICES: { pattern: RegExp; name: string }[] = [
   { pattern: /iPad/, name: 'iPad' },
   { pattern: /iPhone/, name: 'iPhone' },
-  { pattern: /Android.*Mobile/, name: 'Android phone' },
-  { pattern: /Android/, name: 'Android tablet' },
   { pattern: /Macintosh|Mac OS X/, name: 'Mac' },
   { pattern: /Windows/, name: 'Windows PC' },
   { pattern: /CrOS/, name: 'Chromebook' },
@@ -19,8 +17,17 @@ const BROWSERS: { pattern: RegExp; name: string }[] = [
   { pattern: /Safari\//, name: 'Safari' },
 ];
 
+const ANDROID_MODEL = /Android [\d.]+; (?:[a-z]{2}[-_][a-z]{2}; )?([^;)]+?)(?: Build\/[^;)]*)?[;)]/i;
+
+function resolveAndroidModel(userAgent: string) {
+  const model = ANDROID_MODEL.exec(userAgent)?.[1]?.trim();
+  return model && model !== 'K' ? model : null;
+}
+
 function resolveDevice(userAgent: string, touch: boolean) {
   if (touch && /Macintosh/.test(userAgent)) return 'iPad';
+  if (/Android/.test(userAgent))
+    return resolveAndroidModel(userAgent) ?? (/Mobile/.test(userAgent) ? 'Android phone' : 'Android tablet');
   return DEVICES.find((entry) => entry.pattern.test(userAgent))?.name ?? 'Browser';
 }
 
@@ -33,9 +40,12 @@ function resolveFirstName(user: RemoteUser) {
   return first ? first : user.login;
 }
 
+const MOBILE = /iPhone|iPad|Android/;
+
 export function resolveDeviceName(userAgent: string, touch: boolean, invitee: RemoteUser | null) {
   const device = resolveDevice(userAgent, touch);
-  const browser = /iPhone|iPad|Android/.test(device) ? null : resolveBrowser(userAgent);
+  const mobile = MOBILE.test(userAgent) || device === 'iPad';
+  const browser = mobile ? null : resolveBrowser(userAgent);
   const base = browser ? `${browser} on ${device}` : device;
   const name = invitee ? `${resolveFirstName(invitee)} ${base}` : base;
   return name.slice(0, DEVICE_NAME_LIMIT);

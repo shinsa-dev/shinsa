@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { AccessRequest, LinkKind, RemoteDevice } from '@shinsa/core';
+import type { AccessRequest, RemoteDevice } from '@shinsa/core';
 import {
   type MachineCredentials,
   parsePrivateKey,
@@ -30,21 +30,14 @@ export interface RemoteFile {
   enabled: boolean;
   devices: RemoteDevice[];
   access: RemoteAccess | null;
-  links: StoredLink[];
+  link: StoredLink | null;
   requests: AccessRequest[];
 }
 
 export interface StoredLink {
-  kind: LinkKind;
   secret: string;
-  invite: string | null;
+  invite: string;
   createdAt: number;
-}
-
-const LINK_KINDS: readonly LinkKind[] = ['device', 'invite'];
-
-function isLinkKind(value: unknown): value is LinkKind {
-  return LINK_KINDS.includes(value as LinkKind);
 }
 
 type Fields = Record<string, unknown>;
@@ -119,26 +112,21 @@ function readMembers(value: unknown): RemoteMember[] {
   });
 }
 
-function readLinks(value: unknown): StoredLink[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    if (!isFields(entry) || !isLinkKind(entry.kind) || typeof entry.secret !== 'string') return [];
-    if (typeof entry.createdAt !== 'number') return [];
-    const invite = readOptionalText(entry.invite);
-    if (entry.kind === 'invite' && invite === null) return [];
-    return [{ kind: entry.kind, secret: entry.secret, invite, createdAt: entry.createdAt }];
-  });
+function readLink(value: unknown): StoredLink | null {
+  if (!isFields(value) || typeof value.secret !== 'string' || typeof value.invite !== 'string') return null;
+  if (typeof value.createdAt !== 'number') return null;
+  return { secret: value.secret, invite: value.invite, createdAt: value.createdAt };
 }
 
 function readRequests(value: unknown): AccessRequest[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     const user = isFields(entry) ? readUser(entry.user) : null;
-    if (!(user && isFields(entry) && isLinkKind(entry.kind))) return [];
+    if (!(user && isFields(entry))) return [];
     const { id, publicKey, deviceName, requestedAt } = entry;
     if (typeof id !== 'string' || typeof publicKey !== 'string' || typeof deviceName !== 'string') return [];
     if (typeof requestedAt !== 'number') return [];
-    return [{ id, kind: entry.kind, publicKey, deviceName, user, requestedAt }];
+    return [{ id, publicKey, deviceName, user, requestedAt }];
   });
 }
 
@@ -157,7 +145,7 @@ function createRemoteFile(): RemoteFile {
     enabled: false,
     devices: [],
     access: null,
-    links: [],
+    link: null,
     requests: [],
   };
 }
@@ -181,7 +169,7 @@ export function readRemoteFile(path: string): RemoteFile {
     enabled: credentials !== null && fields.enabled === true,
     devices: readDevices(fields.devices),
     access: readAccess(fields.access),
-    links: readLinks(fields.links),
+    link: readLink(fields.link),
     requests: readRequests(fields.requests),
   };
 }

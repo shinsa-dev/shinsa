@@ -2063,35 +2063,27 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote link
 
-Make the reusable link that asks for access to this machine, replacing the one before.
+Show the reusable invite link that asks for access to this machine, making it if it is off.
 
 ```
-shinsa remote link <kind> [--json]
+shinsa remote link [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
-
-| Argument | Kind | What it is |
-| --- | --- | --- |
-| `<kind>` | choice, required | device for your own devices, invite for someone else’s GitHub account. |
 
 #### shinsa remote link-off
 
-Turn a link off, so nobody can ask for access with it any more.
+Turn the invite link off, so nobody can ask for access with it any more.
 
 ```
-shinsa remote link-off <kind> [--json]
+shinsa remote link-off [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
-| Argument | Kind | What it is |
-| --- | --- | --- |
-| `<kind>` | choice, required | device for your own devices, invite for someone else’s GitHub account. |
-
 #### shinsa remote accept
 
-Accept an access request: add its device, and for an invite make its account a member.
+Accept an access request: add its device, and make its account a member when it is not yours.
 
 ```
 shinsa remote accept <request> [--json]

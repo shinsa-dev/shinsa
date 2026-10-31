@@ -27,10 +27,10 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
    that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
    instance has one owner, the GitHub account that paired it, and may have members, who reach it exactly as the owner
-   does, so a team can share one machine, such as a server everyone uses. Nobody gets in by holding a link: Add
-   device (your own account) and Invite someone (any GitHub account) are reusable links that let a device ask for
-   access, and you accept or decline each request on the machine or from any device that already reaches it.
-   Accepting an invite's request makes that account a member. Only the machine invites or removes a member; a member
+   does, so a team can share one machine, such as a server everyone uses. Nobody gets in by holding a link: the
+   machine's one reusable invite link lets any device, yours or someone else's with their own GitHub account, ask
+   for access, and you accept or decline each request on the machine or from any device that already reaches it.
+   Accepting a request from an account not yet on the machine makes it a member. Only the machine invites or removes a member; a member
    can leave.
 4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
    named tunnel; no inbound port is ever opened.
