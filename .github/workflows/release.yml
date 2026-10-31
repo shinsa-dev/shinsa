@@ -272,11 +272,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RELEASE_TAG: ${{ needs.mac.outputs.tag }}
         run: bun scripts/release-upload.ts
-      - name: Keep the last five canaries on GitHub
-        if: ${{ !cancelled() && needs.mac.outputs.channel == 'canary' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bun scripts/release-prune.ts
 
   status:
     needs: [trigger, mac, downloads]
