@@ -55,7 +55,7 @@ describe('a share link', () => {
 
   test('opens a page that search engines are told not to keep', async () => {
     const harness = createHarness();
-    const page = await harness.call('/share/inst/abc');
+    const page = await harness.call('/t/abc');
     expect(page.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     expect(page.headers.get('referrer-policy')).toBe('no-referrer');
     expect((await harness.call('/')).headers.get('x-robots-tag')).toBeNull();

@@ -25,7 +25,7 @@ describe('the share link', () => {
     });
     const path = resolveSharePagePath('inst', SHARE_ID);
     expect(url).toBe(`https://app.shinsa.dev${path}#${KEY}`);
-    expect(path).toMatch(/^\/share\/[A-Za-z0-9_-]+$/);
+    expect(path).toMatch(/^\/t\/[A-Za-z0-9_-]+$/);
     expect(path).not.toContain('inst');
     expect(new URL(url).pathname).not.toContain(KEY);
     expect(parseShareUrl(url)).toEqual({ instanceId: 'inst', shareId: SHARE_ID, key: KEY });
@@ -35,12 +35,13 @@ describe('the share link', () => {
     const path = resolveSharePagePath('inst', SHARE_ID);
     expect(parseShareLocation(path, '')).toBeNull();
     expect(parseShareLocation(path, '#short')).toBeNull();
-    expect(parseShareLocation(`/share/${SHARE_ID}`, `#${KEY}`)).toBeNull();
+    expect(parseShareLocation(`/t/${SHARE_ID}`, `#${KEY}`)).toBeNull();
     expect(parseShareLocation(resolveSharePagePath('../x', SHARE_ID), `#${KEY}`)).toBeNull();
     expect(
-      parseShareLocation(`/share/${serializeBase64Url(new Uint8Array(20).fill(255))}`, `#${KEY}`)
+      parseShareLocation(`/t/${serializeBase64Url(new Uint8Array(20).fill(255))}`, `#${KEY}`)
     ).toBeNull();
-    expect(parseShareLocation('/share/a!b', `#${KEY}`)).toBeNull();
+    expect(parseShareLocation('/t/a!b', `#${KEY}`)).toBeNull();
+    expect(parseShareLocation(path.replace(/^\/t\//, '/share/'), `#${KEY}`)).toBeNull();
     expect(parseShareLocation(`${path}/more`, `#${KEY}`)).toBeNull();
     expect(parseShareLocation(`/tasks/${SHARE_ID}`, `#${KEY}`)).toBeNull();
     expect(parseShareUrl(null)).toBeNull();

@@ -76,7 +76,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - **Share links.** `POST /__remote/shares/<instance>/connect`, with no session, tells a share page where the machine is:
   `{ url: "wss://t-<instance>.shinsa.dev", online }` (`ShareConnectResponse`), 404 for an instance that does not
   exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
-  which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/…` page carry
+  which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/t/…` page carry
   `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The

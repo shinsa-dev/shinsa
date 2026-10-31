@@ -14,7 +14,6 @@ import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
@@ -53,9 +52,8 @@ function ShareBody({ view }: { view: ShareView }) {
     case 'unpaired':
       return <p className='text-fg-3 text-xs'>{SHARE_NEEDS_REMOTE}</p>;
     case 'off':
-      return null;
     case 'linking':
-      return <LoadingLine label='Making the link' className='text-fg-2 text-xs' />;
+      return null;
     case 'failed':
       return (
         <p role='alert' className='selectable text-destructive text-xs'>
@@ -77,7 +75,7 @@ function ShareLimitRow({
   onChange: (limit: ShareLimit) => void;
 }) {
   return (
-    <div className='flex items-center justify-between gap-3'>
+    <div className='flex w-full items-center justify-between gap-3 self-stretch'>
       <span className='text-fg-3 text-xs'>{SHARE_LIMIT_TITLE}</span>
       <SelectField
         label={SHARE_LIMIT_TITLE}
@@ -108,9 +106,9 @@ function ShareActions({ task, view, limit }: { task: Task; view: ShareView; limi
       </Button>
     );
   }
-  if (view.kind === 'off') {
+  if (view.kind === 'off' || view.kind === 'linking') {
     return (
-      <Button loading={busy} onClick={() => void share()}>
+      <Button loading={busy || view.kind === 'linking'} onClick={() => void share()}>
         Share
       </Button>
     );

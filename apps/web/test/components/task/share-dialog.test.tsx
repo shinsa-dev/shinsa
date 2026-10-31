@@ -23,7 +23,7 @@ function showTask(overrides: Partial<Task> = {}, paired = true) {
   act(() => openShareDialog('source'));
 }
 
-const URL = 'https://app.shinsa.dev/share/abc';
+const URL = 'https://app.shinsa.dev/t/abc';
 
 const SHARING = { at: 1, limit: 'until_done', endsAt: null } as const;
 
@@ -58,10 +58,11 @@ describe('the share dialog', () => {
     );
   });
 
-  it('waits for the link while it is made', async () => {
+  it('keeps Share loading until the link is made', async () => {
     showTask({ share: { ...SHARING, url: null } });
-    expect(await screen.findByText('Making the link')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Stop sharing' })).toBeTruthy();
+    const share = (await screen.findByText('Share')).closest('button');
+    expect(share?.getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull();
   });
 
   it('shows the link to copy inside its field, and stops sharing once you confirm', async () => {

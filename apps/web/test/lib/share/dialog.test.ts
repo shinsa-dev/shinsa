@@ -53,7 +53,7 @@ describe('the share dialog', () => {
 
   it('shows the link once it exists, and why publishing failed', () => {
     const task = createTask({ id: 't' });
-    const url = 'https://app.shinsa.dev/share/abc';
+    const url = 'https://app.shinsa.dev/t/abc';
     expect(resolveShareView({ ...task, share: { ...SHARING, url } }, null)).toEqual({ kind: 'shared', url });
     expect(
       resolveShareView({ ...task, share: { ...SHARING, url, failure: 'app.shinsa.dev refused it.' } }, PAIRED)

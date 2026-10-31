@@ -179,6 +179,10 @@ async function startMachine(id: string, name: string, dataDir: string) {
     place: PLACE,
     shares,
   });
+  engine.onEffect(async (effect, context) => {
+    if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
+  });
+  engine.start();
   const key = await remote.store.resolveMachineKey();
   const machine: Machine = {
     id,
