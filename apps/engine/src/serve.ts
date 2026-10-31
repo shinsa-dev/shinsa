@@ -45,6 +45,7 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
+import { SharePublisher } from './remote/shares.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -233,6 +234,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     ],
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
+      shares: new SharePublisher({ engine, remote, evidence }),
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),

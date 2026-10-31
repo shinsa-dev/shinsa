@@ -122,6 +122,41 @@ describe('the link', () => {
   });
 });
 
+describe('a publication that fails', () => {
+  test('is kept on the task until a later publication succeeds, and sharing again retries it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.share', taskId });
+    const detail = 'Turn on remote access in Settings to share this task.';
+    harness.send({ type: 'share.fail', taskId, detail });
+    expect(harness.task(taskId).share?.failure).toBe(detail);
+    expect(harness.send({ type: 'share.fail', taskId, detail }).events).toEqual([]);
+    harness.send({ type: 'task.share', taskId });
+    expect(publishes(harness, taskId)).toBe(2);
+    harness.send({ type: 'share.record', taskId, url: null });
+    expect(harness.task(taskId).share).toMatchObject({ url: null, failure: null });
+    expect(harness.send({ type: 'share.record', taskId, url: null }).events).toEqual([]);
+  });
+
+  test('a later publication that keeps the link only clears the failure', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.share', taskId });
+    const url = 'https://app.shinsa.dev/share/abc';
+    harness.send({ type: 'share.record', taskId, url });
+    harness.send({ type: 'share.fail', taskId, detail: 'app.shinsa.dev did not answer.' });
+    harness.send({ type: 'share.record', taskId, url: null });
+    expect(harness.task(taskId).share?.url).toBe(url);
+    expect(harness.task(taskId).share?.failure).toBeNull();
+  });
+
+  test('is ignored once the task is no longer shared', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(harness.send({ type: 'share.fail', taskId, detail: 'Gone.' }).events).toEqual([]);
+  });
+});
+
 describe('stopping sharing', () => {
   test('removes the publication, drops a publish still queued and records it', () => {
     const harness = createHarness();

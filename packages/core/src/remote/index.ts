@@ -127,6 +127,7 @@ export {
   SHARE_DIFF_FILE,
   SHARE_FILE_TYPES,
   type SharedPublication,
+  type ShareFileType,
 } from './shares.ts';
 export type {
   PairingView,

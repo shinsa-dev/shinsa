@@ -169,7 +169,10 @@ src/
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
-│                        classifier reads every machine's policies with a new task's request and names its machine), index.ts (Remote: wires
+│                        classifier reads every machine's policies with a new task's request and names its machine),
+│                        shares.ts (SharePublisher: the share.publish and share.remove effects, which publish a shared
+│                        task's projection to app.shinsa.dev with the repository's visibility, its evidence files by
+│                        hash and a public repository's pull request diff), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
@@ -208,7 +211,8 @@ src/
 │                        check's describeWorkspaceProblem)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
-│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id, a user
+│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id and
+│                        visibility, a pull request's diff (`gh pr diff`, what a shared task's Code tab shows), a user
 │                        attachment upload and rewriting the description's block (writePullRequestBlock);
 │                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
 │                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a

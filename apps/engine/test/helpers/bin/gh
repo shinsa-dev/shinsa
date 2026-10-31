@@ -47,6 +47,8 @@ interface FakeState {
   rulesetChecks?: string[];
   baseChecks?: boolean;
   repositoryId?: number;
+  visibility?: string;
+  diffs?: Record<string, string>;
   uploads?: number;
   failUploads?: boolean;
   uploadReply?: string;
@@ -341,6 +343,25 @@ if (group === 'api' && /^repos\/[^/]+\/[^/]+$/.test(command ?? '') && flag('--jq
     process.exit(1);
   }
   console.log(String(state.repositoryId));
+  process.exit(0);
+}
+if (group === 'api' && /^repos\/[^/]+\/[^/]+$/.test(command ?? '') && flag('--jq') === '.visibility') {
+  save();
+  if (state.visibility === undefined) {
+    console.error('HTTP 404: Not Found');
+    process.exit(1);
+  }
+  console.log(state.visibility);
+  process.exit(0);
+}
+if (group === 'pr' && command === 'diff') {
+  save();
+  const diff = state.diffs?.[args[2] ?? ''];
+  if (diff === undefined) {
+    console.error('no pull requests found');
+    process.exit(1);
+  }
+  console.log(diff);
   process.exit(0);
 }
 if (group === 'api' && command?.includes('/rules/branches/')) {

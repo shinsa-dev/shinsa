@@ -17,7 +17,10 @@ export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   assertHumanShares(decider);
   const task = decider.task(command.taskId);
   if (task.watchHome) throw new DomainError('share_refused', 'An automation has nothing to share.');
-  if (task.share) return;
+  if (task.share) {
+    if (task.share.failure) decider.run({ kind: 'share.publish', taskId: task.id });
+    return;
+  }
   decider.emit({ type: 'task.shared', taskId: task.id });
   decider.run({ kind: 'share.publish', taskId: task.id });
 }
@@ -33,8 +36,16 @@ export function unshareTask(decider: Decider, command: CommandOf<'task.unshare'>
 
 export function recordShare(decider: Decider, command: CommandOf<'share.record'>) {
   const share = decider.state.tasks[command.taskId]?.share;
-  if (!share || share.url === command.url) return;
-  decider.emit({ type: 'share.recorded', taskId: command.taskId, url: command.url });
+  if (!share) return;
+  const url = command.url ?? share.url;
+  if (url === share.url && !share.failure) return;
+  decider.emit({ type: 'share.recorded', taskId: command.taskId, url });
+}
+
+export function failShare(decider: Decider, command: CommandOf<'share.fail'>) {
+  const share = decider.state.tasks[command.taskId]?.share;
+  if (!share || share.failure === command.detail) return;
+  decider.emit({ type: 'share.failed', taskId: command.taskId, detail: command.detail });
 }
 
 function listTouchedTaskIds(decider: Decider) {

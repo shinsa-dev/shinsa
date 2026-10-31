@@ -93,7 +93,7 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
-import { recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
+import { failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
@@ -230,6 +230,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return unshareTask(decider, command);
     case 'share.record':
       return recordShare(decider, command);
+    case 'share.fail':
+      return failShare(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':

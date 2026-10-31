@@ -37,6 +37,7 @@ import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
 import { resolveRoundRepository } from '../../src/triage/message.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { NO_SHARES } from '../helpers/index.ts';
 
 export const PLAN: PlanDocument = {
   goal: 'Add the two greeting files.',
@@ -631,6 +632,7 @@ export class World {
     const quick = createQuickCalls(this.providers ?? new ProviderRegistry(), () => engine.state.settings);
     const briefings = new Briefings(engine, { ask: quick.write });
     const effects = new EffectRunner(engine, this.config, runs, briefings, {
+      shares: NO_SHARES,
       resolveLogin: () => Promise.resolve(null),
       triage: async (state, task, local) => {
         const waitsOn = this.dependOn.flatMap((id) => state.tasks[id] ?? []);

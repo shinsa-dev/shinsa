@@ -22,7 +22,10 @@ export function startFakeControlPlane(): FakeControlPlane {
     async fetch(request) {
       const path = new URL(request.url).pathname;
       const authorization = request.headers.get('authorization');
-      calls.push({ path, token: authorization?.replace(/^Bearer /, '') ?? null, body: await request.json() });
+      const contentType = request.headers.get('content-type');
+      const text = await request.text();
+      const body: unknown = contentType === 'application/json' ? JSON.parse(text) : { contentType, text };
+      calls.push({ path, token: authorization?.replace(/^Bearer /, '') ?? null, body });
       const answer = answers.get(path);
       if (answer) return answer();
       if (path === REMOTE_PATHS.pairStart)

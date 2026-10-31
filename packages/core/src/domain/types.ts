@@ -490,6 +490,7 @@ export interface Task {
 export interface TaskShare {
   at: number;
   url: string | null;
+  failure?: string | null;
 }
 
 export interface TaskBacklog {

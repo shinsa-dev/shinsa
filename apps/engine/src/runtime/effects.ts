@@ -55,6 +55,7 @@ import {
   writePullRequestBlock,
 } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
+import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
   type LoginResolver,
@@ -83,6 +84,7 @@ export interface EffectRunnerOptions {
   watchIntervalMs?: number;
   workspaces?: Workspaces;
   services?: TaskServices;
+  shares: ShareEffects;
 }
 
 export interface TaskServices {
@@ -159,6 +161,7 @@ export class EffectRunner {
   readonly #watchIntervalMs: number;
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
+  readonly #shares: ShareEffects;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
@@ -189,6 +192,7 @@ export class EffectRunner {
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
+    this.#shares = options.shares;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
     this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
@@ -239,8 +243,9 @@ export class EffectRunner {
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
       case 'share.publish':
+        return this.#shares.publish(effect.taskId, context);
       case 'share.remove':
-        return Promise.reject(new Error('Sharing tasks is not available yet.'));
+        return this.#shares.remove(effect.taskId);
     }
   }
 
@@ -298,6 +303,13 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
+    if (effect.kind === 'share.publish') {
+      await this.#engine.dispatch(
+        { type: 'share.fail', taskId: effect.taskId, detail: error },
+        { id: `${key}:share.fail` }
+      );
+      return;
+    }
     const title = FAILURE_TITLE[effect.kind];
     if (!title || !('taskId' in effect)) return;
     await this.#engine.dispatch(

@@ -9,6 +9,7 @@ import {
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
+  type RepositoryVisibility,
   replacePullRequestBlock,
   resolveCurrentRound,
   type Settings,
@@ -16,7 +17,7 @@ import {
 } from '@shinsa/core';
 import { assertRefName, resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
 import { log } from '../log/index.ts';
-import { runCommand, runCommandOrThrow } from '../shell/index.ts';
+import { describeFailure, runCommand, runCommandOrThrow } from '../shell/index.ts';
 
 interface CheckEntry {
   status?: string;
@@ -408,6 +409,32 @@ export async function resolveRepositoryId(repo: Repo, signal?: AbortSignal) {
   if (!Number.isSafeInteger(id) || id <= 0)
     throw new Error(`GitHub returned "${output.trim()}" as the repository id.`);
   return id;
+}
+
+const VISIBILITIES: Readonly<Record<string, RepositoryVisibility>> = {
+  public: 'public',
+  private: 'private',
+  internal: 'private',
+};
+
+export async function resolveRepoVisibility(repo: Repo, signal?: AbortSignal): Promise<RepositoryVisibility> {
+  const slug = resolveRepoSlug(repo);
+  if (!slug) return 'unknown';
+  const result = await runGh(['api', `repos/${slug.owner}/${slug.name}`, '--jq', '.visibility'], repo.path, {
+    signal,
+  });
+  if (!result.ok) {
+    log.warn('[GitHub] Could not read the repository’s visibility', {
+      repoId: repo.id,
+      error: describeFailure(['gh', 'api', 'repos'], result),
+    });
+    return 'unknown';
+  }
+  return VISIBILITIES[result.stdout.trim()] ?? 'unknown';
+}
+
+export function readPullRequestDiff(repo: Repo, number: number, signal?: AbortSignal) {
+  return runGhOrThrow(['pr', 'diff', String(number)], repo.path, { signal });
 }
 
 export interface Attachment {

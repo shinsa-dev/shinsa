@@ -8,12 +8,14 @@ import {
   mergePullRequest,
   type PullRequestDetails,
   readPullRequest,
+  readPullRequestDiff,
   resolveCheckRuns,
   resolveCheckRunsState,
   resolveChecks,
   resolveRemarks,
   resolveRepoSlug,
   resolveRepositoryId,
+  resolveRepoVisibility,
   retargetPullRequest,
   serializePullRequest,
   serializePullRequestTitle,
@@ -48,6 +50,8 @@ interface FakePull {
 }
 
 interface FakeExtra {
+  visibility?: string;
+  diffs?: Record<string, string>;
   mergeQueue?: boolean;
   failReads?: number;
   repositoryId?: number;
@@ -556,6 +560,31 @@ function createFailingGraphql() {
   );
   return dir;
 }
+
+describe('what a shared task reads from GitHub', () => {
+  test('reads whether the repository is public, and treats anything else or a failure as not public', async () => {
+    const repo = createRepo({ path: createTempDir() });
+    useFakeGitHub([], { visibility: 'public' });
+    expect(await resolveRepoVisibility(repo)).toBe('public');
+    useFakeGitHub([], { visibility: 'private' });
+    expect(await resolveRepoVisibility(repo)).toBe('private');
+    useFakeGitHub([], { visibility: 'internal' });
+    expect(await resolveRepoVisibility(repo)).toBe('private');
+    useFakeGitHub([], { visibility: 'secret' });
+    expect(await resolveRepoVisibility(repo)).toBe('unknown');
+    useFakeGitHub([]);
+    expect(await resolveRepoVisibility(repo)).toBe('unknown');
+    expect(await resolveRepoVisibility({ ...repo, remote: null })).toBe('unknown');
+  });
+
+  test('reads a pull request’s diff from GitHub, not from the worktree', async () => {
+    const github = useFakeGitHub([], { diffs: { '7': 'diff --git a/x b/x' } });
+    const repo = createRepo({ path: createTempDir() });
+    expect(await readPullRequestDiff(repo, 7)).toBe('diff --git a/x b/x');
+    expect(github.read().calls).toContainEqual(['pr', 'diff', '7']);
+    await expect(readPullRequestDiff(repo, 8)).rejects.toThrow('no pull requests found');
+  });
+});
 
 describe('the description on GitHub', () => {
   test('reads the repository id once through gh, and refuses a repository without a GitHub remote', async () => {

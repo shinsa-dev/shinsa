@@ -976,6 +976,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.shared':
     case 'task.unshared':
     case 'share.recorded':
+    case 'share.failed':
       applyShareEvent(state, event);
       break;
     case 'memory.written':
