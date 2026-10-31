@@ -22,6 +22,7 @@ const INDEX = resolve(import.meta.dirname, '../node_modules/@central-icons-react
 const SKIP_DIRS = new Set([
   'node_modules',
   'dist',
+  'dist-remote',
   'build',
   'test',
   '.turbo',

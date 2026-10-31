@@ -28,6 +28,7 @@ describe('settings tabs', () => {
       'Attention',
       'Notifications',
       'Context',
+      'Remote access',
       'Setup',
       'Updates',
     ]);

@@ -3,13 +3,13 @@ import {
   type ClientMessage,
   DomainError,
   isSurface,
+  type RequestOrigin,
   resolveStatePatch,
   type ServerMessage,
   type Surface,
   serializeState,
   type UserCommand,
 } from '@shinsa/core';
-import type { ServerWebSocket } from 'bun';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
@@ -22,9 +22,15 @@ export interface SocketData {
   kind: 'hub';
   transcripts: Map<string, () => void>;
   surface: Surface | null;
+  origin: RequestOrigin;
 }
 
-type Socket = ServerWebSocket<SocketData>;
+export interface HubSocket {
+  data: SocketData;
+  send: (payload: string) => unknown;
+}
+
+type Socket = HubSocket;
 
 function send(socket: Socket, message: ServerMessage) {
   socket.send(JSON.stringify(message));
@@ -138,7 +144,7 @@ export function createSocketHub(
         return;
       case 'command': {
         try {
-          await dispatchUserCommand(engine, message.command, message.id, classify);
+          await dispatchUserCommand(engine, message.command, message.id, classify, socket.data.origin);
           send(socket, { type: 'ack', id: message.id, error: null });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'command_failed';

@@ -22,18 +22,33 @@ import { ProjectOption } from '@/components/status/project-dot.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { useConnection } from '@/lib/connection/socket.ts';
+import {
+  connection,
+  type MachineChoice,
+  NO_UNREACHABLE_MACHINES,
+  type UnreachableMachine,
+  useConnection,
+  useMachines,
+  useUnreachableMachines,
+} from '@/lib/connection/socket.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import {
   AUTO_CHOICES,
   createNewTaskCommand,
   describeNewTask,
+  describePlacementDone,
+  hasMachineChoice,
+  isProjectOnMachine,
+  listNewTaskMachines,
   listNewTaskPriorities,
   listNewTaskProjects,
   listNewTaskStarts,
   type NewTaskChoices,
   type NewTaskProjectItem,
   NO_PROJECT,
+  type PolicyPlacement,
+  requestPolicyPlacement,
+  resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
   resolveStartChoice,
@@ -77,12 +92,16 @@ function ProjectField({
   );
 }
 
-function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices) {
-  const project = state ? resolveProjectChoice(state, chosen.project) : 'auto';
-  const shownProject = state ? resolveShownProject(state, project) : NO_PROJECT;
+function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices, machines: MachineChoice[]) {
+  const picked = state ? resolveProjectChoice(state, chosen.project) : 'auto';
+  const shown = state ? resolveShownProject(state, picked) : NO_PROJECT;
+  const placement = resolveNewTaskMachine(machines, { machine: chosen.machine, project: picked }, shown);
+  const fits = isProjectOnMachine(machines, placement?.id ?? null, shown);
+  const project = fits || picked === 'auto' ? picked : NO_PROJECT;
+  const shownProject = fits ? shown : NO_PROJECT;
   const open = state ? listOpenTaskChoices(state, null) : [];
   const choices: NewTaskChoices = { ...chosen, project, ...resolveStartChoice(chosen, open) };
-  return { choices, shownProject, open };
+  return { choices, shownProject, open, placement };
 }
 
 function AfterTaskList({
@@ -168,18 +187,40 @@ function StartField({
 export function NewTaskFields({
   state,
   chosen,
+  machines,
+  unreachable = NO_UNREACHABLE_MACHINES,
   onChoose,
 }: {
   state: ShinsaState | null;
   chosen: NewTaskChoices;
+  machines: MachineChoice[];
+  unreachable?: UnreachableMachine[];
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
-  const { choices, shownProject, open } = resolveForm(state, chosen);
+  const { choices, shownProject, open, placement } = resolveForm(state, chosen, machines);
+  const pickedMachine = choices.machine === 'auto' ? null : choices.machine;
+  const projects = state
+    ? listNewTaskProjects(state, connection.selectMachine).filter((item) =>
+        isProjectOnMachine(machines, pickedMachine, item.value)
+      )
+    : [];
   return (
     <>
+      {hasMachineChoice(machines, unreachable) && (
+        <SelectField
+          label='Machine'
+          size='sm'
+          variant='ghost'
+          align='start'
+          items={listNewTaskMachines(machines, placement, unreachable)}
+          value={choices.machine}
+          onValueChange={(next) => onChoose({ machine: next })}
+          className='min-w-0 max-w-56'
+        />
+      )}
       {state && (
         <ProjectField
-          items={listNewTaskProjects(state)}
+          items={projects}
           value={shownProject}
           onValueChange={(project) => onChoose({ project })}
         />
@@ -200,11 +241,13 @@ export function NewTaskFields({
 
 export function NewTaskForm() {
   const { state } = useConnection();
+  const machines = useMachines();
+  const unreachable = useUnreachableMachines();
   const [request, setRequest] = React.useState('');
   const [chosen, setChosen] = React.useState<NewTaskChoices>(AUTO_CHOICES);
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
-  const { choices } = resolveForm(state, chosen);
+  const { choices, placement } = resolveForm(state, chosen, machines);
   const attachments = useAttachments();
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(request, attachments.drafts, busy);
@@ -223,9 +266,19 @@ export function NewTaskForm() {
   async function submit() {
     if (!ready) return;
     setBusy(true);
+    let policy: PolicyPlacement | null = null;
+    if (placement?.byPolicy) policy = await requestPolicyPlacement(machines, request);
+    const machineId = policy?.answer?.machineId ?? placement?.id ?? null;
     const sent = await sendCommandWithToast(
       createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
-      copy.done
+      placement
+        ? describePlacementDone(
+            copy.done,
+            machines.find((machine) => machine.id === machineId),
+            policy?.reason ?? ''
+          )
+        : copy.done,
+      machineId
     );
     setBusy(false);
     if (!sent) return;
@@ -254,7 +307,13 @@ export function NewTaskForm() {
       <ScrollFade targetRef={field} />
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
         <AttachButton attachments={attachments} />
-        <NewTaskFields state={state} chosen={chosen} onChoose={choose} />
+        <NewTaskFields
+          state={state}
+          chosen={chosen}
+          machines={machines}
+          unreachable={unreachable}
+          onChoose={choose}
+        />
         <span className='flex-1' />
         <Button size='sm' disabled={!ready} loading={busy} onClick={() => void submit()}>
           {copy.submit}

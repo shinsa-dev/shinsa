@@ -249,6 +249,16 @@ src/
 │                    resumed one (memory.ts, resolveMemoryTold), and the writing rules every role gets (rules.ts,
 │                    WRITING_RULES)
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
+├── remote/          Remote access, shared by the engine, the web app and the hosted Worker (`apps/cloud`), on
+│                    WebCrypto only: the append-only wire contract with the Worker (contract.ts: REMOTE_PATHS, the
+│                    tunnel host, the stable webhook URL and its engine path, the enrollment link's fragment), keys
+│                    (keys.ts: P-256 ECDH, fingerprints), the handshake (handshake.ts: the hellos, ee/es/se ECDH and
+│                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
+│                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
+│                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts) and what stays
+│                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
+│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
+│                    secrets are made by the caller, so core stays free of randomness
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,

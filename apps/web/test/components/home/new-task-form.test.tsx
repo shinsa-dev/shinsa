@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
+import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -65,7 +66,94 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  replaceConnection(null);
   stopFakeServer();
+});
+
+function connectTwoMachines() {
+  const local = connection;
+  const sent: [string, string | null | undefined][] = [];
+  const studio = { id: 'studio', name: 'Studio', current: false };
+  const machines: MachineChoice[] = [
+    {
+      ...studio,
+      state: {
+        tasks: { a: { stage: 'building' as const } },
+        projects: { p1: {}, p2: {} },
+        settings: { taskCapacity: 4 },
+      },
+    },
+    {
+      id: 'box',
+      name: 'Build box',
+      current: false,
+      state: {
+        tasks: {},
+        projects: {},
+        settings: { taskCapacity: null, placementPolicies: ['Benchmarks run on the build box.'] },
+      },
+    },
+  ];
+  replaceConnection({
+    ...local,
+    listMachines: () => machines,
+    selectMachine: (id: string) => (id === 'p1' || id === 'p2' ? studio : null),
+    command: (command, machineId) => {
+      sent.push([command.type, machineId]);
+      return Promise.resolve();
+    },
+  });
+  return sent;
+}
+
+describe('NewTaskForm with several machines', () => {
+  it('shows a machine this device cannot reach in the picker, disabled with what to do', async () => {
+    const local = connection;
+    const machines: MachineChoice[] = [
+      { id: 'studio', name: 'Studio', current: true, state: { tasks: {}, projects: {}, settings: {} } },
+    ];
+    const unreachable = [{ id: 'laptop', name: 'Laptop' }];
+    replaceConnection({
+      ...local,
+      listMachines: () => machines,
+      listUnreachableMachines: () => unreachable,
+    });
+    renderForm();
+    expect(combobox('Machine').textContent).toBe('Automatic');
+    fireEvent.click(combobox('Machine'));
+    const laptop = await screen.findByRole('option', { name: /Laptop/ });
+    expect(laptop.getAttribute('aria-disabled')).toBe('true');
+    expect(laptop.textContent).toContain('Add this device on Laptop first');
+  });
+
+  it('shows no machine picker with one machine', () => {
+    renderForm();
+    expect(screen.queryByRole('combobox', { name: 'Machine' })).toBeNull();
+  });
+
+  it('lets the policies place a task, and on the machine you pick with only that machine’s projects', async () => {
+    const sent = connectTwoMachines();
+    const realFetch = globalThis.fetch;
+    const asked: unknown[] = [];
+    globalThis.fetch = mock((_url: string, init: RequestInit) => {
+      asked.push(JSON.parse(String(init.body)));
+      return Promise.resolve(
+        Response.json({ answer: { machineId: 'studio', reason: 'Studio runs reviews.' } })
+      );
+    }) as unknown as typeof globalThis.fetch;
+    renderForm();
+    expect(combobox('Machine').textContent).toBe('Automatic');
+    fireEvent.change(field(), { target: { value: 'Review the build' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(sent).toEqual([['task.create', 'studio']]));
+    globalThis.fetch = realFetch;
+    expect(asked).toMatchObject([{ request: 'Review the build' }]);
+    await pick('Project', /Superwall on Studio/, /Superwall/);
+    expect(combobox('Machine').textContent).toBe('Automatic');
+    await pick('Machine', /Build box/, 'Build box');
+    expect(combobox('Project').textContent).toBe('No project');
+    expect(await listOptions('Project')).toEqual(['No project']);
+  });
 });
 
 function serveUploads() {

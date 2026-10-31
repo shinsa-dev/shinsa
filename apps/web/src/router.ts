@@ -42,12 +42,31 @@ export function parseRoute(pathname: string): Route {
   return { name: 'home' };
 }
 
-let current = parseRoute(location.pathname);
+export function resolveRouteBase(env: Record<string, unknown>) {
+  const base = typeof env.BASE_URL === 'string' ? env.BASE_URL : '/';
+  return base.replace(/\/+$/, '');
+}
+
+const ROUTE_BASE = resolveRouteBase(import.meta.env);
+
+export function stripRouteBase(pathname: string, base = ROUTE_BASE) {
+  if (!base) return pathname;
+  if (pathname === base) return '/';
+  return pathname.startsWith(`${base}/`) ? pathname.slice(base.length) : pathname;
+}
+
+export function withRouteBase(path: string, base = ROUTE_BASE) {
+  if (!(base && path.startsWith('/'))) return path;
+  if (path === base || path.startsWith(`${base}/`) || path.startsWith(`${base}?`)) return path;
+  return `${base}${path}`;
+}
+
+let current = parseRoute(stripRouteBase(location.pathname));
 
 let search = location.search;
 
 function syncRoute() {
-  const next = parseRoute(location.pathname);
+  const next = parseRoute(stripRouteBase(location.pathname));
   const changed = JSON.stringify(next) !== JSON.stringify(current);
   if (changed) current = next;
   if (!changed && search === location.search) return;
@@ -58,13 +77,14 @@ function syncRoute() {
 addEventListener('popstate', syncRoute);
 
 export function replaceRoute(path: string) {
-  history.replaceState(null, '', path);
+  history.replaceState(null, '', withRouteBase(path));
   syncRoute();
 }
 
 export function navigate(path: string) {
-  if (path === `${location.pathname}${location.search}`) return;
-  history.pushState(null, '', path);
+  const full = withRouteBase(path);
+  if (full === `${location.pathname}${location.search}`) return;
+  history.pushState(null, '', full);
   syncRoute();
 }
 
@@ -121,8 +141,18 @@ export interface TaskPathOptions {
 
 export type TaskPathTarget = Pick<Task, 'id'> & { handle?: string | null };
 
+let sharedHandles: ReadonlySet<string> = new Set();
+
+export function replaceSharedHandles(handles: ReadonlySet<string>) {
+  sharedHandles = handles;
+}
+
+function resolveTaskReference(task: TaskPathTarget) {
+  return task.handle && !sharedHandles.has(task.handle) ? task.handle : task.id;
+}
+
 export function resolveCanonicalTaskPath(task: TaskPathTarget, segment: string, query: string) {
-  if (!task.handle || segment === task.handle) return null;
+  if (!task.handle || sharedHandles.has(task.handle) || segment === task.handle) return null;
   return `${resolveTaskPath(task)}${query}`;
 }
 
@@ -145,5 +175,5 @@ export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions =
   if (options.spot) params.set('spot', options.spot);
   if (options.run) params.set('run', options.run);
   const query = params.toString();
-  return `/tasks/${encodeURIComponent(task.handle ?? task.id)}${query ? `?${query}` : ''}`;
+  return `/tasks/${encodeURIComponent(resolveTaskReference(task))}${query ? `?${query}` : ''}`;
 }

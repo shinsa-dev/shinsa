@@ -4,9 +4,13 @@
   "ignorePaths": ["**/node_modules/**", "**/dist/**", "packages/ui/src/components/icon/paths.ts"],
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_"],
   "words": [
+    "cfargotunnel",
+    "ECDH",
+    "HKDF",
     "gtimeout",
     "gitdir",
     "commondir",
+    "Macbook",
     "nohup",
     "noarchive",
     "quicktime",

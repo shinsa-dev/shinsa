@@ -33,7 +33,7 @@ describe('sendCommandWithToast', () => {
   it('sends the command and confirms it with the done toast', async () => {
     const command = spyOn(connection, 'command').mockResolvedValue(undefined);
     expect(await sendCommandWithToast(COMMAND, 'Marked done.')).toBe(true);
-    expect(command).toHaveBeenCalledWith(COMMAND);
+    expect(command).toHaveBeenCalledWith(COMMAND, undefined);
     expect(toasts.success).toHaveBeenCalledWith('Marked done.');
     command.mockRestore();
   });

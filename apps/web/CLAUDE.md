@@ -10,7 +10,9 @@ themes, from sample data.
 
 ```
 src/
-├── main.tsx             Mounts Root; applies the stored theme and a `?layout=` override before the first paint
+├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and a
+│                        `?layout=` override before the first paint
+├── remote-sw.ts         The remote build's service worker (/sw.js, scope /): hands the page's /api/ requests to the page
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
 │                        /onboarding until setup is complete, resolveOnboardingRedirect), the frame (AppFrame for Cards and
 │                        Sidebar, or setup's own OnboardingShell on /onboarding, which has no ⌘K)
@@ -19,13 +21,21 @@ src/
 │                        (lib/kept-views.ts, docs/design.md 35); starts the connection unless the route is /ui
 ├── router.ts            The pushState router: parseRoute, navigate, replaceRoute, updateSearchParams,
 │                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built);
-│                        RouteScope renders a subtree at a fixed route (the site's demos)
+│                        RouteScope renders a subtree at a fixed route (the site's demos); the build's base path
+│                        (from BASE_URL; both builds use `/` today) is taken off the address and put on every path
+│                        it pushes and every in-app link (stripRouteBase, withRouteBase)
 ├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (in the Mac app
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
 ├── routes/              One file per page: home.tsx, tasks.tsx (All tasks), settings.tsx, automation.tsx (a
 │   │                    automation's own page at /automations/<id>, laid out like a task page: facts row, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed in task list rows, an Activity log of its runs), onboarding.tsx
-│   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar)
+│   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar;
+│   │                    in the remote build, a note that terminals stay on the machine)
+│   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
+│   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
+│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
+│   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
+│   │                    device, the benefits card and Check again)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -119,6 +129,20 @@ src/
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
+    ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
+    │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
+    │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
+    │                    machine owns each id, each machine's own state for placement (listMachines), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
+    │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
+    │                    remote services and their context, for Settings → Machines),
+    │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
+    │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
+    │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
+    │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
+    │                    enroll.ts (enrollDevice), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    ones this device cannot reach yet, the form's checks and the
+    │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
+    │                    fleet member)
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
     │                    patches applied once per frame, acks, transcripts from the position held (every followed
     │                    run plus the 24 read last, TRANSCRIPT_CACHE_LIMIT), whether the desktop app is connected,
@@ -257,7 +281,9 @@ src/
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, automations.ts (a watch's page: its facts,
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
-        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start and priority),
+        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
+        remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
+        expiry and its QR code as an image; connection/remote-access.ts reads and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
         server form and its checks), versions.ts (Settings → Agents → Versions: rows, statuses and the update labels)

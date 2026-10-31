@@ -48,6 +48,11 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
         'Only the human types into their terminals and runs their services. Put the command in a ```bash run block in your question to them, and they can run it in a terminal with one press.',
     },
     {
+      pattern: /\bdata\/remote\.json\b/,
+      reason:
+        'remote.json holds the keys for reaching this machine from anywhere. Agents never read or change it; remote access is the human’s, in Settings.',
+    },
+    {
       pattern: /\bgh\s+pr\s+(merge|create)\b/,
       reason: 'Shinsa opens and merges pull requests; the human approves merges.',
     },

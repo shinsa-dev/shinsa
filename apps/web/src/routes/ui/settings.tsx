@@ -8,26 +8,40 @@ import {
   type Settings,
   type ShinsaState,
 } from '@shinsa/core';
+import { Card } from '@shinsa/ui/components/card';
 import * as React from 'react';
 import { type AccountActions, AccountsGroup } from '@/components/settings/accounts.tsx';
 import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
+import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
 import { PluginsGroup } from '@/components/settings/plugins.tsx';
+import { PolicySettings } from '@/components/settings/policies.tsx';
+import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
+import { TaskFacts } from '@/components/task/facts.tsx';
 import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
+import { replaceConnection } from '@/lib/connection/socket.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
+import type { PolicyActions } from '@/lib/remote/policies.ts';
+import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
+import {
+  createSampleFleet,
+  createSampleMachineServices,
+  createSampleRemote,
+  createSampleRemoteActions,
+} from './sample-remote.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
@@ -242,6 +256,36 @@ const SAMPLE_MEMORY_ACTIONS: MemoryActions = {
   remove: acknowledgeSample,
 };
 
+const SAMPLE_POLICY_ACTIONS: PolicyActions = { write: acknowledgeSample };
+
+const SAMPLE_POLICY_MACHINES = [
+  {
+    id: 'studio',
+    name: 'Studio',
+    current: true,
+    state: {
+      tasks: {},
+      projects: {},
+      settings: {
+        placementPolicies: [
+          'Run Xcode simulator tests and TestFlight builds here.',
+          'Anything that needs macOS runs here.',
+        ],
+      },
+    },
+  },
+  {
+    id: 'server',
+    name: 'Build server',
+    current: false,
+    state: {
+      tasks: {},
+      projects: {},
+      settings: { placementPolicies: ['Benchmarks and load tests always run here.'] },
+    },
+  },
+];
+
 function createMemoryScene(now: number): ShinsaState {
   const project: Project = {
     id: 'shinsa',
@@ -296,6 +340,39 @@ function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }
   );
 }
 
+function FleetFactsSpecimen({ now }: { now: number }) {
+  const [fleet] = React.useState(() => {
+    const studio = createSampleTask(now, {
+      id: 'fleet-studio',
+      title: 'Fix the scroll in tab groups',
+      handle: 'WEB-14',
+    });
+    const laptop = createSampleTask(now, {
+      id: 'fleet-laptop',
+      title: 'Add search to the docs',
+      handle: 'DOC-3',
+    });
+    const next = createSampleFleet([
+      { name: 'Studio', state: createSampleState({ tasks: [studio] }) },
+      { name: 'MacBook Air', state: createSampleState({ tasks: [laptop] }) },
+    ]);
+    replaceConnection(next);
+    return next;
+  });
+  React.useEffect(() => {
+    replaceConnection(fleet);
+    return () => replaceConnection(null);
+  }, [fleet]);
+  const state = fleet.snapshot().state as unknown as ShinsaState;
+  return (
+    <Card>
+      {Object.values(state.tasks).map((task) => (
+        <TaskFacts key={task.id} state={state} task={task} />
+      ))}
+    </Card>
+  );
+}
+
 export function SettingsSpecimens() {
   const [now] = React.useState(Date.now);
   const [{ state, schedules }] = React.useState(() => createScheduleScene(now));
@@ -304,9 +381,34 @@ export function SettingsSpecimens() {
   const [extensions] = React.useState(() => createSampleExtensions(now));
   const [versions] = React.useState(createSampleVersions);
   const [memory] = React.useState(() => createMemoryScene(now));
+  const [remote] = React.useState(() => createSampleRemote(now));
+  const [remoteActions] = React.useState(() => createSampleRemoteActions(now));
+  const [machines] = React.useState(() => createSampleMachineServices(now));
   const settings = createSettings();
   return (
     <>
+      {remote.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <RemoteAccessGroup snapshot={scene.snapshot} failure={null} actions={remoteActions} />
+          </div>
+        </Specimen>
+      ))}
+      <Specimen label='MachinesSettings · on app.shinsa.dev: every machine of the account, two in this dashboard'>
+        <div className='w-full max-w-xl'>
+          <RemoteServicesContext.Provider value={machines}>
+            <MachinesSettings />
+          </RemoteServicesContext.Provider>
+        </div>
+      </Specimen>
+      <Specimen label='PolicySettings · on app.shinsa.dev: which work runs on which machine, in plain English'>
+        <div className='w-full max-w-xl'>
+          <PolicySettings machines={SAMPLE_POLICY_MACHINES} actions={SAMPLE_POLICY_ACTIONS} />
+        </div>
+      </Specimen>
+      <Specimen label='TaskFacts · on app.shinsa.dev with several machines, each task shows the machine it runs on'>
+        <FleetFactsSpecimen now={now} />
+      </Specimen>
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>
         <div className='w-full max-w-xl'>
           <MemorySettings state={memory} actions={SAMPLE_MEMORY_ACTIONS} />

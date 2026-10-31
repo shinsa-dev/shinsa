@@ -319,6 +319,14 @@ function readRoleSwitches(value: unknown) {
   return switches;
 }
 
+function readPlacementPatch(fields: Record<string, unknown>): Partial<Settings> {
+  const patch: Partial<Settings> = {};
+  if ('taskCapacity' in fields) patch.taskCapacity = readNullableInteger(fields, 'taskCapacity');
+  if ('placementPolicies' in fields)
+    patch.placementPolicies = readList(fields, 'placementPolicies', readText);
+  return patch;
+}
+
 function readSettingsPatch(value: unknown): Partial<Settings> {
   const fields = readObject(value, 'patch');
   readKnownKeys(fields, SETTINGS_KEYS, 'Settings');
@@ -329,6 +337,7 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('delegationLimit' in fields) patch.delegationLimit = readNullableInteger(fields, 'delegationLimit');
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
+  Object.assign(patch, readPlacementPatch(fields));
   if ('approvePlans' in fields) patch.approvePlans = readChoice(fields, 'approvePlans', PLAN_APPROVALS);
   if ('agentModels' in fields) patch.agentModels = readRoleIds(fields.agentModels, 'agentModels');
   if ('agentProviders' in fields) {

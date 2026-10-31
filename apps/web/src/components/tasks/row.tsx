@@ -18,9 +18,11 @@ import { PriorityChoices, TaskActionItems } from '@/components/task/action-items
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
+import { useMachine } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
+import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
 import type { TaskGroupKey } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
@@ -78,13 +80,24 @@ function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
 
 function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
   const project = selectProject(state, repo.projectId);
+  const machine = useMachine(repo.id);
   const icon = <RepoIcon state={state} repo={repo} />;
-  if (!project) return icon;
+  if (!(project || machine)) return icon;
   return (
     <Hint
       label={
         <span className='whitespace-nowrap'>
-          {project.name} <TooltipLabel>project</TooltipLabel>
+          {project && (
+            <>
+              {project.name} <TooltipLabel>project</TooltipLabel>
+            </>
+          )}
+          {project && machine && ' '}
+          {machine && (
+            <>
+              {resolveMachineLabel(machine)} <TooltipLabel>machine</TooltipLabel>
+            </>
+          )}
         </span>
       }
     >

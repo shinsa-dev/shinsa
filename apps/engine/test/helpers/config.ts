@@ -29,6 +29,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     pushRetryMs: 10,
     overloadRetryMs: 10,
     eunoe: { command: resolve(import.meta.dirname, 'bin/eunoe'), port: null },
+    remoteOrigin: 'http://127.0.0.1:1',
     ...overrides,
   };
   for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
