@@ -8,9 +8,9 @@ export type CommandRunner = (
   options?: { timeoutMs?: number }
 ) => Promise<CommandResult>;
 
-type PrerequisiteId = 'git' | 'brew' | 'gh' | 'gh_auth' | 'claude' | 'bun' | 'codex' | 'codex_auth';
+export type PrerequisiteId = 'git' | 'brew' | 'gh' | 'gh_auth' | 'claude' | 'bun' | 'codex' | 'codex_auth';
 
-interface Prerequisite {
+export interface Prerequisite {
   id: PrerequisiteId;
   label: string;
   ok: boolean;
@@ -34,6 +34,12 @@ const CHECK_TIMEOUT_MS = 15_000;
 const NOT_FOUND_CODE = 127;
 
 const BUN_FILES = ['bun.lock', 'bun.lockb', 'bunfig.toml'];
+
+const MISSING_TOOLS = /xcrun: error|invalid active developer path/;
+
+const BREW_PATH = 'eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"';
+
+const INSTALL_ORDER: readonly PrerequisiteId[] = ['git', 'brew', 'gh', 'gh_auth', 'claude', 'bun'];
 
 const FIXES: Record<PrerequisiteId, string> = {
   git: 'Install Apple’s command line tools, which include Git.',
@@ -59,6 +65,11 @@ const COMMANDS: Record<PrerequisiteId, string> = {
   codex_auth: 'codex login',
 };
 
+const SCRIPTS: Partial<Record<PrerequisiteId, string>> = {
+  git: "xcode-select --install; echo 'Finish the install in the window macOS opened.'; until xcode-select -p >/dev/null 2>&1; do sleep 5; done",
+  brew: `${COMMANDS.brew} && ${BREW_PATH}`,
+};
+
 const LABELS: Record<PrerequisiteId, string> = {
   git: 'Git',
   brew: 'Homebrew',
@@ -72,6 +83,18 @@ const LABELS: Record<PrerequisiteId, string> = {
 
 export function resolveInstallCommand(id: string) {
   return Object.hasOwn(COMMANDS, id) ? COMMANDS[id as PrerequisiteId] : null;
+}
+
+export function resolveInstallScript(id: string) {
+  return Object.hasOwn(COMMANDS, id)
+    ? (SCRIPTS[id as PrerequisiteId] ?? COMMANDS[id as PrerequisiteId])
+    : null;
+}
+
+export function listMissingInstalls(checks: readonly Prerequisite[]) {
+  const missing = new Set(checks.filter((check) => !(check.ok || check.optional)).map((check) => check.id));
+  if (missing.has('brew')) missing.delete('git');
+  return INSTALL_ORDER.filter((id) => missing.has(id));
 }
 
 export function resolvePrerequisiteLabel(id: string) {
@@ -101,7 +124,7 @@ function firstLine(text: string) {
 function describeOutcome(result: CommandResult) {
   if (result.ok) return firstLine(result.stdout || result.stderr);
   if (result.timedOut) return 'It did not answer in time.';
-  if (result.code === NOT_FOUND_CODE) return 'Not installed.';
+  if (result.code === NOT_FOUND_CODE || MISSING_TOOLS.test(result.stderr)) return 'Not installed.';
   return firstLine(result.stderr || result.stdout) || `It exited with code ${result.code}.`;
 }
 

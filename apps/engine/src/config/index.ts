@@ -26,6 +26,7 @@ export interface ServerConfig {
   machine: MachineConfigRead;
   roots: string[];
   inspect: boolean;
+  simulateMissing: string[];
   editor: string | null;
   terminal: string;
   settleDelayMs: number;
@@ -110,6 +111,7 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
     machine: read,
     roots: readList(env.SHINSA_ROOTS, ':'),
     inspect: env.SHINSA_INSPECT === '1',
+    simulateMissing: readList(env.SHINSA_SIMULATE_MISSING, ','),
     editor: env.SHINSA_EDITOR || machine.editor,
     terminal: env.SHINSA_TERMINAL || machine.terminal || 'Terminal',
     settleDelayMs: readNumber(env, 'SHINSA_SETTLE_DELAY_MS', 15_000),

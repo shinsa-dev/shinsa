@@ -190,6 +190,10 @@ export function isInstallable(check: OnboardingCheck) {
   return !check.ok && check.command !== null;
 }
 
+export function countMissingInstalls(checks: readonly OnboardingCheck[]) {
+  return checks.filter((check) => isInstallable(check) && !check.optional).length;
+}
+
 export function describeInstallEnd(terminal: TerminalInfo) {
   if (terminal.status === 'stopped')
     return 'Shinsa’s engine restarted, so the install stopped. Install it again.';

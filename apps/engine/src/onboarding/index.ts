@@ -21,7 +21,14 @@ import { runCommand } from '../shell/index.ts';
 import { refreshInstallFolders } from '../shell/login.ts';
 import type { AccountSource } from './accounts.ts';
 import { type FlowContext, OnboardingSetup } from './flow.ts';
-import { type InstallTerminals, openInstallTerminal, openReplyTerminal } from './install.ts';
+import {
+  INSTALL_SCRIPTS,
+  type InstallScripts,
+  type InstallTerminals,
+  openInstallAllTerminal,
+  openInstallTerminal,
+  openReplyTerminal,
+} from './install.ts';
 import { type CommandRunner, isBunUsed, resolvePrerequisites } from './prerequisites.ts';
 import {
   createChosenProjects,
@@ -32,6 +39,7 @@ import {
 import type { ProjectRevision } from './revise.ts';
 import { requestRevision } from './revise.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
+import { createSetupSimulation } from './simulate.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';
 
@@ -83,9 +91,18 @@ export class Onboarding {
   readonly #context: OnboardingContext;
   readonly setup: OnboardingSetup;
   readonly #projects: ProjectSetup;
+  readonly #run: CommandRunner;
+  readonly #scripts: InstallScripts;
 
   constructor(context: OnboardingContext) {
     this.#context = context;
+    const run = context.run ?? runCommand;
+    const simulation =
+      context.config.simulateMissing.length > 0
+        ? createSetupSimulation(context.config.simulateMissing, run)
+        : null;
+    this.#run = simulation?.run ?? run;
+    this.#scripts = simulation?.scripts ?? INSTALL_SCRIPTS;
     const { engine, resolveLogin } = context;
     this.#projects = {
       engine,
@@ -193,30 +210,35 @@ export class Onboarding {
   }
 
   async openPrivacySettings() {
-    const run = this.#context.run ?? runCommand;
-    const result = await run(['open', PRIVACY_SETTINGS_URL], this.#context.config.userHome);
+    const result = await this.#run(['open', PRIVACY_SETTINGS_URL], this.#context.config.userHome);
     return { ok: result.ok };
   }
 
   async resolvePrerequisites() {
-    const { config, roots, run } = this.#context;
+    const { config, roots } = this.#context;
     refreshInstallFolders(Bun.env, config.userHome);
-    return resolvePrerequisites(config.userHome, run, { bun: isBunUsed(await roots.listRoots()) });
+    return resolvePrerequisites(config.userHome, this.#run, { bun: isBunUsed(await roots.listRoots()) });
   }
 
   async openInstall(fields: JsonObject) {
     const { terminals, config, engine } = this.#context;
-    if (typeof fields.id !== 'string' && typeof fields.command !== 'string')
+    if (typeof fields.id !== 'string' && typeof fields.command !== 'string' && fields.all !== true)
       throw new DomainError(
         'body_invalid',
-        'Send “id” as the check to fix, such as gh, or a “command” from the help task.'
+        'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.'
       );
     if (!terminals) throw new DomainError('terminals_off', 'Terminals are off, so run the command yourself.');
     if (typeof fields.id === 'string')
-      return { terminal: openInstallTerminal(terminals, fields.id, config.userHome) };
+      return { terminal: openInstallTerminal(terminals, fields.id, config.userHome, this.#scripts) };
+    if (fields.all === true) {
+      const report = await this.resolvePrerequisites();
+      return { terminal: openInstallAllTerminal(terminals, report.checks, config.userHome, this.#scripts) };
+    }
     const helpId = await this.setup.selectHelp();
     const body = (helpId && engine.state.tasks[helpId]?.result?.body) || null;
-    return { terminal: openReplyTerminal(terminals, body, String(fields.command), config.userHome) };
+    return {
+      terminal: openReplyTerminal(terminals, body, String(fields.command), config.userHome, this.#scripts),
+    };
   }
 
   #resolveContext(revision: ProjectRevision | null): FlowContext {

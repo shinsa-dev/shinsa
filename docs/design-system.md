@@ -7530,8 +7530,10 @@ style of its own.
 - **Sign in, never import**: an account the app needs is one primary button ("Sign in with Claude") on an empty
   row, never a login found on the machine and copied. Until the data arrives, the card holds one row with a delayed
   loading line, never "none found".
-- **Install in place**: a missing tool's row has Install (`secondary`, `sm`, `IconConsole`), which opens a terminal
-  inside the card that runs the tool's own command and checks again when it ends. When one still fails, "Ask an
+- **Install in place**: a missing tool's row has Install (`sm`, `IconConsole`), which opens a terminal
+  inside the card that runs the tool's own command and checks again when it ends. With two or more missing, a row
+  above them offers Install all (`primary`), one terminal that installs each in the order they need; with one, its
+  Install is the primary. The step's own forward button turns `secondary` until the tools are there. When one still fails, "Ask an
   agent for help" under the card shows the agent's reply in place, each command in it with Run in terminal.
 - **Finishing opens the first task**: the last step lands on a done task that sums up what was set up; there is no
   finished page.

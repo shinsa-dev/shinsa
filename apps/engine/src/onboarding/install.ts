@@ -1,12 +1,29 @@
 import { DomainError, type TerminalInfo } from '@shinsa/core';
 import type { Terminals } from '../terminals/index.ts';
-import { resolveInstallCommand, resolvePrerequisiteLabel } from './prerequisites.ts';
+import {
+  listMissingInstalls,
+  type Prerequisite,
+  resolveInstallScript,
+  resolvePrerequisiteLabel,
+} from './prerequisites.ts';
 
 export type InstallTerminals = Pick<Terminals, 'snapshot' | 'create' | 'rename' | 'run' | 'close'>;
 
+export interface InstallScripts {
+  resolve(id: string): string | null;
+  resolveReply(command: string): string;
+}
+
 export const SETUP_TERMINAL_PROJECT = 'setup';
 
+export const INSTALL_SCRIPTS: InstallScripts = {
+  resolve: resolveInstallScript,
+  resolveReply: (command) => command,
+};
+
 const REPLY_TERMINAL_NAME = 'Fix from the agent';
+
+const ALL_TERMINAL_NAME = 'Set up the missing tools';
 
 const FENCE = /```([^\n]*)\n([\s\S]*?)```/g;
 
@@ -27,12 +44,31 @@ function openSetupTerminal(terminals: InstallTerminals, name: string, script: st
   return { ...terminal, name };
 }
 
-export function openInstallTerminal(terminals: InstallTerminals, id: string, home: string): TerminalInfo {
-  const command = resolveInstallCommand(id);
+export function openInstallTerminal(
+  terminals: InstallTerminals,
+  id: string,
+  home: string,
+  scripts: InstallScripts = INSTALL_SCRIPTS
+): TerminalInfo {
+  const script = scripts.resolve(id);
   const label = resolvePrerequisiteLabel(id);
-  if (!(command && label))
+  if (!(script && label))
     throw new DomainError('check_unknown', 'Shinsa has no command that fixes that check.');
-  return openSetupTerminal(terminals, `Set up ${label}`, `${command}; exit`, home);
+  return openSetupTerminal(terminals, `Set up ${label}`, `${script}; exit`, home);
+}
+
+export function openInstallAllTerminal(
+  terminals: InstallTerminals,
+  checks: readonly Prerequisite[],
+  home: string,
+  scripts: InstallScripts = INSTALL_SCRIPTS
+): TerminalInfo {
+  const steps = listMissingInstalls(checks).flatMap((id) => {
+    const script = scripts.resolve(id);
+    return script ? [`{ ${script}; }`] : [];
+  });
+  if (steps.length === 0) throw new DomainError('nothing_missing', 'Every tool Shinsa needs is installed.');
+  return openSetupTerminal(terminals, ALL_TERMINAL_NAME, `${steps.join(' && ')}; exit`, home);
 }
 
 export function isReplyCommand(body: string, command: string) {
@@ -53,12 +89,13 @@ export function openReplyTerminal(
   terminals: InstallTerminals,
   body: string | null,
   command: string,
-  home: string
+  home: string,
+  scripts: InstallScripts = INSTALL_SCRIPTS
 ): TerminalInfo {
   if (!(body && isReplyCommand(body, command)))
     throw new DomainError(
       'command_unknown',
       'Shinsa runs only the commands the help task’s agent replied with.'
     );
-  return openSetupTerminal(terminals, REPLY_TERMINAL_NAME, `${command}\nexit`, home);
+  return openSetupTerminal(terminals, REPLY_TERMINAL_NAME, `${scripts.resolveReply(command)}\nexit`, home);
 }

@@ -74,7 +74,7 @@ export async function replyToOnboarding(reply: OnboardingReply) {
   return flow;
 }
 
-export async function requestOnboardingInstall(fix: { id: string } | { command: string }) {
+export async function requestOnboardingInstall(fix: { id: string } | { all: true } | { command: string }) {
   const answer = await requestJson<{ terminal: TerminalInfo }>('/api/onboarding/install', fix);
   return answer.terminal;
 }

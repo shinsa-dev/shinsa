@@ -1236,12 +1236,16 @@ Only these, and they win over anything below:
     - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
       the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
       command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`. At the right a passed or optional check shows
-      its version or state in `TOKEN_TEXT`; a failed one shows a `sm` secondary Install (the console icon), which asks
+      its version or state in `TOKEN_TEXT`; a failed one shows a `sm` Install (the console icon), which asks
       the engine to run that check's own command (`POST /api/onboarding/install`, never a command from the page) and
       opens its terminal inside the card under the row: a 224px pane with the item corner and a hairline, the
       terminal's own background, and when the command ends one `text-xs` `fg-2` line under it ("Finished. Shinsa
       checked the tools again.", or its exit code and to ask for help), at which point the checks are read again by
-      themselves. Check again is in the footer, and coming back to the window checks again by itself. An optional
+      themselves. With two or more required tools missing, a row above the checks says how many ("3 tools are missing.
+      Install them all in one terminal, each after the one it needs.") with a `sm` primary Install all, whose terminal
+      opens under that row (`{ all: true }`); with one, that check's Install is the primary. Either way the footer's
+      button (Skip for now, Finish anyway) steps back to secondary while a required tool is missing, so the install is
+      the one primary on the step. Check again is in the footer, and coming back to the window checks again by itself. An optional
       check that fails (codex and its sign-in) is a skipped row, never a fail, and never holds setup back.
     - **Help** (`OnboardingHelp`): while a required check still fails, a line under the card ("Stuck on an install?
       An agent reads the failing checks and replies with the commands to run.") with a secondary Ask an agent for

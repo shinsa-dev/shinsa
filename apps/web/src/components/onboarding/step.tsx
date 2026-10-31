@@ -329,7 +329,8 @@ function StepFooter({
 }) {
   const previous = flow.steps[flow.index - 1];
   const submit = resolveSubmit(step, values, drafts);
-  const signInFirst = step.id === 'accounts' && isStepInstalled(step) && accounts.list?.length === 0;
+  const installFirst = !isStepInstalled(step);
+  const signInFirst = step.id === 'accounts' && !installFirst && accounts.list?.length === 0;
   return (
     <>
       {previous ? (
@@ -352,7 +353,7 @@ function StepFooter({
         )}
         <StepAction step={step} pending={pending} accounts={accounts} actions={actions} />
         <Button
-          variant={signInFirst ? 'secondary' : 'primary'}
+          variant={signInFirst || installFirst ? 'secondary' : 'primary'}
           icon={{ name: 'IconArrowRight', position: 'inline-end' }}
           disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
           loading={pending === SUBMIT_KEY}

@@ -500,6 +500,54 @@ describe('the setup page', () => {
     await waitFor(() => expect(reads()).toBe((before ?? 0) + 1));
   });
 
+  it('with several tools missing, Install all runs them in one terminal and Finish anyway steps back', async () => {
+    const missing = (id: string, label: string, command: string) => ({
+      id,
+      label,
+      ok: false,
+      detail: 'Not installed.',
+      fix: null,
+      command,
+    });
+    const tools = createStep({
+      id: 'prerequisites',
+      title: 'The tools Shinsa runs',
+      ready: false,
+      submitLabel: 'Finish anyway',
+      checks: [
+        missing('gh', 'GitHub CLI', 'brew install gh'),
+        missing('bun', 'Bun', 'curl -fsSL https://bun.sh/install | bash'),
+        { ...missing('codex', 'Codex', 'npm install -g @openai/codex'), optional: true },
+      ],
+    });
+    startFakeServer();
+    const terminal = createTerminal({ id: 'all', projectId: 'setup', name: 'Set up the missing tools' });
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: createFlow(tools) },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+      'POST /api/onboarding/install': { answer: { terminal } },
+    });
+    renderPage();
+    expect(
+      await screen.findByText(
+        '2 tools are missing. Install them all in one terminal, each after the one it needs.'
+      )
+    ).toBeTruthy();
+    const isPrimary = (button: HTMLElement) => button.className.includes('before:bg-primary');
+    expect(isPrimary(screen.getByRole('button', { name: 'Install all' }))).toBe(true);
+    expect(isPrimary(screen.getByRole('button', { name: /Finish anyway/ }))).toBe(false);
+    expect(screen.getAllByRole('button', { name: 'Install' }).some(isPrimary)).toBe(false);
+    globals.WebSocket = QuietSocket;
+    act(() => connection.replaceTerminals(createTerminalsSnapshot([terminal])));
+    fireEvent.click(screen.getByRole('button', { name: 'Install all' }));
+    await waitFor(() =>
+      expect(fake?.requests.find((request) => request.path === '/api/onboarding/install')?.body).toEqual({
+        all: true,
+      })
+    );
+    await waitFor(() => expect(document.querySelector('.xterm')).not.toBeNull());
+  });
+
   it('asks an agent for help with the failing checks, shows its reply, and runs a command from it', async () => {
     const tools = createStep({
       id: 'prerequisites',

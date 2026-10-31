@@ -4759,6 +4759,14 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
+- **Simulated missing tools.** `SHINSA_SIMULATE_MISSING=git,brew,gh,gh_auth,claude,bun,codex,codex_auth` (any of
+  them, comma separated) makes setup's tool checks answer as a Mac without those tools would (`onboarding/simulate.ts`):
+  `127` for a missing command, Apple's `xcrun` placeholder for Git, "not logged into any GitHub hosts" for `gh auth
+  status`. Install and a command from the help task then only print what they would run, and an install marks its tool
+  installed, so the next check passes; a `brew` install fails while Homebrew is still missing, and Homebrew brings Git.
+  Nothing else is simulated: the accounts, sign-in and agents are real. The `setup-*` services of the Shinsa project
+  each run a fresh Shinsa on one case (a new Mac, no Bun, no Homebrew, GitHub signed out, no Claude Code), to click
+  through setup as that person.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
   effect runs (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered, and every command
   is refused with `inspect_read_only` ("Shinsa is in inspect mode and only shows this data. Start it without
@@ -4995,16 +5003,24 @@ install script, `brew install gh`, `gh auth login`, Claude Code's `curl -fsSL ht
 Bun's `curl -fsSL https://bun.sh/install | bash`, `npm install -g @openai/codex` and `codex login`. Before every
 check the engine adds `~/.bun/bin`, `~/.local/bin` and Homebrew's folders that exist to its own `PATH` again
 (`refreshInstallFolders` in `shell/login.ts`, the folders it adds at start when no login shell answers), so a tool
-you just installed is found without restarting Shinsa.
+you just installed is found without restarting Shinsa. On a Mac without Apple's command line tools `/usr/bin/git`
+is a placeholder that fails with `xcrun: error: invalid active developer path`; that reads "Not installed." too.
 
 **`POST /api/onboarding/install`** with `{ id }` (a check's id) or `{ command }` (a command from the help task's
 reply, below): opens a terminal running it and answers `{ terminal }` (`TerminalInfo`). Only a request from Shinsa's
 own page is taken: one with no `Origin` is refused with `browser_only`, so neither the `shinsa` command nor an agent
 installs anything. With `id`, the terminal runs that check's own command, never one the page sends (`install.ts`,
 `openInstallTerminal`; an id with none is `check_unknown`), as `‹command›; exit`, named "Set up ‹label›". With
+`{ all: true }`, it runs every required missing tool's script in one terminal named "Set up the missing tools", in
+the order they need each other (Git, Homebrew, the GitHub CLI, its sign-in, Claude Code, Bun; `listMissingInstalls`),
+each as `{ ‹script›; }` joined with `&&`, so one that fails stops the rest; Git is left out when Homebrew is in the list,
+since Homebrew's installer brings Apple's command line tools, and it is `nothing_missing` when no required tool is.
+A script is a check's command except for two (`resolveInstallScript`): Git's waits until `xcode-select -p` answers,
+because `xcode-select --install` only opens macOS's installer window and returns, and Homebrew's puts `brew` on the
+terminal's `PATH` after it (`brew shellenv`), so the commands after it find it. With
 `command`, it runs only when every line of it, a leading `$` or `%` prompt dropped, is in one `bash run` block of
 the current help task's result (`isReplyCommand`), else `command_unknown`, in a terminal named "Fix from the agent".
-Either way the terminal opens in your home folder under the project id `setup`, which no project has, so the
+Every way the terminal opens in your home folder under the project id `setup`, which no project has, so the
 Terminal page does not list it, and an earlier setup terminal of the same name is closed first. The command is
 followed by `exit`, so the terminal ends when it does, with its exit code, and the web checks again then. Other codes:
 `body_invalid`, `terminals_off` (Shinsa runs with no terminals).

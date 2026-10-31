@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import {
   type CommandRunner,
   isBunUsed,
+  listMissingInstalls,
+  type Prerequisite,
   resolveInstallCommand,
+  resolveInstallScript,
   resolvePrerequisiteLabel,
   resolvePrerequisites,
 } from '../../src/onboarding/prerequisites.ts';
@@ -169,6 +172,47 @@ describe('the install commands', () => {
     expect(resolveInstallCommand('rm -rf ~')).toBeNull();
     expect(resolveInstallCommand('toString')).toBeNull();
     expect(resolvePrerequisiteLabel('constructor')).toBeNull();
+  });
+});
+
+describe('the install scripts', () => {
+  test('wait for Apple’s installer window, and put Homebrew on PATH for the commands after it', () => {
+    expect(resolveInstallScript('git')).toContain('until xcode-select -p');
+    expect(resolveInstallScript('brew')).toEndWith(
+      '&& eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"'
+    );
+    expect(resolveInstallScript('gh')).toBe('brew install gh');
+    expect(resolveInstallScript('toString')).toBeNull();
+  });
+
+  test('list the required missing tools in the order they need each other, leaving Git to Homebrew', () => {
+    const check = (id: string, ok: boolean, optional = false) =>
+      ({ id, ok, ...(optional ? { optional } : {}) }) as Prerequisite;
+    expect(
+      listMissingInstalls([
+        check('bun', false),
+        check('gh_auth', false),
+        check('gh', false),
+        check('codex', false, true),
+        check('brew', false),
+        check('git', false),
+        check('claude', true),
+      ])
+    ).toEqual(['brew', 'gh', 'gh_auth', 'bun']);
+    expect(listMissingInstalls([check('git', false), check('gh', true)])).toEqual(['git']);
+  });
+
+  test('read Apple’s Git placeholder, which runs without the command line tools, as not installed', async () => {
+    const shim = result(
+      false,
+      '',
+      'xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)'
+    );
+    const report = await resolvePrerequisites(HOME, createRunner({ ...READY, 'git --version': shim }));
+    expect(report.checks.find((check) => check.id === 'git')).toMatchObject({
+      ok: false,
+      detail: 'Not installed.',
+    });
   });
 });
 

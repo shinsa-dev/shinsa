@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  countMissingInstalls,
   describeAccessTitle,
   describeAccountSource,
   describeFixAction,
@@ -122,6 +123,14 @@ describe('the steps', () => {
     expect(isInstallable(missing)).toBe(true);
     expect(isInstallable({ ...missing, ok: true })).toBe(false);
     expect(isInstallable({ ...missing, command: null })).toBe(false);
+    expect(
+      countMissingInstalls([
+        missing,
+        { ...missing, id: 'bun' },
+        { ...missing, optional: true },
+        { ...missing, ok: true },
+      ])
+    ).toBe(2);
     expect(describeFixAction(missing)).toBe('Install');
     expect(describeFixAction({ ...missing, id: 'gh_auth' })).toBe('Sign in');
     expect(isStepInstalled(createStep({ checks: [missing] }))).toBe(false);

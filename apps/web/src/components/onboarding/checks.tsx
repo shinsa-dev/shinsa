@@ -13,6 +13,7 @@ import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestOnboardingInstall } from '@/lib/connection/onboarding.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import {
+  countMissingInstalls,
   describeFixAction,
   describeInstallEnd,
   isInstallable,
@@ -57,10 +58,12 @@ export function InstallTerminal({ terminalId, onEnd }: { terminalId: string; onE
 function CheckRow({
   check,
   installing,
+  leading,
   onInstall,
 }: {
   check: OnboardingCheck;
   installing: boolean;
+  leading: boolean;
   onInstall: () => void;
 }) {
   return (
@@ -81,12 +84,41 @@ function CheckRow({
         )}
       </span>
       {isInstallable(check) ? (
-        <Button variant='secondary' size='sm' icon='IconConsole' loading={installing} onClick={onInstall}>
+        <Button
+          variant={leading ? 'primary' : 'secondary'}
+          size='sm'
+          icon='IconConsole'
+          loading={installing}
+          onClick={onInstall}
+        >
           {describeFixAction(check)}
         </Button>
       ) : (
         <Truncate className={cn(TOKEN_TEXT, 'min-w-0 max-w-1/2 shrink text-end')}>{check.detail}</Truncate>
       )}
+    </div>
+  );
+}
+
+const ALL_CHECKS = 'all';
+
+function InstallAllRow({
+  count,
+  installing,
+  onInstall,
+}: {
+  count: number;
+  installing: boolean;
+  onInstall: () => void;
+}) {
+  return (
+    <div className={cn(SETTING_ROW, 'gap-2')}>
+      <span className='min-w-0 flex-1 text-fg-3 text-xs'>
+        {count} tools are missing. Install them all in one terminal, each after the one it needs.
+      </span>
+      <Button variant='primary' size='sm' icon='IconConsole' loading={installing} onClick={onInstall}>
+        Install all
+      </Button>
     </div>
   );
 }
@@ -100,22 +132,40 @@ export function OnboardingChecks({
 }) {
   const [install, setInstall] = React.useState<Install | null>(null);
   const [starting, setStarting] = React.useState<string | null>(null);
+  const missing = countMissingInstalls(checks);
   const start = async (checkId: string) => {
     setStarting(checkId);
     await requestWithToast(async () => {
-      const terminal = await requestOnboardingInstall({ id: checkId });
+      const terminal = await requestOnboardingInstall(
+        checkId === ALL_CHECKS ? { all: true } : { id: checkId }
+      );
       setInstall({ checkId, terminalId: terminal.id });
     });
     setStarting(null);
   };
   return (
     <SettingsCard>
+      {(missing > 1 || install?.checkId === ALL_CHECKS) && (
+        <div className='border-border border-b'>
+          {missing > 1 && (
+            <InstallAllRow
+              count={missing}
+              installing={starting === ALL_CHECKS}
+              onInstall={() => void start(ALL_CHECKS)}
+            />
+          )}
+          {install?.checkId === ALL_CHECKS && (
+            <InstallTerminal key={install.terminalId} terminalId={install.terminalId} onEnd={onRecheck} />
+          )}
+        </div>
+      )}
       <ul className='flex flex-col'>
         {checks.map((check) => (
           <li key={check.id}>
             <CheckRow
               check={check}
               installing={starting === check.id}
+              leading={missing === 1 && isInstallable(check) && !check.optional}
               onInstall={() => void start(check.id)}
             />
             {install?.checkId === check.id && (
