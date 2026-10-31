@@ -159,7 +159,7 @@ describe('the shinsa tool server', () => {
     expect(reply.properties.points.items.properties.note.maxLength).toBe(PROTOCOL_LIMITS.replyNote);
     expect(reply.properties.points.items.required).toEqual(['ask', 'outcome', 'note']);
     expect(reply.properties.next.maxLength).toBe(PROTOCOL_LIMITS.replyNext);
-    expect(reply.properties.details.maxLength).toBe(PROTOCOL_LIMITS.replyDetails);
+    expect('details' in reply.properties).toBe(false);
     expect(steps.items.properties.detail.description).toContain('in markdown');
     const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
     expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);

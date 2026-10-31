@@ -2395,7 +2395,7 @@ describe('the process tools and what a run cost', () => {
     const tree = await git(path, 'rev-parse', 'HEAD^{tree}');
     expect(dispatched.find((command) => command.type === 'agent.complete_fix')).toMatchObject({
       summary: 'Fixed.',
-      reply: { ...reply, details: null },
+      reply,
       walkthrough: { flow: 'a → b' },
       treeHash: tree,
     });

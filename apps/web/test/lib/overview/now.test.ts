@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { DisplayPhase, ReportCheck } from '@shinsa/core';
 import {
+  describeAgentReviewFact,
   describeFollowUpNote,
-  describeReviewFacts,
   isAgentWorking,
   isTaskWatchable,
   listFeedLines,
@@ -135,32 +135,13 @@ describe('resolveNowTitle', () => {
   });
 });
 
-describe('describeReviewFacts', () => {
-  it('sums up the agent review and leaves the checks to their own line', () => {
-    const task = createTask({
-      id: 'task-1',
-      checkResults: [check('pass'), check('pass'), check('fail')],
-      findings: [{ severity: 'optional', file: null, line: null, message: 'Consider a guard.' }],
-    });
-    expect(describeReviewFacts(task, false)).toBe('Agent review left 1 note');
-    expect(describeReviewFacts(createTask({ id: 'task-1' }), false)).toBe('Agent review found nothing');
-  });
-
-  it('counts several notes', () => {
+describe('describeAgentReviewFact', () => {
+  it('says the agent review found nothing, and nothing when its findings show below', () => {
     const findings = [
-      { severity: 'blocking' as const, file: null, line: null, message: 'One' },
-      { severity: 'optional' as const, file: null, line: null, message: 'Two' },
+      { severity: 'optional' as const, file: null, line: null, message: 'Consider a guard.' },
     ];
-    expect(describeReviewFacts(createTask({ id: 'task-1', findings }), false)).toBe(
-      'Agent review left 2 notes'
-    );
-  });
-
-  it('says the pull request is clean at the merge gate', () => {
-    const task = createTask({ id: 'task-1', checkResults: [check('pass')], pullRequest: PULL_REQUEST });
-    expect(describeReviewFacts(task, true)).toBe('Agent review found nothing · PR #4531 is clean');
-    expect(describeReviewFacts(task, false)).toBe('Agent review found nothing');
-    expect(describeReviewFacts(createTask({ id: 'task-2' }), true)).toBe('Agent review found nothing');
+    expect(describeAgentReviewFact(createTask({ id: 'task-1', findings }))).toBeNull();
+    expect(describeAgentReviewFact(createTask({ id: 'task-1' }))).toBe('Agent review found nothing');
   });
 });
 

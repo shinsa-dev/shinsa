@@ -15,7 +15,6 @@ const REPLY: FixReply = {
     { ask: 'Replace the stream', outcome: 'not_changed', note: 'Slack does not say it allows it.' },
   ],
   next: 'Restart the engine.',
-  details: 'The section reads the remote access state.',
 };
 
 function answered(id: string, headline: string, repliedAt: number): Iteration {
@@ -69,17 +68,20 @@ describe('the reply to your request on the Overview', () => {
     expect(view.getByText('Not changed')).toBeTruthy();
     expect(view.getByText('What to do now')).toBeTruthy();
     expect(view.queryByText('What I sent for two.', { exact: false })).toBeNull();
-    fireEvent.click(view.getByRole('button', { name: 'Expand the details' }));
-    expect(view.getByText('The section reads the remote access state.')).toBeTruthy();
-    expect(view.getByText(/What I sent for two\./)).toBeTruthy();
+    const sent = view.getByRole('button', { name: 'Expand what you sent' });
+    expect(
+      sent.compareDocumentPosition(view.getByText(REPLY.headline)) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(sent);
+    expect(view.getByText(/What I sent for two\./).closest('blockquote')).toBeTruthy();
     expect(view.getByText('Earlier requests')).toBeTruthy();
     expect(view.getByText('Made the first change.')).toBeTruthy();
     expect(view.getByText(/1 done · 1 answered · 1 not changed/)).toBeTruthy();
   });
 
-  it('opens an earlier request to the same report, and a reply without details folds only what you sent', () => {
+  it('opens an earlier request to the same report, what you sent folded above it', () => {
     const plain = { ...answered('one', 'Made the first change.', NOW - 60_000) };
-    plain.reply = { ...REPLY, headline: 'Made the first change.', details: null, next: null };
+    plain.reply = { ...REPLY, headline: 'Made the first change.', next: null };
     const task = createTask({ id: 'task-1', stage: 'building', iterations: [plain] });
     const view = renderOverview(createShinsaState({ tasks: [task] }), task);
     expect(view.getByText('Your requests')).toBeTruthy();
@@ -90,27 +92,14 @@ describe('the reply to your request on the Overview', () => {
     expect(view.getByText(/What I sent for one\./)).toBeTruthy();
   });
 
-  it('folds nothing after a reply to verdicts alone, and only the details when you sent no words', () => {
+  it('folds nothing after a reply to verdicts alone', () => {
     const verdicts = { text: '', comments: 0, at: NOW - 6_000 };
     const bare = { ...answered('two', REPLY.headline, NOW - 5_000), requests: [verdicts] };
-    const task = createTask({
-      id: 'task-1',
-      stage: 'awaiting_review',
-      iterations: [{ ...bare, reply: { ...REPLY, details: null } }],
-    });
+    const task = createTask({ id: 'task-1', stage: 'awaiting_review', iterations: [bare] });
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'review' });
     const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task);
     expect(view.getByText(REPLY.headline)).toBeTruthy();
-    expect(view.queryByText('What you sent')).toBeNull();
     expect(view.queryByRole('button', { name: 'Expand what you sent' })).toBeNull();
-
-    view.unmount();
-    const detailed = createTask({ id: 'task-1', stage: 'awaiting_review', iterations: [bare] });
-    const again = renderOverview(createShinsaState({ tasks: [detailed], gates: [gate] }), detailed);
-    expect(again.getByText('Details')).toBeTruthy();
-    fireEvent.click(again.getByRole('button', { name: 'Expand the details' }));
-    expect(again.getByText('The section reads the remote access state.')).toBeTruthy();
-    expect(again.queryByText('What you sent')).toBeNull();
   });
 
   it('lists a plan you asked to change with what you sent', () => {

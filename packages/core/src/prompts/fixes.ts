@@ -87,7 +87,6 @@ const REPLY_INSTRUCTION = [
   '- `headline`: one sentence, what you did about their request.',
   '- `points`: each thing they raised, in their words cut short, with its outcome (`done`, `answered` for a question, `not_changed` when you left it as it was) and a note: where it is now, the answer, or why you left it.',
   '- `next`: what they do now to see or try it, in markdown, with the exact commands and links. Leave it out when there is nothing.',
-  '- `details`: anything else worth knowing, in markdown. Leave it out when the points say it all.',
 ].join('\n');
 
 export function resolveHumanFixPrompt(message: string | null, comments: readonly ReviewComment[]) {

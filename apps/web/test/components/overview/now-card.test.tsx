@@ -168,8 +168,30 @@ describe('NowCard on the Overview', () => {
     expect(card.getByText('The check passed')).toBeTruthy();
     expect(card.queryByText('bun test a.test.ts')).toBeNull();
     fireEvent.click(card.getByRole('button', { name: 'Expand the checks' }));
-    expect(card.getByText('Building')).toBeTruthy();
+    expect(card.queryByText('Building')).toBeNull();
     expect(card.getByText('bun test a.test.ts')).toBeTruthy();
+  });
+
+  it('links the pull request at the merge gate with whether it conflicts and how its checks stand', () => {
+    const { task, gate, state } = reviewing('merge');
+    const { view } = renderOverview(state, task, gate);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Agent review found nothing')).toBeTruthy();
+    expect(card.getByText('#42').closest('a')?.getAttribute('href')).toBe('https://github.com/you/app/pull/42');
+    expect(card.getByText('No conflicts')).toBeTruthy();
+    expect(card.getByText('Checks passing')).toBeTruthy();
+  });
+
+  it('leaves the agent review out of the facts when its findings show below', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_review',
+      findings: [{ severity: 'optional', file: null, line: null, message: 'Consider a guard.' }],
+    });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.queryByText(/Agent review/)).toBeNull();
+    expect(view.getByText('Consider a guard.')).toBeTruthy();
   });
 
   it('opens the checks on the review card when one failed', () => {

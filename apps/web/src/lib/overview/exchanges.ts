@@ -75,7 +75,8 @@ export function describeRequestText(iteration: Iteration) {
   const comments = iteration.requests.reduce((sum, request) => sum + request.comments, 0);
   const note = comments > 0 ? formatCount(comments, 'line comment', 'line comments') : null;
   if (texts.length === 0) return note ?? '';
-  return [...texts, ...(note ? [`And ${note}.`] : [])].join('\n\n');
+  const said = texts.join('\n\n');
+  return note ? `${said}\nAnd ${note}.` : said;
 }
 
 export function describeOutcomes(reply: FixReply) {

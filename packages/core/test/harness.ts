@@ -125,7 +125,6 @@ export const REPLY: FixReply = {
   headline: 'Made the change you asked for.',
   points: [{ ask: 'The change', outcome: 'done', note: 'It is in.' }],
   next: null,
-  details: null,
 };
 
 export function resolveReply(harness: Harness, runId: string) {

@@ -166,17 +166,20 @@ function StageHeader({ stage }: { stage: CheckStage }) {
 export function ChecksBlock({
   taskId,
   view,
+  headers = 'always',
   className,
 }: {
   taskId: string;
   view: ChecksView;
+  headers?: 'always' | 'several';
   className?: string;
 }) {
+  const showHeaders = headers === 'always' || view.stages.length > 1;
   return (
     <div className={cn('flex min-w-0 flex-col gap-2', className)}>
       {view.stages.map((stage) => (
         <section key={stage.key} className='flex min-w-0 flex-col gap-1'>
-          <StageHeader stage={stage} />
+          {showHeaders && <StageHeader stage={stage} />}
           {stage.rows.length > 0 && (
             <ul className={cn(INSET, 'flex min-w-0 flex-col divide-y divide-border')}>
               {stage.rows.map((row) => (
@@ -197,12 +200,12 @@ export function FoldedChecks({ taskId, view }: { taskId: string; view: ChecksVie
   );
   return (
     <div className='flex min-w-0 flex-col gap-2'>
-      <DisclosureHeader disclosure={disclosure} label='the checks' className='h-6 gap-1.5 text-2xs'>
-        <span className='font-medium text-fg-2'>Checks</span>
+      <DisclosureHeader disclosure={disclosure} label='the checks' className='h-6 gap-1.5 text-xs'>
+        <span className='text-fg-2'>Checks</span>
         <span className={cn('tabular-nums', STATUS_TEXT[view.status])}>{view.summary}</span>
         <DisclosureChevron className='text-fg-3' />
       </DisclosureHeader>
-      {disclosure.open && <ChecksBlock taskId={taskId} view={view} />}
+      {disclosure.open && <ChecksBlock taskId={taskId} view={view} headers='several' />}
     </div>
   );
 }

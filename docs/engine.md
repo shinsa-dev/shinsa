@@ -1284,17 +1284,20 @@ reply you read on the Overview, so the chat is never where you learn what change
 - **The reply is a hand-over field.** While a request is open, `complete_fix` must carry `reply`: a `headline`, each
   point you raised as `points` (in your words cut short, marked `done`, `answered` or `not_changed`, each with a
   `note`: where it is now, the answer, or why it was left), `next` (what you do now, with the commands in `bash run`
-  blocks and full links) and `details`. Core refuses the fix without one (`reply_required`) and refuses one on a fix
+  blocks and full links). Core refuses the fix without one (`reply_required`) and refuses one on a fix
   nobody asked for (`reply_unasked`), so an automatic checks or review fix never invents an answer. The schema stays
   static and optional (Caching, below); the human fix prompts (`REPLY_INSTRUCTION`, `prompts/fixes.ts`) and the
   handover skill say what each field holds.
 - **On the Overview** the review and merge cards lead with the latest reply (`ReplyReport`,
-  `components/overview/reply-report.tsx`): the headline, then each point with its outcome, What to do now, and the
-  details and what you sent folded below it, never as a quote or a thread. While the Agent works on one, the work
+  `components/overview/reply-report.tsx`): What you sent, folded above it as a quote of your words, then the
+  headline, each point with its outcome and What to do now. Facts the cards add are live links: the pull request at
+  the merge gate with its hover card, whether it conflicts and how its checks stand; the agent review's count is
+  left out when its findings show right below. While the Agent works on one, the work
   card shows "Your request". Earlier requests, a panel below, lists every earlier reply and every plan revision you
   gave feedback on (its change summary as the headline), newest first, each folded to its headline and a count of
   its outcomes (`listEarlierExchanges`, `lib/overview/exchanges.ts`; `RequestsPanel`). The checks fold to one line on these cards, open by
-  themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`).
+  themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`); opened, they show
+  the list itself, with a stage's header only when there is more than one stage.
 
 ### Steps around the merge
 

@@ -167,7 +167,6 @@ export interface FixReply {
   headline: string;
   points: ReplyPoint[];
   next: string | null;
-  details: string | null;
 }
 
 export interface FixHandOver {

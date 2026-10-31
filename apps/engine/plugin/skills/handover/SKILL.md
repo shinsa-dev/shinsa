@@ -109,7 +109,6 @@ instead of the chat, so it must stand alone:
   and the note is the answer) or `not_changed` (the note says why). Never mark a point done that you did not change.
 - `next`: what they do now to see or try it, as numbered steps with exact commands in ```bash run blocks and full
   links. Leave it out when there is nothing to do.
-- `details`: anything else worth knowing, in markdown; leave it out when the points say it all.
 
 Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing, the steps or the watchdogs. Each part you
 send replaces that part whole, so send the full new list, not just the new item.

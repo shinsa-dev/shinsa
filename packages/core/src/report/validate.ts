@@ -152,7 +152,6 @@ export const PROTOCOL_LIMITS = {
   replyAsk: 160,
   replyNote: 280,
   replyNext: 1_200,
-  replyDetails: 4_000,
 } as const;
 
 export const REPLY_OUTCOMES: readonly [ReplyOutcome, ...ReplyOutcome[]] = ['done', 'answered', 'not_changed'];
@@ -685,7 +684,6 @@ function readReply(reader: Reader, input: unknown): FixReply | null {
     headline: reader.text(record.headline, 'reply.headline', PROTOCOL_LIMITS.replyHeadline),
     points: readReplyPoints(reader, record.points),
     next: reader.optionalText(record.next, 'reply.next', PROTOCOL_LIMITS.replyNext),
-    details: reader.optionalText(record.details, 'reply.details', PROTOCOL_LIMITS.replyDetails),
   };
 }
 

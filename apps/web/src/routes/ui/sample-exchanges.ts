@@ -14,15 +14,6 @@ const SETTINGS_REQUEST =
 const SETTINGS_HEADLINE =
   "I moved Slack under Remote access, made it use Slack's agent features, and started an engine on this branch so you can test it end to end.";
 
-const SETTINGS_REPLY = `**Settings:** Slack is now on Settings → General, right below Remote access. While remote access is off it says "Turn it on above first". I replaced the Integrations screenshots with before and after shots of the General tab.
-
-**Slack's agent features:**
-- **Streamed reading:** when someone mentions the bot, a plan called "Reading the thread" streams into the thread with two steps, then finishes as "Starting a task" or "Nothing to start" with the reason.
-- **Status message:** the task's steps now show as Slack's plan block, with done, in progress, "Waiting for you" and to come.
-- **Thread status:** Slack's own working or waiting indicator on the thread follows the task.
-
-Two things only the real test will answer: whether your workspace shows the thread status, and whether Slack lets the status message replace the finished stream.`;
-
 const SETTINGS_NEXT = `1. At [api.slack.com/apps](https://api.slack.com/apps), create the app from \`apps/cloud/slack-manifest.json\` and turn on public distribution.
 2. Put the secrets on the Worker:
    \`\`\`bash run
@@ -35,13 +26,6 @@ const STATUS_REQUEST =
 
 const STATUS_HEADLINE =
   'I fixed the status message: when Slack refuses the plan block, the thread now gets the steps as a line of text instead of nothing.';
-
-const STATUS_REPLY = `- **App.shinsa.dev:** when Slack rejects a post's blocks (\`invalid_blocks\`), the Worker now answers with a separate refusal (422 \`slack_blocks_refused\`). It used to answer 502, which the engine retried until it gave up.
-- **Engine:** on that refusal, it sends the same status again right away with the steps written out (✓ done, ● at work, ◐ waiting for you, ○ to come), and stays on text for that workspace.
-
-**Your question:** yes. The thread status needs Agents & AI Apps turned on in the Slack app's settings. Without it Slack ignores the status, and everything else still posts.
-
-That memory does not survive a restart: the first status after a restart tries the plan block again and falls back the same way.`;
 
 const STATUS_NEXT =
   'Restart the engine on this branch and mention the bot again. The status message should appear as a line of steps. To see the thread status, turn on Agents & AI Apps in the Slack app first.';
@@ -71,7 +55,6 @@ const SETTINGS_REPLY_REPORT: FixReply = {
     },
   ],
   next: SETTINGS_NEXT,
-  details: SETTINGS_REPLY,
 };
 
 const STATUS_REPLY_REPORT: FixReply = {
@@ -89,7 +72,6 @@ const STATUS_REPLY_REPORT: FixReply = {
     },
   ],
   next: STATUS_NEXT,
-  details: STATUS_REPLY,
 };
 
 function answered(id: string, text: string, reply: FixReply, at: number, repliedAt: number): Iteration {

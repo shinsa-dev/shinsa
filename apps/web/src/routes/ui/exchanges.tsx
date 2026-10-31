@@ -16,7 +16,7 @@ export function ExchangeSpecimens() {
   const shown = selectShownReply(scene.review, scene.gate);
   return (
     <>
-      <Specimen label='ReplyReport · the review card after your request: each point you raised, done, answered or not changed, with why, then what to do now; details and what you sent folded'>
+      <Specimen label='ReplyReport · the review card after your request: each point you raised, done, answered or not changed, with why, then what to do now; what you sent folded above it as a quote'>
         <Wide>
           <NowCard state={scene.state} task={scene.review} gate={scene.gate} onOpen={acknowledgeSample} />
           <RequestsPanel task={scene.review} shownId={shown?.id ?? null} />

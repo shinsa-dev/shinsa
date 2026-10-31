@@ -56,44 +56,30 @@ function PointList({ reply }: { reply: FixReply }) {
   );
 }
 
-function SentText({ text }: { text: string }) {
+function SentQuote({ text, className }: { text: string; className?: string }) {
   return (
-    <div className='flex flex-col gap-px'>
-      <span className='text-2xs text-fg-2'>What you sent</span>
-      <p className='selectable whitespace-pre-wrap text-fg-3 text-xs'>{text}</p>
+    <div className={cn('prose-shinsa selectable min-w-0 text-xs', className)}>
+      <blockquote className='whitespace-pre-wrap'>{text}</blockquote>
     </div>
   );
 }
 
-const MORE_TITLE = {
-  both: { label: 'the details', title: 'Details and what you sent' },
-  details: { label: 'the details', title: 'Details' },
-  sent: { label: 'what you sent', title: 'What you sent' },
-} as const;
-
-function ReplyMore({ task, iteration }: { task: Task; iteration: AnsweredIteration }) {
+function SentFold({ task, iteration }: { task: Task; iteration: Iteration }) {
   const disclosure = useDisclosure(
-    resolveTaskDisclosureId(task.id, 'overview', 'reply', iteration.id, 'more'),
+    resolveTaskDisclosureId(task.id, 'overview', 'reply', iteration.id, 'sent'),
     false
   );
-  const details = iteration.reply.details;
   const sent = describeRequestText(iteration);
-  if (!details && !sent) return null;
-  const more = MORE_TITLE[details && sent ? 'both' : details ? 'details' : 'sent'];
+  if (!sent) return null;
   return (
     <div className='flex flex-col gap-1.5'>
-      <DisclosureHeader disclosure={disclosure} label={more.label} className='gap-1.5 text-2xs text-fg-2'>
+      <DisclosureHeader disclosure={disclosure} label='what you sent' className='gap-1.5 text-fg-2 text-xs'>
         <span className='group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>
-          {more.title}
+          What you sent
         </span>
         <DisclosureChevron />
       </DisclosureHeader>
-      {disclosure.open && (
-        <div className='flex flex-col gap-2'>
-          {details && <Markdown text={details} className='text-fg-3 text-xs' />}
-          {sent && <SentText text={sent} />}
-        </div>
-      )}
+      {disclosure.open && <SentQuote text={sent} />}
     </div>
   );
 }
@@ -110,6 +96,7 @@ export function ReplyReport({
   const reply = iteration.reply;
   return (
     <div className='flex flex-col gap-3'>
+      <SentFold task={task} iteration={iteration} />
       <div className='flex flex-col gap-2'>
         {headline && (
           <InlineMarkdown
@@ -125,7 +112,6 @@ export function ReplyReport({
           <Markdown text={reply.next} className='text-fg-3 text-xs' />
         </div>
       )}
-      <ReplyMore task={task} iteration={iteration} />
     </div>
   );
 }
@@ -134,9 +120,9 @@ export function WorkingRequest({ iteration }: { iteration: Iteration }) {
   const text = describeRequestText(iteration);
   if (!text) return null;
   return (
-    <div className='flex flex-col gap-px'>
-      <span className='text-2xs text-fg-2'>Your request</span>
-      <p className='selectable line-clamp-3 whitespace-pre-wrap text-fg-3 text-xs'>{text}</p>
+    <div className='flex flex-col gap-1'>
+      <span className='text-fg-2 text-xs'>Your request</span>
+      <SentQuote text={text} className='line-clamp-4' />
     </div>
   );
 }
@@ -176,7 +162,10 @@ function ExchangeRow({ task, exchange }: { task: Task; exchange: Exchange }) {
           {request ? (
             <ReplyReport task={task} iteration={exchange.iteration} headline={false} />
           ) : (
-            <SentText text={exchange.feedback} />
+            <div className='flex flex-col gap-1'>
+              <span className='text-fg-2 text-xs'>What you sent</span>
+              <SentQuote text={exchange.feedback} />
+            </div>
           )}
         </div>
       )}

@@ -86,10 +86,6 @@ const REPLY = {
       'What they do now to see or try it, in markdown: numbered steps with the exact commands in ```bash run blocks and full links. Leave it out when there is nothing.',
       L.replyNext
     ),
-    details: limitedText(
-      'Anything else worth knowing, in markdown. Leave it out when the points say it all.',
-      L.replyDetails
-    ),
   },
   required: ['headline', 'points'],
 };

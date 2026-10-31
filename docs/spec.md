@@ -1039,9 +1039,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   each thing you send after the work is in is a request, and the fix that answers it must hand over a reply
   (`complete_fix`'s `reply`, `docs/engine.md` → Your requests and their replies).
 - **Confirmations, not a thread.** Five designs were tried in `/ui`; the one chosen reads as a report: a headline,
-  each point you raised marked Done, Answered or Not changed with a note, then What to do now. No quoted message, no
-  bubbles, no inline chat: the plan and the reply are one shared record, and earlier requests (plan feedback
-  included) fold below as the same report.
+  each point you raised marked Done, Answered or Not changed with a note, then What to do now. What you sent folds
+  above it as a quote of your own words; no bubbles, no inline chat: the plan and the reply are one shared record, and
+  earlier requests (plan feedback included) fold below as the same report. Every fact on the card is a live link
+  (the pull request with its hover card), never plain text that names one.
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).

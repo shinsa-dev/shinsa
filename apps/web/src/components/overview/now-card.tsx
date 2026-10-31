@@ -13,6 +13,7 @@ import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { ChecksBlock, FoldedChecks } from '@/components/checks/checks-list.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
+import { PrLink } from '@/components/links/pull-request.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
 import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
@@ -38,10 +39,11 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
 import {
+  describeAgentReviewFact,
   describeFollowUpNote,
-  describeReviewFacts,
   isTaskWatchable,
   type NowTarget,
   RESULT_TITLE,
@@ -64,6 +66,7 @@ import {
   resolveRetryLabel,
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
+import { describeMergeable, describePullRequestChecks } from '@/lib/tasks/pull-request.ts';
 import { describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
 
 function PlannedOperation({ task }: { task: Task }) {
@@ -277,6 +280,37 @@ export function ChangeCard({
   );
 }
 
+function ReviewFacts({ state, task, merge }: { state: ShinsaState; task: Task; merge: boolean }) {
+  const review = describeAgentReviewFact(task);
+  const pullRequest = merge ? task.pullRequest : null;
+  const mergeable = pullRequest ? describeMergeable(pullRequest) : null;
+  const checks = pullRequest ? describePullRequestChecks(pullRequest) : null;
+  const facts = [
+    review && <span key='review'>{review}</span>,
+    pullRequest && <PrLink key='pull-request' state={state} task={task} />,
+    mergeable && (
+      <span key='mergeable' className={TONE_TEXT[mergeable.tone]}>
+        {mergeable.label}
+      </span>
+    ),
+    checks && (
+      <span key='checks' className={TONE_TEXT[checks.tone]}>
+        {checks.label}
+      </span>
+    ),
+  ].filter(Boolean);
+  if (facts.length === 0) return null;
+  return (
+    <p className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-fg-3 text-xs'>
+      {facts.flatMap((fact, index) => (index === 0 ? [fact] : [<FactDot key={`dot-${index}`} />, fact]))}
+    </p>
+  );
+}
+
+function FactDot() {
+  return <span className='text-fg-2'>·</span>;
+}
+
 function ReviewCard({
   state,
   task,
@@ -307,9 +341,11 @@ function ReviewCard({
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
       {reply && <ReplyReport task={task} iteration={reply} />}
-      <p className='text-fg-3 text-xs'>
-        {gate.escalation ? describeEscalationBody(gate.escalation) : describeReviewFacts(task, merge)}
-      </p>
+      {gate.escalation ? (
+        <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>
+      ) : (
+        <ReviewFacts state={state} task={task} merge={merge} />
+      )}
       {checks && <FoldedChecks taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
       {merge && <MergeStepsBlock task={task} when='pre_merge' waits={listMergeWaits(state, task)} />}

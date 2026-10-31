@@ -18,7 +18,6 @@ const REPLY: FixReply = {
     { ask: 'Drop the stream', outcome: 'not_changed', note: 'Slack needs it.' },
   ],
   next: null,
-  details: null,
 };
 
 function iteration(id: string, overrides: Partial<Iteration> = {}): Iteration {
@@ -107,7 +106,7 @@ describe('describeRequestText', () => {
         { text: 'And rename it.', comments: 1, at: 2 },
       ],
     });
-    expect(describeRequestText(many)).toBe('Move it.\n\nAnd rename it.\n\nAnd 2 line comments.');
+    expect(describeRequestText(many)).toBe('Move it.\n\nAnd rename it.\nAnd 2 line comments.');
     const comments = iteration('a', { requests: [{ text: '', comments: 1, at: 1 }] });
     expect(describeRequestText(comments)).toBe('1 line comment');
     expect(describeRequestText(iteration('a', { requests: [{ text: '', comments: 0, at: 1 }] }))).toBe('');

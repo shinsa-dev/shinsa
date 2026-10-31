@@ -588,7 +588,6 @@ describe('validateFixHandOver', () => {
         { ask: 'Does it need a setting?', outcome: 'answered', note: 'Agents & AI Apps.' },
       ],
       next: 'Restart the engine.',
-      details: null,
     });
   });
 
@@ -605,7 +604,6 @@ describe('validateFixHandOver', () => {
           reply: {
             headline: 'x'.repeat(PROTOCOL_LIMITS.replyHeadline + 1),
             points: [{ ask: '', outcome: 'maybe', note: 'x'.repeat(PROTOCOL_LIMITS.replyNote + 1) }],
-            details: 'x'.repeat(PROTOCOL_LIMITS.replyDetails + 1),
           },
         })
       )
@@ -614,7 +612,6 @@ describe('validateFixHandOver', () => {
       'reply.points[0].ask is required.',
       'reply.points[0].outcome must be one of done, answered, not_changed.',
       `reply.points[0].note is ${PROTOCOL_LIMITS.replyNote + 1} characters; the limit is ${PROTOCOL_LIMITS.replyNote}.`,
-      `reply.details is ${PROTOCOL_LIMITS.replyDetails + 1} characters; the limit is ${PROTOCOL_LIMITS.replyDetails}.`,
     ]);
     expect(
       errorsOf(validateFixHandOver({ summary: 'Fixed.', reply: { headline: 'Did it.', points: [] } }))

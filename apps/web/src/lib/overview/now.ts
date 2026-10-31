@@ -111,15 +111,8 @@ export function isTaskWatchable(state: ShinsaState, task: Task) {
   return status.tone !== 'neutral' || isPausedStatus(status);
 }
 
-export function describeReviewFacts(task: Task, merge: boolean) {
-  const findings = task.findings;
-  const facts = [
-    findings.length === 0
-      ? 'agent review found nothing'
-      : `agent review left ${formatCount(findings.length, 'note', 'notes')}`,
-    merge && task.pullRequest ? `PR #${task.pullRequest.number} is clean` : null,
-  ];
-  return capitalise(facts.filter(Boolean).join(' · '));
+export function describeAgentReviewFact(task: Task) {
+  return task.findings.length === 0 ? 'Agent review found nothing' : null;
 }
 
 function resolveFeedLine(entry: ChatEntry): { icon: IconName; label: string | null; text: string } | null {
