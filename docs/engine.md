@@ -2361,7 +2361,8 @@ tools and T3's MCP toolkits.
 ## Remote access
 
 Reaching this machine from any device at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
-devices enrolled at the machine. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
+devices enrolled at the machine. On screen the hosted side is a product, **Shinsa Cloud**: copy names it that and never
+shows its address, except a command-line line that tells you where to open it. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
 core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
 machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
 The dashboard has an origin of its own, apart from the marketing site on shinsa.dev. Two words keep the parts apart: a
@@ -2503,7 +2504,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   invite says you are joining a shared machine and its button accepts the invite and adds the device in one step
   (`enrollDevice` calls `acceptInvite` first). Settings → General → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
-  Remove, or for a machine shared with you its owner's avatar, "Shared by <owner>" and Leave, which also forgets this
+  Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
   tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine

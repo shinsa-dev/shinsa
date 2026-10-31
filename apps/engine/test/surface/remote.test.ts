@@ -60,7 +60,7 @@ describe('shinsa remote', () => {
     expect(on.text).toBe(
       [
         'Remote access is connected for Studio, signed in as mona.',
-        'Open it at https://app.shinsa.dev.',
+        'Open it in Shinsa Cloud at https://app.shinsa.dev.',
         'Enrolled devices:',
         '  iPhone (last used 2026-10-30T00:00:00.000Z) dev-1',
         '  iPad (never used, added by @kai) dev-2',

@@ -394,19 +394,19 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      <Specimen label='MachinesSettings · on app.shinsa.dev: your machines and one shared with you, three in this dashboard'>
+      <Specimen label='MachinesSettings · in Shinsa Cloud: your machines and one shared with you, three in this dashboard'>
         <div className='w-full max-w-xl'>
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
           </RemoteServicesContext.Provider>
         </div>
       </Specimen>
-      <Specimen label='PolicySettings · on app.shinsa.dev: which work runs on which machine, in plain English'>
+      <Specimen label='PolicySettings · in Shinsa Cloud: which work runs on which machine, in plain English'>
         <div className='w-full max-w-xl'>
           <PolicySettings machines={SAMPLE_POLICY_MACHINES} actions={SAMPLE_POLICY_ACTIONS} />
         </div>
       </Specimen>
-      <Specimen label='TaskFacts · on app.shinsa.dev with several machines, each task shows the machine it runs on'>
+      <Specimen label='TaskFacts · in Shinsa Cloud with several machines, each task shows the machine it runs on'>
         <FleetFactsSpecimen now={now} />
       </Specimen>
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>

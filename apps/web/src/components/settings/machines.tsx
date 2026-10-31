@@ -20,10 +20,9 @@ import { MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
-import { UserAvatar } from './user-row.tsx';
 
 const MACHINES_DESCRIPTION =
-  'Every machine you turned remote access on for, and every machine someone invited you to, which you can leave. The ones added on this device share this one dashboard, and each task runs on one machine. A new task goes to the machine of the project you pick, else where your routing policies send it, else to the one with the most room under its task capacity. To add a device, choose Add device in Settings, Remote access on that machine.';
+  'Your machines and the ones shared with you. Those added on this device share this dashboard. Add a device from Settings, Remote access on its machine.';
 
 function saveMachineSettings(machineId: string, patch: Partial<Settings>, done: string) {
   return sendCommandWithToast({ type: 'settings.change', patch }, done, machineId);
@@ -92,7 +91,6 @@ function MachineItem({
   const detail = machine ? `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}` : row.access;
   return (
     <div className={SETTING_ROW}>
-      {row.instance.role === 'member' && <UserAvatar user={row.instance.owner} />}
       <div className='flex min-w-0 flex-1 flex-col'>
         <div className='flex min-w-0 items-center gap-1.5 text-xs'>
           <Truncate className='text-fg-4'>{row.label}</Truncate>

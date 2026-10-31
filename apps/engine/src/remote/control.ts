@@ -27,7 +27,7 @@ export class ControlError extends Error {
   readonly status: number;
 
   constructor(path: string, status: number) {
-    super(`app.shinsa.dev answered ${path} with status ${status}.`);
+    super(`Shinsa Cloud answered ${path} with status ${status}.`);
     this.name = 'ControlError';
     this.status = status;
   }

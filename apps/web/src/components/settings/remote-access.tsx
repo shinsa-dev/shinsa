@@ -55,9 +55,11 @@ const NO_DEVICES: RemoteDevice[] = [];
 const NO_MEMBERS: RemoteMember[] = [];
 
 const DESCRIPTION =
-  'Reach this machine from any device at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once. Invite someone to give them the same control with their own GitHub account.';
+  'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once. Invite someone to give them the same control with their own GitHub account.';
 
 const SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 ${ROW_INSET}`;
+
+const ONLY_YOU = `pt-0.5 pb-1.5 text-fg-2 text-xs ${ROW_INSET}`;
 
 function QrCode({ text }: { text: string }) {
   const image = React.useMemo(() => resolveQrImage(text), [text]);
@@ -296,9 +298,9 @@ function PeopleSection({
       <p className={SUBHEADING}>People who can reach this machine</p>
       {owner && <UserRow user={owner} detail='Owner' />}
       {members.length === 0 && (
-        <SettingsEmpty>
+        <p className={ONLY_YOU}>
           Only you. Invite someone to give them full control of this machine with their own GitHub account.
-        </SettingsEmpty>
+        </p>
       )}
       {members.map((member) => (
         <UserRow key={member.user.id} user={member.user} detail={describeMemberSince(member)}>
@@ -346,7 +348,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Remove ${name}?`}
-        body={`@${value.user.login} can no longer reach this machine from app.shinsa.dev. Every device they added is forgotten, and any page they have open closes. Invite them again to give it back.`}
+        body={`@${value.user.login} can no longer reach this machine from Shinsa Cloud. Every device they added is forgotten, and any page they have open closes. Invite them again to give it back.`}
         action='Remove member'
         onConfirm={() =>
           void requestWithToast(
@@ -362,7 +364,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Forget ${value.device.name}?`}
-        body='It can no longer open this machine from app.shinsa.dev, and any page it has open closes. Add it again to use it.'
+        body='It can no longer open this machine from Shinsa Cloud, and any page it has open closes. Add it again to use it.'
         action='Forget device'
         onConfirm={() =>
           void requestWithToast(
@@ -377,7 +379,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title='Remove remote access?'
-        body='This machine leaves app.shinsa.dev, its tunnel is deleted and every added device is forgotten. You can turn it on again later.'
+        body='This machine leaves Shinsa Cloud, its tunnel is deleted and every added device is forgotten. You can turn it on again later.'
         action='Remove remote access'
         onConfirm={() => void requestWithToast(actions.remove, 'Remote access is removed.')}
       />

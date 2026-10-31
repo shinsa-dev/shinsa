@@ -51,7 +51,7 @@ describe('the dashboard client', () => {
     const odd = createClient(() => Response.json({ error: { code: 1 } }, { status: 500 }));
     await expect(odd.client.listInstances()).rejects.toMatchObject({
       code: 'failed',
-      message: 'app.shinsa.dev answered 500.',
+      message: 'Shinsa Cloud answered 500.',
     });
     const html = createClient(() => new Response('<html>', { status: 502 }));
     await expect(html.client.listInstances()).rejects.toMatchObject({ code: 'failed', status: 502 });

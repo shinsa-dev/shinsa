@@ -48,12 +48,12 @@ describe('remote access words', () => {
     expect(describeRemoteStatus(createRemoteSnapshot(), NOW)).toEqual({
       label: 'Connected',
       tone: 'green',
-      detail: 'Signed in as mona. Open it at app.shinsa.dev.',
+      detail: 'Signed in as mona. Open it in Shinsa Cloud.',
     });
     expect(describeRemoteStatus(createRemoteSnapshot({ owner: null, status: 'starting' }), NOW)).toEqual({
       label: 'Connecting',
       tone: 'amber',
-      detail: 'Signed in. Open it at app.shinsa.dev.',
+      detail: 'Signed in. Open it in Shinsa Cloud.',
     });
   });
 

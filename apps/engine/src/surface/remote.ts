@@ -9,7 +9,7 @@ const STATUS_WORDS: Record<RemoteSnapshot['status'], string> = {
   starting: 'connecting',
   connected: 'connected',
   reconnecting: 'reconnecting',
-  revoked: 'removed from app.shinsa.dev',
+  revoked: 'removed from Shinsa Cloud',
 };
 
 function describeSeen(at: number | null) {
@@ -39,7 +39,7 @@ function formatRemote(snapshot: RemoteSnapshot) {
     return 'Remote access is off. Turn it on with `shinsa remote pair` to sign in with GitHub.';
   const lines = [
     `Remote access is ${snapshot.enabled ? STATUS_WORDS[snapshot.status] : 'paused'} for ${snapshot.machineName}, signed in as ${snapshot.owner ?? 'unknown'}.`,
-    'Open it at https://app.shinsa.dev.',
+    'Open it in Shinsa Cloud at https://app.shinsa.dev.',
   ];
   if (snapshot.devices.length === 0)
     lines.push('No devices are enrolled. Add one with `shinsa remote enroll`.');
@@ -71,7 +71,7 @@ async function findMemberId(client: SurfaceClient, login: string) {
 export const REMOTE_SPECS: SurfaceSpec[] = [
   defineRead<RemoteSnapshot>({
     path: ['remote', 'status'],
-    summary: 'Show whether this machine can be reached from app.shinsa.dev, and its enrolled devices.',
+    summary: 'Show whether this machine can be reached from Shinsa Cloud, and its enrolled devices.',
     fields: [],
     request: () => '/api/remote',
     format: formatRemote,
@@ -108,7 +108,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'remove'],
-    summary: 'Remove this machine from app.shinsa.dev and forget its tunnel and devices.',
+    summary: 'Remove this machine from Shinsa Cloud and forget its tunnel and devices.',
     humanOnly: true,
     fields: [],
     act: async (client) => {

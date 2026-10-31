@@ -38,17 +38,17 @@ export function describeRemoteStatus(snapshot: RemoteSnapshot, now = Date.now())
     return {
       label: 'Off',
       tone: 'neutral',
-      detail: 'Turn it on to sign in with GitHub. This machine then shows up at app.shinsa.dev.',
+      detail: 'Turn it on to sign in with GitHub. This machine then shows up in Shinsa Cloud.',
     };
   const owner = snapshot.owner ? `Signed in as ${snapshot.owner}.` : 'Signed in.';
   if (snapshot.status === 'revoked')
     return {
       ...STATUS_VIEW.revoked,
-      detail: 'This machine was removed at app.shinsa.dev. Remove it here, then turn remote access on again.',
+      detail: 'This machine was removed in Shinsa Cloud. Remove it here, then turn remote access on again.',
     };
   if (!snapshot.enabled)
     return { label: 'Paused', tone: 'neutral', detail: `${owner} Resume to reach this machine again.` };
-  return { ...STATUS_VIEW[snapshot.status], detail: `${owner} Open it at app.shinsa.dev.` };
+  return { ...STATUS_VIEW[snapshot.status], detail: `${owner} Open it in Shinsa Cloud.` };
 }
 
 export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
@@ -119,7 +119,7 @@ export const LINK_COPY: Record<EnrollmentKind, LinkCopy> = {
     field: 'Who it is for',
     placeholder: 'For example, Bob’s laptop',
     intro:
-      'Say who the invite is for. Shinsa makes a one-time link they open with their own GitHub account, which gives them full control of this machine from app.shinsa.dev.',
+      'Say who the invite is for. Shinsa makes a one-time link they open with their own GitHub account, which gives them full control of this machine from Shinsa Cloud.',
     verb: 'invite',
     unused: 'before anyone used it',
     live: 'Send this link to them. They open it on their own device and sign in with their own GitHub account. Only send it to someone you trust with this machine.',

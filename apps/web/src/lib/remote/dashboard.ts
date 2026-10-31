@@ -34,10 +34,10 @@ async function readError(response: Response) {
     const message =
       typeof body.error?.message === 'string'
         ? body.error.message
-        : `app.shinsa.dev answered ${response.status}.`;
+        : `Shinsa Cloud answered ${response.status}.`;
     return new DashboardError(code, message, response.status);
   } catch {
-    return new DashboardError('failed', `app.shinsa.dev answered ${response.status}.`, response.status);
+    return new DashboardError('failed', `Shinsa Cloud answered ${response.status}.`, response.status);
   }
 }
 
@@ -65,7 +65,7 @@ export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(i
           : {}),
       });
     } catch {
-      throw new DashboardError('offline', 'Couldn’t reach app.shinsa.dev.', 0);
+      throw new DashboardError('offline', 'Couldn’t reach Shinsa Cloud.', 0);
     }
     if (!response.ok) throw await readError(response);
     return (await response.json()) as T;

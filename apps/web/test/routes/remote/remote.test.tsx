@@ -116,10 +116,10 @@ describe('the remote dashboard', () => {
   it('says when app.shinsa.dev cannot be reached', async () => {
     renderRoot('/', {
       dashboard: createDashboard({
-        readSession: () => Promise.reject(new Error('Couldn’t reach app.shinsa.dev.')),
+        readSession: () => Promise.reject(new Error('Couldn’t reach Shinsa Cloud.')),
       }),
     });
-    expect((await screen.findByRole('alert')).textContent).toBe('Couldn’t reach app.shinsa.dev.');
+    expect((await screen.findByRole('alert')).textContent).toBe('Couldn’t reach Shinsa Cloud.');
   });
 
   it('asks to add this browser to the paired machines, or to pair one first', async () => {

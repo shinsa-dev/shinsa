@@ -2013,7 +2013,7 @@ Every task agent's tool: `sources_remove`. Sends `watch_source.remove`.
 
 #### shinsa remote status
 
-Show whether this machine can be reached from app.shinsa.dev, and its enrolled devices.
+Show whether this machine can be reached from Shinsa Cloud, and its enrolled devices.
 
 ```
 shinsa remote status [--json]
@@ -2053,7 +2053,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote remove
 
-Remove this machine from app.shinsa.dev and forget its tunnel and devices.
+Remove this machine from Shinsa Cloud and forget its tunnel and devices.
 
 ```
 shinsa remote remove [--json]
