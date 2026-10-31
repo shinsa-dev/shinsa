@@ -19,13 +19,16 @@ import type { CloudWorld } from './world.ts';
 
 export const ONLINE_WINDOW_MS = 5 * 60_000;
 
+export function isInstanceOnline(row: InstanceRow, now: number) {
+  return row.online === 1 && row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
+}
+
 function serializeInstance(row: SharedInstanceRow, userId: string, now: number): RemoteInstance {
-  const recent = row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
   return {
     id: row.id,
     name: row.name,
     fingerprint: row.fingerprint,
-    online: row.online === 1 && recent,
+    online: isInstanceOnline(row, now),
     lastSeenAt: row.last_seen_at,
     createdAt: row.created_at,
     owner: {
@@ -45,10 +48,9 @@ export async function findInstanceAccess(user: UserRow, instanceId: string, worl
   throw new CloudError('not_found', 'No such machine.', 404);
 }
 
-async function findOwnInstance(user: UserRow, instanceId: string, world: CloudWorld) {
+export async function findOwnInstance(user: UserRow, instanceId: string, world: CloudWorld) {
   const { row, role } = await findInstanceAccess(user, instanceId, world);
-  if (role !== 'owner')
-    throw new CloudError('not_owner', 'Only the owner can remove this machine. Leave it instead.', 403);
+  if (role !== 'owner') throw new CloudError('not_owner', "Only the machine's owner can do this.", 403);
   return row;
 }
 

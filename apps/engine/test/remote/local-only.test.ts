@@ -7,6 +7,7 @@ describe('local-only routes', () => {
       '/api/remote/pair',
       '/api/remote/links/create',
       '/api/remote/members/remove',
+      '/api/slack/disconnect',
       '/api/accounts/login',
       '/api/extensions/mcp/toggle',
       '/api/secrets/gate-1',
@@ -21,7 +22,13 @@ describe('local-only routes', () => {
   });
 
   test('let remote reads through, but never terminals or services', () => {
-    for (const path of ['/api/remote', '/api/accounts', '/api/extensions', '/api/schedules/s1/webhook']) {
+    for (const path of [
+      '/api/remote',
+      '/api/slack',
+      '/api/accounts',
+      '/api/extensions',
+      '/api/schedules/s1/webhook',
+    ]) {
       expect(resolveLocalOnlyRoute('GET', path)).toBe(false);
     }
     expect(resolveLocalOnlyRoute('GET', '/api/terminals')).toBe(true);

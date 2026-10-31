@@ -190,6 +190,12 @@ export {
   type WorkStep,
 } from './shapes.ts';
 export {
+  isSameSlackThread,
+  resolveSlackThreadKey,
+  type SlackThreadLink,
+  type SlackThreadRef,
+} from './slack.ts';
+export {
   compareTasks,
   hasArmedWait,
   isAskTask,

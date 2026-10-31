@@ -1,4 +1,4 @@
-import { type Bytes, parseBase64Url, serializeBase64Url } from './bytes.ts';
+import { type Bytes, parseBase64Url, serializeBase64Url, serializeHex } from './bytes.ts';
 
 export const REMOTE_KEY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' } as const;
 
@@ -39,8 +39,6 @@ export async function parsePrivateKey(text: string) {
 export async function resolveKeyFingerprint(publicKey: string) {
   const raw = parseBase64Url(publicKey) ?? new Uint8Array();
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', raw)) as Bytes;
-  const hex = [...digest.slice(0, FINGERPRINT_BYTES)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  const hex = serializeHex(digest.slice(0, FINGERPRINT_BYTES));
   return hex.match(/.{4}/g)?.join(' ') ?? hex;
 }

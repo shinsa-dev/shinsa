@@ -1,6 +1,7 @@
 import {
   decodeText,
   encodeText,
+  isSameSecret,
   type NativeSignInTokenResponse,
   parseBase64Url,
   REMOTE_NATIVE_CLIENT,
@@ -10,7 +11,7 @@ import {
   type RemoteUser,
   serializeBase64Url,
 } from '@shinsa/core';
-import { createCodeChallenge, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
+import { createCodeChallenge, createToken, resolveTokenHash } from './crypto.ts';
 import type { UserRow } from './database.ts';
 import {
   assertSameOrigin,
@@ -68,7 +69,7 @@ function readSessionToken(request: Request) {
   return readBearer(request) ?? readCookie(request, SESSION_COOKIE);
 }
 
-async function selectSessionUser(request: Request, world: CloudWorld) {
+export async function selectSessionUser(request: Request, world: CloudWorld) {
   const token = readSessionToken(request);
   if (!token) return null;
   return world.store.selectSessionUser(await resolveTokenHash(token), world.now());

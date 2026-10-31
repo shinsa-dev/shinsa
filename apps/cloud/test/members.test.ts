@@ -12,6 +12,7 @@ import {
   resolveInstanceConnectPath,
   resolveInstanceLeavePath,
   resolveInstanceRemovePath,
+  SLACK_RELAY_PATHS,
   verifyConnectToken,
 } from '@shinsa/core';
 import { MAX_INSTANCES_PER_USER } from '../src/pairing.ts';
@@ -230,5 +231,17 @@ describe('machine members', () => {
       expect((await harness.post(path, { userId: '2' }, { bearer: 'nope', sameOrigin: false })).status).toBe(
         401
       );
+  });
+});
+
+describe('a shared machine and Slack', () => {
+  test('a member cannot connect Slack to a machine they do not own, named or picked for them', async () => {
+    const { harness, kai, studio } = await joinMachine();
+    const named = await harness.call(`${SLACK_RELAY_PATHS.connect}?instance=${studio.instanceId}`, {
+      session: kai,
+    });
+    expect(named.status).toBe(403);
+    const picked = await harness.call(SLACK_RELAY_PATHS.connect, { session: kai });
+    expect(picked.headers.get('location')).toBe('/slack/linked?error=no_machine');
   });
 });

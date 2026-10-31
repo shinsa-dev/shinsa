@@ -242,6 +242,10 @@ function recordMessages(
   for (const text of texts) decider.emit({ type: 'task.messaged', taskId, text, ...fields });
 }
 
+export function recordHeldMessage(decider: Decider, taskId: string, text: string) {
+  recordMessages(decider, taskId, [text], {});
+}
+
 function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: string[], request: string) {
   if (task.stage === 'answered' && !decider.context.onBehalf) closeResult(decider, task.id);
   const round = resolveNextRoundNumber(task);

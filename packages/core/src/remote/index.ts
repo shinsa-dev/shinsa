@@ -3,8 +3,10 @@ export {
   concatBytes,
   decodeText,
   encodeText,
+  isSameSecret,
   parseBase64Url,
   serializeBase64Url,
+  serializeHex,
 } from './bytes.ts';
 export {
   CHANNEL_BODY_CHUNK_BYTES,

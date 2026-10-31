@@ -32,6 +32,7 @@ describe('the remote page’s mode', () => {
   });
 
   it('shows the pair page, the enroll page, or the one dashboard of every machine, all at the root', () => {
+    expect(resolveRemoteView({ pathname: '/slack/linked', search: '?team=Acme' })).toEqual({ kind: 'slack' });
     expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ' })).toEqual({
       kind: 'pair',
       claimCode: 'K7PQ',

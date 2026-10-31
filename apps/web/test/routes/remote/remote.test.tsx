@@ -241,6 +241,26 @@ describe('access requests in Settings → Machines', () => {
   });
 });
 
+describe('the page after connecting Slack', () => {
+  it('names the workspace and how the bot works, and opens Shinsa as its main action', async () => {
+    renderRoot('/slack/linked?team=Overclock');
+    expect(await screen.findByText('Slack is connected to Overclock')).toBeTruthy();
+    expect(screen.getByText('Mention @Shinsa')).toBeTruthy();
+    expect(screen.getByText('You decide in Shinsa')).toBeTruthy();
+    const open = screen.getByText('Open Shinsa').closest('a');
+    expect(open?.getAttribute('href')).toBe('/');
+    expect(open?.getAttribute('data-variant') ?? open?.className).not.toContain('secondary');
+  });
+
+  it('says why connecting failed', async () => {
+    renderRoot('/slack/linked?error=slack_denied');
+    expect(await screen.findByText('Slack is not connected')).toBeTruthy();
+    expect(
+      screen.getByText('Slack was not connected because the request was turned down there.')
+    ).toBeTruthy();
+  });
+});
+
 describe('the machines in Settings', () => {
   it('lists every machine with whether it is in this dashboard, and removes one', async () => {
     const devices = createDevices(DEVICE);

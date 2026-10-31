@@ -1,4 +1,4 @@
-import { parseRemoteHookPath, REMOTE_PATHS } from '@shinsa/core';
+import { parseRemoteHookPath, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
 import { createStore, type Database } from './database.ts';
 import { respondHook } from './hooks.ts';
 import { applySecurityHeaders, CloudError, respondError, respondJson } from './http.ts';
@@ -29,6 +29,20 @@ import {
   respondSignInToken,
   respondSignOut,
 } from './session.ts';
+import {
+  respondSlackEvents,
+  respondSlackInteractions,
+  respondSlackLinks,
+  respondSlackPost,
+  respondSlackReaction,
+  respondSlackSession,
+  respondSlackUnlink,
+} from './slack.ts';
+import {
+  respondSlackConnect,
+  respondSlackConnectCallback,
+  respondSlackInstallCallback,
+} from './slack-link.ts';
 import type { CloudConfig, CloudWorld, Fetch } from './world.ts';
 
 type Handler = (
@@ -161,6 +175,59 @@ const ROUTES: Route[] = [
     pattern: exact(REMOTE_PATHS.machineRemove),
     respond: (request, _url, _match, world) => respondMachineRemove(request, world),
   },
+  {
+    method: 'GET',
+    pattern: exact(SLACK_RELAY_PATHS.links),
+    respond: (request, _url, _match, world) => respondSlackLinks(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.unlink),
+    respond: (request, _url, _match, world) => respondSlackUnlink(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.post),
+    respond: (request, _url, _match, world) => respondSlackPost(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.session),
+    respond: (request, _url, _match, world) => respondSlackSession(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.react),
+    respond: (request, _url, _match, world) => respondSlackReaction(request, world),
+  },
+];
+
+const SLACK_ROUTES: Route[] = [
+  {
+    method: 'GET',
+    pattern: exact(SLACK_RELAY_PATHS.connect),
+    respond: (request, url, _match, world) => respondSlackConnect(request, url, world),
+  },
+  {
+    method: 'GET',
+    pattern: exact(SLACK_RELAY_PATHS.connectCallback),
+    respond: (request, url, _match, world) => respondSlackConnectCallback(request, url, world),
+  },
+  {
+    method: 'GET',
+    pattern: exact(SLACK_RELAY_PATHS.installCallback),
+    respond: (request, url, _match, world) => respondSlackInstallCallback(request, url, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.events),
+    respond: (request, _url, _match, world) => respondSlackEvents(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(SLACK_RELAY_PATHS.interactions),
+    respond: (request, _url, _match, world) => respondSlackInteractions(request, world),
+  },
 ];
 
 const API_PREFIX = '/__remote/';
@@ -200,6 +267,16 @@ async function respondApi(request: Request, url: URL, world: CloudWorld) {
 export async function respond(request: Request, world: CloudWorld) {
   const url = new URL(request.url);
   if (url.pathname.startsWith(API_PREFIX)) return applySecurityHeaders(await respondApi(request, url, world));
+  const slack = SLACK_ROUTES.find(
+    (route) => route.method === request.method && route.pattern.test(url.pathname)
+  );
+  if (slack) {
+    try {
+      return applySecurityHeaders(await slack.respond(request, url, [], world));
+    } catch (error) {
+      return applySecurityHeaders(respondError(describeFailure(error)));
+    }
+  }
   const hook = parseRemoteHookPath(url.pathname);
   if (hook) {
     try {
@@ -218,6 +295,7 @@ export interface CloudBindings {
   assets: (request: Request) => Promise<Response>;
   fetch: Fetch;
   now: () => number;
+  defer: (work: Promise<unknown>) => void;
   config: CloudConfig;
 }
 
@@ -227,6 +305,7 @@ export function createWorld(bindings: CloudBindings): CloudWorld {
     assets: bindings.assets,
     fetch: bindings.fetch,
     now: bindings.now,
+    defer: bindings.defer,
     config: bindings.config,
   };
 }
