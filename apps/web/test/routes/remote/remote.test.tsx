@@ -482,6 +482,32 @@ describe('the enroll page', () => {
     expect(await screen.findByRole('button', { name: 'Request access' })).toBeTruthy();
   });
 
+  it('asks again with a new key when the machine it was added to no longer lists this account', async () => {
+    const asked: (EnrolledDevice | null | undefined)[] = [];
+    render(
+      <EnrollPage
+        link={link}
+        user={USER.user as RemoteUser}
+        dashboard={createDashboard({ listInstances: () => Promise.resolve([]) })}
+        devices={createDevices({
+          instanceId: 'k3x9',
+          machineKey: MACHINE_KEY,
+          keys: {} as CryptoKeyPair,
+          enrolledAt: 1,
+        })}
+        resolveName={() => 'Mona iPhone'}
+        request={(_input, options) => {
+          asked.push(options.earlier);
+          return new Promise(() => undefined);
+        }}
+      />
+    );
+    expect(await screen.findByText('Join a shared machine')).toBeTruthy();
+    expect(screen.queryByText('This device is already added')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
+    expect(asked).toEqual([null]);
+  });
+
   it('says why the machine refused, and what to do with a link that cannot work', async () => {
     const { unmount } = render(
       <EnrollPage

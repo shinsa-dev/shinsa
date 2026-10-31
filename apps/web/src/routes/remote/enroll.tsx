@@ -169,7 +169,7 @@ export function EnrollPage({
       </section>
     );
   if (joining === null || earlier === undefined) return <RemoteLoading label='Reading the link' />;
-  if (earlier && !earlier.waiting) return <AddedPage />;
+  if (earlier && !earlier.waiting && !joining) return <AddedPage />;
   const busy = state.kind === 'requesting' || state.kind === 'waiting';
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>

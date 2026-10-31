@@ -2525,7 +2525,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   that drops while the request waits is opened again with the same device key (`requestDeviceAccess`), and once it is
   accepted the device is kept and the dashboard opens. While it waits, Request access reads Waiting for an answer and
   no longer spins. Opening the link again on a device that already asked picks up that one request with its key and
-  name instead of asking again, and on a device already added says so with Open Shinsa. A device that left while it waited shows Waiting for an answer
+  name instead of asking again, and on a device already added says so with Open Shinsa, unless the account no longer has that machine (a member removed), when it asks again with a new key. A device that left while it waited shows Waiting for an answer
   in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
   which forgets its key. Settings → General → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
