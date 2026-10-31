@@ -356,7 +356,15 @@ describe('the posts each gate makes', () => {
     ).toBe(
       `Proposed change\n> A change to the code.\n<${URL}|Decide in Shinsa>\n${footerOf(harness, taskId)}`
     );
-    for (const type of ['merge', 'operation', 'failure', 'configuration', 'sign_in', 'post_merge'] as const) {
+    for (const type of [
+      'merge',
+      'operation',
+      'failure',
+      'configuration',
+      'sign_in',
+      'post_merge',
+      'result',
+    ] as const) {
       expect(serializeSlackGate(harness.task(taskId), { ...gate, type }, URL)).toBeNull();
     }
   });

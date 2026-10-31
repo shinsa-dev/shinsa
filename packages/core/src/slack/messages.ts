@@ -136,13 +136,13 @@ function resolveAttentionGate(gates: readonly Gate[]) {
 export function resolveSlackSessionStatus(task: Task, gates: readonly Gate[]): SlackSessionStatus {
   if (isTaskClosed(task)) return 'closed';
   if (resolveAttentionGate(gates) || NEEDS_YOU_STAGES.has(task.stage)) return 'suspended';
-  if (isTaskResting(task) || task.stage === 'merged') return 'active';
+  if (isTaskResting(task) || task.stage === 'merged' || task.stage === 'answered') return 'active';
   return 'processing';
 }
 
 export function resolveSlackReaction(task: Task, gates: readonly Gate[]): SlackReaction {
   if (task.stage === 'cancelled') return SLACK_REACTIONS.cancelled;
-  if (isTaskClosed(task) || task.stage === 'merged') return SLACK_REACTIONS.done;
+  if (isTaskClosed(task) || task.stage === 'merged' || task.stage === 'answered') return SLACK_REACTIONS.done;
   const attention = resolveAttentionGate(gates);
   if (attention?.type === 'failure') return SLACK_REACTIONS.failed;
   if (attention || NEEDS_YOU_STAGES.has(task.stage)) return SLACK_REACTIONS.needsYou;
@@ -312,6 +312,7 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
     case 'configuration':
     case 'sign_in':
     case 'post_merge':
+    case 'result':
       return null;
   }
 }
