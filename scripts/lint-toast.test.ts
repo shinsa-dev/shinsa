@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { TOAST_LIMIT, TOAST_MESSAGE } from './lint-rules.ts';
+import { TOAST_LIMIT, TOAST_MESSAGE, TOAST_UNCHECKED_MESSAGE } from './lint-rules.ts';
 import { listToastViolations } from './lint-toast.ts';
 
 const LONG = 'Approved. Opening the pull request for you now.';
@@ -48,12 +48,12 @@ describe('a toast is one short line', () => {
     expect(one(`confirmDone(\`${fixed}x\${name}\`);`)).toEqual(['a.ts:1']);
     expect(one(`confirmDone('${fixed}' + name);`)).toEqual([]);
     expect(one(`confirmDone('${fixed}x' + name);`)).toEqual(['a.ts:1']);
-    expect(one(`confirmDone(name - '${LONG}');`)).toEqual([]);
+    expect(one(`confirmDone(name - '${LONG}');`)).toEqual(['a.ts:1']);
   });
 
   test('both branches of a choice are checked', () => {
     expect(one(`confirmDone(ok ? '${SHORT}' :\n  '${LONG}');`)).toEqual(['a.ts:2']);
-    expect(one(`confirmDone(text ??\n  '${LONG}');`)).toEqual(['a.ts:2']);
+    expect(one(`confirmDone(done ??\n  '${LONG}');`)).toEqual(['a.ts:2']);
   });
 
   test('a constant, an object constant and a lookup table are followed to their text', () => {
@@ -65,8 +65,10 @@ describe('a toast is one short line', () => {
     expect(one(`const TOASTS = { a: '${SHORT}',\n  b: '${LONG}' };\nconfirmDone(TOASTS[key]);`)).toEqual([
       'a.ts:2',
     ]);
-    expect(one(`const list = ['${LONG}'];\nconfirmDone(list.at);\nconfirmDone(other.done);`)).toEqual([]);
-    expect(one(`const loop = loop;\nconfirmDone(loop);\nconfirmDone(unknown);`)).toEqual([]);
+    expect(one(`const list = ['${LONG}'];\nconfirmDone(list.at);\nconfirmDone(other.done);`)).toEqual([
+      'a.ts:2',
+    ]);
+    expect(one(`const loop = loop;\nconfirmDone(loop);`)).toEqual([]);
   });
 
   test('a function that returns the text is followed, in another file too', () => {
@@ -95,6 +97,60 @@ describe('a toast is one short line', () => {
       })
     ).toEqual(['use.ts:1', 'use.ts:2']);
     expect(lines({ 'a.ts': 'export default function () {}\nconst noop = 1;' })).toEqual([]);
+  });
+
+  test('toast text the lint cannot read is refused, so no toast escapes the limit', () => {
+    expect(listToastViolations({ 'a.ts': 'toast.error(label);' })).toEqual([
+      { file: 'a.ts', line: 1, message: TOAST_UNCHECKED_MESSAGE },
+    ]);
+    expect(
+      one('toast(build());\nconfirmDone(row.label);\nconfirmDone(TABLE[key]);\nconfirmDone(await read());')
+    ).toEqual(['a.ts:1', 'a.ts:2', 'a.ts:3', 'a.ts:4']);
+    expect(one('const a = { done: label, sent: build() };')).toEqual([]);
+    expect(one('toast.success(true ? undefined : null, { id, description: 42 });')).toEqual([]);
+  });
+
+  test('a server message, describeFailure and a done or sent value are passed on', () => {
+    expect(
+      one(
+        'toast.error(error.message);\ntoast.error(describeFailure(error));\nconfirmDone(done);\nconfirmDone(hint.sent);\ntoast.loading(title, { description: message });'
+      )
+    ).toEqual(['a.ts:5']);
+    expect(
+      one(
+        `const message = '${LONG}';\nconst copy = { message: '${LONG}' };\ntoast.error(message);\ntoast.error(copy.message);`
+      )
+    ).toEqual(['a.ts:1', 'a.ts:2']);
+    expect(one(`const done = '${LONG}';\nconfirmDone(done);`)).toEqual(['a.ts:1']);
+  });
+
+  test('a constant imported from another file is followed, under its own name or an alias', () => {
+    const copy = `export const REMOVED = '${LONG}';\nexport const COPY = { removed: '${LONG}' };\nconst HIDDEN = '${SHORT}';`;
+    expect(
+      lines({
+        'copy.ts': copy,
+        'use.ts':
+          "import { COPY as C, REMOVED } from './copy.ts';\nconfirmDone(REMOVED);\nconfirmDone(C.removed);",
+      })
+    ).toEqual(['copy.ts:1', 'copy.ts:2']);
+    expect(
+      lines({ 'copy.ts': copy, 'use.ts': "import { HIDDEN } from './copy.ts';\nconfirmDone(HIDDEN);" })
+    ).toEqual(['use.ts:2']);
+    expect(
+      lines({ 'a.ts': "import Copy from './copy.ts';\nexport default 1;\nexport function noop() {}" })
+    ).toEqual([]);
+  });
+
+  test('a value taken apart from an object, a constant or a returned object is followed', () => {
+    const accept = `function accept(files) {\n  if (files) return { refusal: '${LONG}' };\n  return { refusal: null };\n}`;
+    expect(one(`${accept}\nconst { refusal } = accept(files);\ntoast.error(refusal);`)).toEqual(['a.ts:2']);
+    expect(one(`const COPY = { a: '${LONG}' };\nconst { a: text } = COPY;\ntoast(text);`)).toEqual([
+      'a.ts:1',
+    ]);
+    expect(one(`const { b } = { b: '${SHORT}' };\ntoast(b);`)).toEqual([]);
+    expect(
+      one('const { c } = read();\ntoast(c);\nconst { d } = 42;\ntoast(d);\nconst { ...rest } = x;')
+    ).toEqual(['a.ts:1', 'a.ts:3']);
   });
 
   test('violations come back ordered by file and line', () => {

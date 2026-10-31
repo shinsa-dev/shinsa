@@ -1,15 +1,27 @@
 import { parse } from '@babel/parser';
-import { TOAST_LIMIT, TOAST_MESSAGE, TOAST_PLACEHOLDER_LENGTH } from './lint-rules.ts';
+import {
+  TOAST_LIMIT,
+  TOAST_MESSAGE,
+  TOAST_PASSTHROUGH,
+  TOAST_PLACEHOLDER_LENGTH,
+  TOAST_UNCHECKED_MESSAGE,
+} from './lint-rules.ts';
 
 type Node = { type: string; loc?: { start: { line: number } }; [key: string]: unknown };
 
-type Text = { file: string; line: number; length: number };
+type Text = { file: string; line: number; length: number | null };
 
-type Source = { file: string; program: Node; constants: Map<string, Node> };
+type Source = { file: string; program: Node; constants: Map<string, Node>; imports: Map<string, string> };
 
 type Definition = { source: Source; params: string[]; returns: Node[] };
 
-type Context = { source: Source; definitions: Map<string, Definition[]>; seen: Set<Node> };
+type Exported = { source: Source; value: Node };
+
+type Index = { definitions: Map<string, Definition[]>; exported: Map<string, Exported[]> };
+
+type Context = Index & { source: Source; seen: Set<Node> };
+
+type Argument = { node: Node; strict: boolean };
 
 const TOAST_METHODS = new Set(['success', 'error', 'info', 'warning', 'message', 'loading']);
 
@@ -29,6 +41,12 @@ const FUNCTION_TYPES = new Set([
   'ArrowFunctionExpression',
   'ObjectMethod',
 ]);
+
+const NOT_TEXT = new Set([...FUNCTION_TYPES, 'BooleanLiteral', 'NullLiteral', 'NumericLiteral']);
+
+const SERVER_TEXT = 'message';
+
+const PASSED_ON = new Set([...TOAST_NAMES, SERVER_TEXT, 'undefined']);
 
 function children(node: Node): Node[] {
   return Object.values(node).flatMap((value) =>
@@ -94,16 +112,41 @@ function readSource(file: string, text: string): Source {
   const program = parse(text, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
     .program as unknown as Node;
   const constants = new Map<string, Node>();
+  const imports = new Map<string, string>();
   visit(program, (node) => {
     const name = node.type === 'VariableDeclarator' ? readName(node.id) : null;
     if (name && node.init) constants.set(name, node.init as Node);
+    const pattern = node.type === 'VariableDeclarator' && node.init ? (node.id as Node) : null;
+    for (const property of pattern?.type === 'ObjectPattern' ? (pattern.properties as Node[]) : []) {
+      const local = property.type === 'ObjectProperty' ? readName(property.value) : null;
+      if (local)
+        constants.set(local, {
+          type: 'Picked',
+          loc: property.loc,
+          from: node.init,
+          key: readName(property.key),
+        });
+    }
+    const local = node.type === 'ImportSpecifier' ? readName(node.local) : null;
+    if (local) imports.set(local, readName(node.imported) ?? local);
   });
-  return { file, program, constants };
+  return { file, program, constants, imports };
 }
 
-function indexDefinitions(sources: Source[]) {
+function indexSources(sources: Source[]): Index {
   const definitions = new Map<string, Definition[]>();
+  const exported = new Map<string, Exported[]>();
   for (const source of sources) {
+    for (const statement of source.program.body as Node[]) {
+      const declaration =
+        statement.type === 'ExportNamedDeclaration' ? (statement.declaration as Node | null) : null;
+      if (declaration?.type !== 'VariableDeclaration') continue;
+      for (const declarator of declaration.declarations as Node[]) {
+        const name = readName(declarator.id);
+        if (name && declarator.init)
+          exported.set(name, [...(exported.get(name) ?? []), { source, value: declarator.init as Node }]);
+      }
+    }
     visit(source.program, (node) => {
       const found = readFunction(node);
       if (!found?.[0]) return;
@@ -112,7 +155,7 @@ function indexDefinitions(sources: Source[]) {
       definitions.set(name, [...(definitions.get(name) ?? []), definition]);
     });
   }
-  return definitions;
+  return { definitions, exported };
 }
 
 function readProperty(object: Node, key: string) {
@@ -132,13 +175,46 @@ function readCalleeName(callee: Node) {
   return readName(callee.type === 'MemberExpression' ? callee.property : callee);
 }
 
-function resolveMember(expression: Node, context: Context) {
-  const found = context.source.constants.get(readName(expression.object) ?? '');
-  const owner = found ? unwrap(found) : null;
-  if (owner?.type !== 'ObjectExpression') return [];
-  if (expression.computed) return listValues(owner);
-  const value = readProperty(owner, readName(expression.property) ?? '');
-  return value ? [value] : [];
+function resolveName(name: string, context: Context): Exported[] {
+  const local = context.source.constants.get(name);
+  if (local) return [{ source: context.source, value: local }];
+  const imported = context.source.imports.get(name);
+  return imported ? (context.exported.get(imported) ?? []) : [];
+}
+
+function resolveMember(expression: Node, context: Context): Exported[] {
+  return resolveName(readName(expression.object) ?? '', context).flatMap(({ source, value }) => {
+    const owner = unwrap(value);
+    if (owner.type !== 'ObjectExpression') return [];
+    if (expression.computed) return listValues(owner).map((item) => ({ source, value: item }));
+    const found = readProperty(owner, readName(expression.property) ?? '');
+    return found ? [{ source, value: found }] : [];
+  });
+}
+
+function resolveObjects(node: Node, context: Context): Exported[] {
+  const expression = unwrap(node);
+  if (expression.type === 'ObjectExpression') return [{ source: context.source, value: expression }];
+  if (expression.type === 'Identifier')
+    return resolveName(expression.name as string, context).flatMap(({ source, value }) =>
+      resolveObjects(value, { ...context, source })
+    );
+  if (expression.type !== 'CallExpression') return [];
+  return (context.definitions.get(readCalleeName(expression.callee as Node) ?? '') ?? []).flatMap(
+    (definition) =>
+      definition.returns.flatMap((value) => resolveObjects(value, { ...context, source: definition.source }))
+  );
+}
+
+function resolvePicked(expression: Node, context: Context): Exported[] {
+  return resolveObjects(expression.from as Node, context).flatMap(({ source, value }) => {
+    const found = readProperty(value, expression.key as string);
+    return found ? [{ source, value: found }] : [];
+  });
+}
+
+function resolveFound(found: Exported[], context: Context) {
+  return found.flatMap(({ source, value }) => resolveTexts(value, { ...context, source }));
 }
 
 function resolveTexts(node: Node | null, context: Context): Text[] {
@@ -147,6 +223,8 @@ function resolveTexts(node: Node | null, context: Context): Text[] {
   const at = { file: context.source.file, line: node.loc?.start.line ?? 0 };
   const expression = unwrap(node);
   const resolve = (next: Node | null) => resolveTexts(next, context);
+  const unchecked = [{ ...at, length: null }];
+  if (NOT_TEXT.has(expression.type)) return [];
   switch (expression.type) {
     case 'StringLiteral':
       return [{ ...at, length: (expression.value as string).length }];
@@ -161,9 +239,9 @@ function resolveTexts(node: Node | null, context: Context): Text[] {
     case 'LogicalExpression':
       return [...resolve(expression.left as Node), ...resolve(expression.right as Node)];
     case 'BinaryExpression': {
-      if (expression.operator !== '+') return [];
+      if (expression.operator !== '+') return unchecked;
       const longest = (texts: Text[]) =>
-        Math.max(TOAST_PLACEHOLDER_LENGTH, ...texts.map((text) => text.length));
+        Math.max(TOAST_PLACEHOLDER_LENGTH, ...texts.map((text) => text.length ?? 0));
       return [
         {
           ...at,
@@ -171,21 +249,36 @@ function resolveTexts(node: Node | null, context: Context): Text[] {
         },
       ];
     }
-    case 'Identifier':
-      return resolve(context.source.constants.get(expression.name as string) ?? null);
-    case 'MemberExpression':
-      return resolveMember(expression, context).flatMap(resolve);
+    case 'Identifier': {
+      const found = resolveName(expression.name as string, context);
+      if (found.length > 0) return resolveFound(found, context);
+      return PASSED_ON.has(expression.name as string) ? [] : unchecked;
+    }
+    case 'Picked': {
+      const found = resolvePicked(expression, context);
+      return found.length > 0 ? resolveFound(found, context) : unchecked;
+    }
+    case 'MemberExpression': {
+      const found = resolveMember(expression, context);
+      if (found.length > 0) return resolveFound(found, context);
+      return !expression.computed && PASSED_ON.has(readName(expression.property) ?? '') ? [] : unchecked;
+    }
     case 'ObjectExpression':
       return TOAST_OPTIONS.flatMap((key) => resolve(readProperty(expression, key)));
-    case 'CallExpression':
-      return (context.definitions.get(readCalleeName(expression.callee as Node) ?? '') ?? []).flatMap(
-        (definition) =>
-          definition.returns.flatMap((value) =>
-            resolveTexts(value, { ...context, source: definition.source })
-          )
+    case 'CallExpression': {
+      const name = readCalleeName(expression.callee as Node) ?? '';
+      if (TOAST_PASSTHROUGH.has(name)) return [];
+      const found = context.definitions.get(name) ?? [];
+      if (found.length === 0) return unchecked;
+      return found.flatMap((definition) =>
+        resolveFound(
+          definition.returns.map((value) => ({ source: definition.source, value })),
+          context
+        )
       );
+    }
     default:
-      return [];
+      return unchecked;
   }
 }
 
@@ -198,6 +291,10 @@ function listCallArguments(node: Node, definitions: Map<string, Definition[]>) {
   if (callee.type === 'Identifier' && name === 'toast') return args.slice(0, 2);
   const helper = TOAST_HELPERS.get(name);
   if (helper !== undefined) return args.slice(helper, helper + 1);
+  return listDoneArguments(name, args, definitions);
+}
+
+function listDoneArguments(name: string, args: Node[], definitions: Map<string, Definition[]>) {
   const positions = new Set(
     (definitions.get(name) ?? []).flatMap((definition) =>
       definition.params.flatMap((param, index) => (TOAST_NAMES.has(param) ? [index] : []))
@@ -206,29 +303,36 @@ function listCallArguments(node: Node, definitions: Map<string, Definition[]>) {
   return [...positions].flatMap((index) => (args[index] ? [args[index]] : []));
 }
 
-function listToastArguments(node: Node, definitions: Map<string, Definition[]>): Node[] {
+function listToastArguments(node: Node, definitions: Map<string, Definition[]>): Argument[] {
   if (node.type === 'ObjectProperty' && TOAST_NAMES.has(readName(node.key) ?? ''))
-    return [node.value as Node];
-  return node.type === 'CallExpression' ? listCallArguments(node, definitions) : [];
+    return [{ node: node.value as Node, strict: false }];
+  if (node.type !== 'CallExpression') return [];
+  const name = readCalleeName(node.callee as Node) ?? '';
+  const direct = listCallArguments(node, definitions);
+  const passed = new Set(listDoneArguments(name, node.arguments as Node[], definitions));
+  return direct.map((argument) => ({ node: argument, strict: !passed.has(argument) }));
+}
+
+function describeText(text: Text, strict: boolean) {
+  if (text.length === null) return strict ? TOAST_UNCHECKED_MESSAGE : null;
+  return text.length > TOAST_LIMIT ? TOAST_MESSAGE : null;
 }
 
 export function listToastViolations(
   files: Record<string, string>
 ): { file: string; line: number; message: string }[] {
   const sources = Object.entries(files).map(([file, text]) => readSource(file, text));
-  const definitions = indexDefinitions(sources);
-  const found = new Map<string, { file: string; line: number }>();
+  const index = indexSources(sources);
+  const found = new Map<string, { file: string; line: number; message: string }>();
   for (const source of sources) {
     visit(source.program, (node) => {
-      for (const argument of listToastArguments(node, definitions)) {
-        for (const text of resolveTexts(argument, { source, definitions, seen: new Set() })) {
-          if (text.length > TOAST_LIMIT)
-            found.set(`${text.file}:${text.line}`, { file: text.file, line: text.line });
+      for (const argument of listToastArguments(node, index.definitions)) {
+        for (const text of resolveTexts(argument.node, { ...index, source, seen: new Set() })) {
+          const message = describeText(text, argument.strict);
+          if (message) found.set(`${text.file}:${text.line}`, { file: text.file, line: text.line, message });
         }
       }
     });
   }
-  return [...found.values()]
-    .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)
-    .map((at) => ({ ...at, message: TOAST_MESSAGE }));
+  return [...found.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 }

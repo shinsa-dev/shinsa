@@ -211,3 +211,7 @@ export const TOAST_LIMIT = 40;
 export const TOAST_PLACEHOLDER_LENGTH = 12;
 
 export const TOAST_MESSAGE = `A toast longer than ${TOAST_LIMIT} characters wraps at the toaster's width. A toast is one short line: the outcome in a few words ("Request declined.", "Kai Lane joined."), no description; an inserted value counts as ${TOAST_PLACEHOLDER_LENGTH} (docs/design.md → Where Shinsa differs, 42)`;
+
+export const TOAST_PASSTHROUGH = new Set(['describeFailure']);
+
+export const TOAST_UNCHECKED_MESSAGE = `Toast text the lint cannot read, so it cannot tell whether it fits on one line. Pass a string literal, a template, a constant or a function that returns one (in any file), a done or sent value, a server message (error.message, describeFailure(error)), or shorten it so it is one of those (docs/design.md → Where Shinsa differs, 42)`;

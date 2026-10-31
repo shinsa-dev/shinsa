@@ -2957,7 +2957,11 @@ Only these, and they win over anything below:
     running update's progress, clipped to one line. An error toast is the server's message, so a `DomainError` a
     command or request from the web can return is one short sentence too ("This task is finished."); what an agent
     needs to recover goes in the messages only agents receive. The toaster clips a title or a line that is still too
-    long, such as a git failure, so nothing ever breaks onto a second line.
+    long, such as a git failure, so nothing ever breaks onto a second line. `bun lint:conventions` fails on a longer
+    toast and on toast text it cannot read: the text of every `toast.*`, `confirmDone`, `requestWithToast` and
+    `sendCommandWithToast` call must be a literal, a template, a constant or a function returning one (followed across
+    imports and destructuring), a `done` or `sent` value (checked where it is written), or a server message
+    (`error.message`, `describeFailure(error)`), which the clip covers.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
