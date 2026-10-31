@@ -1140,6 +1140,30 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
 - **On your behalf.** Both moves are management commands an agent may send for you; the activity reads "Moved
   ‹task› to the backlog" or "out of the backlog". Starting is a plan approval, which only you make.
 
+### Snoozing a task
+
+Snoozing hides an open task from what asks for your attention, in any step, and changes nothing else: its stage,
+gates, plan, branch, worktree, pull request and agent session stay as they are (`decide/snooze.ts`). It is for work
+that is fine but not a priority for a few days, where cancelling would throw it away and the backlog would not take
+it (a task past its plan). It is not pausing: "Paused" already names a step that stopped and needs you, and nothing
+stops here.
+
+- **Snoozing and unsnoozing.** `Task.snoozed` (`{ at }`, or null) changes only through `task.snooze_changed`
+  (`snoozed`). `task.snooze` (Snooze in the task menu, a row's menu and ⌘K, `shinsa tasks snooze`) sets it, and is
+  refused for a settled task (`task_settled`); `task.unsnooze` (Unsnooze, `shinsa tasks unsnooze`) clears it. A
+  repeat records nothing. Each asks for a fresh Home guide. Only you unsnooze a task, or an agent you asked: nothing
+  wakes it on its own.
+- **While snoozed.** `resolveQueue` leaves every open gate of a snoozed task out of `ready` and lists the task in
+  `queue.snoozed` instead of `working`, `waiting` or `backlog`, so it is not in Needs you, In progress, Waiting, the
+  queue button, the guide, the Dock badge or a notification. Home shows it in a Snoozed section, folded by default
+  (`QueueSection.opensOnHome`), the queue popover in a folded Snoozed section, and All tasks in a folded Snoozed
+  group ahead of every gate (`resolveTaskGroup`). The task reads (`GET /api/tasks`, `shinsa tasks list`, an agent's
+  `tasks_list`) mark it `snoozed` and leave it out of `--status needs_you` (`isListed` in `http/reads.ts`). An agent
+  at work keeps working; the gate it reaches waits quietly. A snoozed task that finishes drops out of the snoozed list.
+- **Unsnoozing.** The task shows again where it is now: a gate it reached while snoozed is in Needs you at once.
+- **On your behalf.** Both are management commands an agent may send for you; the activity reads "Snoozed ‹task›"
+  or "Unsnoozed ‹task›".
+
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).

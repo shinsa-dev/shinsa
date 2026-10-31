@@ -24,6 +24,7 @@ export type TaskGroupKey =
   | 'paused'
   | 'working'
   | 'waiting'
+  | 'snoozed'
   | 'backlog'
   | 'done'
   | 'cancelled';
@@ -63,6 +64,7 @@ export const TASK_GROUPS: TaskGroup[] = [
     tone: 'neutral',
     defaultOpen: true,
   },
+  { key: 'snoozed', title: 'Snoozed', icon: 'IconClockSnooze', tone: 'neutral', defaultOpen: false },
   { key: 'backlog', title: 'Backlog', icon: 'IconArchive', tone: 'neutral', defaultOpen: true },
   { key: 'done', title: 'Done', icon: 'IconCheckCircle2', tone: 'purple', defaultOpen: false },
   { key: 'cancelled', title: 'Cancelled', icon: 'IconCircleX', tone: 'neutral', defaultOpen: false },
@@ -76,6 +78,7 @@ export const TASK_GROUP = Object.fromEntries(TASK_GROUPS.map((group) => [group.k
 export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
+  if (task.snoozed) return 'snoozed';
   const gate = selectLeadGate(state, task);
   if (gate && isHeldInBacklog(state, gate)) return 'backlog';
   if (gate) {
