@@ -172,6 +172,23 @@ describe('the remote dashboard', () => {
   });
 });
 
+describe('the page after connecting Slack', () => {
+  it('names the workspace and what happens next', async () => {
+    renderRoot('/slack/linked?team=Overclock');
+    expect(await screen.findByText('Slack is connected to Overclock')).toBeTruthy();
+    expect(screen.getByText('What happens next')).toBeTruthy();
+    expect(screen.getByText('Open Shinsa').closest('a')?.getAttribute('href')).toBe('/');
+  });
+
+  it('says why connecting failed', async () => {
+    renderRoot('/slack/linked?error=slack_denied');
+    expect(await screen.findByText('Slack is not connected')).toBeTruthy();
+    expect(
+      screen.getByText('Slack was not connected because the request was turned down there.')
+    ).toBeTruthy();
+  });
+});
+
 describe('the machines in Settings', () => {
   it('lists every machine with whether it is in this dashboard, and removes one', async () => {
     const devices = createDevices(DEVICE);

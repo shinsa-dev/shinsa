@@ -1,4 +1,4 @@
-import { parseEnrollFragment, REMOTE_PATHS } from '@shinsa/core';
+import { parseEnrollFragment, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 
 export const SERVICE_WORKER_PATH = `${REMOTE_PATHS.app}sw.js`;
@@ -29,7 +29,11 @@ export function resolveOnMachineUrl(url: string) {
   return fragment === undefined ? marked : `${marked}#${fragment}`;
 }
 
-export type RemoteView = { kind: 'app' } | { kind: 'pair'; claimCode: string | null } | { kind: 'enroll' };
+export type RemoteView =
+  | { kind: 'app' }
+  | { kind: 'pair'; claimCode: string | null }
+  | { kind: 'enroll' }
+  | { kind: 'slack' };
 
 export function isRemoteBuild(env: Record<string, unknown> = import.meta.env) {
   return env.VITE_SHINSA_REMOTE === '1';
@@ -39,6 +43,7 @@ export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'
   if (location.pathname === REMOTE_PATHS.pairPage)
     return { kind: 'pair', claimCode: new URLSearchParams(location.search).get('code') };
   if (location.pathname === REMOTE_PATHS.enrollPage) return { kind: 'enroll' };
+  if (location.pathname === SLACK_RELAY_PATHS.linkedPage) return { kind: 'slack' };
   return { kind: 'app' };
 }
 
