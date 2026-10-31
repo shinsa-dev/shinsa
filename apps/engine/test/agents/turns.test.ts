@@ -4,6 +4,7 @@ import { Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
 import {
+  isSessionCacheWarm,
   resolveRestorePlan,
   resolveTurnFold,
   resolveTurnPlan,
@@ -250,6 +251,16 @@ describe('folding at a step boundary', () => {
     expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(
       'The plan in full.\n\nNow build phase 1 of 2.'
     );
+  });
+
+  test('a session’s cache is warm until the expiry its last ended run recorded, and unknown counts as cold', () => {
+    const run = createRun({ id: 'r3', sessionId: 's', startedAt: 30 });
+    const older = createRun({ id: 'r1', sessionId: 's', startedAt: 10, cacheExpiresAt: 500 });
+    const newer = createRun({ id: 'r2', sessionId: 's', startedAt: 20, cacheExpiresAt: 1_000 });
+    expect(isSessionCacheWarm(context(run, [older, newer]), 's', 999)).toBe(true);
+    expect(isSessionCacheWarm(context(run, [older, newer]), 's', 1_000)).toBe(false);
+    expect(isSessionCacheWarm(context(run, []), 's', 0)).toBe(false);
+    expect(isSessionCacheWarm(context({ ...run, cacheExpiresAt: 9_999 }, []), 's', 0)).toBe(false);
   });
 
   test('an eunoe fold or cut keeps the session’s first message, so the house rules are not sent again; Claude Code’s own summary drops them', () => {

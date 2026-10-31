@@ -183,6 +183,14 @@ export function resolveTurnFold({ run, plan, stepPrompt, firstAttempt, folds }: 
   return run.role === 'agent' && needsRoundBrief(run);
 }
 
+export function isSessionCacheWarm(context: TurnContext, sessionId: string, now: number) {
+  const earlier = listSessionRuns(context, sessionId).filter(
+    (run) => run.id !== context.run.id && run.cacheExpiresAt !== undefined
+  );
+  const expiresAt = earlier.at(-1)?.cacheExpiresAt;
+  return expiresAt !== undefined && now < expiresAt;
+}
+
 export function resolveTurnPrompt(
   context: TurnContext,
   plan: TurnPlan,

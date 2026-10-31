@@ -74,6 +74,7 @@ import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
+  isSessionCacheWarm,
   resolveRestorePlan,
   resolveTurnBrief,
   resolveTurnFold,
@@ -649,7 +650,9 @@ export class RunSupervisor {
         ? { extensions, announceExtensions: !pin || !isSameExtensionSet(pin, extensions.loaded) }
         : {}),
       ...options,
-      ...(fold ? { fold } : {}),
+      ...(fold && plan.resume
+        ? { fold, cacheWarm: isSessionCacheWarm(this.#context(turn), plan.resume, Date.now()) }
+        : {}),
       ...(active.lease ? { account: { id: active.lease.id, configDir: active.lease.configDir } } : {}),
       usageBaseline: this.#readSessionUsage,
       onSession: (linked) => {
@@ -784,6 +787,7 @@ export class RunSupervisor {
       summary: result.summary,
       ...(attemptId ? { attemptId } : {}),
       ...(result.failure ? { failure: result.failure } : {}),
+      ...(result.context?.cacheExpiresAt ? { cacheExpiresAt: result.context.cacheExpiresAt } : {}),
     };
     await this.#engine.dispatch(command, { id: `run.end:${attemptId ?? runId}` });
   }

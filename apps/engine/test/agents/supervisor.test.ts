@@ -1450,7 +1450,16 @@ describe('resume fallback', () => {
     await until('the session', () => step.sessions.started.length > 0);
     (step.sessions.started[0] as FakeSession).finish();
     await running;
-    expect(step.sessions.started[0]?.input).toMatchObject({ resume: 'old', fold: true });
+    expect(step.sessions.started[0]?.input).toMatchObject({ resume: 'old', fold: true, cacheWarm: false });
+    const warm = restoreSetup((state) => {
+      const earlier = state.runs['run-0'];
+      if (earlier) earlier.cacheExpiresAt = Date.now() + 60_000;
+    });
+    const warmRun = warm.supervisor.execute('run-1');
+    await until('the warm session', () => warm.sessions.started.length > 0);
+    (warm.sessions.started[0] as FakeSession).finish();
+    await warmRun;
+    expect(warm.sessions.started[0]?.input).toMatchObject({ fold: true, cacheWarm: true });
     const continued = restoreSetup(() => undefined);
     await runOnce(continued);
     expect(continued.sessions.started[0]?.input.fold).toBeUndefined();

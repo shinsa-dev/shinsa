@@ -83,6 +83,29 @@ describe('recovery', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 
+  test('a run that ends with a known cache expiry records it on the run, and one without leaves it unset', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const first = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: first.id,
+      outcome: 'completed',
+      summary: null,
+      cacheExpiresAt: 3_600_000,
+    });
+    expect(harness.state.runs[first.id]?.cacheExpiresAt).toBe(3_600_000);
+    const second = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: second.id,
+      outcome: 'failed',
+      summary: 'stopped',
+      cacheExpiresAt: null,
+    });
+    expect(harness.state.runs[second.id]?.cacheExpiresAt).toBeUndefined();
+  });
+
   test('rejecting a failure gate cancels the task', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

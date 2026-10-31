@@ -3841,10 +3841,11 @@ Code's own summary). So build phase 1 starts from the accepted plan rather than
 the planning conversation, and a fix from the plan and the hand-overs rather than the whole build. A thread with
 nothing before its turn is left as it is, and so is a step whose history is under 40,000 tokens (`FOLD_FLOOR_TOKENS`,
 `foldFloor`) while its cache is still warm: there a fold would rewrite more of the cache than it saves, so the fold is
-dropped and the step reads its warm cache. Once the cache has expired (the session's last request is older than the
-lifetime its breakpoints ask for, an hour for `ttl: "1h"` and five minutes otherwise, or the forwarder has not seen the
-session since it started), the next request rewrites the whole prefix anyway, so a step of any size folds first and
-writes only the folded prefix.
+dropped and the step reads its warm cache. Whether it is warm is the expiry the session's last run recorded when it
+ended (`resolveCacheExpiry`, the same reading idle compaction uses, kept on the run by `run.cached` so it survives a
+restart; `isSessionCacheWarm` in `agents/turns.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
+no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
+first and writes only the folded prefix.
 
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it
 starts and passes it both as process environment and in the Agent SDK's flag-settings layer, which outranks the

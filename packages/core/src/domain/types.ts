@@ -527,6 +527,7 @@ export interface Run {
   cohort?: DeliveryCohort | null;
   waitingOn?: RunWait | null;
   compactions?: string[];
+  cacheExpiresAt?: number;
   fork?: RunFork | null;
   round?: number;
 }

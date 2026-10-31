@@ -923,6 +923,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'run.silence_snoozed':
     case 'run.silence_dismissed':
     case 'run.compacted':
+    case 'run.cached':
       applyRunEvent(state, event);
       break;
     case 'delegation.asked':

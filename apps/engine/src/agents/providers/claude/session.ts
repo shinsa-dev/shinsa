@@ -287,7 +287,7 @@ export function startClaudeSession(
     if (route.notice) recorder.notify(route.notice);
     eunoe = route.eunoe;
     if (eunoe && options.eunoe && input.fold && input.resume && !input.fork) {
-      releaseFold = options.eunoe.fold(input.resume);
+      releaseFold = options.eunoe.fold(input.resume, input.cacheWarm ?? false);
     }
     return runtime.runQuery({
       prompt: hasServers ? gated() : prompts,

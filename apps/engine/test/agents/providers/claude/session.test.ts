@@ -914,7 +914,7 @@ describe('what an idle session leaves behind', () => {
 
 function createEunoe(up = true) {
   const watching: { sessionId: string; watcher: EunoeWatcher; stopped: boolean }[] = [];
-  const folds: { sessionId: string; released: boolean }[] = [];
+  const folds: { sessionId: string; warm: boolean; released: boolean }[] = [];
   const link: EunoeLink = {
     ensure: () =>
       Promise.resolve(
@@ -929,8 +929,8 @@ function createEunoe(up = true) {
         entry.stopped = true;
       };
     },
-    fold: (sessionId) => {
-      const entry = { sessionId, released: false };
+    fold: (sessionId, warm) => {
+      const entry = { sessionId, warm, released: false };
       folds.push(entry);
       return () => {
         entry.released = true;
@@ -1048,14 +1048,14 @@ describe('compaction and fast mode', () => {
 
   test('a turn that asks for a fold queues one for the session it resumes, until the turn ends', async () => {
     const { link, folds } = createEunoe();
-    const { input } = createInput({ compaction: 'fold', fold: true, resume: 'sess-1' });
+    const { input } = createInput({ compaction: 'fold', fold: true, cacheWarm: true, resume: 'sess-1' });
     const { session, messages } = startScripted(input, { eunoe: link });
     messages.push(init);
     await until('the fold', () => folds.length === 1);
-    expect(folds).toEqual([{ sessionId: 'sess-1', released: false }]);
+    expect(folds).toEqual([{ sessionId: 'sess-1', warm: true, released: false }]);
     messages.push(success('ok'));
     await session.done;
-    expect(folds).toEqual([{ sessionId: 'sess-1', released: true }]);
+    expect(folds).toEqual([{ sessionId: 'sess-1', warm: true, released: true }]);
   });
 
   test('no fold is queued for a new session, a fork, a turn that does not ask, or a session that goes direct', async () => {

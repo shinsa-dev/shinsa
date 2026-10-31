@@ -199,6 +199,8 @@ function finishRun(
 export function endRun(decider: Decider, command: CommandOf<'run.end'>) {
   const run = decider.state.runs[command.runId];
   if (!run || run.endedAt !== null || isStaleAttempt(run, command.attemptId)) return;
+  if (command.cacheExpiresAt)
+    decider.emit({ type: 'run.cached', runId: run.id, cacheExpiresAt: command.cacheExpiresAt });
   finishRun(decider, run, command.outcome, command.summary, command.failure ?? null);
 }
 

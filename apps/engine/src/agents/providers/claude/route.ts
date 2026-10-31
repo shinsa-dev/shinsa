@@ -16,7 +16,7 @@ export interface EunoeWatcher {
 export interface EunoeLink {
   ensure: () => Promise<EunoeStatus>;
   watch: (sessionId: string, watcher: EunoeWatcher) => () => void;
-  fold: (sessionId: string) => () => void;
+  fold: (sessionId: string, warm: boolean) => () => void;
 }
 
 interface ClaudeRoute {

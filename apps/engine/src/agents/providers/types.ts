@@ -46,6 +46,7 @@ export interface AgentSessionInput {
   onActivity?: () => void;
   compaction?: CompactionMode;
   fold?: boolean;
+  cacheWarm?: boolean;
   fastMode?: boolean;
   usageBaseline?: UsageBaseline;
   extensions?: SessionExtensions;
