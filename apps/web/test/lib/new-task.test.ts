@@ -6,6 +6,7 @@ import {
   describeMachineLoad,
   describeNewTask,
   describePlacementDone,
+  describePolicyFailure,
   hasMachineChoice,
   isProjectOnMachine,
   isWaitingStart,
@@ -233,7 +234,7 @@ describe('the machine a new task runs on', () => {
         asked.push(question);
         return Promise.resolve({ answer });
       })
-    ).toEqual(answer);
+    ).toEqual({ answer, reason: answer.reason });
     expect(asked).toEqual([
       {
         request: 'Run the benchmark',
@@ -250,8 +251,23 @@ describe('the machine a new task runs on', () => {
       },
     ]);
     expect(
-      await requestPolicyPlacement([studio, ruled], 'x', () => Promise.reject(new Error('down')))
-    ).toBeNull();
+      await requestPolicyPlacement([studio, ruled], 'x', () => Promise.resolve({ answer: null }))
+    ).toEqual({
+      answer: null,
+      reason: '',
+    });
+    expect(
+      await requestPolicyPlacement([studio, ruled], 'x', () =>
+        Promise.reject(new Error('No Claude account is signed in.'))
+      )
+    ).toEqual({
+      answer: null,
+      reason:
+        'Your routing policies were not read (No Claude account is signed in), so it went to the machine with the most room.',
+    });
+    expect(describePolicyFailure('timeout')).toBe(
+      'Your routing policies were not read (timeout), so it went to the machine with the most room.'
+    );
   });
 
   it('asks the machine in front by POST /api/placement', async () => {
@@ -264,7 +280,7 @@ describe('the machine a new task runs on', () => {
     }) as unknown as typeof globalThis.fetch;
     const placed = await requestPolicyPlacement([studio, ruled], 'Run the benchmark');
     globalThis.fetch = realFetch;
-    expect(placed).toEqual(answer);
+    expect(placed).toEqual({ answer, reason: answer.reason });
     expect(posted).toEqual(['/api/placement']);
   });
 

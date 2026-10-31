@@ -1,9 +1,4 @@
-import {
-  type PlacementAnswer,
-  resolveTaskProject,
-  type ShinsaState,
-  serializeAttachments,
-} from '@shinsa/core';
+import { resolveTaskProject, type ShinsaState, serializeAttachments } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shinsa/ui/components/select';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -40,6 +35,7 @@ import {
   type NewTaskChoices,
   type NewTaskProjectItem,
   NO_PROJECT,
+  type PolicyPlacement,
   requestPolicyPlacement,
   resolveNewTaskMachine,
   resolveProjectChoice,
@@ -195,16 +191,16 @@ export function NewTaskForm() {
   async function submit() {
     if (!ready) return;
     setBusy(true);
-    let answer: PlacementAnswer | null = null;
-    if (placement?.byPolicy) answer = await requestPolicyPlacement(machines, request);
-    const machineId = answer?.machineId ?? placement?.id ?? null;
+    let policy: PolicyPlacement | null = null;
+    if (placement?.byPolicy) policy = await requestPolicyPlacement(machines, request);
+    const machineId = policy?.answer?.machineId ?? placement?.id ?? null;
     const sent = await sendCommandWithToast(
       createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
       placement
         ? describePlacementDone(
             copy.done,
             machines.find((machine) => machine.id === machineId),
-            answer?.reason ?? ''
+            policy?.reason ?? ''
           )
         : copy.done,
       machineId

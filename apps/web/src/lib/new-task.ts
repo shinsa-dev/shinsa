@@ -202,13 +202,23 @@ export async function requestPolicyPlacement(
   machines: PlacementMachine[],
   request: string,
   ask: PlacementAsker = askPlacement
-) {
+): Promise<PolicyPlacement> {
   try {
     const { answer } = await ask({ request, machines: listPlacementCandidates(machines) });
-    return answer;
-  } catch {
-    return null;
+    return { answer, reason: answer?.reason ?? '' };
+  } catch (error) {
+    return { answer: null, reason: describePolicyFailure(error) };
   }
+}
+
+export interface PolicyPlacement {
+  answer: PlacementAnswer | null;
+  reason: string;
+}
+
+export function describePolicyFailure(error: unknown) {
+  const why = error instanceof Error ? error.message.replace(/\.$/, '') : String(error);
+  return `Your routing policies were not read (${why}), so it went to the machine with the most room.`;
 }
 
 export function describePlacementDone(done: string, machine: MachineChoice | undefined, reason: string) {
