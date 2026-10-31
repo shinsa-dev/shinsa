@@ -1,4 +1,5 @@
 import { type ByteRange, type Channel, isVersion, parseRange } from './download.ts';
+import { recordFailure } from './log.ts';
 
 interface UpdateObject {
   size: number;
@@ -113,10 +114,14 @@ export async function respondUpdate(request: Request, bucket: UpdateBucket | nul
   if (request.method !== 'GET' && request.method !== 'HEAD') return answerStatus(405, { Allow: 'GET, HEAD' });
   const file = resolveUpdateFile(new URL(request.url).pathname);
   if (!file) return answerStatus(404);
-  if (!bucket) return answerStatus(503);
+  if (!bucket) {
+    recordFailure('Update files have no R2 binding', { key: file.key });
+    return answerStatus(503);
+  }
   try {
     return await streamUpdateFile(request, file, bucket);
-  } catch {
+  } catch (error) {
+    recordFailure('Update file read from R2 failed', { key: file.key, error: String(error) });
     return answerStatus(503);
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { ByteRange } from '../../src/worker/download.ts';
 import {
   isUpdatePath,
@@ -218,12 +218,18 @@ describe('respondUpdate', () => {
   });
 
   it('answers 503 without a bucket or when R2 fails, so the app tries again later', async () => {
+    const logged = spyOn(console, 'error').mockImplementation(() => undefined);
     const withoutBucket = await respondUpdate(createRequest('/updates/beta-mac.yml'), null);
     expect(withoutBucket.status).toBe(503);
     const { bucket } = createBucket(STORED, new Error('R2 down'));
     const failing = await respondUpdate(createRequest('/updates/beta-mac.yml'), bucket);
     expect(failing.status).toBe(503);
     expect(failing.headers.get('Cache-Control')).toBe('no-store');
+    expect(logged.mock.calls).toEqual([
+      ['Update files have no R2 binding', { key: 'updates/beta-mac.yml' }],
+      ['Update file read from R2 failed', { key: 'updates/beta-mac.yml', error: 'Error: R2 down' }],
+    ]);
+    logged.mockRestore();
   });
 
   it('answers 405 to anything but GET and HEAD', async () => {

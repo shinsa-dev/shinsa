@@ -3,6 +3,7 @@
   "account_id": "e8563b02f2bf2b6a136f2781445a486f",
   "compatibility_date": "2026-10-01",
   "main": "./src/worker/index.ts",
+  "observability": { "enabled": true },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
