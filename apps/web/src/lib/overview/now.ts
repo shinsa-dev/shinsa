@@ -19,7 +19,6 @@ import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
-import { describeChecksPassed } from '@/lib/tasks/checks.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
 import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
@@ -113,10 +112,8 @@ export function isTaskWatchable(state: ShinsaState, task: Task) {
 }
 
 export function describeReviewFacts(task: Task, merge: boolean) {
-  const checks = task.checkResults ?? [];
   const findings = task.findings;
   const facts = [
-    checks.length > 0 ? describeChecksPassed(checks) : null,
     findings.length === 0
       ? 'agent review found nothing'
       : `agent review left ${formatCount(findings.length, 'note', 'notes')}`,

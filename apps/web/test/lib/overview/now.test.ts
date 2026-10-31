@@ -136,16 +136,13 @@ describe('resolveNowTitle', () => {
 });
 
 describe('describeReviewFacts', () => {
-  it('sums up checks and the agent review', () => {
+  it('sums up the agent review and leaves the checks to their own line', () => {
     const task = createTask({
       id: 'task-1',
       checkResults: [check('pass'), check('pass'), check('fail')],
       findings: [{ severity: 'optional', file: null, line: null, message: 'Consider a guard.' }],
     });
-    expect(describeReviewFacts(task, false)).toBe('2 of 3 checks passed · agent review left 1 note');
-  });
-
-  it('starts with a capital letter when there are no checks', () => {
+    expect(describeReviewFacts(task, false)).toBe('Agent review left 1 note');
     expect(describeReviewFacts(createTask({ id: 'task-1' }), false)).toBe('Agent review found nothing');
   });
 
@@ -161,10 +158,8 @@ describe('describeReviewFacts', () => {
 
   it('says the pull request is clean at the merge gate', () => {
     const task = createTask({ id: 'task-1', checkResults: [check('pass')], pullRequest: PULL_REQUEST });
-    expect(describeReviewFacts(task, true)).toBe(
-      'The check passed · agent review found nothing · PR #4531 is clean'
-    );
-    expect(describeReviewFacts(task, false)).toBe('The check passed · agent review found nothing');
+    expect(describeReviewFacts(task, true)).toBe('Agent review found nothing · PR #4531 is clean');
+    expect(describeReviewFacts(task, false)).toBe('Agent review found nothing');
     expect(describeReviewFacts(createTask({ id: 'task-2' }), true)).toBe('Agent review found nothing');
   });
 });

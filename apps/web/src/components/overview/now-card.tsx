@@ -11,7 +11,7 @@ import {
 import { Button } from '@shinsa/ui/components/button';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
-import { ChecksBlock } from '@/components/checks/checks-list.tsx';
+import { ChecksBlock, FoldedChecks } from '@/components/checks/checks-list.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
@@ -291,7 +291,6 @@ function ReviewCard({
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
-  const waits = listMergeWaits(state, task);
   const reply = selectShownReply(task, gate);
   return (
     <NowFrame
@@ -311,9 +310,9 @@ function ReviewCard({
       <p className='text-fg-3 text-xs'>
         {gate.escalation ? describeEscalationBody(gate.escalation) : describeReviewFacts(task, merge)}
       </p>
-      {checks && <ChecksBlock taskId={task.id} view={checks} />}
+      {checks && <FoldedChecks taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
-      {(merge || waits.length > 0) && <MergeStepsBlock task={task} when='pre_merge' waits={waits} />}
+      {merge && <MergeStepsBlock task={task} when='pre_merge' waits={listMergeWaits(state, task)} />}
     </NowFrame>
   );
 }

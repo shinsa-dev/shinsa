@@ -151,32 +151,56 @@ describe('NowCard on the Overview', () => {
     expect(card.queryByText('The second half.')).toBeNull();
   });
 
-  it('lists the checks on the review card', () => {
+  function reviewWithCheck(outcome: 'pass' | 'fail') {
     const task = createTask({
       id: 'task-1',
       stage: 'awaiting_review',
       checks: [{ id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', phases: [1], source: 'plan' }],
-      checkResults: [
-        { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', outcome: 'pass', detail: null },
-      ],
+      checkResults: [{ id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', outcome, detail: null }],
     });
     const gate = createGate({ id: 'gate-1', taskId: 'task-1' });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    const card = within(view.container.querySelector('section') as HTMLElement);
+    return within(view.container.querySelector('section') as HTMLElement);
+  }
+
+  it('folds passing checks on the review card into one line that opens them', () => {
+    const card = reviewWithCheck('pass');
+    expect(card.getByText('The check passed')).toBeTruthy();
+    expect(card.queryByText('bun test a.test.ts')).toBeNull();
+    fireEvent.click(card.getByRole('button', { name: 'Expand the checks' }));
     expect(card.getByText('Building')).toBeTruthy();
     expect(card.getByText('bun test a.test.ts')).toBeTruthy();
   });
 
-  it('lists the tasks the merge waits on under Pre-merge steps, ticked once each finishes and never by you', async () => {
+  it('opens the checks on the review card when one failed', () => {
+    const card = reviewWithCheck('fail');
+    expect(card.getByText('bun test a.test.ts')).toBeTruthy();
+  });
+
+  function waitingOnTasks(type: 'review' | 'merge') {
     const docs = createTask({ id: 'docs', title: 'Document the agent login', stage: 'building' });
     const skills = createTask({ id: 'skills', title: 'Teach the skill to log in', stage: 'merged' });
-    const task = createTask({ id: 'task-1', stage: 'awaiting_review', waitsOn: ['docs', 'skills'] });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'review' });
+    const task = createTask({
+      id: 'task-1',
+      stage: type === 'merge' ? 'awaiting_merge' : 'awaiting_review',
+      waitsOn: ['docs', 'skills'],
+    });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type });
     const state = createShinsaState({ tasks: [docs, skills, task], gates: [gate] });
     const { view } = renderOverview(state, task, gate);
-    const card = within(view.container.querySelector('section') as HTMLElement);
+    return within(view.container.querySelector('section') as HTMLElement);
+  }
+
+  it('keeps Pre-merge steps off the review gate, even when the merge waits on other tasks', () => {
+    const card = waitingOnTasks('review');
+    expect(card.queryByText('Pre-merge steps')).toBeNull();
+    expect(card.queryByText('Linked task')).toBeNull();
+  });
+
+  it('lists the tasks the merge waits on at the merge gate as task links, ticked once each finishes and never by you', async () => {
+    const card = waitingOnTasks('merge');
     expect(card.getByText('Pre-merge steps')).toBeTruthy();
-    expect(card.getByText('Document the agent login')).toBeTruthy();
+    expect(card.getByRole('link', { name: /Document the agent login/ })).toBeTruthy();
     expect(card.getAllByText('Linked task')).toHaveLength(2);
     const boxes = card.getAllByRole('checkbox');
     expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual(['false', 'true']);
