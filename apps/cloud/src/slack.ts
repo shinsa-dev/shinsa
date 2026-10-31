@@ -402,6 +402,8 @@ export async function respondSlackPost(request: Request, world: CloudWorld) {
   return recordPosted(world, posted, post, instance);
 }
 
+const STATUS_UNAVAILABLE_CODES = new Set(['not_authorized', 'feature_disabled']);
+
 export async function respondSlackSession(request: Request, world: CloudWorld) {
   const instance = await findMachine(request, world);
   const session = parseSlackRelaySession(await readJsonFields(request));
@@ -414,7 +416,9 @@ export async function respondSlackSession(request: Request, world: CloudWorld) {
       json: { channel_id: session.channelId, thread_ts: session.threadTs, status: session.status },
     });
   } catch (error) {
-    recordFailure('[Cloud] Slack did not take a thread status', { error, teamId: session.teamId });
+    if (!(error instanceof SlackApiError && STATUS_UNAVAILABLE_CODES.has(error.code))) {
+      recordFailure('[Cloud] Slack did not take a thread status', { error, teamId: session.teamId });
+    }
     answer = { applied: false };
   }
   return respondJson(answer);
