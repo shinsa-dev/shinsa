@@ -2595,8 +2595,10 @@ Slack ──event──► app.shinsa.dev /slack/events
   `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
   loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),
   `active` once it rests or merged, and `closed` when it is done or cancelled; only a change is sent. It is best
-  effort: a workspace without Slack's agent features answers `feature_disabled`, app.shinsa.dev logs it and says
-  `applied: false`, and the posts carry on as they are.
+  effort: a workspace without Slack's agent tasks feature answers `feature_disabled`, app.shinsa.dev logs it and says
+  `applied: false`, and the posts carry on as they are. It needs only `chat:write`, the scope the bot already has, and
+  no app setting: the app's Agents & AI Apps feature (`agent_view`) stays off, because the bot answers mentions in
+  channels and never the agent pane or direct messages that feature opens.
 - **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
