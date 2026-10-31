@@ -1683,7 +1683,7 @@ Only these, and they win over anything below:
       Without schedules the card holds one sentence.
     - **Fast mode** is the speed select of each agent group and role in Settings → Agents (26). **Settings →
       General** holds the **Context** group (`components/settings/context.tsx`):
-      **Context management** (Default, `IconLayersTwo`; Compaction only, `IconMinimize`; Provider compaction,
+      **Management** ("Context management" in ⌘K; Default, `IconLayersTwo`; Compaction only, `IconMinimize`; Provider compaction,
       `IconBubbleText`; Off, `IconPause`; each with a one-line hint in the menu, never naming one provider's
       product), then **Compact idle sessions** (Never, the default, or 1, 2, 5 or 10 minutes before the cache
       expires), shown only where a provider summarises itself: Claude agents with provider compaction, Codex agents

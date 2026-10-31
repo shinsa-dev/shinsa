@@ -682,7 +682,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Watchdog checks have a session of their own.** A check reads logs after the merge in a watch
   session that starts with the brief and is resumed by the next check; the Agent's own session never
   carries a check's output, and a check never carries the Agent's build.
-- **Context management is a setting.** Settings → General → Context, Context management: Default
+- **Context management is a setting.** Settings → General → Context, Management: Default
   (folds at each step and compacts near the limit), Compaction only (eunoe near the limit, no folds
   between steps), Provider compaction (Claude Code's or Codex's own) or Off.
 - **Bots don't wake the Agent for notices.** A bot's comment on the pull request conversation (a
@@ -694,7 +694,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **eunoe compacts, not Claude Code.** Claude sessions go through eunoe, served by Shinsa itself
   (since 2026-10-31, inside the engine), in its own folder: at the context limit it folds the finished turns
   to your messages, the output that mattered and the replies, so nothing is summarised away and the
-  full transcript stays searchable. Settings → General → Context picks how (Context management,
+  full transcript stays searchable. Settings → General → Context picks how (Management,
   since 2026-10-31). Each fold shows as a quiet line in the chat.
 - **A missing eunoe never stops work.** When eunoe cannot start, the run talks to Claude directly
   with Claude Code's compaction and the chat says why. Shinsa's eunoe is its own: its own port and

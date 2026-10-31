@@ -44,9 +44,9 @@ async function choose(label: string, option: string | RegExp) {
 describe('Settings → General → Context', () => {
   it('folds by default and leaves idle compaction to provider compaction', async () => {
     renderContext();
-    expect(screen.getByRole('combobox', { name: 'Context management' }).textContent).toBe('Default');
+    expect(screen.getByRole('combobox', { name: 'Management' }).textContent).toBe('Default');
     expect(screen.queryByRole('combobox', { name: 'Compact idle sessions' })).toBeNull();
-    await choose('Context management', /^Compaction only/);
+    await choose('Management', /^Compaction only/);
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { compaction: 'compact' } }]);
   });
 

@@ -3788,8 +3788,8 @@ for it, so its `claude` never outlives the server.
 
 **Compaction and fast mode.** Shinsa does not use a provider's own summary by default: eunoe's core
 (`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) folds and
-compacts instead. Settings → General → Context, Context management (`settings.compaction`, a `settings.change` event
-because replay must reproduce it):
+compacts instead. Settings → General → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
+event because replay must reproduce it):
 
 | Setting | What happens |
 | --- | --- |

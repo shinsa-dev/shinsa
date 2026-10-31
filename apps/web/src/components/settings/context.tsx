@@ -2,7 +2,6 @@ import { listAgentProviders, resolveCompaction, resolveIdleCompaction, type Sett
 import { SelectField } from '@/components/controls/select-field.tsx';
 import {
   COMPACTION_MODE_ITEMS,
-  CONTEXT_MANAGEMENT,
   listCompactionItems,
   parseCompaction,
   resolveCompactionValue,
@@ -13,9 +12,9 @@ import { SettingRow, SettingsGroup } from './group.tsx';
 export function ContextSettings({ settings }: { settings: Settings }) {
   return (
     <SettingsGroup title='Context'>
-      <SettingRow title={CONTEXT_MANAGEMENT}>
+      <SettingRow title='Management'>
         <SelectField
-          label={CONTEXT_MANAGEMENT}
+          label='Management'
           items={COMPACTION_MODE_ITEMS}
           value={resolveCompaction(settings)}
           onValueChange={(compaction) => void updateSettings({ compaction })}
