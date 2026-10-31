@@ -285,7 +285,7 @@ describe('the machine a new task runs on', () => {
       value: 'auto',
       label: 'Automatic',
       icon: 'IconSparkle',
-      hint: 'Your policies decide when you start it',
+      hint: 'Your routing policies decide when you start it',
     });
     expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
     expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');

@@ -226,7 +226,7 @@ export function listNewTaskMachines(
       value: 'auto',
       label: placement?.byPolicy || !automatic ? 'Automatic' : `Automatic: ${resolveMachineLabel(automatic)}`,
       icon: 'IconSparkle',
-      ...(placement?.byPolicy ? { hint: 'Your policies decide when you start it' } : {}),
+      ...(placement?.byPolicy ? { hint: 'Your routing policies decide when you start it' } : {}),
     },
     ...machines.map((machine) => ({
       value: machine.id,

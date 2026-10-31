@@ -2380,29 +2380,31 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
   Settings → General → Machines lists every machine in rows like Remote access's: its name with its status beside it
   (online or last seen), whether it is in this dashboard, and Remove; machines in the dashboard also show their open
-  tasks and their task capacity. Below it, Policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
-  lists each machine's policies, sentences in plain English, the way Memory lists rules: New policy opens a one-line form with the machine
-  it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both.
+  tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
+  it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
+  machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
+  this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
   New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
-  disk; `resolveProjectMachine`); then, when any machine has a policy, the policies: each is a sentence in plain
+  disk; `resolveProjectMachine`); then, when any machine has a routing policy, the routing policies: each is a sentence in plain
   English (`placementPolicies`, such as "Run Xcode simulator tests here."), and when you start the task the page sends
   the request with every machine's policies and load to `POST /api/placement` on the first machine of the dashboard
   (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
   prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
   none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your policies decide when you start it", and the toast says where the task went and why); then, with no answer, the
+  "Your routing policies decide when you start it", and the toast says where the task went and why); then, with no answer, the
   focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
-  steers placement: a machine still runs a task you send it when full. Placement policies are each machine's own setting
-  too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Policies. The fleet sends `task.create` to the chosen
+  steers placement: a machine still runs a task you send it when full. Routing policies are each machine's own setting
+  too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already

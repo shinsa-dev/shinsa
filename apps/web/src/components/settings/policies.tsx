@@ -23,6 +23,7 @@ import {
   type PolicyRef,
   resolvePolicyRemoval,
   resolvePolicyWrites,
+  type UnreachableMachine,
   validatePolicy,
 } from '@/lib/remote/policies.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
@@ -35,11 +36,13 @@ interface Draft {
 
 function PolicyForm({
   machines,
+  unreachable,
   draft,
   actions,
   onDone,
 }: {
   machines: MachineChoice[];
+  unreachable: UnreachableMachine[];
   draft: Draft;
   actions: PolicyActions;
   onDone: () => void;
@@ -56,7 +59,7 @@ function PolicyForm({
     setBusy(true);
     const saved = await actions.write(
       resolvePolicyWrites(machines, draft.editing, machineId, text),
-      draft.editing ? 'Policy saved.' : 'Policy added.'
+      draft.editing ? 'Routing policy saved.' : 'Routing policy added.'
     );
     setBusy(false);
     if (saved) onDone();
@@ -76,7 +79,7 @@ function PolicyForm({
           rows={1}
           value={text}
           placeholder={POLICY_PLACEHOLDER}
-          aria-label='The policy'
+          aria-label='The routing policy'
           aria-invalid={error ? true : undefined}
           className='min-h-0 resize-none'
           onKeyDown={(event) => {
@@ -98,7 +101,7 @@ function PolicyForm({
           label='Runs on'
           size='sm'
           align='start'
-          items={listPolicyMachineItems(machines)}
+          items={listPolicyMachineItems(machines, unreachable)}
           value={machineId}
           onValueChange={(next) => {
             setMachineId(next);
@@ -156,9 +159,11 @@ function PolicyRow({
 
 export function PolicySettings({
   machines,
+  unreachable = [],
   actions = POLICY_ACTIONS,
 }: {
   machines: MachineChoice[];
+  unreachable?: UnreachableMachine[];
   actions?: PolicyActions;
 }) {
   const [draft, setDraft] = React.useState<Draft | null>(null);
@@ -178,12 +183,18 @@ export function PolicySettings({
           icon='IconPlusMedium'
           onClick={() => setDraft({ editing: null, machineId: first.id, text: '' })}
         >
-          New policy
+          New routing policy
         </Button>
       }
     >
       {draft && !draft.editing && (
-        <PolicyForm machines={machines} draft={draft} actions={actions} onDone={() => setDraft(null)} />
+        <PolicyForm
+          machines={machines}
+          unreachable={unreachable}
+          draft={draft}
+          actions={actions}
+          onDone={() => setDraft(null)}
+        />
       )}
       {empty && !draft && (
         <SettingsEmpty>
@@ -205,7 +216,7 @@ export function PolicySettings({
             }
           >
             {policies.length === 0 ? (
-              <SettingsEmpty>No policies for this machine yet.</SettingsEmpty>
+              <SettingsEmpty>No routing policies for this machine yet.</SettingsEmpty>
             ) : (
               policies.map((text, index) => {
                 const ref = { machineId: machine.id, index };
@@ -213,6 +224,7 @@ export function PolicySettings({
                   <PolicyForm
                     key={text}
                     machines={machines}
+                    unreachable={unreachable}
                     draft={{ editing: ref, machineId: machine.id, text }}
                     actions={actions}
                     onDone={() => setDraft(null)}
@@ -222,7 +234,9 @@ export function PolicySettings({
                     key={text}
                     text={text}
                     onEdit={() => setDraft({ editing: ref, machineId: machine.id, text })}
-                    onRemove={() => actions.write([resolvePolicyRemoval(machines, ref)], 'Policy removed.')}
+                    onRemove={() =>
+                      actions.write([resolvePolicyRemoval(machines, ref)], 'Routing policy removed.')
+                    }
                   />
                 );
               })

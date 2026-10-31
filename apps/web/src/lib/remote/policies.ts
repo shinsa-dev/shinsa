@@ -3,7 +3,7 @@ import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { MachineChoice } from '@/lib/connection/socket.ts';
 import { resolveMachineLabel } from './mode.ts';
 
-export const POLICIES_SECTION = 'Policies';
+export const POLICIES_SECTION = 'Routing policies';
 
 export const POLICY_PLACEHOLDER = 'What runs on this machine, such as “Run Xcode simulator tests here.”';
 
@@ -26,8 +26,35 @@ export function listPolicyGroups(machines: MachineChoice[]): PolicyGroup[] {
   return machines.map((machine) => ({ machine, policies: machine.state.settings.placementPolicies ?? [] }));
 }
 
-export function listPolicyMachineItems(machines: MachineChoice[]) {
-  return machines.map((machine) => ({ value: machine.id, label: resolveMachineLabel(machine) }));
+export interface UnreachableMachine {
+  id: string;
+  name: string;
+}
+
+export function describeUnreachableMachine(name: string) {
+  return `Add this device on ${name} first`;
+}
+
+export interface PolicyMachineItem {
+  value: string;
+  label: string;
+  disabled?: string;
+}
+
+export function listPolicyMachineItems(
+  machines: MachineChoice[],
+  unreachable: UnreachableMachine[] = []
+): PolicyMachineItem[] {
+  return [
+    ...machines.map((machine) => ({ value: machine.id, label: resolveMachineLabel(machine) })),
+    ...unreachable
+      .filter((machine) => !machines.some((reachable) => reachable.id === machine.id))
+      .map((machine) => ({
+        value: machine.id,
+        label: machine.name,
+        disabled: describeUnreachableMachine(machine.name),
+      })),
+  ];
 }
 
 export function describePolicyCount(count: number) {
@@ -39,7 +66,7 @@ export function describePolicyLength(text: string) {
 }
 
 export function describePolicySubmit(editing: PolicyRef | null) {
-  return editing ? 'Save' : 'Add policy';
+  return editing ? 'Save' : 'Add routing policy';
 }
 
 function selectPolicies(machines: MachineChoice[], machineId: string) {

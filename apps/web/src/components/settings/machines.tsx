@@ -22,7 +22,7 @@ import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
 
 const MACHINES_DESCRIPTION =
-  'Every machine you turned remote access on for. The ones added on this device share this one dashboard, and each task runs on one machine. A new task goes to the machine of the project you pick, else where your policies send it, else to the one with the most room under its task capacity. To add a device, choose Add device in Settings, Remote access on that machine.';
+  'Every machine you turned remote access on for. The ones added on this device share this one dashboard, and each task runs on one machine. A new task goes to the machine of the project you pick, else where your routing policies send it, else to the one with the most room under its task capacity. To add a device, choose Add device in Settings, Remote access on that machine.';
 
 function saveMachineSettings(machineId: string, patch: Partial<Settings>, done: string) {
   return sendCommandWithToast({ type: 'settings.change', patch }, done, machineId);
@@ -156,7 +156,12 @@ export function MachinesSettings() {
           <SettingsEmpty>Reading your machines.</SettingsEmpty>
         )}
       </SettingsGroup>
-      <PolicySettings machines={machines} />
+      <PolicySettings
+        machines={machines}
+        unreachable={(rows ?? [])
+          .filter((row) => !row.device)
+          .map((row) => ({ id: row.instance.id, name: row.instance.name }))}
+      />
     </>
   );
 }

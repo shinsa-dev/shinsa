@@ -20,9 +20,9 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    channel, merges their tasks, queue and gates into one view, and shows each task's machine on the task, as Kanna does.
    A machine is a computer that runs the engine and the only place tasks run; a device (a browser or a phone) is only
    a way in. With two machines or more, New task has a Machine picker: Automatic sends a task to the machine of the
-   project you picked, then where your policies send it: sentences in plain English per machine, such as "Run Xcode simulator tests here.", that the classifier reads with the request, then
+   project you picked, then where your routing policies send it: sentences in plain English per machine, such as "Run Xcode simulator tests here.", that the classifier reads with the request, then
    to the one with the most room under its task capacity; picking one overrides it. Settings → Machines lists every
-   machine with its status, its open tasks, its task capacity and Remove, and Settings → Policies says which machine runs which work. On the machine a
+   machine with its status, its open tasks, its task capacity and Remove, and Settings → Routing policies says which machine runs which work. On the machine a
    device was added from, the dashboard calls that machine This machine.
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
    that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An

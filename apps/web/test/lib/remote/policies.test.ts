@@ -35,9 +35,21 @@ describe('placement policies', () => {
       { value: 'studio', label: 'This machine' },
       { value: 'server', label: 'Server' },
     ]);
+    expect(
+      listPolicyMachineItems(
+        [STUDIO],
+        [
+          { id: 'studio', name: 'Studio' },
+          { id: 'laptop', name: 'Laptop' },
+        ]
+      )
+    ).toEqual([
+      { value: 'studio', label: 'This machine' },
+      { value: 'laptop', label: 'Laptop', disabled: 'Add this device on Laptop first' },
+    ]);
     expect(describePolicyCount(2)).toBe('2 of 20');
     expect(describePolicyLength(' iOS ')).toBe('3 / 240');
-    expect(describePolicySubmit(null)).toBe('Add policy');
+    expect(describePolicySubmit(null)).toBe('Add routing policy');
     expect(describePolicySubmit({ machineId: 'studio', index: 0 })).toBe('Save');
   });
 
