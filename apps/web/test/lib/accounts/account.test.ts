@@ -48,7 +48,7 @@ describe('account labels', () => {
 
 describe('account actions', () => {
   it('confirms a new default account by its name', () => {
-    expect(describeDefaultChanged({ email: 'a@example.com' })).toBe('a@example.com is the default account.');
+    expect(describeDefaultChanged({ email: 'a@example.com' })).toBe('a@example.com is the default.');
   });
 
   it('leaves an account out of new work, or takes it back, and says which happened', () => {
@@ -189,6 +189,6 @@ describe('running a step again on an account', () => {
     });
     expect(listRerunChoices(snapshot)).toEqual([{ value: 'w', label: 'work@example.com', account: work }]);
     expect(listRerunChoices(null)).toEqual([]);
-    expect(describeRerun(work)).toBe('Running this step again on work@example.com.');
+    expect(describeRerun(work)).toBe('Rerunning on work@example.com.');
   });
 });

@@ -134,10 +134,7 @@ describe('runTaskAction', () => {
     runTaskAction(FULL, 'snooze');
     runTaskAction(FULL, 'unsnooze');
     expect(spies.sent.mock.calls).toEqual([
-      [
-        { type: 'task.snooze', taskId: 'full' },
-        'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
-      ],
+      [{ type: 'task.snooze', taskId: 'full' }, 'Snoozed.'],
       [{ type: 'task.unsnooze', taskId: 'full' }, 'Unsnoozed.'],
     ]);
   });
@@ -147,10 +144,7 @@ describe('runTaskAction', () => {
     runTaskAction(FULL, 'removeFromBacklog');
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.move_to_backlog', taskId: 'full' }, 'Moved to the backlog.'],
-      [
-        { type: 'task.remove_from_backlog', taskId: 'full' },
-        'Removed from the backlog. Its plan now waits for your approval.',
-      ],
+      [{ type: 'task.remove_from_backlog', taskId: 'full' }, 'Removed from the backlog.'],
     ]);
   });
 });

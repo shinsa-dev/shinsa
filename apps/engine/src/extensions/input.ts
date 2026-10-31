@@ -82,7 +82,7 @@ export function parseServerDefinition(
 ): McpDefinition {
   const transport = fields.transport;
   if (transport !== 'stdio' && transport !== 'http' && transport !== 'sse') {
-    throw new DomainError('server_invalid', 'Pick how Shinsa reaches the MCP: a command, HTTP or SSE.');
+    throw new DomainError('server_invalid', 'Pick a command, HTTP or SSE.');
   }
   const env = keepSaved(parseTextMap(fields.env, 'The environment'), saved?.env ?? {});
   const headers = keepSaved(parseTextMap(fields.headers, 'The headers'), saved?.headers ?? {});
@@ -117,26 +117,22 @@ export function parseServerDefinition(
 export function parseServerName(value: unknown, isTaken: (name: string) => boolean) {
   const name = typeof value === 'string' ? value.trim() : '';
   if (!MCP_NAME_PATTERN.test(name)) {
-    throw new DomainError(
-      'server_name_invalid',
-      'Name it with letters, digits, dashes or underscores, at most 64 characters.'
-    );
+    throw new DomainError('server_name_invalid', 'Use up to 64 letters, digits, - or _.');
   }
   if (RESERVED_NAMES.has(name))
     throw new DomainError('server_name_invalid', 'The name shinsa is Shinsa’s own.');
-  if (isTaken(name)) throw new DomainError('server_name_taken', `Shinsa already has an MCP named ${name}.`);
+  if (isTaken(name)) throw new DomainError('server_name_taken', `An MCP named ${name} exists.`);
   return name;
 }
 
 export function parseServerScope(value: unknown, state: ShinsaState): ExtensionScope {
   const scope = parseScope(value);
-  if (!scope)
-    throw new DomainError('scope_invalid', 'Use it everywhere, in one project or in one repository.');
+  if (!scope) throw new DomainError('scope_invalid', 'Pick all, a project or a repository.');
   if (scope.kind === 'project' && !state.projects[scope.project]) {
     throw new DomainError('scope_invalid', 'There is no project with that id.');
   }
   if (scope.kind === 'repo' && !Object.values(state.repos).some((repo) => repo.path === scope.path)) {
-    throw new DomainError('scope_invalid', 'No agent has worked in that repository yet.');
+    throw new DomainError('scope_invalid', 'No agent has worked there yet.');
   }
   return scope;
 }

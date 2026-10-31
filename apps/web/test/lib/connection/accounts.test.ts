@@ -131,7 +131,7 @@ describe('account changes', () => {
       [{ type: 'usage_wait.change', taskId: 't', autoResume: false }, 'Waits for you at the reset.'],
       [
         { type: 'task.retry', taskId: 't', account: { id: 'a', email: 'a@example.com' } },
-        'Running this step again on a@example.com.',
+        'Rerunning on a@example.com.',
       ],
     ] as never);
     spies.restore();

@@ -165,7 +165,7 @@ export class Onboarding {
   complete() {
     const { store } = this.#context;
     if (store.config.roots.length === 0) {
-      throw new DomainError('roots_required', 'Choose the folders that hold your repositories first.');
+      throw new DomainError('roots_required', 'Choose your repository folders first.');
     }
     if (store.config.onboardedAt === null) store.update({ onboardedAt: Date.now() });
     return this.resolveStatus();

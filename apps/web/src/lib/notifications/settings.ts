@@ -11,8 +11,7 @@ import {
 } from './browser.ts';
 import { playSound } from './sounds.ts';
 
-export const BLOCKED =
-  'Your browser blocks notifications from Shinsa. Allow them in the site settings first.';
+export const BLOCKED = 'Your browser blocks notifications.';
 
 export const TEST_SOUND = 'Play the sound';
 
@@ -29,8 +28,7 @@ export const MACOS_NOTIFICATIONS_HINT =
 
 export const OPEN_MACOS_SETTINGS = 'Open settings';
 
-export const NOTIFY_BLOCKED =
-  'macOS blocked a notification. Allow notifications for Shinsa in System Settings.';
+export const NOTIFY_BLOCKED = 'macOS blocked a notification.';
 
 const NOTIFY_BLOCKED_TOAST = 'notify-blocked';
 

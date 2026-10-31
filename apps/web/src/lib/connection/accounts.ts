@@ -4,12 +4,7 @@ import { describeBinding, describeRerun } from '@/lib/accounts/account.ts';
 import { createUsageRecheck } from '@/lib/accounts/recheck.ts';
 import { type SignInDialogState, selectDialogLogin } from '@/lib/accounts/sign-in.ts';
 import { describeUsageWaitToggled } from '@/lib/accounts/usage-wait.ts';
-import {
-  type Done,
-  describeFailure,
-  requestWithToast,
-  sendCommandWithToast,
-} from '@/lib/connection/commands.ts';
+import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -37,7 +32,7 @@ async function requestAccounts(path: string, body: unknown) {
   return answer;
 }
 
-function updateAccounts(path: string, body: unknown, done?: Done) {
+function updateAccounts(path: string, body: unknown, done?: string) {
   return requestWithToast(() => requestAccounts(path, body), done);
 }
 

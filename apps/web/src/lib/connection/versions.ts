@@ -87,7 +87,9 @@ export async function requestUpdate(program: ProgramId) {
   });
   publish({ updating: [...view.updating, program] });
   try {
-    const outcome = await streamUpdate(program, (line) => toast.loading(title, { id, description: line }));
+    const outcome = await streamUpdate(program, (message) =>
+      toast.loading(title, { id, description: message })
+    );
     publishVersions(outcome.versions);
     if (outcome.ok) toast.success(outcome.message, { id });
     else toast.error(outcome.message, { id });

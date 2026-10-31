@@ -68,7 +68,7 @@ describe('the versions routes', () => {
   test('a refused update throws before anything streams; a broken one ends the stream with an error', async () => {
     await expect(
       createRoutes()('POST', '/api/versions/update', { program: 'gh' }, UPDATE_STREAM_TYPE)
-    ).rejects.toThrow('Name the program to update: claude or codex.');
+    ).rejects.toThrow('Update claude or codex.');
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const broken = await createRoutes(() => Promise.reject(new Error('spawn failed')))(
       'POST',

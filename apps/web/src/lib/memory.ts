@@ -91,11 +91,7 @@ export const MEMORY_ACTIONS: MemoryActions = {
       { type: 'memory.write', memoryId, projectId, text },
       memoryId ? 'Rule saved.' : 'Agents follow it from their next turn.'
     ),
-  keep: (entry) =>
-    sendCommandWithToast(
-      { type: 'memory.accept', memoryId: entry.id },
-      'Kept. Agents follow it from their next turn.'
-    ),
+  keep: (entry) => sendCommandWithToast({ type: 'memory.accept', memoryId: entry.id }, 'Rule kept.'),
   remove: (entry) =>
     sendCommandWithToast(
       { type: 'memory.remove', memoryId: entry.id },

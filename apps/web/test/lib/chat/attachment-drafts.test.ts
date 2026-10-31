@@ -48,14 +48,14 @@ describe('resolveAcceptedFiles', () => {
   it('leaves out empty and oversized files and says why', () => {
     expect(resolveAcceptedFiles([{ size: 0 }, { size: 26 * 1024 * 1024 }, { size: 3 }], 0)).toEqual({
       accepted: [{ size: 3 }],
-      refusal: 'Each file must be between 1 byte and 25 MB.',
+      refusal: 'Each file must be 1 byte to 25 MB.',
     });
   });
 
   it('stops at ten files a message', () => {
     expect(resolveAcceptedFiles([{ size: 1 }, { size: 1 }], 9)).toEqual({
       accepted: [{ size: 1 }],
-      refusal: 'Attach at most 10 files to one message.',
+      refusal: 'Attach at most 10 files.',
     });
     expect(resolveAcceptedFiles([{ size: 1 }], 12).accepted).toEqual([]);
   });

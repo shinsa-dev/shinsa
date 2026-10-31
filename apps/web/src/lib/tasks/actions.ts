@@ -95,14 +95,11 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
     case 'removeFromBacklog':
       void sendCommandWithToast(
         { type: 'task.remove_from_backlog', taskId: task.id },
-        'Removed from the backlog. Its plan now waits for your approval.'
+        'Removed from the backlog.'
       );
       return;
     case 'snooze':
-      void sendCommandWithToast(
-        { type: 'task.snooze', taskId: task.id },
-        'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.'
-      );
+      void sendCommandWithToast({ type: 'task.snooze', taskId: task.id }, 'Snoozed.');
       return;
     case 'unsnooze':
       void sendCommandWithToast({ type: 'task.unsnooze', taskId: task.id }, 'Unsnoozed.');

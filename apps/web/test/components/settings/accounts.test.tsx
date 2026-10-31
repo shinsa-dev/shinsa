@@ -356,7 +356,7 @@ describe('the Accounts settings', () => {
       ])
     );
     expect(toasts.success.mock.calls.map(([text]) => text)).toEqual([
-      'b@example.com is the default account.',
+      'b@example.com is the default.',
       'Moved up.',
       'Moved down.',
       'New work skips b@example.com.',
@@ -430,7 +430,7 @@ describe('an account’s switch threshold', () => {
     fireEvent.click(screen.getByRole('menuitemradio', { name: '95%' }));
     await settle();
     expect(updates()).toEqual([{ accountId: 'a', patch: { switchAt: 95 } }]);
-    expect(toasts.success).toHaveBeenCalledWith('Switches away from a@example.com at 95%.');
+    expect(toasts.success).toHaveBeenCalledWith('a@example.com switches at 95%.');
   });
 
   it('goes back to the setting', async () => {

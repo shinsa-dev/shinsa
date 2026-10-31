@@ -183,10 +183,7 @@ export class McpOAuth {
     const pending = this.#pending.get(state);
     this.#pending.delete(state);
     if (!pending || pending.expiresAt < this.#now()) {
-      throw new DomainError(
-        'sign_in_expired',
-        'This sign-in expired or was not started here. Connect again.'
-      );
+      throw new DomainError('sign_in_expired', 'This sign-in expired. Connect again.');
     }
     await auth(this.#provider(pending.serverId), this.#options(pending.url, code));
     return pending.serverId;

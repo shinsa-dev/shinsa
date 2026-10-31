@@ -570,8 +570,7 @@ every commit.
   - On a pipeline without the checks step, or a task with no checks at all, there is nothing to run, so approving the
     review with them pushes straight away, as approving without edits does: the push effect commits them first.
   - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
-    Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
-    passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
+    Committing your edits.", "Approved. Merging once CI passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
     request is open) or "Approved. Merging the pull request." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
   - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
@@ -1110,7 +1109,7 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 - **Chains and diamonds.** MCP v2 → embedded chat → paywall editing in the chat: each link waits for
   the one before it, so they start one after another as each merges. A diamond (B and C wait on
   A, D waits on B and C) starts B and C together when A merges, and D only after both. Cycles
-  are refused (`task.wait_on` throws "‹task› already waits on this task."; a new task cannot close one).
+  are refused (`task.wait_on` throws "That task already waits on this one."; a new task cannot close one).
 - **Cancelling a parent.** The work a dependent needed will never exist, so it is not started
   blind: each waiting dependent gets a failure gate, "“‹parent›” was cancelled", and shows as
   Paused. With other parents still pending, the gate says Retry keeps waiting on those only.
@@ -2559,8 +2558,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
   `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
   `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
-  Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
+- **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
+  on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
   repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
   takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
   plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
@@ -2632,9 +2631,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
   prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
   none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went and why; when every provider fails (no
+  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
   Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so the toast says the policies were not read and why (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
+  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
   focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
@@ -4761,8 +4760,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
   effect runs (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered, and every command
-  is refused with `inspect_read_only` ("Shinsa is in inspect mode and only shows this data. Start it without
-  SHINSA_INSPECT to change anything."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
+  is refused with `inspect_read_only` ("Inspect mode is read-only."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
   `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,

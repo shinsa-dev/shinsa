@@ -231,7 +231,7 @@ describe('when the wait ends', () => {
   test('check now wakes the agent at once, and refuses when nothing waits', () => {
     const { harness, taskId } = building();
     expect(() => harness.send({ type: 'monitor.check_in_now', taskId })).toThrow(
-      'Nothing on this task is waiting to be checked.'
+      'Nothing here waits for a check.'
     );
     waitFor(harness, taskId);
     harness.send({ type: 'monitor.check_in_now', taskId });

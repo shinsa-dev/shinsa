@@ -212,7 +212,7 @@ describe('changes', () => {
       'Signed out of linear.',
       'Turned off the review skill.',
       'Turned on the stripe plugin.',
-      'Agents now leave out MCPs unused for 14 days.',
+      'Unused MCPs left out.',
     ]);
   });
 
@@ -316,7 +316,7 @@ describe('signing in to a server', () => {
     window.dispatchEvent(new MessageEvent('message', { data: { channel: 'other', ok: true } }));
     expect(toasts.success).not.toHaveBeenCalled();
     window.dispatchEvent(new MessageEvent('message', { data: { channel: SIGN_IN_CHANNEL, ok: false } }));
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t sign in to linear. Try again.');
+    expect(toasts.error).toHaveBeenCalledWith('Couldn’t sign in to linear.');
     await startSignIn([CONNECTED]);
     showPage('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
@@ -329,7 +329,7 @@ describe('signing in to a server', () => {
   it('says so when the sign-in page reports a failure', async () => {
     await startSignIn();
     FakeChannel.opened[0]?.post({ ok: false });
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t sign in to linear. Try again.');
+    expect(toasts.error).toHaveBeenCalledWith('Couldn’t sign in to linear.');
     expect(FakeChannel.opened[0]?.closed).toBe(true);
   });
 

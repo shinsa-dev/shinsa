@@ -56,7 +56,7 @@ describe('Onboarding', () => {
 
   test('saves the folders to config.json and the defaults as settings, then completes', async () => {
     const { onboarding, engine, store, developer, root } = setup();
-    expect(() => onboarding.complete()).toThrow('Choose the folders that hold your repositories first.');
+    expect(() => onboarding.complete()).toThrow('Choose your repository folders first.');
     const status = await onboarding.applySetup({
       roots: ['~/Developer', `${developer}/`],
       defaultModel: 'sonnet',
@@ -84,12 +84,12 @@ describe('Onboarding', () => {
   test('refuses a setup it cannot use, and changes nothing', async () => {
     const { onboarding, store, root } = setup();
     for (const [body, message] of [
-      [{ roots: [] }, 'Choose at least one folder that holds your repositories.'],
-      [{ roots: 'x' }, 'Choose at least one folder that holds your repositories.'],
+      [{ roots: [] }, 'Choose a folder with your repositories.'],
+      [{ roots: 'x' }, 'Choose a folder with your repositories.'],
       [{ roots: Array.from({ length: 51 }, () => root) }, 'Choose at most 50 folders.'],
       [{ roots: [3] }, 'Each folder must be a path.'],
       [{ roots: ['relative/path'] }, 'relative/path is not a full path.'],
-      [{ roots: ['/no/such/folder'] }, '/no/such/folder is not a folder on this machine.'],
+      [{ roots: ['/no/such/folder'] }, 'That is not a folder on this machine.'],
       [{ roots: [root], defaultModel: 'rm -rf' }, 'Pick a model from the list.'],
       [{ roots: [root], mergeMethod: 'fast-forward' }, 'Merge with squash, merge or rebase.'],
       [{ roots: [root], approvePlans: true }, 'Approve plans when you ask, for large plans or always.'],

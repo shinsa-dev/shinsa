@@ -179,9 +179,7 @@ describe('what you keep', () => {
   test('a scope holds at most twenty rules', () => {
     const harness = createHarness();
     for (let index = 0; index < MEMORY_LIMITS.keptPerScope; index += 1) write(harness, `Rule ${index}.`);
-    expect(() => write(harness, 'One more.')).toThrow(
-      'Agents already remember 20 rules for every project. Remove one first.'
-    );
+    expect(() => write(harness, 'One more.')).toThrow('20 rules kept. Remove one first.');
     const taskId = createTask(harness);
     remember(harness, taskId, 'global', 'One more.');
     const proposal = entries(harness).find((entry) => entry.status === 'proposed');
@@ -193,7 +191,7 @@ describe('what you keep', () => {
       write(harness, `Project rule ${index}.`, projectOf(harness, taskId));
     }
     expect(() => write(harness, 'Another.', projectOf(harness, taskId))).toThrow(
-      'Agents already remember 20 rules for this project.'
+      '20 rules kept. Remove one first.'
     );
   });
 

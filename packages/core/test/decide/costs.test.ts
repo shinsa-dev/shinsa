@@ -148,7 +148,7 @@ describe('the cost limit per task', () => {
   test('the limit must be an amount above zero', () => {
     const harness = createHarness();
     expect(() => harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 0 } })).toThrow(
-      'The cost limit must be an amount above zero, or off.'
+      'The cost limit must be above zero.'
     );
   });
 });
@@ -421,7 +421,7 @@ describe('the usage limit per task', () => {
     const harness = createHarness();
     for (const taskUsageLimit of [0, 101, 2.5]) {
       expect(() => harness.send({ type: 'settings.change', patch: { taskUsageLimit } })).toThrow(
-        'The usage limit must be a whole percentage from 1 to 100, or off.'
+        'The usage limit must be 1 to 100%.'
       );
     }
   });

@@ -164,9 +164,7 @@ describe('Settings → Integrations', () => {
     expect(bodiesTo('/api/extensions/servers/choose')).toEqual([{ serverId: 'linear', enabled: false }]);
     expect(bodiesTo('/api/extensions/plugins/choose')).toEqual([{ pluginId: 'stripe', enabled: false }]);
     expect(bodiesTo('/api/extensions/skills/choose')).toEqual([{ skillId: 'skill-0', enabled: false }]);
-    expect(toasts.success).toHaveBeenCalledWith(
-      'Turned off linear for Shinsa’s agents. Claude Code and Codex keep their own settings.'
-    );
+    expect(toasts.success).toHaveBeenCalledWith('Turned off linear.');
   });
 
   it('opens the sign-in page for a server that waits for one', async () => {
@@ -202,7 +200,7 @@ describe('Settings → Integrations', () => {
     expect(bodiesTo('/api/extensions/servers/choose')).toEqual([
       { serverId: 'linear', scope: { kind: 'project', project: 'sw' } },
     ]);
-    expect(toasts.success).toHaveBeenCalledWith('Agents use linear only in the Superwall project.');
+    expect(toasts.success).toHaveBeenCalledWith('Agents use linear in the Superwall project.');
   });
 
   it('removes Shinsa’s own server only after you confirm', async () => {
@@ -326,7 +324,7 @@ describe('Settings → Integrations', () => {
     await settle();
     expect(bodiesTo('/api/extensions/optimizer')).toEqual([{ enabled: true }, { skills: true }]);
     expect(bodiesTo('/api/extensions/servers/choose')).toEqual([{ serverId: 'linear', enabled: false }]);
-    expect(toasts.success).toHaveBeenCalledWith('Agents now leave out MCPs unused for 14 days.');
+    expect(toasts.success).toHaveBeenCalledWith('Unused MCPs left out.');
   });
 
   it('keeps a long list of failing servers closed until you open it', async () => {

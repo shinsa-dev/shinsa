@@ -48,11 +48,11 @@ describe('signing in to a remote MCP server', () => {
   test('a sign-in nobody started here, or one used twice, is refused', async () => {
     fake = startFakeMcpHttp({ oauth: true });
     const oauth = new McpOAuth(createStore(), { redirectUrl: () => REDIRECT });
-    await expect(oauth.finish('unknown-state', 'code-1')).rejects.toThrow('expired or was not started here');
+    await expect(oauth.finish('unknown-state', 'code-1')).rejects.toThrow('This sign-in expired.');
     const authorizationUrl = await oauth.start('shinsa:docs', fake.mcpUrl);
     const { state, code } = await followAuthorization(authorizationUrl ?? '');
     await oauth.finish(state, code);
-    await expect(oauth.finish(state, code)).rejects.toThrow('expired or was not started here');
+    await expect(oauth.finish(state, code)).rejects.toThrow('This sign-in expired.');
   });
 
   test('a sign-in left open past its ten minutes expires', async () => {

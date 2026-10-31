@@ -53,7 +53,7 @@ export function resolveChosenRoots(
   read: (path: string) => unknown = readdirSync
 ): string[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new DomainError('roots_invalid', 'Choose at least one folder that holds your repositories.');
+    throw new DomainError('roots_invalid', 'Choose a folder with your repositories.');
   }
   if (value.length > MAX_ROOTS) {
     throw new DomainError('roots_invalid', `Choose at most ${MAX_ROOTS} folders.`);
@@ -68,8 +68,7 @@ export function resolveChosenRoots(
     const path = expandHome(entry.trim(), userHome);
     if (!isAbsolute(path)) throw new DomainError('roots_invalid', `${entry} is not a full path.`);
     const root = resolve(path);
-    if (!isDirectory(root))
-      throw new DomainError('roots_invalid', `${entry} is not a folder on this machine.`);
+    if (!isDirectory(root)) throw new DomainError('roots_invalid', 'That is not a folder on this machine.');
     if (picked.includes(root)) continue;
     picked.push(root);
     if (isReadable(root, read)) roots.push(root);

@@ -52,17 +52,14 @@ describe('process actions', () => {
       ],
       [
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true },
-        'Added the task. It starts after this task merges.',
+        'Added. It starts after this merges.',
       ],
       [
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, backlog: true },
-        'Added to the backlog. It plans now and builds when you start it.',
+        'Added to the backlog.',
       ],
       [{ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' }, 'Dismissed.'],
-      [
-        { type: 'suggestion.keep', taskId: 't', suggestionId: 's' },
-        'Kept in this task. The agent takes it now.',
-      ],
+      [{ type: 'suggestion.keep', taskId: 't', suggestionId: 's' }, 'Kept. The agent takes it now.'],
     ] as never);
   });
 });

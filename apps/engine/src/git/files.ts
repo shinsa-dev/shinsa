@@ -39,7 +39,7 @@ const SYMLINK_MODE = '120000';
 
 function assertRead(read: GitRead, what: string) {
   if (read.ok) return read;
-  if (read.timedOut) throw new DomainError('read_timeout', `Reading ${what} took too long and was stopped.`);
+  if (read.timedOut) throw new DomainError('read_timeout', `Reading ${what} took too long.`);
   throw new DomainError(
     'read_failed',
     `Shinsa could not read ${what}: ${read.stderr || `exit ${read.code}`}`

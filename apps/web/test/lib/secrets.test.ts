@@ -25,7 +25,7 @@ describe('answering a secret request', () => {
     ]);
     expect(toasts.success.mock.calls.map(([message]) => message)).toEqual([
       'Saved. The agent carries on.',
-      'Declined. The agent carries on without it.',
+      'Declined. The agent carries on.',
     ]);
     fake.stop();
   });

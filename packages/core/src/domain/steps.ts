@@ -491,7 +491,7 @@ export interface SoftGateDefinition {
 
 export type GateDefinition = HardGateDefinition | SoftGateDefinition;
 
-const DECISION_REFUSAL = 'Approve it, ask for changes or reject it.';
+const DECISION_REFUSAL = 'Approve, ask for changes or reject.';
 
 const RETRY: GateChoice<GateDecision> = { decision: 'approve', does: 'Retries the step.' };
 
@@ -596,7 +596,7 @@ const HARD_GATES = {
       },
       { decision: 'reject', does: 'Keeps the task as its inquiry and finishes it.' },
     ],
-    refusal: 'Approve the proposal or keep the task as it is.',
+    refusal: 'Approve the proposal or keep the task.',
     pauses: false,
   },
   operation: {
@@ -621,7 +621,7 @@ const HARD_GATES = {
       },
       { decision: 'reject', does: 'Finishes the task without running the operation.' },
     ],
-    refusal: 'Run the operation or finish the task without it.',
+    refusal: 'Run the operation or finish without it.',
     pauses: false,
   },
   failure: {
@@ -641,7 +641,7 @@ const HARD_GATES = {
     title: 'Setup incomplete',
     shows: ['each setup problem', 'how to fix it'],
     decisions: [{ decision: 'approve', does: 'Verifies the setup again.' }, CANCEL],
-    refusal: 'Verify the setup again, or cancel the task.',
+    refusal: 'Verify the setup again, or cancel.',
     pauses: true,
   },
   post_merge: {
@@ -651,7 +651,7 @@ const HARD_GATES = {
     title: 'Post-merge',
     shows: ['each post-merge step the agent left for you', 'which are ticked'],
     decisions: [],
-    refusal: 'Tick each post-merge step once you did it; the gate closes with the last one.',
+    refusal: 'Tick each post-merge step once done.',
     pauses: false,
   },
   sign_in: {

@@ -253,11 +253,7 @@ describe('account store', () => {
     expect(store.selectByIdentity({ email: 'none@x.dev', organization: null })).toBeNull();
     expect(store.selectByIdentity({ email: null, organization: null })).toBeNull();
     expect(store.find('acc2').id).toBe('acc2');
-    expectDomainError(
-      () => store.find('gone'),
-      'account_not_found',
-      'That account is no longer in your accounts.'
-    );
+    expectDomainError(() => store.find('gone'), 'account_not_found', 'That account was removed.');
   });
 
   test('the list is a copy, so changing it changes nothing', () => {
@@ -296,11 +292,7 @@ describe('account store', () => {
     store.updateDefault('acc2');
     expect(changes).toBe(1);
     expect(reopen().defaultAccountId).toBe('acc2');
-    expectDomainError(
-      () => store.updateDefault('gone'),
-      'account_not_found',
-      'That account is no longer in your accounts.'
-    );
+    expectDomainError(() => store.updateDefault('gone'), 'account_not_found', 'That account was removed.');
   });
 
   test('moving an account clamps the position to the list', () => {
@@ -317,11 +309,7 @@ describe('account store', () => {
     expect(order()).toEqual(['acc2', 'acc1', 'acc3']);
     store.move('acc1', 1);
     expect(changes).toBe(3);
-    expectDomainError(
-      () => store.move('gone', 0),
-      'account_not_found',
-      'That account is no longer in your accounts.'
-    );
+    expectDomainError(() => store.move('gone', 0), 'account_not_found', 'That account was removed.');
   });
 
   test('removing the default account hands the default to the next one, and the last leaves none', () => {
@@ -335,11 +323,7 @@ describe('account store', () => {
     expect(store.defaultAccountId).toBe('acc3');
     store.remove('acc3');
     expect(store.defaultAccountId).toBeNull();
-    expectDomainError(
-      () => store.remove('acc3'),
-      'account_not_found',
-      'That account is no longer in your accounts.'
-    );
+    expectDomainError(() => store.remove('acc3'), 'account_not_found', 'That account was removed.');
   });
 
   test('removing an account deletes its folder but only unlinks the shared settings', () => {

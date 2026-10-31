@@ -53,8 +53,7 @@ describe('startShinsa', () => {
     const readOnly = {
       error: {
         code: 'inspect_read_only',
-        message:
-          'Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to change anything.',
+        message: 'Inspect mode is read-only.',
       },
     };
     await expect(
@@ -498,7 +497,7 @@ describe('startShinsa with Claude accounts', () => {
     });
     expect(refused.status).toBe(400);
     expect(await refused.json()).toEqual({
-      error: { code: 'account_not_found', message: 'That account is no longer in your accounts.' },
+      error: { code: 'account_not_found', message: 'That account was removed.' },
     });
     const acks: { type: string; id?: string; error?: { code: string } }[] = [];
     socket.addEventListener('message', (event) => acks.push(JSON.parse(String(event.data))));

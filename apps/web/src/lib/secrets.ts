@@ -13,7 +13,7 @@ export function saveSecret(gateId: string, value: string) {
 }
 
 export function declineSecret(gateId: string) {
-  return requestSecret(gateId, { decline: true }, 'Declined. The agent carries on without it.');
+  return requestSecret(gateId, { decline: true }, 'Declined. The agent carries on.');
 }
 
 export function resolveSecretLabel(gate: Gate) {

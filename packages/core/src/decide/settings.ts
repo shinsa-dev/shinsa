@@ -34,7 +34,7 @@ function isWholeBetween(value: number, min: number, max: number) {
 function assertSettings(patch: Partial<Settings>) {
   const rounds = patch.maxFixRounds;
   if (rounds !== undefined && rounds !== null && !isWholeBetween(rounds, 1, Number.MAX_SAFE_INTEGER)) {
-    throw new DomainError('settings_invalid', 'Fix rounds must be a whole number of 1 or more.');
+    throw new DomainError('settings_invalid', 'Fix rounds must be 1 or more.');
   }
   const delegations = patch.delegationLimit;
   if (
@@ -42,51 +42,39 @@ function assertSettings(patch: Partial<Settings>) {
     delegations !== null &&
     !isWholeBetween(delegations, 1, Number.MAX_SAFE_INTEGER)
   ) {
-    throw new DomainError(
-      'settings_invalid',
-      'Delegations at once must be a whole number of 1 or more, or no limit.'
-    );
+    throw new DomainError('settings_invalid', 'Delegations at once must be 1 or more.');
   }
   const attention = patch.attentionLimit;
   if (attention !== undefined && !isWholeBetween(attention, 1, Number.MAX_SAFE_INTEGER)) {
-    throw new DomainError('settings_invalid', 'The attention limit must be a whole number of 1 or more.');
+    throw new DomainError('settings_invalid', 'The attention limit must be 1 or more.');
   }
   const capacity = patch.taskCapacity;
   if (capacity !== undefined && capacity !== null && !isWholeBetween(capacity, 1, Number.MAX_SAFE_INTEGER)) {
-    throw new DomainError(
-      'settings_invalid',
-      'Task capacity must be a whole number of 1 or more, or no limit.'
-    );
+    throw new DomainError('settings_invalid', 'Task capacity must be 1 or more.');
   }
   const policies = patch.placementPolicies;
   if (policies && !isPlacementPoliciesValid(policies)) {
     throw new DomainError(
       'settings_invalid',
-      `A machine has up to ${PLACEMENT_POLICY_LIMITS.perMachine} policies of 1 to ${PLACEMENT_POLICY_LIMITS.text} characters each.`
+      `Keep to ${PLACEMENT_POLICY_LIMITS.perMachine} policies of ${PLACEMENT_POLICY_LIMITS.text} characters.`
     );
   }
   const switchAt = patch.accountSwitchAt;
   if (switchAt !== undefined && !isWholeBetween(switchAt, 1, 100)) {
-    throw new DomainError('settings_invalid', 'Switch accounts at a whole percentage from 1 to 100.');
+    throw new DomainError('settings_invalid', 'Switch accounts at 1 to 100%.');
   }
   const lead = patch.compactionLeadMinutes;
   if (lead !== undefined && !isWholeBetween(lead, 1, MAX_COMPACTION_LEAD_MINUTES)) {
-    throw new DomainError(
-      'settings_invalid',
-      `Compact from 1 to ${MAX_COMPACTION_LEAD_MINUTES} minutes before the cache expires.`
-    );
+    throw new DomainError('settings_invalid', `Compact 1 to ${MAX_COMPACTION_LEAD_MINUTES} minutes ahead.`);
   }
   assertWatchdogSettings(patch);
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
-    throw new DomainError('settings_invalid', 'The cost limit must be an amount above zero, or off.');
+    throw new DomainError('settings_invalid', 'The cost limit must be above zero.');
   }
   const usage = patch.taskUsageLimit;
   if (usage !== undefined && usage !== null && !isWholeBetween(usage, 1, 100)) {
-    throw new DomainError(
-      'settings_invalid',
-      'The usage limit must be a whole percentage from 1 to 100, or off.'
-    );
+    throw new DomainError('settings_invalid', 'The usage limit must be 1 to 100%.');
   }
 }
 
@@ -95,9 +83,9 @@ const WATCHDOG_SETTING_RULES = [
   [
     'watchdogFirstCheckMinutes',
     WATCHDOG_SETTING_LIMITS.firstCheckMinutes,
-    'The first check comes 1 to {max} minutes in.',
+    'The first check is 1 to {max} minutes in.',
   ],
-  ['watchdogMaxGapHours', WATCHDOG_SETTING_LIMITS.maxGapHours, 'Checks are at most 1 to {max} hours apart.'],
+  ['watchdogMaxGapHours', WATCHDOG_SETTING_LIMITS.maxGapHours, 'Checks are 1 to {max} hours apart.'],
 ] as const;
 
 function assertWatchdogSettings(patch: Partial<Settings>) {
@@ -185,7 +173,7 @@ function readFolders(folders: readonly string[]) {
   }
   for (const folder of cleaned) {
     if (!folder.startsWith('/') || folder.length > PROJECT_LIMITS.folder) {
-      throw new DomainError('project_invalid', `“${folder}” is not a full folder path.`);
+      throw new DomainError('project_invalid', 'Give a full folder path.');
     }
   }
   return cleaned;
@@ -198,13 +186,10 @@ function resolveKey(decider: Decider, command: CommandOf<'project.write'>, exist
     return existing?.key ?? resolveProjectKey(command.project.name, others);
   }
   if (!isProjectKey(asked)) {
-    throw new DomainError(
-      'project_invalid',
-      'A project key is 2 to 6 letters or digits and starts with a letter, like SW.'
-    );
+    throw new DomainError('project_invalid', 'A key is 2 to 6 letters, like SW.');
   }
   if (others.includes(asked)) {
-    throw new DomainError('project_key_taken', `Another project already uses the key ${asked}.`);
+    throw new DomainError('project_key_taken', `Another project uses ${asked}.`);
   }
   return asked;
 }
@@ -214,7 +199,7 @@ function assertFoldersFree(decider: Decider, projectId: string, folders: string[
     if (project.id === projectId) continue;
     const shared = folders.find((folder) => project.folders.includes(folder));
     if (shared) {
-      throw new DomainError('folder_taken', `“${shared}” already belongs to the project ${project.name}.`);
+      throw new DomainError('folder_taken', 'That folder is in another project.');
     }
   }
 }
@@ -232,14 +217,14 @@ export function writeProject(decider: Decider, command: CommandOf<'project.write
   const name = command.project.name.trim();
   if (name.length === 0) throw new DomainError('project_name_required', 'Name the project.');
   if (name.length > PROJECT_LIMITS.name) {
-    throw new DomainError('project_invalid', `A project name is at most ${PROJECT_LIMITS.name} characters.`);
+    throw new DomainError('project_invalid', `Keep the name to ${PROJECT_LIMITS.name} characters.`);
   }
   const existing = command.project.id ? decider.state.projects[command.project.id] : undefined;
   const description = (command.project.description ?? existing?.description ?? '').trim();
   if (description.length > PROJECT_LIMITS.description) {
     throw new DomainError(
       'project_invalid',
-      `A project description is at most ${PROJECT_LIMITS.description} characters.`
+      `Keep the description to ${PROJECT_LIMITS.description} characters.`
     );
   }
   const id = existing?.id ?? decider.context.newId();

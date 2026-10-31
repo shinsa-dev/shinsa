@@ -251,7 +251,7 @@ export function resolveScopeText(scope: ExtensionScope, places: ExtensionPlaces)
 
 export function describeScopeChanged(name: string, scope: ExtensionScope, places: ExtensionPlaces) {
   if (scope.kind === 'everywhere') return `Agents use ${name} everywhere.`;
-  return `Agents use ${name} only in ${resolvePlaceText(scope, places)}.`;
+  return `Agents use ${name} in ${resolvePlaceText(scope, places)}.`;
 }
 
 export function serializeScope(scope: ExtensionScope) {
@@ -380,16 +380,15 @@ export function describeGroupCount(group: SkillGroup) {
 }
 
 export function describeServerToggled(name: string, enabled: boolean) {
-  if (enabled) return `Turned on ${name} for Shinsa’s agents.`;
-  return `Turned off ${name} for Shinsa’s agents. Claude Code and Codex keep their own settings.`;
+  return enabled ? `Turned on ${name}.` : `Turned off ${name}.`;
 }
 
 export function describeSkillToggled(name: string, enabled: boolean) {
-  return `Turned ${enabled ? 'on' : 'off'} the ${name} skill.`;
+  return enabled ? `Turned on the ${name} skill.` : `Turned off the ${name} skill.`;
 }
 
 export function describePluginToggled(name: string, enabled: boolean) {
-  return `Turned ${enabled ? 'on' : 'off'} the ${name} plugin.`;
+  return enabled ? `Turned on the ${name} plugin.` : `Turned off the ${name} plugin.`;
 }
 
 export function describeChecked(server: McpServerSummary | null) {
@@ -405,7 +404,7 @@ export function describeAlreadySignedIn(name: string) {
 }
 
 export function describeSignInFailed(name: string) {
-  return `Couldn’t sign in to ${name}. Try again.`;
+  return `Couldn’t sign in to ${name}.`;
 }
 
 export function describeSignedOut(name: string) {
@@ -784,13 +783,11 @@ export function listOptimizerDayItems(current: number) {
 
 export function describeOptimizerChanged(optimizer: ContextOptimizer, patch: Partial<ContextOptimizer>) {
   if (patch.enabled === true) {
-    return `Agents now leave out MCPs unused for ${formatCount(optimizer.days, 'day', 'days')}.`;
+    return 'Unused MCPs left out.';
   }
-  if (patch.enabled === false) return 'Agents load every MCP that is turned on.';
+  if (patch.enabled === false) return 'Agents load every MCP.';
   if (patch.skills !== undefined) {
-    return patch.skills
-      ? 'Agents leave out unused skills too.'
-      : 'Agents load every skill that is turned on.';
+    return patch.skills ? 'Unused skills left out too.' : 'Agents load every skill.';
   }
   return `Unused means not used for ${formatCount(patch.days ?? optimizer.days, 'day', 'days')}.`;
 }

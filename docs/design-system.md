@@ -3693,19 +3693,16 @@ So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px 
 
 Sonner's own defaults stand for everything not listed (auto-close time, stack behaviour, enter and exit motion, swipe to dismiss).
 
-**Copy rules that bind toasts:** a toast states the outcome, in sentence case, with a period when it is a sentence ("Approved. Opening the pull request."), a short fragment otherwise ("Copied"). An error says what failed and, in the description, what to do.
+**Copy rules that bind toasts:** a toast is one short line: the outcome in a few words, at most 40 characters (an inserted name or count counts as 12), with no description line under it, so it never wraps at the toaster's width. Sentence case, with a period when it is a sentence ("Request declined."), a short fragment otherwise ("Copied"). An error toast is the server's short message. The toaster clips a title or description that is still too long to one line with an ellipsis, and `bun lint:conventions` (`scripts/lint-toast.ts`) rejects a longer toast string, and toast text it cannot read through to its words.
 
 ```tsx
 // Root
 <Toaster />
 
 // Anywhere
-toast.success('Approved. Opening the pull request.');
-toast.error('Couldn’t reach Shinsa', { description: 'Run shinsa status to see whether the engine is running.' });
-toast('Task cancelled', {
-  description: 'The agent stopped and the worktree is gone.',
-  action: { label: 'Undo', onClick: () => restore() },
-});
+toast.success('Approved. Building now.');
+toast.error('Couldn’t reach Shinsa.');
+toast('Task cancelled', { action: { label: 'Undo', onClick: () => restore() } });
 
 const id = toast.loading('Merging…');
 await merge();
@@ -7850,8 +7847,8 @@ A list that can hold hundreds of rows renders only the rows in view.
 
 #### Toasts
 
-- After every action a toast says what happened, in a full sentence ending in a full stop ("Kept in this task. It
-  starts as the next round.", "Running this step again on a@b.com.", "Finished without running the operation.").
+- After every action a toast says what happened in one short line of at most 40 characters, ending in a full stop,
+  with no description ("Request declined.", "Rerunning on a@b.com.", "Kai Lane joined.").
   The same action from a card, a menu or the command menu gives the same toast, from one table.
 - A long-running action opens a loading toast titled with the action ("Updating Claude Code") whose description is
   the first line of what runs ("Running claude update.") and then each line of output as it prints; it settles in
@@ -8831,7 +8828,7 @@ Mistakes that were made before and must not come back:
 
 | Wrong | Why | Right |
 | --- | --- | --- |
-| "Approve it, ask for changes or reject it." under an agent's question | The answer options of another kind of decision | "Answer the question." |
+| "Approve, ask for changes or reject." under an agent's question | The answer options of another kind of decision | "Answer the question." |
 | "opening the pull request" while pushing to one already open | Says the wrong thing is happening | "pushing the changes" |
 | "Building started" logged for every phase | Activity repeats a stage that did not change | Log a stage only when it changes; a phase has its own "Finished: …" line |
 | "All 1 checks passed" | The count does not fit its noun | "The check passed" |
@@ -8980,12 +8977,12 @@ Mistakes that were made before and must not come back:
 | Status line under a row | Short phrase, may join facts with " · " | No | "Building · Agent working", "Started 2h ago" |
 | Activity entry | Past-tense sentence, sentence case | No | "Opened pull request #42", "Agent review found 2 issues, 1 blocking", "Finished: Phase 1" |
 | Toast, a word or label | The outcome | No | "Copied", "Merged #4512", "Task cancelled", "Sent to the agent" |
-| Toast, a sentence | Outcome, then one line of consequence | Yes | "Answered. The agent carries on.", "Approved. Opening the pull request.", "Notes saved." |
+| Toast, a sentence | One short line, the outcome in a few words, at most 40 characters | Yes | "Request declined.", "Approved. Building now.", "Notes saved." |
 | Failure toast | "Couldn’t {verb} {object}" | No when one phrase | "Couldn’t copy to the clipboard", "Couldn’t read the version" |
 | Empty state title | What is missing, short | No | "No tasks yet", "Nothing matches", "No terminals in Shop", "Nothing needs you" |
 | Empty state description | One or two sentences: why, and how to fill it | Yes | "A terminal keeps running when you close Shinsa." |
 | Error title | What happened | Yes when a sentence | "This page hit an error.", "This part of Shinsa hit an error." |
-| Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "“Base” was cancelled, so there is nothing to wait for.", "This task is finished. Start a new one." |
+| Error message (domain) | What is wrong and, when not obvious, what to do | Yes | "That task was cancelled.", "This task is finished." |
 | Failure decision | Title says what stopped; body says why and what Retry does | Title no, body yes | "Out of automatic fix rounds" |
 | Tooltip | What the screen does not show; a value and its label over a sentence | No for a phrase, yes for a sentence | "Opens the pull request", "Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its own and agents pick up where they were." |
 | Disabled reason | Plain sentence | No | "Send your line comments to the agent or remove them first" |

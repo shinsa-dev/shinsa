@@ -35,7 +35,9 @@ describe('AttachmentStore', () => {
     const store = new AttachmentStore(createTempDir());
     expect(() => store.write({ name: 'a.txt', mimeType: null, data: '' })).toThrow('The file is empty.');
     const big = Buffer.alloc(ATTACHMENT_LIMIT_BYTES + 1).toString('base64');
-    expect(() => store.write({ name: 'a.bin', mimeType: null, data: big })).toThrow('the limit is 25 MB');
+    expect(() => store.write({ name: 'a.bin', mimeType: null, data: big })).toThrow(
+      'The file is over 25 MB.'
+    );
   });
 
   test('selects only an id and a plain file name that exist', () => {

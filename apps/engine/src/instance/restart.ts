@@ -66,10 +66,7 @@ export class EngineRestarter {
 
   async request(when: EngineRestartWhen) {
     if (!(await this.#options.isService())) {
-      throw new DomainError(
-        'restart_unsupported',
-        'Shinsa restarts its engine only when the engine runs in the background. Stop it and start it again.'
-      );
+      throw new DomainError('restart_unsupported', 'Only a background engine restarts.');
     }
     if (when === 'now' || !this.#isBusy(this.#source.state)) {
       this.#restartSoon();

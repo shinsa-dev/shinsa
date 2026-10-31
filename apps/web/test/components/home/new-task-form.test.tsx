@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { toast } from '@shinsa/ui/components/sonner';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
@@ -153,6 +154,22 @@ describe('NewTaskForm with several machines', () => {
     await pick('Machine', /Build box/, 'Build box');
     expect(combobox('Project').textContent).toBe('No project');
     expect(await listOptions('Project')).toEqual(['No project']);
+  });
+
+  it('warns when the policies could not be read, and still places the task', async () => {
+    const sent = connectTwoMachines();
+    const warned = spyOn(toast, 'warning').mockReturnValue('id');
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(Response.json({ error: { message: 'No Claude account.' } }, { status: 400 }))
+    ) as unknown as typeof globalThis.fetch;
+    renderForm();
+    fireEvent.change(field(), { target: { value: 'Review the build' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    globalThis.fetch = realFetch;
+    expect(warned).toHaveBeenCalledWith('Your routing policies weren’t read.');
+    warned.mockRestore();
   });
 });
 

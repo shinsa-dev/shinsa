@@ -86,7 +86,7 @@ export function useAttachments(draftKey?: string) {
         const stored = await requestAttachmentUpload(file);
         setHeld((current) => current.map((draft) => (draft.key === key ? { ...draft, stored } : draft)));
       } catch (error) {
-        toast.error(`Couldn’t attach ${file.name || 'the file'}: ${describeFailure(error)}`);
+        toast.error(describeFailure(error));
         remove(key);
       }
     },

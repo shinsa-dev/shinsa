@@ -260,10 +260,7 @@ function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: st
 
 export function assertNotWatchHome(task: Task) {
   if (!isWatchHome(task)) return;
-  throw new DomainError(
-    'watch_home',
-    'This is where a watch reads its integration, so it takes no messages. Change the watch in Settings → Automations.'
-  );
+  throw new DomainError('watch_home', 'A watch takes no messages.');
 }
 
 function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {

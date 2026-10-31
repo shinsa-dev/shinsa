@@ -232,11 +232,13 @@ describe('adding and changing servers', () => {
       'no project'
     );
     expect(() => extensions.createServer({ ...base, scope: { kind: 'repo', path: '/other' } })).toThrow(
-      'No agent has worked in that repository yet.'
+      'No agent has worked there yet.'
     );
-    expect(() => extensions.createServer({ ...base, scope: 'here' })).toThrow('Use it everywhere');
+    expect(() => extensions.createServer({ ...base, scope: 'here' })).toThrow(
+      'Pick all, a project or a repository.'
+    );
     extensions.createServer({ ...base, scope: { kind: 'repo', path: machine.repo } });
-    expect(() => extensions.createServer(base)).toThrow('already has an MCP named docs');
+    expect(() => extensions.createServer(base)).toThrow('An MCP named docs exists.');
   });
 
   test('editing keeps a secret you leave empty, and renaming moves the server', () => {
@@ -350,7 +352,7 @@ describe('adding and changing servers', () => {
       false
     );
     expect(() => extensions.removeServer('claude:linear')).toThrow(
-      'comes from ~/.claude/.claude.json. Turn it off instead.'
+      'It comes from ~/.claude/.claude.json. Turn it off.'
     );
   });
 
@@ -484,9 +486,7 @@ describe('signing in from Shinsa', () => {
 
   test('a server on this machine has no sign-in', async () => {
     const { extensions } = createWorld();
-    await expect(extensions.startSignIn('claude:files')).rejects.toThrow(
-      'runs on this machine and has no sign-in'
-    );
+    await expect(extensions.startSignIn('claude:files')).rejects.toThrow('It runs here and has no sign-in.');
   });
 
   test('the callback page says why a sign-in did not finish', async () => {
@@ -499,7 +499,7 @@ describe('signing in from Shinsa', () => {
       'The server sent no sign-in code'
     );
     expect(await extensions.finishSignIn(new URL(`${base}?state=s&code=c`))).toContain(
-      'expired or was not started here'
+      'This sign-in expired.'
     );
   });
 

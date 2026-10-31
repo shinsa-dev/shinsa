@@ -53,7 +53,7 @@ export const PROJECT_DIALOG: Record<ProjectDialogMode, ProjectDialogCopy> = {
     description:
       'A project holds the repositories and folders you work on together. Its key starts each task’s handle, like SW-142.',
     action: 'Create project',
-    done: 'Project created. Add its repositories or folders.',
+    done: 'Project created.',
     fields: ['name', 'key', 'description'],
   },
   name: {
@@ -265,7 +265,7 @@ export function describeProjectRemoval(project: Project, repoCount: number) {
       repoCount > 0
         ? `Its ${repos} stay registered, without a project. Tasks keep their handles.`
         : 'Tasks keep their handles. Nothing on disk changes.',
-    done: repoCount > 0 ? 'Project removed. Its repositories have no project now.' : 'Project removed.',
+    done: 'Project removed.',
   };
 }
 
@@ -299,7 +299,7 @@ async function addFolder(project: Project, path: string) {
   } catch (error) {
     return describeFailure(error);
   }
-  toast.success('Folder added. Its repositories belong to the project.');
+  toast.success('Folder added.');
   return null;
 }
 

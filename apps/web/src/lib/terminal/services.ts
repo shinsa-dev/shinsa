@@ -398,7 +398,7 @@ export function resolveServiceForm(mode: ServiceFormMode, name: string) {
       title: `Edit ${name || 'the service'}`,
       description: 'A change takes effect the next time it starts.',
       action: 'Save',
-      done: 'Saved. Restart it to run the new command.',
+      done: 'Saved. Restart to apply.',
     };
   return {
     title: mode === 'custom' ? 'Add a service' : 'Add services',

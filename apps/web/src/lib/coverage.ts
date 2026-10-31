@@ -53,13 +53,13 @@ export function listCoverageItems(repo: Repo, detected: CoverageDetectionMap | n
 }
 
 const CHANGED: Record<Exclude<CoverageMode, 'off'>, string> = {
-  auto: 'with the tool Shinsa finds',
-  custom: 'with your command',
+  auto: 'Coverage on',
+  custom: 'Custom coverage on',
 };
 
 export function describeCoverageChange(repo: Pick<Repo, 'name'>, setting: CoverageSetting) {
-  if (setting.mode === 'off') return `Shinsa no longer measures test coverage in ${repo.name}.`;
-  return `The next checks in ${repo.name} measure test coverage ${CHANGED[setting.mode]}.`;
+  if (setting.mode === 'off') return `Coverage off in ${repo.name}.`;
+  return `${CHANGED[setting.mode]} in ${repo.name}.`;
 }
 
 export function changeCoverage(repo: Repo, setting: CoverageSetting) {

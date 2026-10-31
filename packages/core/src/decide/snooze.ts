@@ -5,8 +5,7 @@ import type { Decider } from './decider.ts';
 export function snoozeTask(decider: Decider, command: CommandOf<'task.snooze'>) {
   const task = decider.task(command.taskId);
   if (task.snoozed) return;
-  if (isTaskSettled(task))
-    throw new DomainError('task_settled', 'This task is finished, so there is nothing to snooze.');
+  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
   decider.emit({ type: 'task.snooze_changed', taskId: task.id, snoozed: true });
   decider.requestBriefing(task.id);
 }

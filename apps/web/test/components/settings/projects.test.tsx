@@ -233,7 +233,7 @@ describe('Settings → Projects', () => {
     await waitFor(() => expect(actions.save).toHaveBeenCalled());
     expect(actions.save.mock.calls[0]).toEqual([
       { name: 'Basket', description: '', color: 'blue' },
-      'Project created. Add its repositories or folders.',
+      'Project created.',
     ]);
   });
 
@@ -261,12 +261,7 @@ describe('Settings → Projects', () => {
     await settle();
     expect(screen.getByText('Remove Superwall?')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Remove project' }));
-    await waitFor(() =>
-      expect(actions.remove).toHaveBeenCalledWith(
-        SUPERWALL,
-        'Project removed. Its repositories have no project now.'
-      )
-    );
+    await waitFor(() => expect(actions.remove).toHaveBeenCalledWith(SUPERWALL, 'Project removed.'));
   });
 
   it('each repository says where agents work, and offers worktrees or the main checkout', async () => {
