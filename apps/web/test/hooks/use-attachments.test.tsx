@@ -110,4 +110,36 @@ describe('useAttachments', () => {
     expect(seen.attachments?.drafts[0]?.preview).toBe('blob:preview-2');
     expect(revoked).not.toHaveBeenCalledWith('blob:preview-2');
   });
+
+  it('previews an uploaded image from its server copy, never from the file again', async () => {
+    serve((name) => Response.json(stored(name)));
+    const seen: { attachments: Attachments | null } = { attachments: null };
+    function Composer() {
+      seen.attachments = useAttachments();
+      return null;
+    }
+    const page = (mode: 'visible' | 'hidden') => (
+      <React.Activity mode={mode}>
+        <Composer />
+      </React.Activity>
+    );
+    const { rerender } = render(page('visible'));
+    act(() => seen.attachments?.add([new File(['x'], 'a.png', { type: 'image/png' })]));
+    expect(seen.attachments?.drafts[0]?.preview).toBe('blob:preview-1');
+    await waitFor(() => expect(seen.attachments?.drafts[0]?.preview).toBe('/api/attachments/1/a.png'));
+    expect(revoked).toHaveBeenCalledWith('blob:preview-1');
+    act(() => seen.attachments?.add([new File(['y'], 'b.png', { type: 'image/png' })]));
+    expect(seen.attachments?.drafts.map((draft) => draft.preview)).toEqual([
+      '/api/attachments/1/a.png',
+      'blob:preview-2',
+    ]);
+    await waitFor(() => expect(seen.attachments?.ready).toHaveLength(2));
+    act(() => rerender(page('hidden')));
+    act(() => rerender(page('visible')));
+    expect(seen.attachments?.drafts.map((draft) => draft.preview)).toEqual([
+      '/api/attachments/1/a.png',
+      '/api/attachments/1/b.png',
+    ]);
+    expect(created).toHaveBeenCalledTimes(2);
+  });
 });

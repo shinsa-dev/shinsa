@@ -10,6 +10,7 @@ import {
 } from '@shinsa/ui/components/command';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent } from '@shinsa/ui/components/popover';
+import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shinsa/ui/components/select';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -250,6 +251,7 @@ export function NewTaskForm() {
         placeholder={copy.placeholder}
         className={cn(COMPOSER_FIELD, 'max-h-72 min-h-20')}
       />
+      <ScrollFade targetRef={field} />
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
         <AttachButton attachments={attachments} />
         <NewTaskFields state={state} chosen={chosen} onChoose={choose} />

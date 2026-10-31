@@ -1,6 +1,7 @@
 import { serializeAttachments } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
+import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { AttachButton, AttachmentChips, useFileDrop } from '@/components/chat/attachment-chips.tsx';
@@ -64,6 +65,7 @@ export function Composer({
             placeholder={placeholder}
             className={cn(COMPOSER_FIELD, 'max-h-40 min-h-10')}
           />
+          <ScrollFade targetRef={field} />
           <div className={COMPOSER_FOOTER}>
             <AttachButton attachments={attachments} />
             {aside}

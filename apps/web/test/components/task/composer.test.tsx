@@ -41,6 +41,11 @@ function sendButton() {
 }
 
 describe('Composer attachments', () => {
+  it('fades the text where it scrolls under the attachments and the footer', () => {
+    const field = renderComposer(mock(async (_text: string) => true));
+    expect(field.classList.contains('scroll-fade')).toBe(true);
+  });
+
   it('sends an image on its own, then clears it once the message is sent', async () => {
     const onSubmit = mock(async (_text: string) => true);
     const field = renderComposer(onSubmit);

@@ -63,4 +63,42 @@ describe('RunSection', () => {
     expect(reply.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(view.queryByText('Checking the suggestions.')).toBeNull();
   });
+
+  it('shows the answer written before a fix hand-over as the reply, outside the fold', async () => {
+    const answer = 'This PR keeps sampling everywhere but one service.';
+    pushState(createShinsaState({ tasks: [task], runs: [run] }));
+    pushTranscript('run-fix', [
+      createEntry(
+        { type: 'tool_call', callId: 'r1', tool: { kind: 'read', path: 'collector-config.ts', range: null } },
+        'r1',
+        STARTED
+      ),
+      createEntry({ type: 'agent', phase: 'interim', text: answer }, 'a1', STARTED + 500),
+      createEntry(
+        {
+          type: 'tool_call',
+          callId: 'c1',
+          tool: {
+            kind: 'shinsa',
+            name: 'complete_fix',
+            args: { summary: 'No code change: explained the PR.' },
+          },
+        },
+        'c1',
+        STARTED + 1000
+      ),
+      createEntry({ type: 'agent', phase: 'final', text: 'No response requested.' }, 'a2', STARTED + 2000),
+    ]);
+    const view = render(
+      <TooltipProvider>
+        <RunSection run={run} task={task} messages={[]} waiting={false} />
+      </TooltipProvider>
+    );
+    const worked = await view.findByText(/Worked for/);
+    const reply = view.getByText(answer);
+    const card = view.getByText('Handed over the fix');
+    expect(worked.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reply.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.queryByText('No response requested.')).toBeNull();
+  });
 });
