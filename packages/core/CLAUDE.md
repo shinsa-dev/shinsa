@@ -127,8 +127,9 @@ src/
 │   │                web's composer hint reads it), then it is delivered, only recorded (acknowledge), queued as a new
 │   │                round or suggested as a separate task by its kind (at a gate that takes words, always delivered:
 │   │                FEEDBACK_ONLY_EFFECTS); the same text twice within a window is taken once (isRepeatedMessage);
-│   │                superseding an open question; a message sent for you to a task at a gate is only recorded, for
-│   │                its next agent; needsMessageKind (the server classifies such a message first, never at those
+│   │                superseding an open question; a message sent for you to a task at a gate is only recorded and
+│   │                kept (`untoldMessages`), told once by the next run of the task's session (Decider.startRun);
+│   │                needsMessageKind (the server classifies such a message first, never at those
 │   │                gates);
 │   │                new work never waits behind your own decision: new_round (or separate_task with no room for a
 │   │                suggestion) that would only start after you approve or merge is delivered as feedback

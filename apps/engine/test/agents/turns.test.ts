@@ -1,16 +1,26 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type Run, resolveHouseRules, type ShinsaState } from '@shinsa/core';
+import {
+  applyEvent,
+  createState,
+  decide,
+  type Run,
+  resolveHouseRules,
+  type ShinsaCommand,
+  type ShinsaEvent,
+  type ShinsaState,
+} from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
 import {
   resolveRestorePlan,
+  resolveTurnBrief,
   resolveTurnPlan,
   resolveTurnPrompt,
   type TurnContext,
 } from '../../src/agents/turns.ts';
 import { createTempDir } from '../helpers/index.ts';
-import { createRun } from '../helpers/state.ts';
+import { createGate, createRepo, createRound, createRun, createTask } from '../helpers/state.ts';
 
 function provider(overrides: Partial<AgentProvider> = {}): AgentProvider {
   return {
@@ -194,5 +204,48 @@ describe('forking a task', () => {
     );
     expect(prompt.startsWith('The instruction.')).toBe(true);
     expect(prompt).toContain('You now work in `/work`');
+  });
+});
+
+describe('a message kept for the next agent', () => {
+  function send(state: ShinsaState, command: ShinsaCommand, onBehalf = false) {
+    const decision = decide(state, command, { now: 50, newId: () => 'fix-run', onBehalf });
+    return decision.events.reduce(
+      (next, event) => applyEvent(next, { ...event, seq: next.seq + 1, at: 50 } as ShinsaEvent),
+      state
+    );
+  }
+
+  test('reaches a resumed session that already has the house rules', () => {
+    const rules = resolveHouseRules('agent');
+    const built = createRun({
+      id: 'built-run',
+      status: 'running',
+      sessionId: 'session-1',
+      startedAt: 10,
+      endedAt: 20,
+      outcome: 'completed',
+    });
+    let state = createState();
+    state.repos['repo-1'] = createRepo();
+    state.tasks['task-1'] = createTask({
+      stage: 'awaiting_review',
+      activity: [],
+      rounds: [createRound({ status: 'active' })],
+    });
+    state.runs[built.id] = built;
+    state.gates['gate-1'] = createGate({ type: 'review', runId: null, title: 'Review' });
+    state = send(state, { type: 'task.message', taskId: 'task-1', text: 'Keep the old flag.' }, true);
+    state = send(state, { type: 'task.message', taskId: 'task-1', text: 'hello', kind: 'feedback' });
+    const fix = state.runs['fix-run'];
+    if (!fix) throw new Error('no fix run');
+    expect(fix).toMatchObject({ purpose: 'fix', resume: true, sessionId: 'session-1' });
+    const turn = context(fix, [built], { state });
+    turn.transcripts.record('built-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const plan = { resume: 'session-1', fork: false, handoff: null, record: null };
+    const prompt = resolveTurnPrompt(turn, plan, fix.prompt ?? '', resolveTurnBrief(state, fix, null));
+    expect(prompt.startsWith(rules)).toBe(false);
+    expect(prompt).toContain('hello');
+    expect(prompt).toContain('- Sent by an agent on the human’s behalf: Keep the old flag.');
   });
 });

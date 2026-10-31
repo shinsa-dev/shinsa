@@ -6,16 +6,27 @@ import {
   type Repo,
   type Settings,
   type ShinsaCommand,
+  splitHouseRules,
 } from '../../src/index.ts';
+import { listOpenGates } from '../../src/state/queries.ts';
 import {
   buildAll,
   createHarness,
   createTask,
   type Harness,
+  linkSession,
+  PASSING,
   proposePlan,
+  pullRequest,
   reachReviewGate,
+  reachShipping,
   registerRepo,
 } from '../harness.ts';
+
+const KEPT_NOTE = [
+  'While this task waited for the human, these messages were left for you. Act on them along with the rest of this turn:',
+  '- Sent by an agent on the human’s behalf: Keep the old flag.',
+].join('\n');
 
 function actOnBehalf(harness: Harness, command: ShinsaCommand) {
   return harness.send(command, { onBehalf: true });
@@ -214,9 +225,106 @@ describe('acting for the human', () => {
       'Left a message for the next agent on “Fix tab group scroll”, which waits for you'
     );
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'revise', response: 'Smaller.' });
-    expect(harness.activeRun(taskId).prompt).toContain(
-      'The human added since:\n- Sent by an agent on the human’s behalf: Keep the old flag.'
+    const prompt = harness.activeRun(taskId).prompt ?? '';
+    expect(prompt).toContain(KEPT_NOTE);
+    expect(prompt).not.toContain('The human added since:');
+    expect(harness.task(taskId).untoldMessages).toEqual([]);
+  });
+
+  test('a message kept at the review gate reaches the resumed session once, after your reply', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    linkSession(harness, taskId);
+    reachReviewGate(harness, taskId);
+    harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.' },
+      { onBehalf: true, byTask: 'agent-task' }
     );
+    expect(harness.task(taskId).untoldMessages).toEqual([
+      { at: harness.now, text: 'Keep the old flag.', sender: 'agent' },
+    ]);
+    expect(harness.task(taskId).stage).toBe('awaiting_review');
+    harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
+    const fix = harness.activeRun(taskId);
+    expect(fix).toMatchObject({ purpose: 'fix', resume: true });
+    const instruction = splitHouseRules(fix.prompt ?? '')?.instruction ?? fix.prompt ?? '';
+    expect(instruction).toContain('hello');
+    expect(instruction).toContain(KEPT_NOTE);
+    expect(instruction.indexOf('hello')).toBeLessThan(instruction.indexOf(KEPT_NOTE));
+    expect(harness.task(taskId).untoldMessages).toEqual([]);
+    harness.send({ type: 'agent.complete_fix', runId: fix.id, summary: 'Kept the flag.' });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    const reviewer = harness.activeRun(taskId);
+    expect(reviewer.role).toBe('reviewer');
+    expect(reviewer.prompt).not.toContain('Keep the old flag.');
+  });
+
+  test('a message kept at the merge gate reaches the fix your reply starts', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachShipping(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.' },
+      { onBehalf: true, byTask: 'agent-task' }
+    );
+    harness.send({ type: 'task.message', taskId, text: 'Rename the prop.', kind: 'feedback' });
+    expect(harness.activeRun(taskId).prompt).toContain(KEPT_NOTE);
+    expect(harness.task(taskId).untoldMessages).toEqual([]);
+  });
+
+  test('a schedule’s message kept at a gate is told as sent by a schedule', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'agent.set_schedule',
+      runId: harness.activeRun(taskId).id,
+      scheduleId: null,
+      name: null,
+      text: 'Check the nightly build.',
+      trigger: { kind: 'interval', everyMinutes: 30 },
+      target: null,
+      source: null,
+      enabled: null,
+      maxRuns: null,
+      timeZone: 'Europe/Berlin',
+    });
+    const [schedule] = Object.values(harness.state.schedules);
+    reachReviewGate(harness, taskId);
+    harness.advance(60 * 60_000);
+    harness.send({ type: 'schedule.fire', scheduleId: schedule?.id ?? '', dueAt: schedule?.nextRunAt ?? 0 });
+    expect(harness.task(taskId).untoldMessages).toMatchObject([{ sender: 'schedule' }]);
+    harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
+    expect(harness.activeRun(taskId).prompt).toContain('- Sent by a schedule: Check the nightly build.');
+  });
+
+  test('a reviewer restarted at a failure gate is not told; the task’s own agent is', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    for (let attempt = 0; attempt < 5 && listOpenGates(harness.state, taskId).length === 0; attempt += 1) {
+      harness.send({
+        type: 'run.end',
+        runId: harness.activeRun(taskId).id,
+        outcome: 'failed',
+        summary: 'crashed',
+      });
+    }
+    expect(harness.openGate(taskId).type).toBe('failure');
+    harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.' },
+      { onBehalf: true, byTask: 'agent-task' }
+    );
+    harness.send({ type: 'task.retry', taskId });
+    const reviewer = harness.activeRun(taskId);
+    expect(reviewer.role).toBe('reviewer');
+    expect(reviewer.prompt).not.toContain('Keep the old flag.');
+    expect(harness.task(taskId).untoldMessages).toHaveLength(1);
+    harness.send({ type: 'agent.report_review', runId: reviewer.id, summary: null, findings: [] });
+    harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
+    expect(harness.activeRun(taskId).prompt).toContain(KEPT_NOTE);
   });
 
   test('settings and repository fields only the human changes are refused on their behalf; the rest still change', () => {

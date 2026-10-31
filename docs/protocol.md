@@ -239,6 +239,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
+| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 
@@ -695,8 +696,9 @@ task already has), `check_phases_invalid` (a phase the plan does not have), `che
 (replaces the operation gate's notes), `restart_step`, `kept`, `follow_up` (any resting task), `closed`.
 
 A message sent on your behalf (or by a schedule) to a task with any open gate is not delivered into the gate: core
-records it (`task.messaged`) and nothing else, and the next agent's brief carries it (`resolveLaterMessages`: "Sent by
-an agent on the human’s behalf: …", or "Sent by a schedule: …").
+records it (`task.messaged` with `kept`) into `Task.untoldMessages`, and the next run of the task's session (never
+the reviewer, a watchdog's check or a watch's read) is told it once at the tail of its prompt, resumed or fresh ("Sent by an agent on the human’s behalf:
+…", or "Sent by a schedule: …"; `task.messages_told`). `resolveLaterMessages` leaves it out until then.
 
 `task.message` carries an optional `kind` (`MessageKind`), with the classifier's `title`, `why` and `shape` for new
 work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. Where the
@@ -913,7 +915,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.prioritized` | the priority changed |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
-| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off |
+| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off, `kept` when it was sent for you while a gate was open (adds it to `untoldMessages`) |
+| `task.messages_told` | a new run of the task's session was told the messages in `untoldMessages`; clears it |
 | `task.message_received`, `task.message_routed`, `task.message_dropped` | a message of yours entered the inbox, left it to be delivered, or left it undelivered (`reason`) |
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
 | `round.started` | a round became the active one (`branch`, `base`, `onto`: the pull request it ships onto); the round before it, if any, is archived as shipped |
