@@ -101,6 +101,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
 | Your OK | step `your_ok`; gate type `proposal`; stage `awaiting_proposal`; `ChangeProposal`, `task.change_proposed|approved|declined`, `propose_change`; UI "Your OK", "Change to approve" (also for an operation), "Make it a change" |
 | Ask for changes | decision `revise`; UI "Ask for changes", "Request changes"; CLI `plans revise`, `reviews revise`; message effects `revise_plan`, `request_changes`, `send_back` |
+| Answered | stage `answered`; gate type `result` ("Read the answer", "Read the report", "Read the diagnosis"), opened by an answer, research or investigation that hands over with nothing after it; its approve is Close (`closeResult`), which settles the task as done; UI "Answered", "Close". Never "done" for it: done means you have read it |
 | Answering a question | decision `reply`, command `gate.answer` (which takes every decision), CLI `questions answer`; a parent answering its delegation: `delegation_answer`, `agent.answer_delegation` |
 | CI on the pull request | `CiRun`, `CiState`; stored on `PullRequest` as `checkRuns` and `checks` |
 | The classifier | agent role `classifier`, command and effect `task.triage`, stage `triage`; UI "Quick jobs" |
@@ -375,10 +376,11 @@ holds an active run; Shinsa's own stages hold an effect.
 | Stage | Step | Who moves it | Leaves for |
 | --- | --- | --- | --- |
 | `triage` | none | Shinsa: classify, setup verification, worktree | `waiting_on_tasks`, the first step, or a setup gate (stays `triage`) |
-| `waiting_on_tasks` | none | Shinsa, when every task it waits on merged or is done | `triage` (worktree), then the first step |
-| `answering` | answer | answerer | `done`, `awaiting_proposal` |
-| `researching` | research | researcher | `done`, `awaiting_proposal` |
-| `investigating` | investigate | investigator | `done`, `awaiting_proposal`, `triage` (the worktree reset, fix shape) then `planning` |
+| `waiting_on_tasks` | none | Shinsa, when every task it waits on is answered, merged or done (`isTaskComplete`) | `triage` (worktree), then the first step |
+| `answering` | answer | answerer | `answered`, `awaiting_proposal`; `done` (a follow-up on merged or finished work) |
+| `researching` | research | researcher | `answered`, `awaiting_proposal` |
+| `investigating` | investigate | investigator | `answered`, `awaiting_proposal`, `triage` (the worktree reset, fix shape) then `planning` |
+| `answered` | answer, research or investigate | you, at the result gate | `done` (Close, or marked done), the inquiry again (message), the next round (new work closes it first) |
 | `awaiting_proposal` | your OK | you | `triage` (setup verified again) then `planning`; `done` (reject); the inquiry again (message) |
 | `planning` | plan | the agent, read-only (`purpose: plan`) | `awaiting_plan`, `building`, `operating` |
 | `awaiting_plan` | plan | you | `building`, `operating`, `planning` (revise), `cancelled` |
@@ -527,9 +529,9 @@ pull_request, pre_merge, merge, post_merge. `operate` is placed right after `pla
 
 | Step | Class | Actor | Outputs (tool) | Gate | Needs | Worktree | Stages |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `answer` | inquiry | answerer | the answer (`answer`) | none | | no | answering |
-| `research` | inquiry | researcher | the report (`submit_report`) | none | | no | researching |
-| `investigate` | inquiry | investigator | the diagnosis (`report_diagnosis`), evidence | none | | yes | investigating |
+| `answer` | inquiry | answerer | the answer (`answer`) | hard: `result`, when it hands over and nothing follows it | | no | answering |
+| `research` | inquiry | researcher | the report (`submit_report`) | hard: `result`, likewise | | no | researching |
+| `investigate` | inquiry | investigator | the diagnosis (`report_diagnosis`), evidence | hard: `result`, likewise | | yes | investigating |
 | `your_ok` | consent | you | your decision | hard: `proposal`, when the inquiry hands over and proposes what comes next, or the agent composed this step | an inquiry; a plan | no | awaiting_proposal |
 | `plan` | planning | agent | the plan (`propose_plan`) | hard: `plan`, by `PLAN_GATE_RULE` (below) | build or operate | yes | planning, awaiting_plan |
 | `operate` | operation | agent | the outcome (`report_outcome`), evidence | hard: `plan`, `operation` | plan | yes | operating, awaiting_operation |
@@ -542,7 +544,7 @@ pull_request, pre_merge, merge, post_merge. `operate` is placed right after `pla
 | `merge` | shipping | you | the merged commit (evidence) | hard: `merge` | build; pull request before it | no | awaiting_merge, merged |
 | `post_merge` | handover | you | each step ticked | hard: `post_merge`, once the round rests with a step unticked | merge before it | no | |
 
-An inquiry has no gate of its own: a proposal goes to `your_ok`. An inquiry that proposes a change on a task without
+An inquiry's own gate is `result`, which opens only when nothing follows it (stage `answered`, until you close it); a proposal goes to `your_ok`. An inquiry that proposes a change on a task without
 `your_ok` is reshaped by the agent to `[inquiry, your_ok, plan, build, checks, agent_review, your_review,
 pull_request, merge]` (`resolveProposalUpgrade`) and waits at `your_ok`, so a proposal and a composed OK take one path.
 
@@ -587,6 +589,7 @@ secret.
 | `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · reject | "Verify the setup again, or cancel the task." | yes |
 | `sign_in` | Sign in | the provider and the account | approve (retry) · reply (retry with guidance) · reject (cancel) | "Sign in, retry or cancel the task." | yes |
 | `post_merge` | Post-merge | each step left for you after the merge, which are ticked | none: ticking the last step withdraws it (`merge_step.tick`), unticking one opens it again | "Tick each step under Post-merge once you did it; the gate closes with the last one." | no |
+| `result` | Answered (titled "Read the answer", "Read the report" or "Read the diagnosis") | the answer, report or diagnosis | approve (Close: settles the task as done, still open to follow-ups) | "Close the task once you have read the result." | no |
 
 `reply` needs words, except at the operation gate, where empty words clear the notes.
 

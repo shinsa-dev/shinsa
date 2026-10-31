@@ -186,7 +186,7 @@ describe('every task agent manages Shinsa', () => {
       await agent.call('answer', { answer: 'Both wait for you at their gates.' });
     });
     const askId = await createShapedTask(w, 'Please merge the paywall fix and approve the logs.', 'answer');
-    await w.untilStage(askId, 'done');
+    await w.untilStage(askId, 'answered');
 
     expect(tools).toContain('tasks_prioritize');
     expect(tools).toContain('create_task');
@@ -225,7 +225,7 @@ describe('every task agent manages Shinsa', () => {
       await agent.call('answer', { answer: 'Raised it.' });
     });
     const askId = await createShapedTask(w, 'Make the log task urgent', 'answer');
-    await w.untilStage(askId, 'done');
+    await w.untilStage(askId, 'answered');
     const run = Object.values(w.state.runs).find((candidate) => candidate.taskId === askId);
     const id = `agent:${run?.id}:${run?.attemptId}:call:r1:1`;
     expect(w.daemon.log.selectReceipt(id)).toMatchObject({ type: 'task.prioritize', status: 'accepted' });
@@ -249,7 +249,7 @@ describe('every task agent manages Shinsa', () => {
       await agent.call('answer', { answer: 'Asked for search.' });
     });
     const askId = await createShapedTask(w, 'Ask the settings task for search', 'answer');
-    await w.untilStage(askId, 'done');
+    await w.untilStage(askId, 'answered');
     expect(resolveTaskRounds(w.task(otherId)).map((round) => [round.title, round.status])).toEqual([
       ['Add the settings screen', 'active'],
       ['Add search', 'waiting'],
@@ -270,7 +270,7 @@ describe('every task agent manages Shinsa', () => {
       await agent.call('answer', { answer: 'Added it.' });
     });
     const askId = await createShapedTask(w, 'Add the basket folder', 'answer');
-    await w.untilStage(askId, 'done');
+    await w.untilStage(askId, 'answered');
     expect(w.state.projects[projectId]?.folders).toEqual([realpathSync(folder)]);
     expect(w.state.onBehalfActions).toEqual([expect.objectContaining({ byTaskId: askId })]);
   });

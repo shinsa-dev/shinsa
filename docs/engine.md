@@ -643,8 +643,8 @@ them in the order they need:
   task wait on this one (the other part uses what this task adds); any run may set it, since it never holds this
   task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`). A wait ends
   when the task waited on is finished, merged or done (`isTaskComplete`), so a task that ships no pull request
-  releases its waiters too: an answer, research or investigation settles as done when it hands over (or when you
-  veto its proposal), an operation when it ends, and one whose proposal you approve becomes a change that merges.
+  releases its waiters too: an answer, research or investigation once it hands over (it waits as answered for
+  you to close it, and counts as finished) or when you veto its proposal, an operation when it ends, and one whose proposal you approve becomes a change that merges.
 - **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
@@ -920,8 +920,17 @@ folds in `state/shapes.ts`).
   Otherwise the planning run ends, `task.reshaped` records the steps (`by: agent`, its reason), and the first new step
   starts: when the work step changed (a change became an operation, or the other way), the setup is verified again
   first, so a change gets its default branch verified and the Agent plans again, on the same session, with the right prompt.
-- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); an inquiry step has
-  no gate of its own, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
+- **Answered, not done.** An answer, research or investigation that hands over with nothing after it (no `your_ok`,
+  no plan, no proposal) does not settle: it moves to the stage `answered` and opens a `result` gate titled "Read the
+  answer", "Read the report" or "Read the diagnosis" (`openResultGate`, `decide/shapes.ts`), so it waits in Needs you
+  until you have read it. Done means you have. Close (the gate's one decision, approve) settles it as done
+  (`closeResult`, "closed by you") without closing it, so it still takes follow-ups; marking it done closes it as
+  any task. A message asks a follow-up (`follow_up`: the gate is withdrawn, the inquiry agent answers again and the
+  task comes back to answered); new work in the chat closes it first, then starts the next round. A task waiting on
+  it starts once it is answered (`isTaskComplete`). Vetoing a proposal and a follow-up on merged or finished work
+  still finish as done: you just acted on them.
+- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); a proposal never
+  goes through the result gate, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
   goes on and asks it to end with what the next step should do. When it hands over, Shinsa records a proposal (the agent's own `propose_change`, or the Agent's reason and what comes next: "Plan the
   operation. You approve the plan before anything runs.") and opens the proposal gate ("Run an operation from this
   diagnosis?", or "Turn this investigation into a fix?" before a change). Approving records `task.change_approved` (the
@@ -1169,7 +1178,8 @@ stops here.
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
 `question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
 agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
-above), and `operation` an operation after the merge waiting for your OK on the merged commit. `failure` means the
+above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
+answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
 reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
@@ -1189,7 +1199,7 @@ Each gate takes only the answers that mean something for it (`gate.answer` refus
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
 words in it; a secret takes `reply` with a secret ref or reject; your OK takes approve or reject; an operation after the
 merge takes approve (run it with the notes on the gate), `reply` (replace the notes with your words, empty clears
-them, then run) or reject (finish without it); a failure or Sign in gate takes approve (retry), `reply` (retry with
+them, then run) or reject (finish without it); a result gate takes approve (Close); a failure or Sign in gate takes approve (retry), `reply` (retry with
 your words as guidance) or reject, which cancels the task; the setup gate takes approve (verify the setup again)
 or reject. `reply` is the one decision that takes words. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A
 question belongs to the run that asked it: when that run ends for any reason the question is withdrawn and the
@@ -1217,7 +1227,7 @@ sending does:
 | operation gate | `operation_notes` | replaces the gate's notes for the operation (`gate.noted`); nothing runs |
 | a working stage with no agent | `restart_step` | starts the step again with it |
 | triage or waiting on another task | `kept` | is kept for the first agent's brief |
-| a resting task (a finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
+| a resting task (an answered or finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
 | a closed task (marked done, cancelled) | `closed` | refused: "This task is finished." |
 
 That is what feedback does, and at a failure, Sign in, setup, question, plan, review, your OK or operation gate, and
