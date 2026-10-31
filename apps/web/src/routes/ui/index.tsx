@@ -213,7 +213,7 @@ export function UiPage() {
           <Section
             id='shinsa-replies'
             title='Shinsa composites · replies to your requests'
-            description='Five ways the review card could answer what you asked, on your requests in the Slack task. Each folds the checks into one line and shows no pre-merge steps before the merge.'
+            description='How the overview answers what you sent at review: the reply as a report of your points, the request in progress, and the earlier ones, from apps/web/src/components/overview/reply-report.tsx, on your requests in the Slack task.'
             className='flex-col items-start gap-8'
           >
             <ExchangeSpecimens />

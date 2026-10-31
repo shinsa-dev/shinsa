@@ -24,6 +24,7 @@ import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanChangeSummary, PlanFeedback, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
+import { ReplyReport, WorkingRequest } from '@/components/overview/reply-report.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
@@ -37,6 +38,7 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
 import {
   describeFollowUpNote,
   describeReviewFacts,
@@ -290,6 +292,7 @@ function ReviewCard({
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
   const waits = listMergeWaits(state, task);
+  const reply = selectShownReply(task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -304,6 +307,7 @@ function ReviewCard({
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
+      {reply && <ReplyReport task={task} iteration={reply} />}
       <p className='text-fg-3 text-xs'>
         {gate.escalation ? describeEscalationBody(gate.escalation) : describeReviewFacts(task, merge)}
       </p>
@@ -328,6 +332,7 @@ function WorkCard({
   const current = progress.current;
   const leaf = traceStalledLeaf(state, task);
   const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
+  const request = selectWorkingRequest(task);
   return (
     <NowFrame
       eyebrow={
@@ -361,7 +366,8 @@ function WorkCard({
           Held up because <TaskLink state={state} task={leaf.task} /> {STALLED_REASON[leaf.reason]}.
         </p>
       )}
-      {current?.planned && current.detail && !checks && (
+      {request && <WorkingRequest iteration={request} />}
+      {current?.planned && current.detail && !checks && !request && (
         <Markdown text={current.detail} className='text-fg-3 text-xs' />
       )}
       {checks && <ChecksBlock taskId={task.id} view={checks} />}

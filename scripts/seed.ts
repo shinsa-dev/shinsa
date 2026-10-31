@@ -4045,10 +4045,88 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         { role: 'agent', purpose: 'build', minutes: 7, summary: 'Made the row scrollable.' },
         { role: 'reviewer', minutes: 2, summary: 'One suggestion.' },
       ],
+      extra: listTabScrollIterations(),
       gate: {
         type: 'review',
         title: 'Review the tab group scroll fix',
         body: 'Small fix, one suggestion from the agent review.',
+      },
+    },
+  ];
+}
+
+function listTabScrollIterations(): ShinsaEventInput[] {
+  const taskId = 'task-tab-scroll';
+  const request = (iterationId: string, text: string, comments = 0): ShinsaEventInput => ({
+    type: 'iteration.requested',
+    taskId,
+    iterationId,
+    round: 1,
+    text,
+    comments,
+  });
+  return [
+    request(
+      'tab-scroll-iteration-1',
+      "With the scrollbar hidden I can't tell there are more tabs. Can we show that somehow? And does this work with the arrow keys?"
+    ),
+    {
+      type: 'iteration.answered',
+      taskId,
+      iterationId: 'tab-scroll-iteration-1',
+      runId: 'task-tab-scroll-run-0',
+      reply: {
+        headline:
+          'The row now fades at an edge while more tabs sit past it, and the arrow keys move between tabs.',
+        points: [
+          {
+            ask: 'Show that there are more tabs',
+            outcome: 'done',
+            note: 'A fade at each edge that has tabs beyond it; it goes once you reach the end.',
+          },
+          {
+            ask: 'Does it work with the arrow keys?',
+            outcome: 'answered',
+            note: 'It did not. Left and right now move the selection and scroll the new tab into view.',
+          },
+        ],
+        next: null,
+        details: null,
+      },
+    },
+    request(
+      'tab-scroll-iteration-2',
+      'The active tab disappears when I make the window narrower. Keep it in view, and drop the smooth scroll on first load like the review said.',
+      1
+    ),
+    {
+      type: 'iteration.answered',
+      taskId,
+      iterationId: 'tab-scroll-iteration-2',
+      runId: 'task-tab-scroll-run-0',
+      reply: {
+        headline:
+          'The active tab stays in view when the row resizes, and the first render no longer animates.',
+        points: [
+          {
+            ask: 'Keep the active tab in view when the window narrows',
+            outcome: 'done',
+            note: 'A `ResizeObserver` on the row scrolls the active tab back to the centre.',
+          },
+          {
+            ask: 'No smooth scroll on first load',
+            outcome: 'done',
+            note: 'The first scroll is `instant`; only later selections are smooth.',
+          },
+          {
+            ask: 'Line comment: rename `listRef`',
+            outcome: 'not_changed',
+            note: 'It matches `rowRef` in the other tab components, so I kept the name for consistency.',
+          },
+        ],
+        next: '1. Open the paywall editor on a store with more than 20 tabs, at about 900px wide.\n2. Select the last tab, then narrow the window: it should stay centred.\n3. Reload the page on a later tab: the row should not slide.',
+        details:
+          'The fades are two absolutely positioned gradients on the row, shown from `scrollLeft` and `scrollWidth`, so they need no extra markup per tab.',
       },
     },
   ];
