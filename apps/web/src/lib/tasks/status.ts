@@ -65,6 +65,16 @@ const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 
 
 const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegations', tone: 'neutral' };
 
+const PAUSED: ReadonlySet<Status> = new Set([
+  WAITING_TO_CHECK_IN,
+  WAITING_FOR_USAGE,
+  WAITING_FOR_DELEGATIONS,
+]);
+
+export function isPausedStatus(status: Status) {
+  return PAUSED.has(status);
+}
+
 export const ATTENTION: Record<Attention, Status> = {
   critical: { label: 'Critical', tone: 'red' },
   high: { label: 'Read carefully', tone: 'amber' },

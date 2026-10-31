@@ -340,7 +340,7 @@ Only these, and they win over anything below:
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
    (37), and the queue popover is `QUEUE_POPOVER` (`COMPACT_POPOVER`, as tall as its content up to the room under the button,
    then it scrolls, and at least 320px wide, growing just enough to fit its widest status and step track, never past the
-   room left in the window; titles and notes truncate instead of widening it, `contain-inline-size` on both, and its rows end at the step dots) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   room left in the window; titles truncate instead of widening it, `contain-inline-size` on them, and its rows end at the step dots) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
    sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since

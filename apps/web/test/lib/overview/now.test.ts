@@ -187,6 +187,27 @@ describe('isTaskWatchable', () => {
     const done = createTask({ id: 'task-2', stage: 'done' });
     expect(isTaskWatchable(createShinsaState({ tasks: [done] }), done)).toBe(false);
   });
+
+  it('still offers to watch a task whose agent is paused, though its status is grey', () => {
+    const paused = createTask({
+      id: 'task-3',
+      stage: 'building',
+      monitor: {
+        id: 'm',
+        runId: 'r',
+        role: 'agent',
+        phaseIndex: 0,
+        notes: 'n',
+        armedAt: 0,
+        nextCheckAt: 1,
+        timeoutAt: 2,
+        attempts: 0,
+        maxAttempts: 1,
+        status: 'armed',
+      },
+    });
+    expect(isTaskWatchable(createShinsaState({ tasks: [paused] }), paused)).toBe(true);
+  });
 });
 
 describe('listFeedLines', () => {

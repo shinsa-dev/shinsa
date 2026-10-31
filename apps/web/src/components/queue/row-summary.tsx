@@ -42,15 +42,7 @@ function resolveRowProgress(task: Task, status: string) {
   return { track: <MiniTrack steps={steps} />, note: describeStepCount(selectCurrentStep(steps), status) };
 }
 
-export function RowSummary({
-  state,
-  task,
-  detail = true,
-}: {
-  state: ShinsaState;
-  task: Task;
-  detail?: boolean;
-}) {
+export function RowSummary({ state, task, detail }: { state: ShinsaState; task: Task; detail: boolean }) {
   const [run] = selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
   const status = resolveRowStatus(state, task);
   const { track, note } = resolveRowProgress(task, status.label);
