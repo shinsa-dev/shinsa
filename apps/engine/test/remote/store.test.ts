@@ -44,10 +44,9 @@ describe('remote.json', () => {
             name: 'Phone',
             enrolledAt: 1,
             lastSeenAt: 2,
-            enrollmentId: 'link-1',
             userId: '7',
           },
-          { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, enrollmentId: 4 },
+          { publicKey: 'd2', name: 'Laptop', enrolledAt: 3 },
           { publicKey: 'd3', name: 'Broken' },
           'nope',
         ],
@@ -60,6 +59,35 @@ describe('remote.json', () => {
             'nope',
           ],
         },
+        links: [
+          { kind: 'device', secret: 's1', invite: null, createdAt: 1 },
+          { kind: 'invite', secret: 's2', invite: 'tok', createdAt: 2 },
+          { kind: 'invite', secret: 's3', createdAt: 3 },
+          { kind: 'other', secret: 's4', createdAt: 4 },
+          { kind: 'device', secret: 's5' },
+          'nope',
+        ],
+        requests: [
+          {
+            id: 'r1',
+            kind: 'invite',
+            publicKey: 'k1',
+            deviceName: 'Bob iPhone',
+            user: { id: '7', login: 'kai' },
+            requestedAt: 9,
+          },
+          { id: 'r2', kind: 'device', publicKey: 'k2', deviceName: 'Mac', user: { id: '1' }, requestedAt: 9 },
+          { id: 'r3', kind: 'device', publicKey: 'k3', deviceName: 'Mac', user: { id: '1', login: 'mona' } },
+          {
+            id: 'r4',
+            kind: 'device',
+            publicKey: 4,
+            deviceName: 'Mac',
+            user: { id: '1', login: 'mona' },
+            requestedAt: 9,
+          },
+          'nope',
+        ],
       })
     );
     expect(readRemoteFile(path)).toEqual({
@@ -69,13 +97,12 @@ describe('remote.json', () => {
       owner: 'mona',
       enabled: true,
       devices: [
-        { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, enrollmentId: 'link-1', userId: '7' },
+        { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, userId: '7' },
         {
           publicKey: 'd2',
           name: 'Laptop',
           enrolledAt: 3,
           lastSeenAt: null,
-          enrollmentId: null,
           userId: null,
         },
       ],
@@ -83,6 +110,20 @@ describe('remote.json', () => {
         owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
         members: [{ user: { id: '7', login: 'kai', name: null, avatarUrl: 'https://a/7' }, addedAt: 5 }],
       },
+      links: [
+        { kind: 'device', secret: 's1', invite: null, createdAt: 1 },
+        { kind: 'invite', secret: 's2', invite: 'tok', createdAt: 2 },
+      ],
+      requests: [
+        {
+          id: 'r1',
+          kind: 'invite',
+          publicKey: 'k1',
+          deviceName: 'Bob iPhone',
+          user: { id: '7', login: 'kai', name: null, avatarUrl: null },
+          requestedAt: 9,
+        },
+      ],
     });
   });
 
@@ -102,7 +143,10 @@ describe('remote.json', () => {
     expect(file.enabled).toBe(false);
     expect(file.machine).toBeNull();
     expect(warn).toHaveBeenCalled();
-    writeFileSync(path, JSON.stringify({ credentials: 'x', devices: 'x', access: { owner: 'mona' } }));
+    writeFileSync(
+      path,
+      JSON.stringify({ credentials: 'x', devices: 'x', access: { owner: 'mona' }, links: 'x', requests: 'x' })
+    );
     expect(readRemoteFile(path).credentials).toBeNull();
     expect(readRemoteFile(path).access).toBeNull();
     writeFileSync(path, JSON.stringify({ access: { owner: { id: '1', login: 'mona' }, members: 'x' } }));
@@ -122,7 +166,6 @@ describe('the remote store', () => {
       name: 'Phone',
       enrolledAt: 1,
       lastSeenAt: null,
-      enrollmentId: 'a',
       userId: null,
     });
     store.upsertDevice({
@@ -130,14 +173,13 @@ describe('the remote store', () => {
       name: 'Phone again',
       enrolledAt: 2,
       lastSeenAt: null,
-      enrollmentId: 'b',
       userId: null,
     });
     store.recordDeviceSeen('d1', 5);
     store.recordDeviceSeen('unknown', 5);
     expect(statSync(store.path).mode & 0o777).toBe(0o600);
     expect(store.file.devices).toEqual([
-      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, enrollmentId: 'b', userId: null },
+      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, userId: null },
     ]);
     expect(store.selectDevice('d1')?.name).toBe('Phone again');
     expect(store.removeDevice('d1')).toBe(true);
@@ -147,7 +189,7 @@ describe('the remote store', () => {
 
   test('forgets only the devices of accounts that lost access, keeping devices from before accounts were recorded', () => {
     const store = new RemoteStore(createPath());
-    const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
+    const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null };
     store.upsertDevice({ ...device, publicKey: 'mine', userId: '1' });
     store.upsertDevice({ ...device, publicKey: 'kai', userId: '7' });
     store.upsertDevice({ ...device, publicKey: 'old', userId: null });

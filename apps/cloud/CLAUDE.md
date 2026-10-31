@@ -20,7 +20,7 @@ src/
 │                  or bearer
 ├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
-├── members.ts     A machine's members: invites (the machine makes them, you accept one), Leave, removal by the machine
+├── members.ts     A machine's members: its invite, who asked through it, adding and removing members, Leave
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
@@ -75,19 +75,21 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   with its members and invites. The heartbeat answers `{ ok, owner, members }` (`HeartbeatResponse`), the machine's
   owner and its members as users, so the machine keeps its own copy and forgets the devices of anyone no longer listed.
 - **Members.** A machine has one owner, the account that paired it, and up to 20 members (`MAX_INSTANCE_MEMBERS`,
-  `instance_members`), who reach it exactly as its owner does. Only the machine invites: `POST
-  /__remote/machine/invites` (machine token) answers a random one-time token that lives 10 minutes (`INVITE_TTL_MS`),
-  of which D1 keeps only the SHA-256 (`instance_invites`), at most 5 waiting per machine (429 `invites_full`). The
-  machine puts it in the link it shows; whoever opens the link signs in with any GitHub account and the page sends
-  `POST /__remote/invites/accept { token }`, which claims it in one conditional update (another account's claim, an
-  expired or unknown token is 404 `invite_invalid`), makes that account a member (409 `members_full` past the limit)
-  and answers the machine's id, name and owner. The account that claimed it may accept it again until it expires, as
-  long as it still has access, so a device whose handshake failed can try again. The owner opening their own invite
-  only uses it up. A member sees the machine in
-  their list with `role: 'member'` and its `owner`, gets connect tokens for it and can `POST
-  /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot leave (409). The
-  machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines do not count
-  toward the 5 machines a member may pair.
+  `instance_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
+  in. `POST /__remote/machine/invites` (machine token) answers the machine's one reusable invite token, replacing the
+  one before, of which D1 keeps only the SHA-256 (`instance_invites`, one row per machine);
+  `/__remote/machine/invites/remove` turns it off. The machine puts it in its Invite someone link; whoever opens the
+  link signs in with any GitHub account and the page sends `POST /__remote/invites/accept { token }`, which records
+  that this account asked (`instance_requesters`), makes it no member, and answers the machine's id, name and owner,
+  the account's user and a connect token for that account alone, so the browser can ask the machine over the sealed
+  channel (an unknown or turned-off token is 404 `invite_invalid`). The machine checks who asked with `POST
+  /__remote/machine/requesters/find { userId }`, which answers the user only for an account that asked, a member or
+  the owner, and when you accept the request it sends `/__remote/machine/members/add { userId }`, which makes that
+  account a member (only one that asked; 409 `members_full` past the limit; the owner is never one) and drops its
+  request row. A member sees the machine in their list with `role: 'member'` and its `owner`, gets connect tokens for
+  it and can `POST /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot
+  leave (409). The machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines
+  do not count toward the 5 machines a member may pair.
 - **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner or a member, answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine

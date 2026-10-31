@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import type { PairView, RemoteInstance, RemoteSession, RemoteUser } from '@shinsa/core';
+import type { PairView, RemoteInstance, RemoteSession, RemoteSnapshot, RemoteUser } from '@shinsa/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MachinesSettings } from '@/components/settings/machines.tsx';
+import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
 import { Connection, connection } from '@/lib/connection/socket.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
@@ -42,7 +42,13 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     removeInstance: () => Promise.resolve({ ok: true }),
     leaveInstance: () => Promise.resolve({ ok: true }),
     acceptInvite: () =>
-      Promise.resolve({ instanceId: 'k3x9', name: 'Studio', owner: USER.user as RemoteUser }),
+      Promise.resolve({
+        instanceId: 'k3x9',
+        name: 'Studio',
+        owner: USER.user as RemoteUser,
+        user: USER.user as RemoteUser,
+        connect: { url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 },
+      }),
     readPair: () => Promise.resolve(PAIR),
     approvePair: () => Promise.resolve({ instanceId: 'k3x9', name: 'Studio' }),
     signOut: () => Promise.resolve({ ok: true }),
@@ -177,6 +183,35 @@ describe('the remote dashboard', () => {
   });
 });
 
+describe('access requests in Settings → Machines', () => {
+  it('lists the requests waiting on each machine, and nothing when none wait', () => {
+    const request = {
+      id: 'r1',
+      kind: 'invite' as const,
+      publicKey: 'k',
+      deviceName: 'Kai iPhone',
+      user: { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null },
+      requestedAt: Date.now(),
+    };
+    const remote = { requests: [request], access: null } as unknown as RemoteSnapshot;
+    const { unmount } = render(
+      <MachineAccessRequests
+        machines={[
+          { id: 'k3x9', name: 'Studio', remote },
+          { id: 'w4t8', name: 'Laptop', remote: null },
+        ]}
+      />
+    );
+    expect(screen.getByText('Access requests')).toBeTruthy();
+    expect(screen.getByText('Waiting on Studio')).toBeTruthy();
+    expect(screen.queryByText('Waiting on Laptop')).toBeNull();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+    unmount();
+    render(<MachineAccessRequests machines={[{ id: 'w4t8', name: 'Laptop', remote: null }]} />);
+    expect(screen.queryByText('Access requests')).toBeNull();
+  });
+});
+
 describe('the machines in Settings', () => {
   it('lists every machine with whether it is in this dashboard, and removes one', async () => {
     const devices = createDevices(DEVICE);
@@ -304,33 +339,64 @@ describe('the enroll page', () => {
     onMachine: false,
   };
 
-  it('adds this browser and opens the machine', async () => {
+  it('asks for access under the name it guessed, waits, then opens the machine', async () => {
     sessionStorage.setItem('shinsa.remote.enroll', 'x');
+    let finish: () => void = () => undefined;
+    const asked: string[] = [];
     render(
       <EnrollPage
         link={link}
+        user={USER.user as RemoteUser}
         dashboard={createDashboard()}
         devices={createDevices()}
-        enroll={() => Promise.resolve({} as EnrolledDevice)}
+        resolveName={(invitee) => (invitee ? 'Never' : 'Chrome on Mac')}
+        request={(_input, options) => {
+          asked.push(options.name);
+          options.onPending();
+          return new Promise((resolve) => {
+            finish = () => resolve({} as EnrolledDevice);
+          });
+        }}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add this device' }));
+    const field = screen.getByLabelText('Device name') as HTMLInputElement;
+    expect(field.value).toBe('Chrome on Mac');
+    fireEvent.change(field, { target: { value: ' Work Mac ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
+    expect(await screen.findByText(/Accept it in Settings, Remote access/)).toBeTruthy();
+    expect(asked).toEqual(['Work Mac']);
+    finish();
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     expect(sessionStorage.getItem('shinsa.remote.enroll')).toBeNull();
   });
 
-  it('offers to accept an invite to someone else’s machine', async () => {
+  it('asks to join someone else’s machine under a name with the GitHub name in front', async () => {
+    const seen: (RemoteUser | null)[] = [];
     render(
       <EnrollPage
         link={{ ...link, invite: 'invite-token' }}
+        user={USER.user as RemoteUser}
         dashboard={createDashboard()}
         devices={createDevices()}
-        enroll={() => Promise.resolve({} as EnrolledDevice)}
+        resolveName={(invitee) => {
+          seen.push(invitee);
+          return 'Mona iPhone';
+        }}
+        request={(_input, options) => {
+          options.onPending();
+          return new Promise(() => undefined);
+        }}
       />
     );
     expect(screen.getByText('Join a shared machine')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Accept and add this device' }));
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
+    expect(seen[0]).toEqual(USER.user);
+    fireEvent.change(screen.getByLabelText('Device name'), { target: { value: '  ' } });
+    expect(screen.getByRole('button', { name: 'Request access' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.submit(screen.getByLabelText('Device name'));
+    expect(screen.queryByText(/Request sent/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Device name'), { target: { value: 'Mona iPhone' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
+    expect(await screen.findByText(/the machine’s owner accepts it/)).toBeTruthy();
   });
 
   it('says why the machine refused, and what to do with a link that cannot work', async () => {
@@ -338,16 +404,26 @@ describe('the enroll page', () => {
       <EnrollPage
         link={link}
         dashboard={createDashboard()}
+        user={USER.user as RemoteUser}
         devices={createDevices()}
-        enroll={() => Promise.reject(new Error('This browser is not enrolled on this machine.'))}
+        resolveName={() => 'Chrome on Mac'}
+        request={() => Promise.reject(new Error('Your request to reach this machine was declined.'))}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add this device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'This browser is not enrolled on this machine.'
+      'Your request to reach this machine was declined.'
     );
     unmount();
-    render(<EnrollPage link={null} dashboard={createDashboard()} devices={createDevices()} />);
+    render(
+      <EnrollPage
+        link={null}
+        user={USER.user as RemoteUser}
+        dashboard={createDashboard()}
+        devices={createDevices()}
+        resolveName={() => 'Chrome on Mac'}
+      />
+    );
     expect(screen.getByText('This link cannot add a device')).toBeTruthy();
   });
 });

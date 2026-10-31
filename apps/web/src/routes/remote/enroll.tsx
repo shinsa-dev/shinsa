@@ -1,11 +1,14 @@
-import { REMOTE_PATHS, resolveKeyFingerprint } from '@shinsa/core';
+import { DEVICE_NAME_LIMIT, REMOTE_PATHS, type RemoteUser, resolveKeyFingerprint } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Field } from '@shinsa/ui/components/field';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
+import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
-import { type EnrollInput, enrollDevice } from '@/lib/remote/enroll.ts';
+import { type EnrollInput, requestDeviceAccess } from '@/lib/remote/enroll.ts';
 import { clearEnrollFragment, MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { RemoteBenefits, RemoteHero } from './shell.tsx';
 
@@ -18,30 +21,53 @@ const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [
   {
     icon: 'IconShieldCheck',
     title: 'Encrypted end to end',
-    detail: 'Only this device and your machine can read what passes between them.',
+    detail: 'Only this device and the machine can read what passes between them.',
   },
   {
     icon: 'IconLock',
-    title: 'Once per device',
-    detail: 'After this, signing in with GitHub is all it takes.',
+    title: 'Accepted on the machine',
+    detail: 'Nothing opens until someone with access to the machine accepts this request.',
   },
 ];
 
-type EnrollState = { kind: 'ready' } | { kind: 'enrolling' } | { kind: 'failed'; message: string };
+type EnrollState =
+  | { kind: 'ready' }
+  | { kind: 'requesting' }
+  | { kind: 'waiting' }
+  | { kind: 'failed'; message: string };
+
+function resolveBrowserDeviceName(invitee: RemoteUser | null) {
+  return resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, invitee);
+}
+
+function WaitingNote({ invite }: { invite: boolean }) {
+  return (
+    <p role='status' className='w-full text-pretty text-fg-2 text-xs'>
+      {invite
+        ? 'Request sent. Keep this page open until the machine’s owner accepts it.'
+        : 'Request sent. Accept it in Settings, Remote access on the machine, or on any device already added to it. Keep this page open.'}
+    </p>
+  );
+}
 
 export function EnrollPage({
   link,
+  user,
   dashboard,
   devices,
-  enroll = enrollDevice,
+  request = requestDeviceAccess,
+  resolveName = resolveBrowserDeviceName,
 }: {
   link: EnrollInput | null;
+  user: RemoteUser;
   dashboard: Pick<DashboardClient, 'requestConnect' | 'acceptInvite'>;
   devices: Pick<DeviceStore, 'writeDevice'>;
-  enroll?: typeof enrollDevice;
+  request?: typeof requestDeviceAccess;
+  resolveName?: (invitee: RemoteUser | null) => string;
 }) {
   const [state, setState] = React.useState<EnrollState>({ kind: 'ready' });
   const [fingerprint, setFingerprint] = React.useState<string | null>(null);
+  const [name, setName] = React.useState(() => resolveName(link?.invite ? user : null));
   React.useEffect(() => {
     if (link) void resolveKeyFingerprint(link.machineKey).then(setFingerprint);
   }, [link]);
@@ -49,8 +75,8 @@ export function EnrollPage({
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCircleX' tone='red' title='This link cannot add a device'>
-          It is incomplete or was already used. On your machine, open Settings, Remote access and choose Add
-          device for a new one.
+          It is incomplete. On the machine, open Settings, Remote access and copy its Add device or Invite
+          someone link again.
         </RemoteHero>
         <RemoteBenefits />
         <Button
@@ -63,16 +89,33 @@ export function EnrollPage({
         </Button>
       </section>
     );
+  const busy = state.kind === 'requesting' || state.kind === 'waiting';
+  const submit = () => {
+    setState({ kind: 'requesting' });
+    request(link, {
+      dashboard,
+      devices,
+      name: name.trim(),
+      onPending: () => setState({ kind: 'waiting' }),
+    }).then(
+      () => {
+        clearEnrollFragment(sessionStorage);
+        location.assign(REMOTE_PATHS.app);
+      },
+      (error: unknown) => setState({ kind: 'failed', message: (error as Error).message })
+    );
+  };
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       {link.invite ? (
         <RemoteHero icon='IconUserAdd' title='Join a shared machine'>
-          You were invited to reach a machine with your own GitHub account. Accepting adds this device and
-          gives you full control of that machine from anywhere.
+          Ask for access with your GitHub account. Once the machine’s owner accepts, this device has full
+          control of that machine from anywhere.
         </RemoteHero>
       ) : (
         <RemoteHero icon={MACHINE_ICON} title='Add this device to your machine'>
-          Once it is added, this device opens Shinsa on your machine from anywhere.
+          Name this device and ask for access. Once you accept it, this device opens Shinsa on your machine
+          from anywhere.
         </RemoteHero>
       )}
       <SettingsCard className='w-full'>
@@ -86,32 +129,35 @@ export function EnrollPage({
           </div>
         ))}
       </SettingsCard>
-      {state.kind === 'failed' && (
-        <p role='alert' className='w-full text-destructive text-xs'>
-          {state.message}
-        </p>
-      )}
-      <div className='flex w-full flex-col items-center gap-2'>
-        <Button
-          className='w-full'
-          loading={state.kind === 'enrolling'}
-          onClick={() => {
-            setState({ kind: 'enrolling' });
-            enroll(link, { dashboard, devices }).then(
-              () => {
-                clearEnrollFragment(sessionStorage);
-                location.assign(REMOTE_PATHS.app);
-              },
-              (error: unknown) => setState({ kind: 'failed', message: (error as Error).message })
-            );
-          }}
-        >
-          {link.invite ? 'Accept and add this device' : 'Add this device'}
+      <form
+        className='flex w-full flex-col items-center gap-2'
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim() && !busy) submit();
+        }}
+      >
+        <Field className='w-full'>
+          <Input
+            value={name}
+            aria-label='Device name'
+            maxLength={DEVICE_NAME_LIMIT}
+            disabled={busy}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Field>
+        {state.kind === 'failed' && (
+          <p role='alert' className='w-full text-destructive text-xs'>
+            {state.message}
+          </p>
+        )}
+        {state.kind === 'waiting' && <WaitingNote invite={link.invite !== null} />}
+        <Button type='submit' className='w-full' loading={busy} disabled={!name.trim()}>
+          Request access
         </Button>
         <p className='text-2xs text-fg-2'>
           Machine key: <span className='font-mono'>{fingerprint ?? '…'}</span>
         </p>
-      </div>
+      </form>
     </section>
   );
 }

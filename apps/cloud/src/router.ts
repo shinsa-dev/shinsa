@@ -15,7 +15,10 @@ import {
   respondInstanceLeave,
   respondInviteAccept,
   respondInviteCreate,
+  respondInviteRemove,
+  respondMachineMemberAdd,
   respondMachineMemberRemove,
+  respondRequesterFind,
 } from './members.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
 import {
@@ -122,6 +125,21 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(REMOTE_PATHS.machineInvites),
     respond: (request, _url, _match, world) => respondInviteCreate(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineInviteRemove),
+    respond: (request, _url, _match, world) => respondInviteRemove(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineRequester),
+    respond: (request, _url, _match, world) => respondRequesterFind(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineMemberAdd),
+    respond: (request, _url, _match, world) => respondMachineMemberAdd(request, world),
   },
   {
     method: 'POST',

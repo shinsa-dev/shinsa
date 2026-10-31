@@ -12,6 +12,8 @@ export function createRemoteSnapshot(overrides: Partial<RemoteSnapshot> = {}): R
     pairing: null,
     devices: [],
     access: null,
+    links: [],
+    requests: [],
     ...overrides,
   };
 }

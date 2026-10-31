@@ -53,6 +53,12 @@ export interface UnreachableMachine {
   name: string;
 }
 
+export interface MachineAccess {
+  id: string;
+  name: string;
+  remote: RemoteSnapshot | null;
+}
+
 export interface ShinsaConnection {
   start: () => void;
   subscribe: (listener: () => void) => () => void;
@@ -74,6 +80,7 @@ export interface ShinsaConnection {
   selectMachine: (id: string) => MachineView | null;
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
+  listMachineAccess: () => MachineAccess[];
   command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
   flush: () => void;
@@ -97,6 +104,8 @@ export const NO_ENTRIES: ChatEntry[] = [];
 export const NO_MACHINES: MachineChoice[] = [];
 
 export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
+
+export const NO_MACHINE_ACCESS: MachineAccess[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
@@ -224,6 +233,8 @@ export class Connection implements ShinsaConnection {
   listMachines = (): MachineChoice[] => NO_MACHINES;
 
   listUnreachableMachines = (): UnreachableMachine[] => NO_UNREACHABLE_MACHINES;
+
+  listMachineAccess = (): MachineAccess[] => NO_MACHINE_ACCESS;
 
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
@@ -490,4 +501,8 @@ export function useTranscript(runId: string | null) {
 
 export function sendCommand(command: UserCommand, machineId?: string | null) {
   return connection.command(command, machineId);
+}
+
+export function useMachineAccess() {
+  return useSyncExternalStore(connection.subscribeRemote, connection.listMachineAccess);
 }

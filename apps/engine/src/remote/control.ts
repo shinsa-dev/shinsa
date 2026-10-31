@@ -8,6 +8,8 @@ import {
   type PairStartResponse,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
+  type RemoteMember,
+  type RemoteUser,
 } from '@shinsa/core';
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -76,6 +78,18 @@ export class ControlClient {
 
   requestInvite(machineToken: string) {
     return this.#post<InviteCreateResponse>(REMOTE_PATHS.machineInvites, {}, machineToken);
+  }
+
+  async requestInviteRemoval(machineToken: string) {
+    await this.#post(REMOTE_PATHS.machineInviteRemove, {}, machineToken);
+  }
+
+  requestRequester(machineToken: string, userId: string) {
+    return this.#post<RemoteUser>(REMOTE_PATHS.machineRequester, { userId }, machineToken);
+  }
+
+  requestMemberAddition(machineToken: string, userId: string) {
+    return this.#post<RemoteMember>(REMOTE_PATHS.machineMemberAdd, { userId }, machineToken);
   }
 
   async requestMemberRemoval(machineToken: string, userId: string) {

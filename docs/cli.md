@@ -2061,33 +2061,61 @@ shinsa remote remove [--json]
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
-#### shinsa remote enroll
+#### shinsa remote link
 
-Make a one-time link that adds a device, a browser or a phone, to this machine.
-
-```
-shinsa remote enroll <name> [--json]
-```
-
-Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
-
-| Argument | Kind | What it is |
-| --- | --- | --- |
-| `<name>` | text, required | What to call the device, such as iPhone. |
-
-#### shinsa remote invite
-
-Make a one-time link that gives someone else full remote access with their own GitHub account and adds their device.
+Make the reusable link that asks for access to this machine, replacing the one before.
 
 ```
-shinsa remote invite <name> [--json]
+shinsa remote link <kind> [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<name>` | text, required | Who or which device the invite is for, such as Bob’s laptop. |
+| `<kind>` | choice, required | device for your own devices, invite for someone else’s GitHub account. |
+
+#### shinsa remote link-off
+
+Turn a link off, so nobody can ask for access with it any more.
+
+```
+shinsa remote link-off <kind> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<kind>` | choice, required | device for your own devices, invite for someone else’s GitHub account. |
+
+#### shinsa remote accept
+
+Accept an access request: add its device, and for an invite make its account a member.
+
+```
+shinsa remote accept <request> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<request>` | text, required | The request’s id, or the GitHub login that asked, from `shinsa remote status`. |
+
+#### shinsa remote decline
+
+Decline an access request and forget it.
+
+```
+shinsa remote decline <request> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<request>` | text, required | The request’s id, or the GitHub login that asked, from `shinsa remote status`. |
 
 #### shinsa remote remove-member
 

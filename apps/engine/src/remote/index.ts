@@ -1,28 +1,29 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import type { EnrollmentKind, RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
+import type { AccessRequest, LinkKind, RemoteSnapshot, RemoteUser } from '@shinsa/core';
 import {
   type ConnectClaim,
   DomainError,
-  MAX_PENDING_INVITES,
+  type HandshakeKeys,
   type RemoteAccess,
   type RequestOrigin,
   resolveEnrollUrl,
   resolveRemoteHookUrl,
+  serializeBase64Url,
   verifyConnectToken,
+  verifyEnrollProof,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
-import { type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
-import { ControlClient, ControlError } from './control.ts';
-import { Enrollments } from './enrollments.ts';
+import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
+import { ControlClient } from './control.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
-import { RemoteStore } from './store.ts';
+import { RemoteStore, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
 export { createInstalledConnector } from './connector.ts';
 export { ControlClient } from './control.ts';
-export { Enrollments } from './enrollments.ts';
 export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
 export { resolveLocalOnlyRoute } from './local-only.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
@@ -43,9 +44,13 @@ export function resolveRequestOrigin(request: Request): RequestOrigin {
   return remoteRequests.has(request) ? 'remote' : 'local';
 }
 
-export type { RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
+export type { RemoteSnapshot } from '@shinsa/core';
 
-const DEVICE_NAME_LIMIT = 60;
+const SECRET_BYTES = 32;
+
+const MAX_REQUESTS = 20;
+
+type ProofKeys = Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>;
 
 export interface RemoteOptions {
   path: string;
@@ -63,12 +68,6 @@ export interface RemoteOptions {
 }
 
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
-
-function resolveDeviceName(name: string) {
-  const deviceName = name.trim().slice(0, DEVICE_NAME_LIMIT);
-  if (!deviceName) throw new DomainError('device_name_missing', 'Name the device you are adding.');
-  return deviceName;
-}
 
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
@@ -99,12 +98,12 @@ export async function requestHealth(url: string) {
 export class Remote {
   readonly store: RemoteStore;
   readonly control: ControlClient;
-  readonly enrollments: Enrollments;
   readonly supervisor: TunnelSupervisor;
   readonly #options: RemoteOptions;
   readonly #now: () => number;
   readonly #channels = new Set<RemoteChannel>();
   readonly #listeners = new Set<() => void>();
+  readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
   #pairing: Pairing | null = null;
 
   constructor(options: RemoteOptions) {
@@ -112,7 +111,6 @@ export class Remote {
     this.#now = options.now ?? Date.now;
     this.store = new RemoteStore(options.path);
     this.control = options.control ?? new ControlClient();
-    this.enrollments = new Enrollments(this.#now);
     this.supervisor = new TunnelSupervisor({
       control: this.control,
       connect: options.connect,
@@ -153,7 +151,20 @@ export class Remote {
       pairing: this.#pairing?.view ?? null,
       devices: file.devices,
       access: file.access,
+      links: file.credentials && file.machine ? file.links.map((link) => this.#serializeLink(link)) : [],
+      requests: file.requests,
     };
+  }
+
+  #serializeLink(link: StoredLink) {
+    const { credentials, machine } = this.store.file;
+    const fragment = {
+      instanceId: credentials?.instanceId ?? '',
+      machineKey: machine?.publicKey ?? '',
+      secret: link.secret,
+      invite: link.invite,
+    };
+    return { kind: link.kind, url: resolveEnrollUrl(fragment, this.appOrigin), createdAt: link.createdAt };
   }
 
   async startPairing() {
@@ -244,36 +255,141 @@ export class Remote {
       enabled: false,
       devices: [],
       access: null,
+      links: [],
+      requests: [],
+    }));
+    this.#settleWaiters(false);
+    this.#publish();
+  }
+
+  async createLink(kind: LinkKind) {
+    const credentials = this.#assertPaired();
+    await this.store.resolveMachineKey();
+    const invite = await this.#requestInviteToken(kind, credentials.machineToken);
+    const link: StoredLink = {
+      kind,
+      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
+      invite,
+      createdAt: this.#now(),
+    };
+    this.store.update((file) => ({
+      ...file,
+      links: [...file.links.filter((entry) => entry.kind !== kind), link],
     }));
     this.#publish();
   }
 
-  async #createLink(name: string, kind: EnrollmentKind, invite: string | null): Promise<RemoteEnrollment> {
-    const credentials = this.#assertPaired();
-    const machine = await this.store.resolveMachineKey();
-    const { id, secret, expiresAt } = this.enrollments.create(name, kind);
-    const fragment = { instanceId: credentials.instanceId, machineKey: machine.publicKey, secret, invite };
-    return { id, kind, url: resolveEnrollUrl(fragment, this.appOrigin), name, expiresAt };
+  async #requestInviteToken(kind: LinkKind, machineToken: string) {
+    if (kind === 'device') return null;
+    return (await this.control.requestInvite(machineToken)).token;
   }
 
-  createEnrollment(name: string) {
-    return this.#createLink(resolveDeviceName(name), 'device', null);
+  async removeLink(kind: LinkKind) {
+    const credentials = this.#assertPaired();
+    if (kind === 'invite') await this.control.requestInviteRemoval(credentials.machineToken);
+    this.store.update((file) => ({ ...file, links: file.links.filter((entry) => entry.kind !== kind) }));
+    this.#publish();
   }
 
-  async createInvite(name: string) {
-    const credentials = this.#assertPaired();
-    const deviceName = resolveDeviceName(name);
-    try {
-      const invite = await this.control.requestInvite(credentials.machineToken);
-      return await this.#createLink(deviceName, 'invite', invite.token);
-    } catch (error) {
-      if (error instanceof ControlError && error.status === 429)
-        throw new DomainError(
-          'invites_full',
-          `${MAX_PENDING_INVITES} invites are waiting already. Wait for one to be used or expire, then invite again.`
-        );
-      throw error;
+  async #findLinkKind(proof: string, keys: ProofKeys) {
+    for (const link of this.store.file.links)
+      if (await verifyEnrollProof(link.secret, proof, keys)) return link.kind;
+    return null;
+  }
+
+  async #resolveRequester(kind: LinkKind, userId: string): Promise<RemoteUser | string> {
+    const { access, credentials } = this.store.file;
+    if (!(access && credentials)) return 'This machine is still connecting. Try again in a moment.';
+    if (kind === 'device') {
+      if (access.owner.id === userId) return access.owner;
+      return 'This link adds devices for the owner of this machine only. Ask them for an invite link.';
     }
+    try {
+      return await this.control.requestRequester(credentials.machineToken, userId);
+    } catch (error) {
+      log.warn('[Remote] Could not look up who asked for access', { error: describeError(error) });
+      return 'This machine could not check who you are. Try again in a moment.';
+    }
+  }
+
+  async #requestAccess(
+    proof: string,
+    keys: ProofKeys,
+    name: string | null,
+    userId: string
+  ): Promise<AccessAnswer> {
+    const kind = await this.#findLinkKind(proof, keys);
+    if (!kind) return { kind: 'refused', reason: 'This link was turned off. Ask for a new one.' };
+    const user = await this.#resolveRequester(kind, userId);
+    if (typeof user === 'string') return { kind: 'refused', reason: user };
+    const earlier = this.store.file.requests.find((entry) => entry.publicKey === keys.device);
+    const request: AccessRequest = {
+      id: earlier?.id ?? randomUUID(),
+      kind,
+      publicKey: keys.device,
+      deviceName: name ?? earlier?.deviceName ?? 'Browser',
+      user,
+      requestedAt: earlier?.requestedAt ?? this.#now(),
+    };
+    this.store.update((file) => ({
+      ...file,
+      requests: earlier
+        ? file.requests.map((entry) => (entry.id === request.id ? request : entry))
+        : [...file.requests, request].slice(-MAX_REQUESTS),
+    }));
+    this.#publish();
+    const decided = new Promise<boolean>((resolve) => {
+      this.#waiters.set(request.id, [...(this.#waiters.get(request.id) ?? []), resolve]);
+    });
+    return { kind: 'waiting', decided };
+  }
+
+  #findRequest(requestId: string) {
+    const request = this.store.file.requests.find((entry) => entry.id === requestId);
+    if (!request) throw new DomainError('request_not_found', 'That access request was already handled.');
+    return request;
+  }
+
+  #settleRequest(request: AccessRequest, approved: boolean) {
+    this.store.update((file) => ({
+      ...file,
+      requests: file.requests.filter((entry) => entry.id !== request.id),
+    }));
+    for (const resolve of this.#waiters.get(request.id) ?? []) resolve(approved);
+    this.#waiters.delete(request.id);
+    this.#publish();
+  }
+
+  #settleWaiters(approved: boolean) {
+    for (const resolvers of this.#waiters.values()) for (const resolve of resolvers) resolve(approved);
+    this.#waiters.clear();
+  }
+
+  async acceptRequest(requestId: string) {
+    const credentials = this.#assertPaired();
+    const request = this.#findRequest(requestId);
+    const access = this.store.file.access;
+    const joins =
+      request.kind === 'invite' &&
+      access !== null &&
+      access.owner.id !== request.user.id &&
+      !access.members.some((member) => member.user.id === request.user.id);
+    if (joins) {
+      const member = await this.control.requestMemberAddition(credentials.machineToken, request.user.id);
+      this.#recordAccess({ ...access, members: [...access.members, member] });
+    }
+    this.store.upsertDevice({
+      publicKey: request.publicKey,
+      name: request.deviceName,
+      enrolledAt: this.#now(),
+      lastSeenAt: null,
+      userId: request.user.id,
+    });
+    this.#settleRequest(request, true);
+  }
+
+  declineRequest(requestId: string) {
+    this.#settleRequest(this.#findRequest(requestId), false);
   }
 
   async removeMember(userId: string) {
@@ -325,7 +441,6 @@ export class Remote {
   async stop() {
     this.#pairing?.cancel();
     this.#closeChannels(isAnyChannel);
-    this.enrollments.clear();
     await this.supervisor.stop();
   }
 
@@ -346,25 +461,7 @@ export class Remote {
       ...parts,
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
-      redeemEnrollment: async (proof, keys) => {
-        const enrollment = await this.enrollments.redeem(proof, keys);
-        if (enrollment === null) return false;
-        if (enrollment.kind === 'device' && this.store.file.access?.owner.id !== userId) {
-          log.warn('[Remote] Refused a device link opened by another account than the owner');
-          return false;
-        }
-        this.store.upsertDevice({
-          publicKey: keys.device,
-          name: enrollment.name,
-          enrolledAt: this.#now(),
-          lastSeenAt: null,
-          enrollmentId: enrollment.id,
-          userId,
-        });
-        this.#publish();
-        if (enrollment.kind === 'invite') void this.supervisor.requestHeartbeat();
-        return true;
-      },
+      requestAccess: (proof, keys, name) => this.#requestAccess(proof, keys, name, userId),
       recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),
       maxBodyBytes: this.#options.maxBodyBytes,
     });

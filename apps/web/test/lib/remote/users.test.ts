@@ -16,7 +16,6 @@ const DEVICE: RemoteDevice = {
   name: 'Phone',
   enrolledAt: 0,
   lastSeenAt: null,
-  enrollmentId: null,
   userId: '7',
 };
 

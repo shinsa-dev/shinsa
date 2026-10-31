@@ -14,7 +14,7 @@ import { type AccountActions, AccountsGroup } from '@/components/settings/accoun
 import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
-import { MachinesSettings } from '@/components/settings/machines.tsx';
+import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationGroup } from '@/components/settings/notifications.tsx';
@@ -382,7 +382,7 @@ export function SettingsSpecimens() {
   const [versions] = React.useState(createSampleVersions);
   const [memory] = React.useState(() => createMemoryScene(now));
   const [remote] = React.useState(() => createSampleRemote(now));
-  const [remoteActions] = React.useState(() => createSampleRemoteActions(now));
+  const [remoteActions] = React.useState(() => createSampleRemoteActions());
   const [machines] = React.useState(() => createSampleMachineServices(now));
   const settings = createSettings();
   return (
@@ -399,6 +399,13 @@ export function SettingsSpecimens() {
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
           </RemoteServicesContext.Provider>
+        </div>
+      </Specimen>
+      <Specimen label='MachineAccessRequests · in Shinsa Cloud: requests waiting on a machine, accepted from any device'>
+        <div className='w-full max-w-xl'>
+          <MachineAccessRequests
+            machines={[{ id: 'k3x9', name: 'Studio', remote: remote[2]?.snapshot ?? null }]}
+          />
         </div>
       </Specimen>
       <Specimen label='PolicySettings · in Shinsa Cloud: which work runs on which machine, in plain English'>

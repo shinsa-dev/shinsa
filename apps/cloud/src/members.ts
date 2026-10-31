@@ -1,23 +1,15 @@
 import {
-  INVITE_TTL_MS,
   type InviteAcceptResponse,
   type InviteCreateResponse,
   MAX_INSTANCE_MEMBERS,
-  MAX_PENDING_INVITES,
   type RemoteMember,
 } from '@shinsa/core';
 import { createToken, resolveTokenHash } from './crypto.ts';
 import type { InstanceRow } from './database.ts';
 import { CloudError, readJsonFields, readText, respondJson } from './http.ts';
-import { findInstanceAccess, findMachine } from './instances.ts';
+import { createConnectAnswer, findInstanceAccess, findMachine } from './instances.ts';
 import { findPageUser, serializeUser } from './session.ts';
 import type { CloudWorld } from './world.ts';
-
-const INVITE_INVALID = new CloudError(
-  'invite_invalid',
-  'This invite expired or was already used. Ask for a new one.',
-  404
-);
 
 export async function listInstanceMembers(row: InstanceRow, world: CloudWorld) {
   const owner = await world.store.selectUser(row.user_id);
@@ -31,57 +23,85 @@ export async function listInstanceMembers(row: InstanceRow, world: CloudWorld) {
 
 export async function respondInviteCreate(request: Request, world: CloudWorld) {
   const row = await findMachine(request, world);
-  const now = world.now();
-  await world.store.removeExpiredInvites(now);
-  if ((await world.store.countPendingInvites(row.id)) >= MAX_PENDING_INVITES)
-    throw new CloudError(
-      'invites_full',
-      `This machine has ${MAX_PENDING_INVITES} invites waiting. Wait for one to be used or expire, then try again.`,
-      429
-    );
   const token = createToken();
-  const expiresAt = now + INVITE_TTL_MS;
-  await world.store.createInvite(await resolveTokenHash(token), row.id, expiresAt);
-  const answer: InviteCreateResponse = { token, expiresAt };
+  await world.store.replaceInvite(row.id, await resolveTokenHash(token), world.now());
+  const answer: InviteCreateResponse = { token };
   return respondJson(answer);
 }
 
-async function assertRoomForMember(row: InstanceRow, userId: string, world: CloudWorld) {
-  if (row.user_id === userId || (await world.store.isMember(row.id, userId))) return;
-  if ((await world.store.countMembers(row.id)) >= MAX_INSTANCE_MEMBERS)
-    throw new CloudError(
-      'members_full',
-      `This machine already has ${MAX_INSTANCE_MEMBERS} members. Its owner has to remove one first.`,
-      409
-    );
+export async function respondInviteRemove(request: Request, world: CloudWorld) {
+  const row = await findMachine(request, world);
+  await world.store.removeInvite(row.id);
+  return respondJson({ ok: true });
 }
 
-async function claimInvite(row: InstanceRow, tokenHash: string, userId: string, world: CloudWorld) {
-  const now = world.now();
-  await assertRoomForMember(row, userId, world);
-  if (!(await world.store.claimInvite(tokenHash, userId, now))) throw INVITE_INVALID;
-  if (row.user_id !== userId) await world.store.createMember(row.id, userId, now);
+async function selectInviteMachine(tokenHash: string, world: CloudWorld) {
+  const instanceId = await world.store.selectInviteInstance(tokenHash);
+  if (!instanceId) return null;
+  return world.store.selectInstance(instanceId);
 }
 
-async function isAcceptedAgain(row: InstanceRow, claimedBy: string, userId: string, world: CloudWorld) {
-  if (claimedBy !== userId) return false;
-  return row.user_id === userId || world.store.isMember(row.id, userId);
+async function selectAskingUser(row: InstanceRow, userId: string, world: CloudWorld) {
+  const asked =
+    row.user_id === userId ||
+    (await world.store.isMember(row.id, userId)) ||
+    (await world.store.isRequester(row.id, userId));
+  if (!asked) return null;
+  return world.store.selectUser(userId);
 }
 
 export async function respondInviteAccept(request: Request, world: CloudWorld) {
   const user = await findPageUser(request, world);
   const fields = await readJsonFields(request);
   const tokenHash = await resolveTokenHash(readText(fields, 'token', 100));
-  const now = world.now();
-  const invite = await world.store.selectInvite(tokenHash);
-  if (!invite || invite.expires_at <= now) throw INVITE_INVALID;
-  const row = await world.store.selectInstance(invite.instance_id);
-  if (!row) throw INVITE_INVALID;
-  if (invite.claimed_by === null) await claimInvite(row, tokenHash, user.id, world);
-  else if (!(await isAcceptedAgain(row, invite.claimed_by, user.id, world))) throw INVITE_INVALID;
+  const row = await selectInviteMachine(tokenHash, world);
+  if (!row)
+    throw new CloudError(
+      'invite_invalid',
+      'This invite link was turned off. Ask the machine’s owner for a new one.',
+      404
+    );
+  await world.store.recordRequester(row.id, user.id, world.now());
   const { owner } = await listInstanceMembers(row, world);
-  const answer: InviteAcceptResponse = { instanceId: row.id, name: row.name, owner };
+  const answer: InviteAcceptResponse = {
+    instanceId: row.id,
+    name: row.name,
+    owner,
+    user: serializeUser(user),
+    connect: await createConnectAnswer(row, user.id, world),
+  };
   return respondJson(answer);
+}
+
+async function findRequester(request: Request, world: CloudWorld) {
+  const row = await findMachine(request, world);
+  const fields = await readJsonFields(request);
+  const userId = readText(fields, 'userId', 64);
+  const user = await selectAskingUser(row, userId, world);
+  if (!user) throw new CloudError('not_found', 'No one with that account asked to reach this machine.', 404);
+  return { row, user };
+}
+
+export async function respondRequesterFind(request: Request, world: CloudWorld) {
+  const { user } = await findRequester(request, world);
+  return respondJson(serializeUser(user));
+}
+
+export async function respondMachineMemberAdd(request: Request, world: CloudWorld) {
+  const { row, user } = await findRequester(request, world);
+  const now = world.now();
+  if (row.user_id !== user.id && !(await world.store.isMember(row.id, user.id))) {
+    if ((await world.store.countMembers(row.id)) >= MAX_INSTANCE_MEMBERS)
+      throw new CloudError(
+        'members_full',
+        `This machine already has ${MAX_INSTANCE_MEMBERS} members. Remove one first.`,
+        409
+      );
+    await world.store.createMember(row.id, user.id, now);
+  }
+  await world.store.removeRequester(row.id, user.id);
+  const member: RemoteMember = { user: serializeUser(user), addedAt: now };
+  return respondJson(member);
 }
 
 export async function respondInstanceLeave(request: Request, instanceId: string, world: CloudWorld) {

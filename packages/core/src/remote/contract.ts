@@ -26,13 +26,12 @@ export const REMOTE_PATHS = {
   hooks: '/hooks/',
   signInToken: '/__remote/sign-in/token',
   machineInvites: '/__remote/machine/invites',
+  machineInviteRemove: '/__remote/machine/invites/remove',
+  machineRequester: '/__remote/machine/requesters/find',
+  machineMemberAdd: '/__remote/machine/members/add',
   machineMemberRemove: '/__remote/machine/members/remove',
   inviteAccept: '/__remote/invites/accept',
 } as const;
-
-export const INVITE_TTL_MS = 10 * 60_000;
-
-export const MAX_PENDING_INVITES = 5;
 
 export const MAX_INSTANCE_MEMBERS = 20;
 
@@ -116,7 +115,6 @@ export interface RemoteSession {
 
 export interface InviteCreateResponse {
   token: string;
-  expiresAt: number;
 }
 
 export interface InviteAcceptRequest {
@@ -127,9 +125,11 @@ export interface InviteAcceptResponse {
   instanceId: string;
   name: string;
   owner: RemoteUser;
+  user: RemoteUser;
+  connect: ConnectResponse;
 }
 
-export interface MemberRemoveRequest {
+export interface MemberRequest {
   userId: string;
 }
 

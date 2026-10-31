@@ -1,4 +1,4 @@
-import type { RemoteAccess } from './contract.ts';
+import type { RemoteAccess, RemoteUser } from './contract.ts';
 
 export type TunnelStatus = 'off' | 'starting' | 'connected' | 'reconnecting' | 'revoked';
 
@@ -13,11 +13,25 @@ export interface RemoteDevice {
   name: string;
   enrolledAt: number;
   lastSeenAt: number | null;
-  enrollmentId: string | null;
   userId: string | null;
 }
 
-export type EnrollmentKind = 'device' | 'invite';
+export type LinkKind = 'device' | 'invite';
+
+export interface RemoteLink {
+  kind: LinkKind;
+  url: string;
+  createdAt: number;
+}
+
+export interface AccessRequest {
+  id: string;
+  kind: LinkKind;
+  publicKey: string;
+  deviceName: string;
+  user: RemoteUser;
+  requestedAt: number;
+}
 
 export interface RemoteSnapshot {
   paired: boolean;
@@ -30,12 +44,6 @@ export interface RemoteSnapshot {
   pairing: PairingView | null;
   devices: RemoteDevice[];
   access: RemoteAccess | null;
-}
-
-export interface RemoteEnrollment {
-  id: string;
-  kind: EnrollmentKind;
-  url: string;
-  name: string;
-  expiresAt: number;
+  links: RemoteLink[];
+  requests: AccessRequest[];
 }

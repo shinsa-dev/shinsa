@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { RemoteDevice } from '@shinsa/core';
+import type { AccessRequest, LinkKind, RemoteDevice } from '@shinsa/core';
 import {
   type MachineCredentials,
   parsePrivateKey,
@@ -30,6 +30,21 @@ export interface RemoteFile {
   enabled: boolean;
   devices: RemoteDevice[];
   access: RemoteAccess | null;
+  links: StoredLink[];
+  requests: AccessRequest[];
+}
+
+export interface StoredLink {
+  kind: LinkKind;
+  secret: string;
+  invite: string | null;
+  createdAt: number;
+}
+
+const LINK_KINDS: readonly LinkKind[] = ['device', 'invite'];
+
+function isLinkKind(value: unknown): value is LinkKind {
+  return LINK_KINDS.includes(value as LinkKind);
 }
 
 type Fields = Record<string, unknown>;
@@ -68,7 +83,6 @@ function readDevices(value: unknown): RemoteDevice[] {
     if (!isFields(entry) || typeof entry.publicKey !== 'string' || typeof entry.name !== 'string') return [];
     if (typeof entry.enrolledAt !== 'number') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
-    const enrollmentId = typeof entry.enrollmentId === 'string' ? entry.enrollmentId : null;
     const userId = typeof entry.userId === 'string' ? entry.userId : null;
     return [
       {
@@ -76,7 +90,6 @@ function readDevices(value: unknown): RemoteDevice[] {
         name: entry.name,
         enrolledAt: entry.enrolledAt,
         lastSeenAt,
-        enrollmentId,
         userId,
       },
     ];
@@ -106,6 +119,29 @@ function readMembers(value: unknown): RemoteMember[] {
   });
 }
 
+function readLinks(value: unknown): StoredLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isFields(entry) || !isLinkKind(entry.kind) || typeof entry.secret !== 'string') return [];
+    if (typeof entry.createdAt !== 'number') return [];
+    const invite = readOptionalText(entry.invite);
+    if (entry.kind === 'invite' && invite === null) return [];
+    return [{ kind: entry.kind, secret: entry.secret, invite, createdAt: entry.createdAt }];
+  });
+}
+
+function readRequests(value: unknown): AccessRequest[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const user = isFields(entry) ? readUser(entry.user) : null;
+    if (!(user && isFields(entry) && isLinkKind(entry.kind))) return [];
+    const { id, publicKey, deviceName, requestedAt } = entry;
+    if (typeof id !== 'string' || typeof publicKey !== 'string' || typeof deviceName !== 'string') return [];
+    if (typeof requestedAt !== 'number') return [];
+    return [{ id, kind: entry.kind, publicKey, deviceName, user, requestedAt }];
+  });
+}
+
 export function readAccess(value: unknown): RemoteAccess | null {
   const owner = isFields(value) ? readUser(value.owner) : null;
   if (!(owner && isFields(value))) return null;
@@ -121,6 +157,8 @@ function createRemoteFile(): RemoteFile {
     enabled: false,
     devices: [],
     access: null,
+    links: [],
+    requests: [],
   };
 }
 
@@ -143,6 +181,8 @@ export function readRemoteFile(path: string): RemoteFile {
     enabled: credentials !== null && fields.enabled === true,
     devices: readDevices(fields.devices),
     access: readAccess(fields.access),
+    links: readLinks(fields.links),
+    requests: readRequests(fields.requests),
   };
 }
 

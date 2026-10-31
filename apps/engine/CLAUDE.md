@@ -165,7 +165,7 @@ src/
 │                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
 │                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
 │                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
-│                        enrollments.ts (one-time enrollment secrets, each for a named device), channel.ts
+│                        channel.ts
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the

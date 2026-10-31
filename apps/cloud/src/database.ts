@@ -44,12 +44,6 @@ export interface SharedInstanceRow extends InstanceRow {
   owner_avatar_url: string | null;
 }
 
-export interface InviteRow {
-  instance_id: string;
-  expires_at: number;
-  claimed_by: string | null;
-}
-
 export interface MemberRow extends UserRow {
   added_at: number;
 }
@@ -293,42 +287,49 @@ export function createStore(db: Database) {
       await db.prepare('DELETE FROM instances WHERE id = ?').bind(id).run();
     },
 
-    async createInvite(tokenHash: string, instanceId: string, expiresAt: number) {
+    async replaceInvite(instanceId: string, tokenHash: string, now: number) {
       await db
-        .prepare('INSERT INTO instance_invites (token_hash, instance_id, expires_at) VALUES (?, ?, ?)')
-        .bind(tokenHash, instanceId, expiresAt)
+        .prepare(
+          'INSERT INTO instance_invites (instance_id, token_hash, created_at) VALUES (?, ?, ?) ON CONFLICT (instance_id) DO UPDATE SET token_hash = excluded.token_hash, created_at = excluded.created_at'
+        )
+        .bind(instanceId, tokenHash, now)
         .run();
     },
 
-    async removeExpiredInvites(now: number) {
-      await db.prepare('DELETE FROM instance_invites WHERE expires_at <= ?').bind(now).run();
+    async removeInvite(instanceId: string) {
+      await db.prepare('DELETE FROM instance_invites WHERE instance_id = ?').bind(instanceId).run();
     },
 
-    async countPendingInvites(instanceId: string) {
+    async selectInviteInstance(tokenHash: string) {
       const row = await db
-        .prepare(
-          'SELECT COUNT(*) AS total FROM instance_invites WHERE instance_id = ? AND claimed_by IS NULL'
-        )
-        .bind(instanceId)
-        .first<{ total: number }>();
-      return row?.total ?? 0;
-    },
-
-    selectInvite(tokenHash: string) {
-      return db
-        .prepare('SELECT instance_id, expires_at, claimed_by FROM instance_invites WHERE token_hash = ?')
+        .prepare('SELECT instance_id FROM instance_invites WHERE token_hash = ?')
         .bind(tokenHash)
-        .first<InviteRow>();
+        .first<{ instance_id: string }>();
+      return row?.instance_id ?? null;
     },
 
-    async claimInvite(tokenHash: string, userId: string, now: number) {
-      const row = await db
+    async recordRequester(instanceId: string, userId: string, now: number) {
+      await db
         .prepare(
-          'UPDATE instance_invites SET claimed_by = ? WHERE token_hash = ? AND claimed_by IS NULL AND expires_at > ? RETURNING token_hash'
+          'INSERT INTO instance_requesters (instance_id, user_id, requested_at) VALUES (?, ?, ?) ON CONFLICT (instance_id, user_id) DO UPDATE SET requested_at = excluded.requested_at'
         )
-        .bind(userId, tokenHash, now)
-        .first<{ token_hash: string }>();
+        .bind(instanceId, userId, now)
+        .run();
+    },
+
+    async isRequester(instanceId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM instance_requesters WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .first<{ found: number }>();
       return row !== null;
+    },
+
+    async removeRequester(instanceId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM instance_requesters WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .run();
     },
 
     async createMember(instanceId: string, userId: string, now: number) {

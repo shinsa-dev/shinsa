@@ -2,6 +2,7 @@ import type { RemoteInstance, RemoteSnapshot, ShinsaState, WireState } from '@sh
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
 import {
   NO_ENTRIES,
+  NO_MACHINE_ACCESS,
   NO_MACHINES,
   NO_UNREACHABLE_MACHINES,
   type ShinsaConnection,
@@ -31,7 +32,6 @@ export function createSampleRemote(now: number) {
         name: 'iPhone',
         enrolledAt: now - 72 * HOUR_MS,
         lastSeenAt: now - 2 * HOUR_MS,
-        enrollmentId: null,
         userId: null,
       },
       {
@@ -39,7 +39,6 @@ export function createSampleRemote(now: number) {
         name: 'Work laptop',
         enrolledAt: now - 5 * HOUR_MS,
         lastSeenAt: null,
-        enrollmentId: null,
         userId: null,
       },
       {
@@ -47,11 +46,40 @@ export function createSampleRemote(now: number) {
         name: 'Kai’s laptop',
         enrolledAt: now - 30 * HOUR_MS,
         lastSeenAt: now - 20 * 60_000,
-        enrollmentId: null,
         userId: SAMPLE_MEMBER.id,
       },
     ],
     access: { owner: SAMPLE_OWNER, members: [{ user: SAMPLE_MEMBER, addedAt: now - 30 * HOUR_MS }] },
+    links: [
+      {
+        kind: 'device',
+        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
+        createdAt: now - 2 * HOUR_MS,
+      },
+      {
+        kind: 'invite',
+        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH.Qm9iLWludml0ZS10b2tlbg',
+        createdAt: now - 26 * HOUR_MS,
+      },
+    ],
+    requests: [
+      {
+        id: 'request-1',
+        kind: 'invite',
+        publicKey: 'dev-4',
+        deviceName: 'Bob iPhone',
+        user: { id: '4', login: 'bob', name: 'Bob Stone', avatarUrl: null },
+        requestedAt: now - 4 * 60_000,
+      },
+      {
+        id: 'request-2',
+        kind: 'device',
+        publicKey: 'dev-5',
+        deviceName: 'Safari on Mac',
+        user: SAMPLE_OWNER,
+        requestedAt: now - 60_000,
+      },
+    ],
   };
   return [
     {
@@ -83,16 +111,25 @@ export function createSampleRemote(now: number) {
         },
       },
     },
-    { label: 'RemoteAccessGroup · connected, three devices and one member', snapshot: connected },
     {
-      label: 'RemoteAccessGroup · paired, no devices or members yet',
-      snapshot: { ...connected, devices: [], access: { owner: SAMPLE_OWNER, members: [] } },
+      label: 'RemoteAccessGroup · connected, two requests waiting, three devices and one member',
+      snapshot: connected,
+    },
+    {
+      label: 'RemoteAccessGroup · paired, no devices, members, links or requests yet',
+      snapshot: {
+        ...connected,
+        devices: [],
+        access: { owner: SAMPLE_OWNER, members: [] },
+        links: [],
+        requests: [],
+      },
     },
     { label: 'RemoteAccessGroup · paused', snapshot: { ...connected, enabled: false, status: 'off' } },
   ] satisfies { label: string; snapshot: RemoteSnapshot }[];
 }
 
-export function createSampleRemoteActions(now: number): RemoteAccessActions {
+export function createSampleRemoteActions(): RemoteAccessActions {
   const answer = () => Promise.reject(new Error('This is a sample. Nothing changes here.'));
   return {
     pair: answer,
@@ -102,22 +139,10 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
     remove: answer,
     forgetDevice: answer,
     removeMember: answer,
-    createEnrollment: (name) =>
-      Promise.resolve({
-        id: 'sample-link',
-        kind: 'device',
-        name,
-        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
-        expiresAt: now + 10 * 60_000,
-      }),
-    createInvite: (name) =>
-      Promise.resolve({
-        id: 'sample-invite',
-        kind: 'invite',
-        name,
-        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH.Qm9iLWludml0ZS10b2tlbg',
-        expiresAt: now + 10 * 60_000,
-      }),
+    createLink: answer,
+    removeLink: answer,
+    acceptRequest: answer,
+    declineRequest: answer,
   };
 }
 
@@ -223,6 +248,7 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     selectMachine: none,
     listMachines: () => NO_MACHINES,
     listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,
+    listMachineAccess: () => NO_MACHINE_ACCESS,
     command: () => Promise.reject(new Error('This is a sample. Nothing changes here.')),
     reset: () => undefined,
     flush: () => undefined,

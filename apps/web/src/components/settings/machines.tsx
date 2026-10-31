@@ -5,7 +5,13 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { type MachineChoice, useMachines } from '@/lib/connection/socket.ts';
+import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
+import {
+  type MachineAccess,
+  type MachineChoice,
+  useMachineAccess,
+  useMachines,
+} from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
 import {
@@ -20,6 +26,29 @@ import { MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
+import { AccessRequestRows } from './remote-access.tsx';
+
+const REQUESTS_DESCRIPTION =
+  'Devices and people asking to reach your machines. Accepting adds the device, and for an invite gives that account full control of the machine.';
+
+export function MachineAccessRequests({ machines }: { machines: MachineAccess[] }) {
+  const waiting = machines.filter((machine) => (machine.remote?.requests.length ?? 0) > 0);
+  if (waiting.length === 0) return null;
+  return (
+    <SettingsGroup title='Access requests' description={REQUESTS_DESCRIPTION}>
+      {waiting.map((machine) => (
+        <AccessRequestRows
+          key={machine.id}
+          title={`Waiting on ${machine.name}`}
+          requests={machine.remote?.requests ?? []}
+          access={machine.remote?.access ?? null}
+          onAccept={(request) => acceptMachineRequest(machine.id, request.id)}
+          onDecline={(request) => declineMachineRequest(machine.id, request.id)}
+        />
+      ))}
+    </SettingsGroup>
+  );
+}
 
 const MACHINES_DESCRIPTION =
   'Your machines and the ones shared with you. Those added on this device share this dashboard. Add a device from Settings, Remote access on its machine.';
@@ -145,8 +174,10 @@ function useMachineRows() {
 export function MachinesSettings() {
   const { rows, failure, remove } = useMachineRows();
   const machines = useMachines();
+  const access = useMachineAccess();
   return (
     <>
+      <MachineAccessRequests machines={access} />
       <SettingsGroup title={MACHINES_SECTION} description={MACHINES_DESCRIPTION}>
         {failure && (
           <p role='alert' className='px-2 py-1.5 text-destructive text-xs'>

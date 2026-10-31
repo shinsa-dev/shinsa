@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import {
   canEnrollDevices,
+  describeAcceptOutcome,
+  describeAccessRequest,
   describeDeviceDetail,
   describeDeviceSeen,
-  describeEnrollmentExpiry,
-  describeEnrollmentStep,
+  describeLinkAge,
   describeMemberSince,
   describeRemoteStatus,
-  isEnrollmentExpired,
-  resolveEnrollmentState,
+  LINK_COPY,
   resolveQrImage,
-  selectEnrolledDevice,
+  selectLink,
 } from '@/lib/remote-access.ts';
 import { createRemoteSnapshot } from '../support/remote-access.ts';
 
@@ -57,50 +57,53 @@ describe('remote access words', () => {
     });
   });
 
-  it('finds the device a link added by the link, never by its name', () => {
-    const enrollment = { id: 'link-2', kind: 'device' as const, url: 'u', name: 'iPhone', expiresAt: NOW };
-    const earlier = {
-      publicKey: 'a',
-      name: 'iPhone',
-      enrolledAt: NOW,
-      lastSeenAt: null,
-      enrollmentId: 'link-1',
-      userId: null,
-    };
-    const added = { ...earlier, publicKey: 'b', enrollmentId: 'link-2' };
-    expect(selectEnrolledDevice([earlier], enrollment)).toBeNull();
-    expect(selectEnrolledDevice([earlier, added], enrollment)).toBe(added);
-    expect(selectEnrolledDevice([earlier, added], null)).toBeNull();
-  });
-
-  it('says when a device was added or last used, and when a link stops working', () => {
+  it('says when a device was added or last used', () => {
     const device = {
       publicKey: 'k',
       name: 'iPhone',
       enrolledAt: NOW - 3_600_000,
       lastSeenAt: null,
-      enrollmentId: null,
       userId: null,
     };
     expect(describeDeviceSeen(device, NOW)).toStartWith('Added ');
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
-    expect(describeEnrollmentExpiry(NOW + 600_000, NOW)).toStartWith('It works once and expires');
-    expect(describeEnrollmentExpiry(NOW, NOW)).toBe('This link expired. Make a new one.');
-    expect(isEnrollmentExpired(NOW + 1, NOW)).toBe(false);
-    expect(isEnrollmentExpired(NOW, NOW)).toBe(true);
-    const enrollment = { id: 'link-1', kind: 'device' as const, url: 'u', name: 'iPhone', expiresAt: NOW };
-    expect(describeEnrollmentStep('device', null, 'live')).toStartWith('Name the device you are adding');
-    expect(describeEnrollmentStep('device', enrollment, 'live')).toStartWith('Scan this on the phone');
-    expect(describeEnrollmentStep('invite', null, 'live')).toStartWith('Say who the invite is for');
-    expect(describeEnrollmentStep('invite', enrollment, 'expired')).toBe(
-      'This link expired before anyone used it. Make a new one to invite iPhone.'
+  });
+
+  it('finds each kind of link and says how old it is', () => {
+    const link = { kind: 'invite' as const, url: 'u', createdAt: NOW - 3_600_000 };
+    const snapshot = createRemoteSnapshot({ links: [link] });
+    expect(selectLink(snapshot, 'invite')).toBe(link);
+    expect(selectLink(snapshot, 'device')).toBeNull();
+    expect(selectLink(null, 'device')).toBeNull();
+    expect(describeLinkAge(link, NOW)).toMatch(/^Made .*\. It works until you turn it off\.$/);
+    expect(LINK_COPY.device.intro).toContain('your own devices');
+    expect(LINK_COPY.invite.share).toContain('nothing opens until you accept');
+  });
+
+  it('says who asks for what, and what accepting does', () => {
+    const kai = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    const mona = { id: '1', login: 'mona', name: null, avatarUrl: null };
+    const request = {
+      id: 'r1',
+      kind: 'invite' as const,
+      publicKey: 'k',
+      deviceName: 'Kai iPhone',
+      user: kai,
+      requestedAt: NOW - 60_000,
+    };
+    expect(describeAccessRequest(request, NOW)).toMatch(/^Kai iPhone · Invite · Asked /);
+    expect(describeAccessRequest({ ...request, kind: 'device' }, NOW)).toContain(' · Add device · ');
+    const access = { owner: mona, members: [] };
+    expect(describeAcceptOutcome(request, access)).toBe(
+      '@kai joins this machine with full control, and Kai iPhone is added.'
     );
-    expect(describeEnrollmentStep('device', enrollment, 'expired')).toBe(
-      'This link expired before a device used it. Make a new one to add iPhone.'
+    const member = { ...access, members: [{ user: kai, addedAt: 0 }] };
+    expect(describeAcceptOutcome(request, member)).toBe('Kai iPhone is added for @kai.');
+    expect(describeAcceptOutcome({ ...request, user: mona }, access)).toBe('Kai iPhone is added for @mona.');
+    expect(describeAcceptOutcome({ ...request, kind: 'device' }, access)).toBe(
+      'Kai iPhone is added for @kai.'
     );
-    expect(describeEnrollmentStep('device', enrollment, 'stopped')).toBe(
-      'Remote access stopped, so this link no longer works. Make a new one to add iPhone once it is on again.'
-    );
+    expect(describeAcceptOutcome(request, null)).toBe('Kai iPhone is added for @kai.');
   });
 
   it('says which member added a device and when a member joined', () => {
@@ -114,26 +117,11 @@ describe('remote access words', () => {
       name: 'Phone',
       enrolledAt: NOW - 3_600_000,
       lastSeenAt: null,
-      enrollmentId: null,
       userId: '7',
     };
     expect(describeDeviceDetail(device, access, NOW)).toMatch(/^Added .* · Added by @kai$/);
     expect(describeDeviceDetail({ ...device, userId: null }, access, NOW)).not.toContain('Added by');
     expect(describeMemberSince(access.members[0] ?? { user: kai, addedAt: 0 }, NOW)).toStartWith('Joined ');
-  });
-
-  it('calls a link stopped once remote access dropped it, even after it expired', () => {
-    const enrollment = {
-      id: 'link-1',
-      kind: 'device' as const,
-      url: 'u',
-      name: 'iPhone',
-      expiresAt: NOW + 1,
-    };
-    expect(resolveEnrollmentState(null, null, NOW)).toBe('live');
-    expect(resolveEnrollmentState(enrollment, null, NOW)).toBe('live');
-    expect(resolveEnrollmentState(enrollment, 'link-0', NOW + 1)).toBe('expired');
-    expect(resolveEnrollmentState(enrollment, 'link-1', NOW + 1)).toBe('stopped');
   });
 
   it('takes a new device only while paired, on and not removed at app.shinsa.dev', () => {

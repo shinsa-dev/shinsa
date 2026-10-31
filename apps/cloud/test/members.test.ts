@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
   type HeartbeatResponse,
-  INVITE_TTL_MS,
   type InviteAcceptResponse,
   type InviteCreateResponse,
   MAX_INSTANCE_MEMBERS,
-  MAX_PENDING_INVITES,
   type MachineCredentials,
   REMOTE_PATHS,
   type RemoteInstance,
+  type RemoteMember,
+  type RemoteUser,
   resolveInstanceConnectPath,
   resolveInstanceLeavePath,
   resolveInstanceRemovePath,
@@ -16,6 +16,10 @@ import {
 } from '@shinsa/core';
 import { MAX_INSTANCES_PER_USER } from '../src/pairing.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
+
+const MONA: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+
+const KAI: RemoteUser = { id: '2', login: 'kai', name: null, avatarUrl: null };
 
 function machineAuth(credentials: MachineCredentials) {
   return { bearer: credentials.machineToken, sameOrigin: false };
@@ -31,12 +35,20 @@ function acceptInvite(harness: Harness, session: string, token: string) {
   return harness.post(REMOTE_PATHS.inviteAccept, { token }, { session });
 }
 
+function addMember(harness: Harness, credentials: MachineCredentials, userId: string) {
+  return harness.post(REMOTE_PATHS.machineMemberAdd, { userId }, machineAuth(credentials));
+}
+
 async function listInstances(harness: Harness, session: string) {
   return readJson<RemoteInstance[]>(await harness.call(REMOTE_PATHS.instances, { session }));
 }
 
 async function readHeartbeat(harness: Harness, credentials: MachineCredentials) {
   return readJson<HeartbeatResponse>(await heartbeat(harness, credentials));
+}
+
+async function readCode(response: Response) {
+  return (await readJson<{ error: { code: string } }>(response)).error.code;
 }
 
 async function shareMachine() {
@@ -48,84 +60,98 @@ async function shareMachine() {
   return { harness, mona, kai, studio, invite };
 }
 
+async function joinMachine() {
+  const shared = await shareMachine();
+  await acceptInvite(shared.harness, shared.kai, shared.invite.token);
+  await addMember(shared.harness, shared.studio, KAI.id);
+  return shared;
+}
+
 describe('machine members', () => {
-  test('an invite made by the machine lets any signed-in account join it once', async () => {
+  test('opening an invite gives a connect token to ask the machine, without making a member', async () => {
     const { harness, kai, studio, invite } = await shareMachine();
-    expect(invite.expiresAt).toBe(harness.clock.now + INVITE_TTL_MS);
     const stored = harness.db.sqlite.query('SELECT token_hash FROM instance_invites').all() as {
       token_hash: string;
     }[];
     expect(stored[0]?.token_hash).not.toBe(invite.token);
-    const accepted = await acceptInvite(harness, kai, invite.token);
-    expect(accepted.status).toBe(200);
-    expect(await readJson<InviteAcceptResponse>(accepted)).toEqual({
-      instanceId: studio.instanceId,
-      name: 'Studio',
-      owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
-    });
-    const again = await acceptInvite(harness, await harness.signIn('lee', 3), invite.token);
-    expect(again.status).toBe(404);
-    expect((await readJson<{ error: { code: string } }>(again)).error.code).toBe('invite_invalid');
-  });
-
-  test('a member sees the shared machine with its owner, and the owner sees it as theirs', async () => {
-    const { harness, mona, kai, studio, invite } = await shareMachine();
+    const accepted = await readJson<InviteAcceptResponse>(await acceptInvite(harness, kai, invite.token));
+    expect(accepted).toMatchObject({ instanceId: studio.instanceId, name: 'Studio', owner: MONA, user: KAI });
+    const token = new URL(accepted.connect.url).searchParams.get('token') ?? '';
+    const claim = await verifyConnectToken(studio.connectKey, token, studio.instanceId, harness.clock.now);
+    expect(claim?.userId).toBe(KAI.id);
     expect(await listInstances(harness, kai)).toEqual([]);
-    await acceptInvite(harness, kai, invite.token);
-    const shared = await listInstances(harness, kai);
-    expect(shared).toEqual([
-      expect.objectContaining({
-        id: studio.instanceId,
-        owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
-        role: 'member',
-      }),
-    ]);
-    expect((await listInstances(harness, mona))[0]?.role).toBe('owner');
+    expect((await readHeartbeat(harness, studio)).members).toEqual([]);
   });
 
-  test('a member gets connect tokens for the machine, signed for their own account', async () => {
+  test('the invite link works for anyone, as often as it is opened', async () => {
+    const { harness, kai, invite } = await shareMachine();
+    expect((await acceptInvite(harness, kai, invite.token)).status).toBe(200);
+    expect((await acceptInvite(harness, kai, invite.token)).status).toBe(200);
+    expect((await acceptInvite(harness, await harness.signIn('lee', 3), invite.token)).status).toBe(200);
+  });
+
+  test('a new invite replaces the old one, and turning it off stops it', async () => {
     const { harness, kai, studio, invite } = await shareMachine();
-    const before = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session: kai });
-    expect(before.status).toBe(404);
+    const next = await createInvite(harness, studio);
+    const stale = await acceptInvite(harness, kai, invite.token);
+    expect(stale.status).toBe(404);
+    expect(await readCode(stale)).toBe('invite_invalid');
+    expect((await acceptInvite(harness, kai, next.token)).status).toBe(200);
+    const off = await harness.post(REMOTE_PATHS.machineInviteRemove, {}, machineAuth(studio));
+    expect(off.status).toBe(200);
+    expect((await acceptInvite(harness, kai, next.token)).status).toBe(404);
+  });
+
+  test('the machine looks up only who asked, who is a member or its owner', async () => {
+    const { harness, kai, studio, invite } = await shareMachine();
+    const find = (userId: string) =>
+      harness.post(REMOTE_PATHS.machineRequester, { userId }, machineAuth(studio));
+    expect((await find(KAI.id)).status).toBe(404);
     await acceptInvite(harness, kai, invite.token);
+    expect(await readJson<RemoteUser>(await find(KAI.id))).toEqual(KAI);
+    expect(await readJson<RemoteUser>(await find(MONA.id))).toEqual(MONA);
+    expect((await find('99')).status).toBe(404);
+  });
+
+  test('accepting a request on the machine makes the account a member, once', async () => {
+    const { harness, kai, studio, invite } = await shareMachine();
+    expect((await addMember(harness, studio, KAI.id)).status).toBe(404);
+    await acceptInvite(harness, kai, invite.token);
+    const added = await readJson<RemoteMember>(await addMember(harness, studio, KAI.id));
+    expect(added).toEqual({ user: KAI, addedAt: harness.clock.now });
+    expect((await addMember(harness, studio, KAI.id)).status).toBe(200);
+    expect((await readHeartbeat(harness, studio)).members).toEqual([
+      { user: KAI, addedAt: harness.clock.now },
+    ]);
+    expect(await listInstances(harness, kai)).toEqual([
+      expect.objectContaining({ id: studio.instanceId, owner: MONA, role: 'member' }),
+    ]);
     const connect = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session: kai });
     expect(connect.status).toBe(200);
-    const token = new URL((await readJson<{ url: string }>(connect)).url).searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(studio.connectKey, token, studio.instanceId, harness.clock.now);
-    expect(claim?.userId).toBe('2');
   });
 
-  test('the heartbeat answers with the owner and the members', async () => {
-    const { harness, kai, studio, invite } = await shareMachine();
-    expect(await readHeartbeat(harness, studio)).toEqual({
-      ok: true,
-      owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
-      members: [],
-    });
-    await acceptInvite(harness, kai, invite.token);
-    expect((await readHeartbeat(harness, studio)).members).toEqual([
-      { user: { id: '2', login: 'kai', name: null, avatarUrl: null }, addedAt: harness.clock.now },
-    ]);
+  test('the owner asking through their own invite never becomes a member', async () => {
+    const { harness, mona, studio, invite } = await shareMachine();
+    await acceptInvite(harness, mona, invite.token);
+    expect((await addMember(harness, studio, MONA.id)).status).toBe(200);
+    expect((await readHeartbeat(harness, studio)).members).toEqual([]);
   });
 
   test('the machine removes a member, who then loses the machine and its connect tokens', async () => {
-    const { harness, kai, studio, invite } = await shareMachine();
-    await acceptInvite(harness, kai, invite.token);
+    const { harness, kai, studio } = await joinMachine();
     const removed = await harness.post(
       REMOTE_PATHS.machineMemberRemove,
-      { userId: '2' },
+      { userId: KAI.id },
       machineAuth(studio)
     );
     expect(removed.status).toBe(200);
     expect(await listInstances(harness, kai)).toEqual([]);
-    expect((await readHeartbeat(harness, studio)).members).toEqual([]);
     const connect = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session: kai });
     expect(connect.status).toBe(404);
   });
 
   test('a member leaves a shared machine, and the owner cannot leave their own', async () => {
-    const { harness, mona, kai, studio, invite } = await shareMachine();
-    await acceptInvite(harness, kai, invite.token);
+    const { harness, mona, kai, studio } = await joinMachine();
     const ownerLeaves = await harness.post(
       resolveInstanceLeavePath(studio.instanceId),
       {},
@@ -135,66 +161,30 @@ describe('machine members', () => {
     const left = await harness.post(resolveInstanceLeavePath(studio.instanceId), {}, { session: kai });
     expect(left.status).toBe(200);
     expect(await listInstances(harness, kai)).toEqual([]);
-    const strangerLeaves = await harness.post(
-      resolveInstanceLeavePath(studio.instanceId),
-      {},
-      { session: kai }
-    );
-    expect(strangerLeaves.status).toBe(404);
+    const again = await harness.post(resolveInstanceLeavePath(studio.instanceId), {}, { session: kai });
+    expect(again.status).toBe(404);
   });
 
-  test('only the owner removes the machine', async () => {
-    const { harness, mona, kai, studio, invite } = await shareMachine();
-    await acceptInvite(harness, kai, invite.token);
+  test('only the owner removes the machine, which drops its members and invite', async () => {
+    const { harness, mona, kai, studio, invite } = await joinMachine();
     const byMember = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session: kai });
     expect(byMember.status).toBe(403);
-    expect((await readJson<{ error: { code: string } }>(byMember)).error.code).toBe('not_owner');
+    expect(await readCode(byMember)).toBe('not_owner');
     const byOwner = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session: mona });
     expect(byOwner.status).toBe(200);
     expect(await listInstances(harness, kai)).toEqual([]);
     expect(harness.db.sqlite.query('SELECT * FROM instance_members').all()).toEqual([]);
-  });
-
-  test('the owner opening their own invite uses it up without becoming a member', async () => {
-    const { harness, mona, studio, invite } = await shareMachine();
-    expect((await acceptInvite(harness, mona, invite.token)).status).toBe(200);
-    expect((await readHeartbeat(harness, studio)).members).toEqual([]);
-    expect((await acceptInvite(harness, mona, invite.token)).status).toBe(200);
-  });
-
-  test('the account that accepted an invite can accept it again to retry adding its device, until it expires', async () => {
-    const { harness, kai, studio, invite } = await shareMachine();
-    const first = await readJson<InviteAcceptResponse>(await acceptInvite(harness, kai, invite.token));
-    const retried = await acceptInvite(harness, kai, invite.token);
-    expect(retried.status).toBe(200);
-    expect(await readJson<InviteAcceptResponse>(retried)).toEqual(first);
-    expect((await readHeartbeat(harness, studio)).members).toHaveLength(1);
-    harness.clock.now += INVITE_TTL_MS;
     expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
   });
 
-  test('a member removed after accepting cannot use the invite again', async () => {
-    const { harness, kai, studio, invite } = await shareMachine();
-    await acceptInvite(harness, kai, invite.token);
-    await harness.post(REMOTE_PATHS.machineMemberRemove, { userId: '2' }, machineAuth(studio));
-    expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
-  });
-
-  test('an invite expires, and an unknown one is refused', async () => {
-    const { harness, kai, invite } = await shareMachine();
-    expect((await acceptInvite(harness, kai, 'not-a-token')).status).toBe(404);
-    harness.clock.now += INVITE_TTL_MS;
-    expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
-  });
-
-  test('an invite of a removed machine is refused', async () => {
+  test('an invite of a machine removed behind its back is refused', async () => {
     const { harness, mona, kai, studio, invite } = await shareMachine();
     harness.db.sqlite.exec('PRAGMA foreign_keys = OFF');
     await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session: mona });
     expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
   });
 
-  test('accepting needs a signed-in page request', async () => {
+  test('opening an invite needs a signed-in page request', async () => {
     const { harness, kai, invite } = await shareMachine();
     expect((await harness.post(REMOTE_PATHS.inviteAccept, { token: invite.token })).status).toBe(401);
     const crossSite = await harness.post(
@@ -205,36 +195,24 @@ describe('machine members', () => {
     expect(crossSite.status).toBe(403);
   });
 
-  test('keeps at most a few invites waiting per machine, and expired ones make room', async () => {
-    const { harness, studio } = await shareMachine();
-    for (let index = 1; index < MAX_PENDING_INVITES; index++) await createInvite(harness, studio);
-    const full = await harness.post(REMOTE_PATHS.machineInvites, {}, machineAuth(studio));
-    expect(full.status).toBe(429);
-    harness.clock.now += INVITE_TTL_MS;
-    expect((await harness.post(REMOTE_PATHS.machineInvites, {}, machineAuth(studio))).status).toBe(200);
-  });
-
-  test('refuses a new member once the machine is full, and still lets a member back in', async () => {
+  test('refuses a new member once the machine is full', async () => {
     const { harness, kai, studio, invite } = await shareMachine();
-    await acceptInvite(harness, kai, invite.token);
-    for (let index = 1; index < MAX_INSTANCE_MEMBERS; index++)
+    for (let index = 0; index < MAX_INSTANCE_MEMBERS; index++) {
       harness.db.sqlite
         .query('INSERT INTO users (id, login, created_at) VALUES (?, ?, 0)')
         .run(`filler-${index}`, `filler-${index}`);
-    for (let index = 1; index < MAX_INSTANCE_MEMBERS; index++)
       harness.db.sqlite
         .query('INSERT INTO instance_members (instance_id, user_id, added_at) VALUES (?, ?, 0)')
         .run(studio.instanceId, `filler-${index}`);
-    const next = await createInvite(harness, studio);
-    const refused = await acceptInvite(harness, await harness.signIn('lee', 3), next.token);
+    }
+    await acceptInvite(harness, kai, invite.token);
+    const refused = await addMember(harness, studio, KAI.id);
     expect(refused.status).toBe(409);
-    expect((await readJson<{ error: { code: string } }>(refused)).error.code).toBe('members_full');
-    expect((await acceptInvite(harness, kai, next.token)).status).toBe(200);
+    expect(await readCode(refused)).toBe('members_full');
   });
 
   test('shared machines do not count toward the machines a member may pair', async () => {
-    const { harness, kai, invite } = await shareMachine();
-    await acceptInvite(harness, kai, invite.token);
+    const { harness, kai } = await joinMachine();
     for (let index = 0; index < MAX_INSTANCES_PER_USER; index++)
       await pairMachine(harness, kai, `Kai ${index}`);
     expect(await listInstances(harness, kai)).toHaveLength(MAX_INSTANCES_PER_USER + 1);
@@ -242,13 +220,15 @@ describe('machine members', () => {
 
   test('member routes need the machine token', async () => {
     const harness = createHarness();
-    const invite = await harness.post(REMOTE_PATHS.machineInvites, {}, { sameOrigin: false });
-    expect(invite.status).toBe(401);
-    const remove = await harness.post(
+    for (const path of [
+      REMOTE_PATHS.machineInvites,
+      REMOTE_PATHS.machineInviteRemove,
+      REMOTE_PATHS.machineRequester,
+      REMOTE_PATHS.machineMemberAdd,
       REMOTE_PATHS.machineMemberRemove,
-      { userId: '2' },
-      { bearer: 'nope', sameOrigin: false }
-    );
-    expect(remove.status).toBe(401);
+    ])
+      expect((await harness.post(path, { userId: '2' }, { bearer: 'nope', sameOrigin: false })).status).toBe(
+        401
+      );
   });
 });

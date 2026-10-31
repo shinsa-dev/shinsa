@@ -12,7 +12,6 @@ import {
   REMOTE_PATHS,
   type RemoteAccess,
   type RemoteUser,
-  type ServerMessage,
   serializeBase64Url,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
@@ -163,7 +162,7 @@ async function openChannel(
   port: number | undefined,
   enrollSecret: string,
   machineKey: string,
-  as: { userId?: string; device?: CryptoKeyPair } = {}
+  as: { userId?: string; device?: CryptoKeyPair; name?: string; onPending?: () => void } = {}
 ): Promise<OpenChannel> {
   const token = await createToken(undefined, as.userId);
   const socket = new WebSocket(`ws://127.0.0.1:${port}/remote?token=${encodeURIComponent(token)}`, {
@@ -176,21 +175,35 @@ async function openChannel(
     inbox.push(typeof event.data === 'string' ? event.data : new Uint8Array(event.data as ArrayBuffer));
     for (const wake of waiters.splice(0)) wake();
   });
+  let ended = false;
   const closed = new Promise<number>((resolve) =>
-    socket.addEventListener('close', (event) => resolve(event.code))
+    socket.addEventListener('close', (event) => {
+      ended = true;
+      for (const wake of waiters.splice(0)) wake();
+      resolve(event.code);
+    })
   );
   await new Promise((resolve) => socket.addEventListener('open', resolve, { once: true }));
   const take = async () => {
-    while (inbox.length === 0) await new Promise<void>((resolve) => waiters.push(resolve));
+    while (inbox.length === 0) {
+      if (ended) throw new Error('The channel closed.');
+      await new Promise<void>((resolve) => waiters.push(resolve));
+    }
     return inbox.shift() as string | Bytes;
   };
   const handshake = await startHandshake({
     machineKey,
     device: as.device ?? (await createKeyPair()),
     enrollSecret,
+    ...(as.name ? { name: as.name } : {}),
   });
   socket.send(handshake.hello);
-  const session = await handshake.finish((await take()) as string);
+  let first = (await take()) as string;
+  if (first === '{"type":"pending"}') {
+    as.onPending?.();
+    first = (await take()) as string;
+  }
+  const session = await handshake.finish(first);
   const next = async () => {
     for (;;) {
       const message = await session.open((await take()) as Bytes);
@@ -204,6 +217,25 @@ async function openChannel(
     socket,
     closed,
   };
+}
+
+function settleChannel(opening: Promise<OpenChannel>) {
+  return opening.then(
+    () => 'opened',
+    (error: unknown) => (error as Error).message
+  );
+}
+
+async function addDevice(remote: Remote, userId = OWNER.id) {
+  const device = await createKeyPair();
+  remote.store.upsertDevice({
+    publicKey: await serializeDeviceKey(device),
+    name: 'Phone',
+    enrolledAt: 1,
+    lastSeenAt: null,
+    userId,
+  });
+  return device;
 }
 
 async function readAck(channel: OpenChannel) {
@@ -265,12 +297,9 @@ describe('the sealed channel over the tunnel', () => {
   test('enrolls a device, serves the app socket and the API inside it, and refuses local-only commands', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(
-      remote.appOrigin,
-      port,
-      remote.enrollments.create('Phone').secret,
-      machine.publicKey
-    );
+    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: await addDevice(remote),
+    });
     expect(await channel.next()).toEqual({ t: 'ready' });
     expect(remote.snapshot().devices).toHaveLength(1);
     await channel.send({ t: 'ready' });
@@ -313,12 +342,9 @@ describe('the sealed channel over the tunnel', () => {
     const { remote, port, connectors } = await start();
     remote.start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(
-      remote.appOrigin,
-      port,
-      remote.enrollments.create('Phone').secret,
-      machine.publicKey
-    );
+    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: await addDevice(remote),
+    });
     expect(await channel.next()).toEqual({ t: 'ready' });
     await remote.stop();
     expect(await channel.closed).toBe(1008);
@@ -328,12 +354,9 @@ describe('the sealed channel over the tunnel', () => {
   test('closes a channel the browser closes without breaking the server', async () => {
     const { remote, port, tunnel } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(
-      remote.appOrigin,
-      port,
-      remote.enrollments.create('Phone').secret,
-      machine.publicKey
-    );
+    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: await addDevice(remote),
+    });
     expect(await channel.next()).toEqual({ t: 'ready' });
     channel.socket.close();
     await channel.closed;
@@ -473,87 +496,18 @@ describe('managing remote access on the machine', () => {
     for (const route of ['/api/remote/enable', '/api/remote/disable', '/api/remote/remove']) {
       expect(await readError(await local(route, {}))).toBe('remote_not_paired');
     }
-    expect(await readError(await local('/api/remote/devices/enroll', { name: 'iPhone' }))).toBe(
+    expect(await readError(await local('/api/remote/links/create', { kind: 'device' }))).toBe(
       'remote_not_paired'
     );
     warn.mockRestore();
   });
 
-  test('pushes remote access to every open page the moment a link is redeemed or a device forgotten', async () => {
-    const { remote, base, local, port } = await start();
-    const socket = new WebSocket(`${base.replace('http', 'ws')}/ws`, {
-      headers: { origin: 'http://localhost:5181' },
-    } as unknown as string[]);
-    running.push(() => {
-      socket.close();
-      return Promise.resolve();
-    });
-    const pushed: Extract<ServerMessage, { type: 'remote' }>['remote'][] = [];
-    socket.addEventListener('message', (event) => {
-      const message = JSON.parse(String(event.data)) as ServerMessage;
-      if (message.type === 'remote') pushed.push(message.remote);
-    });
-    await until('remote access on connect', () => pushed.length === 1);
-    expect(pushed[0]).toMatchObject({ paired: true, devices: [] });
-    const enrollment = (await (await local('/api/remote/devices/enroll', { name: 'iPhone' })).json()) as {
-      id: string;
-      url: string;
-    };
-    const machine = await remote.store.resolveMachineKey();
-    const secret = parseEnrollFragment(new URL(enrollment.url).hash)?.secret ?? '';
-    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey);
-    expect(await channel.next()).toEqual({ t: 'ready' });
-    await until('the added device', () => pushed.some((snapshot) => snapshot.devices.length === 1));
-    const added = pushed.find((snapshot) => snapshot.devices.length === 1);
-    expect(added?.devices[0]).toMatchObject({ name: 'iPhone', enrollmentId: enrollment.id });
-    const count = pushed.length;
-    remote.removeDevice(added?.devices[0]?.publicKey ?? '');
-    await until('the forgotten device', () => pushed.length > count);
-    expect(pushed.at(-1)?.devices).toEqual([]);
-    expect(await channel.closed).toBe(1008);
-  });
-
-  test('enrolls a named device from a one-time link and forgets it on request', async () => {
-    const { remote, local, port } = await start();
-    expect(await readError(await local('/api/remote/devices/enroll', { name: ' ' }))).toBe('name_invalid');
-    expect(await readError(await local('/api/remote/devices/enroll', {}))).toBe('name_invalid');
-    const enrollment = (await (await local('/api/remote/devices/enroll', { name: '  iPhone ' })).json()) as {
-      url: string;
-      name: string;
-    };
-    expect(enrollment.name).toBe('iPhone');
-    const machine = await remote.store.resolveMachineKey();
-    expect(enrollment.url.startsWith(`${remote.appOrigin}/enroll`)).toBe(true);
-    const fragment = parseEnrollFragment(new URL(enrollment.url).hash);
-    expect(fragment).toMatchObject({ instanceId: 'k3x9', machineKey: machine.publicKey });
-    const channel = await openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey);
-    expect(await channel.next()).toEqual({ t: 'ready' });
-    const listed = await readSnapshot(await local('/api/remote'));
-    expect(listed.devices.map((device) => device.name)).toEqual(['iPhone']);
-    expect(await readError(await local('/api/remote/devices/remove', { publicKey: 'nope' }))).toBe(
-      'device_not_found'
-    );
-    expect(await readError(await local('/api/remote/devices/remove', {}))).toBe('publicKey_invalid');
-    const key = listed.devices[0]?.publicKey ?? '';
-    expect(
-      (await readSnapshot(await local('/api/remote/devices/remove', { publicKey: key }))).devices
-    ).toEqual([]);
-    expect(await channel.closed).toBe(1008);
-    const long = (await (await local('/api/remote/devices/enroll', { name: 'x'.repeat(80) })).json()) as {
-      name: string;
-    };
-    expect(long.name).toHaveLength(60);
-  });
-
   test('refuses from a remote device what stays at the keyboard, over HTTP as over the socket', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(
-      remote.appOrigin,
-      port,
-      remote.enrollments.create('Phone').secret,
-      machine.publicKey
-    );
+    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: await addDevice(remote),
+    });
     expect(await channel.next()).toEqual({ t: 'ready' });
     const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
     await channel.send({
@@ -589,79 +543,250 @@ describe('managing remote access on the machine', () => {
   });
 });
 
-describe('members of this machine', () => {
-  async function readEnrollment(response: Response) {
-    return (await response.json()) as { id: string; kind: string; url: string; name: string };
-  }
-
+describe('links, access requests and members', () => {
   function answerAccess(access: RemoteAccess) {
     return () => Response.json({ ok: true, ...access });
   }
 
-  test('an invite link adds the device of whoever accepted it, for their own account, and syncs members at once', async () => {
-    const { remote, local, port, plane } = await start();
-    plane.answers.set(REMOTE_PATHS.machineInvites, () =>
-      Response.json({ token: 'invite-token', expiresAt: Date.now() + 60_000 })
-    );
-    remote.start();
-    await until('connected', () => remote.snapshot().status === 'connected');
-    const invite = await readEnrollment(await local('/api/remote/invites', { name: ' Bob’s laptop ' }));
-    expect(invite).toMatchObject({ kind: 'invite', name: 'Bob’s laptop' });
-    const fragment = parseEnrollFragment(new URL(invite.url).hash);
-    expect(fragment?.invite).toBe('invite-token');
-    expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineInvites)?.token).toBe('machine');
-    plane.answers.set(
-      REMOTE_PATHS.heartbeat,
-      answerAccess({ owner: OWNER, members: [{ user: KAI, addedAt: 1 }] })
-    );
+  async function readLink(remote: Remote, kind: 'device' | 'invite') {
+    const link = remote.snapshot().links.find((entry) => entry.kind === kind);
+    return parseEnrollFragment(new URL(link?.url ?? 'https://x').hash);
+  }
+
+  async function waitForRequest(remote: Remote) {
+    await until('the request', () => remote.snapshot().requests.length > 0);
+    return remote.snapshot().requests[0]?.id ?? '';
+  }
+
+  test('a device link is reusable, asks for access, and adds the device once accepted', async () => {
+    const { remote, local, port } = await start();
+    expect(await readError(await local('/api/remote/links/create', { kind: 'other' }))).toBe('kind_invalid');
+    const made = await readSnapshot(await local('/api/remote/links/create', { kind: 'device' }));
+    expect(made.links).toEqual([expect.objectContaining({ kind: 'device' })]);
+    const replaced = await readLink(remote, 'device');
+    await local('/api/remote/links/create', { kind: 'device' });
+    const fragment = await readLink(remote, 'device');
+    expect(fragment).toMatchObject({ instanceId: 'k3x9', invite: null });
+    expect(fragment?.secret).not.toBe(replaced?.secret);
+    expect(remote.snapshot().links).toHaveLength(1);
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
-      userId: KAI.id,
-    });
-    expect(await channel.next()).toEqual({ t: 'ready' });
-    expect(remote.snapshot().devices).toEqual([
-      expect.objectContaining({ name: 'Bob’s laptop', userId: KAI.id, enrollmentId: invite.id }),
-    ]);
-    await until('members synced', () => remote.snapshot().access?.members.length === 1);
-    expect(await readError(await local('/api/remote/invites', {}))).toBe('name_invalid');
+    for (const name of ['iPhone', 'Mac']) {
+      let pending = false;
+      const opening = openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
+        name,
+        onPending: () => {
+          pending = true;
+        },
+      });
+      const requestId = await waitForRequest(remote);
+      expect(remote.snapshot().requests[0]).toMatchObject({ kind: 'device', deviceName: name, user: OWNER });
+      const accepted = await readSnapshot(await local('/api/remote/requests/accept', { requestId }));
+      expect(accepted.requests).toEqual([]);
+      const channel = await opening;
+      expect(pending).toBe(true);
+      expect(await channel.next()).toEqual({ t: 'ready' });
+    }
+    expect(remote.snapshot().devices.map((device) => device.name)).toEqual(['iPhone', 'Mac']);
+    expect(await readError(await local('/api/remote/requests/accept', { requestId: 'gone' }))).toBe(
+      'request_not_found'
+    );
+    expect(await readError(await local('/api/remote/requests/accept', {}))).toBe('requestId_invalid');
   });
 
-  test('a device link works only for the owner’s account, and not before the owner is known', async () => {
+  test('a device that asks again keeps its one request, and several requests wait side by side', async () => {
     const { remote, local, port } = await start();
+    await local('/api/remote/links/create', { kind: 'device' });
+    const secret = (await readLink(remote, 'device'))?.secret ?? '';
     const machine = await remote.store.resolveMachineKey();
-    const link = await readEnrollment(await local('/api/remote/devices/enroll', { name: 'iPhone' }));
-    expect(link.kind).toBe('device');
-    const secret = parseEnrollFragment(new URL(link.url).hash)?.secret ?? '';
+    const phone = await createKeyPair();
+    const first = settleChannel(
+      openChannel(remote.appOrigin, port, secret, machine.publicKey, { device: phone })
+    );
+    const requestId = await waitForRequest(remote);
+    const again = settleChannel(
+      openChannel(remote.appOrigin, port, secret, machine.publicKey, { device: phone, name: 'Phone' })
+    );
+    const laptop = settleChannel(
+      openChannel(remote.appOrigin, port, secret, machine.publicKey, { name: 'Laptop' })
+    );
+    await until('both requests', () => remote.snapshot().requests.length === 2);
+    expect(
+      remote.snapshot().requests.map((request) => [request.id === requestId, request.deviceName])
+    ).toEqual([
+      [true, 'Phone'],
+      [false, 'Laptop'],
+    ]);
+    await local('/api/remote/requests/accept', { requestId });
+    expect(await first).toBe('opened');
+    expect(await again).toBe('opened');
+    await local('/api/remote/requests/decline', { requestId: remote.snapshot().requests[0]?.id });
+    expect(await laptop).toContain('declined');
+  });
+
+  test('a declined request is forgotten and the browser is told', async () => {
+    const { remote, local, port } = await start();
+    await local('/api/remote/links/create', { kind: 'device' });
+    const fragment = await readLink(remote, 'device');
+    const machine = await remote.store.resolveMachineKey();
+    const opening = settleChannel(
+      openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey)
+    );
+    const requestId = await waitForRequest(remote);
+    expect(remote.snapshot().requests[0]?.deviceName).toBe('Browser');
+    await local('/api/remote/requests/decline', { requestId });
+    expect(await opening).toContain('declined');
+    expect(remote.snapshot().requests).toEqual([]);
+    expect(remote.snapshot().devices).toEqual([]);
+  });
+
+  test('a device link is refused for another account, before the owner is known, and once turned off', async () => {
+    const { remote, local, port } = await start();
+    await local('/api/remote/links/create', { kind: 'device' });
+    const secret = (await readLink(remote, 'device'))?.secret ?? '';
+    const machine = await remote.store.resolveMachineKey();
     await expect(
       openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id })
-    ).rejects.toThrow('not enrolled');
+    ).rejects.toThrow('owner of this machine only');
+    await expect(openChannel(remote.appOrigin, port, '', machine.publicKey)).rejects.toThrow('not added');
+    const off = await readSnapshot(await local('/api/remote/links/remove', { kind: 'device' }));
+    expect(off.links).toEqual([]);
     await expect(openChannel(remote.appOrigin, port, secret, machine.publicKey)).rejects.toThrow(
-      'not enrolled'
+      'turned off'
     );
-    expect(remote.snapshot().devices).toEqual([]);
     const unknown = await start({ access: null });
+    await unknown.local('/api/remote/links/create', { kind: 'device' });
     const unknownKey = await unknown.remote.store.resolveMachineKey();
     await expect(
       openChannel(
         unknown.remote.appOrigin,
         unknown.port,
-        unknown.remote.enrollments.create('iPhone').secret,
+        (await readLink(unknown.remote, 'device'))?.secret ?? '',
         unknownKey.publicKey
       )
-    ).rejects.toThrow('not enrolled');
+    ).rejects.toThrow('still connecting');
+  });
+
+  test('accepting an invite request makes the account a member and adds its device for it', async () => {
+    const { remote, local, port, plane } = await start();
+    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => Response.json({ user: KAI, addedAt: 5 }));
+    await local('/api/remote/links/create', { kind: 'invite' });
+    const fragment = await readLink(remote, 'invite');
+    expect(fragment?.invite).toBe('invite-token');
+    const machine = await remote.store.resolveMachineKey();
+    const opening = openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
+      userId: KAI.id,
+      name: 'Kai iPhone',
+    });
+    const requestId = await waitForRequest(remote);
+    expect(remote.snapshot().requests[0]).toMatchObject({
+      kind: 'invite',
+      user: KAI,
+      deviceName: 'Kai iPhone',
+    });
+    expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineRequester)?.body).toEqual({
+      userId: KAI.id,
+    });
+    await local('/api/remote/requests/accept', { requestId });
+    expect(await (await opening).next()).toEqual({ t: 'ready' });
+    expect(remote.snapshot().access?.members).toEqual([{ user: KAI, addedAt: 5 }]);
+    expect(remote.snapshot().devices).toEqual([
+      expect.objectContaining({ name: 'Kai iPhone', userId: KAI.id }),
+    ]);
+    await local('/api/remote/links/remove', { kind: 'invite' });
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineInviteRemove)).toBe(true);
+  });
+
+  test('an invite request from the owner or a member adds only the device', async () => {
+    const { remote, local, port, plane } = await start({
+      access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
+    });
+    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    await local('/api/remote/links/create', { kind: 'invite' });
+    const fragment = await readLink(remote, 'invite');
+    const machine = await remote.store.resolveMachineKey();
+    const opening = openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
+      userId: KAI.id,
+    });
+    await local('/api/remote/requests/accept', { requestId: await waitForRequest(remote) });
+    await opening;
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
+  });
+
+  test('an invite request is refused when the machine cannot check who asked', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { remote, local, port, plane } = await start();
+    plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 'invite-token' }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => new Response('', { status: 404 }));
+    await local('/api/remote/links/create', { kind: 'invite' });
+    const machine = await remote.store.resolveMachineKey();
+    await expect(
+      openChannel(
+        remote.appOrigin,
+        port,
+        (await readLink(remote, 'invite'))?.secret ?? '',
+        machine.publicKey,
+        {
+          userId: KAI.id,
+        }
+      )
+    ).rejects.toThrow('could not check who you are');
+    warn.mockRestore();
+  });
+
+  test('approving works from a device that reaches the machine remotely, and links stay at the keyboard', async () => {
+    const { remote, local, port } = await start();
+    await local('/api/remote/links/create', { kind: 'device' });
+    const machine = await remote.store.resolveMachineKey();
+    const admin = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: await addDevice(remote),
+    });
+    expect(await admin.next()).toEqual({ t: 'ready' });
+    const opening = openChannel(
+      remote.appOrigin,
+      port,
+      (await readLink(remote, 'device'))?.secret ?? '',
+      machine.publicKey
+    );
+    const requestId = await waitForRequest(remote);
+    const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
+    const post = async (id: string, path: string, json: unknown) => {
+      await admin.send({
+        t: 'request',
+        id,
+        method: 'POST',
+        path,
+        headers: [['content-type', 'application/json']],
+      });
+      await admin.send({ t: 'body', id, chunk: body(JSON.stringify(json)) });
+      await admin.send({ t: 'end', id });
+      for (;;) {
+        const message = await admin.next();
+        if (message.t === 'response' && message.id === id) return message.status;
+      }
+    };
+    expect(await post('a', '/api/remote/links/create', { kind: 'invite' })).toBe(403);
+    expect(await post('b', '/api/remote/requests/accept', { requestId })).toBe(200);
+    expect(await (await opening).next()).toEqual({ t: 'ready' });
   });
 
   test('a device opens only for the account that added it, and older devices only for the owner', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
-    const kaiDevice = await createKeyPair();
+    const kaiDevice = await addDevice(remote, KAI.id);
     const legacyDevice = await createKeyPair();
-    const base = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
-    remote.store.upsertDevice({ ...base, publicKey: await serializeDeviceKey(kaiDevice), userId: KAI.id });
-    remote.store.upsertDevice({ ...base, publicKey: await serializeDeviceKey(legacyDevice), userId: null });
+    remote.store.upsertDevice({
+      publicKey: await serializeDeviceKey(legacyDevice),
+      name: 'Phone',
+      enrolledAt: 1,
+      lastSeenAt: null,
+      userId: null,
+    });
     await expect(
       openChannel(remote.appOrigin, port, '', machine.publicKey, { device: kaiDevice })
-    ).rejects.toThrow('not enrolled');
+    ).rejects.toThrow('not added');
     const kai = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
       device: kaiDevice,
       userId: KAI.id,
@@ -669,7 +794,7 @@ describe('members of this machine', () => {
     expect(await kai.next()).toEqual({ t: 'ready' });
     await expect(
       openChannel(remote.appOrigin, port, '', machine.publicKey, { device: legacyDevice, userId: KAI.id })
-    ).rejects.toThrow('not enrolled');
+    ).rejects.toThrow('not added');
     const legacy = await openChannel(remote.appOrigin, port, '', machine.publicKey, { device: legacyDevice });
     expect(await legacy.next()).toEqual({ t: 'ready' });
   });
@@ -679,16 +804,13 @@ describe('members of this machine', () => {
       access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
     });
     const machine = await remote.store.resolveMachineKey();
-    const kaiDevice = await createKeyPair();
-    const base = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
-    remote.store.upsertDevice({ ...base, publicKey: await serializeDeviceKey(kaiDevice), userId: KAI.id });
     const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
-      device: kaiDevice,
+      device: await addDevice(remote, KAI.id),
       userId: KAI.id,
     });
     expect(await channel.next()).toEqual({ t: 'ready' });
     const pushes: number[] = [];
-    remote.subscribe(() => pushes.push(1));
+    const release = remote.subscribe(() => pushes.push(1));
     plane.answers.set(
       REMOTE_PATHS.heartbeat,
       answerAccess({ owner: OWNER, members: [{ user: KAI, addedAt: 1 }] })
@@ -703,40 +825,56 @@ describe('members of this machine', () => {
     expect(remote.snapshot().access).toEqual(ACCESS);
     expect(remote.snapshot().devices).toEqual([]);
     expect(await channel.closed).toBe(1008);
+    release();
   });
 
-  test('removing a member tells app.shinsa.dev, then forgets their devices', async () => {
+  test('forgets a device on request and closes its session', async () => {
+    const { remote, local, port } = await start();
+    const machine = await remote.store.resolveMachineKey();
+    const device = await addDevice(remote);
+    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, { device });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    expect(await readError(await local('/api/remote/devices/remove', { publicKey: 'nope' }))).toBe(
+      'device_not_found'
+    );
+    expect(await readError(await local('/api/remote/devices/remove', {}))).toBe('publicKey_invalid');
+    const key = await serializeDeviceKey(device);
+    expect(
+      (await readSnapshot(await local('/api/remote/devices/remove', { publicKey: key }))).devices
+    ).toEqual([]);
+    expect(await channel.closed).toBe(1008);
+  });
+
+  test('removing a member tells Shinsa Cloud, then forgets their devices', async () => {
     const { remote, local, plane } = await start({
       access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
     });
-    const base = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
-    remote.store.upsertDevice({ ...base, publicKey: 'kai-phone', userId: KAI.id });
-    remote.store.upsertDevice({ ...base, publicKey: 'my-phone', userId: OWNER.id });
+    await addDevice(remote, KAI.id);
+    const mine = await serializeDeviceKey(await addDevice(remote));
     expect(await readError(await local('/api/remote/members/remove', {}))).toBe('userId_invalid');
     expect(await readError(await local('/api/remote/members/remove', { userId: '99' }))).toBe(
       'member_not_found'
     );
     const removed = await readSnapshot(await local('/api/remote/members/remove', { userId: KAI.id }));
     expect(removed.access?.members).toEqual([]);
-    expect(removed.devices.map((device) => device.publicKey)).toEqual(['my-phone']);
+    expect(removed.devices.map((device) => device.publicKey)).toEqual([mine]);
     expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineMemberRemove)).toMatchObject({
       token: 'machine',
       body: { userId: KAI.id },
     });
   });
 
-  test('says when too many invites wait, and passes on any other failure', async () => {
-    const { local, plane } = await start();
-    plane.answers.set(REMOTE_PATHS.machineInvites, () => new Response('', { status: 429 }));
-    expect(await readError(await local('/api/remote/invites', { name: 'Bob' }))).toBe('invites_full');
-    plane.answers.set(REMOTE_PATHS.machineInvites, () => new Response('', { status: 500 }));
-    expect(await readError(await local('/api/remote/invites', { name: 'Bob' }))).toBe('request_failed');
-  });
-
-  test('forgets who has access when the machine is removed', async () => {
-    const { remote, local } = await start();
-    expect(remote.snapshot().access).toEqual(ACCESS);
-    expect((await readSnapshot(await local('/api/remote/remove', {}))).access).toBeNull();
+  test('removing the machine forgets who has access, its links and its requests, and tells waiting browsers no', async () => {
+    const { remote, local, port } = await start();
+    await local('/api/remote/links/create', { kind: 'device' });
+    const machine = await remote.store.resolveMachineKey();
+    const opening = settleChannel(
+      openChannel(remote.appOrigin, port, (await readLink(remote, 'device'))?.secret ?? '', machine.publicKey)
+    );
+    await waitForRequest(remote);
+    const removed = await readSnapshot(await local('/api/remote/remove', {}));
+    expect(removed).toMatchObject({ access: null, links: [], requests: [] });
+    expect(await opening).toBe('The channel closed.');
   });
 });
 

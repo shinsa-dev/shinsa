@@ -42,13 +42,18 @@ interface ChannelHub {
   message: (socket: HubSocket, raw: string) => void;
 }
 
+export type AccessAnswer =
+  | { kind: 'refused'; reason: string }
+  | { kind: 'waiting'; decided: Promise<boolean> };
+
 export interface ChannelHost {
   resolveMachineKey: () => Promise<{ publicKey: string; privateKey: CryptoKey }>;
   isEnrolled: (device: string) => boolean;
-  redeemEnrollment: (
+  requestAccess: (
     proof: string,
-    keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
-  ) => Promise<boolean>;
+    keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>,
+    name: string | null
+  ) => Promise<AccessAnswer>;
   recordSeen: (device: string) => void;
   hub: ChannelHub;
   respond: (request: Request) => Promise<Response>;
@@ -154,16 +159,30 @@ export class RemoteChannel {
     this.fail(reason);
   }
 
+  async #awaitAccess(
+    hello: ClientHello,
+    keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
+  ) {
+    if (hello.enroll === null) {
+      this.#refuse('This device is not added to this machine. Open an Add device link from it first.');
+      return false;
+    }
+    const answer = await this.#host.requestAccess(hello.enroll, keys, hello.name);
+    if (answer.kind === 'refused') {
+      this.#refuse(answer.reason);
+      return false;
+    }
+    this.#peer.send(JSON.stringify({ type: 'pending' } satisfies ServerHello));
+    const approved = await answer.decided;
+    if (this.#state.kind === 'closed') return false;
+    if (!approved) this.#refuse('Your request to reach this machine was declined.');
+    return approved;
+  }
+
   async #handshake(hello: ClientHello) {
     const machine = await this.#host.resolveMachineKey();
     const keys = { machine: machine.publicKey, device: hello.device, clientEphemeral: hello.ephemeral };
-    const enrolled = this.#host.isEnrolled(hello.device);
-    const redeemed =
-      !enrolled && hello.enroll !== null && (await this.#host.redeemEnrollment(hello.enroll, keys));
-    if (!(enrolled || redeemed)) {
-      this.#refuse('This device is not enrolled on this machine. Add it from Settings on the machine.');
-      return;
-    }
+    if (!this.#host.isEnrolled(hello.device) && !(await this.#awaitAccess(hello, keys))) return;
     const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
       'deriveBits',
     ])) as CryptoKeyPair;

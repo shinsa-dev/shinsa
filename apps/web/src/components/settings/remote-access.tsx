@@ -1,7 +1,9 @@
 import type {
-  EnrollmentKind,
+  AccessRequest,
+  LinkKind,
+  RemoteAccess,
   RemoteDevice,
-  RemoteEnrollment,
+  RemoteLink,
   RemoteMember,
   RemoteSnapshot,
   RemoteUser,
@@ -16,8 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
-import { Field } from '@shinsa/ui/components/field';
-import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { type DialogControl, useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -25,7 +25,7 @@ import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { useNow } from '@/hooks/use-now.ts';
-import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
+import { requestWithToast } from '@/lib/connection/commands.ts';
 import {
   REMOTE_ACCESS_ACTIONS,
   type RemoteAccessActions,
@@ -36,28 +36,26 @@ import { resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
 import { describeUserName } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
+  describeAcceptOutcome,
+  describeAccessRequest,
   describeDeviceDetail,
-  describeEnrollmentExpiry,
-  describeEnrollmentStep,
+  describeLinkAge,
   describeMemberSince,
   describeRemoteStatus,
   LINK_COPY,
   REMOTE_ACCESS_SECTION,
-  resolveEnrollmentState,
   resolveQrImage,
-  selectEnrolledDevice,
+  selectLink,
 } from '@/lib/remote-access.ts';
 import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { UserRow } from './user-row.tsx';
 
-const NO_DEVICES: RemoteDevice[] = [];
-
 const NO_MEMBERS: RemoteMember[] = [];
 
 const DESCRIPTION =
-  'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once. Invite someone to give them the same control with their own GitHub account.';
+  'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, asks for access with a link and opens nothing until you accept it. Invite someone to give them the same control with their own GitHub account.';
 
-const SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 ${ROW_INSET}`;
+const SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 first:mt-0 first:border-t-0 first:pt-1.5 ${ROW_INSET}`;
 
 const ONLY_YOU = `pt-0.5 pb-1.5 text-fg-2 text-xs ${ROW_INSET}`;
 
@@ -66,15 +64,15 @@ function QrCode({ text }: { text: string }) {
   return <img src={image} alt='QR code for the link' className='size-48 rounded-md' />;
 }
 
-function EnrollmentView({ enrollment, now }: { enrollment: RemoteEnrollment; now: number }) {
+function LinkView({ link, now }: { link: RemoteLink; now: number }) {
   return (
     <div className='flex w-full flex-col items-center gap-3'>
-      <QrCode text={enrollment.url} />
+      <QrCode text={link.url} />
       <div className='flex w-full min-w-0 items-center gap-1.5'>
-        <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{enrollment.url}</Truncate>
-        <CopyButton text={enrollment.url} />
+        <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{link.url}</Truncate>
+        <CopyButton text={link.url} />
       </div>
-      <p className='text-2xs text-fg-2'>{describeEnrollmentExpiry(enrollment.expiresAt, now)}</p>
+      <p className='text-2xs text-fg-2'>{describeLinkAge(link, now)}</p>
     </div>
   );
 }
@@ -82,39 +80,23 @@ function EnrollmentView({ enrollment, now }: { enrollment: RemoteEnrollment; now
 function LinkDialog({
   kind,
   control,
-  devices,
+  link,
   canEnroll,
-  onCreate,
-  onAdded,
+  actions,
 }: {
-  kind: EnrollmentKind;
+  kind: LinkKind;
   control: DialogControl;
-  devices: RemoteDevice[];
+  link: RemoteLink | null;
   canEnroll: boolean;
-  onCreate: (name: string) => Promise<RemoteEnrollment>;
-  onAdded: () => void;
+  actions: RemoteAccessActions;
 }) {
   const copy = LINK_COPY[kind];
-  const [name, setName] = React.useState('');
   const [busy, setBusy] = React.useState(false);
-  const [enrollment, setEnrollment] = React.useState<RemoteEnrollment | null>(null);
-  const formId = React.useId();
-  const [stoppedId, setStoppedId] = React.useState<string | null>(null);
   const now = useNow();
-  if (enrollment && !canEnroll && stoppedId !== enrollment.id) setStoppedId(enrollment.id);
-  const state = resolveEnrollmentState(enrollment, stoppedId, now);
-  const live = enrollment !== null && state === 'live';
-  const addedKey = selectEnrolledDevice(devices, enrollment)?.publicKey ?? null;
 
-  React.useEffect(() => {
-    if (!(addedKey && enrollment)) return;
-    confirmDone(`${enrollment.name} is added.`);
-    onAdded();
-  }, [addedKey, enrollment, onAdded]);
-
-  async function create() {
+  async function run(act: () => Promise<unknown>, done?: string) {
     setBusy(true);
-    await requestWithToast(async () => setEnrollment(await onCreate(name.trim())));
+    await requestWithToast(act, done);
     setBusy(false);
   }
 
@@ -122,57 +104,48 @@ function LinkDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{enrollment ? copy.titleFor(enrollment.name) : copy.title}</DialogTitle>
-          <DialogDescription>{describeEnrollmentStep(kind, enrollment, state)}</DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{link ? copy.share : copy.intro}</DialogDescription>
         </DialogHeader>
-        {live && <EnrollmentView enrollment={enrollment} now={now} />}
-        {!enrollment && (
-          <form
-            id={formId}
-            className='w-full'
-            onSubmit={(event) => {
-              event.preventDefault();
-              void create();
-            }}
-          >
-            <Field>
-              <Input
-                value={name}
-                aria-label={copy.field}
-                placeholder={copy.placeholder}
-                maxLength={60}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Field>
-          </form>
-        )}
+        {link && <LinkView link={link} now={now} />}
         <DialogFooter>
-          {live && (
+          {link ? (
             <>
+              <Button
+                variant='secondary'
+                disabled={busy}
+                onClick={() =>
+                  void run(() => actions.removeLink(kind), `The link is turned off. ${copy.off}`)
+                }
+              >
+                Turn off link
+              </Button>
+              <Button
+                variant='secondary'
+                disabled={busy || !canEnroll}
+                onClick={() => void run(() => actions.createLink(kind), `There is a new link. ${copy.off}`)}
+              >
+                Make new link
+              </Button>
               {kind === 'device' && (
                 <Button
                   variant='secondary'
                   nativeButton={false}
-                  render={<a href={resolveOnMachineUrl(enrollment.url)} target='_blank' rel='noreferrer' />}
+                  render={<a href={resolveOnMachineUrl(link.url)} target='_blank' rel='noreferrer' />}
                 >
                   Add this device
                 </Button>
               )}
               <DialogClose render={<Button />}>Done</DialogClose>
             </>
-          )}
-          {enrollment && !live && (
+          ) : (
             <>
               <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
-              <Button loading={busy} disabled={!canEnroll} onClick={() => void create()}>
-                Make new link
-              </Button>
-            </>
-          )}
-          {!enrollment && (
-            <>
-              <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
-              <Button type='submit' form={formId} disabled={!name.trim()} loading={busy}>
+              <Button
+                loading={busy}
+                disabled={!canEnroll}
+                onClick={() => void run(() => actions.createLink(kind))}
+              >
                 Make link
               </Button>
             </>
@@ -180,6 +153,52 @@ function LinkDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function AccessRequestRows({
+  title = 'Waiting for your answer',
+  requests,
+  access,
+  onAccept,
+  onDecline,
+}: {
+  title?: string;
+  requests: AccessRequest[];
+  access: RemoteAccess | null;
+  onAccept: (request: AccessRequest) => Promise<unknown>;
+  onDecline: (request: AccessRequest) => Promise<unknown>;
+}) {
+  const now = useNow();
+  if (requests.length === 0) return null;
+  return (
+    <>
+      <p className={SUBHEADING}>{title}</p>
+      {requests.map((request) => (
+        <UserRow key={request.id} user={request.user} detail={describeAccessRequest(request, now)}>
+          <Button
+            variant='secondary'
+            size='sm'
+            onClick={() =>
+              void requestWithToast(
+                () => onDecline(request),
+                `The request for ${request.deviceName} is declined.`
+              )
+            }
+          >
+            Decline
+          </Button>
+          <Button
+            size='sm'
+            onClick={() =>
+              void requestWithToast(() => onAccept(request), describeAcceptOutcome(request, access))
+            }
+          >
+            Accept
+          </Button>
+        </UserRow>
+      ))}
+    </>
   );
 }
 
@@ -299,7 +318,8 @@ function PeopleSection({
       {owner && <UserRow user={owner} detail='Owner' />}
       {members.length === 0 && (
         <p className={ONLY_YOU}>
-          Only you. Invite someone to give them full control of this machine with their own GitHub account.
+          Only you. Invite someone to let them ask for full control of this machine with their own GitHub
+          account.
         </p>
       )}
       {members.map((member) => (
@@ -314,19 +334,19 @@ function PeopleSection({
 }
 
 type RemoteDialog =
-  | { kind: 'link'; link: EnrollmentKind }
+  | { kind: 'link'; link: LinkKind }
   | { kind: 'remove' }
   | { kind: 'forget'; device: RemoteDevice }
   | { kind: 'member'; user: RemoteUser };
 
 function RemoteDialogs({
   dialog,
-  devices,
+  snapshot,
   canEnroll,
   actions,
 }: {
   dialog: ReturnType<typeof useDialogState<RemoteDialog>>;
-  devices: RemoteDevice[];
+  snapshot: RemoteSnapshot | null;
   canEnroll: boolean;
   actions: RemoteAccessActions;
 }) {
@@ -336,10 +356,9 @@ function RemoteDialogs({
       <LinkDialog
         kind={value.link}
         control={dialog.control}
-        devices={devices}
+        link={selectLink(snapshot, value.link)}
         canEnroll={canEnroll}
-        onCreate={value.link === 'invite' ? actions.createInvite : actions.createEnrollment}
-        onAdded={dialog.close}
+        actions={actions}
       />
     );
   if (value?.kind === 'member') {
@@ -430,10 +449,19 @@ export function RemoteAccessGroup({
       {snapshot && (
         <StatusRow snapshot={snapshot} actions={actions} onRemove={() => dialog.show({ kind: 'remove' })} />
       )}
+      {canAdd && (
+        <AccessRequestRows
+          requests={snapshot.requests}
+          access={snapshot.access}
+          onAccept={(request) => actions.acceptRequest(request.id)}
+          onDecline={(request) => actions.declineRequest(request.id)}
+        />
+      )}
       {canAdd && <p className={SUBHEADING}>Devices that can reach this machine</p>}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
-          None yet. Add device sets up the phone or browser you use away from this machine.
+          None yet. Add device makes the link the phone or browser you use away from this machine asks for
+          access with.
         </SettingsEmpty>
       )}
       {snapshot?.devices.map((device) => (
@@ -451,12 +479,7 @@ export function RemoteAccessGroup({
           onRemove={(user) => dialog.show({ kind: 'member', user })}
         />
       )}
-      <RemoteDialogs
-        dialog={dialog}
-        devices={snapshot?.devices ?? NO_DEVICES}
-        canEnroll={canEnroll}
-        actions={actions}
-      />
+      <RemoteDialogs dialog={dialog} snapshot={snapshot} canEnroll={canEnroll} actions={actions} />
     </SettingsGroup>
   );
 }

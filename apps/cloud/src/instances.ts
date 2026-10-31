@@ -64,14 +64,21 @@ export async function respondInstances(request: Request, world: CloudWorld) {
   return respondJson(rows.map((row) => serializeInstance(row, user.id, now)));
 }
 
+export async function createConnectAnswer(
+  row: InstanceRow,
+  userId: string,
+  world: CloudWorld
+): Promise<ConnectResponse> {
+  const expiresAt = world.now() + CONNECT_TOKEN_TTL_MS;
+  const token = await createConnectToken(row.connect_key, { instanceId: row.id, userId, expiresAt });
+  const url = `wss://${resolveTunnelHost(row.id)}${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`;
+  return { url, expiresAt };
+}
+
 export async function respondConnect(request: Request, instanceId: string, world: CloudWorld) {
   const user = await findPageUser(request, world);
   const { row } = await findInstanceAccess(user, instanceId, world);
-  const expiresAt = world.now() + CONNECT_TOKEN_TTL_MS;
-  const token = await createConnectToken(row.connect_key, { instanceId: row.id, userId: user.id, expiresAt });
-  const url = `wss://${resolveTunnelHost(row.id)}${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`;
-  const answer: ConnectResponse = { url, expiresAt };
-  return respondJson(answer);
+  return respondJson(await createConnectAnswer(row, user.id, world));
 }
 
 export async function respondInstanceRemove(request: Request, instanceId: string, world: CloudWorld) {

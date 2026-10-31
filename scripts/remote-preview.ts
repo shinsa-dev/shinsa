@@ -14,9 +14,9 @@ import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
+  type ConnectResponse,
   createConnectToken,
   createSettings,
-  INVITE_TTL_MS,
   type InviteAcceptResponse,
   type InviteCreateResponse,
   type NativeSignInTokenResponse,
@@ -230,7 +230,7 @@ function respondIndex(machines: Machine[]) {
       `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
     ],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} (a fresh one-time link)`,
+      `Add this device to ${machine.name} (request access, then accept it in that machine's own app below)`,
       `/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
@@ -248,22 +248,26 @@ function respondIndex(machines: Machine[]) {
   ];
   const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first, then open the dashboard.</p><ol>${items}</ol></body>`,
+    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first: request access, accept it in the machine's own app, then open the dashboard.</p><ol>${items}</ol></body>`,
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
 }
 
-async function respondConnect(machine: Machine) {
+async function createConnect(machine: Machine): Promise<ConnectResponse> {
   const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
   const token = await createConnectToken(machine.connectKey, {
     instanceId: machine.id,
     userId: USER.id,
     expiresAt,
   });
-  return Response.json({
+  return {
     url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
     expiresAt,
-  });
+  };
+}
+
+async function respondConnect(machine: Machine) {
+  return Response.json(await createConnect(machine));
 }
 
 function respondNativeSignIn(url: URL) {
@@ -287,25 +291,30 @@ function respondInviteCreate(request: Request, machines: Machine[]) {
   if (!machine) return Response.json({ error: { code: 'revoked', message: 'Not paired.' } }, { status: 401 });
   const token = crypto.randomUUID().replaceAll('-', '');
   INVITES.set(token, machine.id);
-  const answer: InviteCreateResponse = { token, expiresAt: Date.now() + INVITE_TTL_MS };
+  const answer: InviteCreateResponse = { token };
   return Response.json(answer);
 }
 
 async function respondInviteAccept(request: Request, machines: Machine[]) {
   const { token } = (await request.json()) as { token?: string };
   const machine = machines.find((entry) => entry.id === INVITES.get(token ?? ''));
-  INVITES.delete(token ?? '');
   if (!machine)
     return Response.json(
       {
         error: {
           code: 'invite_invalid',
-          message: 'This invite expired or was already used. Ask for a new one.',
+          message: 'This invite link was turned off. Ask the machine’s owner for a new one.',
         },
       },
       { status: 404 }
     );
-  const answer: InviteAcceptResponse = { instanceId: machine.id, name: machine.name, owner: USER };
+  const answer: InviteAcceptResponse = {
+    instanceId: machine.id,
+    name: machine.name,
+    owner: USER,
+    user: USER,
+    connect: await createConnect(machine),
+  };
   return Response.json(answer);
 }
 
@@ -338,7 +347,9 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
   if (machine && (pathname.endsWith('/remove') || pathname.endsWith('/leave'))) return Response.json({});
   if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines);
   if (pathname === REMOTE_PATHS.inviteAccept) return respondInviteAccept(request, machines);
-  if (pathname === REMOTE_PATHS.machineMemberRemove) return Response.json({ ok: true });
+  if (pathname === REMOTE_PATHS.machineRequester) return Response.json(USER);
+  if (pathname === REMOTE_PATHS.machineInviteRemove || pathname === REMOTE_PATHS.machineMemberRemove)
+    return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 }
 
@@ -387,12 +398,11 @@ async function main() {
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {
-        const enrollment = await enrolling.remote.createEnrollment('This browser');
+        await enrolling.remote.createLink('device');
+        const link = enrolling.remote.snapshot().links.find((entry) => entry.kind === 'device');
         const onMachine = url.searchParams.has('on');
-        return Response.redirect(
-          onMachine ? enrollment.url.replace('#', '?on=machine#') : enrollment.url,
-          302
-        );
+        const target = link?.url ?? REMOTE_PATHS.app;
+        return Response.redirect(onMachine ? target.replace('#', '?on=machine#') : target, 302);
       }
       const tunnel = /^\/__preview\/tunnel\/([a-z]+)$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);

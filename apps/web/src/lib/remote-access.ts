@@ -1,8 +1,9 @@
 import type {
-  EnrollmentKind,
+  AccessRequest,
+  LinkKind,
   RemoteAccess,
   RemoteDevice,
-  RemoteEnrollment,
+  RemoteLink,
   RemoteMember,
   RemoteSnapshot,
 } from '@shinsa/core';
@@ -66,83 +67,62 @@ export function describeMemberSince(member: RemoteMember, now = Date.now()) {
   return formatSince('Joined', member.addedAt, now);
 }
 
-export function selectEnrolledDevice(devices: RemoteDevice[], enrollment: RemoteEnrollment | null) {
-  if (!enrollment) return null;
-  return devices.find((device) => device.enrollmentId === enrollment.id) ?? null;
-}
-
-export function isEnrollmentExpired(expiresAt: number, now = Date.now()) {
-  return expiresAt <= now;
-}
-
-export type EnrollmentState = 'live' | 'expired' | 'stopped';
-
 export function canEnrollDevices(snapshot: RemoteSnapshot | null) {
   return snapshot?.paired === true && snapshot.enabled && snapshot.status !== 'revoked';
 }
 
-export function resolveEnrollmentState(
-  enrollment: RemoteEnrollment | null,
-  stoppedId: string | null,
-  now = Date.now()
-): EnrollmentState {
-  if (enrollment && enrollment.id === stoppedId) return 'stopped';
-  if (enrollment && isEnrollmentExpired(enrollment.expiresAt, now)) return 'expired';
-  return 'live';
-}
-
 interface LinkCopy {
   title: string;
-  titleFor: (name: string) => string;
-  field: string;
-  placeholder: string;
   intro: string;
-  verb: string;
-  unused: string;
-  live: string;
+  share: string;
+  off: string;
 }
 
-export const LINK_COPY: Record<EnrollmentKind, LinkCopy> = {
+export const LINK_COPY: Record<LinkKind, LinkCopy> = {
   device: {
     title: 'Add a device',
-    titleFor: (name) => `Add ${name}`,
-    field: 'Device name',
-    placeholder: 'For example, iPhone',
-    intro: 'Name the device you are adding, a browser or a phone. Shinsa makes a one-time link for it.',
-    verb: 'add',
-    unused: 'before a device used it',
-    live: 'Scan this on the phone, or open the link on the device you are adding, and sign in with GitHub.',
+    intro:
+      'Make a link for your own devices. Open it on a browser or a phone, sign in with your GitHub account and ask for access. You accept each request here.',
+    share:
+      'Scan this on the phone, or open the link on the device you are adding. Each device names itself and asks for access, which you accept here. The link works until you turn it off.',
+    off: 'Nobody can ask for access with the old link any more.',
   },
   invite: {
     title: 'Invite someone',
-    titleFor: (name) => `Invite for ${name}`,
-    field: 'Who it is for',
-    placeholder: 'For example, Bob’s laptop',
     intro:
-      'Say who the invite is for. Shinsa makes a one-time link they open with their own GitHub account, which gives them full control of this machine from Shinsa Cloud.',
-    verb: 'invite',
-    unused: 'before anyone used it',
-    live: 'Send this link to them. They open it on their own device and sign in with their own GitHub account. Only send it to someone you trust with this machine.',
+      'Make a link for other people. Whoever opens it signs in with their own GitHub account and asks for access. Accepting gives them full control of this machine.',
+    share:
+      'Share this link with the people you want on this machine. Each asks for access with their GitHub account, and nothing opens until you accept. The link works until you turn it off.',
+    off: 'Nobody can ask to join with the old link any more.',
   },
 };
 
-export function describeEnrollmentStep(
-  kind: EnrollmentKind,
-  enrollment: RemoteEnrollment | null,
-  state: EnrollmentState
-) {
-  const copy = LINK_COPY[kind];
-  if (!enrollment) return copy.intro;
-  if (state === 'stopped')
-    return `Remote access stopped, so this link no longer works. Make a new one to ${copy.verb} ${enrollment.name} once it is on again.`;
-  if (state === 'expired')
-    return `This link expired ${copy.unused}. Make a new one to ${copy.verb} ${enrollment.name}.`;
-  return copy.live;
+export function selectLink(snapshot: RemoteSnapshot | null, kind: LinkKind) {
+  return snapshot?.links.find((link) => link.kind === kind) ?? null;
 }
 
-export function describeEnrollmentExpiry(expiresAt: number, now = Date.now()) {
-  if (isEnrollmentExpired(expiresAt, now)) return 'This link expired. Make a new one.';
-  return `${formatUntil('It works once and expires', expiresAt, now)}.`;
+export function describeLinkAge(link: RemoteLink, now = Date.now()) {
+  return `${formatSince('Made', link.createdAt, now)}. It works until you turn it off.`;
+}
+
+const REQUEST_KIND: Record<LinkKind, string> = {
+  device: 'Add device',
+  invite: 'Invite',
+};
+
+export function describeAccessRequest(request: AccessRequest, now = Date.now()) {
+  return `${request.deviceName} · ${REQUEST_KIND[request.kind]} · ${formatSince('Asked', request.requestedAt, now)}`;
+}
+
+export function describeAcceptOutcome(request: AccessRequest, access: RemoteAccess | null) {
+  const joins =
+    request.kind === 'invite' &&
+    access !== null &&
+    access.owner.id !== request.user.id &&
+    !access.members.some((member) => member.user.id === request.user.id);
+  return joins
+    ? `@${request.user.login} joins this machine with full control, and ${request.deviceName} is added.`
+    : `${request.deviceName} is added for @${request.user.login}.`;
 }
 
 function resolveQrPath(text: string) {

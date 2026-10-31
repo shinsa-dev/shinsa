@@ -4,6 +4,7 @@ import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts
 import {
   createClientHello,
   createEnrollProof,
+  DEVICE_NAME_LIMIT,
   deriveClientSession,
   deriveServerSession,
   type HandshakeKeys,
@@ -127,12 +128,28 @@ describe('the hello messages', () => {
       device: parties.keys.device,
       ephemeral: parties.keys.clientEphemeral,
       enroll: null,
+      name: null,
     });
     expect(parseClientHello(JSON.stringify(hello))).toEqual(hello);
     expect(parseClientHello(JSON.stringify({ ...hello, enroll: 'proof', extra: 1 }))).toEqual({
       ...hello,
       enroll: 'proof',
     });
+  });
+
+  test('carries the name a device asks to be added under, trimmed to the limit', async () => {
+    const parties = await createParties();
+    const hello = await createClientHello(
+      parties.device.publicKey,
+      parties.clientEphemeral.publicKey,
+      'proof',
+      'Bob iPhone'
+    );
+    expect(parseClientHello(JSON.stringify(hello))?.name).toBe('Bob iPhone');
+    const long = { ...hello, name: ` ${'x'.repeat(DEVICE_NAME_LIMIT + 10)} ` };
+    expect(parseClientHello(JSON.stringify(long))?.name).toHaveLength(DEVICE_NAME_LIMIT);
+    expect(parseClientHello(JSON.stringify({ ...hello, name: '  ' }))?.name).toBeNull();
+    expect(parseClientHello(JSON.stringify({ ...hello, name: 3 }))?.name).toBeNull();
   });
 
   test('refuses a client hello of another shape or version', () => {
@@ -157,6 +174,7 @@ describe('the hello messages', () => {
       ephemeral: 'e',
     });
     expect(parseServerHello('{"type":"refused","reason":"r"}')).toEqual({ type: 'refused', reason: 'r' });
+    expect(parseServerHello('{"type":"pending"}')).toEqual({ type: 'pending' });
     expect(parseServerHello('{"type":"welcome"}')).toBeNull();
     expect(parseServerHello('{"type":"refused"}')).toBeNull();
     expect(parseServerHello('nope')).toBeNull();

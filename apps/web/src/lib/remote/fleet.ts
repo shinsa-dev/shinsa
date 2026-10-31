@@ -1,9 +1,11 @@
-import type { UserCommand, WireState } from '@shinsa/core';
+import type { RemoteSnapshot, UserCommand, WireState } from '@shinsa/core';
 import {
   type ConnectionStatus,
+  type MachineAccess,
   type MachineChoice,
   type MachineView,
   NO_ENTRIES,
+  NO_MACHINE_ACCESS,
   NO_MACHINES,
   NO_UNREACHABLE_MACHINES,
   type ShinsaConnection,
@@ -68,8 +70,10 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
   const [home] = parts;
   if (!home) return null;
   const owners = new Map<string, string>();
-  for (const part of parts)
+  for (const part of parts) {
+    owners.set(part.id, part.id);
     for (const key of FLEET_RECORDS) for (const id of Object.keys(part.state[key])) owners.set(id, part.id);
+  }
   const sharedHandles = listSharedHandles(parts);
   if (parts.length === 1) return { state: home.state, owners, sharedHandles };
   const state: WireState = {
@@ -138,6 +142,8 @@ export class Fleet implements ShinsaConnection {
   #owners: ReadonlyMap<string, string> = EMPTY_OWNERS;
   #machines: MachineChoice[] = NO_MACHINES;
   #unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
+  #accessInputs: (RemoteSnapshot | null)[] = [];
+  #access: MachineAccess[] = NO_MACHINE_ACCESS;
   readonly #state = createSignal();
   readonly #transcripts = createSignal();
   readonly #accounts = createSignal();
@@ -271,6 +277,21 @@ export class Fleet implements ShinsaConnection {
   };
 
   listUnreachableMachines = () => this.#unreachable;
+
+  listMachineAccess = () => {
+    const remotes = this.#entries.map((entry) => entry.member.connection.selectRemote());
+    const same =
+      remotes.length === this.#accessInputs.length &&
+      remotes.every((remote, index) => remote === this.#accessInputs[index]);
+    if (same) return this.#access;
+    this.#accessInputs = remotes;
+    this.#access = this.#entries.map((entry, index) => ({
+      id: entry.view.id,
+      name: entry.view.name,
+      remote: remotes[index] ?? null,
+    }));
+    return this.#access;
+  };
 
   command = (command: UserCommand, machineId?: string | null) => {
     this.snapshot();

@@ -64,6 +64,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
         return (
           <EnrollPage
             link={selectEnrollFragment(sessionStorage, '')}
+            user={session.user}
             dashboard={services.dashboard}
             devices={services.devices}
           />

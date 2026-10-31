@@ -1,5 +1,5 @@
-import { DomainError, type RemoteUser } from '@shinsa/core';
-import type { RemoteEnrollment, RemoteSnapshot } from '../remote/index.ts';
+import { type AccessRequest, DomainError, type LinkKind, type RemoteUser } from '@shinsa/core';
+import type { RemoteSnapshot } from '../remote/index.ts';
 import type { RemoteDevice } from '../remote/store.ts';
 import type { SurfaceClient } from './client.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
@@ -28,7 +28,8 @@ function describeDevice(snapshot: RemoteSnapshot, device: RemoteDevice) {
 
 function describeMembers(snapshot: RemoteSnapshot) {
   const members = snapshot.access?.members ?? [];
-  if (members.length === 0) return ['No one else has access. Invite someone with `shinsa remote invite`.'];
+  if (members.length === 0)
+    return ['No one else has access. Invite someone with `shinsa remote link invite`.'];
   return ['Members:', ...members.map((member) => `  ${describeUser(member.user)}`)];
 }
 
@@ -42,19 +43,73 @@ function formatRemote(snapshot: RemoteSnapshot) {
     'Open it in Shinsa Cloud at https://app.shinsa.dev.',
   ];
   if (snapshot.devices.length === 0)
-    lines.push('No devices are enrolled. Add one with `shinsa remote enroll`.');
-  else lines.push('Enrolled devices:', ...snapshot.devices.map((device) => describeDevice(snapshot, device)));
-  lines.push(...describeMembers(snapshot));
+    lines.push('No devices are added. Make a link with `shinsa remote link device`.');
+  else lines.push('Added devices:', ...snapshot.devices.map((device) => describeDevice(snapshot, device)));
+  lines.push(...describeMembers(snapshot), ...describeLinks(snapshot), ...describeRequests(snapshot));
   return lines.join('\n');
 }
 
-function formatEnrollment(enrollment: RemoteEnrollment) {
-  const intro =
-    enrollment.kind === 'invite'
-      ? `Send this link to the person using ${enrollment.name}. They sign in with their own GitHub account within 10 minutes, and it works once:`
-      : `Open this link on ${enrollment.name} within 10 minutes, signed in as you. It works once:`;
-  return [intro, enrollment.url].join('\n');
+const LINK_WORDS: Record<LinkKind, string> = {
+  device: 'Add device (your own account)',
+  invite: 'Invite someone (any GitHub account)',
+};
+
+function describeLinks(snapshot: RemoteSnapshot) {
+  return snapshot.links.map((link) => `${LINK_WORDS[link.kind]} link: ${link.url}`);
 }
+
+function describeRequest(request: AccessRequest) {
+  return `  ${request.id} ${describeUser(request.user)} asks to add ${request.deviceName}`;
+}
+
+function describeRequests(snapshot: RemoteSnapshot) {
+  if (snapshot.requests.length === 0) return [];
+  return [
+    'Access requests (accept or decline each with `shinsa remote accept` or `shinsa remote decline`):',
+    ...snapshot.requests.map(describeRequest),
+  ];
+}
+
+function formatLink(snapshot: RemoteSnapshot, kind: LinkKind) {
+  const link = snapshot.links.find((entry) => entry.kind === kind);
+  const intro =
+    kind === 'invite'
+      ? 'Share this link. Anyone who opens it signs in with GitHub and asks for access, which you accept or decline:'
+      : 'Open this link on your device and sign in as you. Each device asks for access, which you accept or decline:';
+  return [intro, link?.url ?? 'No link was made.'].join('\n');
+}
+
+async function findRequestId(client: SurfaceClient, ref: string) {
+  const snapshot = await client.read<RemoteSnapshot>('/api/remote');
+  const wanted = ref.replace(/^@/, '').toLowerCase();
+  const matches = snapshot.requests.filter(
+    (entry) => entry.id === ref || entry.user.login.toLowerCase() === wanted
+  );
+  const [found] = matches;
+  if (found && matches.length === 1) return found.id;
+  const problem =
+    matches.length > 1
+      ? `@${wanted} asked more than once; name the request by its id`
+      : `No access request matches ${ref}`;
+  throw new DomainError('request_not_found', `${problem}. See them with \`shinsa remote status\`.`);
+}
+
+const LINK_FIELD = {
+  name: 'kind',
+  kind: 'choice',
+  choices: ['device', 'invite'],
+  positional: 'one',
+  required: true,
+  description: 'device for your own devices, invite for someone else’s GitHub account.',
+} as const;
+
+const REQUEST_FIELD = {
+  name: 'request',
+  kind: 'text',
+  positional: 'one',
+  required: true,
+  description: 'The request’s id, or the GitHub login that asked, from `shinsa remote status`.',
+} as const;
 
 async function findMemberId(client: SurfaceClient, login: string) {
   const snapshot = await client.read<RemoteSnapshot>('/api/remote');
@@ -117,44 +172,48 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     },
   }),
   defineAction({
-    path: ['remote', 'enroll'],
-    summary: 'Make a one-time link that adds a device, a browser or a phone, to this machine.',
+    path: ['remote', 'link'],
+    summary: 'Make the reusable link that asks for access to this machine, replacing the one before.',
     humanOnly: true,
-    fields: [
-      {
-        name: 'name',
-        kind: 'text',
-        positional: 'one',
-        required: true,
-        description: 'What to call the device, such as iPhone.',
-      },
-    ],
+    fields: [LINK_FIELD],
     act: async (client, values) => {
-      const data = await client.post<RemoteEnrollment>('/api/remote/devices/enroll', {
-        name: readValue(values, 'name'),
-      });
-      return { data, text: formatEnrollment(data) };
+      const kind = readValue(values, 'kind') as LinkKind;
+      const data = await client.post<RemoteSnapshot>('/api/remote/links/create', { kind });
+      return { data, text: formatLink(data, kind) };
     },
   }),
   defineAction({
-    path: ['remote', 'invite'],
-    summary:
-      'Make a one-time link that gives someone else full remote access with their own GitHub account and adds their device.',
+    path: ['remote', 'link-off'],
+    summary: 'Turn a link off, so nobody can ask for access with it any more.',
     humanOnly: true,
-    fields: [
-      {
-        name: 'name',
-        kind: 'text',
-        positional: 'one',
-        required: true,
-        description: 'Who or which device the invite is for, such as Bob’s laptop.',
-      },
-    ],
+    fields: [LINK_FIELD],
     act: async (client, values) => {
-      const data = await client.post<RemoteEnrollment>('/api/remote/invites', {
-        name: readValue(values, 'name'),
+      const data = await client.post<RemoteSnapshot>('/api/remote/links/remove', {
+        kind: readValue(values, 'kind'),
       });
-      return { data, text: formatEnrollment(data) };
+      return { data, text: formatRemote(data) };
+    },
+  }),
+  defineAction({
+    path: ['remote', 'accept'],
+    summary: 'Accept an access request: add its device, and for an invite make its account a member.',
+    humanOnly: true,
+    fields: [REQUEST_FIELD],
+    act: async (client, values) => {
+      const requestId = await findRequestId(client, readValue(values, 'request'));
+      const data = await client.post<RemoteSnapshot>('/api/remote/requests/accept', { requestId });
+      return { data, text: formatRemote(data) };
+    },
+  }),
+  defineAction({
+    path: ['remote', 'decline'],
+    summary: 'Decline an access request and forget it.',
+    humanOnly: true,
+    fields: [REQUEST_FIELD],
+    act: async (client, values) => {
+      const requestId = await findRequestId(client, readValue(values, 'request'));
+      const data = await client.post<RemoteSnapshot>('/api/remote/requests/decline', { requestId });
+      return { data, text: formatRemote(data) };
     },
   }),
   defineAction({
