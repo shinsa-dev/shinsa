@@ -214,7 +214,7 @@ describe('the command line drives the whole lifecycle of a task', () => {
     expect(w.state.projects).toEqual({});
 
     expect((await shinsa(port, 'health')).text).toMatch(/^Healthy\./);
-    expect((await shinsa(port, 'tasks', '--help')).text).toContain('  create        Create a task.');
+    expect((await shinsa(port, 'tasks', '--help')).text).toContain('  create               Create a task.');
     expect((await shinsa(port, 'tasks', 'create', '--help')).text).toContain('--plan-first');
   });
 });
