@@ -55,9 +55,8 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
 6. In a second job (`downloads`, on Ubuntu, after the release is published), copies the release's disk image to the
    site's R2 bucket and points the download channels at it (`scripts/release-upload.ts`, below). It is its own job
    so that a failure there (a token without R2 access, an R2 outage) leaves the published release alone, and
-   Re-run failed jobs retries only the copy. After a canary, the same job removes the GitHub releases and tags of all
-   but the newest five canaries (`scripts/release-prune.ts`), even when the copy failed, but only while installed
-   apps from before the move to shinsa.dev still read GitHub's feed (Moving off GitHub's feed, below).
+   Re-run failed jobs retries only the copy. Nothing is ever deleted: every GitHub release and tag and every build in
+   R2 stays (How many are kept, below).
 7. Reports the release on the commit it built, as a commit status named `Release` linked to the run, so it shows
    beside lint and test on GitHub and turns the commit red when it fails. Check runs of a `workflow_run` workflow
    never count in the commit's status, so the jobs post it through the statuses API (`statuses: write`): the `mac`
@@ -90,11 +89,10 @@ the newest tested `main` is always what the Canary channel installs. The rules, 
 - **Loops.** The workflow pushes nothing itself: `gh release create` makes the tag through the API, a tag is not a
   push to `main`, and GitHub never starts a workflow from its own token's events.
 - **Notes.** The generated notes start at the previous canary's tag, so they list what this merge brought.
-- **How many are kept.** Five. GitHub's release feed, which electron-updater and the site's fallback read, lists only
-  the newest 10 releases, so a canary on every merge would push every beta and stable release out of it within ten
-  merges and leave the Beta channel with nothing to find. `scripts/release-prune.ts` deletes the older canary
-  releases with their tags (`gh release delete --cleanup-tag`), and `scripts/release-upload.ts` deletes their disk
-  images from R2. Only `vX.Y.Z-canary.N` tags are ever touched (`listStaleCanaries` in `scripts/release-version.ts`).
+- **How many are kept.** All of them. Every canary's GitHub release and tag stays, so its commit and the day it
+  shipped can always be found, and its disk image, zip and blockmap stay in R2 under `releases/<version>/`. The app
+  reads its updates from shinsa.dev, one file per channel, so the number of releases on GitHub never crowds a channel
+  out (Moving off GitHub's feed, below).
 
 ## Versions
 
@@ -234,13 +232,11 @@ both zips; not worth it until someone asks for Intel.
 ## Moving off GitHub's feed
 
 Apps built before `UPDATE_FEED` pointed at shinsa.dev read GitHub's release feed, which lists only the newest ten
-releases, so GitHub keeps only the newest five canaries until they have moved:
-
-1. Copy the newest beta's update files to R2, so the Beta channel has a file before any app reads it:
-   `CLOUDFLARE_API_TOKEN=… bun scripts/release-upload.ts v1.0.0-beta.5` (the next canary writes `canary-mac.yml`).
-2. Release a beta built with the new feed. Every beta and stable app takes it from GitHub, and every app after it
-   reads shinsa.dev; canary apps move with the next canary.
-3. Then remove `scripts/release-prune.ts` and its step in `release.yml`, so every GitHub release and tag is kept.
+releases. Canary apps move with the next canary. Apps on `1.0.0-beta.1` to `1.0.0-beta.5` take a newer beta only
+while it is among those ten: once ten newer releases push it out, they find no update and need a reinstall from
+`shinsa.dev/download/beta`. Before the first beta on the new feed, copy the newest beta's update files to R2, so the
+Beta channel has a file before any app reads it: `CLOUDFLARE_API_TOKEN=… bun scripts/release-upload.ts v1.0.0-beta.5`
+(the next canary writes `canary-mac.yml`).
 
 ## Signing and notarization
 
