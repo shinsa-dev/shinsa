@@ -58,7 +58,10 @@ describe('asking a machine for access from this browser', () => {
     const device = await requestDeviceAccess(createInput(mac), options);
     expect(steps).toEqual(['accept tok', 'pending']);
     expect(mac.names).toEqual(['Kai iPhone']);
-    expect(written).toEqual([{ ...device, waiting: { machineName: 'Studio' } }, device]);
+    expect(written).toEqual([
+      { ...device, waiting: { machineName: 'Studio', deviceName: 'Kai iPhone' } },
+      device,
+    ]);
     expect(device).toMatchObject({
       instanceId: 'k3x9',
       machineKey: mac.machineKey,
@@ -67,6 +70,33 @@ describe('asking a machine for access from this browser', () => {
     });
     expect(mac.enrolled.has(await serializePublicKey(device.keys.publicKey))).toBe(true);
     expect(mac.last.closedWith?.code).toBe(1000);
+  });
+
+  it('asks again with the key of an earlier request, so the machine keeps one request', async () => {
+    const mac = await FakeMac.create({ enrollSecret: SECRET });
+    const keys = await createKeyPair();
+    const earlier: EnrolledDevice = {
+      instanceId: 'k3x9',
+      machineKey: mac.machineKey,
+      keys,
+      enrolledAt: 7,
+      waiting: { machineName: 'Studio', deviceName: 'Kai iPhone' },
+    };
+    const made: string[] = [];
+    const { options } = createOptions(mac, {
+      earlier,
+      createKeys: () => {
+        made.push('key');
+        return createKeyPair();
+      },
+    });
+    const device = await requestDeviceAccess(createInput(mac), options);
+    expect(made).toEqual([]);
+    expect(device.keys).toBe(keys);
+    expect(device.enrolledAt).toBe(7);
+    const other = createOptions(mac, { earlier: { ...earlier, machineKey: 'another' } });
+    const fresh = await requestDeviceAccess(createInput(mac), other.options);
+    expect(fresh.keys).not.toBe(keys);
   });
 
   it('leaves a device added elsewhere off this machine', async () => {

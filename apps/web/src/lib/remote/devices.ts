@@ -13,7 +13,7 @@ export interface EnrolledDevice {
   keys: CryptoKeyPair;
   enrolledAt: number;
   onMachine?: true;
-  waiting?: { machineName: string };
+  waiting?: { machineName: string; deviceName?: string };
 }
 
 const DEVICE_PREFIX = 'device:';

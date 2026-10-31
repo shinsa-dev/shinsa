@@ -53,6 +53,7 @@ describe('remote access words', () => {
       tone: 'amber',
       detail: 'Signed in. Open it in Shinsa Cloud.',
     });
+    expect(describeRemoteStatus(createRemoteSnapshot({ status: 'off' }), NOW).label).toBe('Not connected');
   });
 
   it('says when a device was added or last used', () => {

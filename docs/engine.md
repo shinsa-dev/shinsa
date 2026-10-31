@@ -2453,7 +2453,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
-  sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
+  sign-in, Connecting, Connected, Not connected when it is on and its tunnel is not running, Reconnecting, Paused,
+  Removed) with Turn on, Cancel, Pause, Resume and Remove, the
   added devices with when each was last used, which member added it (by name), and Revoke, the people who can reach
   the machine (you as the owner, then each member with their GitHub avatar, name, login, when they joined and Remove,
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
@@ -2522,7 +2523,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   the request was sent, where to accept it and that the page can be closed; for a machine not yet in your list it says
   you are joining a shared machine. It opens the channel with the connect token `acceptInvite` answers. A connection
   that drops while the request waits is opened again with the same device key (`requestDeviceAccess`), and once it is
-  accepted the device is kept and the dashboard opens. A device that left while it waited shows Waiting for an answer
+  accepted the device is kept and the dashboard opens. While it waits, Request access reads Waiting for an answer and
+  no longer spins. Opening the link again on a device that already asked picks up that one request with its key and
+  name instead of asking again, and on a device already added says so with Open Shinsa. A device that left while it waited shows Waiting for an answer
   in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
   which forgets its key. Settings → General → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and

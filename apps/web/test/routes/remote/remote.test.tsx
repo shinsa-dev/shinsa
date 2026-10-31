@@ -394,6 +394,9 @@ describe('the enroll page', () => {
     fireEvent.change(field, { target: { value: ' Work Mac ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
     expect(await screen.findByText('Request sent. Accept it on the machine.')).toBeTruthy();
+    const waitingButton = screen.getByRole('button', { name: 'Waiting for an answer' });
+    expect(waitingButton.hasAttribute('disabled')).toBe(true);
+    expect(waitingButton.querySelector('[data-slot="spinner"], .animate-spin')).toBeNull();
     expect(asked).toEqual(['Work Mac']);
     finish();
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
@@ -427,6 +430,56 @@ describe('the enroll page', () => {
     fireEvent.change(screen.getByLabelText('Device name'), { target: { value: 'Mona iPhone' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
     expect(await screen.findByText('Request sent. You can close this page.')).toBeTruthy();
+  });
+
+  it('picks up the request this device already sent, and says when it is already added', async () => {
+    const earlier = {
+      instanceId: 'k3x9',
+      machineKey: MACHINE_KEY,
+      keys: {} as CryptoKeyPair,
+      enrolledAt: 1,
+      waiting: { machineName: 'Studio', deviceName: 'Work Mac' },
+    };
+    const asked: { name: string; earlier: EnrolledDevice | null | undefined }[] = [];
+    const { unmount } = render(
+      <EnrollPage
+        link={link}
+        user={USER.user as RemoteUser}
+        dashboard={createDashboard()}
+        devices={createDevices(earlier)}
+        resolveName={() => 'Chrome on Mac'}
+        request={(_input, options) => {
+          asked.push({ name: options.name, earlier: options.earlier });
+          return new Promise(() => undefined);
+        }}
+      />
+    );
+    expect(await screen.findByText('Request sent. Accept it on the machine.')).toBeTruthy();
+    expect(((await screen.findByLabelText('Device name')) as HTMLInputElement).value).toBe('Work Mac');
+    expect(asked).toEqual([{ name: 'Work Mac', earlier }]);
+    unmount();
+    const { waiting: _waiting, ...added } = earlier;
+    const second = render(
+      <EnrollPage
+        link={link}
+        user={USER.user as RemoteUser}
+        dashboard={createDashboard()}
+        devices={createDevices(added)}
+        resolveName={() => 'Chrome on Mac'}
+      />
+    );
+    expect(await screen.findByText('This device is already added')).toBeTruthy();
+    second.unmount();
+    render(
+      <EnrollPage
+        link={link}
+        user={USER.user as RemoteUser}
+        dashboard={createDashboard()}
+        devices={{ ...createDevices(), selectDevice: () => Promise.reject(new Error('No storage.')) }}
+        resolveName={() => 'Chrome on Mac'}
+      />
+    );
+    expect(await screen.findByRole('button', { name: 'Request access' })).toBeTruthy();
   });
 
   it('says why the machine refused, and what to do with a link that cannot work', async () => {

@@ -14,6 +14,7 @@ export interface EnrollOptions {
   dashboard: Pick<DashboardClient, 'acceptInvite'>;
   devices: Pick<DeviceStore, 'writeDevice'>;
   name: string;
+  earlier?: EnrolledDevice | null;
   onPending: () => void;
   now?: () => number;
   retryMs?: number;
@@ -40,7 +41,10 @@ async function openWhenAccepted(
         name: options.name,
         onPending: () => {
           if (!pending)
-            void options.devices.writeDevice({ ...device, waiting: { machineName: accepted.name } });
+            void options.devices.writeDevice({
+              ...device,
+              waiting: { machineName: accepted.name, deviceName: options.name },
+            });
           pending = true;
           options.onPending();
         },
@@ -52,15 +56,20 @@ async function openWhenAccepted(
   }
 }
 
+export function selectWaitingDevice(input: EnrollInput, device: EnrolledDevice | null) {
+  return device?.waiting && device.machineKey === input.machineKey ? device : null;
+}
+
 export async function requestDeviceAccess(
   input: EnrollInput,
   options: EnrollOptions
 ): Promise<EnrolledDevice> {
+  const earlier = selectWaitingDevice(input, options.earlier ?? null);
   const device: EnrolledDevice = {
     instanceId: input.instanceId,
     machineKey: input.machineKey,
-    keys: await (options.createKeys ?? createDeviceKeys)(),
-    enrolledAt: (options.now ?? Date.now)(),
+    keys: earlier?.keys ?? (await (options.createKeys ?? createDeviceKeys)()),
+    enrolledAt: earlier?.enrolledAt ?? (options.now ?? Date.now)(),
     ...(input.onMachine ? { onMachine: true } : {}),
   };
   const channel = await openWhenAccepted(input, options, device);

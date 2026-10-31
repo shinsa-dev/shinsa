@@ -13,7 +13,7 @@ export interface RemoteStatusView {
 }
 
 const STATUS_VIEW: Record<RemoteSnapshot['status'], Omit<RemoteStatusView, 'detail'>> = {
-  off: { label: 'Off', tone: 'neutral' },
+  off: { label: 'Not connected', tone: 'neutral' },
   starting: { label: 'Connecting', tone: 'amber' },
   connected: { label: 'Connected', tone: 'green' },
   reconnecting: { label: 'Reconnecting', tone: 'amber' },
