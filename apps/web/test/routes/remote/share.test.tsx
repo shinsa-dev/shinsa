@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { SharedPublication, Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
 import { SharePage } from '@/routes/remote/share.tsx';
 import { createSharedTask, DIFF } from '../../lib/share/fixtures.ts';
 import { createTask } from '../../support/state.ts';
@@ -52,6 +53,18 @@ function publication(overrides: Partial<SharedPublication['shared']> = {}): Shar
 }
 
 describe('the shared page on app.shinsa.dev', () => {
+  it('refuses every write while it is open, and stops refusing once it closes', async () => {
+    serve({
+      '/__remote/shares/tok': () => Response.json(publication()),
+      '/__remote/shares/tok/files/diff': () => new Response(DIFF),
+    });
+    const page = render(<SharePage token='tok' />);
+    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
+    expect(selectReadOnlyRefusal()?.message).toBe(READ_ONLY_REFUSAL);
+    page.unmount();
+    expect(selectReadOnlyRefusal()).toBeNull();
+  });
+
   it('shows a task read-only, with who shared it and its code from the published diff', async () => {
     serve({
       '/__remote/shares/tok': () => Response.json(publication()),

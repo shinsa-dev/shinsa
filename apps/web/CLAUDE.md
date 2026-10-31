@@ -138,7 +138,8 @@ src/
     │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the published diff and
     │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
     │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
-    │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides) and
+    │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides), and
+    │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's

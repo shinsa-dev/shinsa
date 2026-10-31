@@ -2611,7 +2611,17 @@ publishing path will serve teams.
   swaps the view in place when its `updatedAt` moved, so a running task's stage, phases, checks and review show up as
   the engine republishes them; a refresh that fails keeps the view, and a link that stopped working says so at once.
   An unknown or removed link says "This task is no longer shared, or the
-  link is wrong." Every answer and the page carry `X-Robots-Tag: noindex, nofollow, noarchive`.
+  link is wrong." Every answer and the page carry `X-Robots-Tag: noindex, nofollow, noarchive`. Unlike remote access,
+  which the engine pushes over the sealed channel the moment state changes, a link lags by up to `SHARE_REFRESH_MS`
+  after the engine publishes.
+- **Nothing writes through a link.** Hiding controls is the first layer, not the guarantee. A link never reaches the
+  machine: the page talks only to app.shinsa.dev, whose share routes answer `GET` alone (any other method is 404), and
+  the share token is no machine token (every machine route answers it 401) and no connect token or device key (the
+  tunnel's `/remote` refuses it), so no command, request or webhook can travel from a link to the engine. On the page
+  itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
+  rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
+  can be changed from here." before anything is sent, on the public page and on the machine's Preview alike, so a
+  control added later without a `useReadOnly` check still changes nothing.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
 

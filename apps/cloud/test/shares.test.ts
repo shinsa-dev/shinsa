@@ -400,4 +400,25 @@ describe('the shared page', () => {
     const home = await harness.call('/');
     expect(home.headers.get('x-robots-tag')).toBeNull();
   });
+
+  test('a share token writes nothing: no route takes a write by it, and no machine route accepts it', async () => {
+    const { harness, machine } = await setUp();
+    const token = await readToken(await publish(harness, machine));
+    for (const path of [resolveSharePath(token), resolveShareFilePath(token, 'shot-1')]) {
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        const answer = await harness.call(path, { method, body: '{}' });
+        expect(answer.status).toBe(404);
+      }
+    }
+    const asMachine = { bearer: token, sameOrigin: false };
+    expect((await harness.post(resolveMachinePublicationPath(TASK_ID), {}, asMachine)).status).toBe(401);
+    expect((await harness.post(resolveMachinePublicationRemovePath(TASK_ID), {}, asMachine)).status).toBe(
+      401
+    );
+    expect((await harness.post(REMOTE_PATHS.machineFilesCheck, { hashes: [] }, asMachine)).status).toBe(401);
+    expect(
+      (await harness.post(REMOTE_PATHS.heartbeat, { localUrl: 'http://127.0.0.1:7446' }, asMachine)).status
+    ).toBe(401);
+    expect((await harness.call(resolveSharePath(token))).status).toBe(200);
+  });
 });
