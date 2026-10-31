@@ -186,7 +186,7 @@ describe('folders and repositories to add', () => {
     expect(describeProjectRemoval(SUPERWALL, 2)).toEqual({
       title: 'Remove Superwall?',
       body: 'Its 2 repositories stay registered, without a project. Tasks keep their handles.',
-      done: 'Project removed. Its repositories have no project now.',
+      done: 'Project removed.',
     });
     expect(describeProjectRemoval(BASKET, 0)).toEqual({
       title: 'Remove Basket?',
@@ -266,7 +266,7 @@ describe('PROJECT_ACTIONS', () => {
     ]);
     expect(toasts.success.mock.calls.map((call) => call[0])).toEqual([
       'Repository added to Superwall.',
-      'Folder added. Its repositories belong to the project.',
+      'Folder added.',
     ]);
   });
 

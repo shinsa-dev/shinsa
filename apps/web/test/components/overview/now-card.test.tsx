@@ -370,11 +370,7 @@ describe('NowCard on the Overview', () => {
     expect(listSentCommands()).toEqual([
       { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null, planVersion: undefined },
     ]);
-    expect(
-      await view.findByText(
-        'Started. The worktree moves onto the latest default branch, then building begins.'
-      )
-    ).toBeTruthy();
+    expect(await view.findByText('Started. Updating the worktree.')).toBeTruthy();
   });
 
   it('says the operation runs next when you approve an operation’s plan', async () => {

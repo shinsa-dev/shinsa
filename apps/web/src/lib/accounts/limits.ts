@@ -51,7 +51,7 @@ export function parseSwitchValue(value: string) {
 
 export function describeSwitchAtChange(account: AccountSummary, switchAt: number | null) {
   const label = resolveAccountLabel(account);
-  return switchAt === null ? `${label} follows the setting.` : `Switches away from ${label} at ${switchAt}%.`;
+  return switchAt === null ? `${label} follows the setting.` : `${label} switches at ${switchAt}%.`;
 }
 
 export const PERCENT_TITLE = 'Switch accounts at another percentage';

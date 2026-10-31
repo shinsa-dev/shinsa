@@ -25,8 +25,8 @@ const WORKSPACE_COPY: Record<WorkspaceMode, Omit<WorkspaceItem, 'value'>> = {
 };
 
 const CHANGED: Record<WorkspaceMode, string> = {
-  worktrees: 'get a worktree each',
-  main_checkout: 'work in its checkout, one at a time',
+  worktrees: 'A worktree per task',
+  main_checkout: 'One task at a time',
 };
 
 export function resolveWorkspaceLabel(repo: Pick<Repo, 'workspace'>) {
@@ -38,7 +38,7 @@ export function listWorkspaceItems(): WorkspaceItem[] {
 }
 
 export function describeWorkspaceChange(repo: Pick<Repo, 'name'>, mode: WorkspaceMode) {
-  return `New tasks in ${repo.name} ${CHANGED[mode]}. Tasks already working keep where they are.`;
+  return `${CHANGED[mode]} in ${repo.name}.`;
 }
 
 export function changeWorkspace(repo: Repo, mode: WorkspaceMode) {

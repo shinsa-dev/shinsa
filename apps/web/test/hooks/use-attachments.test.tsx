@@ -69,8 +69,7 @@ describe('useAttachments', () => {
     const { result } = renderHook(() => useAttachments());
     act(() => result.current.add([new File(['x'], 'a.txt'), new File(['x'], '')]));
     await waitFor(() => expect(result.current.drafts).toEqual([]));
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t attach a.txt: The file is empty.');
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t attach the file: The file is empty.');
+    expect(toasts.error).toHaveBeenCalledWith('The file is empty.');
   });
 
   it('refuses files over the limits, ignores an empty transfer, and revokes previews when it goes', () => {
@@ -83,7 +82,7 @@ describe('useAttachments', () => {
         files: [new File([], 'empty.png', { type: 'image/png' })],
       } as unknown as DataTransfer);
     });
-    expect(toasts.error).toHaveBeenCalledWith('Each file must be between 1 byte and 25 MB.');
+    expect(toasts.error).toHaveBeenCalledWith('Each file must be 1 byte to 25 MB.');
     act(() => result.current.add([new File(['x'], 'c.png', { type: 'image/png' })]));
     unmount();
     expect(revoked).toHaveBeenCalledWith('blob:preview-1');

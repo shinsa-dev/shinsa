@@ -308,14 +308,7 @@ export function OverlaySpecimens() {
         <Button variant='outline' onClick={() => toast.success('Approved. Opening the pull request.')}>
           Success
         </Button>
-        <Button
-          variant='outline'
-          onClick={() =>
-            toast.error('Unable to reach Shinsa', {
-              description: 'Run shinsa status to see whether the engine is running.',
-            })
-          }
-        >
+        <Button variant='outline' onClick={() => toast.error('Couldn’t reach Shinsa.')}>
           Error
         </Button>
         <Button variant='outline' onClick={() => toast.warning('Checks failing on #4512')}>
@@ -331,7 +324,6 @@ export function OverlaySpecimens() {
           variant='outline'
           onClick={() =>
             toast('Task cancelled', {
-              description: 'The agent stopped and the worktree is gone.',
               action: { label: 'Undo', onClick: () => toast.success('Restored') },
             })
           }

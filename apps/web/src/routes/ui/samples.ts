@@ -18,7 +18,7 @@ export const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;
 
 export function acknowledgeSample() {
-  toast('Nothing was sent. This page only shows samples.');
+  toast('Samples only. Nothing was sent.');
   return Promise.resolve(true);
 }
 

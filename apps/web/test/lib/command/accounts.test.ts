@@ -66,7 +66,7 @@ describe('the global Accounts group', () => {
     });
     pick(choice, 'b');
     pick(choice, 'gone');
-    expect(update.mock.calls).toEqual([['b', { isDefault: true }, 'b@example.com is the default account.']]);
+    expect(update.mock.calls).toEqual([['b', { isDefault: true }, 'b@example.com is the default.']]);
     const noDefault = listAccountSections(createSnapshot({ accounts: [createAccount({ id: 'b' })] }))[0];
     expect(noDefault?.commands[2]).toMatchObject({ value: null });
     expect(noDefault?.commands[2]?.hint).toBeUndefined();

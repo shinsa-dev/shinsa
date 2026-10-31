@@ -7850,8 +7850,8 @@ A list that can hold hundreds of rows renders only the rows in view.
 
 #### Toasts
 
-- After every action a toast says what happened, in a full sentence ending in a full stop ("Kept in this task. It
-  starts as the next round.", "Running this step again on a@b.com.", "Finished without running the operation.").
+- After every action a toast says what happened in one short line of at most 40 characters, ending in a full stop,
+  with no description ("Request declined.", "Rerunning on a@b.com.", "Kai Lane joined.").
   The same action from a card, a menu or the command menu gives the same toast, from one table.
 - A long-running action opens a loading toast titled with the action ("Updating Claude Code") whose description is
   the first line of what runs ("Running claude update.") and then each line of output as it prints; it settles in

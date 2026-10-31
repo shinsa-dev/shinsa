@@ -1622,7 +1622,7 @@ Only these, and they win over anything below:
       (`RunAccount` in `account-items.tsx`, its latest attempt's account, else the one it is bound to). On the run
       of the step an agent works on now it is a click menu (hover `fg-4`), "Run this step again on" over every
       signed-in account with the current one checked; picking one restarts the step bound to that account, with
-      the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
+      the toast "Rerunning on a@b.com." ⌘K's This task has the same as "Run this step again on…".
       Earlier runs show the account as plain text.
     - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
       these. Seven are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
@@ -1718,7 +1718,7 @@ Only these, and they win over anything below:
       take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
       button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
       only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,
-      "macOS blocked a notification. Allow notifications for Shinsa in System Settings.", with the action Open
+      "macOS blocked a notification.", with the action Open
       settings (`apps/desktop/CLAUDE.md` → Rules).
     - **What triggers them**: a gate that newly enters Needs you within the focus project. The first snapshot after a
       load never chimes, a gate outside the focus project never does, and neither does one that comes into view when the
@@ -1832,8 +1832,7 @@ Only these, and they win over anything below:
       "Loads when needed · ~4.2k tokens" while the optimizer leaves it out. Then a primary `xs` Connect when it needs
       a sign-in (a Claude Code or plugin MCP's cost carries the tooltip that Claude runs can still use the sign-in
       made in Claude Code), the `Switch` (tooltip: "Only for Shinsa’s agents. Claude Code and Codex keep their own
-      settings."; toast on off: "Turned off ‹name› for Shinsa’s agents. Claude Code and Codex keep their own
-      settings.") and the `•••` menu ("MCP options"): Connect or Sign in again (web MCPs), Sign out, Check now, Show
+      settings."; toast on off: "Turned off ‹name›.") and the `•••` menu ("MCP options"): Connect or Sign in again (web MCPs), Sign out, Check now, Show
       details / Hide details, Use everywhere, Use in one project ▸, Use in one repository ▸ (radio items, the current
       place checked), Edit… (Shinsa's own) or Copy to Shinsa and edit…, and Remove behind `ConfirmDialog` (Shinsa's
       own only, "Remove MCP"). The details sit inside the row, indented to the name (`pl-7`, `pr-2`), with no surface
@@ -1925,7 +1924,7 @@ Only these, and they win over anything below:
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
     - **A split-off is a suggested task's row** in Suggested tasks with Make it a task (outline) and Keep it here
       (secondary, in Dismiss's place); keeping it sends it to this task now, as a message to the open round or a new
-      round of a resting task ("Kept in this task. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
+      round of a resting task ("Kept. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
       ("The agent takes it now") and, per round whose shipping can change, "Ship round 4 as a
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.

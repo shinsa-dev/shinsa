@@ -570,8 +570,7 @@ every commit.
   - On a pipeline without the checks step, or a task with no checks at all, there is nothing to run, so approving the
     review with them pushes straight away, as approving without edits does: the push effect commits them first.
   - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
-    Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
-    passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
+    Committing your edits.", "Approved. Merging once CI passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
     request is open) or "Approved. Merging the pull request." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
   - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
@@ -2568,9 +2567,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
   prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
   none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went and why; when every provider fails (no
+  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
   Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so the toast says the policies were not read and why (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
+  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
   focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole

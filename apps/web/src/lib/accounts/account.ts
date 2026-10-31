@@ -126,7 +126,7 @@ export function listRerunChoices(snapshot: AccountsSnapshot | null): AccountChoi
 }
 
 export function describeRerun(account: RunAccount) {
-  return `Running this step again on ${resolveAccountLabel(account)}.`;
+  return `Rerunning on ${resolveAccountLabel(account)}.`;
 }
 
 export function describeRunsOn(account: RunAccount) {
@@ -138,7 +138,7 @@ export function describeBinding(account: RunAccount | null) {
 }
 
 export function describeDefaultChanged(account: { email: string | null }) {
-  return `${resolveAccountLabel(account)} is the default account.`;
+  return `${resolveAccountLabel(account)} is the default.`;
 }
 
 export function resolvePauseAction(account: AccountSummary): AccountAction {
