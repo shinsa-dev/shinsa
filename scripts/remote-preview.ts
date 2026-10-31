@@ -5,10 +5,12 @@ import { Transcripts } from '../apps/engine/src/agents/index.ts';
 import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
 import { createQuickCalls } from '../apps/engine/src/agents/quick/index.ts';
 import { ConfigStore, resolveConfig } from '../apps/engine/src/config/index.ts';
+import { normalizeRemote } from '../apps/engine/src/git/repo.ts';
 import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
+import { type ShareGitHub, SharePublisher } from '../apps/engine/src/remote/shares.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
@@ -23,8 +25,14 @@ import {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
+  type Repo,
+  type RepositoryVisibility,
   resolveKeyFingerprint,
+  resolveSharePagePath,
+  SHARE_DIFF_FILE,
+  type SharedPublication,
   serializeBase64Url,
+  type Task,
 } from '../packages/core/src/index.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -63,6 +71,16 @@ interface Machine {
   connectKey: string;
   publicKey: string;
 }
+
+interface PreviewShare {
+  token: string;
+  label: string;
+  taskId: string;
+  publisher: SharePublisher;
+  port: number;
+}
+
+const SHARE_ROUTE = new RegExp(`^${REMOTE_PATHS.shares}/([A-Za-z0-9_-]+)(?:/files/([A-Za-z0-9_-]+))?$`);
 
 function seedStudio() {
   const seedDir = join(PREVIEW_DIR, 'studio');
@@ -126,11 +144,18 @@ async function startMachine(id: string, name: string, dataDir: string) {
     machineName: name,
     openUrl: () => Promise.resolve(),
   });
+  const evidence = new EvidenceStore(config.evidenceDir);
+  const shares = new SharePublisher({
+    engine,
+    remote,
+    evidence,
+    github: createPreviewGitHub(engine, 'public'),
+  });
   const http = startServer({
     engine,
     config,
     transcripts: new Transcripts(config.transcriptsDir),
-    evidence: new EvidenceStore(config.evidenceDir),
+    evidence,
     models: { listModels: () => Promise.resolve([]) } as never,
     onboarding: new Onboarding({
       engine,
@@ -146,6 +171,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     }),
     remote,
     place: PLACE,
+    shares,
   });
   const key = await remote.store.resolveMachineKey();
   const machine: Machine = {
@@ -156,7 +182,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     connectKey,
     publicKey: key.publicKey,
   };
-  return { machine, engine };
+  return { machine, engine, evidence };
 }
 
 async function seedLaptop(engine: Engine, dataDir: string) {
@@ -199,6 +225,118 @@ function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
   );
 }
 
+function readBranchDiff(repo: Repo, base: string, branch: string) {
+  const diff = Bun.spawnSync(['git', '-C', repo.path, 'diff', `${base}...${branch}`]);
+  if (diff.exitCode !== 0) throw new Error(`git diff ${base}...${branch} failed in ${repo.path}.`);
+  return diff.stdout.toString();
+}
+
+function countStoredEvidence(engine: Engine, taskId: string) {
+  return Object.values(engine.state.evidence).filter(
+    (item) => item.taskId === taskId && item.uri.startsWith('/api/evidence/')
+  ).length;
+}
+
+function createPreviewGitHub(engine: Engine, visibility: RepositoryVisibility): ShareGitHub {
+  return {
+    resolveVisibility: () => Promise.resolve(visibility),
+    readDiff: (repo, number) => {
+      const task = Object.values(engine.state.tasks).find(
+        (entry) => entry.repoId === repo.id && entry.pullRequest?.number === number
+      );
+      return Promise.resolve(readBranchDiff(repo, repo.defaultBranch, task?.branch ?? repo.defaultBranch));
+    },
+  };
+}
+
+function hasBranch(repo: Repo, branch: string) {
+  return Bun.spawnSync(['git', '-C', repo.path, 'rev-parse', '--verify', '--quiet', branch]).exitCode === 0;
+}
+
+async function normalizeSeedRemote(engine: Engine, repo: Repo) {
+  if (!repo.remote) return repo;
+  await engine.dispatch({
+    type: 'repo.update',
+    repoId: repo.id,
+    patch: { remote: normalizeRemote(repo.remote) },
+  });
+  return engine.state.repos[repo.id] ?? repo;
+}
+
+async function createPreviewShare(
+  studio: Awaited<ReturnType<typeof startMachine>>,
+  task: Task,
+  token: string,
+  label: string,
+  visibility: RepositoryVisibility
+): Promise<PreviewShare | null> {
+  const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
+  if (!seeded) return null;
+  await normalizeSeedRemote(studio.engine, seeded);
+  const publisher = new SharePublisher({
+    engine: studio.engine,
+    remote: studio.machine.remote,
+    evidence: studio.evidence,
+    github: createPreviewGitHub(studio.engine, visibility),
+  });
+  return { token, label, taskId: task.id, publisher, port: studio.machine.port };
+}
+
+async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachine>>) {
+  const { engine } = studio;
+  const tasks = Object.values(engine.state.tasks).filter((entry) => entry.report && entry.repoId);
+  const coded = tasks.find((entry) => {
+    const repo = entry.repoId ? engine.state.repos[entry.repoId] : undefined;
+    return entry.pullRequest?.state === 'open' && entry.branch && repo && hasBranch(repo, entry.branch);
+  });
+  const [evidenced] = tasks.sort(
+    (left, right) => countStoredEvidence(engine, right.id) - countStoredEvidence(engine, left.id)
+  );
+  const shares = [
+    coded &&
+      (await createPreviewShare(
+        studio,
+        coded,
+        'preview-public',
+        'A shared task from a public repository, with Code',
+        'public'
+      )),
+    evidenced &&
+      (await createPreviewShare(
+        studio,
+        evidenced,
+        'preview-private',
+        'A shared task from a private repository, with its evidence: no code, no paths',
+        'private'
+      )),
+  ];
+  return shares.filter((share): share is PreviewShare => Boolean(share));
+}
+
+async function respondShare(match: RegExpExecArray, shares: PreviewShare[]) {
+  const [, token, fileId] = match;
+  const share = shares.find((entry) => entry.token === token);
+  if (!share)
+    return Response.json(
+      { error: { code: 'share_not_found', message: 'This task is no longer shared, or the link is wrong.' } },
+      { status: 404 }
+    );
+  const preview = await share.publisher.preview(share.taskId);
+  if (fileId === SHARE_DIFF_FILE && preview.files[fileId])
+    return new Response(await share.publisher.previewDiff(share.taskId), {
+      headers: { 'content-type': 'text/plain' },
+    });
+  const uri = fileId ? preview.files[fileId] : undefined;
+  if (uri) return fetch(`http://127.0.0.1:${share.port}${uri}`);
+  if (fileId) return new Response(null, { status: 404 });
+  const publication: SharedPublication = {
+    shared: preview.shared,
+    files: Object.keys(preview.files),
+    updatedAt: preview.updatedAt,
+  };
+  return Response.json(publication);
+}
+
 function respondStatic(pathname: string) {
   const relative = pathname.replace(/^\/+/, '');
   const file = Bun.file(join(REMOTE_WEB, relative));
@@ -209,7 +347,7 @@ function respondStatic(pathname: string) {
   });
 }
 
-function respondIndex(machines: Machine[]) {
+function respondIndex(machines: Machine[], shares: PreviewShare[]) {
   const links = [
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     [
@@ -228,6 +366,11 @@ function respondIndex(machines: Machine[]) {
     ['All tasks, each with its machine', '/tasks'],
     ['Settings, with Machines', '/settings'],
     ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
+    ...shares.map((share) => [
+      `${share.label} (a public link, no sign-in)`,
+      resolveSharePagePath(share.token),
+    ]),
+    ['A share link that no longer works', resolveSharePagePath('no-longer-shared')],
     ...machines.map((machine) => [
       `${machine.name}'s own app on the machine: Settings, Remote access`,
       `http://${HOST}:${machine.port}/settings`,
@@ -332,12 +475,15 @@ async function main() {
   const laptop = await startMachine('laptop', 'Laptop', laptopData);
   await seedLaptop(laptop.engine, laptopData);
   const machines = [studio.machine, laptop.machine];
+  const shares = await createPreviewShares(studio);
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/__preview') return respondIndex(machines);
+      if (url.pathname === '/__preview') return respondIndex(machines, shares);
+      const share = SHARE_ROUTE.exec(url.pathname);
+      if (share) return respondShare(share, shares);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {

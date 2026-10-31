@@ -30,7 +30,14 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
    named tunnel; no inbound port is ever opened.
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
-   your local engine and holds no state of its own. Nothing is copied to the cloud.
+   your local engine and holds no state of its own. Nothing is copied to the cloud, with one exception you choose
+   task by task: a task you share is published to app.shinsa.dev as a read-only projection (core's `SharedTask`), so
+   anyone with its link can read it without a device key. A publication carries the request, plan, phase reports,
+   walkthrough, review, evidence and the pull request's state and checks, and, for a public repository only, its
+   pull request's diff from GitHub. Chats, transcripts, tool calls, gate questions and answers, activity, notes,
+   attachments, check output, secrets, accounts and costs never leave the machine, and nothing of a private
+   repository's code, file names, branches or pull request address does either. The same projection and publishing
+   path will serve teams (`docs/engine.md` → Sharing a task).
 6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed
    with keys only those two hold. A browser is trusted once, by scanning a QR the machine shows; a GitHub account alone
@@ -48,6 +55,10 @@ browser on app.shinsa.dev ──HTTPS──► Worker (apps/cloud, D1)   sign-in
         ▼                                  ▼
 t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── the engine
         sealed frames only                                    (127.0.0.1)
+
+the engine ──HTTPS, machine token──► Worker: a shared task's publication (D1)
+                                     and its files (R2), only for tasks you share
+anyone with the link ──HTTPS──► app.shinsa.dev/share/‹token›: read-only, no sign-in
 ```
 
 ## Risks
@@ -72,6 +83,11 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.
 - **Metadata stays visible**: when you use Shinsa, from where, and how much.
+- **A shared task is readable by app.shinsa.dev.** A publication is not end to end encrypted: the Worker stores it,
+  so whoever controls the deploy or the Cloudflare account can read it. It holds only what you would put in a pull
+  request (`docs/engine.md` → Sharing a task), its link token is kept only as a hash, and Stop sharing removes it at
+  once. Text an agent wrote (a summary, a testing step) can still name a file of a private repository, which is why
+  Share task offers Preview first.
 
 ## Later
 

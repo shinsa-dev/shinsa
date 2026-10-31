@@ -267,7 +267,9 @@ src/
 │                    loses every path, line, command and pull request address, and has no code), hasSharedCode, and
 │                    resolveSharedFingerprint, which decide's syncShares compares to republish a shared task only
 │                    when what it shows changed (decide/shares.ts: task.share and task.unshare, human-only;
-│                    share.record, the link the engine got back)
+│                    share.record, the link the engine got back; share.fail, why a publish failed); its wire
+│                    contract with the Worker is remote/shares.ts (PublicationRequest, SharedPublication,
+│                    SharePreview, PUBLICATION_LIMITS, SHARE_FILE_TYPES and the share paths)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,

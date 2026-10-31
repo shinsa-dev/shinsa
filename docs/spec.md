@@ -377,7 +377,10 @@ Remote access: Settings → General → Remote access pairs this machine with ap
 the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashboard over every machine a device was added to, each
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
-`docs/plans/remote-plan.md`).
+`docs/plans/remote-plan.md`). Share task (a task's menu) makes a public link, `app.shinsa.dev/share/<token>`, that
+anyone can open read-only without signing in: the task's request, plan, review, evidence and pull request, with its
+code only for a public repository, and never its chat. Preview shows on the machine exactly what the link shows, and
+Stop sharing ends the link at once (`docs/engine.md` → Sharing a task).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -414,8 +417,8 @@ where your policies, plain-English sentences the classifier reads with the reque
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
   opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state
-  (`docs/plans/remote-plan.md`).
+  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
+  tasks you share by link, as a read-only projection without their chat (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
 

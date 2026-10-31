@@ -172,7 +172,8 @@ src/
 │                        classifier reads every machine's policies with a new task's request and names its machine),
 │                        shares.ts (SharePublisher: the share.publish and share.remove effects, which publish a shared
 │                        task's projection to app.shinsa.dev with the repository's visibility, its evidence files by
-│                        hash and a public repository's pull request diff), index.ts (Remote: wires
+│                        hash and a public repository's pull request diff, and GET /api/tasks/<id>/share/preview,
+│                        what it would publish now), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,

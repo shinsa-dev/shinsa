@@ -2513,6 +2513,90 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
 
+## Sharing a task
+
+A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/<token>`, without signing in
+and without a device key: the one place task data leaves the machine outside the sealed channel. What leaves is a
+read-only projection a pull request could carry; chats and everything else from the agent sessions never do. The
+same projection and publishing path will serve teams.
+
+- **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
+  the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
+  core refuses them on your behalf (`human_only`), since they publish outside the machine. An automation's home is
+  refused (`share_refused`). The remote dashboard may share, as it may close a gate.
+- **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository })`) builds a
+  `SharedTask`: a redacted `Task` (so the web's tab components render it unchanged), the task's current evidence, the
+  project's name, the owner's GitHub login and the machine's name from `remote.json`, the repository's name and
+  whether it shares code. It copies fields by name: a field added to `Task` later stays empty until it is added here
+  on purpose. What it keeps and drops:
+
+  | Part | Public repository | Private, or visibility unknown |
+  | --- | --- | --- |
+  | Title, handle, status and its reason, priority, kind of task, request text, summary, result, proposal | kept | kept |
+  | Request attachments (pasted images, files) | dropped | dropped |
+  | Plan: goal, phases, behaviour, approach, out of scope, its changes and approval | kept | kept, without its files |
+  | Plan files, check commands, `shinsa://file`, `branch`, `pr` and `repo` links | kept | dropped |
+  | Phase reports, walkthrough, review report, findings, decisions | kept | kept, without file, line ranges or commands |
+  | A testing step's target | a public `https://` address only | a public `https://` address only |
+  | Check results | label and outcome (and note) | label and outcome (and note) |
+  | Check output, coverage | output never; coverage kept | dropped |
+  | Branches, base, the pull request's address, head and merge commit | kept | dropped |
+  | Pull request number, state, checks and check runs, comment count, changes | kept (check runs' links too) | kept, without links |
+  | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed | the same |
+  | The diff (Code) | the pull request's, once one is open or merged | never |
+  | Chats, transcripts, runs, tool calls, sessions, accounts, costs | never | never |
+  | Gates' questions and answers, plan answers, your review comments, verdict notes | never | never |
+  | Activity, notes, inbox, messages, watchdogs, delegations, worktree, waits | never | never |
+  | Links to other tasks (`shinsa://task/…`) | their label as plain text | their label as plain text |
+
+  Visibility is `public` only when GitHub says so (`gh repo view --json visibility`, `resolveRepoVisibility`, kept 10
+  minutes per repository, `VISIBILITY_TTL_MS`); a repository without a GitHub remote, a failed read or any other
+  answer is `unknown` and is treated as private. A task without a repository has no Code. Text an agent wrote freely
+  (a summary, a finding's message, a testing step) is kept as written and can name a file; Preview is how you check it.
+- **When it is published.** `task.share` emits `task.shared` and queues `share.publish` (`replay_safe`, lane
+  `share:<task>`, so a later publish waits for the one running). At the end of every `decide`, `syncShares` (beside
+  `syncMergeSteps`) compares the fingerprint of each touched shared task's projection before and after
+  (`resolveSharedFingerprint`, the projection under a fixed context) and queues `share.publish` only when it changed:
+  a note, a message or a run's activity publishes nothing. `task.unshare` cancels a queued publish, emits
+  `task.unshared` and queues `share.remove`.
+- **Publishing** (`apps/engine/src/remote/shares.ts`, `SharePublisher`): it reads the visibility, resolves the
+  projection, lists its files and posts them with the machine token (`apps/cloud/CLAUDE.md` → Shared tasks). Evidence
+  stored on the machine (`/api/evidence/…`) is a file when it is a PNG, JPEG, WebP, GIF, MP4, WebM, text or Markdown
+  of 50 MB at most; anything else is left out of the publication rather than shown broken. Each file is hashed once
+  per size and modification time, the Worker is asked which hashes it lacks, and only those are uploaded. For a
+  public repository with an open or merged pull request, the diff is `gh pr diff <n>`, read again only when the
+  head moves, and left out above 50 MB (Code then shows no diff). At most 200 files. The first publication asks for a
+  new link (`newLink` while `TaskShare.url` is null); its answer is recorded with `share.record`, and later ones keep
+  the link.
+- **Failures.** Not paired (no credentials, or a 401 that revokes the machine) fails at once with "Turn on remote
+  access in Settings → General to share this task…" (`SHARE_NOT_PAIRED`); another refusal from app.shinsa.dev (a 4xx)
+  fails at once with its message; a network error or a 5xx retries as any effect. A failed publish sends
+  `share.fail`, which keeps the reason on `TaskShare.failure` for Share task to show with Try again (`task.share`
+  again republishes, keeping the link); it opens no failure gate, since nothing in the task waits on it. A
+  successful publish clears it. Pausing remote access does not stop publishing: pausing closes the way in, not the
+  links you gave out. Removing remote access, or the machine on app.shinsa.dev, removes every publication and file
+  the machine made, so every link answers as no longer shared.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one dialog over the task's
+  `TaskShare` and the remote snapshot, in five views: remote access needed (Open Settings), ready (Share), making the link,
+  failed (the reason, Stop sharing and Try again) and shared (the link, read-only and selectable, with Copy, Stop
+  sharing and Done). Every view but the failed one offers Preview, so you can read what a link shows before you
+  share or turn on remote access.
+- **Preview** (`/tasks/<handle>/shared`, `routes/share-preview.tsx`): the same page a link opens, from
+  `GET /api/tasks/<id>/share/preview` (`SharePreview`: the projection the engine would publish now, with its real
+  visibility, and the local address of each file it would upload) and `…/share/preview/diff`, so it shows exactly what
+  the link would, private-repository rules included, before anything leaves the machine. Its note says it is a
+  preview and that chats, activity and notes never leave the machine.
+- **The shared page** (`routes/remote/share.tsx`, `components/share/shared-task-page.tsx`): the remote build's
+  `/share/<token>` reads `GET /__remote/shares/<token>` with no session and shows the task read-only: its heading,
+  its facts (handle, status, project, repository, pull request with its checks, who shared it from which machine and
+  when it was last published), and the tabs Overview (result, summary, plan, evidence), Review (the review tab read
+  only: no verdict, no comments, no drafts) when the task reached review, and Code for a public repository: every
+  file of the published diff, read from the publication's `diff` file, never from a worktree. No control on it sends
+  a command. An unknown or removed link says "This task is no longer shared, or the link is wrong." Every answer and
+  the page carry `X-Robots-Tag: noindex, nofollow, noarchive`.
+- **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
+  the link is missing; an agent has no tool to share or stop sharing.
+
 ## Who can change Shinsa
 
 Shinsa is a local server for one person, and every agent runs as that person, on that machine, with a shell. There

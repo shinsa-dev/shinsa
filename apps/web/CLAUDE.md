@@ -35,7 +35,10 @@ src/
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
 │   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
-│   │                    device, the benefits card and Check again)
+│   │                    device, the benefits card and Check again), share.tsx (/share/<token>: a shared task,
+│   │                    read-only and without sign-in, docs/engine.md → Sharing a task)
+│   ├── share-preview.tsx /tasks/<handle>/shared: on the machine, the page a share link would show, from the engine's
+│   │                    preview of what it would publish
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -129,6 +132,12 @@ src/
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
+    ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, share and unshare),
+    │                    sources.ts (a shared task from a publication on app.shinsa.dev or the engine's preview, and
+    │                    each file's address), view.ts (the read-only state and task the tab components render),
+    │                    page.ts (the shared page's tabs, notes and Shared by line), code.ts (the published diff in
+    │                    place of a worktree's refs); components/share/shared-task-page.tsx renders it and
+    │                    components/task/share-dialog.tsx is Share task
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
