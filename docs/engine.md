@@ -4596,7 +4596,9 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
   `instance/bundle.ts` as `BUNDLE`, null when running from source): a compiled engine cannot read core's sources or
   the SDK's `package.json`. `shinsa eunoe …` runs eunoe's CLI from the same executable (the agents' `eunoe load` and
-  `eunoe peek`); the forwarder itself is the library, in the engine.
+  `eunoe peek`), importing its `src/cli/main.ts` by path through `node_modules`, since eunoe's `exports` map lists only
+  the library; the Test workflow bundles `scripts/engine-main.ts` so a dependency bump that breaks the import fails
+  before merge. The forwarder itself is the library, in the engine.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
 - **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
