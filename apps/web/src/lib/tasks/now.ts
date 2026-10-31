@@ -8,7 +8,7 @@ import {
 } from '@shinsa/core';
 import { formatCount, formatSteps } from '@/lib/format/count.ts';
 import { countOpenSteps } from '@/lib/review/merge-steps.ts';
-import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
+import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 
 export function resolveGateNow(task: Task, gate: Gate) {
   switch (gate.type) {

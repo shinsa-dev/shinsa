@@ -3,10 +3,10 @@ import { recordEvidenceText } from '@/lib/evidence/texts.ts';
 
 const FOLDER = '/evidence';
 
-const TESTS = `$ bun test test/components/roadmap
+const TESTS = `$ bun test test/components/tasks
 bun test v1.4.4
 
-test/components/roadmap/row.test.tsx:
+test/components/tasks/row.test.tsx:
 ✓ the row context menu > offers Open task, priority, dependencies and the task actions [54.03ms]
 ✓ the row context menu > opens the task [26.15ms]
 ✓ the row context menu > changes the priority [21.31ms]
@@ -39,7 +39,7 @@ $ bun run test
 Ran 1835 tests across 214 files.`;
 
 const TEXTS: [string, string][] = [
-  [`${FOLDER}/roadmap-tests.txt`, TESTS],
+  [`${FOLDER}/task-list-tests.txt`, TESTS],
   [`${FOLDER}/checks.txt`, CHECKS],
 ];
 
@@ -103,12 +103,12 @@ const PIECES: Omit<Evidence, 'taskId' | 'attachedAt'>[] = [
     uri: `${FOLDER}/tasks-hover-1280-light.webm`,
   },
   {
-    id: 'roadmap-tests',
+    id: 'task-list-tests',
     runId: null,
     kind: 'test',
-    title: 'bun test test/components/roadmap',
+    title: 'bun test test/components/tasks',
     detail: 'The kind-of-task test covers the tinted mark and its tooltip.',
-    uri: `${FOLDER}/roadmap-tests.txt`,
+    uri: `${FOLDER}/task-list-tests.txt`,
   },
   {
     id: 'checks',

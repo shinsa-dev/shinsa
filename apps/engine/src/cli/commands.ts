@@ -77,9 +77,15 @@ export async function createTask(args: string[], io: CommandIo) {
     repoId: null,
     priority: resolvePriority(flags),
     planFirst: flags.has('--plan-first'),
+    ...(flags.has('--backlog') ? { backlog: true } : {}),
     origin: io.cwd,
   });
-  writeDone(io, 'Started. Shinsa brings it back when it needs a decision.');
+  writeDone(
+    io,
+    flags.has('--backlog')
+      ? 'Added to the backlog. It plans now and builds when you start it.'
+      : 'Started. Shinsa brings it back when it needs a decision.'
+  );
   writeTaskLink(io, result);
 }
 

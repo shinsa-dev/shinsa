@@ -20,6 +20,7 @@ import {
 import { assembleReport } from '../report/assemble.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument } from '../report/types.ts';
+import { BACKLOG_REASON, PLAN_READY_REASON } from './backlog.ts';
 import {
   assertCheckIds,
   findTaskCheck,
@@ -86,7 +87,7 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
     startAfterPlan(decider, task.id);
     return;
   }
-  decider.stage(task.id, 'awaiting_plan', 'plan ready for you');
+  decider.stage(task.id, 'awaiting_plan', proposed.backlog ? BACKLOG_REASON : PLAN_READY_REASON);
   decider.openGate(task.id, 'plan', task.title, body, {
     details: { planVersion: proposed.plan?.version ?? 1 },
   });

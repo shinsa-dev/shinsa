@@ -54,7 +54,7 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
       label: `${resolveDependencyLabel(task)}…`,
       ...(hint ? { hint } : {}),
       icon: 'IconHourglass',
-      keywords: ['wait', 'after', 'depends', 'dependency', 'blocked', 'chain', 'roadmap', 'order'],
+      keywords: ['wait', 'after', 'depends', 'dependency', 'blocked', 'chain', 'order'],
       heading: 'Waits on',
       value: task.waitsOn,
       options: choices.map((choice) => ({

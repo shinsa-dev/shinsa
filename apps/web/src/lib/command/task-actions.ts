@@ -19,6 +19,8 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   terminal: ['worktree', 'shell', 'command line'],
   finder: ['worktree', 'files', 'folder', 'reveal'],
   fork: ['handoff', 'copy', 'follow-up', 'new task'],
+  moveToBacklog: ['later', 'park', 'schedule', 'not now'],
+  removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
   restart: ['retry', 'rerun', 'again'],
   complete: ['complete', 'finish', 'close', 'resolve'],
   cancel: ['stop', 'abandon', 'drop', 'close'],

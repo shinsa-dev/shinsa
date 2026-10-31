@@ -17,17 +17,15 @@ import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
-import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectTaskProject } from '@/lib/projects.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
-import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
+import type { TaskGroupKey } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
-import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 import { PullRequestBadge } from './pull-request-badge.tsx';
 import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
 
-export const ROADMAP_COLUMNS =
+export const TASK_LIST_COLUMNS =
   'grid-cols-[minmax(0,1fr)_7.5rem_12rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
@@ -52,16 +50,13 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
+function KindMark({ task }: { task: Task }) {
   return (
     <Hint label={describeTaskSteps(task)}>
       <span
         role='img'
         aria-label={resolveShapeLabel(task)}
-        className={cn(
-          'grid size-4 shrink-0 place-items-center',
-          TONE_TEXT[resolveTaskStatus(state, task).tone]
-        )}
+        className='grid size-4 shrink-0 place-items-center text-fg-2'
       >
         <Icon size='sm' name={resolveShapeIcon(task)} />
       </span>
@@ -69,12 +64,12 @@ function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: RoadmapGroupKey }) {
+function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: TaskGroupKey }) {
   if (group === 'waiting') return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
   return <StatusText state={state} task={task} className='truncate text-xs' />;
 }
 
-export function RoadmapRow({
+export function TaskListRow({
   state,
   task,
   group,
@@ -82,7 +77,7 @@ export function RoadmapRow({
 }: {
   state: ShinsaState;
   task: Task;
-  group: RoadmapGroupKey;
+  group: TaskGroupKey;
   depth: number;
 }) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
@@ -105,7 +100,7 @@ export function RoadmapRow({
                 navigate(resolveTaskPath(task));
               }
             }}
-            className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none transition-colors duration-150 hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1 ${ROADMAP_COLUMNS}`}
+            className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none transition-colors duration-150 hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1 ${TASK_LIST_COLUMNS}`}
           />
         }
       >
@@ -124,7 +119,7 @@ export function RoadmapRow({
           <Truncate>{repo?.name ?? 'No repository'}</Truncate>
         </span>
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-          <KindMark state={state} task={task} />
+          <KindMark task={task} />
           <RowStatus state={state} task={task} group={group} />
         </span>
         <span className='max-md:hidden'>

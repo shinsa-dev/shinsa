@@ -74,7 +74,7 @@ export interface StepGate {
   when: string | null;
 }
 
-export type PlanGateReason = 'operates' | 'plan_first' | 'asks_approval' | 'large' | 'revised';
+export type PlanGateReason = 'operates' | 'plan_first' | 'backlog' | 'asks_approval' | 'large' | 'revised';
 
 export interface PlanGateRule {
   always: readonly PlanGateReason[];
@@ -82,7 +82,7 @@ export interface PlanGateRule {
 }
 
 export const PLAN_GATE_RULE: PlanGateRule = {
-  always: ['operates', 'plan_first', 'asks_approval'],
+  always: ['operates', 'plan_first', 'backlog', 'asks_approval'],
   withLargePlans: ['large', 'revised'],
 };
 
@@ -91,6 +91,7 @@ export const PLAN_SIZE_LIMITS = { phases: 3, files: 6 } as const;
 const PLAN_GATE_REASON_TEXT: Record<PlanGateReason, string> = {
   operates: 'the task runs an operation',
   plan_first: 'it was created plan first',
+  backlog: 'it is in the backlog',
   asks_approval: 'the plan asks for approval',
   large: `the plan has more than ${PLAN_SIZE_LIMITS.phases} phases or ${PLAN_SIZE_LIMITS.files} files`,
   revised: 'the plan is a revision',

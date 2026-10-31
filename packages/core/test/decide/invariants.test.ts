@@ -891,6 +891,7 @@ function assertInvariants(state: ShinsaState, now: number) {
   }
   for (const task of queue.working) place(task.id, 'working');
   for (const task of queue.waiting) place(task.id, 'waiting');
+  for (const task of queue.backlog) place(task.id, 'backlog');
 
   assertScheduleInvariants(state);
   assertHandleInvariants(state);
@@ -975,7 +976,36 @@ type SideStream =
   | 'on_behalf'
   | 'workspaces'
   | 'pushes'
+  | 'backlog'
   | null;
+
+function selectBacklogCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
+  if (!chance(random, ROUND_ODDS)) return null;
+  const tasks = Object.values(state.tasks).filter((task) => !isTaskSettled(task));
+  const parked = tasks.filter((task) => task.backlog);
+  const commands: ShinsaCommand[] = [
+    { type: 'task.create', request: 'Later', repoId: 'repo', backlog: true },
+    { type: 'task.create', request: 'What is this?', repoId: 'repo', mode: 'ask', backlog: true },
+    ...tasks.map((task) => ({ type: 'task.move_to_backlog' as const, taskId: task.id })),
+    ...parked.map((task) => ({ type: 'task.remove_from_backlog' as const, taskId: task.id })),
+  ];
+  return pick(random, commands) ?? null;
+}
+
+function listBacklogMarks(state: ShinsaState) {
+  return Object.values(state.tasks).flatMap((task) => [
+    task.backlog && task.stage === 'awaiting_plan' ? 'plan held in the backlog' : null,
+    ...task.activity.map((entry) =>
+      entry.text === 'Started building from the backlog'
+        ? 'started from the backlog'
+        : entry.text === 'Removed from the backlog'
+          ? 'removed from the backlog'
+          : entry.text.startsWith('Started at once')
+            ? 'inquiry started at once'
+            : null
+    ),
+  ]);
+}
 
 function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
   if (!chance(random, ROUND_ODDS)) return null;
@@ -1054,6 +1084,8 @@ function selectSideCommand(
       return selectWorkspaceCommand(state, randoms.planner);
     case 'pushes':
       return selectPushCommand(state, randoms.pushes);
+    case 'backlog':
+      return selectBacklogCommand(state, randoms.planner);
     default:
       return null;
   }
@@ -1402,6 +1434,24 @@ describe('decide under random command sequences', () => {
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'workspaces', collect);
       expect([...reached].sort()).toEqual(['waited for the checkout', 'worked in the checkout']);
+    },
+    SEEDS * 2_000
+  );
+
+  test(
+    'keeps every invariant while you move work into and out of the backlog',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of listBacklogMarks(state)) if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'backlog', collect);
+      expect([...reached].sort()).toEqual([
+        'inquiry started at once',
+        'plan held in the backlog',
+        'removed from the backlog',
+        'started from the backlog',
+      ]);
     },
     SEEDS * 2_000
   );

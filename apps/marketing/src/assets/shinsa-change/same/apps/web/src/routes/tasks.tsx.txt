@@ -8,18 +8,18 @@ import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { RoadmapSection } from '@/components/roadmap/group.tsx';
-import { ROADMAP_COLUMNS } from '@/components/roadmap/row.tsx';
+import { TaskGroupSection } from '@/components/tasks/group.tsx';
+import { TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeRoadmapCounts, listRoadmapSections, selectRoadmapGroup } from '@/lib/tasks/roadmap.ts';
+import { describeTaskCounts, listTaskGroupSections, selectTaskGroup } from '@/lib/tasks/groups.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
   const search = useSearchParam('q') ?? '';
-  const status = selectRoadmapGroup(useSearchParam('status'));
-  const sections = listRoadmapSections(state, search, status?.key ?? null);
+  const status = selectTaskGroup(useSearchParam('status'));
+  const sections = listTaskGroupSections(state, search, status?.key ?? null);
   const filtered = search.trim() !== '' || status !== null;
   const empty = sections.every((section) => section.entries.length === 0);
   useRegisterCommands(listTaskListSections(search, status?.key ?? null));
@@ -27,7 +27,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
   return (
     <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6')}>
       <div className='flex items-end gap-3'>
-        <PageHeading title='All tasks' description={describeRoadmapCounts(state)} className='flex-1' />
+        <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
         {status && (
           <Hint label='Clear the filter'>
             <Button
@@ -54,7 +54,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
         <div
           className={cn(
             'grid h-7 shrink-0 items-center gap-4 border-border border-b px-3 font-medium text-2xs text-fg-2',
-            ROADMAP_COLUMNS
+            TASK_LIST_COLUMNS
           )}
         >
           <span>Task</span>
@@ -76,7 +76,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
             />
           ) : (
             sections.map(({ group, entries }) => (
-              <RoadmapSection
+              <TaskGroupSection
                 key={`${group.key}-${status?.key ?? 'all'}`}
                 group={group}
                 entries={entries}

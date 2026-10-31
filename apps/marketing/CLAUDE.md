@@ -59,14 +59,14 @@ src/
                             kinds (the six kinds of task, cycling until you pick one), review (the Review tab: the
                             walkthrough, judgement calls, risks and testing, with the Evidence section first; static but for
                             its point index, its evidence and scrolling), code (the Code workbench, side by side and
-                            editable: the stand-in keeps your saves in memory), roadmap (All tasks), loop (the
+                            editable: the stand-in keeps your saves in memory), tasks (All tasks), loop (the
                             pull request activity), guard (agent commands and the policy's verdicts); frame.tsx holds
                             DemoRoot (installs the stand-in server), Window (the app's top bar and traffic lights over
                             the demo's page) and Stage; focus.ts (`useFocus`) plays a demo only
                             while it is the main thing on screen (half of it in view, or 45% of the screen), and its first step comes 300ms after
   lib/content.ts            Every headline and paragraph on the page, the principles and the feature grid
   lib/site.ts               Name, URL, description, the download and GitHub links
-  lib/scene.ts              The sample project (Northwind) and the Home and roadmap state
+  lib/scene.ts              The sample project (Northwind) and the Home and All tasks state
   lib/*-scene.ts            One file of sample state per demo. onboarding-code.ts is the Northwind change the gates and
                             Code demos show. tint-scene.ts is the Review demo's task, a real Shinsa change (SW-214, the
                             tinted kind icons and pull request badges on All tasks): its code is the commit's real files,
@@ -74,7 +74,7 @@ src/
                             neighbours, read with `?raw` through tint-code.ts, so nothing lints or type-checks them), and
                             evidence-scene.ts its evidence: shots of Shinsa's own All tasks page in public/evidence/
                             (1280px light and dark, before recreated with the commit's old classes), a hover recording,
-                            the roadmap tests' real run and the checks, and a dev-server link
+                            the task list tests' real run and the checks, and a dev-server link
   lib/og.tsx                The share image (`/og.png`, 1200×630): Satori and resvg at build time, in Areal from
                             `src/assets/fonts/` (static Regular and Medium cut from the kit's variable font, since Satori
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons

@@ -52,6 +52,7 @@ import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { listMergeWaits } from '@/lib/review/merge-steps.ts';
+import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
@@ -204,21 +205,22 @@ export function PlanCard({
 }) {
   const { busy, run } = useBusy<GateReply>();
   const approve = resolvePlanReply(task);
+  const copy = describePlanCard(task);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
-      title='The agent wants your go-ahead on this plan'
+      title={copy.title}
       action={
         <Button
           size='sm'
           loading={busy === approve}
           onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))}
         >
-          Approve plan
+          {copy.approve}
         </Button>
       }
       footer={
-        <FooterNote note='Want something different? Say it in the chat and the agent revises it.'>
+        <FooterNote note={copy.note}>
           <QuietLink busy={busy !== null} onClick={() => onOpen('agent')}>
             Open the chat
           </QuietLink>

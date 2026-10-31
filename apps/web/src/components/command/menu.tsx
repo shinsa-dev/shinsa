@@ -513,7 +513,10 @@ export function CommandMenu() {
     const request = trimmed;
     later(
       () =>
-        void sendCommandWithToast({ type: 'task.create', request, repoId: null }, describeNewTask(false).done)
+        void sendCommandWithToast(
+          { type: 'task.create', request, repoId: null },
+          describeNewTask('auto').done
+        )
     );
   };
 

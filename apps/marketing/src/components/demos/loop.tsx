@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
-import { PullRequestBadge } from '@/components/roadmap/pull-request-badge.tsx';
 import { StatusText } from '@/components/status/text.tsx';
+import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
 import { createLoopState, LOOP_ENTRIES } from '../../lib/loop-scene.ts';
 import { FIRST_STEP_MS, useFocus } from './focus.ts';
 import { DemoRoot, Stage } from './frame.tsx';

@@ -115,7 +115,7 @@ $ shinsa open SW-142
 Create a task from a request; Shinsa picks the kind of work and runs it. The folder you run it in tells triage where the work is. Shinsa classifies the request, plans it and builds it, and brings it back when it needs a decision.
 
 ```
-shinsa do <request...> [--plan-first] [--urgent | --high]
+shinsa do <request...> [--plan-first | --backlog] [--urgent | --high]
 $ shinsa do "fix the scroll in tab groups"
 $ shinsa do "add search to the docs" --plan-first
 ```
@@ -123,6 +123,7 @@ $ shinsa do "add search to the docs" --plan-first
 | Option | What it does |
 | --- | --- |
 | `--plan-first` | Wait for you to approve a plan before building. |
+| `--backlog` | Plan it now and keep it in the backlog until you start building it. |
 | `--urgent` | Put it ahead of everything else. |
 | `--high` | Put it ahead of normal work. |
 
@@ -304,7 +305,7 @@ Every task agent's tool: `tasks_diff` (reads).
 Create a task. Shinsa classifies it, plans it and builds it.
 
 ```
-shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--ask] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
+shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--backlog] [--ask] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
 ```
 
 Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create`.
@@ -316,6 +317,7 @@ Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create
 | `--project` | text, optional | The project (key, name or id), or none. Left out, it is the repository’s project, else the one in focus. |
 | `--priority` | choice, optional | low, normal, high or urgent. |
 | `--plan-first` | boolean, optional | Wait for you to approve the plan before building. |
+| `--backlog` | boolean, optional | Plan it now and keep it in the backlog until you start building it. |
 | `--ask` | boolean, optional | Only answer a question: no changes, branch or pull request. |
 | `--after` | list, optional | Tasks it waits on before it starts. |
 | `--fork-from` | text, optional | A task to fork: the new task’s agent starts from a copy of its conversation. |
@@ -434,6 +436,34 @@ shinsa tasks stop-waiting <task> [--json]
 ```
 
 Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks move-to-backlog
+
+Keep a task in the backlog: its plan waits there until you start building it.
+
+```
+shinsa tasks move-to-backlog <task> [--json]
+```
+
+Every task agent's tool: `tasks_move_to_backlog`. Sends `task.move_to_backlog`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks remove-from-backlog
+
+Take a task out of the backlog: its plan waits for you in Needs you.
+
+```
+shinsa tasks remove-from-backlog <task> [--json]
+```
+
+Every task agent's tool: `tasks_remove_from_backlog`. Sends `task.remove_from_backlog`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -844,10 +874,10 @@ Every task agent's tool: `suggestions_list` (reads).
 
 #### shinsa suggestions accept
 
-Add a suggested task to the roadmap.
+Add a suggested task as a task of its own.
 
 ```
-shinsa suggestions accept <task> <suggestion> [--after-this] [--json]
+shinsa suggestions accept <task> <suggestion> [--after-this] [--backlog] [--json]
 ```
 
 Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
@@ -857,6 +887,7 @@ Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 | `--after-this` | boolean, optional | Start it only after this task merges. |
+| `--backlog` | boolean, optional | Plan it now and keep it in the backlog until you start building it. |
 
 #### shinsa suggestions dismiss
 

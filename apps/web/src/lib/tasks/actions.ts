@@ -1,4 +1,4 @@
-import { isTaskSettled, type Task, type TaskPriority } from '@shinsa/core';
+import { isTaskSettled, resolveBacklogRefusal, type Task, type TaskPriority } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
@@ -15,6 +15,8 @@ export type TaskActionKey =
   | 'terminal'
   | 'finder'
   | 'fork'
+  | 'moveToBacklog'
+  | 'removeFromBacklog'
   | 'restart'
   | 'complete'
   | 'cancel';
@@ -27,6 +29,8 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   terminal: { label: 'Open a terminal', icon: 'IconConsole' },
   finder: { label: 'Show in Finder', icon: 'IconFolder1' },
   fork: { label: FORK_TITLE, icon: 'IconFork' },
+  moveToBacklog: { label: 'Move to the backlog', icon: 'IconArchive' },
+  removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
   complete: { label: 'Mark as done', icon: 'IconCheckCircle2' },
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
@@ -39,7 +43,12 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
   const lifecycle: TaskActionKey[] = isTaskSettled(task) ? [] : ['restart', 'complete', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
-  return [links, worktree, fork, lifecycle].filter((group) => group.length > 0);
+  return [links, worktree, fork, listBacklogActions(task), lifecycle].filter((group) => group.length > 0);
+}
+
+function listBacklogActions(task: Task): TaskActionKey[] {
+  if (task.backlog) return ['removeFromBacklog'];
+  return resolveBacklogRefusal(task) === null ? ['moveToBacklog'] : [];
 }
 
 export function runTaskAction(task: Task, key: TaskActionKey) {
@@ -62,6 +71,15 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       return;
     case 'fork':
       openForkDialog(task.id);
+      return;
+    case 'moveToBacklog':
+      void sendCommandWithToast({ type: 'task.move_to_backlog', taskId: task.id }, 'Moved to the backlog.');
+      return;
+    case 'removeFromBacklog':
+      void sendCommandWithToast(
+        { type: 'task.remove_from_backlog', taskId: task.id },
+        'Removed from the backlog. Its plan now waits for your approval.'
+      );
       return;
     case 'restart':
       void sendCommandWithToast({ type: 'task.retry', taskId: task.id }, 'Restarted.');

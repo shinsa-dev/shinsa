@@ -33,6 +33,7 @@ interface SpawnOptions {
   parent: boolean;
   forkOf?: string;
   waitsOn?: string[];
+  backlog?: boolean;
 }
 
 function spawnTask(
@@ -53,6 +54,7 @@ function spawnTask(
       origin: source.origin,
       ...(options.forkOf ? { forkOf: options.forkOf } : {}),
       ...(options.waitsOn ? { waitsOn: options.waitsOn } : {}),
+      ...(options.backlog ? { backlog: true } : {}),
     },
     { createdBy: creator, ...(parent ? { parentTaskId: source.id, shape: 'change' as const } : {}) }
   );
@@ -76,6 +78,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
       parent: false,
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
       ...(command.afterThis ? { waitsOn: [task.id] } : {}),
+      ...(command.backlog ? { backlog: true } : {}),
     }
   );
   if (command.thisWaits) waitOn(decider, decider.task(task.id), [createdId]);

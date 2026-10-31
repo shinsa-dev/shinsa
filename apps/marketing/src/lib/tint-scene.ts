@@ -133,7 +133,7 @@ const REPORT: WorkReport = {
   walkthrough: {
     approach:
       'Reuse the tones the rest of the app already has: the status text’s tone for the kind icon, and the pull request’s tone for its badge, with a matching hover step.',
-    flow: 'Each roadmap row resolves its status with `resolveTaskStatus`, and `KindMark` colours itself with that tone. The badge resolves its pull request’s tone once and takes `TONE_SURFACE` at rest and `TONE_SURFACE_HOVER` under the pointer.',
+    flow: 'Each task row resolves its status with `resolveTaskStatus`, and `KindMark` colours itself with that tone. The badge resolves its pull request’s tone once and takes `TONE_SURFACE` at rest and `TONE_SURFACE_HOVER` under the pointer.',
     risks: [
       {
         title: 'Gray icons for neutral statuses',
@@ -144,7 +144,7 @@ const REPORT: WorkReport = {
       },
     ],
     testing: {
-      automated: ['`row.test.tsx` checks the tinted kind mark and its tooltip on a roadmap row.'],
+      automated: ['`row.test.tsx` checks the tinted kind mark and its tooltip on a task row.'],
       manual: [
         {
           action: 'Open All tasks.',
@@ -185,7 +185,7 @@ export function createTintState(now: number): { state: ShinsaState; task: Task }
     title: TINT_TITLE,
     stage: 'awaiting_review',
     stageReason: 'changes to review',
-    branch: 'feat/tinted-roadmap-icons',
+    branch: 'feat/tinted-task-icons',
     worktreePath: '~/.config/shinsa/data/worktrees/shinsa/SW-214',
     pipeline: ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge'],
     report: REPORT,

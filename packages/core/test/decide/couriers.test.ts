@@ -30,6 +30,7 @@ function courier(
     repoId?: string | null;
     thisWaits?: boolean;
     afterThis?: boolean;
+    backlog?: boolean;
     forkOf?: string;
   } = {}
 ) {
@@ -43,6 +44,7 @@ function courier(
     thisWaits: options.thisWaits ?? false,
     afterThis: options.afterThis ?? false,
     ...(options.forkOf ? { forkOf: options.forkOf } : {}),
+    ...(options.backlog ? { backlog: true } : {}),
   });
   return created(harness, before);
 }
@@ -111,6 +113,13 @@ describe('a courier task', () => {
     expect(task).toMatchObject({ waitsOn: [taskId], forkOf: taskId, auto: { start: false } });
     expect(task?.activity.find((entry) => entry.kind === 'stage')?.actor).toBe('shinsa');
     expect(harness.task(taskId)).toMatchObject({ waitsOn: [], stage: 'building' });
+  });
+
+  test('a courier task for the backlog waits there after its plan', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const [task] = courier(harness, harness.activeRun(taskId).id, { backlog: true });
+    expect(task?.backlog).toEqual({ at: expect.any(Number) });
   });
 
   test('waiting for this task, starts only once this task merges', () => {

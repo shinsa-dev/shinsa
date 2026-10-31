@@ -60,6 +60,9 @@ const DESCRIPTIONS: Descriptions = {
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,
   'task.wait_on': (state, command) => `Changed what ${quoteTask(state, command.taskId)} waits on`,
+  'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
+  'task.remove_from_backlog': (state, command) =>
+    `Moved ${quoteTask(state, command.taskId)} out of the backlog`,
   'task.cancel': (state, command) => `Cancelled ${quoteTask(state, command.taskId)}`,
   'task.complete': (state, command) => `Marked ${quoteTask(state, command.taskId)} as done`,
   'task.retry': (state, command) => `Retried ${quoteTask(state, command.taskId)}`,

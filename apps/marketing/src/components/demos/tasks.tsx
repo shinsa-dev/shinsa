@@ -3,7 +3,7 @@ import { TasksPage } from '@/routes/tasks.tsx';
 import { createHomeScene } from '../../lib/scene.ts';
 import { DemoRoot, Window } from './frame.tsx';
 
-export function RoadmapDemo() {
+export function TasksDemo() {
   const [state] = React.useState(() => createHomeScene(Date.now()));
   return (
     <DemoRoot>

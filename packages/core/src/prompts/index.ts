@@ -32,6 +32,7 @@ export {
   describeEvidenceForFix,
   resolveAgentPrompt,
   resolveAnswererPrompt,
+  resolveBacklogStart,
   resolveInvestigatorPrompt,
   resolveOperationInstruction,
   resolvePhaseInstruction,

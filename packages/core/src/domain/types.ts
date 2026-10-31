@@ -476,7 +476,14 @@ export interface Task {
   mergeStepsDone?: string[];
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
+  backlog?: TaskBacklog | null;
 }
+
+export interface TaskBacklog {
+  at: number;
+}
+
+export type BacklogCause = 'you' | 'started' | 'inquiry';
 
 export interface InboxMessage {
   id: string;

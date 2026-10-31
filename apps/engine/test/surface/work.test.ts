@@ -24,6 +24,9 @@ describe('suggested tasks', () => {
       'Added the suggested task.'
     );
     await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-2', '--after-this']);
+    expect((await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-3', '--backlog'])).text).toBe(
+      'Added the suggested task to the backlog.'
+    );
     expect((await runSpec(fake, ['suggestions', 'dismiss', 'fix', 'sug-1'])).text).toBe('Dismissed.');
     expect((await runSpec(fake, ['suggestions', 'keep', 'fix', 'sug-1'])).text).toBe(
       'Kept it in this task as a new round.'
@@ -31,6 +34,13 @@ describe('suggested tasks', () => {
     expect(fake.sent).toEqual([
       { type: 'suggestion.accept', taskId: 'task-123', suggestionId: 'sug-1', waitsOnThis: false },
       { type: 'suggestion.accept', taskId: 'task-123', suggestionId: 'sug-2', waitsOnThis: true },
+      {
+        type: 'suggestion.accept',
+        taskId: 'task-123',
+        suggestionId: 'sug-3',
+        waitsOnThis: false,
+        backlog: true,
+      },
       { type: 'suggestion.dismiss', taskId: 'task-123', suggestionId: 'sug-1' },
       { type: 'suggestion.keep', taskId: 'task-123', suggestionId: 'sug-1' },
     ]);
