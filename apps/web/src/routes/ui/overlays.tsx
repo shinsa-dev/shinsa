@@ -70,6 +70,7 @@ import {
 import { toast } from '@shinsa/ui/components/sonner';
 import { Switch } from '@shinsa/ui/components/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@shinsa/ui/components/tooltip';
+import { SAMPLE_GIT_FAILURE } from './samples.ts';
 import { Section } from './section.tsx';
 
 export const OVERLAY_SECTIONS = [
@@ -339,6 +340,9 @@ export function OverlaySpecimens() {
           }
         >
           Error with action
+        </Button>
+        <Button variant='outline' onClick={() => toast.error(SAMPLE_GIT_FAILURE)}>
+          Long error
         </Button>
         <Button
           variant='outline'

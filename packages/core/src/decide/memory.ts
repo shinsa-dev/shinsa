@@ -43,11 +43,7 @@ function countKept(decider: Decider, projectId: string | null, except: string | 
 
 function assertRoomToKeep(decider: Decider, projectId: string | null, except: string | null) {
   if (countKept(decider, projectId, except) < MEMORY_LIMITS.keptPerScope) return;
-  const where = projectId ? 'this project' : 'every project';
-  throw new DomainError(
-    'memory_full',
-    `Agents already remember ${MEMORY_LIMITS.keptPerScope} rules for ${where}. Remove one first.`
-  );
+  throw new DomainError('memory_full', `${MEMORY_LIMITS.keptPerScope} rules kept. Remove one first.`);
 }
 
 function assertProject(decider: Decider, projectId: string | null) {
