@@ -32,7 +32,7 @@ import {
 import { createSlackSignature, decryptToken } from './crypto.ts';
 import type { InstanceRow, SlackThreadKey, SlackWorkspaceRow } from './database.ts';
 import { TUNNEL_OFFLINE_STATUSES } from './hooks.ts';
-import { CloudError, readJsonFields, respondJson } from './http.ts';
+import { CloudError, readJsonFields, respondError, respondJson } from './http.ts';
 import { findMachine, isInstanceOnline } from './instances.ts';
 import { recordFailure } from './log.ts';
 import { readSlackText, requestSlack, requestSlackUserName, SlackApiError } from './slack-api.ts';
@@ -402,22 +402,29 @@ export async function respondSlackPost(request: Request, world: CloudWorld) {
   return recordPosted(world, posted, post, instance);
 }
 
+const STATUS_UNAVAILABLE_CODES = new Set(['not_authorized', 'feature_disabled']);
+
 export async function respondSlackSession(request: Request, world: CloudWorld) {
   const instance = await findMachine(request, world);
   const session = parseSlackRelaySession(await readJsonFields(request));
   if (!session) throw new CloudError('body_invalid', 'The Slack status is not one this relay sends.', 400);
   const token = await findThreadToken(instance, session, null, world);
-  let answer: SlackRelaySessionSet = { applied: true };
   try {
     await requestSlack(world, 'agents.sessions.setStatus', {
       token,
       json: { channel_id: session.channelId, thread_ts: session.threadTs, status: session.status },
     });
   } catch (error) {
+    if (error instanceof SlackApiError && STATUS_UNAVAILABLE_CODES.has(error.code)) {
+      return respondJson({ applied: false } satisfies SlackRelaySessionSet);
+    }
     recordFailure('[Cloud] Slack did not take a thread status', { error, teamId: session.teamId });
-    answer = { applied: false };
+    const code = error instanceof SlackApiError ? error.code : 'failed';
+    return respondError(
+      new CloudError('slack_failed', `Slack did not take the thread status (${code}).`, 502)
+    );
   }
-  return respondJson(answer);
+  return respondJson({ applied: true } satisfies SlackRelaySessionSet);
 }
 
 const SETTLED_REACTION_CODES = new Set(['no_reaction', 'already_reacted']);

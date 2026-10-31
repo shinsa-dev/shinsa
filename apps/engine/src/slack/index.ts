@@ -84,6 +84,7 @@ export class Slack {
   readonly #statusShown = new Map<string, string>();
   readonly #sessionShown = new Map<string, SlackSessionStatus>();
   readonly #declined = new Set<string>();
+  readonly #sessionRefused = new Set<string>();
 
   constructor(options: SlackOptions) {
     this.#engine = options.engine;
@@ -269,7 +270,8 @@ export class Slack {
 
   async #syncSession(thread: SlackThreadRef, taskId: string, status: SlackSessionStatus) {
     const credentials = this.#selectCredentials();
-    if (!credentials || this.#sessionShown.get(taskId) === status) return;
+    if (!credentials || this.#sessionRefused.has(thread.teamId) || this.#sessionShown.get(taskId) === status)
+      return;
     try {
       const applied = await this.#relay.requestSession(credentials.machineToken, {
         teamId: thread.teamId,
@@ -278,7 +280,12 @@ export class Slack {
         status,
       });
       this.#sessionShown.set(taskId, status);
-      if (!applied) log.info('[Slack] Slack did not show the thread status', { taskId, status });
+      if (applied) return;
+      this.#sessionRefused.add(thread.teamId);
+      log.info('[Slack] Slack does not show a thread status in this workspace', {
+        taskId,
+        teamId: thread.teamId,
+      });
     } catch (error) {
       log.warn('[Slack] The thread status could not be set', { taskId, status, error: describeError(error) });
     }

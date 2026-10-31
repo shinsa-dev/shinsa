@@ -124,7 +124,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `/slack/interactions` takes a question's choice button (signed, acknowledged at once): from a linked person on a
   message their own machine posted it is forwarded signed to that machine's `/api/slack/interactions`, and the
   click's `response_url` gets the post with "@you answered" in place of the buttons, or a private refusal, `/__remote/slack/session` sets the thread's status
-  (`agents.sessions.setStatus`, best effort, `applied: false` where Slack has no agent features); `/__remote/slack/links` and `/unlink` read and remove its links. Message
+  (`agents.sessions.setStatus`, best effort: `applied: false`, not logged, for `not_authorized` from an app not on
+  Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
   cookie (`findSessionUser`). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the

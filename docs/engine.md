@@ -2796,10 +2796,14 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
   loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),
   `active` once it rests or merged, and `closed` when it is done or cancelled; only a change is sent. It is best
-  effort: a workspace without Slack's agent tasks feature answers `feature_disabled`, app.shinsa.dev logs it and says
-  `applied: false`, and the posts carry on as they are. It needs only `chat:write`, the scope the bot already has, and
-  no app setting: the app's Agents & AI Apps feature (`agent_view`) stays off, because the bot answers mentions in
-  channels and never the agent pane or direct messages that feature opens.
+  effort, and today it is never shown: Slack takes it only from an app on its Agent Sessions (the manifest's
+  `agent_view`, Agents & AI Apps), and that stays off, because switching it on cannot be undone, needs Marketplace
+  review and opens an agent pane and direct messages the bot never answers. Without it Slack answers `not_authorized`
+  (`feature_disabled` in a workspace without agent features); app.shinsa.dev says `applied: false` without logging
+  either (`STATUS_UNAVAILABLE_CODES`), and the engine then makes no more status calls for that workspace until it
+  restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
+  answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
+  passing failure never turns the status off. The posts, reactions and status message carry on as they are.
 - **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
