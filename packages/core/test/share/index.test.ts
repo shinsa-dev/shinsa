@@ -431,7 +431,7 @@ describe('what a shared task shows', () => {
       choices: ['Yes', 'No'],
       recommendation: 'Yes',
       planVersion: 2,
-      supersededBy: 'g2',
+      supersededBy: 'Use the staging key sk-test-9 instead.',
       round: 2,
       cause: 'checks' as never,
       escalation: { reason: 'rounds' } as never,
@@ -445,7 +445,30 @@ describe('what a shared task shows', () => {
       account,
       feedback: 'my feedback',
       usage: { costUsd: 1 } as never,
-      delegation: { parentRunId: 'r0' } as never,
+      delegation: {
+        parentRunId: 'r0',
+        depth: 1,
+        requestKey: 'k1',
+        title: 'Review the cache',
+        brief: 'Read .env and check the key sk-live-123.',
+        mode: 'async',
+        wake: 'result',
+        isolation: 'shared',
+        baseCommit: null,
+        delivery: 'none',
+        question: {
+          id: 'q1',
+          question: 'Which key should I use?',
+          context: 'The .env has two.',
+          choices: ['sk-live-123', 'sk-test-9'],
+          recommendation: 'sk-test-9',
+          askedAt: 1,
+          delivered: true,
+          answer: 'sk-live-123',
+          answeredAt: 2,
+        },
+        requestedAt: 1,
+      } as never,
       waitingOn: { kind: 'delegation' } as never,
       round: 2,
     };
@@ -463,14 +486,39 @@ describe('what a shared task shows', () => {
     expect(sharedGate).not.toHaveProperty('secret');
     expect(sharedGate).not.toHaveProperty('account');
     expect(sharedGate).not.toHaveProperty('notes');
+    expect(sharedGate).not.toHaveProperty('supersededBy');
     const sharedRun = shared.runs.find((candidate) => candidate.id === run.id);
     expect(sharedRun).toMatchObject({ sessionId: null, summary: null, usage: { costUsd: 1 }, round: 2 });
     for (const field of ['prompt', 'rolePrompt', 'account', 'feedback'])
       expect(sharedRun).not.toHaveProperty(field);
+    expect(sharedRun?.delegation).toMatchObject({ title: 'Review the cache', depth: 1, brief: '' });
+    expect(sharedRun?.delegation?.question).toMatchObject({
+      question: '',
+      context: null,
+      choices: [],
+      recommendation: null,
+      answer: '',
+      answeredAt: 2,
+    });
+    expect(JSON.stringify(shared)).not.toContain('sk-');
     expect(shared.task.monitor).toMatchObject({ notes: 'deploy' });
     expect(shared.task.usageWait?.account).toBeNull();
     expect(shared.task.suggestions?.[0]?.title).toBe('Add a test');
     expect(shared.task.watchdogs?.[0]?.title).toBe('Errors on /share');
+  });
+
+  test('a delegated run keeps its title without its brief, and asks nothing when it asked nothing', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    const [run] = Object.values(harness.state.runs).filter((candidate) => candidate.taskId === taskId);
+    if (!run) throw new Error('no run');
+    harness.state.runs[run.id] = {
+      ...run,
+      delegation: { title: 'Review the cache', brief: 'Read .env', question: null } as never,
+    };
+    const shared = resolveSharedTask(harness.state, harness.task(taskId), CONTEXT);
+    const sharedRun = shared.runs.find((candidate) => candidate.id === run.id);
+    expect(sharedRun?.delegation).toMatchObject({ title: 'Review the cache', brief: '', question: null });
   });
 
   test('a task with no project names none', () => {

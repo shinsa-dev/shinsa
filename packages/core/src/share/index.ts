@@ -1,4 +1,5 @@
 import { splitMessageAttachments } from '../chat/attachments.ts';
+import type { RunDelegation } from '../domain/delegations.ts';
 import { isCurrentEvidence } from '../domain/evidence.ts';
 import type { Round } from '../domain/rounds.ts';
 import type {
@@ -212,7 +213,6 @@ function redactGate(gate: Gate): Gate {
     ...(gate.recommendation ? { recommendation: gate.recommendation } : {}),
     ...(gate.cause ? { cause: gate.cause } : {}),
     ...(gate.escalation ? { escalation: gate.escalation } : {}),
-    ...(gate.supersededBy ? { supersededBy: gate.supersededBy } : {}),
     ...(gate.round ? { round: gate.round } : {}),
   };
 }
@@ -233,9 +233,27 @@ function redactRun(run: Run): Run {
     outcome: run.outcome,
     summary: null,
     ...(run.usage ? { usage: run.usage } : {}),
-    ...(run.delegation ? { delegation: run.delegation } : {}),
+    ...(run.delegation ? { delegation: redactDelegation(run.delegation) } : {}),
     ...(run.waitingOn ? { waitingOn: run.waitingOn } : {}),
     ...(run.round ? { round: run.round } : {}),
+  };
+}
+
+function redactDelegation(delegation: RunDelegation): RunDelegation {
+  const question = delegation.question;
+  return {
+    ...delegation,
+    brief: '',
+    question: question
+      ? {
+          ...question,
+          question: '',
+          context: null,
+          choices: [],
+          recommendation: null,
+          answer: question.answer === null ? null : '',
+        }
+      : null,
   };
 }
 

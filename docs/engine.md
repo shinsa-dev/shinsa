@@ -2553,8 +2553,8 @@ publishing path will serve teams.
   | Suggestions, watchdogs, a monitor, a usage wait (without its account) | kept |
   | Activity | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments |
   | Notes | kept |
-  | Chats, transcripts, tool calls, live agent output | never |
-  | Messages to agents, gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
+  | Chats, transcripts, tool calls, live agent output, a delegated agent's brief and the question it asked and its answer (its title, depth and state stay) | never |
+  | Messages to agents (a chat reply that stood in for a gate answer included), gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
   | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never |
   | Links to other tasks (`shinsa://task/…`) | their label as plain text |
 

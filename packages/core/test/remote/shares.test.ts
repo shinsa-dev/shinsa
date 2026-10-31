@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  isShareCodeFile,
   isShareFileId,
   isShareFileType,
   resolveMachineFilePath,
@@ -9,8 +10,10 @@ import {
   resolveSharePagePath,
   resolveSharePath,
   resolveSharePreviewApiPath,
+  resolveSharePreviewCodeApiPath,
   resolveSharePreviewDiffApiPath,
   resolveShareUrl,
+  SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
 } from '../../src/remote/shares.ts';
 
@@ -33,6 +36,13 @@ describe('the share contract', () => {
   test('names the engine routes a preview reads', () => {
     expect(resolveSharePreviewApiPath('task 1')).toBe('/api/tasks/task%201/share/preview');
     expect(resolveSharePreviewDiffApiPath('task-1')).toBe('/api/tasks/task-1/share/preview/diff');
+    expect(resolveSharePreviewCodeApiPath('task-1')).toBe('/api/tasks/task-1/share/preview/code');
+  });
+
+  test('knows the files that carry code, and no other', () => {
+    expect(isShareCodeFile(SHARE_DIFF_FILE)).toBe(true);
+    expect(isShareCodeFile(SHARE_CODE_FILE)).toBe(true);
+    expect(isShareCodeFile('ab12')).toBe(false);
   });
 
   test('accepts only file types a page can show without running them', () => {
