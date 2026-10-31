@@ -268,7 +268,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
 - **All tasks.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
-  that handle several parents), the backlog, then done and cancelled, collapsed. Priority then age
+  that handle several parents), then snoozed, the backlog, done and cancelled, collapsed. Priority then age
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
@@ -279,6 +279,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   and builds; Remove from the backlog (the task's menu or ⌘K) makes it a plan to approve. You put work there yourself (When to start → Backlog,
   Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
   Shinsa never decides it for you. Questions, research and investigations never wait there.
+- **Snoozing.** Snooze (the task's menu, a row's menu, ⌘K or `shinsa tasks snooze`) takes an open task in any step
+  out of Needs you, In progress, the queue, the guide, the Dock badge and notifications, and changes nothing else:
+  its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
+  section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
+  its own.
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and

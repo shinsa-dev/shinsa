@@ -306,6 +306,15 @@ function applyBacklogChanged(state: ShinsaState, event: EventOf<'task.backlog_ch
   });
 }
 
+function applySnoozeChanged(state: ShinsaState, event: EventOf<'task.snooze_changed'>) {
+  updateTask(state, event.taskId, event.at, { snoozed: event.snoozed ? { at: event.at } : null });
+  record(state, event.taskId, event.at, {
+    actor: 'you',
+    kind: 'stage',
+    text: event.snoozed ? 'Snoozed: it keeps its place, out of Needs you and Home' : 'Unsnoozed',
+  });
+}
+
 function listPlanHistory(task: Task | undefined) {
   const previous = task?.plan;
   if (!previous) return task?.planHistory ?? [];
@@ -490,6 +499,16 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       : describeMessage(event),
     detail: event.text,
     ...(event.kind === 'acknowledge' ? { noted: true } : {}),
+  });
+  if (event.kept) keepMessage(state, event);
+}
+
+function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const sender = event.scheduleId ? 'schedule' : 'agent';
+  updateTask(state, event.taskId, event.at, {
+    untoldMessages: [...(task.untoldMessages ?? []), { at: event.at, text: event.text, sender }],
   });
 }
 
@@ -743,6 +762,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);
       break;
+    case 'task.snooze_changed':
+      applySnoozeChanged(state, event);
+      break;
     case 'task.noted':
       applyNoted(state, event);
       break;
@@ -877,6 +899,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.edits_told':
       updateTask(state, event.taskId, event.at, { untoldEdits: [] });
+      break;
+    case 'task.messages_told':
+      updateTask(state, event.taskId, event.at, { untoldMessages: [] });
       break;
     case 'task.overlapped':
     case 'task.overlaps_told':

@@ -131,8 +131,12 @@ describe('resolveHomeSections', () => {
         createTask({ id: 'review', stage: 'reviewing' }),
         createTask({ id: 'build', stage: 'building' }),
         createTask({ id: 'later', stage: 'waiting_on_tasks', waitsOn: ['build'] }),
+        createTask({ id: 'aside', stage: 'awaiting_review', snoozed: { at: NOW } }),
       ],
-      gates: [createGate({ id: 'g-review', taskId: 'review', type: 'review' })],
+      gates: [
+        createGate({ id: 'g-review', taskId: 'review', type: 'review' }),
+        createGate({ id: 'g-aside', taskId: 'aside', type: 'review' }),
+      ],
     });
     const { first, last } = resolveHomeSections(
       state,
@@ -140,7 +144,12 @@ describe('resolveHomeSections', () => {
       NOW
     );
     expect(first.map((section) => section.key)).toEqual(['needs', 'working']);
-    expect(last.map((section) => section.key)).toEqual(['waiting']);
+    expect(first[0]?.items.map((item) => item.task.id)).toEqual(['review']);
+    expect(last.map((section) => [section.key, section.opensOnHome])).toEqual([
+      ['waiting', true],
+      ['snoozed', false],
+    ]);
+    expect(last[1]?.items.map((item) => item.task.id)).toEqual(['aside']);
   });
 
   it('shows each task in one section: the queue first, then Recently finished, then Recent conversations', () => {

@@ -286,7 +286,7 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
   if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
-    recordMessages(decider, task.id, texts, scheduled);
+    recordMessages(decider, task.id, texts, { ...scheduled, kept: true });
     return;
   }
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);

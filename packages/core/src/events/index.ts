@@ -124,6 +124,7 @@ type EventBody =
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
+  | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }
   | {
       type: 'task.messaged';
@@ -133,6 +134,7 @@ type EventBody =
       kind?: MessageKind;
       round?: number;
       suggestionId?: string;
+      kept?: true;
     }
   | {
       type: 'iteration.requested';
@@ -143,6 +145,7 @@ type EventBody =
       comments: number;
     }
   | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: FixReply; runId: string }
+  | { type: 'task.messages_told'; taskId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }
   | { type: 'task.message_dropped'; taskId: string; messageId: string; reason: string }

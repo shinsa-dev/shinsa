@@ -16,6 +16,7 @@ export interface Queue {
   working: Task[];
   waiting: Task[];
   backlog: Task[];
+  snoozed: Task[];
 }
 
 export interface QueueStep {

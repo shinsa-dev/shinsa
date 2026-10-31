@@ -107,6 +107,8 @@ export type UserCommand =
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
   | { type: 'task.move_to_backlog'; taskId: string }
   | { type: 'task.remove_from_backlog'; taskId: string }
+  | { type: 'task.snooze'; taskId: string }
+  | { type: 'task.unsnooze'; taskId: string }
   | { type: 'task.cancel'; taskId: string }
   | { type: 'task.complete'; taskId: string }
   | { type: 'task.retry'; taskId: string; account?: RunAccount }

@@ -78,6 +78,7 @@ describe('the row context menu', () => {
       'Show in Finder',
       'Fork into a new task',
       'Move to the backlog',
+      'Snooze',
       'Restart the current step',
       'Mark as done',
       'Cancel task',

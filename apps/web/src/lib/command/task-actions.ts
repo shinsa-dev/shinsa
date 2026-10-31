@@ -21,6 +21,8 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   fork: ['handoff', 'copy', 'follow-up', 'new task'],
   moveToBacklog: ['later', 'park', 'schedule', 'not now'],
   removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
+  snooze: ['hide', 'later', 'not now', 'put aside', 'pause'],
+  unsnooze: ['wake', 'resume', 'pick up', 'show', 'needs you'],
   restart: ['retry', 'rerun', 'again'],
   complete: ['complete', 'finish', 'close', 'resolve'],
   cancel: ['stop', 'abandon', 'drop', 'close'],

@@ -97,6 +97,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
+| Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
 | Your OK | step `your_ok`; gate type `proposal`; stage `awaiting_proposal`; `ChangeProposal`, `task.change_proposed|approved|declined`, `propose_change`; UI "Your OK", "Change to approve" (also for an operation), "Make it a change" |
@@ -240,6 +241,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
+| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 
@@ -699,8 +701,9 @@ task already has), `check_phases_invalid` (a phase the plan does not have), `che
 (replaces the operation gate's notes), `restart_step`, `kept`, `follow_up` (any resting task), `closed`.
 
 A message sent on your behalf (or by a schedule) to a task with any open gate is not delivered into the gate: core
-records it (`task.messaged`) and nothing else, and the next agent's brief carries it (`resolveLaterMessages`: "Sent by
-an agent on the human’s behalf: …", or "Sent by a schedule: …").
+records it (`task.messaged` with `kept`) into `Task.untoldMessages`, and the next run of the task's session (never
+the reviewer, a watchdog's check or a watch's read) is told it once at the tail of its prompt, resumed or fresh ("Sent by an agent on the human’s behalf:
+…", or "Sent by a schedule: …"; `task.messages_told`). `resolveLaterMessages` leaves it out until then.
 
 `task.message` carries an optional `kind` (`MessageKind`), with the classifier's `title`, `why` and `shape` for new
 work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. Where the
@@ -759,6 +762,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
+| `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
+| `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
@@ -926,8 +931,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
+| `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
-| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off |
+| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off, `kept` when it was sent for you while a gate was open (adds it to `untoldMessages`) |
+| `task.messages_told` | a new run of the task's session was told the messages in `untoldMessages`; clears it |
 | `task.message_received`, `task.message_routed`, `task.message_dropped` | a message of yours entered the inbox, left it to be delivered, or left it undelivered (`reason`) |
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
 | `round.started` | a round became the active one (`branch`, `base`, `onto`: the pull request it ships onto); the round before it, if any, is archived as shipped |

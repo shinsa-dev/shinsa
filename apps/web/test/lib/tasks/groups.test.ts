@@ -65,6 +65,13 @@ describe('resolveTaskGroup', () => {
     expect(groupFor({ type: 'operation' }, { stage: 'awaiting_operation' })).toBe('operation');
   });
 
+  it('files a snoozed task under Snoozed whatever waits on it, until it is finished', () => {
+    const snoozed = { snoozed: { at: 1 } };
+    expect(groupFor({ type: 'review' }, snoozed)).toBe('snoozed');
+    expect(groupFor({ type: 'failure' }, { ...snoozed, backlog: { at: 1 } })).toBe('snoozed');
+    expect(groupFor({ type: 'review', status: 'answered' }, { ...snoozed, stage: 'merged' })).toBe('done');
+  });
+
   it('files a backlog task under Backlog while it plans and while its plan waits, but a failure still pauses it', () => {
     const backlog = { backlog: { at: 1 } };
     expect(groupFor({ type: 'plan' }, backlog)).toBe('backlog');
@@ -97,7 +104,7 @@ describe('resolveTaskGroup', () => {
 });
 
 describe('TASK_GROUPS', () => {
-  it('lists the sections in to-do order with Done and Cancelled collapsed', () => {
+  it('lists the sections in to-do order with Snoozed, Done and Cancelled collapsed', () => {
     expect(TASK_GROUPS.map((group) => group.title)).toEqual([
       'Ready to merge',
       'Changes to review',
@@ -108,11 +115,13 @@ describe('TASK_GROUPS', () => {
       'Paused',
       'In progress',
       'Waiting on another task',
+      'Snoozed',
       'Backlog',
       'Done',
       'Cancelled',
     ]);
     expect(TASK_GROUPS.filter((group) => !group.defaultOpen).map((group) => group.key)).toEqual([
+      'snoozed',
       'done',
       'cancelled',
     ]);
@@ -330,6 +339,7 @@ describe('listTaskGroupSections', () => {
       working: ['high', 'old', 'new'],
       waiting: ['waiter', 'next:1'],
       backlog: [],
+      snoozed: [],
       done: ['done', 'merged'],
       cancelled: ['gone'],
     });

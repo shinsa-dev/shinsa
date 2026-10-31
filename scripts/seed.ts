@@ -4713,6 +4713,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       reason: 'built, checked and ready for review',
       branch: 'feat/usage-aware-defaults',
       ageHours: 70,
+      extra: [{ type: 'task.snooze_changed', taskId: 'task-usage-defaults', snoozed: true }],
       verification: [createPlanCheck('Model defaults', 'bun test src/shared/defaults.test.ts', [1, 2, 3])],
       worktreePath: defaultsPath,
       report: {
