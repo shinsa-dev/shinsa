@@ -18,9 +18,9 @@ interface UpdateFile {
   cacheControl: string;
 }
 
-export const UPDATES_PATH = '/updates';
+const UPDATES_PATH = '/updates';
 
-export const UPDATES_PREFIX = 'updates/';
+const UPDATES_PREFIX = 'updates/';
 
 export const ZIP_NAME = 'Shinsa-mac-arm64.zip';
 
