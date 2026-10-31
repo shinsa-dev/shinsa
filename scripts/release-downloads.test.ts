@@ -2,17 +2,22 @@ import { describe, expect, it } from 'bun:test';
 import type { DownloadPointer } from '../apps/marketing/src/worker/download.ts';
 import {
   assertDownloadFile,
+  assertUpdateZip,
   type ChannelPointers,
   type DownloadRelease,
   describeDownloadUpload,
+  describeUpdateUpload,
   listPointerUploads,
-  listStaleCanaryKeys,
+  listUpdateUploads,
   parseDownloadRelease,
   parseStoredPointer,
   parseTokenId,
+  parseUpdateFile,
   R2_ACCOUNT_ID,
   resolveChannelUpdates,
   resolveR2Credentials,
+  serializeUpdateFile,
+  type UpdateZip,
 } from './release-downloads.ts';
 
 const SHA = 'b'.repeat(64);
@@ -204,18 +209,117 @@ describe('describeDownloadUpload', () => {
   });
 });
 
-describe('listStaleCanaryKeys', () => {
-  it('lists the disk images of all but the newest canaries, never a beta, a stable release or another key', () => {
-    const keys = [
-      'releases/1.3.0/Shinsa-mac-arm64.dmg',
-      'releases/1.4.0-beta.1/Shinsa-mac-arm64.dmg',
-      ...[1, 2, 3, 4, 5, 6, 7].map((n) => `releases/1.4.1-canary.${n}/Shinsa-mac-arm64.dmg`),
-      'releases/1.4.1-canary.8/notes.txt',
-      'releases/nightly/Shinsa-mac-arm64.dmg',
-    ];
-    expect(listStaleCanaryKeys(keys)).toEqual([
-      'releases/1.4.1-canary.2/Shinsa-mac-arm64.dmg',
-      'releases/1.4.1-canary.1/Shinsa-mac-arm64.dmg',
+const ZIP_SHA512 = 'cTILCjXJe+74LTndY+J0iLZlWweLeNpxzrN6jnPMg6ZZOeSyUi5YYWaYFjK+F35NHHhvTUvSKtHyPWxVUGfh8w==';
+
+function updateFileOf(version: string) {
+  return [
+    `version: ${version}`,
+    'files:',
+    '  - url: Shinsa-mac-arm64.zip',
+    `    sha512: ${ZIP_SHA512}`,
+    '    size: 173065450',
+    '  - url: Shinsa-mac-arm64.dmg',
+    '    sha512: e7CT1fEPE85O6bB6lkWpcZ3AC1o2FH6YIfJTFbHpVcGBVHIBwSb5EScIBupxtjGubA2Y3RKeQXrnzSRUEmIgGg==',
+    '    size: 179067323',
+    'path: Shinsa-mac-arm64.zip',
+    `sha512: ${ZIP_SHA512}`,
+    "releaseDate: '2026-10-31T21:18:31.252Z'",
+    '',
+  ].join('\n');
+}
+
+function zipOf(version: string): UpdateZip {
+  return { version, size: 173065450, sha512: ZIP_SHA512, releaseDate: '2026-10-31T21:18:31.252Z' };
+}
+
+describe('parseUpdateFile', () => {
+  it('reads the zip the release update file describes', () => {
+    expect(parseUpdateFile(releaseOf('v1.0.0-canary.41'), updateFileOf('1.0.0-canary.41'))).toEqual(
+      zipOf('1.0.0-canary.41')
+    );
+  });
+
+  it('refuses a file of another version, without a zip, or unreadable, naming the file', () => {
+    const release = releaseOf('v1.0.0-beta.5');
+    const refused = (text: string) => () => parseUpdateFile(release, text);
+    const message =
+      'The beta-mac.yml of v1.0.0-beta.5 does not describe its Shinsa-mac-arm64.zip as 1.0.0-beta.5.';
+    expect(refused(updateFileOf('1.0.0-beta.4'))).toThrow(message);
+    expect(
+      refused(updateFileOf('1.0.0-beta.5').replace('url: Shinsa-mac-arm64.zip', 'url: other.zip'))
+    ).toThrow(message);
+    expect(refused(updateFileOf('1.0.0-beta.5').replace('size: 173065450', 'size: 0'))).toThrow(message);
+    expect(refused(updateFileOf('1.0.0-beta.5').replace(/releaseDate: .*/, ''))).toThrow(message);
+    expect(refused('version: 1.0.0-beta.5\nfiles: none\n')).toThrow(message);
+    expect(refused('files: [')).toThrow(message);
+    expect(refused('- 1')).toThrow(message);
+  });
+});
+
+describe('assertUpdateZip', () => {
+  const release = releaseOf('v1.0.0');
+
+  it('takes the zip the update file describes', () => {
+    expect(() =>
+      assertUpdateZip(release, zipOf('1.0.0'), { size: 173065450, sha512: ZIP_SHA512 })
+    ).not.toThrow();
+  });
+
+  it('refuses a zip of another size or digest', () => {
+    const message =
+      'The downloaded Shinsa-mac-arm64.zip of v1.0.0 is not the file its latest-mac.yml describes.';
+    expect(() => assertUpdateZip(release, zipOf('1.0.0'), { size: 1, sha512: ZIP_SHA512 })).toThrow(message);
+    expect(() => assertUpdateZip(release, zipOf('1.0.0'), { size: 173065450, sha512: 'other' })).toThrow(
+      message
+    );
+  });
+});
+
+describe('serializeUpdateFile', () => {
+  it('points the update at the zip in its own version folder, so every version stays reachable', () => {
+    expect(Bun.YAML.parse(serializeUpdateFile(zipOf('1.0.0-canary.41')))).toEqual({
+      version: '1.0.0-canary.41',
+      files: [{ url: '1.0.0-canary.41/Shinsa-mac-arm64.zip', sha512: ZIP_SHA512, size: 173065450 }],
+      path: '1.0.0-canary.41/Shinsa-mac-arm64.zip',
+      sha512: ZIP_SHA512,
+      releaseDate: '2026-10-31T21:18:31.252Z',
+    });
+  });
+
+  it('quotes every string, so a version or a date is never read as a number or a timestamp', () => {
+    const text = serializeUpdateFile(zipOf('1.0'));
+    expect(text).toContain('version: "1.0"\n');
+    expect(text).toContain('releaseDate: "2026-10-31T21:18:31.252Z"\n');
+  });
+});
+
+describe('listUpdateUploads', () => {
+  it('writes the update file of each channel the release moves', () => {
+    const body = serializeUpdateFile(zipOf('1.0.0'));
+    expect(listUpdateUploads(zipOf('1.0.0'), ['stable', 'beta'])).toEqual([
+      { key: 'updates/latest-mac.yml', body },
+      { key: 'updates/beta-mac.yml', body },
     ]);
+    expect(listUpdateUploads(zipOf('1.0.1-canary.1'), ['canary']).map((upload) => upload.key)).toEqual([
+      'updates/canary-mac.yml',
+    ]);
+    expect(listUpdateUploads(zipOf('1.0.0'), [])).toEqual([]);
+  });
+});
+
+describe('describeUpdateUpload', () => {
+  it('names the update channels that now offer the release', () => {
+    expect(describeUpdateUpload(releaseOf('v1.3.1'), ['stable', 'beta'])).toBe(
+      'The Stable and Beta update channels offer 1.3.1 from shinsa.dev/updates.'
+    );
+    expect(describeUpdateUpload(releaseOf('v1.4.1-canary.3'), ['canary'])).toBe(
+      'The Canary update channel offers 1.4.1-canary.3 from shinsa.dev/updates.'
+    );
+  });
+
+  it('says when no channel moves, because each offers a newer version', () => {
+    expect(describeUpdateUpload(releaseOf('v1.4.1-canary.1'), [])).toBe(
+      'No update channel moves to 1.4.1-canary.1: each already offers a newer version.'
+    );
   });
 });

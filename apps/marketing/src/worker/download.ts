@@ -102,7 +102,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isVersion(value: unknown): value is string {
+export function isVersion(value: unknown): value is string {
   return typeof value === 'string' && resolveVersionOrder(value, value) === 0;
 }
 

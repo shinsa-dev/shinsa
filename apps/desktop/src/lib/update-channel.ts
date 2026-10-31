@@ -1,7 +1,11 @@
 import { resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
 import type { UpdateChannel } from './bridge.ts';
 
-export const UPDATE_FEED = { provider: 'github', owner: 'shinsa-dev', repo: 'shinsa' } as const;
+export const UPDATE_FEED = {
+  provider: 'generic',
+  url: 'https://shinsa.dev/updates',
+  useMultipleRangeRequest: false,
+} as const;
 
 const CHANNEL_LABELS: Record<UpdateChannel, string> = { stable: 'Stable', beta: 'Beta', canary: 'Canary' };
 

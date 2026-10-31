@@ -100,8 +100,8 @@ src/
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
-                            into download.ts, which answers the download paths, and open.ts, which writes the open
-                            page's tab title from the query with HTMLRewriter (tested in test/worker/ at 100%,
+                            into download.ts, which answers the download paths, updates.ts, which serves the Mac
+                            app's update files, and open.ts, which writes the open page's tab title from the query with HTMLRewriter (tested in test/worker/ at 100%,
                             `bun run test`)
 ```
 
@@ -156,7 +156,7 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
 preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
 is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download`,
-`/download/*` and `/open` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
+`/download/*`, `/open` and `/updates/*` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
 preview` serves `/open` without the Worker, so its tab keeps the generic title; `bunx wrangler dev`
 after a build shows it as production does.
 
@@ -165,18 +165,24 @@ The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in
 `DOWNLOADS`. The Release workflow fills it (`docs/release.md`), so the site never changes for a release:
 
 ```
-releases/<version>/Shinsa-mac-arm64.dmg   every release's disk image, never overwritten
-channels/stable.json                      what /download serves
-channels/beta.json                        what /download/beta serves
-channels/canary.json                      what /download/canary serves
+releases/<version>/Shinsa-mac-arm64.dmg            every release's disk image, never overwritten
+releases/<version>/Shinsa-mac-arm64.zip            every release's update, never overwritten
+releases/<version>/Shinsa-mac-arm64.zip.blockmap   its blockmap, for differential updates
+channels/stable.json                               what /download serves
+channels/beta.json                                 what /download/beta serves
+channels/canary.json                               what /download/canary serves
+updates/latest-mac.yml                             the Stable update channel's file
+updates/beta-mac.yml                               the Beta update channel's file
+updates/canary-mac.yml                             the Canary update channel's file
 ```
 
 A channel file is a pointer, `{version, key, size, sha256, publishedAt}` (`parseDownloadPointer`), written after the
 GitHub release is published and only when its version is not older than the one there by semver (so a stable release
 moves `stable.json` and `beta.json`, a beta only `beta.json`, a canary only `canary.json`, and a stable hotfix below a
 running beta moves only `stable.json`). `canary.json` only ever points at a canary and the other two never do, so
-`/download` and `/download/beta` never hand out a build of `main`. Only the newest five canaries keep their disk image in the bucket;
-the Release workflow deletes the older ones.
+`/download` and `/download/beta` never hand out a build of `main`. Nothing in the bucket is deleted: every version keeps its
+disk image, zip and blockmap under `releases/<version>/`, and the channel's `updates/<channel>-mac.yml` moves with its
+pointer (`docs/release.md` → Downloads).
 
 - **Serving.** The Worker reads the channel's pointer (kept 60 seconds in the edge cache, `caches.default` under a
   made-up URL; the cache works on the custom domains, not on a workers.dev preview) and streams the object from the
@@ -202,6 +208,17 @@ the Release workflow deletes the older ones.
   first stable release. A canary is never a fallback for `/download` or `/download/beta`, and nothing but a canary is
   one for `/download/canary`. The feed lists the last 10 releases, so ten betas after a stable release would send a
   fallback `/download` to a beta: a working file, in a case that needs R2 down too.
+- **Update files.** `/updates/*` is the feed the Mac app's updater reads (`apps/desktop/CLAUDE.md` → Updates):
+  `/updates/<channel>-mac.yml` (`latest`, `beta`, `canary`, `UPDATE_CHANNEL_FILES`) serves `updates/<name>` as
+  `text/yaml` with `Cache-Control: public, max-age=60`, and `/updates/<version>/Shinsa-mac-arm64.zip` and its
+  `.blockmap` serve `releases/<version>/<name>` with `Cache-Control: public, max-age=31536000, immutable`, since a
+  version's build never changes. Each channel file names its zip as `<version>/Shinsa-mac-arm64.zip`, relative to
+  `/updates/`. Every answer carries R2's `ETag`, `Last-Modified` and `Accept-Ranges: bytes`; a single `Range` reads
+  only those bytes and answers 206 (a differential update asks one range per request), a range past the end answers
+  416, a multi-range or malformed one gets the whole file, and a HEAD reads no bytes. Any other path under `/updates`
+  answers 404, so nothing else in the bucket can be reached; no binding or an R2 error answers 503 with
+  `Cache-Control: no-store` and writes a `console.error` (`log.ts`), which Workers Logs keeps (`observability` in
+  `wrangler.jsonc`), and the app checks again later. There is no fallback to GitHub (`updates.ts`).
 - **Workers limits that apply.** A streamed response has no size limit, an R2 body costs no CPU time per byte, and an
   HTTP request has no wall-clock limit while the client stays connected. A download is two R2 operations (the pointer,
   on a cache miss, and the object), both Class B reads, of which ten million a month are free. Memory (128 MB) is never
