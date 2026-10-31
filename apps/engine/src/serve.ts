@@ -62,6 +62,7 @@ import {
 import { Schedules } from './schedules/index.ts';
 import { createWatchWriter } from './schedules/suggest.ts';
 import { SecretStore } from './secrets/index.ts';
+import { Slack } from './slack/index.ts';
 import {
   ATTACHMENT_REQUEST_LIMIT_BYTES,
   EventLog,
@@ -165,6 +166,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     machineName: resolveMachineName(),
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
+  const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
     baseUrl: () => address.url,
@@ -220,6 +222,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     briefings,
     terminals,
     remote,
+    slack,
     inbox,
     quick,
     classify,
@@ -243,6 +246,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       resolveLogin,
       roots,
       services: terminals,
+      slack,
     }),
   };
 }
@@ -280,6 +284,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     place: options.place ?? createPlacementAsker(services.quick.classify),
     workspaces: services.runs.workspaces,
     remote: services.remote,
+    slack: services.slack,
     restarter: createLaunchdRestarter(engine, {
       byService: options.byService ?? false,
       drain: services.runs,

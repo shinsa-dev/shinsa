@@ -46,6 +46,21 @@ export interface SlackLinks {
   links: SlackLink[];
 }
 
+export interface SlackSnapshot {
+  remote: boolean;
+  connectUrl: string | null;
+  links: SlackLink[];
+  problem: string | null;
+}
+
+export function resolveSlackConnectUrl(origin: string, instanceId: string) {
+  return `${origin}${SLACK_RELAY_PATHS.connect}?instance=${encodeURIComponent(instanceId)}`;
+}
+
+export function resolveSlackTaskUrl(origin: string, taskId: string) {
+  return `${origin}/tasks/${encodeURIComponent(taskId)}`;
+}
+
 const SIGNATURE_VERSION = 'v1';
 
 type Fields = Record<string, unknown>;

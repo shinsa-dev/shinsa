@@ -3,8 +3,10 @@ import {
   createSlackForwardSignature,
   listSlackMentionedUsers,
   parseSlackRelayPost,
+  resolveSlackConnectUrl,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
+  resolveSlackTaskUrl,
   SLACK_FORWARD_WINDOW_MS,
   SLACK_RELAY_MESSAGE_LIMITS,
   verifySlackForwardSignature,
@@ -133,5 +135,14 @@ describe('the page after connecting Slack', () => {
   test('names the workspace, or the problem', () => {
     expect(resolveSlackLinkedPath({ team: 'Acme' })).toBe('/slack/linked?team=Acme');
     expect(resolveSlackLinkedPath({ error: 'slack_denied' })).toBe('/slack/linked?error=slack_denied');
+  });
+});
+
+describe('links back to app.shinsa.dev', () => {
+  test('connecting names the machine, and a task opens in the dashboard', () => {
+    expect(resolveSlackConnectUrl('https://app.shinsa.dev', 'k3 x')).toBe(
+      'https://app.shinsa.dev/slack/connect?instance=k3%20x'
+    );
+    expect(resolveSlackTaskUrl('https://app.shinsa.dev', 'id-1')).toBe('https://app.shinsa.dev/tasks/id-1');
   });
 });

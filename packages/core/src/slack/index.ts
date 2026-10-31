@@ -53,8 +53,10 @@ export {
   createSlackForwardSignature,
   listSlackMentionedUsers,
   parseSlackRelayPost,
+  resolveSlackConnectUrl,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
+  resolveSlackTaskUrl,
   SLACK_FORWARD_HEADERS,
   SLACK_FORWARD_WINDOW_MS,
   SLACK_RELAY_MESSAGE_LIMITS,
@@ -64,6 +66,7 @@ export {
   type SlackNames,
   type SlackRelayPost,
   type SlackRelayPosted,
+  type SlackSnapshot,
   verifySlackForwardSignature,
 } from './relay.ts';
 export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';
