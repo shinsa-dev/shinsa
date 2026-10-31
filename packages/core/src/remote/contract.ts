@@ -25,7 +25,16 @@ export const REMOTE_PATHS = {
   pairs: '/__remote/pairs',
   hooks: '/hooks/',
   signInToken: '/__remote/sign-in/token',
+  machineInvites: '/__remote/machine/invites',
+  machineMemberRemove: '/__remote/machine/members/remove',
+  inviteAccept: '/__remote/invites/accept',
 } as const;
+
+export const INVITE_TTL_MS = 10 * 60_000;
+
+export const MAX_PENDING_INVITES = 5;
+
+export const MAX_INSTANCE_MEMBERS = 20;
 
 export const REMOTE_NATIVE_CLIENT = 'native';
 
@@ -67,9 +76,25 @@ export interface HeartbeatRequest {
   version: string;
 }
 
+export interface RemoteUser {
+  id: string;
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export interface RemoteMember {
+  user: RemoteUser;
+  addedAt: number;
+}
+
 export interface HeartbeatResponse {
   ok: true;
+  owner: RemoteUser;
+  members: RemoteMember[];
 }
+
+export type RemoteRole = 'owner' | 'member';
 
 export interface RemoteInstance {
   id: string;
@@ -78,13 +103,32 @@ export interface RemoteInstance {
   online: boolean;
   lastSeenAt: number | null;
   createdAt: number;
+  owner: RemoteUser;
+  role: RemoteRole;
 }
 
 export interface RemoteSession {
-  user: { id: string; login: string; avatarUrl: string | null } | null;
+  user: RemoteUser | null;
 }
 
-export type RemoteUser = NonNullable<RemoteSession['user']>;
+export interface InviteCreateResponse {
+  token: string;
+  expiresAt: number;
+}
+
+export interface InviteAcceptRequest {
+  token: string;
+}
+
+export interface InviteAcceptResponse {
+  instanceId: string;
+  name: string;
+  owner: RemoteUser;
+}
+
+export interface MemberRemoveRequest {
+  userId: string;
+}
 
 export interface NativeSignInTokenRequest {
   code: string;
@@ -136,6 +180,10 @@ export function resolvePairApprovePath(claimCode: string) {
 
 export function resolveInstanceRemovePath(instanceId: string) {
   return `${resolveInstancePath(instanceId)}/remove`;
+}
+
+export function resolveInstanceLeavePath(instanceId: string) {
+  return `${resolveInstancePath(instanceId)}/leave`;
 }
 
 export function resolveRemoteHookUrl(

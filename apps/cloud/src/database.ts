@@ -14,6 +14,7 @@ export interface Database {
 export interface UserRow {
   id: string;
   login: string;
+  name: string | null;
   avatar_url: string | null;
 }
 
@@ -35,6 +36,22 @@ export interface InstanceRow {
   online: number;
   last_seen_at: number | null;
   created_at: number;
+}
+
+export interface SharedInstanceRow extends InstanceRow {
+  owner_login: string;
+  owner_name: string | null;
+  owner_avatar_url: string | null;
+}
+
+export interface InviteRow {
+  instance_id: string;
+  expires_at: number;
+  claimed_by: string | null;
+}
+
+export interface MemberRow extends UserRow {
+  added_at: number;
 }
 
 export interface PairSessionRow {
@@ -60,17 +77,39 @@ export interface NewInstance {
   createdAt: number;
 }
 
-const INSTANCE_COLUMNS =
-  'id, user_id, name, fingerprint, tunnel_id, dns_record_id, connect_key, local_url, online, last_seen_at, created_at';
+const INSTANCE_COLUMN_NAMES = [
+  'id',
+  'user_id',
+  'name',
+  'fingerprint',
+  'tunnel_id',
+  'dns_record_id',
+  'connect_key',
+  'local_url',
+  'online',
+  'last_seen_at',
+  'created_at',
+];
+
+const INSTANCE_COLUMNS = INSTANCE_COLUMN_NAMES.join(', ');
+
+const SHARED_INSTANCE_COLUMNS = [
+  ...INSTANCE_COLUMN_NAMES.map((column) => `instances.${column}`),
+  'users.login AS owner_login',
+  'users.name AS owner_name',
+  'users.avatar_url AS owner_avatar_url',
+].join(', ');
+
+const USER_COLUMNS = 'users.id, users.login, users.name, users.avatar_url';
 
 export function createStore(db: Database) {
   return {
     async upsertUser(user: UserRow, now: number) {
       await db
         .prepare(
-          'INSERT INTO users (id, login, avatar_url, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET login = excluded.login, avatar_url = excluded.avatar_url'
+          'INSERT INTO users (id, login, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET login = excluded.login, name = excluded.name, avatar_url = excluded.avatar_url'
         )
-        .bind(user.id, user.login, user.avatar_url, now)
+        .bind(user.id, user.login, user.name, user.avatar_url, now)
         .run();
     },
 
@@ -84,7 +123,7 @@ export function createStore(db: Database) {
     selectSessionUser(tokenHash: string, now: number) {
       return db
         .prepare(
-          'SELECT users.id, users.login, users.avatar_url FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?'
+          `SELECT ${USER_COLUMNS} FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?`
         )
         .bind(tokenHash, now)
         .first<UserRow>();
@@ -95,7 +134,7 @@ export function createStore(db: Database) {
     },
 
     selectUser(id: string) {
-      return db.prepare('SELECT id, login, avatar_url FROM users WHERE id = ?').bind(id).first<UserRow>();
+      return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<UserRow>();
     },
 
     async createSignInCode(codeHash: string, row: SignInCodeRow, now: number) {
@@ -207,11 +246,21 @@ export function createStore(db: Database) {
       return row?.total ?? 0;
     },
 
+    async countOwnedInstances(userId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM instances WHERE user_id = ?')
+        .bind(userId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
     async listUserInstances(userId: string) {
       const { results } = await db
-        .prepare(`SELECT ${INSTANCE_COLUMNS} FROM instances WHERE user_id = ? ORDER BY created_at`)
-        .bind(userId)
-        .all<InstanceRow>();
+        .prepare(
+          `SELECT ${SHARED_INSTANCE_COLUMNS} FROM instances JOIN users ON users.id = instances.user_id WHERE instances.user_id = ? OR instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ?) ORDER BY instances.created_at`
+        )
+        .bind(userId, userId)
+        .all<SharedInstanceRow>();
       return results;
     },
 
@@ -242,6 +291,86 @@ export function createStore(db: Database) {
 
     async removeInstance(id: string) {
       await db.prepare('DELETE FROM instances WHERE id = ?').bind(id).run();
+    },
+
+    async createInvite(tokenHash: string, instanceId: string, expiresAt: number) {
+      await db
+        .prepare('INSERT INTO instance_invites (token_hash, instance_id, expires_at) VALUES (?, ?, ?)')
+        .bind(tokenHash, instanceId, expiresAt)
+        .run();
+    },
+
+    async removeExpiredInvites(now: number) {
+      await db.prepare('DELETE FROM instance_invites WHERE expires_at <= ?').bind(now).run();
+    },
+
+    async countPendingInvites(instanceId: string) {
+      const row = await db
+        .prepare(
+          'SELECT COUNT(*) AS total FROM instance_invites WHERE instance_id = ? AND claimed_by IS NULL'
+        )
+        .bind(instanceId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
+    selectInvite(tokenHash: string) {
+      return db
+        .prepare('SELECT instance_id, expires_at, claimed_by FROM instance_invites WHERE token_hash = ?')
+        .bind(tokenHash)
+        .first<InviteRow>();
+    },
+
+    async claimInvite(tokenHash: string, userId: string, now: number) {
+      const row = await db
+        .prepare(
+          'UPDATE instance_invites SET claimed_by = ? WHERE token_hash = ? AND claimed_by IS NULL AND expires_at > ? RETURNING token_hash'
+        )
+        .bind(userId, tokenHash, now)
+        .first<{ token_hash: string }>();
+      return row !== null;
+    },
+
+    async createMember(instanceId: string, userId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO instance_members (instance_id, user_id, added_at) VALUES (?, ?, ?) ON CONFLICT (instance_id, user_id) DO NOTHING'
+        )
+        .bind(instanceId, userId, now)
+        .run();
+    },
+
+    async isMember(instanceId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM instance_members WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async countMembers(instanceId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM instance_members WHERE instance_id = ?')
+        .bind(instanceId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
+    async listMembers(instanceId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${USER_COLUMNS}, instance_members.added_at FROM instance_members JOIN users ON users.id = instance_members.user_id WHERE instance_members.instance_id = ? ORDER BY instance_members.added_at, users.login`
+        )
+        .bind(instanceId)
+        .all<MemberRow>();
+      return results;
+    },
+
+    async removeMember(instanceId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM instance_members WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .run();
     },
   };
 }

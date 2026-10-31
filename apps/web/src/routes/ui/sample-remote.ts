@@ -93,6 +93,8 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
   };
 }
 
+const SAMPLE_OWNER = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+
 const SAMPLE_MACS: RemoteInstance[] = [
   {
     id: 'k3x9',
@@ -101,6 +103,8 @@ const SAMPLE_MACS: RemoteInstance[] = [
     online: true,
     lastSeenAt: null,
     createdAt: 0,
+    owner: SAMPLE_OWNER,
+    role: 'owner',
   },
   {
     id: 'p7m2',
@@ -109,6 +113,8 @@ const SAMPLE_MACS: RemoteInstance[] = [
     online: false,
     lastSeenAt: null,
     createdAt: 0,
+    owner: SAMPLE_OWNER,
+    role: 'owner',
   },
   {
     id: 'w4t8',
@@ -117,6 +123,8 @@ const SAMPLE_MACS: RemoteInstance[] = [
     online: true,
     lastSeenAt: null,
     createdAt: 0,
+    owner: SAMPLE_OWNER,
+    role: 'owner',
   },
 ];
 

@@ -23,6 +23,8 @@ const STUDIO: RemoteInstance = {
   online: true,
   lastSeenAt: NOW,
   createdAt: 0,
+  owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+  role: 'owner',
 };
 
 async function createDevice(machineKey: string): Promise<EnrolledDevice> {

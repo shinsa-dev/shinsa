@@ -5,6 +5,7 @@ import {
   REMOTE_PATHS,
   resolveEnrollUrl,
   resolveInstanceConnectPath,
+  resolveInstanceLeavePath,
   resolveInstancePath,
   resolveInstanceRemovePath,
   resolvePairApprovePath,
@@ -27,6 +28,7 @@ describe('the remote contract', () => {
     expect(resolveInstancePath('k3x9')).toBe('/__remote/instances/k3x9');
     expect(resolveInstanceConnectPath('k3x9')).toBe('/__remote/instances/k3x9/connect');
     expect(resolveInstanceRemovePath('k3x9')).toBe('/__remote/instances/k3x9/remove');
+    expect(resolveInstanceLeavePath('k3x9')).toBe('/__remote/instances/k3x9/leave');
     expect(resolvePairPath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345');
     expect(resolvePairApprovePath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345/approve');
   });
