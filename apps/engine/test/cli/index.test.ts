@@ -318,6 +318,15 @@ describe('shinsa do', () => {
     expect(Object.values(engine.state.tasks).map((candidate) => candidate.priority)).toContain('high');
   });
 
+  test('--backlog files the task for the backlog', async () => {
+    const { engine, port } = startTestServer();
+    const { io, out } = createIo(port);
+    expect(await runCli(['do', 'add', 'search', '--backlog'], io)).toBe(0);
+    const task = Object.values(engine.state.tasks)[0];
+    expect(task?.backlog).toEqual({ at: expect.any(Number) });
+    expect(out[0]).toBe('Added to the backlog. It plans now and builds when you start it.');
+  });
+
   test('an empty request, a server that is down or an invalid port fail with a plain message', async () => {
     const { io, errors } = createIo('1');
     expect(await runCli(['do'], io)).toBe(1);
@@ -757,7 +766,7 @@ describe('managing Shinsa from the command line', () => {
         '  shinsa tasks <command> [arguments] [--json]',
         '',
         'Commands',
-        `  ${'list'.padEnd(14)}List tasks, most recently changed first.`,
+        `  ${'list'.padEnd(21)}List tasks, most recently changed first.`,
       ]);
     }
   });

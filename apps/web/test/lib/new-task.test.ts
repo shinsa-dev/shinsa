@@ -3,8 +3,8 @@ import { act, renderHook } from '@testing-library/react';
 import {
   AUTO_CHOICES,
   createNewTaskCommand,
+  describeAfterLabel,
   describeNewTask,
-  isWaitingStart,
   listNewTaskPriorities,
   listNewTaskProjects,
   listNewTaskStarts,
@@ -12,6 +12,8 @@ import {
   requestNewTask,
   resolveProjectChoice,
   resolveShownProject,
+  resolveStartChoice,
+  toggleAfterTask,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
 import { createShinsaState, createTask } from '../support/state.ts';
@@ -58,15 +60,21 @@ describe('useNewTaskRequest', () => {
 });
 
 describe('describeNewTask', () => {
-  it('words the composer the same for every task, Add when it waits', () => {
-    expect(describeNewTask(false)).toEqual({
+  it('words the composer the same for every task, Add when it waits or goes to the backlog', () => {
+    const started = {
       placeholder: 'Describe the work or ask a question. Shinsa decides what kind of task it is.',
       submit: 'Start',
       done: 'Started. It comes back when it needs a decision.',
-    });
-    expect(describeNewTask(true)).toMatchObject({
+    };
+    expect(describeNewTask('auto')).toEqual(started);
+    expect(describeNewTask('now')).toEqual(started);
+    expect(describeNewTask('after')).toMatchObject({
       submit: 'Add',
-      done: 'Added. It starts when the task it waits on is finished.',
+      done: 'Added. It starts when the tasks it waits on are finished.',
+    });
+    expect(describeNewTask('backlog')).toMatchObject({
+      submit: 'Add',
+      done: 'Added to the backlog. It plans now and builds when you start it.',
     });
   });
 });
@@ -81,7 +89,9 @@ describe('createNewTaskCommand', () => {
   });
 
   it('sends each part you picked, Start now as no tasks to wait on and No project as null', () => {
-    expect(createNewTaskCommand('Fix it', { project: 'p1', start: 'now', priority: 'urgent' })).toEqual({
+    expect(
+      createNewTaskCommand('Fix it', { project: 'p1', start: 'now', after: [], priority: 'urgent' })
+    ).toEqual({
       type: 'task.create',
       request: 'Fix it',
       repoId: null,
@@ -89,8 +99,16 @@ describe('createNewTaskCommand', () => {
       priority: 'urgent',
       waitsOn: [],
     });
-    expect(createNewTaskCommand('Fix it', { ...AUTO_CHOICES, start: 'base' })).toMatchObject({
-      waitsOn: ['base'],
+    expect(
+      createNewTaskCommand('Fix it', { ...AUTO_CHOICES, start: 'after', after: ['a', 'b'] })
+    ).toMatchObject({
+      waitsOn: ['a', 'b'],
+    });
+    expect(createNewTaskCommand('Fix it', { ...AUTO_CHOICES, start: 'backlog' })).toEqual({
+      type: 'task.create',
+      request: 'Fix it',
+      repoId: null,
+      backlog: true,
     });
     expect(createNewTaskCommand('Fix it', { ...AUTO_CHOICES, project: NO_PROJECT })).toEqual({
       type: 'task.create',
@@ -112,10 +130,46 @@ describe('the composer’s choices', () => {
     ]);
   });
 
-  it('offer Auto, Start now and After each open task, and know which of them waits', () => {
-    const starts = listNewTaskStarts([createTask({ id: 'base', title: 'Fix the schema' })]);
-    expect(starts.map((item) => item.label)).toEqual(['Auto start', 'Start now', 'After Fix the schema']);
-    expect(['auto', 'now', 'base'].map(isWaitingStart)).toEqual([false, false, true]);
+  it('offer four ways to start, each with its hint, and name the tasks it waits for', () => {
+    const base = createTask({ id: 'base', title: 'Fix the schema' });
+    const starts = listNewTaskStarts([base], []);
+    expect(starts.map((item) => [item.value, item.label, item.hint])).toEqual([
+      ['auto', 'Auto start', 'Now, or after work it builds on'],
+      ['now', 'Start now', 'Now, even if related work is open'],
+      ['after', 'After another task…', 'When the tasks you pick finish'],
+      ['backlog', 'Backlog', 'Plans now, builds when you start it'],
+    ]);
+    expect(starts[2]?.disabled).toBeUndefined();
+    expect(listNewTaskStarts([base], ['base'])[2]?.label).toBe('After Fix the schema');
+    expect(listNewTaskStarts([], [])[2]?.disabled).toBe('No open task to wait for');
+  });
+
+  it('name one task, or the first and how many more', () => {
+    expect(describeAfterLabel([])).toBe('After another task…');
+    expect(describeAfterLabel([{ title: 'A' }])).toBe('After A');
+    expect(describeAfterLabel([{ title: 'A' }, { title: 'B' }, { title: 'C' }])).toBe('After A and 2 more');
+  });
+
+  it('keep only open tasks to wait for, and fall back to Auto start when none is left', () => {
+    const open = [createTask({ id: 'a' })];
+    expect(resolveStartChoice({ start: 'after', after: ['a', 'gone'] }, open)).toEqual({
+      start: 'after',
+      after: ['a'],
+    });
+    expect(resolveStartChoice({ start: 'after', after: ['gone'] }, open)).toEqual({
+      start: 'auto',
+      after: [],
+    });
+    expect(resolveStartChoice({ start: 'backlog', after: [] }, open)).toEqual({
+      start: 'backlog',
+      after: [],
+    });
+  });
+
+  it('toggle a task in and out of what it waits for', () => {
+    expect(toggleAfterTask([], 'a')).toEqual({ start: 'after', after: ['a'] });
+    expect(toggleAfterTask(['a', 'b'], 'a')).toEqual({ start: 'after', after: ['b'] });
+    expect(toggleAfterTask(['a'], 'a')).toEqual({ start: 'auto', after: [] });
   });
 });
 

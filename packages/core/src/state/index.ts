@@ -24,6 +24,7 @@ export {
 export {
   findTask,
   isDependencyOf,
+  isHeldInBacklog,
   isRunWaiting,
   isWaitingForCheckout,
   isWaitingOnAnswer,

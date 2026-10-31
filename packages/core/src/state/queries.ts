@@ -1,5 +1,6 @@
 import {
   DomainError,
+  type Gate,
   isAgentQuestion,
   isDelegatedRun,
   isSettingUpWorkspace,
@@ -18,6 +19,10 @@ export function listOpenGates(state: ShinsaState, taskId?: string) {
   return Object.values(state.gates).filter(
     (gate) => gate.status === 'open' && (taskId === undefined || gate.taskId === taskId)
   );
+}
+
+export function isHeldInBacklog(state: ShinsaState, gate: Gate) {
+  return gate.type === 'plan' && Boolean(state.tasks[gate.taskId]?.backlog);
 }
 
 export function listLiveRuns(state: ShinsaState, taskId?: string) {

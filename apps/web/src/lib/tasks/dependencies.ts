@@ -1,6 +1,6 @@
 import { compareTasks, listPendingDependencies, type ShinsaState, type Task } from '@shinsa/core';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { listOpenTaskChoices } from '@/lib/tasks/roadmap.ts';
+import { listOpenTaskChoices } from '@/lib/tasks/groups.ts';
 
 const BEFORE_BUILD: ReadonlySet<Task['stage']> = new Set<Task['stage']>([
   'triage',

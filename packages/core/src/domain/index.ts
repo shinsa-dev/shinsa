@@ -1,5 +1,11 @@
 export type * from './accounts.ts';
 export {
+  BACKLOG_REFUSAL_TEXT,
+  type BacklogRefusal,
+  canWaitInBacklog,
+  resolveBacklogRefusal,
+} from './backlog.ts';
+export {
   describeWholeSuiteRefusal,
   isBlockingCheck,
   isWholeSuiteCommand,

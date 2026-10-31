@@ -369,6 +369,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
     ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
+    ...(fields.backlog === undefined ? {} : { backlog: readBoolean(fields, 'backlog') }),
   };
 }
 
@@ -427,6 +428,7 @@ function readSuggestionAccept(fields: Fields): UserCommand {
     taskId: readId(fields, 'taskId'),
     suggestionId: readId(fields, 'suggestionId'),
     waitsOnThis: readBoolean(fields, 'waitsOnThis'),
+    ...(fields.backlog === undefined ? {} : { backlog: readBoolean(fields, 'backlog') }),
   };
 }
 
@@ -639,6 +641,11 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.create': readTaskCreate,
   'task.prioritize': readTaskPrioritize,
   'task.wait_on': readTaskWaitOn,
+  'task.move_to_backlog': (fields) => ({ type: 'task.move_to_backlog', taskId: readId(fields, 'taskId') }),
+  'task.remove_from_backlog': (fields) => ({
+    type: 'task.remove_from_backlog',
+    taskId: readId(fields, 'taskId'),
+  }),
   'task.cancel': (fields) => ({ type: 'task.cancel', taskId: readId(fields, 'taskId') }),
   'task.complete': (fields) => ({ type: 'task.complete', taskId: readId(fields, 'taskId') }),
   'task.retry': readRetry,

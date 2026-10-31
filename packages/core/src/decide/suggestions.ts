@@ -113,6 +113,7 @@ export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestio
     priority: parent.priority,
     origin: parent.origin,
     waitsOn: command.waitsOnThis ? [parent.id] : [],
+    ...(command.backlog ? { backlog: true } : {}),
   });
   decider.emit({
     type: 'suggestion.settled',

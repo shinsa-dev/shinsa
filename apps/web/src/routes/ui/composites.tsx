@@ -44,7 +44,7 @@ import { TONE_EDGE, TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { AUTO_CHOICES, type NewTaskChoices } from '@/lib/new-task.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { MERGE_ITEMS } from '@/lib/settings.ts';
-import { ROADMAP_GROUPS } from '@/lib/tasks/roadmap.ts';
+import { TASK_GROUPS } from '@/lib/tasks/groups.ts';
 import { acknowledgeSample, createSampleState, createSampleTask, HOUR } from './samples.ts';
 import { Specimen } from './section.tsx';
 
@@ -220,8 +220,8 @@ export function CompositeSpecimens() {
           </SectionLabel>
         </div>
       </Specimen>
-      <Specimen label='Status tiles, one per roadmap group'>
-        {ROADMAP_GROUPS.map((group) => (
+      <Specimen label='Status tiles, one per task group'>
+        {TASK_GROUPS.map((group) => (
           <StatusTile key={group.key} icon={group.icon} tone={group.tone} label={group.title} />
         ))}
       </Specimen>

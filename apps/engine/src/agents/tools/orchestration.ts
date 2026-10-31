@@ -143,7 +143,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task on the roadmap for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both.',
+      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -168,6 +168,11 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'boolean',
           description:
             'The new task waits until this one is finished (merged, or done when it ships no pull request), then starts.',
+        },
+        backlog: {
+          type: 'boolean',
+          description:
+            'The new task triages and plans, then waits in the human’s backlog until they start building it. Only when the human asked to keep it for later.',
         },
         client_request_id: CLIENT_REQUEST_ID,
       },
@@ -402,6 +407,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,
+      backlog: request.backlog,
     },
     resolveCommandId(call, 'create_task', request.requestKey)
   );

@@ -189,6 +189,7 @@ export function createTask(
     waitsOn?: string[];
     triageWaitsOn?: string | string[];
     planFirst?: boolean;
+    backlog?: boolean;
   } = {}
 ) {
   const repoId = options.repoId ?? (Object.keys(harness.state.repos)[0] || registerRepo(harness));
@@ -200,6 +201,7 @@ export function createTask(
     priority: options.priority,
     waitsOn: options.waitsOn,
     planFirst: options.planFirst,
+    backlog: options.backlog,
   });
   const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
   harness.send({

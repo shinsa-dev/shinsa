@@ -85,7 +85,7 @@ describe('suggested follow-ups', () => {
       within(list)
         .getAllByRole('option')
         .map((option) => option.textContent)
-    ).toEqual(['After this task mergesSuggested', 'Start now']);
+    ).toEqual(['After this task mergesSuggested', 'Start now', 'Backlog']);
   });
 });
 

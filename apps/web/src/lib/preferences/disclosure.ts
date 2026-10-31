@@ -14,7 +14,7 @@ export type DisclosureScope =
   | 'home'
   | 'queue'
   | 'services'
-  | 'roadmap'
+  | 'tasks'
   | 'settings'
   | 'automation'
   | 'ui';

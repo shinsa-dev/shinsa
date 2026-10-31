@@ -78,7 +78,7 @@ function listSuggestionCommands(task: Task): Command[] {
         label: `Add the suggested task “${suggestion.title}”`,
         hint: suggestion.why,
         icon: 'IconPlusMedium',
-        keywords: ['suggested task', 'suggestion', 'roadmap', 'accept', 'add'],
+        keywords: ['suggested task', 'suggestion', 'accept', 'add'],
         page: {
           kind: 'list',
           crumb: 'Add',

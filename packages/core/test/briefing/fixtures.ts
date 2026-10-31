@@ -33,6 +33,7 @@ export function queueOf(entries: QueuedGate[], extra: Partial<Queue> = {}): Queu
     later: [],
     working: [],
     waiting: [],
+    backlog: [],
     ...extra,
   };
 }

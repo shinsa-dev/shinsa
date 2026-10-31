@@ -311,6 +311,24 @@ describe('NowCard on the Overview', () => {
     expect(await view.findByText('Approved. Building now.')).toBeTruthy();
   });
 
+  it('offers only Start building on a plan kept in the backlog', async () => {
+    const task = createTask({ id: 'task-1', stage: 'awaiting_plan', backlog: { at: 0 } });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.getByText('Planned and kept in the backlog')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Approve plan' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Back to Needs you' })).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Start building' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null, planVersion: undefined },
+    ]);
+    expect(
+      await view.findByText(
+        'Started. The worktree moves onto the latest default branch, then building begins.'
+      )
+    ).toBeTruthy();
+  });
+
   it('says the operation runs next when you approve an operation’s plan', async () => {
     const task = createTask({ id: 'task-1', stage: 'awaiting_plan', pipeline: ['plan', 'operate'] });
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });

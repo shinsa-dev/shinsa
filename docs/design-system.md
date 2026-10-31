@@ -4326,7 +4326,7 @@ already that slot and needs none.
 #### DisclosureHeader, DisclosureChevron, DisclosureAction
 
 Every collapsible header (Overview and Review panels, change snippets, the live card's row, a delegation's spawn card,
-a round's row, Home's sections, the compact queue's sections, the roadmap's groups, Settings' folding blocks). The
+a round's row, Home's sections, the compact queue's sections, All tasks' groups, Settings' folding blocks). The
 whole header is the trigger.
 
 Props of `DisclosureHeader`:
@@ -4404,7 +4404,7 @@ const disclosure = useDisclosure(createDisclosureId('task', task.id, 'overview',
 
 Every collapsible remembers whether it is open. Its state is `useDisclosure(persistId, defaultOpen)`, never
 `useState`. Ids come from what the thing shows, never an index: `createDisclosureId(scope, …parts)` joins a scope
-(`task`, `home`, `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:`, for example
+(`task`, `home`, `queue`, `services`, `tasks`, `settings`, `ui`) and parts with `:`, for example
 `task:<taskId>:overview:panel:<panel>`, `home:section:<section>`, `queue:section:<section>`,
 `services:project:<id>`, `settings:mcp:server:<id>`. A fold that should be forgotten passes `notPersisted('why')`.
 Every collapsible composite (`Panel`, `CompactSection`, `FoldingBlock`, `ExpandRow`, and the feature ones) takes a
@@ -5099,7 +5099,7 @@ Props: `label`, `tone`, `place?`, `body`, `fix`, `action?`, `children?`. No titl
 
 #### StatusTile and the task glyphs
 
-A 20px (or 18px) rounded square carrying a 14px state glyph in a tone: queue and row tiles, gate tiles, roadmap group icons, smart
+A 20px (or 18px) rounded square carrying a 14px state glyph in a tone: queue and row tiles, gate tiles, task group icons, smart
 link tiles, service rows.
 
 - Classes: `corner-superellipse/1.125 inline-grid shrink-0 place-items-center rounded-control-sm` + size + 
@@ -5832,7 +5832,7 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 
 **Do** make the whole row the link. **Don't** add a second line under the title just to hold row actions.
 
-**Example.** The roadmap (All tasks) follows these rules with rows instead of a table: each row is one line that opens its task, status and pull request are trailing columns, and a nested row's corner arrow is a 20px button that opens the Waits on menu.
+**Example.** All tasks follows these rules with rows instead of a table: each row is one line that opens its task, status and pull request are trailing columns, and a nested row's corner arrow is a 20px button that opens the Waits on menu.
 
 #### Buttons: variant and size by context
 
@@ -6129,7 +6129,7 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 
 **Do** wrap a task title in a row in `Truncate`. **Don't** add a `truncate` span with a `title` attribute.
 
-**Example.** A branch path in the facts row is a menu trigger, so it keeps a plain `truncate`; the same branch in a roadmap row is `Truncate`.
+**Example.** A branch path in the facts row is a menu trigger, so it keeps a plain `truncate`; the same branch in an All tasks row is `Truncate`.
 
 #### Times
 
@@ -6485,7 +6485,7 @@ Example: on Home, "In progress 3" is a 12px medium grey label with a lighter cou
 
 #### Collapsible headers
 
-- Every collapsible header folds from a click anywhere on it: panels, snippets, the live card's row, delegation cards, round rows, Home's sections, compact queue sections, roadmap groups, settings blocks.
+- Every collapsible header folds from a click anywhere on it: panels, snippets, the live card's row, delegation cards, round rows, Home's sections, compact queue sections, task groups, settings blocks.
 - Header with nothing interactive inside: one `<button>` with `aria-expanded` (inside its `h2` or `figcaption` when it has one), `group/disclosure flex min-w-0 cursor-pointer select-none items-center text-left outline-none`, `w-full` when wrapped.
 - Header with its own controls (a link, Stop, a select): the click handler sits on the header element itself; its controls are wrapped in `DisclosureAction`, a span that stops click propagation (`flex min-w-0 items-center`, placed `ms-auto shrink-0`); the chevron becomes the single focusable trigger, a `<button>` with `aria-expanded` and the label "Expand ‹label›" or "Collapse ‹label›". Never nest a button inside a button.
 - The chevron is always last, after the header's controls.
@@ -6914,7 +6914,7 @@ Example: on a task page, ⌘K opens with "Approve the plan" first; typing "dark"
 - Real menus open on click; hover-only information uses info popovers (Menus, in 11.1).
 - A generic options trigger (`•••`) has no tooltip.
 - A project's dot lines up with menu icons: in any menu or select the 8px dot sits in a 14px box (`grid size-3.5 shrink-0 place-items-center`), the size of a menu icon, so its label starts where every other item's label does. Every place you pick a project shows the dot before each name, in the trigger and every option, through one renderer. "All work" is a grey dot.
-- A project and a repository are never mixed up: a project is its dot and name, a repository its own name after its GitHub or folder mark, tinted in its project's colour (`RepoIcon`). The task's facts row shows the folder the agent works in; the task card on hover, the roadmap's Repository column and repository links show GitHub with a remote. A folder never stands for a project.
+- A project and a repository are never mixed up: a project is its dot and name, a repository its own name after its GitHub or folder mark, tinted in its project's colour (`RepoIcon`). The task's facts row shows the folder the agent works in; the task card on hover, All tasks' Repository column and repository links show GitHub with a remote. A folder never stands for a project.
 - Priority shows its level's mark everywhere: bars for low, normal, high, a red square with `!` for urgent; the priority menu's items carry the same marks.
 - Item actions have one source (label and icon), read by the page's `•••` menu, the list's context menu and the command menu, so every action carries the same icon everywhere; destructive actions (Cancel task) use the destructive style.
 - Dependency editing has one source too and is the same everywhere: a "Wait for another task" submenu of open tasks with a check on each current one (current ones sorted first; a click ticks or unticks one and the menu stays open) and "Stop waiting" (clears all). Several at once is the normal case: every list adds or removes one and never replaces the others. The label changes to "Merge after another task" once building has started. A locked dependency shows ticked and disabled with its reason, and Stop waiting is not offered when it is the only one.
@@ -7066,14 +7066,15 @@ an action, the action's click never folds the header, and the chevron becomes it
 - Example: a Settings folding block is `block` + `glyph`, so its chevron sits 9px from the end, in the same column
   as the rows' own chevrons below it.
 
-#### Grouped status lists (a roadmap)
+#### Grouped status lists (All tasks)
 
 A list of everything of one kind is split into sections by status, in the order a person should act on them, each
 with a sticky header.
 
 - Order the sections by what needs the user first, finished work last. Shinsa's order: Ready to merge, Changes to
   review, Plan to approve, Change to approve, Operation to confirm, Needs your answer, Paused, In progress, Waiting
-  on another task, Done, Cancelled. Done and Cancelled start collapsed.
+  on another task, Backlog, Done, Cancelled. Done and Cancelled start collapsed. Work the user kept for later (a
+  backlog) sits after everything in motion and before finished work, and never reads as a decision.
 - A new kind of decision gets its own section, placed by what it decides, not merged into the nearest one (a
   proposed change decides what gets built, like a plan, but is not a plan yet, so it sits right after Plan to
   approve with its own icon and tone).
@@ -8794,8 +8795,8 @@ export function useDelayed(active: boolean, delayMs: number = LOADING_DELAY_MS) 
 - Writes are kept in memory, saved 250ms after the last toggle and on `pagehide`. Another tab's save (the `storage` event) is merged in, keeping this tab's unsaved toggles.
 - Only the 600 most recently toggled entries are kept: a toggle moves its entry to the end and the oldest fall off.
 - Trees use the same store with one entry per folder (`useDisclosureSet(prefix, marked)`).
-- Stable ids from what it shows, never an array index: `createDisclosureId(scope, …parts)` joins a scope (`task`, `home`, `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:` (a `:` inside a part is escaped as `%3A`). Content that has no stable id is hashed (FNV-1a, base 36). Examples: `task:<taskId>:review:card:<point>`, `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`, `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`, `task:<taskId>:chat:tool:<callKey>`, `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`, `services:project:<id>`, `roadmap:group:<group>`, `settings:mcp:server:<id>`, `ui:…`.
-- Required: every collapsible primitive takes a `persistId` (`Panel`, `CompactSection`, `WideSection`, `FoldingBlock`, `RoadmapSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`, `UserMessage`, `TestingPanel`, `MergeStepsPanel`, `EvidencePanel`). `DisclosureHeader` takes the `disclosure` the hook returns, never its own open state.
+- Stable ids from what it shows, never an array index: `createDisclosureId(scope, …parts)` joins a scope (`task`, `home`, `queue`, `services`, `tasks`, `settings`, `ui`) and parts with `:` (a `:` inside a part is escaped as `%3A`). Content that has no stable id is hashed (FNV-1a, base 36). Examples: `task:<taskId>:review:card:<point>`, `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`, `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`, `task:<taskId>:chat:tool:<callKey>`, `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`, `services:project:<id>`, `tasks:group:<group>`, `settings:mcp:server:<id>`, `ui:…`.
+- Required: every collapsible primitive takes a `persistId` (`Panel`, `CompactSection`, `WideSection`, `FoldingBlock`, `TaskGroupSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`, `UserMessage`, `TestingPanel`, `MergeStepsPanel`, `EvidencePanel`). `DisclosureHeader` takes the `disclosure` the hook returns, never its own open state.
 - Opting out says why: `notPersisted('…')`. Used for a finding card (it never folds) and search result groups (new with every query).
 - Not collapsibles: popovers, menus and dialogs. A one-way "Show more" on a long diff, code block or tool output is a reveal, not a fold, and is not remembered.
 - A card that is jumped to opens again even if it was folded.
@@ -10339,7 +10340,7 @@ window.addEventListener('keydown', onKey);
 Three syntax checks on every `.tsx` file in the app.
 
 1. **`persistId` required.** Any of these elements without a `persistId` attribute: `Panel`, `CompactSection`,
-   `WideSection`, `FoldingBlock`, `RoadmapSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`,
+   `WideSection`, `FoldingBlock`, `TaskGroupSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`,
    `UserMessage`, `TestingPanel`, `MergeStepsPanel`, `EvidencePanel`. A spread (`{...parts}`) does not count.
 2. **`DisclosureHeader` takes a `disclosure`.** A `DisclosureHeader` without a `disclosure` attribute.
 3. **No fold state in `useState`.** In a file that folds (it has an `aria-expanded` attribute or renders a

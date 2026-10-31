@@ -67,6 +67,7 @@ const queue: Queue = {
   later: [],
   working: [tools],
   waiting: [],
+  backlog: [],
 };
 
 describe('describeBriefingPrompt', () => {

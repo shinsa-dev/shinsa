@@ -49,20 +49,27 @@ export const WORK_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['suggestions', 'accept'],
-    summary: 'Add a suggested task to the roadmap.',
+    summary: 'Add a suggested task as a task of its own.',
     command: 'suggestion.accept',
     fields: [
       TASK_FIELD,
       SUGGESTION_FIELD,
       { name: 'afterThis', kind: 'boolean', description: 'Start it only after this task merges.' },
+      {
+        name: 'backlog',
+        kind: 'boolean',
+        description: 'Plan it now and keep it in the backlog until you start building it.',
+      },
     ],
     build: async (values, client) => ({
       type: 'suggestion.accept',
       taskId: await findTaskId(client, readValue(values, 'task')),
       suggestionId: readValue(values, 'suggestion'),
       waitsOnThis: values.afterThis === true,
+      ...(values.backlog ? { backlog: true } : {}),
     }),
-    done: () => 'Added the suggested task.',
+    done: (values) =>
+      values.backlog ? 'Added the suggested task to the backlog.' : 'Added the suggested task.',
   }),
   defineCommand({
     path: ['suggestions', 'dismiss'],

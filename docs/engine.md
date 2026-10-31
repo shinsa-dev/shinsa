@@ -73,7 +73,7 @@ Besides its hand-over tool, every working role can ask (`ask`; never the reviewe
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), see the
 other open work in its repository (`list_repository_work`, Other work in the repository, below), suggest
 tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
-and the Agent and the investigator can wait (`wait_for`). So every task agent can read across the roadmap, file a
+and the Agent and the investigator can wait (`wait_for`). So every task agent can read across every task, file a
 task, schedule work and suggest tasks, while its hand-over stays its own. Which role may call which tool is one
 table, `listCallableToolNames` in `packages/core/src/domain/tools.ts`: `decide` refuses a call the run's role does not
 have, and each prompt's house rules name only the tools the agent has, and never repeat what a tool's own description
@@ -326,7 +326,7 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
 - **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
   is not told about the source.
-- **Forking from the web.** Fork into a new task (the task menu, a roadmap row's menu and ⌘K, on every task but a
+- **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
   cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
   sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
   into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
@@ -385,7 +385,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
-   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise Settings → Agents →
+   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) or kept in the backlog (Scheduling → The backlog, below)
+   always waits at a plan gate; otherwise Settings → Agents →
    Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
@@ -895,7 +896,7 @@ folds in `state/shapes.ts`).
   pipeline back (an answer that became a change reads as a change).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the roadmap row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
@@ -959,7 +960,10 @@ The kind of task is always decided for you; when it starts and its priority are 
 them in the composer.
 
 - `task.create` records which were left to Shinsa (`auto: { shape, start, priority }`): the kind is Auto unless `mode` was
-  given, a field you leave out is Auto, and an explicit `waitsOn: []` is Start now. Schedules and accepted suggested tasks
+  given, a field you leave out is Auto, and an explicit `waitsOn: []` is Start now. The composer's When to start
+  has four choices: Auto start (triage may make it wait on open work it builds on), Start now (`waitsOn: []`), After
+  another task… (a searchable list of every open task in any project, several at once, `waitsOn: [ids]`) and Backlog
+  (`backlog: true`, The backlog, above). Triage never chooses the backlog. Schedules and accepted suggested tasks
   keep their own choices; a split plan's tasks are changes; a courier's task is Auto.
 - Triage answers each Auto part as a typed decision question with a short why: `shape`, `priority` (urgent, high, normal or
   low) and `waits_on` (the open tasks of the task's project, in any repository, listed with their repository and
@@ -1020,8 +1024,8 @@ be changed from a plan.
 
 ## Scheduling
 
-Shinsa is a roadmap: everything you ask for is worked on as soon as it can be, and only the order
-in which finished work reaches you is managed.
+Everything you ask for is worked on as soon as it can be, unless you put it in the backlog (The backlog, below),
+and only the order in which finished work reaches you is managed.
 
 - **No dependency, no waiting.** A new task is classified, gets its worktree and starts planning
   at once, on its own agent, then builds, checks and lands at your review gate. How many
@@ -1042,8 +1046,10 @@ in which finished work reaches you is managed.
   OK, an operation and a secret rank as questions), paused (a failure, a setup to fix, a sign-in),
   then the oldest first), and the guide never leads with a low priority decision while anything else waits
   (`parseBriefing` drops such an answer; low ones go to the end of next).
-- **No hold.** New work is never parked while decisions pile up: holding the compute only delays work you asked
-  for, and priority already keeps finished work out of your way.
+- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up or usage runs
+  low: holding the compute only delays work you asked for, and priority already keeps finished work out of your way.
+  Work you want planned now and built later goes in the backlog, and only you (or an agent you asked) put it there;
+  triage never does.
 
 ### Dependencies
 
@@ -1091,6 +1097,40 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 - **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
   branch; only a task's own rounds stack (Rounds, above).
 
+### The backlog
+
+Work you want written down and planned, but not built yet, waits in the backlog: a status of a task, never a kind of
+task, so a backlog task keeps its kind, priority, handle and plan. Planning costs a small share of a task (about 4% of
+its usage in a measured log); building, checks, fixes and review are the rest, so a backlog task spends almost
+nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
+
+- **Putting work there.** `Task.backlog` (`{ at }`, or null) changes only through `task.backlog_changed` (`backlog`,
+  `cause`: `you`, `started` or `inquiry`). You file a task for the backlog with `task.create` `backlog: true` (the
+  composer's When to start → Backlog, `shinsa do --backlog`, `shinsa tasks create --backlog`, `create_task`'s
+  `backlog`), accept a suggested task into it (`suggestion.accept` `backlog: true`, `shinsa suggestions accept
+  --backlog`), or move one there (`task.move_to_backlog`, Move to the backlog in the task menu, a row's menu and ⌘K,
+  `shinsa tasks move-to-backlog`). Moving is refused, by `resolveBacklogRefusal`, for a settled task
+  (`task_settled`), for an answer, research or an investigation (`backlog_inquiry`: only work that builds or runs an
+  operation waits there, `canWaitInBacklog`) and once a plan was approved or building started (`backlog_started`).
+- **While there.** A backlog task is triaged, verified, gets its worktree and is planned like any other, then waits at
+  its plan gate, which always opens for it (`backlog` in `PLAN_GATE_RULE`), with the stage reason "in the backlog".
+  That gate is held (`isHeldInBacklog`): `resolveQueue` leaves it out of `ready` and lists the task in
+  `queue.backlog` instead, so it is not in Needs you, the queue button, Home, the guide, the Dock badge or a
+  notification. Any other gate on a backlog task (a question, a failure, setup to fix) reaches you as usual. A task
+  triage makes an inquiry leaves the backlog at once (`cause: inquiry`, "Started at once: questions, research and
+  investigations never wait in the backlog"). A backlog task can still wait on other tasks; it plans once they finish.
+- **Taking it out.** `task.remove_from_backlog` (Remove from the backlog, `shinsa tasks remove-from-backlog`) clears it,
+  and its plan waits in Needs you as a plan to approve ("plan ready for you").
+- **Starting.** Approving the held plan (Start building, or Start the operation for an operation) is the start: the
+  task goes back to triage, `worktree.create` resets its worktree onto the freshly fetched default branch (planning
+  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingFromBacklog`,
+  `buildFromBacklog`) with `cause: started`. The first build prompt says how long the plan waited and that the
+  worktree now holds the latest default branch, and asks the Agent to check the plan still fits the code before it
+  builds (`resolveBacklogStart`). A task without a worktree starts building at once. A task that still waits on another
+  waits for it first, then builds without planning again.
+- **On your behalf.** Both moves are management commands an agent may send for you; the activity reads "Moved
+  ‹task› to the backlog" or "out of the backlog". Starting is a plan approval, which only you make.
+
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
@@ -1105,7 +1145,8 @@ no way to push without the hook; Pushing the branch, below). `configuration` mea
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
-first or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
+first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
+or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
@@ -1664,7 +1705,7 @@ checks it ran.
   open task, or one repeated in the call is dropped; a call that would leave more than ten open
   suggestions on the task is refused. Suggestions never start anything.
 - Accepting (`suggestion.accept`, `shinsa suggestions accept`) creates the task in the same repository, waiting on
-  this one when `waitsOnThis` is set, and links it; dismissing keeps it out of the way. A settled task keeps its
+  this one when `waitsOnThis` is set, or in the backlog when `backlog` is (Scheduling → The backlog), and links it; dismissing keeps it out of the way. A settled task keeps its
   suggested tasks so you can still accept them. On screen they are "Suggested tasks" ("Add the suggested task
   “‹title›”", "Dismiss the suggested task"). A follow-up is something else: a message to a finished answer,
   investigation or report.
@@ -1782,7 +1823,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   schedules write --source <server> --project <project>`, or accepting a suggested watch, below) creates its home
   (`createWatchHome`): a task marked `watchHome`, with no handle, no triage and no agent, resting at once (`done`,
   "waiting for its first read"). A watch never takes a target of its own (`source_target`), and a schedule that
-  starts or messages a task cannot become one (`source_change`). A home is on no list: the roadmap, the queue, Home,
+  starts or messages a task cannot become one (`source_change`). A home is on no list: All tasks, the queue, Home,
   ⌘K, references, `find_tasks` and `shinsa tasks list` leave it out (`isWatchHome`, in `isInFocus` and each list); it
   takes no message and is no other schedule's target (`watch_home`), and a redelivered message to it is dropped.
   Deleting the watch cancels its home (`closeWatchHome`), at rest or mid-read. A fire never messages the home, which
@@ -1817,7 +1858,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
   `routes/automation.tsx`), laid out like a task page: its text as the description, a facts row (its type, on or
   paused, the integration, the project in its own colour, when it runs, the next and last run and how many tasks it
-  filed, `listAutomationFacts`), the tasks it filed in the roadmap's own rows, and an Activity log of every run, newest
+  filed, `listAutomationFacts`), the tasks it filed in All tasks' own rows, and an Activity log of every run, newest
   first, drawn by the task page's own entry (`ActivityEntry`): a title for the outcome ("Filed 1 task", "No new
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
@@ -1961,7 +2002,9 @@ and the run supervisor.
   repositories), with `this_task_waits` making this task wait on it (a blocker, not just a parent link; only an Agent
   run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
   task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
-  as Shinsa's); setting both is refused (`dependency_cycle`). It is exactly-once per `client_request_id`.
+  as Shinsa's); setting both is refused (`dependency_cycle`). `backlog` files it for the backlog (Scheduling → The
+  backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
+  exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command

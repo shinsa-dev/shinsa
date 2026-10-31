@@ -15,6 +15,7 @@ import {
 import { listOpenMergeSteps } from '../report/merge-steps.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
+  isHeldInBacklog,
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
@@ -112,7 +113,7 @@ function countDependents(state: ShinsaState) {
 }
 
 function listQueuedGates(state: ShinsaState): QueuedGate[] {
-  const open = listOpenGates(state);
+  const open = listOpenGates(state).filter((gate) => !isHeldInBacklog(state, gate));
   const dependents = open.length > 0 ? countDependents(state) : new Map<string, number>();
   return open.flatMap((gate) => {
     const task = state.tasks[gate.taskId];
@@ -136,9 +137,11 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const running = resolveActiveRunTasks(state);
   const working: Task[] = [];
   const waiting: Task[] = [];
+  const backlog: Task[] = [];
   for (const task of Object.values(state.tasks)) {
     if (tasksWithGates.has(task.id) || !isListedInFocus(state, task, now)) continue;
-    if (listWaitsOn(state, task).length > 0) waiting.push(task);
+    if (task.backlog && !isTaskSettled(task)) backlog.push(task);
+    else if (listWaitsOn(state, task).length > 0) waiting.push(task);
     else if (isMoving(task, running)) working.push(task);
   }
 
@@ -151,5 +154,6 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
     later: ready.slice(limit),
     working: working.sort(compareTasks),
     waiting: waiting.sort(compareTasks),
+    backlog: backlog.sort(compareTasks),
   };
 }

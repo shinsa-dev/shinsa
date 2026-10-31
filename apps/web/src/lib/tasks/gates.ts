@@ -28,6 +28,10 @@ const GATE_REPLY = {
   recheck: { decision: 'approve', done: 'Verifying the setup again.' },
   approvePlan: { decision: 'approve', done: 'Approved. Building now.' },
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
+  startBacklog: {
+    decision: 'approve',
+    done: 'Started. The worktree moves onto the latest default branch, then building begins.',
+  },
   revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },
   approveChanges: { decision: 'approve', done: 'Approved. Opening the pull request.' },
   pushChanges: { decision: 'approve', done: 'Approved. Pushing the changes.' },
@@ -81,7 +85,8 @@ export function resolveRetryReply(gate: Gate): GateReply {
 }
 
 export function resolvePlanReply(task: Task): GateReply {
-  return resolveWorkStep(resolveTaskPipeline(task)) === 'operate' ? 'approveOperationPlan' : 'approvePlan';
+  if (resolveWorkStep(resolveTaskPipeline(task)) === 'operate') return 'approveOperationPlan';
+  return task.backlog ? 'startBacklog' : 'approvePlan';
 }
 
 const APPROVAL_REPLY: Record<ApprovalPath, GateReply> = {

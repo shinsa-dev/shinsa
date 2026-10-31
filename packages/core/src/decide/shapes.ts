@@ -158,12 +158,12 @@ export function startOperation(decider: Decider, taskId: string, guidance: strin
   });
 }
 
-export function startAfterPlan(decider: Decider, taskId: string) {
+export function startAfterPlan(decider: Decider, taskId: string, addition = '') {
   if (resolveWorkStep(resolveTaskPipeline(decider.task(taskId))) === 'operate') {
     startOperation(decider, taskId, null);
     return;
   }
-  startPhase(decider, taskId, 0);
+  startPhase(decider, taskId, 0, addition);
 }
 
 export function finishMerge(decider: Decider, taskId: string) {

@@ -94,9 +94,12 @@ export type UserCommand =
       mode?: TaskMode;
       account?: RunAccount | null;
       forkOf?: string;
+      backlog?: boolean;
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
+  | { type: 'task.move_to_backlog'; taskId: string }
+  | { type: 'task.remove_from_backlog'; taskId: string }
   | { type: 'task.cancel'; taskId: string }
   | { type: 'task.complete'; taskId: string }
   | { type: 'task.retry'; taskId: string; account?: RunAccount }
@@ -115,7 +118,13 @@ export type UserCommand =
       comments?: ReviewComment[];
     }
   | { type: 'merge_step.tick'; taskId: string; key: string; done: boolean }
-  | { type: 'suggestion.accept'; taskId: string; suggestionId: string; waitsOnThis: boolean }
+  | {
+      type: 'suggestion.accept';
+      taskId: string;
+      suggestionId: string;
+      waitsOnThis: boolean;
+      backlog?: boolean;
+    }
   | { type: 'suggestion.dismiss'; taskId: string; suggestionId: string }
   | { type: 'suggestion.keep'; taskId: string; suggestionId: string; shape?: TaskShape }
   | { type: 'monitor.check_in_now'; taskId: string }
