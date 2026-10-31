@@ -135,7 +135,7 @@ src/
     ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, share and unshare),
     │                    sources.ts (a shared task from a publication on app.shinsa.dev or the engine's preview, and
     │                    each file's address), view.ts (the read-only state and task the tab components render),
-    │                    page.ts (the shared page's tabs, notes and Shared by line), code.ts (the published diff in
+    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the published diff in
     │                    place of a worktree's refs); components/share/shared-task-page.tsx renders it and
     │                    components/task/share-dialog.tsx is Share task
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and

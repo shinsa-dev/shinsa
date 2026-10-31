@@ -1,4 +1,6 @@
 import {
+  REMOTE_PATHS,
+  type RemoteSession,
   resolveShareFilePath,
   resolveSharePath,
   resolveSharePreviewApiPath,
@@ -7,6 +9,8 @@ import {
 } from '@shinsa/core';
 import { requestJson } from '@/lib/connection/http.ts';
 import type { SharedSource } from '@/lib/share/view.ts';
+
+export const SHARE_REFRESH_MS = 10_000;
 
 export const SHARE_GONE =
   'This task is no longer shared, or the link is wrong. Ask whoever sent it for a new one.';
@@ -56,4 +60,14 @@ export async function requestDiffText(url: string, read: typeof fetch = fetch) {
   const response = await read(url);
   if (!response.ok) throw new Error('The changes did not load. Reload the page to try again.');
   return response.text();
+}
+
+export async function requestViewerLogin(read: typeof fetch = fetch) {
+  try {
+    const response = await read(REMOTE_PATHS.session);
+    if (!response.ok) return null;
+    return ((await response.json()) as RemoteSession).user?.login ?? null;
+  } catch {
+    return null;
+  }
 }

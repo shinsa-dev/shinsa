@@ -6,6 +6,7 @@ import {
   requestDiffText,
   requestPreviewSource,
   requestPublicationSource,
+  requestViewerLogin,
   SHARE_GONE,
   ShareGoneError,
 } from '@/lib/share/sources.ts';
@@ -53,6 +54,16 @@ describe('a publication on app.shinsa.dev', () => {
     await expect(requestDiffText('/diff', answer(new Response('', { status: 404 })))).rejects.toThrow(
       'The changes did not load. Reload the page to try again.'
     );
+  });
+});
+
+describe('who is looking at a shared page', () => {
+  it('is the GitHub login signed in to app.shinsa.dev, or no one', async () => {
+    const signedIn = Response.json({ user: { id: '1', login: 'mona', avatarUrl: null } });
+    expect(await requestViewerLogin(answer(signedIn))).toBe('mona');
+    expect(await requestViewerLogin(answer(Response.json({ user: null })))).toBeNull();
+    expect(await requestViewerLogin(answer(new Response('', { status: 500 })))).toBeNull();
+    expect(await requestViewerLogin(answer(new Error('offline')))).toBeNull();
   });
 });
 

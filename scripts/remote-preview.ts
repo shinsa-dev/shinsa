@@ -76,6 +76,7 @@ interface PreviewShare {
   token: string;
   label: string;
   taskId: string;
+  handle: string;
   publisher: SharePublisher;
   port: number;
 }
@@ -279,7 +280,14 @@ async function createPreviewShare(
     evidence: studio.evidence,
     github: createPreviewGitHub(studio.engine, visibility),
   });
-  return { token, label, taskId: task.id, publisher, port: studio.machine.port };
+  return {
+    token,
+    label,
+    taskId: task.id,
+    handle: task.handle ?? task.id,
+    publisher,
+    port: studio.machine.port,
+  };
 }
 
 async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachine>>) {
@@ -366,9 +374,12 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
     ['All tasks, each with its machine', '/tasks'],
     ['Settings, with Machines', '/settings'],
     ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
-    ...shares.map((share) => [
-      `${share.label} (a public link, no sign-in)`,
-      resolveSharePagePath(share.token),
+    ...shares.flatMap((share) => [
+      [`${share.label} (a public link, no sign-in)`, resolveSharePagePath(share.token)],
+      [
+        `The same task, ${share.handle}, as you see it on Studio`,
+        `http://${HOST}:${share.port}/tasks/${share.handle}`,
+      ],
     ]),
     ['A share link that no longer works', resolveSharePagePath('no-longer-shared')],
     ...machines.map((machine) => [

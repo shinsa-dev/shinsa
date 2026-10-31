@@ -379,7 +379,7 @@ task showing its machine, and with several machines New task places each task au
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`). Share task (a task's menu) makes a public link, `app.shinsa.dev/share/<token>`, that
 anyone can open read-only without signing in: the task's request, plan, review, evidence and pull request, with its
-code only for a public repository, and never its chat. Preview shows on the machine exactly what the link shows, and
+code only for a public repository, and never its chat. An open link follows a running task within seconds. Preview shows on the machine exactly what the link shows, and
 Stop sharing ends the link at once (`docs/engine.md` → Sharing a task).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and

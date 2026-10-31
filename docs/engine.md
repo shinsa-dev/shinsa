@@ -2593,11 +2593,16 @@ same projection and publishing path will serve teams.
   preview and that chats, activity and notes never leave the machine.
 - **The shared page** (`routes/remote/share.tsx`, `components/share/shared-task-page.tsx`): the remote build's
   `/share/<token>` reads `GET /__remote/shares/<token>` with no session and shows the task read-only: its heading, its
-  facts (handle, status, project, repository, pull request with its checks, who shared it from which machine and when
-  it was last published), and the tabs Overview (result, summary, plan, evidence), Review (the review tab read only:
+  facts (handle, status, project, repository, pull request with its checks, who shared it from which machine, "you"
+  when the GitHub login signed in to app.shinsa.dev is its owner and on the machine's Preview, and when it was last
+  published), and the tabs Overview (result, summary, plan, evidence), Review (the review tab read only:
   no verdict, no comments, no drafts, merge steps listed without a box to tick) when the task reached review, and Code
   for a public repository: every file of the published diff, read from the publication's `diff` file, never from a
-  worktree. No control on it sends a command. An unknown or removed link says "This task is no longer shared, or the
+  worktree. No control on it sends a command. It follows the task while it is open: every `SHARE_REFRESH_MS` (10
+  seconds) while the tab is visible, and at once when it comes back into view, it reads the publication again and
+  swaps the view in place when its `updatedAt` moved, so a running task's stage, phases, checks and review show up as
+  the engine republishes them; a refresh that fails keeps the view, and a link that stopped working says so at once.
+  An unknown or removed link says "This task is no longer shared, or the
   link is wrong." Every answer and the page carry `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.

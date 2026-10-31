@@ -25,8 +25,9 @@ export function resolveSharedTab(tabs: readonly SharedTab[], requested: string |
   return tabs.find((tab) => tab === requested) ?? 'overview';
 }
 
-export function describeSharedBy(shared: SharedTask) {
-  const owner = shared.owner ? `@${shared.owner}` : null;
+export function describeSharedBy(shared: SharedTask, viewer: string | null) {
+  const mine = shared.owner !== null && shared.owner.toLowerCase() === viewer?.toLowerCase();
+  const owner = mine ? 'you' : shared.owner && `@${shared.owner}`;
   if (owner && shared.machine) return `Shared by ${owner} from ${shared.machine}`;
   if (owner) return `Shared by ${owner}`;
   if (shared.machine) return `Shared from ${shared.machine}`;

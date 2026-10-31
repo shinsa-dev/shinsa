@@ -16,34 +16,62 @@ function registerSharedCode(view: SharedView) {
   return registerCodeSource(view.task.id, createSharedCodeSource(readDiff, view.task.branch));
 }
 
-export function useSharedView(key: string, request: () => Promise<SharedSource>): SharedViewLoad {
+function resolveFailure(error: unknown): SharedViewLoad {
+  return { status: 'error', message: describeFailure(error), gone: error instanceof ShareGoneError };
+}
+
+export function useSharedView(
+  key: string,
+  request: () => Promise<SharedSource>,
+  refreshMs: number | null = null
+): SharedViewLoad {
   const [load, setLoad] = React.useState<SharedViewLoad>({ status: 'loading' });
   const requestRef = React.useRef(request);
   requestRef.current = request;
+  const shownRef = React.useRef<{ updatedAt: number; release: () => void } | null>(null);
+
   React.useEffect(() => {
     let alive = true;
-    let release: () => void = () => undefined;
-    setLoad({ status: 'loading' });
-    requestRef.current().then(
-      (source) => {
-        if (!alive) return;
-        const view = resolveSharedView(source);
-        release = registerSharedCode(view);
-        setLoad({ status: 'ready', view });
-      },
-      (error: unknown) => {
-        if (alive)
-          setLoad({
-            status: 'error',
-            message: describeFailure(error),
-            gone: error instanceof ShareGoneError,
-          });
-      }
-    );
+    const show = (source: SharedSource) => {
+      if (shownRef.current?.updatedAt === source.updatedAt) return;
+      const view = resolveSharedView(source);
+      shownRef.current?.release();
+      shownRef.current = { updatedAt: source.updatedAt, release: registerSharedCode(view) };
+      setLoad({ status: 'ready', view });
+    };
+    const read = () =>
+      requestRef.current().then(
+        (source) => {
+          if (alive) show(source);
+        },
+        (error: unknown) => {
+          if (alive && (!shownRef.current || error instanceof ShareGoneError)) setLoad(resolveFailure(error));
+        }
+      );
+    void read();
+    if (refreshMs === null) {
+      return () => {
+        alive = false;
+      };
+    }
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void read();
+    };
+    const timer = setInterval(refresh, refreshMs);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
       alive = false;
-      release();
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
     };
-  }, [key]);
+  }, [key, refreshMs]);
+
+  React.useEffect(
+    () => () => {
+      shownRef.current?.release();
+      shownRef.current = null;
+    },
+    []
+  );
   return load;
 }

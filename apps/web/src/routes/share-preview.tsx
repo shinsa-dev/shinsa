@@ -17,5 +17,5 @@ export function SharePreviewPage({ state, reference }: { state: ShinsaState; ref
   if (load.status === 'error') {
     return <EmptyState icon='IconEyeSlash' title='The preview did not load' description={load.message} />;
   }
-  return <SharedTaskPage view={load.view} note={SHARED_PREVIEW_NOTE} />;
+  return <SharedTaskPage view={load.view} note={SHARED_PREVIEW_NOTE} viewer={load.view.shared.owner} />;
 }

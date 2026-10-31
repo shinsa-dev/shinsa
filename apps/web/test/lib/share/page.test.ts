@@ -32,9 +32,14 @@ describe('the shared page', () => {
   });
 
   it('says who shared it and from which machine, with what it knows', () => {
-    expect(describeSharedBy(createSharedTask())).toBe('Shared by @mona from Studio');
-    expect(describeSharedBy(createSharedTask({ machine: null }))).toBe('Shared by @mona');
-    expect(describeSharedBy(createSharedTask({ owner: null }))).toBe('Shared from Studio');
-    expect(describeSharedBy(createSharedTask({ owner: null, machine: null }))).toBe('Shared');
+    expect(describeSharedBy(createSharedTask(), null)).toBe('Shared by @mona from Studio');
+    expect(describeSharedBy(createSharedTask({ machine: null }), 'octocat')).toBe('Shared by @mona');
+    expect(describeSharedBy(createSharedTask({ owner: null }), null)).toBe('Shared from Studio');
+    expect(describeSharedBy(createSharedTask({ owner: null, machine: null }), 'mona')).toBe('Shared');
+  });
+
+  it('says you shared it when the one looking is its owner, without the @', () => {
+    expect(describeSharedBy(createSharedTask(), 'mona')).toBe('Shared by you from Studio');
+    expect(describeSharedBy(createSharedTask({ machine: null }), 'Mona')).toBe('Shared by you');
   });
 });

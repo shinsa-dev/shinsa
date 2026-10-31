@@ -35,7 +35,7 @@ import { resolveStageLabel, resolveTaskStatusIcon } from '@/lib/tasks/status.ts'
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 import { ReviewTab } from '@/routes/task/review.tsx';
 
-function SharedFacts({ view }: { view: SharedView }) {
+function SharedFacts({ view, viewer }: { view: SharedView; viewer: string | null }) {
   const { task, shared } = view;
   const pullRequest = task.pullRequest;
   const prTone = pullRequest ? TONE_TEXT[resolvePullRequestTone(pullRequest)] : '';
@@ -80,7 +80,7 @@ function SharedFacts({ view }: { view: SharedView }) {
       )}
       <span className={FACT}>
         <Icon size='sm' name='IconShareOs' />
-        <span className='truncate'>{describeSharedBy(shared)}</span>
+        <span className='truncate'>{describeSharedBy(shared, viewer)}</span>
         <TimeAgo at={view.updatedAt} />
       </span>
     </div>
@@ -149,7 +149,15 @@ function SharedTabContent({ view, tab }: { view: SharedView; tab: SharedTab }) {
   }
 }
 
-export function SharedTaskPage({ view, note }: { view: SharedView; note: string }) {
+export function SharedTaskPage({
+  view,
+  note,
+  viewer,
+}: {
+  view: SharedView;
+  note: string;
+  viewer: string | null;
+}) {
   const tabs = listSharedTabs(view.task, view.shared);
   const tab = resolveSharedTab(tabs, useSearchParam('tab'));
   return (
@@ -172,7 +180,7 @@ export function SharedTaskPage({ view, note }: { view: SharedView; note: string 
               />
             )}
           </div>
-          <SharedFacts view={view} />
+          <SharedFacts view={view} viewer={viewer} />
         </div>
         <ErrorBoundary size='inline' resetKey={tab} className={cn(PAGE_COLUMN, 'py-5')}>
           <SharedTabContent view={view} tab={tab} />

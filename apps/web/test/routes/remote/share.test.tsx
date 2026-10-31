@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { SharedPublication, Task } from '@shinsa/core';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SharePage } from '@/routes/remote/share.tsx';
 import { createSharedTask, DIFF } from '../../lib/share/fixtures.ts';
 import { createTask } from '../../support/state.ts';
@@ -21,6 +21,12 @@ function serve(routes: Record<string, () => Response>) {
     const route = routes[String(input)];
     return Promise.resolve(route ? route() : new Response('', { status: 404 }));
   }) as never);
+}
+
+function refresh() {
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
 }
 
 function publication(overrides: Partial<SharedPublication['shared']> = {}): SharedPublication {
@@ -77,6 +83,49 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(screen.getByText('#7').closest('a')?.getAttribute('href')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Review' }));
     expect(await screen.findByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
+  });
+
+  it('says you shared it when you are signed in to app.shinsa.dev as its owner', async () => {
+    serve({
+      '/__remote/shares/tok': () => Response.json(publication()),
+      '/__remote/session': () => Response.json({ user: { id: '1', login: 'mona', avatarUrl: null } }),
+    });
+    render(<SharePage token='tok' />);
+    expect(await screen.findByText('Shared by you from Studio')).toBeTruthy();
+  });
+
+  it('follows the task as it changes, and says so at once when sharing stops', async () => {
+    let current = publication();
+    let shared = true;
+    serve({
+      '/__remote/shares/tok': () => (shared ? Response.json(current) : new Response('', { status: 404 })),
+    });
+    render(<SharePage token='tok' />);
+    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
+    const task = { ...current.shared.task, title: 'Rotate every key' };
+    current = { ...current, shared: { ...current.shared, task }, updatedAt: 2 };
+    refresh();
+    expect(await screen.findByText('Rotate every key')).toBeTruthy();
+    refresh();
+    expect(screen.getByText('Rotate every key')).toBeTruthy();
+    shared = false;
+    refresh();
+    expect(await screen.findByText('This task is not shared')).toBeTruthy();
+  });
+
+  it('keeps showing the task when one refresh fails on the way', async () => {
+    let up = true;
+    const fetch = serve({
+      '/__remote/shares/tok': () => (up ? Response.json(publication()) : new Response('', { status: 503 })),
+    });
+    const reads = () => fetch.mock.calls.filter(([url]) => url === '/__remote/shares/tok').length;
+    render(<SharePage token='tok' />);
+    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
+    up = false;
+    refresh();
+    await waitFor(() => expect(reads()).toBeGreaterThan(1));
+    expect(screen.getByText('Rotate API keys')).toBeTruthy();
+    expect(screen.queryByText('The shared task did not load')).toBeNull();
   });
 
   it('says the task is no longer shared when the link is gone, and why it failed otherwise', async () => {
