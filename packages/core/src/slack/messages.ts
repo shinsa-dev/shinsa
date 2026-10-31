@@ -58,12 +58,12 @@ export interface SlackTaskRef {
   pullRequest: { number: number; url: string } | null;
 }
 
-export interface SlackStatusView {
+interface SlackStatusView {
   label: string;
   detail: string | null;
 }
 
-export interface SlackQuestionView {
+interface SlackQuestionView {
   gateId: string | null;
   question: string;
   context: string | null;
@@ -71,12 +71,12 @@ export interface SlackQuestionView {
   recommendation: string | null;
 }
 
-export interface SlackPlanView {
+interface SlackPlanView {
   goal: string;
   phases: string[];
 }
 
-export interface SlackReviewView {
+interface SlackReviewView {
   summary: string;
   checks: string | null;
 }
@@ -157,7 +157,7 @@ function resolveStatusView(task: Task, gates: readonly Gate[]): SlackStatusView 
   return { label: capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]), detail: null };
 }
 
-export function serializeSlackStatusView(ref: SlackTaskRef, view: SlackStatusView): SlackMessage {
+function serializeSlackStatusView(ref: SlackTaskRef, view: SlackStatusView): SlackMessage {
   return createSlackMessage(`${ref.label}: ${view.label}`, [
     createSlackSection(
       serializeLines([`*${escapeSlackText(view.label)}*`, view.detail ? serializeQuote(view.detail) : null])
@@ -190,7 +190,7 @@ function hasLongChoice(view: SlackQuestionView) {
   );
 }
 
-export function serializeSlackQuestionView(ref: SlackTaskRef, view: SlackQuestionView): SlackMessage {
+function serializeSlackQuestionView(ref: SlackTaskRef, view: SlackQuestionView): SlackMessage {
   const answers = listAnswerButtons(view);
   const choices = hasLongChoice(view)
     ? createSlackSection(
@@ -214,7 +214,7 @@ export function serializeSlackQuestionView(ref: SlackTaskRef, view: SlackQuestio
   ]);
 }
 
-export function serializeSlackSecretView(ref: SlackTaskRef, label: string): SlackMessage {
+function serializeSlackSecretView(ref: SlackTaskRef, label: string): SlackMessage {
   return createSlackMessage(`${ref.label} needs a secret: ${label}`, [
     createSlackHeader('Secret needed'),
     createSlackSection(`*${escapeSlackText(label)}*\nGive it in Shinsa, never in Slack.`),
@@ -223,7 +223,7 @@ export function serializeSlackSecretView(ref: SlackTaskRef, label: string): Slac
   ]);
 }
 
-export function serializeSlackPlanView(ref: SlackTaskRef, view: SlackPlanView): SlackMessage {
+function serializeSlackPlanView(ref: SlackTaskRef, view: SlackPlanView): SlackMessage {
   const phases = view.phases
     .slice(0, SLACK_PLAN_PHASES)
     .map((phase, index) => `*${index + 1}.*  ${escapeSlackText(phase)}`);
@@ -243,7 +243,7 @@ export function serializeSlackPlanView(ref: SlackTaskRef, view: SlackPlanView): 
   ]);
 }
 
-export function serializeSlackReviewView(ref: SlackTaskRef, view: SlackReviewView): SlackMessage {
+function serializeSlackReviewView(ref: SlackTaskRef, view: SlackReviewView): SlackMessage {
   const pullRequest = ref.pullRequest
     ? serializeLink(`PR #${ref.pullRequest.number}`, ref.pullRequest.url)
     : 'Opens once you approve';
@@ -259,7 +259,7 @@ export function serializeSlackReviewView(ref: SlackTaskRef, view: SlackReviewVie
   ]);
 }
 
-export function serializeSlackProposalView(ref: SlackTaskRef, request: string): SlackMessage {
+function serializeSlackProposalView(ref: SlackTaskRef, request: string): SlackMessage {
   return createSlackMessage(`${ref.label} proposes a change.`, [
     createSlackHeader('Proposed change'),
     createSlackSection(serializeQuote(request || 'A change to the code.')),
@@ -324,7 +324,7 @@ function resolveResultBody(markdown: string) {
   return { body: `${(end > 0 ? kept.slice(0, end) : kept).trimEnd()}…`, cut: true };
 }
 
-export function serializeSlackResultView(ref: SlackTaskRef, markdown: string): SlackMessage {
+function serializeSlackResultView(ref: SlackTaskRef, markdown: string): SlackMessage {
   const { body, cut } = resolveResultBody(markdown);
   const { chunks } = listSlackChunks(serializeSlackMrkdwn(body), 2800, SLACK_RESULT_LIMIT + 100);
   return createSlackMessage(resolveLead(body) || ref.label, [
@@ -349,7 +349,7 @@ function serializeNote(fallback: string, title: string, detail: string, ref: Sla
   ]);
 }
 
-export function serializeSlackForwardedView(ref: SlackTaskRef) {
+function serializeSlackForwardedView(ref: SlackTaskRef) {
   return serializeNote(`Sent to ${ref.label}.`, 'Sent to the task', 'Its agent reads it next.', ref);
 }
 
@@ -357,7 +357,7 @@ export function serializeSlackForwarded(task: Task, taskUrl: string) {
   return serializeSlackForwardedView(resolveTaskRef(task, taskUrl));
 }
 
-export function serializeSlackHeldView(ref: SlackTaskRef) {
+function serializeSlackHeldView(ref: SlackTaskRef) {
   return serializeNote(
     `Kept for ${ref.label}. It waits on you in Shinsa.`,
     'Kept for the task',

@@ -1,7 +1,5 @@
 import {
   DomainError,
-  isSlackPreviewRequest,
-  listSlackPreviewPosts,
   listSlackStatusGates,
   type MachineCredentials,
   parseSlackAnswer,
@@ -18,17 +16,14 @@ import {
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
-  SLACK_PREVIEW_REACTIONS,
   SLACK_REACTIONS,
   type SlackAnswerReply,
-  type SlackMention,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
   type SlackThreadRef,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
-  serializeSlackPreviewIntro,
   serializeSlackStatus,
   verifySlackForwardSignature,
 } from '@shinsa/core';
@@ -216,26 +211,8 @@ export class Slack {
     }
   }
 
-  async #preview(mention: SlackMention) {
-    const credentials = this.#selectCredentials();
-    const origin = this.#remote.appOrigin;
-    const connectUrl = credentials ? resolveSlackConnectUrl(origin, credentials.instanceId) : origin;
-    const posts = listSlackPreviewPosts(origin, connectUrl);
-    await this.#send(mention, null, serializeSlackPreviewIntro(posts));
-    for (const post of posts) await this.#send(mention, null, post.message);
-    let shown: string | null = null;
-    for (const reaction of SLACK_PREVIEW_REACTIONS) {
-      await this.#react(mention, mention.messageTs, reaction, shown);
-      shown = reaction;
-    }
-  }
-
   async evaluate(effect: Effect<'slack.evaluate'>, context: EffectContext) {
     const { mention } = effect;
-    if (isSlackPreviewRequest(mention.text)) {
-      await this.#preview(mention);
-      return;
-    }
     await this.#react(mention, mention.messageTs, SLACK_REACTIONS.sizing, null);
     const said = await this.#ask<unknown>(
       SLACK_EVALUATION_SYSTEM,

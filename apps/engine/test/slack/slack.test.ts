@@ -493,24 +493,6 @@ describe('reading a mention', () => {
     ]);
   });
 
-  test('“preview posts” sends every post with sample data and steps the reaction through each state', async () => {
-    const { slack, stub, relay, asked } = setUp();
-    await slack.evaluate({ ...effect, mention: { ...MENTION, text: 'Preview posts' } }, context());
-    const posts = callsTo(relay, 'post').map((call) => JSON.stringify(call.body?.message));
-    expect(posts[0]).toContain('Every post Shinsa makes in a thread');
-    for (const words of ['Question', 'Plan ready for your approval', 'Ready for your review', 'Not a task'])
-      expect(posts.some((post) => post.includes(words))).toBe(true);
-    expect(posts.some((post) => post.includes('/slack/connect?instance=k3x9'))).toBe(true);
-    expect(callsTo(relay, 'react').map((call) => [call.body?.add, call.body?.remove])).toEqual([
-      ['hourglass_flowing_sand', null],
-      ['hammer_and_wrench', 'hourglass_flowing_sand'],
-      ['raised_hand', 'hammer_and_wrench'],
-      ['white_check_mark', 'raised_hand'],
-    ]);
-    expect(asked).toEqual([]);
-    expect(stub.dispatched).toEqual([]);
-  });
-
   test('carries on when Slack will not take a reaction or the relay refuses it', async () => {
     const { slack, stub, answers } = setUp();
     answers['/__remote/slack/react'] = () => Response.json({ applied: false });

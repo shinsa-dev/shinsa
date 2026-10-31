@@ -1034,7 +1034,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   button to decide in Shinsa and a small line naming the task and its `PR #<number>`, and the result's start with a
   button to the rest. No icons in the posts: the state is the one reaction on your
   message (⏳ sizing up, 🛠️ working, ✋ needs you, ✅ done), there from the moment the bot reads it. No streamed text
-  and no "Thinking…" placeholder. "@Shinsa preview posts" shows every post with sample data. A question's choices are buttons: the person who started the task answers with one, the post then says who
+  and no "Thinking…" placeholder. A question's choices are buttons: the person who started the task answers with one, the post then says who
   answered what, and anyone else is told privately they cannot; plans, reviews, merges and the rest are decided only
   in Shinsa.
 - **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every

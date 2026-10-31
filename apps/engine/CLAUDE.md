@@ -176,7 +176,7 @@ src/
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
 │                        slack.mention, and a question's choice clicked in Slack as slack.answer
 │                        (handleTunnel); slack.evaluate: ⏳ on the mention, the classifier asked, "Not a task" once
-│                        per thread or slack.start_task, or every post with sample data for "preview posts"; the
+│                        per thread or slack.start_task; the
 │                        slack.post and slack.status effects, the status message edited at most every 5 s and only
 │                        when it changes, the thread's status and the mention's one reaction moved with it; GET
 │                        /api/slack and POST /api/slack/disconnect), relay.ts (SlackRelay: posts, reactions, the

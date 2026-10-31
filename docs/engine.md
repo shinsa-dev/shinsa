@@ -2505,7 +2505,6 @@ Slack ──event──► app.shinsa.dev /slack/events
                   └─ a gate open ──► kept in its chat, "Kept for the task"
    otherwise ──► slack.evaluate: ⏳ on the mention at once,
                   the model reads the thread
-                  ├─ "preview posts" ──► every post, sample data
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
                               task.create, as from Home
@@ -2568,12 +2567,6 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   everything on Auto, through the same `createTask` and the same triage (repository, kind, priority, and whatever
   triage learns next, such as finding a duplicate of an open task), so a change to triage reaches Slack with no
   change here.
-- **Every post at once, with sample data**: a mention whose text is exactly "preview posts" (`isSlackPreviewRequest`)
-  skips the check and starts nothing: the machine posts a list of what follows, then every post the bot can make
-  from sample data (`listSlackPreviewPosts`: each status, a question, a secret, a plan, a review, a proposal, a
-  result, "Sent to", "Kept for", "Not a task", the private "Connect Slack" and "offline"), and steps the mention's
-  reaction through each state (`SLACK_PREVIEW_REACTIONS`), so every post can be seen without a teammate or a real
-  task.
 - **Work starts a task, as Home does** (`startSlackTask`): a mention in any other thread, a task's
   closed thread included, is `task.create` with no project, kind or priority given, exactly as a request typed on Home
   with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
