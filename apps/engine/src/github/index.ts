@@ -486,6 +486,10 @@ export async function retargetPullRequest(repo: Repo, number: number, base: stri
   await runGhOrThrow(['pr', 'edit', String(number), '--base', assertRefName(base)], repo.path, { signal });
 }
 
+export async function closePullRequest(repo: Repo, number: number, comment: string, signal?: AbortSignal) {
+  await runGhOrThrow(['pr', 'close', String(number), '--comment', comment], repo.path, { signal });
+}
+
 async function resolveMergeMessage(
   repo: Repo,
   number: number,

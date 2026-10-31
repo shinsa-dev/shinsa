@@ -870,6 +870,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.record_retry` | the engine, before it requeues a failed open or push | `step` (`updating`, `pushing`, `opening`), the `attempt` that failed, `attempts`, `retryAt`, a short `detail`: `pull_request.push_retrying` and the stage reason "pushing again in 30s, attempt 2 of 5: …" |
 | `pull_request.record_update_conflict` | open and push effects, after aborting the merge of the base | `base`, the conflicted `files`: a fix round (`fixFor: 'update'`) |
 | `pull_request.record_hook_failure` | open and push effects | the hook's `output` tail and the `failures` read from it (or null): `pull_request.hook_failed`, then a fix round (`fixFor: 'hook'`), or the `push_hook` failure gate when the same failures come back |
+| `pull_request.record_closed` | the close effect | the pull requests it `closed` and the ones it `failed` to close (`{ number, detail }[]`): `pull_request.closed`, only on a cancelled task with something in either list |
 | `evidence.record_uploads` | open and push effects | the GitHub attachment `url` of each uploaded piece (`uploads: { evidenceId, url }[]`): `evidence.uploaded` with the pieces of this task whose address is new, nothing otherwise |
 | `effect.fail` | the engine and effects | an effect gave up: a failure gate when its kind has one |
 | `run.attempt`, `run.link`, `run.meter`, `run.end` | the run supervisor | an attempt starts, links its session, is metered, ends |
@@ -977,6 +978,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.read_failed`, `pull_request.read_failures_cleared` | a read failed; the count reset |
 | `pull_request.push_retrying` | a failed update, push or open is retried: step, attempt, attempts, when, why (one activity entry) |
 | `pull_request.hook_failed` | the pre-push hook rejected the push: `failure` (output, failures, signature), kept as `task.pushHookFailure` |
+| `pull_request.closed` | a cancel closed pull requests: `closed` turn `closed` on the task and its rounds ("Closed pull request #N"), each of `failed` stays open with its `detail` ("Could not close pull request #N") |
 | `pull_request.watched` | the watch's memory changed (with what changed) |
 | `delegation.asked`, `delegation.answered` | a delegation asked its parent; was answered |
 | `delegation.acknowledged` | the parent read a finished result |
@@ -1006,6 +1008,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.push` | replay_safe | `task:<id>` | as `pull_request.open`, without opening when the pull request is open; then rewrites the description's block (`evidence.record_uploads` for what it uploaded) |
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
+| `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
