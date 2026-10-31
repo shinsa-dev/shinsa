@@ -87,11 +87,17 @@ export interface Harness {
 
 export const NATIVE_VERIFIER = 'native-verifier-that-is-long-enough-for-pkce-0123456789';
 
-const GITHUB_USERS = new Map<string, { id: number; login: string }>();
+export interface GitHubStandIn {
+  id: number;
+  login: string;
+  name?: string | null;
+}
+
+const GITHUB_USERS = new Map<string, GitHubStandIn>();
 
 const GITHUB_CHALLENGES = new Map<string, string>();
 
-export function registerGitHubCode(code: string, user: { id: number; login: string }, challenge: string) {
+export function registerGitHubCode(code: string, user: GitHubStandIn, challenge: string) {
   GITHUB_USERS.set(code, user);
   GITHUB_CHALLENGES.set(code, challenge);
 }

@@ -14,6 +14,7 @@ export interface Database {
 export interface UserRow {
   id: string;
   login: string;
+  name: string | null;
   avatar_url: string | null;
 }
 
@@ -68,9 +69,9 @@ export function createStore(db: Database) {
     async upsertUser(user: UserRow, now: number) {
       await db
         .prepare(
-          'INSERT INTO users (id, login, avatar_url, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET login = excluded.login, avatar_url = excluded.avatar_url'
+          'INSERT INTO users (id, login, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET login = excluded.login, name = excluded.name, avatar_url = excluded.avatar_url'
         )
-        .bind(user.id, user.login, user.avatar_url, now)
+        .bind(user.id, user.login, user.name, user.avatar_url, now)
         .run();
     },
 
@@ -84,7 +85,7 @@ export function createStore(db: Database) {
     selectSessionUser(tokenHash: string, now: number) {
       return db
         .prepare(
-          'SELECT users.id, users.login, users.avatar_url FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?'
+          'SELECT users.id, users.login, users.name, users.avatar_url FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?'
         )
         .bind(tokenHash, now)
         .first<UserRow>();
@@ -95,7 +96,10 @@ export function createStore(db: Database) {
     },
 
     selectUser(id: string) {
-      return db.prepare('SELECT id, login, avatar_url FROM users WHERE id = ?').bind(id).first<UserRow>();
+      return db
+        .prepare('SELECT id, login, name, avatar_url FROM users WHERE id = ?')
+        .bind(id)
+        .first<UserRow>();
     },
 
     async createSignInCode(codeHash: string, row: SignInCodeRow, now: number) {

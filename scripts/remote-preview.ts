@@ -34,7 +34,7 @@ const ORIGIN = `http://${HOST}:${PORT}`;
 const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
-const USER = { id: '1', login: 'you', avatarUrl: null };
+const USER = { id: '1', login: 'you', name: null, avatarUrl: null };
 const PLACE = createPlacementAsker(createQuickCalls(new ProviderRegistry(), createSettings).classify);
 
 const LAPTOP_TASKS = [

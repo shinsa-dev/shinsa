@@ -81,7 +81,7 @@ export interface RemoteInstance {
 }
 
 export interface RemoteSession {
-  user: { id: string; login: string; avatarUrl: string | null } | null;
+  user: { id: string; login: string; name: string | null; avatarUrl: string | null } | null;
 }
 
 export type RemoteUser = NonNullable<RemoteSession['user']>;
