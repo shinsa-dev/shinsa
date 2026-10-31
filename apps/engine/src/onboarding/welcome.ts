@@ -1,4 +1,4 @@
-import { describeList, type OnboardingCheck } from '@shinsa/core';
+import type { OnboardingCheck } from '@shinsa/core';
 
 export interface WelcomeLine {
   label: string;
@@ -11,16 +11,10 @@ export function listFailingChecks(checks: readonly OnboardingCheck[]) {
   return checks.filter((check) => !(check.ok || check.optional === true));
 }
 
-function describeTools(checks: readonly OnboardingCheck[]) {
-  const missing = listFailingChecks(checks).map((check) => check.label);
-  if (missing.length === 0) return 'Everything Shinsa needs is installed.';
-  return `Still missing ${describeList(missing, 'and')}. Run setup again from Settings to install them.`;
-}
-
-export function resolveWelcomeBody(lines: readonly WelcomeLine[], checks: readonly OnboardingCheck[]) {
+export function resolveWelcomeBody(lines: readonly WelcomeLine[]) {
   const setUp = [
     ...lines.map((line) => `- **${line.label}:** ${line.summary ?? NOT_SET}`),
-    `- **Tools:** ${describeTools(checks)}`,
+    '- **Tools:** Everything Shinsa needs is installed.',
   ];
   return [
     'Welcome to Shinsa. Setup is done, and this was your first task.',

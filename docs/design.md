@@ -1179,8 +1179,8 @@ Only these, and they win over anything below:
       the `text-base` title, "How should agents work?", its one line of description in `text-xs` `fg-2`
       under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
-      action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
-      "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
+      action (Add account, or Check the tools again as a `default` icon button with its tooltip) and the primary button with the step's label ("Continue", "Create 6 projects",
+      "Finish setup") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
       The first step you open is simply there. Moving to another step
       slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
       (the other way when you go back), both the full width of the column and 360ms on the standard curve
@@ -1229,30 +1229,31 @@ Only these, and they win over anything below:
       its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus plan" or "Not signed in", and the
       `CopyButton` of `codex login` while it is not). With no account the card is one `SettingsEmpty` row, "No Claude
       account yet. Agents need one to work.", with the one primary Sign in with Claude (the Claude mark), which opens
-      the sign-in dialog; the footer's button is then Skip for now. With an account, Add account in the footer opens
+      the sign-in dialog; Continue stays off until an account is signed in, since setup never ends without one. With an account, Add account in the footer opens
       the same dialog; there is no menu and no claude-swap entry (Settings keeps those). Until the socket has the
       accounts the card holds one row with a delayed `LoadingLine`. Coming back to the window reads the accounts and
       the check again, so a Codex login you finished in a terminal shows.
-    - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
-      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
-      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`. At the right a passed or optional check shows
-      its version or state in `TOKEN_TEXT`; a failed one shows a `sm` Install (the console icon), which asks
-      the engine to run that check's own command (`POST /api/onboarding/install`, never a command from the page) and
-      opens its terminal inside the card under the row: a 224px pane with the item corner and a hairline, the
-      terminal's own background, and when the command ends one `text-xs` `fg-2` line under it ("Finished. Shinsa
-      checked the tools again.", or its exit code and to ask for help), at which point the checks are read again by
-      themselves. With two or more required tools missing, a row above the checks says how many ("3 tools are missing.
-      Install them all in one terminal, each after the one it needs.") with a `sm` primary Install all, whose terminal
-      opens under that row (`{ all: true }`); with one, that check's Install is the primary. Either way the footer's
-      button (Skip for now, Finish anyway) steps back to secondary while a required tool is missing, so the install is
-      the one primary on the step. Check again is in the footer, and coming back to the window checks again by itself. An optional
-      check that fails (codex and its sign-in) is a skipped row, never a fail, and never holds setup back.
+    - **Tools** are one Settings card of checks (`OnboardingChecks`): one-line `SETTING_ROW`s with the
+      `CheckOutcomeIcon` in the 14px icon slot and the tool's name in `text-xs` `fg-4`, never a fix sentence or the
+      command under it. At the right a passed or optional check that needs nothing shows its version or state in
+      `TOKEN_TEXT`; a failed one shows a 24px `CopyButton` of its command and, 4px after it, a `sm` Install (Sign in
+      for a login; the console icon), which asks the engine to run that check's own command
+      (`POST /api/onboarding/install`, never a command from the page) and opens its terminal inside the card under the
+      row: a 224px pane with the item corner and a hairline, on the terminal's own background. When the command ends
+      the terminal goes and the checks are read again by themselves; an install that failed leaves one `text-2xs`
+      destructive line in its place ("The install ended with code 1. Install it again, or ask an agent for help.").
+      With two or more required tools missing, a row above the checks says how many ("3 tools are missing. Install
+      them all in one terminal, each after the one it needs.") with a `sm` primary Install all, whose terminal opens
+      under that row (`{ all: true }`); with one, that check's Install is the primary. Finish setup stays off, and
+      secondary, while a required tool is missing: setup never ends with one missing, so the app can assume every tool
+      is there. Coming back to the window checks again by itself. An optional check that fails (codex and its
+      sign-in) is a skipped row, never a fail, and never holds setup back.
     - **Help** (`OnboardingHelp`): while a required check still fails, a line under the card ("Stuck on an install?
       An agent reads the failing checks and replies with the commands to run.") with a secondary Ask an agent for
       help (the question bubble). Asking starts a question task, and the line turns into a Settings card that holds a
       delayed `LoadingLine` until the agent replies and then its reply as `Markdown`, whose shell blocks marked run get
       Run in terminal: the engine runs a command only when it is in one of that reply's run blocks, in the same
-      in-card terminal, and the checks are read again when it ends. The task itself waits on Home with the rest.
+      in-card terminal, which goes when it ends, and the checks are read again. The task itself waits on Home with the rest.
     - **Finishing** opens the welcome task the engine records ("Welcome to Shinsa", done), whose result says what you
       set up; a run started again goes Home instead. Opening `/onboarding` once the server's run is finished (setup
       done and not started again) goes Home.

@@ -304,23 +304,25 @@ describe('the setup steps', () => {
 });
 
 describe('the accounts step', () => {
-  test('with no account signed in it offers to skip, and continuing moves on to the tools', async () => {
+  test('with no account signed in it is not ready, and refuses to continue until one is', async () => {
     const world = setup({ accounts: [{ id: 'a-1', email: null, signedIn: false }] });
     const flow = await reachAccounts(world);
-    expect(flow.step?.submitLabel).toBe('Skip for now');
+    expect(flow.step).toMatchObject({ ready: false, submitLabel: 'Continue' });
     await expect(answer(world.onboarding, 'accounts', 'later')).resolves.toMatchObject({
       step: { id: 'accounts', problem: 'Continue to the next step.' },
     });
+    await expect(answer(world.onboarding, 'accounts', 'continue')).resolves.toMatchObject({
+      step: { id: 'accounts', problem: 'Sign in to a Claude account first. Agents work under it.' },
+    });
+    world.accounts.splice(0, 1, ME);
     const tools = await answer(world.onboarding, 'accounts', 'continue');
     expect(tools.step?.id).toBe('prerequisites');
     expect(tools.steps[3]?.summary).toBe('1 account');
   });
 
-  test('counts no accounts as none yet', async () => {
+  test('with no account at all it is not ready', async () => {
     const world = setup({ accounts: [] });
-    await reachAccounts(world);
-    const tools = await answer(world.onboarding, 'accounts', 'continue');
-    expect(tools.steps[3]?.summary).toBe('None yet');
+    expect((await reachAccounts(world)).step?.ready).toBe(false);
   });
 });
 
@@ -381,7 +383,7 @@ describe('asking for help', () => {
 
 describe('finishing', () => {
   test('records one welcome task with what you set up, and lands on it', async () => {
-    const world = setup({ run: NO_BUN });
+    const world = setup();
     expect((await world.onboarding.setup.resolve()).welcome).toBeNull();
     await reachAccounts(world);
     await answer(world.onboarding, 'accounts', 'continue');
@@ -394,19 +396,28 @@ describe('finishing', () => {
     expect(body).toContain('- **Projects:** None yet');
     expect(body).toContain('- **Defaults:** Opus 5.5 · Squash · Large plans first');
     expect(body).toContain('- **Claude:** 1 account');
-    expect(body).toContain('- **Tools:** Still missing Bun.');
+    expect(body).toContain('- **Tools:** Everything Shinsa needs is installed.');
     await world.onboarding.setup.reply({ type: 'restart' });
     await openStep(world.onboarding, 'prerequisites');
     expect((await answer(world.onboarding, 'prerequisites', 'continue')).welcome).toBe(done.welcome);
     expect(Object.keys(world.engine.state.tasks)).toEqual([done.welcome as string]);
   });
 
-  test('checks the tools, finishes setup and stays finished while setup is done', async () => {
-    const world = setup({ run: NO_BUN });
+  test('refuses to finish while a tool is missing, then finishes and stays finished', async () => {
+    let bun = false;
+    const world = setup({ run: (command, cwd) => (bun ? ALL_OK : NO_BUN)(command, cwd) });
     await reachAccounts(world);
     const tools = await answer(world.onboarding, 'accounts', 'continue');
-    expect(tools.step).toMatchObject({ id: 'prerequisites', ready: false, submitLabel: 'Finish anyway' });
+    expect(tools.step).toMatchObject({ id: 'prerequisites', ready: false, submitLabel: 'Finish setup' });
     expect(tools.step?.checks.find((check) => check.id === 'bun')).toMatchObject({ ok: false });
+    await expect(answer(world.onboarding, 'prerequisites', 'continue')).resolves.toMatchObject({
+      step: {
+        id: 'prerequisites',
+        problem: 'Install the missing tools first. Setup finishes once every one is there.',
+      },
+    });
+    expect(world.store.config.onboardedAt).toBeNull();
+    bun = true;
     const done = await answer(world.onboarding, 'prerequisites', 'continue');
     expect(done).toMatchObject({ index: 5, step: null });
     expect(world.store.config.onboardedAt).not.toBeNull();

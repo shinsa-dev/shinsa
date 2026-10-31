@@ -193,8 +193,7 @@ export class Onboarding {
     const lines = await Promise.all(
       steps.map(async (step) => ({ label: step.label, summary: await step.summarize(context) }))
     );
-    const report = await this.resolvePrerequisites();
-    await engine.dispatch({ type: 'onboarding.welcome', body: resolveWelcomeBody(lines, report.checks) });
+    await engine.dispatch({ type: 'onboarding.welcome', body: resolveWelcomeBody(lines) });
   }
 
   async #requestHelp(checks: OnboardingCheck[]) {

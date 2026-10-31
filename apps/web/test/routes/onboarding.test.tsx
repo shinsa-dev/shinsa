@@ -249,13 +249,13 @@ describe('the setup page', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('with Claude Code missing it offers to install it and no sign-in, then checks again when the install ends', async () => {
+  it('with Claude Code missing it offers to install or copy it and no sign-in, then hides the terminal and checks again when the install ends', async () => {
     globals.WebSocket = QuietSocket;
     const missing = createStep({
       id: 'accounts',
       title: 'Sign in with Claude',
       ready: false,
-      submitLabel: 'Skip for now',
+      submitLabel: 'Continue',
       checks: [
         {
           id: 'claude',
@@ -276,6 +276,10 @@ describe('the setup page', () => {
     act(() => connection.replaceTerminals(createTerminalsSnapshot([terminal])));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Install' }));
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(screen.queryByText('Install Claude Code, which agents run on.')).toBeNull();
+    expect(screen.queryByText('curl -fsSL https://claude.ai/install.sh | bash')).toBeNull();
+    expect((screen.getByRole('button', { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /Sign in with Claude/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add account' })).toBeNull();
     await waitFor(() =>
@@ -287,11 +291,13 @@ describe('the setup page', () => {
       fake?.requests.filter((request) => request.method === 'GET' && request.path === '/api/onboarding/flow')
         .length ?? 0;
     expect(reads()).toBe(1);
+    await waitFor(() => expect(document.querySelector('.xterm')).not.toBeNull());
     act(() =>
       connection.replaceTerminals(createTerminalsSnapshot([{ ...terminal, status: 'exited', exitCode: 0 }]))
     );
-    expect(await screen.findByText('Finished. Shinsa checked the tools again.')).toBeTruthy();
     await waitFor(() => expect(reads()).toBe(2));
+    expect(document.querySelector('.xterm')).toBeNull();
+    expect(screen.queryByText(/The install ended/)).toBeNull();
   });
 
   it('lists the Claude accounts and Codex, signs in to another from Add account, and removes one you do not want', async () => {
@@ -365,12 +371,12 @@ describe('the setup page', () => {
     );
   });
 
-  it('offers to sign in again, and with no account one Sign in with Claude and Skip for now', async () => {
+  it('offers to sign in again, and with no account one Sign in with Claude and no way on', async () => {
     startFakeServer();
     pushAccounts(createSnapshot({ accounts: [createAccount({ id: 'old', signIn: 'signed_out' })] }));
     fake = startFakeOnboarding({
       'GET /api/onboarding/flow': {
-        answer: createFlow(createStep({ id: 'accounts', options: [], submitLabel: 'Skip for now' })),
+        answer: createFlow(createStep({ id: 'accounts', options: [], ready: false })),
       },
       'GET /api/onboarding': { answer: createOnboardingStatus() },
       'POST /api/accounts/login': { answer: createSnapshot() },
@@ -382,7 +388,7 @@ describe('the setup page', () => {
         accountId: 'old',
       })
     );
-    expect(screen.getByRole('button', { name: /Skip for now/ })).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(true);
     pushAccounts(createSnapshot({ accounts: [] }));
     expect(await screen.findByText('No Claude account yet. Agents need one to work.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add account' })).toBeNull();
@@ -397,13 +403,13 @@ describe('the setup page', () => {
     );
   });
 
-  it('checks the tools again, and finishing setup opens the welcome task', async () => {
+  it('shows each tool as one line, checks again from the icon button, and finishes only once every tool is there', async () => {
     const tools = createStep({
       id: 'prerequisites',
       title: 'The tools Shinsa runs',
       options: [],
       ready: false,
-      submitLabel: 'Finish anyway',
+      submitLabel: 'Finish setup',
       checks: [
         { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50', fix: null, command: null },
         {
@@ -416,17 +422,34 @@ describe('the setup page', () => {
         },
       ],
     });
-    serve(createFlow(tools), [() => createFlow(null, { welcome: 'welcome-1' })]);
+    const installed = createStep({
+      ...tools,
+      ready: true,
+      checks: tools.checks.map((check) => ({ ...check, ok: true, detail: '1.0' })),
+    });
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: () => (reads() > 1 ? createFlow(installed) : createFlow(tools)) },
+      'POST /api/onboarding/flow': { answer: createFlow(null, { welcome: 'welcome-1' }) },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+    });
+    const reads = () =>
+      fake?.requests.filter((request) => request.path === '/api/onboarding/flow').length ?? 0;
     history.replaceState(null, '', '/onboarding');
     renderPage();
-    expect(await screen.findByText(/Install Bun from/)).toBeTruthy();
+    expect(await screen.findByText('Bun')).toBeTruthy();
+    expect(screen.queryByText(/Install Bun from/)).toBeNull();
+    expect(screen.queryByText('curl -fsSL https://bun.sh/install | bash')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
     expect(screen.getByText('git version 2.50')).toBeTruthy();
     expect(screen.queryByText('bun: not found')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(screen.queryByRole('button', { name: /Finish anyway/ })).toBeNull();
+    expect((screen.getByRole('button', { name: /Finish setup/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('Check again')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Check the tools again' }));
     await waitFor(() =>
-      expect(fake?.requests.filter((request) => request.path === '/api/onboarding/flow')).toHaveLength(2)
+      expect((screen.getByRole('button', { name: /Finish setup/ }) as HTMLButtonElement).disabled).toBe(false)
     );
-    fireEvent.click(await screen.findByRole('button', { name: /Finish anyway/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/ }));
     await waitFor(() => expect(location.pathname).toBe('/tasks/welcome-1'));
   });
 
@@ -467,7 +490,7 @@ describe('the setup page', () => {
     ]);
   });
 
-  it('a missing tool shows its command to copy and Install, and the tools are checked again when you come back', async () => {
+  it('a missing tool shows a copy button and Install, and the tools are checked again when you come back', async () => {
     const tools = createStep({
       id: 'prerequisites',
       title: 'The tools Shinsa runs',
@@ -486,7 +509,8 @@ describe('the setup page', () => {
     });
     serve(createFlow(tools));
     renderPage();
-    expect(await screen.findByText('brew install gh')).toBeTruthy();
+    expect(await screen.findByText('GitHub CLI')).toBeTruthy();
+    expect(screen.queryByText('brew install gh')).toBeNull();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Install' })).toBeTruthy();
     const reads = () =>
@@ -500,7 +524,7 @@ describe('the setup page', () => {
     await waitFor(() => expect(reads()).toBe((before ?? 0) + 1));
   });
 
-  it('with several tools missing, Install all runs them in one terminal and Finish anyway steps back', async () => {
+  it('with several tools missing, Install all runs them in one terminal and Finish setup waits', async () => {
     const missing = (id: string, label: string, command: string) => ({
       id,
       label,
@@ -513,7 +537,7 @@ describe('the setup page', () => {
       id: 'prerequisites',
       title: 'The tools Shinsa runs',
       ready: false,
-      submitLabel: 'Finish anyway',
+      submitLabel: 'Finish setup',
       checks: [
         missing('gh', 'GitHub CLI', 'brew install gh'),
         missing('bun', 'Bun', 'curl -fsSL https://bun.sh/install | bash'),
@@ -535,7 +559,7 @@ describe('the setup page', () => {
     ).toBeTruthy();
     const isPrimary = (button: HTMLElement) => button.className.includes('before:bg-primary');
     expect(isPrimary(screen.getByRole('button', { name: 'Install all' }))).toBe(true);
-    expect(isPrimary(screen.getByRole('button', { name: /Finish anyway/ }))).toBe(false);
+    expect(isPrimary(screen.getByRole('button', { name: /Finish setup/ }))).toBe(false);
     expect(screen.getAllByRole('button', { name: 'Install' }).some(isPrimary)).toBe(false);
     globals.WebSocket = QuietSocket;
     act(() => connection.replaceTerminals(createTerminalsSnapshot([terminal])));
@@ -553,7 +577,7 @@ describe('the setup page', () => {
       id: 'prerequisites',
       title: 'The tools Shinsa runs',
       ready: false,
-      submitLabel: 'Finish anyway',
+      submitLabel: 'Finish setup',
       checks: [
         {
           id: 'gh',
@@ -607,10 +631,9 @@ describe('the setup page', () => {
       connection.replaceTerminals(createTerminalsSnapshot([{ ...terminal, status: 'exited', exitCode: 1 }]))
     );
     expect(
-      await screen.findByText(
-        'The install ended with code 1. Read its output above, or ask an agent for help.'
-      )
+      await screen.findByText('The install ended with code 1. Install it again, or ask an agent for help.')
     ).toBeTruthy();
+    expect(document.querySelector('.xterm')).toBeNull();
   });
 
   it('lets you leave setup you started again from Settings', async () => {

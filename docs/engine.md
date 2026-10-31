@@ -5097,7 +5097,12 @@ have reached.
   web shows from the accounts snapshot's `providers` (signed in with `codex login` in a terminal, read again when you
   come back to the window). Setup reads no Claude Code or claude-swap login and offers none: a copied login shares
   its single-use refresh token and signs one side out (Accounts and usage limits, above); Settings still signs in to
-  a claude-swap account by its email. With no Claude account signed in the step's button says Skip for now.
+  a claude-swap account by its email. The step is not `ready` until a Claude account is signed in, and continuing
+  without one is refused as its `problem` ("Sign in to a Claude account first. Agents work under it.").
+- **Setup never finishes with a tool missing.** The `prerequisites` step is `ready` only when every required check
+  passes, its button is always Finish setup, and finishing while one fails is refused as its `problem` ("Install the
+  missing tools first. Setup finishes once every one is there."). Once you are in the app, every tool and a Claude
+  account are there.
 - **Help from an agent.** `{ type: 'help', stepId }` on the step on screen starts a question task (`task.create`,
   mode `ask`, no repository or project) whose request lists the step's required checks that fail, with what went
   wrong and Shinsa's fix, and asks for the commands that fix them, each in a `bash run` block, without running
@@ -5108,7 +5113,8 @@ have reached.
   (`onboarding.welcome { body }`, core's `decide/onboarding.ts`): `task.created` with origin `onboarding`, no
   repository and mode `ask`, `task.triaged` with the next handle, `task.delivered` with the body as the answer, and
   done. No triage, agent or effect runs. The body (`resolveWelcomeBody`) welcomes you and lists what you set up, each
-  step's summary (folders, projects, defaults, Claude accounts) and the tools still missing, then what happens next.
+  step's summary (folders, projects, defaults, Claude accounts) and that every tool is installed, then what happens
+  next.
   Core refuses a second one (`welcome_recorded`, any task with that origin), so running setup again never adds
   another; a finished run with none yet (setup done before the welcome existed) records it. The flow's `welcome` is
   its id, and the web opens it when setup ends the first time, and goes Home on a run again. In inspect mode nothing
@@ -5151,7 +5157,7 @@ how the tools are checked again.
     ready: boolean;                // prerequisites: every required tool is there; accounts: Claude Code is installed
     help: string | null;           // the help task's id, once you asked
     problem: string | null;        // why the last answer was refused
-    submitLabel: string;           // "Continue", "Skip for now", "Finish setup", "Finish anyway"
+    submitLabel: string;           // "Continue", "Create 6 projects", "Finish setup"
   } | null;
   revisit: boolean;                // setup was done before this run
   welcome: string | null;          // the welcome task's id, once there is one

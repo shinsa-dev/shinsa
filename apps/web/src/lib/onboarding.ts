@@ -197,9 +197,9 @@ export function countMissingInstalls(checks: readonly OnboardingCheck[]) {
 export function describeInstallEnd(terminal: TerminalInfo) {
   if (terminal.status === 'stopped')
     return 'Shinsa’s engine restarted, so the install stopped. Install it again.';
-  if (terminal.exitCode === 0) return 'Finished. Shinsa checked the tools again.';
+  if (terminal.exitCode === 0) return null;
   const code = terminal.exitCode === null ? 'without an exit code' : `with code ${terminal.exitCode}`;
-  return `The install ended ${code}. Read its output above, or ask an agent for help.`;
+  return `The install ended ${code}. Install it again, or ask an agent for help.`;
 }
 
 export function resolveSetupEndPath(flow: OnboardingFlow) {

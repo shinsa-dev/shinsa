@@ -7506,9 +7506,9 @@ style of its own.
   the body 16px under it, then a refused answer's reason as an error line; then the footer 24px under.
 - **Footer**: `flex items-center justify-between gap-3`, no hairline above. Left: Back (`secondary`,
   `IconArrowLeft`), or an empty span on the first step. Right (`flex items-center gap-1.5`, 6px apart): Close setup
-  on a re-run, the step's own secondary action ("Add account", "Check again" with `IconArrowRotateClockwise`), and
-  the primary named for the step ("Continue", "Skip for now", "Finish setup", "Finish anyway") with `IconArrowRight`
-  at its end. All `default` size.
+  on a re-run, the step's own secondary action ("Add account", or an icon-only `IconArrowRotateClockwise` button
+  whose label and tooltip say "Check the tools again"), and the primary named for the step ("Continue", "Finish setup")
+  with `IconArrowRight` at its end, off until the step is ready. All `default` size.
 - **Error line**: `flex min-w-0 items-start gap-1.25 text-red-text text-xs leading-relaxed`, `IconExclamationCircle`
   at `size='sm'` in the 20px slot, the text `selectable min-w-0 whitespace-pre-wrap break-words`.
 - **Motion**: the step enters with a 0.5rem slide and a fade, 220ms on `cubic-bezier(0.23, 1, 0.32, 1)`, from the left when going
@@ -7528,12 +7528,14 @@ style of its own.
   }
   ```
 - **Sign in, never import**: an account the app needs is one primary button ("Sign in with Claude") on an empty
-  row, never a login found on the machine and copied. Until the data arrives, the card holds one row with a delayed
+  row, never a login found on the machine and copied. The step does not move on without one. Until the data arrives, the card holds one row with a delayed
   loading line, never "none found".
-- **Install in place**: a missing tool's row has Install (`sm`, `IconConsole`), which opens a terminal
-  inside the card that runs the tool's own command and checks again when it ends. With two or more missing, a row
+- **Install in place**: a missing tool's row is its name on one line, then a copy button and Install (`sm`,
+  `IconConsole`), which opens a terminal inside the card that runs the tool's own command; when it ends the terminal
+  goes and the tools are checked again, a failed install leaving one line saying so. With two or more missing, a row
   above them offers Install all (`primary`), one terminal that installs each in the order they need; with one, its
-  Install is the primary. The step's own forward button turns `secondary` until the tools are there. When one still fails, "Ask an
+  Install is the primary. The flow never finishes with a required tool missing: its forward button stays off and
+  `secondary` until they are all there. When one still fails, "Ask an
   agent for help" under the card shows the agent's reply in place, each command in it with Run in terminal.
 - **Finishing opens the first task**: the last step lands on a done task that sums up what was set up; there is no
   finished page.
@@ -7575,10 +7577,11 @@ A list of checks is a Settings card of rows (`SETTING_ROW` with `gap-2`):
 - The outcome icon in a 14px slot: passed `IconCheckCircle2Filled` `text-primary-4`, failed `IconCircleXFilled`
   `text-red-4`, skipped `IconCircleDotted` `text-fg-2`; its tooltip names the outcome in its text tone
   (`text-primary-text`, `text-red-text`, `text-fg-2`).
-- The name (`text-fg-4 text-xs`) over its fix as inline markdown (`text-2xs text-fg-3`), `flex-col gap-px`.
-- Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated.
+- The name alone on one line (`text-fg-4 text-xs`, truncated), so every row keeps the icon level with its text.
+- Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated; a failed check
+  with a fix shows its 24px copy button and `sm` Install there instead, 4px apart.
 - An optional check that fails is "skipped", never "failed", and never holds the flow back.
-- "Check again" sits in the footer, busy while it runs.
+- Checking again is an icon-only button in the footer ("Check the tools again"), busy while it runs.
 - Example: setup's Tools step.
 
 #### The now card: one frame for every process state

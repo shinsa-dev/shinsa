@@ -349,7 +349,6 @@ const DEFAULTS: StepDefinition = {
 };
 
 function describeAccountCount(accounts: ClaudeAccount[]) {
-  if (accounts.length === 0) return 'None yet';
   return accounts.length === 1 ? '1 account' : `${accounts.length} accounts`;
 }
 
@@ -374,14 +373,16 @@ const ACCOUNTS: StepDefinition = {
       title: 'Sign in with Claude',
       description: describeAccountsStep(installed, signedIn),
       checks,
-      ready: installed,
-      submitLabel: signedIn ? 'Continue' : 'Skip for now',
+      ready: installed && signedIn,
     });
   },
   summarize: async (context) => describeAccountCount(await context.listAccounts()),
-  answer: (values) => {
+  answer: async (values, context) => {
     assertContinue(values);
-    return Promise.resolve();
+    const accounts = await context.listAccounts();
+    if (!accounts.some((account) => account.signedIn)) {
+      throw new DomainError('account_required', 'Sign in to a Claude account first. Agents work under it.');
+    }
   },
 };
 
@@ -394,16 +395,21 @@ const PREREQUISITES: StepDefinition = {
       title: 'The tools Shinsa runs',
       description: report.ready
         ? 'Everything Shinsa needs is installed on this machine.'
-        : 'Some tools are missing. Install each one here, or ask an agent for help when an install fails.',
+        : 'Some tools are missing. Install each one here, or ask an agent for help when an install fails. Setup finishes once every one is there.',
       checks: report.checks,
       ready: report.ready,
-      submitLabel: report.ready ? 'Finish setup' : 'Finish anyway',
+      submitLabel: 'Finish setup',
     });
   },
   summarize: () => Promise.resolve(null),
-  answer: (values) => {
+  answer: async (values, context) => {
     assertContinue(values);
-    return Promise.resolve();
+    if (!(await context.checkPrerequisites()).ready) {
+      throw new DomainError(
+        'tools_missing',
+        'Install the missing tools first. Setup finishes once every one is there.'
+      );
+    }
   },
 };
 

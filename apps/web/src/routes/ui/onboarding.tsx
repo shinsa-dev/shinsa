@@ -235,7 +235,7 @@ const NO_ACCOUNTS = createSampleStep({
   ...ACCOUNTS,
   description:
     'Sign in to the Claude account agents work under. You can add more accounts later in Settings.',
-  submitLabel: 'Skip for now',
+  ready: false,
 });
 
 const NO_CLAUDE_CODE = createSampleStep({
@@ -258,9 +258,9 @@ const TOOLS = createSampleStep({
   id: 'prerequisites',
   title: 'The tools Shinsa runs',
   description:
-    'Some tools are missing. Install each one here, or ask an agent for help when an install fails.',
+    'Some tools are missing. Install each one here, or ask an agent for help when an install fails. Setup finishes once every one is there.',
   ready: false,
-  submitLabel: 'Finish anyway',
+  submitLabel: 'Finish setup',
   checks: [
     { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50.1', fix: null, command: null },
     {

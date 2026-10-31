@@ -23,25 +23,15 @@ const MISSING_CODEX = createCheck({
 });
 
 describe('the welcome', () => {
-  test('lists each step’s answer, and says when every tool is installed', () => {
-    const body = resolveWelcomeBody(
-      [
-        { label: 'Folders', summary: '~/Developer' },
-        { label: 'Projects', summary: null },
-      ],
-      [createCheck({}), MISSING_CODEX]
-    );
+  test('lists each step’s answer, and says every tool is installed', () => {
+    const body = resolveWelcomeBody([
+      { label: 'Folders', summary: '~/Developer' },
+      { label: 'Projects', summary: null },
+    ]);
     expect(body).toContain(
       '- **Folders:** ~/Developer\n- **Projects:** None yet\n- **Tools:** Everything Shinsa needs is installed.'
     );
     expect(body).toContain('## What happens next');
-  });
-
-  test('names the tools still missing, leaving out the optional ones', () => {
-    const body = resolveWelcomeBody([], [MISSING_GH, MISSING_CODEX]);
-    expect(body).toContain(
-      '- **Tools:** Still missing GitHub CLI. Run setup again from Settings to install them.'
-    );
   });
 });
 

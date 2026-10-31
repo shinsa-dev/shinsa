@@ -140,12 +140,12 @@ describe('the steps', () => {
 
   it('says how an install ended', () => {
     const ended = { status: 'exited', exitCode: 0 } as never;
-    expect(describeInstallEnd(ended)).toBe('Finished. Shinsa checked the tools again.');
+    expect(describeInstallEnd(ended)).toBeNull();
     expect(describeInstallEnd({ status: 'exited', exitCode: 1 } as never)).toBe(
-      'The install ended with code 1. Read its output above, or ask an agent for help.'
+      'The install ended with code 1. Install it again, or ask an agent for help.'
     );
     expect(describeInstallEnd({ status: 'exited', exitCode: null } as never)).toBe(
-      'The install ended without an exit code. Read its output above, or ask an agent for help.'
+      'The install ended without an exit code. Install it again, or ask an agent for help.'
     );
     expect(describeInstallEnd({ status: 'stopped', exitCode: null } as never)).toBe(
       'Shinsa’s engine restarted, so the install stopped. Install it again.'

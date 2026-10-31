@@ -1,6 +1,6 @@
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
-import { InstallTerminal } from '@/components/onboarding/checks.tsx';
+import { InstallEnd, InstallTerminal } from '@/components/onboarding/checks.tsx';
 import { SETTING_ROW, SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { CommandRunnerProvider } from '@/components/text/code-block.tsx';
@@ -8,6 +8,7 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestOnboardingInstall } from '@/lib/connection/onboarding.ts';
 import { useTask } from '@/lib/connection/selectors.ts';
+import { describeInstallEnd } from '@/lib/onboarding.ts';
 
 export function OnboardingHelp({
   help,
@@ -26,11 +27,14 @@ export function OnboardingHelp({
 }) {
   const task = useTask(help);
   const [terminalId, setTerminalId] = React.useState<string | null>(null);
+  const [failure, setFailure] = React.useState<string | null>(null);
   const runner = React.useMemo(
     () => ({
       folder: userHome,
-      run: (command: string) =>
-        requestWithToast(async () => setTerminalId((await requestOnboardingInstall({ command })).id)),
+      run: (command: string) => {
+        setFailure(null);
+        return requestWithToast(async () => setTerminalId((await requestOnboardingInstall({ command })).id));
+      },
     }),
     [userHome]
   );
@@ -65,7 +69,18 @@ export function OnboardingHelp({
           <LoadingLine label='An agent is looking into the failing checks' className='text-xs' />
         </div>
       )}
-      {terminalId && <InstallTerminal key={terminalId} terminalId={terminalId} onEnd={onRecheck} />}
+      {terminalId && (
+        <InstallTerminal
+          key={terminalId}
+          terminalId={terminalId}
+          onEnd={(terminal) => {
+            setTerminalId(null);
+            setFailure(describeInstallEnd(terminal));
+            onRecheck();
+          }}
+        />
+      )}
+      {failure && <InstallEnd text={failure} />}
     </SettingsCard>
   );
 }

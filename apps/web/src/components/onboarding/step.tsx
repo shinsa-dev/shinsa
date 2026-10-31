@@ -7,6 +7,7 @@ import type {
   ProviderLogin,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -25,6 +26,7 @@ import { OptionList } from '@/components/onboarding/options.tsx';
 import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingFiledProjects, OnboardingProjectsChat } from '@/components/onboarding/projects-chat.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
 import { useWindowReturn } from '@/hooks/use-window-return.ts';
 import {
@@ -279,14 +281,17 @@ function StepAction({
   }
   if (step.id !== 'prerequisites') return null;
   return (
-    <Button
-      variant='secondary'
-      icon='IconArrowRotateClockwise'
-      loading={pending === REFRESH_KEY}
-      onClick={actions.refresh}
-    >
-      Check again
-    </Button>
+    <Hint label='Check the tools again'>
+      <Button
+        variant='secondary'
+        size='icon'
+        aria-label='Check the tools again'
+        loading={pending === REFRESH_KEY}
+        onClick={actions.refresh}
+      >
+        <Icon name='IconArrowRotateClockwise' />
+      </Button>
+    </Hint>
   );
 }
 
@@ -330,7 +335,7 @@ function StepFooter({
   const previous = flow.steps[flow.index - 1];
   const submit = resolveSubmit(step, values, drafts);
   const installFirst = !isStepInstalled(step);
-  const signInFirst = step.id === 'accounts' && !installFirst && accounts.list?.length === 0;
+  const signInFirst = step.id === 'accounts' && !installFirst && !step.ready;
   return (
     <>
       {previous ? (
@@ -355,7 +360,7 @@ function StepFooter({
         <Button
           variant={signInFirst || installFirst ? 'secondary' : 'primary'}
           icon={{ name: 'IconArrowRight', position: 'inline-end' }}
-          disabled={!submit.ready || (pending !== null && pending !== SUBMIT_KEY)}
+          disabled={!(submit.ready && step.ready) || (pending !== null && pending !== SUBMIT_KEY)}
           loading={pending === SUBMIT_KEY}
           onClick={() => actions.answer(step.id, submit.values, SUBMIT_KEY, submit.projects)}
         >
