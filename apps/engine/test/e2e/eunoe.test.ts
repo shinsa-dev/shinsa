@@ -58,7 +58,13 @@ async function openWorld({ server = {}, requests = 1 }: WorldOptions = {}) {
     return agentTurn(call, params.length - 1, requests);
   });
   upstream = startFakeAnthropic();
-  eunoe = new EunoeServer({ dir, upstream: upstream.url, window: () => Promise.resolve(4_000), foldFloor: 0, ...server });
+  eunoe = new EunoeServer({
+    dir,
+    upstream: upstream.url,
+    window: () => Promise.resolve(4_000),
+    foldFloor: 0,
+    ...server,
+  });
   const provider = createClaudeProvider(createFakeRuntime(fake.query), {
     env: {},
     home: createTempDir(),
