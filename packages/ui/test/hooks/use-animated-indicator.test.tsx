@@ -341,6 +341,28 @@ describe('useAnimatedIndicator', () => {
     expect(a.hasAttribute('data-indicator-here')).toBe(false);
   });
 
+  it('parks while its page is hidden, so an item that left meanwhile keeps no box when it shows again', async () => {
+    const page = (mode: 'visible' | 'hidden', children: React.ReactNode) => (
+      <React.Activity mode={mode}>
+        <List>{children}</List>
+      </React.Activity>
+    );
+    const view = render(page('visible', items()));
+    const indicator = view.getByTestId('indicator');
+    expect(indicator.style.opacity).toBe('1');
+
+    view.rerender(page('hidden', items()));
+    await act(flush);
+    expect(indicator.style.opacity).toBe('0');
+    expect(indicator.style.width).toBe('0px');
+
+    view.rerender(page('hidden', []));
+    await act(flush);
+    view.rerender(page('visible', []));
+    await act(flush);
+    expect(indicator.style.opacity).toBe('0');
+  });
+
   it('does nothing without an indicator to move', () => {
     const view = render(<List bare>{items()}</List>);
     expect(view.getByTestId('a').hasAttribute('data-indicator-here')).toBe(false);
