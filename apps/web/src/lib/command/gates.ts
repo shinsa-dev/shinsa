@@ -409,6 +409,20 @@ function listOperationCommands(gate: Gate): Command[] {
   ];
 }
 
+function listResultCommands(gate: Gate): Command[] {
+  return [
+    {
+      kind: 'run',
+      id: `${resolveGateId(gate)}.close`,
+      label: 'Close',
+      hint: gate.title,
+      icon: 'IconCheckCircle2',
+      keywords: ['close', 'done', 'read', 'answered', 'answer', 'report', 'diagnosis'],
+      run: () => void replyToGate(gate, 'closeResult'),
+    },
+  ];
+}
+
 function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: GateContext): Command[] {
   switch (gate.type) {
     case 'configuration':
@@ -433,6 +447,8 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
       return listMergeCommands(task, gate, context);
     case 'post_merge':
       return listPostMergeCommands(task, gate);
+    case 'result':
+      return listResultCommands(gate);
   }
 }
 
