@@ -655,6 +655,8 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     type: 'task.remove_from_backlog',
     taskId: readId(fields, 'taskId'),
   }),
+  'task.snooze': (fields) => ({ type: 'task.snooze', taskId: readId(fields, 'taskId') }),
+  'task.unsnooze': (fields) => ({ type: 'task.unsnooze', taskId: readId(fields, 'taskId') }),
   'task.cancel': (fields) => ({ type: 'task.cancel', taskId: readId(fields, 'taskId') }),
   'task.complete': (fields) => ({ type: 'task.complete', taskId: readId(fields, 'taskId') }),
   'task.retry': readRetry,

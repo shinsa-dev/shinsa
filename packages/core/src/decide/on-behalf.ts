@@ -63,6 +63,8 @@ const DESCRIPTIONS: Descriptions = {
   'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
   'task.remove_from_backlog': (state, command) =>
     `Moved ${quoteTask(state, command.taskId)} out of the backlog`,
+  'task.snooze': (state, command) => `Snoozed ${quoteTask(state, command.taskId)}`,
+  'task.unsnooze': (state, command) => `Unsnoozed ${quoteTask(state, command.taskId)}`,
   'task.cancel': (state, command) => `Cancelled ${quoteTask(state, command.taskId)}`,
   'task.complete': (state, command) => `Marked ${quoteTask(state, command.taskId)} as done`,
   'task.retry': (state, command) => `Retried ${quoteTask(state, command.taskId)}`,

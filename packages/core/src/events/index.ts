@@ -123,6 +123,7 @@ type EventBody =
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
+  | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }
   | {
       type: 'task.messaged';

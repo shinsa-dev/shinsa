@@ -330,6 +330,7 @@ describe('listTaskGroupSections', () => {
       working: ['high', 'old', 'new'],
       waiting: ['waiter', 'next:1'],
       backlog: [],
+      snoozed: [],
       done: ['done', 'merged'],
       cancelled: ['gone'],
     });
