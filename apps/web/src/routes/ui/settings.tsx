@@ -397,12 +397,7 @@ export function SettingsSpecimens() {
       {slack.map((scene) => (
         <Specimen key={scene.label} label={scene.label}>
           <div className='w-full max-w-xl'>
-            <SlackGroup
-              state={memory}
-              snapshot={scene.snapshot}
-              failure={null}
-              actions={SAMPLE_SLACK_ACTIONS}
-            />
+            <SlackGroup snapshot={scene.snapshot} failure={null} actions={SAMPLE_SLACK_ACTIONS} />
           </div>
         </Specimen>
       ))}

@@ -3,8 +3,6 @@ import {
   createSlackHeader,
   createSlackMessage,
   createSlackSection,
-  listSlackDecidedChunks,
-  listSlackReadingChunks,
   listSlackStatusGates,
   resolveSlackPostMessage,
   resolveSlackSessionStatus,
@@ -12,13 +10,11 @@ import {
   SLACK_RESULT_LIMIT,
   type SlackBlock,
   type SlackMessage,
-  serializeSlackDeclined,
   serializeSlackForwarded,
   serializeSlackGate,
   serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
-  serializeSlackReading,
   serializeSlackResult,
   serializeSlackStatus,
   type TaskShape,
@@ -178,50 +174,6 @@ describe('the status message', () => {
     const first = createTask(harness, { request: 'First' });
     const second = createTask(harness, { request: 'Second', waitsOn: [first] });
     expect(readText(statusOf(harness, second))).toContain('⏳ *Waiting for “First” to finish*');
-  });
-});
-
-describe('the streamed reading of a thread', () => {
-  const MENTION = {
-    eventId: 'Ev1',
-    teamId: 'T1',
-    channelId: 'C1',
-    threadTs: '100.1',
-    messageTs: '100.3',
-    userId: 'U1',
-    userName: 'Christo',
-    text: 'take this',
-    permalink: null,
-    thread: [
-      { ts: '100.1', userId: 'U2', userName: 'Mia', text: 'It hangs.', bot: false },
-      { ts: '100.3', userId: 'U1', userName: 'Christo', text: 'take this', bot: false },
-    ],
-  };
-
-  test('opens a plan that reads the thread and decides, counting the messages', () => {
-    expect(listSlackReadingChunks(MENTION)).toEqual([
-      { type: 'plan_update', title: 'Reading the thread' },
-      expect.objectContaining({
-        id: 'read',
-        status: 'in_progress',
-        details: expect.objectContaining({ type: 'rich_text' }),
-      }),
-      { type: 'task_update', id: 'decide', title: 'Decide whether there is work', status: 'in_progress' },
-    ]);
-    expect(JSON.stringify(listSlackReadingChunks({ ...MENTION, thread: [] }))).toContain('1 message');
-  });
-
-  test('closes it with the decision: the first sentence of the work, or the reason there is none', () => {
-    const work = listSlackDecidedChunks({ kind: 'task', request: 'Fix the export hang. It started Monday.' });
-    expect(work.at(-1)).toEqual({ type: 'plan_update', title: 'Starting a task' });
-    expect(JSON.stringify(work)).toContain('Work: Fix the export hang.');
-    expect(JSON.stringify(work)).not.toContain('Monday');
-    const none = listSlackDecidedChunks({ kind: 'none', reason: 'This reads as a thank-you.' });
-    expect(none.at(-1)).toEqual({ type: 'plan_update', title: 'Nothing to start' });
-    expect(JSON.stringify(none)).toContain('This reads as a thank-you.');
-    expect(
-      none.slice(0, 2).every((chunk) => chunk.type === 'task_update' && chunk.status === 'complete')
-    ).toBe(true);
   });
 });
 
@@ -476,7 +428,7 @@ describe('the result', () => {
 });
 
 describe("the bot's own replies", () => {
-  test('forwarded, held, declined, reading, link and offline', () => {
+  test('forwarded, held, link and offline', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness, { request: 'Fix it' }));
     expect(readText(serializeSlackForwarded(task, URL))).toBe(
@@ -485,10 +437,6 @@ describe("the bot's own replies", () => {
     expect(readText(serializeSlackHeld(task, URL))).toBe(
       `📌 Kept for <${URL}|Fix it>. It waits on you in Shinsa, so nothing changes until you decide there.`
     );
-    expect(readText(serializeSlackDeclined('This reads as a <thanks>.'))).toBe(
-      "I didn't start a task. This reads as a &lt;thanks&gt;. \nMention me again with what you want done, and I will take it from there."
-    );
-    expect(readText(serializeSlackReading())).toBe('👀 Reading the thread…');
     const link = serializeSlackLinkPrompt('https://app.shinsa.dev/slack/link');
     expect(listButtons(link)).toEqual([
       expect.objectContaining({ url: 'https://app.shinsa.dev/slack/link', style: 'primary' }),
@@ -517,9 +465,6 @@ describe('a post from the outbox', () => {
     expect(resolveSlackPostMessage(state, { kind: 'held' }, taskId, URL)?.text).toStartWith('Kept for');
     expect(resolveSlackPostMessage(state, { kind: 'result' }, taskId, URL)).toBeNull();
     expect(resolveSlackPostMessage(state, { kind: 'forwarded' }, 'gone', URL)).toBeNull();
-    expect(
-      resolveSlackPostMessage(state, { kind: 'declined', reason: 'Thanks.' }, null, URL)?.text
-    ).toContain('Thanks.');
     expect(listSlackStatusGates(state, taskId).map((gate) => gate.id)).toEqual(['q1']);
   });
 });

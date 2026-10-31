@@ -1,10 +1,7 @@
 import {
   DomainError,
-  listSlackDecidedChunks,
-  listSlackReadingChunks,
   listSlackStatusGates,
   type MachineCredentials,
-  parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
@@ -13,22 +10,14 @@ import {
   type ShinsaEffect,
   SLACK_BLOCKS_REFUSED,
   SLACK_ENGINE_EVENTS_PATH,
-  SLACK_EVALUATION_SCHEMA,
-  SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
-  type SlackEvaluation,
-  type SlackMention,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
-  type SlackStreamChunk,
   type SlackThreadRef,
-  serializeSlackEvaluationPrompt,
-  serializeSlackReading,
   serializeSlackStatus,
   verifySlackForwardSignature,
 } from '@shinsa/core';
-import type { QuickJson } from '../agents/quick/index.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
@@ -41,11 +30,6 @@ export const SLACK_EVENT_BODY_LIMIT_BYTES = 1024 * 1024;
 
 const STATUS_INTERVAL_MS = 5_000;
 
-const UNDECIDED: SlackEvaluation = {
-  kind: 'none',
-  reason: 'I could not read the thread just now, so I did not start anything. Mention me again in a minute.',
-};
-
 type Effect<Kind extends ShinsaEffect['kind']> = Extract<ShinsaEffect, { kind: Kind }>;
 
 type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
@@ -53,7 +37,6 @@ type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 export interface SlackOptions {
   engine: Engine;
   remote: Remote;
-  ask: QuickJson;
   fetch?: Fetch;
   now?: () => number;
   sleep?: Sleep;
@@ -81,7 +64,6 @@ function respondJsonError(code: string, message: string, status: number) {
 export class Slack {
   readonly #engine: Engine;
   readonly #remote: Remote;
-  readonly #ask: QuickJson;
   readonly #relay: SlackRelay;
   readonly #now: () => number;
   readonly #sleep: Sleep;
@@ -94,7 +76,6 @@ export class Slack {
   constructor(options: SlackOptions) {
     this.#engine = options.engine;
     this.#remote = options.remote;
-    this.#ask = options.ask;
     this.#relay = new SlackRelay(() => options.remote.appOrigin, options.fetch);
     this.#now = options.now ?? Date.now;
     this.#sleep = options.sleep ?? sleepFor;
@@ -137,9 +118,8 @@ export class Slack {
     return Response.json({ ok: true }, { status: 202 });
   }
 
-  #taskUrl(taskId: string | null) {
-    const origin = this.#remote.appOrigin;
-    return taskId ? resolveSlackTaskUrl(origin, taskId) : origin;
+  #taskUrl(taskId: string) {
+    return resolveSlackTaskUrl(this.#remote.appOrigin, taskId);
   }
 
   async #send(
@@ -182,45 +162,6 @@ export class Slack {
     }
   }
 
-  async #stream(mention: SlackMention, ts: string | null, done: boolean, chunks: SlackStreamChunk[]) {
-    const credentials = this.#selectCredentials();
-    if (!credentials) return null;
-    try {
-      return await this.#relay.requestStream(credentials.machineToken, {
-        teamId: mention.teamId,
-        channelId: mention.channelId,
-        threadTs: mention.threadTs,
-        recipientUserId: mention.userId,
-        ts,
-        done,
-        chunks,
-      });
-    } catch (error) {
-      log.warn('[Slack] The thread could not be streamed', {
-        threadTs: mention.threadTs,
-        error: describeError(error),
-      });
-      return null;
-    }
-  }
-
-  async evaluate(effect: Effect<'slack.evaluate'>, context: EffectContext) {
-    const { mention } = effect;
-    const streamTs = await this.#stream(mention, null, false, listSlackReadingChunks(mention));
-    const statusTs = streamTs ?? (await this.#send(mention, null, serializeSlackReading()));
-    const said = await this.#ask<unknown>(
-      SLACK_EVALUATION_SYSTEM,
-      serializeSlackEvaluationPrompt(mention),
-      SLACK_EVALUATION_SCHEMA
-    );
-    const evaluation = parseSlackEvaluation(said) ?? UNDECIDED;
-    if (streamTs) await this.#stream(mention, streamTs, true, listSlackDecidedChunks(evaluation));
-    await this.#engine.dispatch(
-      { type: 'slack.record_evaluation', mention, statusTs, evaluation },
-      { id: `${context.key}:slack.record_evaluation` }
-    );
-  }
-
   async post(effect: Effect<'slack.post'>) {
     const message = resolveSlackPostMessage(
       this.#engine.state,
@@ -229,7 +170,7 @@ export class Slack {
       this.#taskUrl(effect.taskId)
     );
     if (!message) return;
-    await this.#send(effect.thread, effect.replaceTs, message);
+    await this.#send(effect.thread, null, message);
   }
 
   async status(effect: Effect<'slack.status'>, context: EffectContext) {

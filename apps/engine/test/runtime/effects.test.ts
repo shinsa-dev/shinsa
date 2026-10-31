@@ -261,24 +261,10 @@ describe('routing effects', () => {
 
 describe('the Slack effects', () => {
   const THREAD = { teamId: 'T1', channelId: 'C1', threadTs: '1.1' };
-  const MENTION = {
-    ...THREAD,
-    eventId: 'Ev1',
-    messageTs: '1.1',
-    userId: 'U1',
-    userName: 'Christo',
-    text: 'hi',
-    permalink: null,
-    thread: [],
-  };
 
   test('go to the Slack service', async () => {
     const handled: string[] = [];
     const slack = {
-      evaluate: () => {
-        handled.push('evaluate');
-        return Promise.resolve();
-      },
       status: () => {
         handled.push('status');
         return Promise.resolve();
@@ -289,13 +275,12 @@ describe('the Slack effects', () => {
       },
     } as unknown as Slack;
     const { runner } = setup(() => undefined, { slack });
-    await runner.apply({ kind: 'slack.evaluate', mention: MENTION }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
     await runner.apply(
-      { kind: 'slack.post', thread: THREAD, taskId: null, post: { kind: 'forwarded' }, replaceTs: null },
+      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'forwarded' } },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post']);
+    expect(handled).toEqual(['status', 'post']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {

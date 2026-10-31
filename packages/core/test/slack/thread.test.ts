@@ -52,10 +52,10 @@ describe('the thread as text', () => {
 });
 
 describe('the request of a task from Slack', () => {
-  test('leads with the request, names the asker and fences the thread as untrusted data', () => {
-    expect(serializeSlackRequest(mention(), ' Fix the export hang. ', 'n1')).toBe(
+  test('leads with what the person wrote, names the asker and fences the thread as untrusted data', () => {
+    expect(serializeSlackRequest(mention({ text: ' take this ' }), 'n1')).toBe(
       [
-        'Fix the export hang.',
+        'take this',
         '',
         'Asked by Christo in Slack: https://acme.slack.com/archives/C1/p1003',
         '',
@@ -71,7 +71,7 @@ describe('the request of a task from Slack', () => {
   });
 
   test('names the thread without a link when Slack gave none', () => {
-    expect(serializeSlackRequest(mention({ permalink: null }), 'Fix it.', 'n1')).toContain(
+    expect(serializeSlackRequest(mention({ permalink: null }), 'n1')).toContain(
       'Asked by Christo in a Slack thread.'
     );
   });

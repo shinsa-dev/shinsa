@@ -1,23 +1,20 @@
-import type { ShinsaState, SlackLink, SlackSnapshot } from '@shinsa/core';
+import type { SlackLink, SlackSnapshot } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
-import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { SLACK_ACTIONS, type SlackActions, useSlack } from '@/lib/connection/slack.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { updateSettings } from '@/lib/settings.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import {
   describeSlackLink,
   describeSlackStatus,
-  listSlackProjectItems,
-  parseSlackProjectValue,
-  resolveSlackProjectValue,
   SLACK_DESCRIPTION,
+  SLACK_ON_MACHINE_NOTE,
   SLACK_SECTION,
 } from '@/lib/slack.ts';
-import { SETTING_ROW, SettingRow, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 function StatusAction({ snapshot }: { snapshot: SlackSnapshot }) {
   if (!snapshot.connectUrl) return null;
@@ -62,14 +59,14 @@ function LinkRow({ link }: { link: SlackLink }) {
 }
 
 export function SlackGroup({
-  state,
   snapshot,
   failure,
+  onMachine = true,
   actions = SLACK_ACTIONS,
 }: {
-  state: ShinsaState;
   snapshot: SlackSnapshot | null;
   failure: string | null;
+  onMachine?: boolean;
   actions?: SlackActions;
 }) {
   const dialog = useDialogState<true>();
@@ -79,7 +76,7 @@ export function SlackGroup({
       title={SLACK_SECTION}
       description={SLACK_DESCRIPTION}
       action={
-        connected ? (
+        connected && onMachine ? (
           <Button variant='secondary' size='sm' onClick={() => dialog.show(true)}>
             Disconnect
           </Button>
@@ -91,20 +88,10 @@ export function SlackGroup({
       {snapshot?.links.map((link) => (
         <LinkRow key={`${link.teamId}:${link.userId}`} link={link} />
       ))}
-      {snapshot?.remote && (
-        <SettingRow title='Project for new tasks'>
-          <SelectField
-            label='Project for new tasks'
-            items={listSlackProjectItems(state)}
-            value={resolveSlackProjectValue(state)}
-            onValueChange={(value) =>
-              void updateSettings(
-                { slackProjectId: parseSlackProjectValue(value) },
-                'Slack tasks go there now.'
-              )
-            }
-          />
-        </SettingRow>
+      {snapshot && !onMachine && (
+        <div className={SETTING_ROW}>
+          <p className='text-pretty text-2xs text-fg-2'>{SLACK_ON_MACHINE_NOTE}</p>
+        </div>
       )}
       <ConfirmDialog
         control={dialog.control}
@@ -117,7 +104,7 @@ export function SlackGroup({
   );
 }
 
-export function SlackSettings({ state }: { state: ShinsaState }) {
+export function SlackSettings() {
   const { snapshot, failure } = useSlack();
-  return <SlackGroup state={state} snapshot={snapshot} failure={failure} />;
+  return <SlackGroup snapshot={snapshot} failure={failure} onMachine={!isRemoteBuild()} />;
 }

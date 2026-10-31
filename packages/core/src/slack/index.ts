@@ -15,7 +15,6 @@ export {
   type SlackPlainText,
   type SlackPlanTask,
   type SlackRichText,
-  type SlackStreamChunk,
   type SlackTaskStatus,
 } from './blocks.ts';
 export {
@@ -27,28 +26,16 @@ export {
   type SlackThreadMessage,
 } from './contract.ts';
 export {
-  parseSlackEvaluation,
-  SLACK_EVALUATION_LIMITS,
-  SLACK_EVALUATION_SCHEMA,
-  SLACK_EVALUATION_SYSTEM,
-  type SlackEvaluation,
-  serializeSlackEvaluationPrompt,
-} from './evaluation.ts';
-export {
-  listSlackDecidedChunks,
-  listSlackReadingChunks,
   listSlackStatusGates,
   resolveSlackPostMessage,
   resolveSlackSessionStatus,
   SLACK_RESULT_LIMIT,
   type SlackStatusLayout,
-  serializeSlackDeclined,
   serializeSlackForwarded,
   serializeSlackGate,
   serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
-  serializeSlackReading,
   serializeSlackResult,
   serializeSlackStatus,
 } from './messages.ts';
@@ -65,7 +52,6 @@ export {
   listSlackMentionedUsers,
   parseSlackRelayPost,
   parseSlackRelaySession,
-  parseSlackRelayStream,
   resolveSlackConnectUrl,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
@@ -83,7 +69,6 @@ export {
   type SlackRelayPosted,
   type SlackRelaySession,
   type SlackRelaySessionSet,
-  type SlackRelayStream,
   type SlackSessionStatus,
   type SlackSnapshot,
   verifySlackForwardSignature,

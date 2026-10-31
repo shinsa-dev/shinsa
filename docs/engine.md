@@ -2503,9 +2503,7 @@ Slack ──event──► app.shinsa.dev /slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, "Sent to the task"
                   └─ a gate open ──► kept in its chat, "Kept for the task"
-   otherwise ──► slack.evaluate: "Reading the thread…", the classifier
-                  ├─ work ──► task.create + slack.thread_linked
-                  └─ not  ──► the reason, in place of "Reading…"
+   otherwise ──► task.create, as from Home + slack.thread_linked
    the task moves ──► slack.status (one message, edited)
    a gate opens, a result ──► slack.post (a new message)
                   └─ POST app.shinsa.dev /__remote/slack/post ──► Slack
@@ -2521,11 +2519,10 @@ Slack ──event──► app.shinsa.dev /slack/events
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; both are refused from off the machine (`local-only.ts`, writes only).
-- **The project for new tasks** is the human-only setting `slackProjectId` (Settings → General → Slack, "Project
-  for new tasks"): a project, or null for the focus project at the time of the mention. Core refuses a project that
-  does not exist (`settings_invalid`) and clears the setting when its project is removed. Triage picks the repository
-  in it as for any task.
+  link of this machine; it is refused from off the machine (`local-only.ts`, writes only). The hosted dashboard on
+  app.shinsa.dev shows the section too, below Machines, read from the first machine of the dashboard: its status,
+  Connect Slack and the connected workspaces, with a line that Disconnect is on the machine itself (`onMachine`),
+  since it is refused remotely.
 - **A mention reaches the machine** as `SlackMention` (`slack/contract.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
@@ -2543,27 +2540,16 @@ Slack ──event──► app.shinsa.dev /slack/events
   work a new round. The bot answers "Sent to …" in the thread. While the task has a gate open (a question, a plan, a
   review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
   nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
-  waits on you in Shinsa" (`held`). A mention in any other thread, a task's closed thread
-  included, is evaluated first.
-- **The evaluation** (`slack.evaluate`, `slack/evaluation.ts`): the bot streams its reading into the thread with
-  Slack's agent streaming (`chat.startStream` in `plan` display mode, to the person who mentioned it as its recipient,
-  through `/__remote/slack/stream`): a plan "Reading the thread" with two tasks at work, "Read the thread" (the number
-  of messages) and "Decide whether there is work" (`listSlackReadingChunks`). Where Slack will not stream (an older
-  workspace, a refusal), it posts "Reading the thread…" instead. Then
-  one quick call with the classifier triage uses reads the whole thread under a fixed system prompt
-  (`SLACK_EVALUATION_SYSTEM`, the thread as data, never instructions) and answers `task` with the request as the person
-  would write it, or `none` with a one-sentence reason (`parseSlackEvaluation`, `SLACK_EVALUATION_LIMITS`). A bare
-  mention under a bug report is work; thanks and small talk are not. When no provider answers, the answer is `none`
-  with "I could not read the thread just now…", so a mention never hangs on Reading. The stream is then stopped with
-  both tasks done, the decision as the second one's output (the first sentence of the work, or the reason there is
-  none) and the plan retitled "Starting a task" or "Nothing to start" (`listSlackDecidedChunks`, `chat.stopStream`),
-  well inside Slack's 10-minute limit for a stream. The result comes back as
-  `slack.record_evaluation` with the reading post's ts: `none` replaces that post with the reason; `task` creates a
-  task (`task.create` in the project for new tasks, its request the evaluation's words, who asked with the permalink,
-  and the thread fenced in a nonce-tagged `<slack-thread-…>` element marked as untrusted data,
-  `serializeSlackRequest`) and links it to the thread (`slack.thread_linked`, "Started from a Slack thread"), and the
-  reading post becomes the task's status message. A task that opened in the meantime takes the mention as a message
-  instead.
+  waits on you in Shinsa" (`held`).
+- **Any other mention starts a task, as Home does** (`receiveSlackMention`): a mention in any other thread, a task's
+  closed thread included, is `task.create` with no project, kind or priority given, exactly as a request typed on Home
+  with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
+  (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
+  Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
+  `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
+  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts the status message.
+  There is no separate check of whether a mention is work: triage's kinds already cover a question, an investigation
+  and a change, and the thread's own status shows Slack the agent at work at once.
 - **What is posted back** (`syncSlackThreads`, after every command, for the tasks it changed): every gate a linked
   task opens that you decide or answer (question, secret, plan, review, proposal; `SLACK_POSTED_GATES`) and its result
   (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
@@ -2599,7 +2585,7 @@ Slack ──event──► app.shinsa.dev /slack/events
   `applied: false`, and the posts carry on as they are. It needs only `chat:write`, the scope the bot already has, and
   no app setting: the app's Agents & AI Apps feature (`agent_view`) stays off, because the bot answers mentions in
   channels and never the agent pane or direct messages that feature opens.
-- **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
+- **Failures.** `slack.post` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
   workspace) is logged (`[Slack] app.shinsa.dev refused the post`) and dropped, since sending it again cannot work.

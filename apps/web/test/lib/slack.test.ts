@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { SlackSnapshot } from '@shinsa/core';
-import {
-  describeSlackLink,
-  describeSlackStatus,
-  FOCUS_PROJECT_VALUE,
-  listSlackProjectItems,
-  parseSlackProjectValue,
-  resolveSlackLinkedResult,
-  resolveSlackProjectValue,
-} from '@/lib/slack.ts';
-import { createProject, createShinsaState } from '../support/state.ts';
+import { describeSlackLink, describeSlackStatus, resolveSlackLinkedResult } from '@/lib/slack.ts';
 
 const LINK = { teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 0 };
 
@@ -56,38 +47,6 @@ describe('Slack’s status in Settings', () => {
     expect(describeSlackLink({ ...LINK, linkedAt: 1_000 }, 1_000 + 2 * 3_600_000)).toBe(
       'Connected 2h ago as Christo'
     );
-  });
-});
-
-describe('the project Slack tasks go to', () => {
-  const state = createShinsaState({
-    projects: [
-      createProject({ id: 'b', name: 'Site', color: 'green' }),
-      createProject({ id: 'a', name: 'App', color: 'blue' }),
-    ],
-  });
-
-  it('offers the focus project first, then every project by name', () => {
-    expect(listSlackProjectItems(state)).toEqual([
-      { value: FOCUS_PROJECT_VALUE, label: 'The focus project' },
-      { value: 'a', label: 'App', dot: 'blue' },
-      { value: 'b', label: 'Site', dot: 'green' },
-    ]);
-  });
-
-  it('shows the chosen project, and the focus project when none is chosen or it is gone', () => {
-    expect(resolveSlackProjectValue(state)).toBe(FOCUS_PROJECT_VALUE);
-    expect(resolveSlackProjectValue({ ...state, settings: { ...state.settings, slackProjectId: 'b' } })).toBe(
-      'b'
-    );
-    expect(
-      resolveSlackProjectValue({ ...state, settings: { ...state.settings, slackProjectId: 'gone' } })
-    ).toBe(FOCUS_PROJECT_VALUE);
-  });
-
-  it('stores no project for the focus project', () => {
-    expect(parseSlackProjectValue(FOCUS_PROJECT_VALUE)).toBeNull();
-    expect(parseSlackProjectValue('a')).toBe('a');
   });
 });
 

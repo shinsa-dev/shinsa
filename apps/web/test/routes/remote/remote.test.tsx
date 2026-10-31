@@ -173,11 +173,14 @@ describe('the remote dashboard', () => {
 });
 
 describe('the page after connecting Slack', () => {
-  it('names the workspace and what happens next', async () => {
+  it('names the workspace and how the bot works, and opens Shinsa as its main action', async () => {
     renderRoot('/slack/linked?team=Overclock');
     expect(await screen.findByText('Slack is connected to Overclock')).toBeTruthy();
-    expect(screen.getByText('What happens next')).toBeTruthy();
-    expect(screen.getByText('Open Shinsa').closest('a')?.getAttribute('href')).toBe('/');
+    expect(screen.getByText('Mention @Shinsa')).toBeTruthy();
+    expect(screen.getByText('You decide in Shinsa')).toBeTruthy();
+    const open = screen.getByText('Open Shinsa').closest('a');
+    expect(open?.getAttribute('href')).toBe('/');
+    expect(open?.getAttribute('data-variant') ?? open?.className).not.toContain('secondary');
   });
 
   it('says why connecting failed', async () => {

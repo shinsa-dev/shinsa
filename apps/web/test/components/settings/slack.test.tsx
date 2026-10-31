@@ -1,28 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, mock, spyOn } from 'bun:test';
 import type { SlackSnapshot } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SlackGroup, SlackSettings } from '@/components/settings/slack.tsx';
 import type { SlackActions } from '@/lib/connection/slack.ts';
 import { resetSlack } from '@/lib/connection/slack.ts';
-import { spyOnCommands } from '../../support/commands.ts';
-import { createProject, createShinsaState } from '../../support/state.ts';
 
 const CONNECT_URL = 'https://app.shinsa.dev/slack/connect?instance=k3x9';
 
 const LINK = { teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: Date.now() };
 
-const STATE = createShinsaState({ projects: [createProject({ id: 'site', name: 'Site' })] });
-
 function snapshot(overrides: Partial<SlackSnapshot> = {}): SlackSnapshot {
   return { remote: true, connectUrl: CONNECT_URL, links: [], problem: null, ...overrides };
 }
 
-function renderGroup(current: SlackSnapshot | null, failure: string | null = null) {
+function renderGroup(current: SlackSnapshot | null, failure: string | null = null, onMachine = true) {
   const actions = { disconnect: mock(() => Promise.resolve(snapshot())) } satisfies SlackActions;
   render(
     <TooltipProvider>
-      <SlackGroup state={STATE} snapshot={current} failure={failure} actions={actions} />
+      <SlackGroup snapshot={current} failure={failure} onMachine={onMachine} actions={actions} />
     </TooltipProvider>
   );
   return actions;
@@ -39,12 +35,11 @@ describe('Settings → General → Slack', () => {
     expect(screen.getByText('Shinsa answered with status 503.')).toBeTruthy();
   });
 
-  it('asks for remote access above it first, with nothing to connect and no project to pick yet', () => {
+  it('asks for remote access above it first, with nothing to connect yet', () => {
     renderGroup(snapshot({ remote: false, connectUrl: null }));
     expect(screen.getByText('Needs remote access')).toBeTruthy();
     expect(screen.getByText(/Turn it on above first/)).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.queryByText('Project for new tasks')).toBeNull();
   });
 
   it('connects through app.shinsa.dev in a new tab', () => {
@@ -67,26 +62,19 @@ describe('Settings → General → Slack', () => {
     await waitFor(() => expect(actions.disconnect).toHaveBeenCalled());
   });
 
+  it('on app.shinsa.dev connects and lists workspaces, and sends Disconnect to the machine', () => {
+    renderGroup(snapshot({ links: [LINK] }), null, false);
+    expect(screen.getByText('Overclock')).toBeTruthy();
+    expect(screen.getByText('Connect another workspace').closest('a')?.getAttribute('href')).toBe(
+      CONNECT_URL
+    );
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+    expect(screen.getByText('Disconnect is in Settings on the machine itself.')).toBeTruthy();
+  });
+
   it('shows nothing to connect when the engine has no link to give', () => {
     renderGroup(snapshot({ connectUrl: null }));
     expect(screen.queryByText('Connect Slack')).toBeNull();
-  });
-
-  it('sets the project new Slack tasks go to', async () => {
-    const commands = spyOnCommands();
-    renderGroup(snapshot());
-    fireEvent.click(screen.getByRole('combobox', { name: 'Project for new tasks' }));
-    const list = (await screen.findAllByRole('listbox')).at(-1) as HTMLElement;
-    const item = within(list).getByRole('option', { name: 'Site' });
-    fireEvent.pointerDown(item, { pointerType: 'mouse' });
-    fireEvent.click(item);
-    await waitFor(() =>
-      expect(commands.sent).toHaveBeenCalledWith(
-        { type: 'settings.change', patch: { slackProjectId: 'site' } },
-        'Slack tasks go there now.'
-      )
-    );
-    commands.restore();
   });
 });
 
@@ -106,7 +94,7 @@ describe('SlackSettings', () => {
   it('reads Slack from the engine', async () => {
     render(
       <TooltipProvider>
-        <SlackSettings state={STATE} />
+        <SlackSettings />
       </TooltipProvider>
     );
     expect(await screen.findByText('Overclock')).toBeTruthy();

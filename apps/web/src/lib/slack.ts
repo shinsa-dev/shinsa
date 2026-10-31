@@ -1,16 +1,16 @@
-import type { ShinsaState, SlackLink, SlackSnapshot } from '@shinsa/core';
+import type { SlackLink, SlackSnapshot } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
-import { listProjects } from '@/lib/projects.ts';
+import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
 
 export const SLACK_SECTION = 'Slack';
 
 export const SLACK_DESCRIPTION =
   'Mention @Shinsa in a Slack channel or thread to start a task on this machine. Its questions, plan, review and result come back in the thread; you still decide in Shinsa.';
 
-export const FOCUS_PROJECT_VALUE = 'focus';
+export const SLACK_ON_MACHINE_NOTE = 'Disconnect is in Settings on the machine itself.';
 
-export const SLACK_LINKED_ERRORS: Record<string, string> = {
+const SLACK_LINKED_ERRORS: Record<string, string> = {
   slack_denied: 'Slack was not connected because the request was turned down there.',
   slack_expired: 'Connecting took longer than 10 minutes. Start again from Settings on your machine.',
   slack_failed: 'Slack did not finish connecting. Try again in a minute.',
@@ -53,26 +53,23 @@ export function describeSlackLink(link: SlackLink, now = Date.now()) {
   return `${formatSince('Connected', link.linkedAt, now)} as ${link.userName}`;
 }
 
-export function listSlackProjectItems(state: ShinsaState) {
-  return [
-    { value: FOCUS_PROJECT_VALUE, label: 'The focus project' },
-    ...listProjects(state).map((project) => ({ value: project.id, label: project.name, dot: project.color })),
-  ];
-}
-
-export function resolveSlackProjectValue(state: ShinsaState) {
-  const projectId = state.settings.slackProjectId ?? null;
-  return projectId && state.projects[projectId] ? projectId : FOCUS_PROJECT_VALUE;
-}
-
-export function parseSlackProjectValue(value: string) {
-  return value === FOCUS_PROJECT_VALUE ? null : value;
-}
-
-export const SLACK_NEXT_STEPS = [
-  'Mention @Shinsa in a channel or a thread with what you want done.',
-  'Your machine reads the thread and starts a task when there is work in it. It always answers in the thread.',
-  'Questions, the plan, the review and the result come back in the thread. You decide in Shinsa.',
+export const SLACK_POINTS: RemotePoint[] = [
+  {
+    icon: 'IconBubbleText',
+    title: 'Mention @Shinsa',
+    detail: 'In a channel or a thread, with what you want done. A bare mention under a bug report is enough.',
+  },
+  {
+    icon: MACHINE_ICON,
+    title: 'It runs on your machine',
+    detail: 'The thread becomes a task, just like one typed on Home, with its project picked for you.',
+  },
+  {
+    icon: 'IconShieldCheck',
+    title: 'You decide in Shinsa',
+    detail:
+      'Questions, the plan, the review and the result come back in the thread. Approving stays in Shinsa.',
+  },
 ];
 
 export type SlackLinkedResult = { kind: 'linked'; team: string } | { kind: 'failed'; message: string };

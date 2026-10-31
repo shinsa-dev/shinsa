@@ -59,7 +59,6 @@ describe('the settings a command may change', () => {
       watchdogMaxGapHours: 6,
       taskCapacity: null,
       placementPolicies: [],
-      slackProjectId: null,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

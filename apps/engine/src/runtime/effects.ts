@@ -242,8 +242,6 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
-      case 'slack.evaluate':
-        return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
         return this.#withSlack((slack) => slack.status(effect, context));
       case 'slack.post':

@@ -30,16 +30,10 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
 
 const THREAD = { teamId: 'T1', channelId: 'C1', threadTs: '100.1' };
 
-function startFromSlack(harness: Harness, options: { shape?: TaskShape; statusTs?: string | null } = {}) {
+function startFromSlack(harness: Harness, options: { shape?: TaskShape } = {}) {
   const repoId = Object.keys(harness.state.repos)[0] || registerRepo(harness);
   const before = new Set(Object.keys(harness.state.tasks));
   harness.send({ type: 'slack.mention', mention: mention() });
-  harness.send({
-    type: 'slack.record_evaluation',
-    mention: mention(),
-    statusTs: options.statusTs === undefined ? '100.4' : options.statusTs,
-    evaluation: { kind: 'task', request: 'Fix the export hang on large files.' },
-  });
   const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
   harness.send({
     type: 'task.triage',
@@ -64,36 +58,11 @@ function postsOf(harness: Harness) {
 }
 
 describe('a mention in a thread no task holds', () => {
-  test('is evaluated first and starts nothing yet', () => {
-    const harness = createHarness();
-    const decision = harness.send({ type: 'slack.mention', mention: mention() });
-    expect(decision.events).toEqual([]);
-    expect(harness.lastEffect('slack.evaluate').mention.eventId).toBe('Ev1');
-  });
-
-  test('that is not work is answered in the thread with the reason, replacing the status message', () => {
-    const harness = createHarness();
-    harness.send({
-      type: 'slack.record_evaluation',
-      mention: mention(),
-      statusTs: '100.4',
-      evaluation: { kind: 'none', reason: 'This reads as a thank-you.' },
-    });
-    expect(Object.keys(harness.state.tasks)).toEqual([]);
-    expect(harness.lastEffect('slack.post')).toEqual({
-      kind: 'slack.post',
-      thread: THREAD,
-      taskId: null,
-      post: { kind: 'declined', reason: 'This reads as a thank-you.' },
-      replaceTs: '100.4',
-    });
-  });
-
-  test('that is work starts a task with the request, the asker and the thread as untrusted data', () => {
+  test('starts a task at once, as a request typed on Home would, with the asker and the thread as untrusted data', () => {
     const harness = createHarness();
     const taskId = startFromSlack(harness);
     const task = harness.task(taskId);
-    expect(task.request).toContain('Fix the export hang on large files.');
+    expect(task.request).toStartWith('can you take this?');
     expect(task.request).toContain('Asked by Christo in Slack: https://acme.slack.com/archives/C1/p1003');
     expect(task.request).toContain('Mia: Export hangs on big files.');
     expect(task.request).toContain('Christo (mentioning you): can you take this?');
@@ -102,25 +71,25 @@ describe('a mention in a thread no task holds', () => {
       ...THREAD,
       userId: 'U1',
       permalink: 'https://acme.slack.com/archives/C1/p1003',
-      statusTs: '100.4',
+      statusTs: null,
     });
     expect(task.activity.map((entry) => entry.text)).toContain('Started from a Slack thread');
     expect(harness.effectsOf('slack.status').map((effect) => effect.taskId)).toContain(taskId);
   });
 
-  test('goes to the default project for Slack, or the focus project when it is gone', () => {
+  test('with no words asks the task to do what the thread asks for', () => {
     const harness = createHarness();
-    const slack = writeProject(harness, 'Shinsa');
+    harness.send({ type: 'slack.mention', mention: mention({ text: '  ' }) });
+    const [task] = Object.values(harness.state.tasks);
+    expect(task?.request).toStartWith('Do what this Slack thread asks for.');
+  });
+
+  test('takes the project, the kind of task and the priority the way Home does: the focus project, then triage', () => {
+    const harness = createHarness();
     const focus = writeProject(harness, 'Site');
     harness.send({ type: 'focus.change', projectId: focus, until: null });
-    harness.send({ type: 'settings.change', patch: { slackProjectId: slack } });
-    const first = startFromSlack(harness);
-    expect(harness.task(first).projectId).toBe(slack);
-    harness.send({ type: 'project.remove', projectId: slack });
-    expect(harness.state.settings.slackProjectId).toBeNull();
-    harness.send({ type: 'task.cancel', taskId: first });
-    const second = startFromSlack(harness);
-    expect(harness.task(second).projectId).toBe(focus);
+    const taskId = startFromSlack(harness, { shape: 'answer' });
+    expect(harness.task(taskId).projectId).toBe(focus);
   });
 });
 
@@ -136,9 +105,8 @@ describe('a mention in a thread a task holds', () => {
     expect(harness.lastEffect('slack.post')).toMatchObject({
       taskId,
       post: { kind: 'forwarded' },
-      replaceTs: null,
     });
-    expect(harness.effectsOf('slack.evaluate')).toHaveLength(1);
+    expect(Object.keys(harness.state.tasks)).toEqual([taskId]);
   });
 
   test('while the task waits on you is kept for it and closes no gate, so you still decide in Shinsa', () => {
@@ -160,28 +128,12 @@ describe('a mention in a thread a task holds', () => {
     expect(harness.lastEffect('slack.post')).toMatchObject({ taskId, post: { kind: 'held' } });
   });
 
-  test('that arrives while another mention of the thread is evaluated still goes to the task', () => {
-    const harness = createHarness();
-    const taskId = startFromSlack(harness);
-    harness.send({
-      type: 'slack.record_evaluation',
-      mention: mention({ eventId: 'Ev2', text: '' }),
-      statusTs: '100.6',
-      evaluation: { kind: 'task', request: 'Something else.' },
-    });
-    expect(Object.keys(harness.state.tasks)).toEqual([taskId]);
-    expect(harness.lastEffect('slack.post')).toMatchObject({
-      post: { kind: 'forwarded' },
-      replaceTs: '100.6',
-    });
-  });
-
   test('starts a new task once the old one is closed', () => {
     const harness = createHarness();
     const first = startFromSlack(harness);
     harness.send({ type: 'task.cancel', taskId: first });
     harness.send({ type: 'slack.mention', mention: mention({ eventId: 'Ev2' }) });
-    expect(harness.lastEffect('slack.evaluate').mention.eventId).toBe('Ev2');
+    expect(Object.values(harness.state.tasks).filter((task) => task.slack)).toHaveLength(2);
   });
 });
 
@@ -247,22 +199,11 @@ describe('what a linked task posts back', () => {
 describe('the status message', () => {
   test('is recorded once posted, and the same message again records nothing', () => {
     const harness = createHarness();
-    const taskId = startFromSlack(harness, { statusTs: null });
+    const taskId = startFromSlack(harness);
     expect(harness.task(taskId).slack?.statusTs).toBeNull();
     harness.send({ type: 'slack.record_status', taskId, ts: '100.9' });
     expect(harness.task(taskId).slack?.statusTs).toBe('100.9');
     expect(harness.send({ type: 'slack.record_status', taskId, ts: '100.9' }).events).toEqual([]);
     expect(harness.send({ type: 'slack.record_status', taskId: 'gone', ts: '100.9' }).events).toEqual([]);
-  });
-});
-
-describe('the default project for Slack', () => {
-  test('must be a project that exists', () => {
-    const harness = createHarness();
-    expect(() => harness.send({ type: 'settings.change', patch: { slackProjectId: 'nope' } })).toThrow(
-      'That project no longer exists. Pick another default project for Slack.'
-    );
-    harness.send({ type: 'settings.change', patch: { slackProjectId: null } });
-    expect(harness.state.settings.slackProjectId).toBeNull();
   });
 });

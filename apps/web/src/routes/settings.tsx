@@ -72,14 +72,8 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <AttentionSettings settings={state.settings} />
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
-          {isRemoteBuild() ? (
-            <MachinesSettings />
-          ) : (
-            <>
-              <RemoteAccessSettings />
-              <SlackSettings state={state} />
-            </>
-          )}
+          {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
+          <SlackSettings />
           <UpdateSettings />
           <SetupSettings />
         </>

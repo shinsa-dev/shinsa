@@ -35,10 +35,12 @@ function describeAsker(mention: SlackMention) {
   return `Asked by ${mention.userName} in a Slack thread.`;
 }
 
-export function serializeSlackRequest(mention: SlackMention, request: string, nonce: string) {
+const BARE_MENTION_REQUEST = 'Do what this Slack thread asks for.';
+
+export function serializeSlackRequest(mention: SlackMention, nonce: string) {
   const tag = `slack-thread-${nonce}`;
   return [
-    request.trim(),
+    mention.text.trim() || BARE_MENTION_REQUEST,
     '',
     describeAsker(mention),
     '',

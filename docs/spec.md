@@ -378,9 +378,9 @@ the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashb
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`).
-Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread,
-decides whether it is work, and starts a task in the project for new tasks or messages the task the thread already
-has; the task's status, its questions, its plan, its review and its result come back in the thread, and every decision
+Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
+and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it, or
+messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread, and every decision
 is still made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
 own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
@@ -1020,9 +1020,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 ### Slack (2026-10-31)
 
 - **Tag the bot, from anywhere in Slack.** A mention outside a thread starts one; in a thread the bot reads all of it,
-  so a bare mention under a bug report is enough. It always answers in the thread: "Reading the thread…", then a task,
-  or the reason it started none (a quick evaluation decides, as messages are classified), or "Sent to" the task the
-  thread already has.
+  so a bare mention under a bug report is enough. It always answers in the thread: the new task's status message, or
+  "Sent to" the task the thread already has. A mention runs the same loop as Home's input with everything on Auto:
+  triage picks the project, the repository, the kind (a question is answered and ends there) and the priority.
 - **One shared bot, locked to its owner.** The app lives on app.shinsa.dev and relays each mention to the machine of
   the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
   gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds

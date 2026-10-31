@@ -20,11 +20,8 @@ import {
   SLACK_BLOCK_LIMITS,
   type SlackMessage,
   type SlackPlanTask,
-  type SlackStreamChunk,
   type SlackTaskStatus,
 } from './blocks.ts';
-import type { SlackMention } from './contract.ts';
-import type { SlackEvaluation } from './evaluation.ts';
 import { escapeSlackText, listSlackChunks, serializeSlackMrkdwn } from './mrkdwn.ts';
 import type { SlackPost } from './posts.ts';
 import type { SlackSessionStatus } from './relay.ts';
@@ -359,53 +356,6 @@ export function serializeSlackHeld(task: Task, taskUrl: string) {
   ]);
 }
 
-export function serializeSlackDeclined(reason: string) {
-  return createSlackMessage(`I didn't start a task. ${reason}`, [
-    createSlackSection(`I didn't start a task. ${escapeSlackText(reason)}`),
-    createSlackContext(['Mention me again with what you want done, and I will take it from there.']),
-  ]);
-}
-
-const READ_TASK = { id: 'read', title: 'Read the thread' } as const;
-
-const DECIDE_TASK = { id: 'decide', title: 'Decide whether there is work' } as const;
-
-export function listSlackReadingChunks(mention: SlackMention): SlackStreamChunk[] {
-  return [
-    { type: 'plan_update', title: 'Reading the thread' },
-    {
-      type: 'task_update',
-      ...READ_TASK,
-      status: 'in_progress',
-      details: createSlackRichText(describeCount(Math.max(mention.thread.length, 1), 'message')),
-    },
-    { type: 'task_update', ...DECIDE_TASK, status: 'in_progress' },
-  ];
-}
-
-function describeDecision(evaluation: SlackEvaluation) {
-  if (evaluation.kind === 'none') return evaluation.reason;
-  const [first] = evaluation.request.trim().split(/(?<=[.!?])\s/u);
-  return `Work: ${first ?? evaluation.request}`.slice(0, SLACK_BLOCK_LIMITS.taskTitle * 2);
-}
-
-export function listSlackDecidedChunks(evaluation: SlackEvaluation): SlackStreamChunk[] {
-  return [
-    { type: 'task_update', ...READ_TASK, status: 'complete' },
-    {
-      type: 'task_update',
-      ...DECIDE_TASK,
-      status: 'complete',
-      output: createSlackRichText(describeDecision(evaluation)),
-    },
-    { type: 'plan_update', title: evaluation.kind === 'task' ? 'Starting a task' : 'Nothing to start' },
-  ];
-}
-
-export function serializeSlackReading() {
-  return createSlackMessage('Reading the thread…', [createSlackContext(['👀 Reading the thread…'])]);
-}
-
 export function serializeSlackLinkPrompt(linkUrl: string) {
   return createSlackMessage('Connect Slack to your Shinsa to use me.', [
     createSlackSection(
@@ -427,11 +377,10 @@ export function serializeSlackOffline(machineName: string) {
 export function resolveSlackPostMessage(
   state: ShinsaState,
   post: SlackPost,
-  taskId: string | null,
+  taskId: string,
   taskUrl: string
 ): SlackMessage | null {
-  const task = taskId ? state.tasks[taskId] : undefined;
-  if (post.kind === 'declined') return serializeSlackDeclined(post.reason);
+  const task = state.tasks[taskId];
   if (!task) return null;
   if (post.kind === 'forwarded') return serializeSlackForwarded(task, taskUrl);
   if (post.kind === 'held') return serializeSlackHeld(task, taskUrl);

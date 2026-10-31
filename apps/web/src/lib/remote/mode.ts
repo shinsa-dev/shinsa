@@ -9,6 +9,12 @@ export const MACHINES_SECTION = 'Machines';
 
 export const MACHINE_ICON: IconName = 'IconMacbookRemote';
 
+export interface RemotePoint {
+  icon: IconName;
+  title: string;
+  detail: string;
+}
+
 const ENROLL_KEY = 'shinsa.remote.enroll';
 
 const ENROLL_ON_MACHINE_KEY = 'shinsa.remote.enroll.on-machine';

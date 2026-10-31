@@ -4,8 +4,6 @@ import { join } from 'node:path';
 import {
   createSlackForwardSignature,
   DomainError,
-  SLACK_EVALUATION_SCHEMA,
-  SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
   type SlackMention,
   type SlackThreadLink,
@@ -61,8 +59,6 @@ interface Setup {
   stub: ReturnType<typeof createStubEngine>;
   relay: RelayCall[];
   answers: Record<string, (body: Record<string, unknown> | null) => Response | Promise<Response>>;
-  asked: { system: string; prompt: string; schema: unknown }[];
-  answer: { value: unknown };
   waits: number[];
   clock: { now: number };
 }
@@ -98,10 +94,8 @@ function setUp(options: { enabled?: boolean; link?: SlackThreadLink | null } = {
   });
   const relay: RelayCall[] = [];
   let posted = 0;
-  let streamed = 0;
   const answers: Setup['answers'] = {
     '/__remote/slack/post': (body) => Response.json({ ts: body?.replaceTs ?? `200.${++posted}` }),
-    '/__remote/slack/stream': (body) => Response.json({ ts: body?.ts ?? `300.${++streamed}` }),
     '/__remote/slack/session': () => Response.json({ applied: true }),
     '/__remote/slack/links': () =>
       Response.json({
@@ -109,17 +103,11 @@ function setUp(options: { enabled?: boolean; link?: SlackThreadLink | null } = {
       }),
     '/__remote/slack/unlink': () => Response.json({ ok: true }),
   };
-  const asked: Setup['asked'] = [];
-  const answer = { value: { decision: 'task', text: 'Fix the hanging build.' } as unknown };
   const waits: number[] = [];
   const clock = { now: NOW };
   const slack = new Slack({
     engine: stub.engine,
     remote: createRemote({ enabled: options.enabled }),
-    ask: <T>(system: string, prompt: string, schema?: unknown) => {
-      asked.push({ system, prompt, schema });
-      return Promise.resolve(answer.value as T);
-    },
     fetch: async (input, init = {}) => {
       const url = new URL(input);
       const headers = new Headers(init.headers);
@@ -141,7 +129,7 @@ function setUp(options: { enabled?: boolean; link?: SlackThreadLink | null } = {
     },
     statusIntervalMs: 5000,
   });
-  return { slack, stub, relay, answers, asked, answer, waits, clock };
+  return { slack, stub, relay, answers, waits, clock };
 }
 
 function callsTo(relay: RelayCall[], path: string) {
@@ -202,103 +190,21 @@ describe('a mention app.shinsa.dev forwards', () => {
   });
 });
 
-describe('deciding whether a mention is work', () => {
-  test('streams its reading of the thread, asks the classifier, closes the stream with the decision and records it', async () => {
-    const { slack, stub, relay, asked } = setUp({ link: null });
-    await slack.evaluate({ kind: 'slack.evaluate', mention: MENTION }, context('slack-eval'));
-    const [start, stop] = callsTo(relay, 'stream');
-    expect(start).toMatchObject({
-      method: 'POST',
-      token: 'machine-token',
-      body: {
-        teamId: 'T1',
-        channelId: 'C1',
-        threadTs: '100.1',
-        recipientUserId: 'U1',
-        ts: null,
-        done: false,
-      },
-    });
-    expect(JSON.stringify(start?.body?.chunks)).toContain('Reading the thread');
-    expect(stop?.body).toMatchObject({ ts: '300.1', done: true });
-    expect(JSON.stringify(stop?.body?.chunks)).toContain('Starting a task');
-    expect(callsTo(relay, 'post')).toEqual([]);
-    expect(asked[0]?.system).toBe(SLACK_EVALUATION_SYSTEM);
-    expect(asked[0]?.schema).toBe(SLACK_EVALUATION_SCHEMA);
-    expect(asked[0]?.prompt).toContain('Christo (mentioning you): the build hangs');
-    expect(stub.dispatched).toEqual([
-      {
-        type: 'slack.record_evaluation',
-        mention: MENTION,
-        statusTs: '300.1',
-        evaluation: { kind: 'task', request: 'Fix the hanging build.' },
-      },
-    ]);
-    expect(stub.commandIds).toEqual(['slack-eval:slack.record_evaluation']);
-  });
-
-  test('where Slack will not stream it posts “Reading the thread” instead, and still decides', async () => {
-    const { slack, stub, relay, answers } = setUp({ link: null });
-    answers['/__remote/slack/stream'] = () =>
-      Response.json({ error: { code: 'slack_failed', message: 'missing_scope' } }, { status: 502 });
-    await slack.evaluate({ kind: 'slack.evaluate', mention: MENTION }, context());
-    expect(callsTo(relay, 'stream')).toHaveLength(1);
-    expect(JSON.stringify(callsTo(relay, 'post')[0]?.body?.message)).toContain('Reading the thread');
-    expect(stub.dispatched[0]).toMatchObject({ statusTs: '200.1' });
-    expect(warnings).toHaveBeenCalledWith('[Slack] The thread could not be streamed', expect.anything());
-  });
-
-  test('without an answer it declines and says why, and a refused reading post still decides', async () => {
-    const { slack, stub, answer, answers } = setUp({ link: null });
-    answer.value = null;
-    const refuse = () =>
-      Response.json({ error: { code: 'thread_not_forwarded', message: 'Never sent.' } }, { status: 403 });
-    answers['/__remote/slack/stream'] = refuse;
-    answers['/__remote/slack/post'] = refuse;
-    await slack.evaluate({ kind: 'slack.evaluate', mention: MENTION }, context());
-    expect(stub.dispatched[0]).toMatchObject({
-      statusTs: null,
-      evaluation: { kind: 'none', reason: expect.stringContaining('could not read the thread') },
-    });
-    expect(warnings).toHaveBeenCalledWith('[Slack] app.shinsa.dev refused the post', expect.anything());
-  });
-
+describe('a post the outbox asks for', () => {
   test('a relay that is down or overloaded throws, so the outbox tries again', async () => {
-    const { slack, answers, stub } = setUp({ link: null });
-    answers['/__remote/slack/stream'] = () => new Response('busy', { status: 503 });
+    const { slack, answers } = setUp();
+    const effect = {
+      kind: 'slack.post' as const,
+      thread: THREAD,
+      taskId: 't1',
+      post: { kind: 'forwarded' as const },
+    };
     answers['/__remote/slack/post'] = () => new Response('busy', { status: 503 });
-    const failed = slack.evaluate({ kind: 'slack.evaluate', mention: MENTION }, context());
+    const failed = slack.post(effect);
     await expect(failed).rejects.toBeInstanceOf(SlackRelayError);
     await expect(failed).rejects.toMatchObject({ code: 'relay_failed', isRetryable: true });
     answers['/__remote/slack/post'] = () => Promise.reject(new Error('offline'));
-    await expect(
-      slack.evaluate({ kind: 'slack.evaluate', mention: MENTION }, context())
-    ).rejects.toMatchObject({
-      code: 'unreachable',
-    });
-    expect(stub.dispatched).toEqual([]);
-  });
-
-  test('streams nothing while remote access is off', async () => {
-    const { slack, relay, stub } = setUp({ link: null, enabled: false });
-    await slack.evaluate({ kind: 'slack.evaluate', mention: MENTION }, context());
-    expect(relay).toEqual([]);
-    expect(stub.dispatched[0]).toMatchObject({ statusTs: null });
-  });
-});
-
-describe('a post the outbox asks for', () => {
-  test('a decline replaces the reading post with the reason', async () => {
-    const { slack, relay } = setUp();
-    await slack.post({
-      kind: 'slack.post',
-      thread: THREAD,
-      taskId: null,
-      post: { kind: 'declined', reason: 'This is a thank-you.' },
-      replaceTs: '200.9',
-    });
-    expect(relay[0]?.body).toMatchObject({ replaceTs: '200.9' });
-    expect(JSON.stringify(relay[0]?.body?.message)).toContain('This is a thank-you.');
+    await expect(slack.post(effect)).rejects.toMatchObject({ code: 'unreachable' });
   });
 
   test('a task’s post links to it on app.shinsa.dev', async () => {
@@ -308,7 +214,6 @@ describe('a post the outbox asks for', () => {
       thread: THREAD,
       taskId: 't1',
       post: { kind: 'forwarded' },
-      replaceTs: null,
     });
     expect(JSON.stringify(relay[0]?.body?.message)).toContain('https://app.test/tasks/t1');
   });
@@ -320,14 +225,12 @@ describe('a post the outbox asks for', () => {
       thread: THREAD,
       taskId: 'gone',
       post: { kind: 'result' },
-      replaceTs: null,
     });
     await slack.post({
       kind: 'slack.post',
       thread: THREAD,
       taskId: 't1',
       post: { kind: 'gate', gateId: 'missing' },
-      replaceTs: null,
     });
     expect(relay).toEqual([]);
     const off = setUp({ enabled: false });
@@ -336,7 +239,6 @@ describe('a post the outbox asks for', () => {
       thread: THREAD,
       taskId: 't1',
       post: { kind: 'forwarded' },
-      replaceTs: null,
     });
     expect(off.relay).toEqual([]);
     expect(warnings).toHaveBeenCalledWith(
@@ -397,7 +299,7 @@ describe('the status message of a task', () => {
       (callsTo(relay, 'post')[index]?.body?.message as { blocks: { type: string }[] } | undefined)?.blocks ??
       [];
     answers['/__remote/slack/post'] = (body) => {
-      const blocks = (body?.message as { blocks: { type: string }[] }).blocks;
+      const blocks = (body?.message as { blocks: { type: string }[] } | undefined)?.blocks ?? [];
       if (blocks.some((block) => block.type === 'plan'))
         return Response.json({ error: { code: 'slack_blocks_refused' } }, { status: 422 });
       return Response.json({ ts: body?.replaceTs ?? '200.1' });
@@ -483,13 +385,12 @@ describe('the status message of a task', () => {
 });
 
 describe('a mention through the real engine', () => {
-  test('is evaluated, starts a task tied to its thread, and posts the task’s status there', async () => {
+  test('starts a task tied to its thread at once, and posts the task’s status there', async () => {
     const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
     const posts: Record<string, unknown>[] = [];
     const slack = new Slack({
       engine,
       remote: createRemote(),
-      ask: <T>() => Promise.resolve({ decision: 'task', text: 'Fix the hanging build.' } as T),
       fetch: (_input, init = {}) => {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
         posts.push(body);
@@ -498,7 +399,6 @@ describe('a mention through the real engine', () => {
       statusIntervalMs: 0,
     });
     engine.onEffect((effect, effectContext) => {
-      if (effect.kind === 'slack.evaluate') return slack.evaluate(effect, effectContext);
       if (effect.kind === 'slack.status') return slack.status(effect, effectContext);
       if (effect.kind === 'slack.post') return slack.post(effect);
       return Promise.resolve();
@@ -507,14 +407,14 @@ describe('a mention through the real engine', () => {
     const body = JSON.stringify(MENTION);
     expect((await slack.handleEvents(await forward(body, Date.now()))).status).toBe(202);
     expect((await slack.handleEvents(await forward(body, Date.now()))).status).toBe(202);
-    await until('the status replaces the reading post', () =>
-      posts.some((post) => post.replaceTs === '200.1')
+    await until('the status message is posted and recorded', () =>
+      Object.values(engine.state.tasks).some((task) => task.slack?.statusTs === '200.1')
     );
     const tasks = Object.values(engine.state.tasks);
     expect(tasks).toHaveLength(1);
-    expect(tasks[0]?.request).toStartWith('Fix the hanging build.');
+    expect(tasks[0]?.request).toStartWith('the build hangs');
     expect(tasks[0]?.slack).toMatchObject({ ...THREAD, userId: 'U1', statusTs: '200.1' });
-    expect(JSON.stringify(posts[0])).toContain('Reading the thread');
+    expect(posts[0]).toMatchObject({ replaceTs: null });
     engine.stop();
     await engine.settle();
   });
@@ -528,7 +428,6 @@ describe('without injected clocks and networks', () => {
     const slack = new Slack({
       engine: stub.engine,
       remote: createRemote(),
-      ask: () => Promise.resolve(null),
       fetch: () => Promise.resolve(Response.json({ ts: '200.1' })),
       statusIntervalMs: 20,
     });
@@ -554,7 +453,7 @@ describe('without injected clocks and networks', () => {
   });
 });
 
-describe('Settings → Integrations → Slack', () => {
+describe('Settings → General → Slack', () => {
   test('shows the connect link and who is connected through app.shinsa.dev', async () => {
     const { slack, relay } = setUp();
     expect(await slack.snapshot()).toEqual({

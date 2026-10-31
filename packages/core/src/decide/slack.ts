@@ -19,62 +19,36 @@ function selectThreadTask(decider: Decider, thread: SlackThreadRef): Task | null
   );
 }
 
-function requestPost(
-  decider: Decider,
-  thread: SlackThreadRef,
-  taskId: string | null,
-  post: SlackPost,
-  replaceTs: string | null = null
-) {
-  decider.run({ kind: 'slack.post', thread, taskId, post, replaceTs });
+function requestPost(decider: Decider, thread: SlackThreadRef, taskId: string, post: SlackPost) {
+  decider.run({ kind: 'slack.post', thread, taskId, post });
 }
 
-function forwardMention(decider: Decider, task: Task, mention: SlackMention, replaceTs: string | null) {
+function forwardMention(decider: Decider, task: Task, mention: SlackMention) {
   const text = serializeSlackMessage(mention);
   const held = listOpenGates(decider.state, task.id).length > 0;
   if (held) recordHeldMessage(decider, task.id, text);
   else messageTask(decider, { type: 'task.message', taskId: task.id, text });
   const post: SlackPost = { kind: held ? 'held' : 'forwarded' };
-  requestPost(decider, resolveSlackMentionThread(mention), task.id, post, replaceTs);
-}
-
-function resolveSlackProject(decider: Decider) {
-  const projectId = decider.state.settings.slackProjectId ?? null;
-  return projectId && decider.state.projects[projectId] ? projectId : undefined;
+  requestPost(decider, resolveSlackMentionThread(mention), task.id, post);
 }
 
 export function receiveSlackMention(decider: Decider, command: CommandOf<'slack.mention'>) {
-  const linked = selectThreadTask(decider, resolveSlackMentionThread(command.mention));
-  if (linked) {
-    forwardMention(decider, linked, command.mention, null);
-    return;
-  }
-  decider.run({ kind: 'slack.evaluate', mention: command.mention });
-}
-
-export function recordSlackEvaluation(decider: Decider, command: CommandOf<'slack.record_evaluation'>) {
-  const { mention, statusTs, evaluation } = command;
+  const { mention } = command;
   const thread = resolveSlackMentionThread(mention);
   const linked = selectThreadTask(decider, thread);
   if (linked) {
-    forwardMention(decider, linked, mention, statusTs);
+    forwardMention(decider, linked, mention);
     return;
   }
-  if (evaluation.kind === 'none') {
-    requestPost(decider, thread, null, { kind: 'declined', reason: evaluation.reason }, statusTs);
-    return;
-  }
-  const projectId = resolveSlackProject(decider);
   const taskId = createTask(decider, {
     type: 'task.create',
-    request: serializeSlackRequest(mention, evaluation.request, decider.context.newId()),
+    request: serializeSlackRequest(mention, decider.context.newId()),
     repoId: null,
-    ...(projectId ? { projectId } : {}),
   });
   decider.emit({
     type: 'slack.thread_linked',
     taskId,
-    link: { ...thread, userId: mention.userId, permalink: mention.permalink, statusTs },
+    link: { ...thread, userId: mention.userId, permalink: mention.permalink, statusTs: null },
   });
 }
 

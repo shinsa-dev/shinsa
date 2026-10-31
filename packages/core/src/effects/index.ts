@@ -1,5 +1,4 @@
 import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
-import type { SlackMention } from '../slack/contract.ts';
 import type { SlackPost } from '../slack/posts.ts';
 
 export interface CheckToRun {
@@ -29,15 +28,8 @@ export type ShinsaEffect =
   | { kind: 'run.wake'; runId: string; generation: number }
   | { kind: 'delegation.steer'; runId: string; generation: number }
   | { kind: 'delegation.reply'; runId: string; questionId: string }
-  | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
-  | {
-      kind: 'slack.post';
-      thread: SlackThreadRef;
-      taskId: string | null;
-      post: SlackPost;
-      replaceTs: string | null;
-    };
+  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
@@ -64,7 +56,6 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'run.wake': 'process_bound',
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
-  'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
 };
@@ -99,8 +90,6 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.runId}:${effect.generation}`;
     case 'delegation.reply':
       return `${effect.kind}:${effect.runId}:${effect.questionId}`;
-    case 'slack.evaluate':
-      return `${effect.kind}:${effect.mention.eventId}`;
     case 'slack.status':
       return `${effect.kind}:${effect.taskId}:${seq}`;
     case 'slack.post':
@@ -145,8 +134,6 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `reply:${effect.runId}`;
     case 'pull_request.watch':
       return `side:${effect.taskId}`;
-    case 'slack.evaluate':
-      return `slack:${resolveSlackThreadKey(effect.mention)}`;
     case 'slack.post':
     case 'slack.status':
       return `slack:${resolveSlackThreadKey(effect.thread)}`;

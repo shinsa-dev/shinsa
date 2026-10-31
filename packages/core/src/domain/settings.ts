@@ -49,7 +49,6 @@ export interface Settings {
   watchdogMaxGapHours?: number;
   taskCapacity?: number | null;
   placementPolicies?: string[];
-  slackProjectId?: string | null;
 }
 
 export const SETTINGS_KEYS = [
@@ -77,7 +76,6 @@ export const SETTINGS_KEYS = [
   'watchdogMaxGapHours',
   'taskCapacity',
   'placementPolicies',
-  'slackProjectId',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -91,7 +89,6 @@ export const HUMAN_ONLY_SETTINGS = [
   'fastMode',
   'agentFastModes',
   'delegationLimit',
-  'slackProjectId',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -142,7 +139,6 @@ const DEFAULT_SETTINGS: Settings = {
   watchdogMaxGapHours: WATCHDOG_DEFAULTS.maxGapHours,
   taskCapacity: null,
   placementPolicies: [],
-  slackProjectId: null,
 };
 
 export function createSettings(): Settings {

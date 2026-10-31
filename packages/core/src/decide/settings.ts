@@ -270,9 +270,6 @@ export function removeProject(decider: Decider, command: CommandOf<'project.remo
     decider.emit({ type: 'focus.changed', focus: { projectId: null, until: null } });
     decider.run({ kind: 'briefing.request', projectId: null });
   }
-  if (decider.state.settings.slackProjectId === command.projectId) {
-    decider.emit({ type: 'settings.changed', settings: { ...decider.state.settings, slackProjectId: null } });
-  }
   removeProjectMemory(decider, command.projectId);
   removeProjectSuggestions(decider, command.projectId);
   decider.emit({ type: 'project.removed', projectId: command.projectId });
@@ -301,20 +298,9 @@ function dropStaleModels(previous: Settings, patch: Partial<Settings>): Settings
   };
 }
 
-function assertSlackProject(decider: Decider, patch: Partial<Settings>) {
-  const projectId = patch.slackProjectId;
-  if (projectId && !decider.state.projects[projectId]) {
-    throw new DomainError(
-      'project_not_found',
-      'That project no longer exists. Pick another default project for Slack.'
-    );
-  }
-}
-
 export function changeSettings(decider: Decider, command: CommandOf<'settings.change'>) {
   assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_SETTINGS, 'the settings');
   assertSettings(command.patch);
-  assertSlackProject(decider, command.patch);
   const settings = dropStaleModels(decider.state.settings, command.patch);
   if (isSameValue(settings, decider.state.settings)) return;
   decider.emit({ type: 'settings.changed', settings });

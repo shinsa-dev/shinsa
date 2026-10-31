@@ -47,17 +47,6 @@ export interface SlackPlanTask {
   details?: SlackRichText;
 }
 
-export type SlackStreamChunk =
-  | { type: 'plan_update'; title: string }
-  | {
-      type: 'task_update';
-      id: string;
-      title: string;
-      status: Exclude<SlackTaskStatus, 'pending'>;
-      details?: SlackRichText;
-      output?: SlackRichText;
-    };
-
 export type SlackBlock =
   | { type: 'header'; text: SlackPlainText }
   | { type: 'section'; text: SlackMrkdwn; accessory?: SlackButton }

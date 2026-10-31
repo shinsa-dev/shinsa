@@ -1,7 +1,7 @@
 import { readResponseFields } from './http.ts';
 import type { CloudWorld } from './world.ts';
 
-export const SLACK_API_ORIGIN = 'https://slack.com';
+const SLACK_API_ORIGIN = 'https://slack.com';
 
 export const SLACK_BOT_SCOPES = [
   'app_mentions:read',
