@@ -2951,6 +2951,14 @@ Only these, and they win over anything below:
     - **Fork into a new task** is a task action (the task menu, an All tasks row's menu, ⌘K) on every task but a cancelled
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
+42. **A toast is one short line** (since 2026-10-31; `lib/connection/commands.ts`, `scripts/lint-toast.ts`). A toast
+    says what just happened in a few words and never wraps at the toaster's 420px: "Request declined.", "Device
+    revoked.", "Kai Lane joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or
+    count as 12; no description line under it, and no consequence the screen already shows. The one second line is a
+    running update's progress, clipped to one line. An error toast is the server's message, so a `DomainError` a
+    command or request from the web can return is one short sentence too ("This task is finished."); what an agent
+    needs to recover goes in the messages only agents receive. The toaster clips a title or a line that is still too
+    long, such as a git failure, so nothing ever breaks onto a second line.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
@@ -2967,7 +2975,11 @@ and those transitions only. Besides that it bans comments (outside `packages/ui`
 global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
 `hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (32, 34, 37); a terminal's keys go through xterm.js's own
 handler on its element (37). It also rejects an ad hoc selection (`select-text`, `select-all`,
-`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39).
+`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39). It
+rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,
+`requestWithToast`, `sendCommandWithToast` and any function with a `done` or `sent` parameter, and every `done` or
+`sent` property, followed through constants, lookup tables, both branches of a choice and the functions that return
+it, in any file of the app; an inserted value counts as 12. A message from the server is not caught.
 
 ---
 
@@ -3246,12 +3258,11 @@ the string. Product copy is US English ("organization", "canceled", "color").
 
 ### Punctuation and characters
 
-- **No trailing period** on a single phrase: labels, tooltips, badges, toast
-  titles, and combobox and list empty rows ("No campaigns found"). A toast
-  title built from a server message's first sentence drops its period. A
-  description that is a full sentence (hints, dialog bodies, toast
-  descriptions, empty-state bodies, integration row and section
-  descriptions) ends with a period.
+- **No trailing period** on a single phrase: labels, tooltips, badges and
+  combobox and list empty rows ("No campaigns found"). A toast is one short
+  line with no description (Where Shinsa differs, 42). A description that is
+  a full sentence (hints, dialog bodies, empty-state bodies, integration row
+  and section descriptions) ends with a period.
 - **Failure toasts are "Couldn’t {verb} {object}"** ("Couldn’t save
   paywall"), never "Could not…", "Unable to…" or "Failed to…". Inline error
   prose says "couldn’t" too. Don't repeat "Try again." in prose right above a
