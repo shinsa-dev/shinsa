@@ -79,7 +79,7 @@ export function createFleetMember(
 
 export const TASK_CAPACITY_TITLE = 'Task capacity';
 
-export const NO_TASK_CAPACITY = 'none';
+const NO_TASK_CAPACITY = 'none';
 
 const TASK_CAPACITIES = [2, 4, 8, 16];
 

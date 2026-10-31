@@ -13,9 +13,9 @@ const ENROLL_KEY = 'shinsa.remote.enroll';
 
 const ENROLL_ON_MACHINE_KEY = 'shinsa.remote.enroll.on-machine';
 
-export const ON_MACHINE_PARAM = 'on';
+const ON_MACHINE_PARAM = 'on';
 
-export const ON_MACHINE_VALUE = 'machine';
+const ON_MACHINE_VALUE = 'machine';
 
 export const THIS_MACHINE = 'This machine';
 

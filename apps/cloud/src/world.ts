@@ -3,7 +3,7 @@ import type { CloudStore } from './database.ts';
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
-export const DEFAULT_MAX_INSTANCES = 50;
+const DEFAULT_MAX_INSTANCES = 50;
 
 export interface CloudConfig {
   origin: string;
