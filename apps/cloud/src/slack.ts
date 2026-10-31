@@ -1,5 +1,6 @@
 import {
   createSlackForwardSignature,
+  isSameSecret,
   listSlackMentionedUsers,
   parseSlackRelayPost,
   resolveSlackReadableText,
@@ -16,7 +17,7 @@ import {
   serializeSlackLinkPrompt,
   serializeSlackOffline,
 } from '@shinsa/core';
-import { createSlackSignature, decryptToken, isSameSecret } from './crypto.ts';
+import { createSlackSignature, decryptToken } from './crypto.ts';
 import type { InstanceRow, SlackWorkspaceRow } from './database.ts';
 import { TUNNEL_OFFLINE_STATUSES } from './hooks.ts';
 import { CloudError, readJsonFields, respondJson } from './http.ts';

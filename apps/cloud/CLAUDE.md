@@ -26,8 +26,8 @@ src/
 │                  the thread, and the machine's links, unlink and posts
 ├── slack-api.ts   The Slack Web API (requestSlack, SlackApiError) and the scopes
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
-├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, constant-time comparison, the bot
-│                  tokens sealed with AES-GCM, Slack's request signature
+├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, the bot tokens sealed with AES-GCM,
+│                  Slack's request signature (hex and constant-time comparison are core's serializeHex, isSameSecret)
 └── log.ts         recordFailure: the one console call (Workers Logs)
 migrations/        D1's schema (wrangler d1 migrations)
 slack-manifest.json The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts

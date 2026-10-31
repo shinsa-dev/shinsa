@@ -2502,6 +2502,7 @@ Slack ──event──► app.shinsa.dev /slack/events
                                              /api/slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, "Sent to the task"
+                  └─ a gate open ──► kept in its chat, "Kept for the task"
    otherwise ──► slack.evaluate: "Reading the thread…", the classifier
                   ├─ work ──► task.create + slack.thread_linked
                   └─ not  ──► the reason, in place of "Reading…"
@@ -2539,7 +2540,10 @@ Slack ──event──► app.shinsa.dev /slack/events
   open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
   write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
   as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
-  work a new round. The bot answers "Sent to …" in the thread. A mention in any other thread, a task's closed thread
+  work a new round. The bot answers "Sent to …" in the thread. While the task has a gate open (a question, a plan, a
+  review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
+  nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
+  waits on you in Shinsa" (`held`). A mention in any other thread, a task's closed thread
   included, is evaluated first.
 - **The evaluation** (`slack.evaluate`, `slack/evaluation.ts`): the bot posts "Reading the thread…" in the thread, then
   one quick call with the classifier triage uses reads the whole thread under a fixed system prompt
@@ -2571,7 +2575,7 @@ Slack ──event──► app.shinsa.dev /slack/events
   - a proposal: the change proposed and why;
   - the result: in full in Slack's mrkdwn (`serializeSlackMrkdwn`, links to Shinsa files as their text), cut at 12,000
     characters with a pointer to the rest (`SLACK_RESULT_LIMIT`).
-  Slack never closes a gate: the posts say where to decide, and a reply in the thread is a message to the task.
+  Slack never closes a gate: the posts say where to decide, and a mention while a gate is open is kept, not routed.
 - **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
   that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`

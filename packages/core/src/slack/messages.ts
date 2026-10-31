@@ -140,7 +140,7 @@ function serializeQuestion(task: Task, gate: Gate, taskUrl: string) {
       ? [createSlackSection(choices.map((choice) => describeChoice(choice, gate.recommendation)).join('\n'))]
       : []),
     createSlackActions([createSlackButton('Answer in Shinsa', taskUrl, true)]),
-    createFooter(task, 'Or mention me in this thread with your answer.'),
+    createFooter(task, 'Answer it in Shinsa. A mention here is kept for the task, not taken as the answer.'),
   ]);
 }
 
@@ -174,7 +174,7 @@ function serializePlan(task: Task, taskUrl: string) {
     ...(phases.length > 0 ? [createSlackSection(phases.join('\n'))] : []),
     ...(facts ? [createSlackContext([facts])] : []),
     createSlackActions([createSlackButton('Review the plan', taskUrl, true)]),
-    createFooter(task, 'Approve it in Shinsa. Mention me here to ask for changes.'),
+    createFooter(task, 'Approve it or ask for changes in Shinsa.'),
   ]);
 }
 
@@ -233,7 +233,7 @@ function serializeReview(task: Task, taskUrl: string) {
     createSlackActions([createSlackButton('Review in Shinsa', taskUrl, true)]),
     createFooter(
       task,
-      [pullRequest, 'Approve it in Shinsa. Mention me here to ask for changes.'].filter(Boolean).join('  ·  ')
+      [pullRequest, 'Approve it or ask for changes in Shinsa.'].filter(Boolean).join('  ·  ')
     ),
   ]);
 }
@@ -247,7 +247,7 @@ function serializeProposal(task: Task, taskUrl: string) {
     ),
     ...(proposal?.why ? [createSlackContext([`_Why:_ ${escapeSlackText(proposal.why)}`])] : []),
     createSlackActions([createSlackButton('Decide in Shinsa', taskUrl, true)]),
-    createFooter(task, 'Approve it in Shinsa. Mention me here to say what to do instead.'),
+    createFooter(task, 'Decide in Shinsa.'),
   ]);
 }
 
@@ -294,6 +294,14 @@ export function serializeSlackForwarded(task: Task, taskUrl: string) {
   ]);
 }
 
+export function serializeSlackHeld(task: Task, taskUrl: string) {
+  return createSlackMessage(`Kept for ${describeTask(task)}. It waits on you in Shinsa.`, [
+    createSlackContext([
+      `📌 Kept for ${describeTaskLink(task, taskUrl)}. It waits on you in Shinsa, so nothing changes until you decide there.`,
+    ]),
+  ]);
+}
+
 export function serializeSlackDeclined(reason: string) {
   return createSlackMessage(`I didn't start a task. ${reason}`, [
     createSlackSection(`I didn't start a task. ${escapeSlackText(reason)}`),
@@ -333,6 +341,7 @@ export function resolveSlackPostMessage(
   if (post.kind === 'declined') return serializeSlackDeclined(post.reason);
   if (!task) return null;
   if (post.kind === 'forwarded') return serializeSlackForwarded(task, taskUrl);
+  if (post.kind === 'held') return serializeSlackHeld(task, taskUrl);
   if (post.kind === 'result') return serializeSlackResult(task, taskUrl);
   const gate = state.gates[post.gateId];
   return gate ? serializeSlackGate(task, gate, taskUrl) : null;

@@ -2,7 +2,7 @@
   "display_information": {
     "name": "Shinsa",
     "description": "Mention Shinsa in a thread and your own Shinsa takes the work.",
-    "long_description": "Mention @Shinsa in a channel or a thread with what you want done, or under a bug report. Shinsa reads the thread on your own machine, decides whether there is work in it, and starts a task there. The task's status, its questions, its plan, its review and its result come back in the thread, and you decide in Shinsa. Each person connects Slack to their own Shinsa, so the bot only ever does work for the person who mentioned it.",
+    "long_description": "Mention @Shinsa in a channel or a thread with what you want done, or under a bug report. Shinsa's relay at app.shinsa.dev reads the thread and passes it to your own machine, without storing the text; your machine decides whether there is work in it and starts a task there. The task's status, its questions, its plan, its review and its result come back in the thread, and you decide in Shinsa. Each person connects Slack to their own Shinsa, so the bot only ever does work for the person who mentioned it.",
     "background_color": "#1d1c1a"
   },
   "features": {

@@ -12,6 +12,7 @@ import {
   serializeSlackDeclined,
   serializeSlackForwarded,
   serializeSlackGate,
+  serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
   serializeSlackReading,
@@ -162,7 +163,7 @@ describe('the posts each gate makes', () => {
     expect(text).toContain('Question\n*Which format should the export use?*');
     expect(text).toContain('The *old* one is slow.');
     expect(text).toContain('• CSV\n• JSON  _recommended_');
-    expect(text).toContain('Or mention me in this thread with your answer.');
+    expect(text).toContain('A mention here is kept for the task, not taken as the answer.');
     expect(listButtons(message ?? never())).toEqual([
       expect.objectContaining({
         text: expect.objectContaining({ text: 'Answer in Shinsa' }),
@@ -232,7 +233,7 @@ describe('the posts each gate makes', () => {
     expect(text).toContain('1. *Read in chunks*  Use a stream.\n2. *Test it*  A large file.');
     expect(text).toContain('1 file · 1 check · 1 question');
     expect(text).toContain('Review the plan');
-    expect(text).toContain('Approve it in Shinsa. Mention me here to ask for changes.');
+    expect(text).toContain('Approve it or ask for changes in Shinsa.');
   });
 
   test('a review reads like the pull request description: summary, approach, checks and risks', () => {
@@ -365,11 +366,14 @@ describe('the result', () => {
 });
 
 describe("the bot's own replies", () => {
-  test('forwarded, declined, reading, link and offline', () => {
+  test('forwarded, held, declined, reading, link and offline', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness, { request: 'Fix it' }));
     expect(readText(serializeSlackForwarded(task, URL))).toBe(
       `↪️ Sent to <${URL}|Fix it>. It reads your message next.`
+    );
+    expect(readText(serializeSlackHeld(task, URL))).toBe(
+      `📌 Kept for <${URL}|Fix it>. It waits on you in Shinsa, so nothing changes until you decide there.`
     );
     expect(readText(serializeSlackDeclined('This reads as a <thanks>.'))).toBe(
       "I didn't start a task. This reads as a &lt;thanks&gt;. \nMention me again with what you want done, and I will take it from there."
@@ -400,6 +404,7 @@ describe('a post from the outbox', () => {
     ).toContain('Go?');
     expect(resolveSlackPostMessage(state, { kind: 'gate', gateId: 'gone' }, taskId, URL)).toBeNull();
     expect(resolveSlackPostMessage(state, { kind: 'forwarded' }, taskId, URL)?.text).toStartWith('Sent to');
+    expect(resolveSlackPostMessage(state, { kind: 'held' }, taskId, URL)?.text).toStartWith('Kept for');
     expect(resolveSlackPostMessage(state, { kind: 'result' }, taskId, URL)).toBeNull();
     expect(resolveSlackPostMessage(state, { kind: 'forwarded' }, 'gone', URL)).toBeNull();
     expect(

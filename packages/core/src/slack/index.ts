@@ -35,6 +35,7 @@ export {
   serializeSlackDeclined,
   serializeSlackForwarded,
   serializeSlackGate,
+  serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
   serializeSlackReading,

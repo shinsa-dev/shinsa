@@ -1,5 +1,6 @@
 import {
   APP_IDENTITY,
+  isSameSecret,
   type MachineCredentials,
   type PairApproveResponse,
   type PairPollResponse,
@@ -11,7 +12,7 @@ import {
   resolveTunnelHost,
 } from '@shinsa/core';
 import { createCloudflare } from './cloudflare.ts';
-import { createClaimCode, createInstanceId, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
+import { createClaimCode, createInstanceId, createToken, resolveTokenHash } from './crypto.ts';
 import type { PairSessionRow } from './database.ts';
 import { assertSameOrigin, CloudError, readJsonFields, readText, respondJson } from './http.ts';
 import { findSessionUser } from './session.ts';

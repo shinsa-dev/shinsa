@@ -1,5 +1,5 @@
-import { REMOTE_PATHS, resolveSlackLinkedPath, SLACK_RELAY_PATHS } from '@shinsa/core';
-import { createToken, encryptToken, isSameSecret } from './crypto.ts';
+import { isSameSecret, REMOTE_PATHS, resolveSlackLinkedPath, SLACK_RELAY_PATHS } from '@shinsa/core';
+import { createToken, encryptToken } from './crypto.ts';
 import type { InstanceRow, UserRow } from './database.ts';
 import { CloudError, readCookie, serializeCookie } from './http.ts';
 import { findOwnInstance } from './instances.ts';

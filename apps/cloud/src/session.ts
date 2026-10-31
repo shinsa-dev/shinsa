@@ -1,5 +1,5 @@
-import { REMOTE_PATHS, type RemoteSession } from '@shinsa/core';
-import { createCodeChallenge, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
+import { isSameSecret, REMOTE_PATHS, type RemoteSession } from '@shinsa/core';
+import { createCodeChallenge, createToken, resolveTokenHash } from './crypto.ts';
 import type { UserRow } from './database.ts';
 import {
   assertSameOrigin,

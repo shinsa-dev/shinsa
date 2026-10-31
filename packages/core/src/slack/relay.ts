@@ -1,4 +1,4 @@
-import { encodeText } from '../remote/bytes.ts';
+import { encodeText, isSameSecret, serializeHex } from '../remote/bytes.ts';
 import { SLACK_BLOCK_LIMITS } from './blocks.ts';
 import { SLACK_LIMITS } from './contract.ts';
 
@@ -69,18 +69,6 @@ function isFields(value: unknown): value is Fields {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function serializeHex(bytes: Uint8Array) {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function isSameText(left: string, right: string) {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index++)
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
-}
-
 async function signForward(connectKey: string, timestamp: string, body: string) {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -105,7 +93,7 @@ export async function verifySlackForwardSignature(
 ) {
   if (!headers.signature || !headers.timestamp || !/^\d{1,16}$/.test(headers.timestamp)) return false;
   if (Math.abs(now - Number(headers.timestamp)) > SLACK_FORWARD_WINDOW_MS) return false;
-  return isSameText(await signForward(connectKey, headers.timestamp, body), headers.signature);
+  return isSameSecret(await signForward(connectKey, headers.timestamp, body), headers.signature);
 }
 
 function readId(fields: Fields, key: string) {

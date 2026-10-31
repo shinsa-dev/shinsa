@@ -1,6 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { REMOTE_PATHS } from '@shinsa/core';
-import { isSameSecret } from '../src/crypto.ts';
 import { readCookie } from '../src/http.ts';
 import { resolveCloudConfig } from '../src/world.ts';
 import { createHarness } from './harness.ts';
@@ -69,12 +68,6 @@ describe('the router', () => {
 });
 
 describe('the helpers', () => {
-  test('compares secrets in full', () => {
-    expect(isSameSecret('abc', 'abc')).toBe(true);
-    expect(isSameSecret('abc', 'abd')).toBe(false);
-    expect(isSameSecret('abc', 'ab')).toBe(false);
-  });
-
   test('reads one cookie among many', () => {
     const request = new Request('https://x', { headers: { cookie: 'a=1; b=two=2' } });
     expect(readCookie(request, 'b')).toBe('two=2');

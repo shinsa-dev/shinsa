@@ -6,8 +6,9 @@ import type { ShinsaEventInput } from '../events/index.ts';
 import { resolveSlackMentionThread, type SlackMention } from '../slack/contract.ts';
 import { SLACK_POSTED_GATES, type SlackPost } from '../slack/posts.ts';
 import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
+import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
-import { messageTask } from './messages.ts';
+import { messageTask, recordHeldMessage } from './messages.ts';
 import { createTask } from './tasks.ts';
 
 function selectThreadTask(decider: Decider, thread: SlackThreadRef): Task | null {
@@ -29,8 +30,12 @@ function requestPost(
 }
 
 function forwardMention(decider: Decider, task: Task, mention: SlackMention, replaceTs: string | null) {
-  messageTask(decider, { type: 'task.message', taskId: task.id, text: serializeSlackMessage(mention) });
-  requestPost(decider, resolveSlackMentionThread(mention), task.id, { kind: 'forwarded' }, replaceTs);
+  const text = serializeSlackMessage(mention);
+  const held = listOpenGates(decider.state, task.id).length > 0;
+  if (held) recordHeldMessage(decider, task.id, text);
+  else messageTask(decider, { type: 'task.message', taskId: task.id, text });
+  const post: SlackPost = { kind: held ? 'held' : 'forwarded' };
+  requestPost(decider, resolveSlackMentionThread(mention), task.id, post, replaceTs);
 }
 
 function resolveSlackProject(decider: Decider) {

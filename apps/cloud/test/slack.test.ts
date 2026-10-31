@@ -56,6 +56,8 @@ function createFakeSlack(harness: Harness): FakeSlack {
       authed_user: { id: 'U1' },
     }),
     'users.info': (body) => {
+      if (body.user === 'U5') return { ok: true, user: { name: 'sam', profile: { real_name: 'Sam Real' } } };
+      if (body.user === 'U6') return { ok: true, user: { name: 'kit', profile: {} } };
       const name = NAMES[String(body.user)];
       return name
         ? { ok: true, user: { name: 'x', profile: { display_name: name } } }
@@ -544,6 +546,8 @@ describe('a mention from someone', () => {
         { ts: '90.3', bot_id: 'BY', username: 'Alerts', text: 'Disk full.' },
         { ts: '90.4', bot_id: 'BZ', text: 'beep' },
         { ts: '90.5', user: 'U7', text: 'same here' },
+        { ts: '90.51', user: 'U5', text: 'me too' },
+        { ts: '90.52', user: 'U6', text: 'and me' },
         { ts: '90.6', user: 'B0T', text: 'Earlier reply' },
         { ts: '90.7' },
         'noise',
@@ -561,6 +565,8 @@ describe('a mention from someone', () => {
       ['Alerts', 'Disk full.', true],
       ['Bot', 'beep', true],
       ['U7', 'same here', false],
+      ['Sam Real', 'me too', false],
+      ['kit', 'and me', false],
       ['B0T', 'Earlier reply', true],
       ['Christo', 'the build hangs', false],
     ]);

@@ -141,6 +141,25 @@ describe('a mention in a thread a task holds', () => {
     expect(harness.effectsOf('slack.evaluate')).toHaveLength(1);
   });
 
+  test('while the task waits on you is kept for it and closes no gate, so you still decide in Shinsa', () => {
+    const harness = createHarness();
+    const taskId = startFromSlack(harness);
+    readyWorktree(harness, taskId);
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Which file format?',
+      context: null,
+    });
+    harness.send({ type: 'slack.mention', mention: mention({ eventId: 'Ev2', text: 'CSV, go' }) });
+    expect(harness.state.gates.q1?.status).toBe('open');
+    expect(harness.task(taskId).activity.some((entry) => (entry.detail ?? '').includes('CSV, go'))).toBe(
+      true
+    );
+    expect(harness.lastEffect('slack.post')).toMatchObject({ taskId, post: { kind: 'held' } });
+  });
+
   test('that arrives while another mention of the thread is evaluated still goes to the task', () => {
     const harness = createHarness();
     const taskId = startFromSlack(harness);
