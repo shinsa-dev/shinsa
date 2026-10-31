@@ -2,11 +2,13 @@ import { join } from 'node:path';
 import {
   DomainError,
   MERGE_METHODS,
+  type OnboardingCheck,
   type OnboardingStatus,
   PLAN_APPROVALS,
   type PlanApproval,
   type RootSuggestions,
   type Settings,
+  selectWelcomeTask,
 } from '@shinsa/core';
 import type { ModelSource } from '../agents/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
@@ -18,7 +20,7 @@ import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
 import { refreshInstallFolders } from '../shell/login.ts';
 import type { AccountSource } from './accounts.ts';
-import { OnboardingSetup } from './flow.ts';
+import { type FlowContext, OnboardingSetup } from './flow.ts';
 import { type InstallTerminals, openInstallTerminal } from './install.ts';
 import { type CommandRunner, isBunUsed, resolvePrerequisites } from './prerequisites.ts';
 import {
@@ -27,9 +29,11 @@ import {
   listProjectSuggestions,
   type ProjectSetup,
 } from './projects.ts';
+import type { ProjectRevision } from './revise.ts';
 import { requestRevision } from './revise.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
+import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';
 
 export type { AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
@@ -96,25 +100,13 @@ export class Onboarding {
       complete: async () => {
         await this.complete();
       },
+      requestHelp: (checks) => this.#requestHelp(checks),
+      selectWelcome: () => selectWelcomeTask(context.engine.state.tasks)?.id ?? null,
       reviseProjects: async (revision, text, choices) => {
         const suggestions = await listProjectSuggestions(this.#projects, context.roots.configured, revision);
         return requestRevision(context.ask, suggestions, revision, text, choices);
       },
-      resolveContext: (revision) => ({
-        userHome: context.config.userHome,
-        settings: context.engine.state.settings,
-        roots: context.roots.configured,
-        projectCount: Object.keys(context.engine.state.projects).length,
-        suggestRoots: () => this.listSuggestions(false),
-        suggestProjects: () => listProjectSuggestions(this.#projects, context.roots.configured, revision),
-        listFiledProjects: () => listFiledProjects(context.engine, context.roots.configured),
-        listModels: () => context.models.listModels(),
-        listAccounts: context.accounts,
-        checkPrerequisites: () => this.resolvePrerequisites(),
-        save: (patch, commandId) => this.#saveAnswer(patch, commandId),
-        createProjects: (choices, commandId) =>
-          createChosenProjects(this.#projects, context.roots.configured, choices, commandId, revision),
-      }),
+      resolveContext: (revision) => this.#resolveContext(revision),
     });
   }
 
@@ -166,13 +158,38 @@ export class Onboarding {
     return this.resolveStatus();
   }
 
-  complete() {
+  async complete() {
     const { store } = this.#context;
     if (store.config.roots.length === 0) {
       throw new DomainError('roots_required', 'Choose the folders that hold your repositories first.');
     }
     if (store.config.onboardedAt === null) store.update({ onboardedAt: Date.now() });
+    await this.#recordWelcome();
     return this.resolveStatus();
+  }
+
+  async #recordWelcome() {
+    const { engine } = this.#context;
+    if (engine.readOnly || selectWelcomeTask(engine.state.tasks)) return;
+    const context = this.#resolveContext(null);
+    const steps = ONBOARDING_STEPS.filter((step) => step.id !== 'prerequisites');
+    const lines = await Promise.all(
+      steps.map(async (step) => ({ label: step.label, summary: await step.summarize(context) }))
+    );
+    const report = await this.resolvePrerequisites();
+    await engine.dispatch({ type: 'onboarding.welcome', body: resolveWelcomeBody(lines, report.checks) });
+  }
+
+  async #requestHelp(checks: OnboardingCheck[]) {
+    const events = await this.#context.engine.dispatch({
+      type: 'task.create',
+      request: resolveHelpRequest(checks),
+      repoId: null,
+      projectId: null,
+      mode: 'ask',
+    });
+    const created = events.find((event) => event.type === 'task.created');
+    return created?.taskId ?? null;
   }
 
   async openPrivacySettings() {
@@ -193,6 +210,25 @@ export class Onboarding {
       throw new DomainError('body_invalid', 'Send “id” as the check to fix, such as gh.');
     if (!terminals) throw new DomainError('terminals_off', 'Terminals are off, so run the command yourself.');
     return { terminal: openInstallTerminal(terminals, fields.id, config.userHome) };
+  }
+
+  #resolveContext(revision: ProjectRevision | null): FlowContext {
+    const context = this.#context;
+    return {
+      userHome: context.config.userHome,
+      settings: context.engine.state.settings,
+      roots: context.roots.configured,
+      projectCount: Object.keys(context.engine.state.projects).length,
+      suggestRoots: () => this.listSuggestions(false),
+      suggestProjects: () => listProjectSuggestions(this.#projects, context.roots.configured, revision),
+      listFiledProjects: () => listFiledProjects(context.engine, context.roots.configured),
+      listModels: () => context.models.listModels(),
+      listAccounts: context.accounts,
+      checkPrerequisites: () => this.resolvePrerequisites(),
+      save: (patch, commandId) => this.#saveAnswer(patch, commandId),
+      createProjects: (choices, commandId) =>
+        createChosenProjects(this.#projects, context.roots.configured, choices, commandId, revision),
+    };
   }
 
   async #saveAnswer(patch: SetupPatch, commandId: string) {

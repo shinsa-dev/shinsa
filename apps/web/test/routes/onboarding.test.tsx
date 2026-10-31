@@ -389,7 +389,7 @@ describe('the setup page', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: /Finish anyway/ }));
     expect(await screen.findByRole('heading', { name: 'Shinsa is ready' })).toBeTruthy();
-    expect(screen.getByText('Accounts answer')).toBeTruthy();
+    expect(screen.getByText('Claude answer')).toBeTruthy();
     expect(location.pathname).toBe('/onboarding');
     fireEvent.click(screen.getByRole('button', { name: /Go to Home/ }));
     expect(location.pathname).toBe('/');

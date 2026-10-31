@@ -21,7 +21,7 @@ const LABELS: [OnboardingStepId, string, string][] = [
   ['roots', 'Folders', '~/Developer'],
   ['projects', 'Projects', '6 projects'],
   ['defaults', 'Defaults', 'Opus 5.5 · Squash · Plan first'],
-  ['accounts', 'Accounts', '2 accounts'],
+  ['accounts', 'Claude', '2 accounts'],
   ['prerequisites', 'Tools', ''],
 ];
 
@@ -40,6 +40,7 @@ function createSampleStep(
     checks: [],
     ready: true,
     problem: null,
+    help: null,
     submitLabel: 'Continue',
     ...step,
   };
@@ -57,6 +58,7 @@ function createSampleFlow(step: OnboardingStep | null, revisit = false): Onboard
     index,
     step,
     revisit,
+    welcome: null,
   };
 }
 

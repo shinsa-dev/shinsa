@@ -29,6 +29,11 @@ const ALL_OK: CommandRunner = (command) =>
     timedOut: false,
   });
 
+const NO_CLAUDE: CommandRunner = (command) =>
+  command[0] === 'claude'
+    ? Promise.resolve({ ok: false, code: 127, stdout: '', stderr: 'claude: not found', timedOut: false })
+    : ALL_OK(command, '');
+
 const NO_BUN: CommandRunner = (command) =>
   command[0] === 'bun'
     ? Promise.resolve({ ok: false, code: 127, stdout: '', stderr: 'bun: not found', timedOut: false })
@@ -121,7 +126,7 @@ describe('the setup steps', () => {
       ['roots', 'Folders', true],
       ['projects', 'Projects', false],
       ['defaults', 'Defaults', false],
-      ['accounts', 'Accounts', false],
+      ['accounts', 'Claude', false],
       ['prerequisites', 'Tools', false],
     ]);
     expect(flow.step).toMatchObject({
@@ -319,7 +324,82 @@ describe('the accounts step', () => {
   });
 });
 
+describe('the Claude step', () => {
+  test('shows Claude Code as installed and the accounts agents work under', async () => {
+    const flow = await reachAccounts(setup());
+    expect(flow.step).toMatchObject({ id: 'accounts', title: 'Sign in with Claude', ready: true });
+    expect(flow.step?.description).toStartWith('Agents work under these Claude accounts.');
+    expect(flow.step?.checks.map((check) => [check.id, check.ok])).toEqual([['claude', true]]);
+  });
+
+  test('asks you to sign in when no account is signed in', async () => {
+    const flow = await reachAccounts(setup({ accounts: [] }));
+    expect(flow.step?.description).toStartWith('Sign in to the Claude account agents work under.');
+  });
+
+  test('asks you to install Claude Code first when it is missing', async () => {
+    const flow = await reachAccounts(setup({ run: NO_CLAUDE }));
+    expect(flow.step).toMatchObject({ ready: false });
+    expect(flow.step?.description).toStartWith('Agents run on Claude Code. Install it here');
+    expect(flow.step?.checks[0]).toMatchObject({
+      id: 'claude',
+      ok: false,
+      command: 'curl -fsSL https://claude.ai/install.sh | bash',
+    });
+  });
+});
+
+describe('asking for help', () => {
+  test('starts a question task with the checks that fail, and keeps it with the run', async () => {
+    const world = setup({ run: NO_BUN });
+    await reachAccounts(world);
+    await answer(world.onboarding, 'accounts', 'continue');
+    const flow = await world.onboarding.setup.reply({ type: 'help', stepId: 'prerequisites' });
+    const taskId = flow.step?.help as string;
+    const task = world.engine.state.tasks[taskId];
+    expect(task).toMatchObject({ mode: 'ask', repoId: null, projectId: null });
+    expect(task?.request).toContain(
+      "- Bun: Not installed. Shinsa's fix is `curl -fsSL https://bun.sh/install | bash`."
+    );
+    expect(task?.request).not.toContain('Git');
+    expect((await world.open().onboarding.setup.resolve()).step?.help).toBe(taskId);
+  });
+
+  test('refuses when every check passes, or for a step that is not on screen', async () => {
+    const world = setup();
+    await reachAccounts(world);
+    await expect(world.onboarding.setup.reply({ type: 'help', stepId: 'accounts' })).rejects.toMatchObject({
+      code: 'help_unneeded',
+    });
+    await expect(world.onboarding.setup.reply({ type: 'help', stepId: 'roots' })).rejects.toMatchObject({
+      code: 'step_stale',
+    });
+    expect(Object.keys(world.engine.state.tasks)).toEqual([]);
+  });
+});
+
 describe('finishing', () => {
+  test('records one welcome task with what you set up, and lands on it', async () => {
+    const world = setup({ run: NO_BUN });
+    expect((await world.onboarding.setup.resolve()).welcome).toBeNull();
+    await reachAccounts(world);
+    await answer(world.onboarding, 'accounts', 'continue');
+    const done = await answer(world.onboarding, 'prerequisites', 'continue');
+    const welcome = world.engine.state.tasks[done.welcome as string];
+    expect(welcome).toMatchObject({ title: 'Welcome to Shinsa', stage: 'done' });
+    const body = welcome?.result?.body ?? '';
+    expect(body).toStartWith('Welcome to Shinsa. Setup is done');
+    expect(body).toContain('- **Folders:** ');
+    expect(body).toContain('- **Projects:** None yet');
+    expect(body).toContain('- **Defaults:** Opus 5.5 · Squash · Large plans first');
+    expect(body).toContain('- **Claude:** 1 account');
+    expect(body).toContain('- **Tools:** Still missing Bun.');
+    await world.onboarding.setup.reply({ type: 'restart' });
+    await openStep(world.onboarding, 'prerequisites');
+    expect((await answer(world.onboarding, 'prerequisites', 'continue')).welcome).toBe(done.welcome);
+    expect(Object.keys(world.engine.state.tasks)).toEqual([done.welcome as string]);
+  });
+
   test('checks the tools, finishes setup and stays finished while setup is done', async () => {
     const world = setup({ run: NO_BUN });
     await reachAccounts(world);
@@ -402,7 +482,7 @@ describe('the saved setup', () => {
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
     expect(warn).toHaveBeenCalledTimes(3);
     warn.mockRestore();
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 5, index: 0 });
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 6, index: 0, help: null });
   });
 
   test('in inspect mode it shows the first step and writes nothing', async () => {

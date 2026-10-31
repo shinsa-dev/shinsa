@@ -62,7 +62,7 @@ describe('the steps', () => {
       { value: 'roots', label: 'Folders', hint: 'Folders answer', disabled: false },
       { value: 'projects', label: 'Projects', hint: 'Projects answer', disabled: false },
       { value: 'defaults', label: 'Defaults', hint: undefined, disabled: false },
-      { value: 'accounts', label: 'Accounts', hint: undefined, disabled: true },
+      { value: 'accounts', label: 'Claude', hint: undefined, disabled: true },
     ]);
   });
 
