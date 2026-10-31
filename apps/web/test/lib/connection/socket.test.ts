@@ -12,12 +12,17 @@ import { act, renderHook } from '@testing-library/react';
 import {
   Connection,
   connection,
+  replaceConnection,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
   useConnection,
   useDesktopConnected,
+  useMachine,
+  useMachines,
   useTranscript,
+  useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
+import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -489,6 +494,24 @@ describe('Connection terminals', () => {
   });
 });
 
+describe('Connection remote access', () => {
+  it('keeps the remote access the server pushes, tells its listeners and forgets it on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeRemote(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectRemote()).toBeNull();
+    const remote = createRemoteSnapshot();
+    latest().receive({ type: 'remote', remote });
+    expect(subject.selectRemote()).toEqual(remote);
+    expect(listener).toHaveBeenCalledTimes(1);
+    subject.reset();
+    expect(subject.selectRemote()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('Connection transcripts', () => {
   it('subscribes to a run once however many watchers it has', () => {
     const { subject, latest } = setup();
@@ -693,10 +716,36 @@ describe('the shared connection', () => {
     timeout.mockRestore();
   });
 
+  it('uses the connection a remote page put in place, with the machine of each task, until it is taken away', () => {
+    const local = connection;
+    const machine = { id: 'm2', name: 'Laptop', current: false };
+    const machines = [
+      { id: 'm2', name: 'Laptop', current: false, state: { tasks: {}, projects: {}, settings: {} } },
+    ];
+    expect(renderHook(() => useMachines()).result.current).toEqual([]);
+    expect(renderHook(() => useUnreachableMachines()).result.current).toEqual([]);
+    const unreachable = [{ id: 'm3', name: 'Build box' }];
+    const fleet = {
+      ...local,
+      listUnreachableMachines: () => unreachable,
+      selectMachine: (id: string) => (id === 'task-1' ? machine : null),
+      listMachines: () => machines,
+    };
+    replaceConnection(fleet);
+    expect(connection).toBe(fleet);
+    expect(renderHook(() => useMachines()).result.current).toBe(machines);
+    expect(renderHook(() => useUnreachableMachines()).result.current).toBe(unreachable);
+    expect(renderHook(() => useMachine('task-1')).result.current).toBe(machine);
+    expect(renderHook(() => useMachine(null)).result.current).toBeNull();
+    replaceConnection(null);
+    expect(connection).toBe(local);
+    expect(connection.selectMachine('task-1')).toBeNull();
+  });
+
   it('sends commands through the shared connection', async () => {
     const command = spyOn(connection, 'command').mockResolvedValue(undefined);
     await sendCommand(COMMAND);
-    expect(command).toHaveBeenCalledWith(COMMAND);
+    expect(command).toHaveBeenCalledWith(COMMAND, undefined);
     command.mockRestore();
   });
 

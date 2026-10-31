@@ -504,3 +504,15 @@ export function retryHookFix(decider: Decider, taskId: string, guidance: string 
   resetFixBudget(decider, taskId);
   startHookFix(decider, taskId, decider.task(taskId).pushHookFailure, guidance);
 }
+
+export function recordClosedPullRequests(decider: Decider, command: CommandOf<'pull_request.record_closed'>) {
+  const task = decider.task(command.taskId);
+  if (task.stage !== 'cancelled') return;
+  if (command.closed.length === 0 && command.failed.length === 0) return;
+  decider.emit({
+    type: 'pull_request.closed',
+    taskId: task.id,
+    closed: command.closed,
+    failed: command.failed,
+  });
+}

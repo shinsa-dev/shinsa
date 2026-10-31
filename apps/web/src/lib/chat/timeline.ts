@@ -143,6 +143,12 @@ function listUndelivered(task: Task): HumanMessage[] {
 
 const SENT_WINDOW_MS = 5_000;
 
+const EMPTY_TURN_FILLER = 'No response requested.';
+
+function isEmptyTurnFiller(text: string) {
+  return text.trim() === EMPTY_TURN_FILLER;
+}
+
 function listUnsent(sending: HumanMessage[], landed: HumanMessage[]) {
   const unclaimed = [...landed];
   return sending.filter((sent) => {
@@ -375,6 +381,7 @@ function applyEntry(builder: TimelineBuilder, entry: ChatEntry) {
       applyUserEntry(builder, entry);
       return;
     case 'agent':
+      if (isEmptyTurnFiller(entry.text)) return;
       builder.group = null;
       builder.items.push({
         kind: 'agent',
@@ -468,13 +475,29 @@ function isFullReplyHandOver(item: TimelineItemOf<'handover'>) {
   );
 }
 
+function isAgentItem(item: TimelineItem): item is TimelineItemOf<'agent'> {
+  return item.kind === 'agent';
+}
+
+function selectAnswerBefore(body: TimelineItem[], handOver: TimelineItemOf<'handover'>) {
+  const before = body.slice(0, body.indexOf(handOver));
+  const previous = before.filter(isTurnHandOver).at(-1);
+  return (
+    before
+      .slice(previous ? before.indexOf(previous) + 1 : 0)
+      .filter(isAgentItem)
+      .at(-1) ?? null
+  );
+}
+
 function selectReply(body: TimelineItem[], quiet: boolean) {
   const last = body.filter(isTurnHandOver).at(-1);
   if (last && isFullReplyHandOver(last)) return null;
-  const agents = body
-    .slice(last ? body.indexOf(last) + 1 : 0)
-    .filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
-  return agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
+  const agents = body.slice(last ? body.indexOf(last) + 1 : 0).filter(isAgentItem);
+  const after =
+    agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
+  if (after || quiet || !last || selectToolName(last.call) !== 'complete_fix') return after;
+  return selectAnswerBefore(body, last);
 }
 
 function isRejectedHandover(item: TimelineItem): item is TimelineItemOf<'handover'> {
@@ -579,7 +602,7 @@ export function resolveLastHandover(entries: ChatEntry[], name: ShinsaToolName) 
 export function resolveLastAgentText(entries: ChatEntry[]) {
   const texts = entries.filter(
     (entry): entry is ChatEntryOf<'agent'> | ChatEntryOf<'error'> =>
-      entry.type === 'agent' || entry.type === 'error'
+      entry.type === 'error' || (entry.type === 'agent' && !isEmptyTurnFiller(entry.text))
   );
   const settled = texts.filter((entry) => entry.type === 'error' || entry.phase === 'final').at(-1);
   return (settled ?? texts.at(-1))?.text ?? null;

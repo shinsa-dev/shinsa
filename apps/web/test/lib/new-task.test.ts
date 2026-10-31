@@ -4,12 +4,20 @@ import {
   AUTO_CHOICES,
   createNewTaskCommand,
   describeAfterLabel,
+  describeMachineLoad,
   describeNewTask,
+  describePlacementDone,
+  describePolicyFailure,
+  hasMachineChoice,
+  isProjectOnMachine,
+  listNewTaskMachines,
   listNewTaskPriorities,
   listNewTaskProjects,
   listNewTaskStarts,
   NO_PROJECT,
   requestNewTask,
+  requestPolicyPlacement,
+  resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
   resolveStartChoice,
@@ -90,7 +98,13 @@ describe('createNewTaskCommand', () => {
 
   it('sends each part you picked, Start now as no tasks to wait on and No project as null', () => {
     expect(
-      createNewTaskCommand('Fix it', { project: 'p1', start: 'now', after: [], priority: 'urgent' })
+      createNewTaskCommand('Fix it', {
+        project: 'p1',
+        start: 'now',
+        after: [],
+        priority: 'urgent',
+        machine: 'auto',
+      })
     ).toEqual({
       type: 'task.create',
       request: 'Fix it',
@@ -191,6 +205,15 @@ describe('the project choice', () => {
     ]);
   });
 
+  it('names the machine of each project when the dashboard spans several', () => {
+    const machine = (id: string) => (id === 'p2' ? { name: 'Laptop' } : { name: 'Studio' });
+    expect(listNewTaskProjects(state, machine).map((item) => item.label)).toEqual([
+      'No project',
+      'Basket on Laptop',
+      'Superwall on Studio',
+    ]);
+  });
+
   it('shows the focus project until you pick, and No project without a focus', () => {
     const focused = { ...state, focus: { projectId: 'p1', until: null } };
     expect(resolveShownProject(focused, 'auto')).toBe('p1');
@@ -205,5 +228,164 @@ describe('the project choice', () => {
       NO_PROJECT,
       'auto',
     ]);
+  });
+});
+
+function createMachine(id: string, open: number, capacity: number | null, projects: string[] = []) {
+  return {
+    id,
+    name: id === 'studio' ? 'Studio' : 'Build box',
+    state: {
+      tasks: Object.fromEntries(
+        Array.from({ length: open }, (_, index) => [`${id}-${index}`, { stage: 'building' as const }])
+      ),
+      projects: Object.fromEntries(projects.map((project) => [project, {}])),
+      settings: { taskCapacity: capacity },
+    },
+  };
+}
+
+describe('the machine a new task runs on', () => {
+  const studio = { ...createMachine('studio', 3, 4, ['p1']), current: true };
+  const box = { ...createMachine('box', 1, null), current: false };
+  const ruled = {
+    ...box,
+    state: {
+      ...box.state,
+      settings: { taskCapacity: null, placementPolicies: ['Run benchmarks on the build box.'] },
+    },
+  };
+  const auto = { machine: 'auto', project: 'auto' } as const;
+
+  it('picks nothing with one machine, the project you pick, then the focus project or the most room', () => {
+    expect(resolveNewTaskMachine([studio], auto, 'p1')).toBeNull();
+    expect(resolveNewTaskMachine([studio, box], auto, 'p1')).toEqual({ id: 'studio', byPolicy: false });
+    expect(resolveNewTaskMachine([studio, box], auto, NO_PROJECT)).toEqual({ id: 'box', byPolicy: false });
+    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'studio' }, NO_PROJECT)).toEqual({
+      id: 'studio',
+      byPolicy: false,
+    });
+    expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'gone' }, NO_PROJECT)).toEqual({
+      id: 'box',
+      byPolicy: false,
+    });
+    expect(resolveNewTaskMachine([], { ...auto, machine: 'x' }, NO_PROJECT)).toBeNull();
+  });
+
+  it('leaves Automatic to the policies when there are any and you named no project or machine', () => {
+    expect(resolveNewTaskMachine([studio, ruled], auto, 'p1')).toEqual({ id: 'studio', byPolicy: true });
+    expect(resolveNewTaskMachine([studio, ruled], { ...auto, project: 'p1' }, 'p1')).toEqual({
+      id: 'studio',
+      byPolicy: false,
+    });
+    expect(resolveNewTaskMachine([studio, ruled], { ...auto, machine: 'box' }, NO_PROJECT)).toEqual({
+      id: 'box',
+      byPolicy: false,
+    });
+  });
+
+  it('asks the engine which machine the policies send a request to, and falls back on no answer', async () => {
+    const asked: unknown[] = [];
+    const answer = { machineId: 'box', reason: 'Benchmarks run on the build box.' };
+    expect(
+      await requestPolicyPlacement([studio, ruled], 'Run the benchmark', (question) => {
+        asked.push(question);
+        return Promise.resolve({ answer });
+      })
+    ).toEqual({ answer, reason: answer.reason });
+    expect(asked).toEqual([
+      {
+        request: 'Run the benchmark',
+        machines: [
+          { id: 'studio', name: 'Studio', policies: [], open: 3, capacity: 4 },
+          {
+            id: 'box',
+            name: 'Build box',
+            policies: ['Run benchmarks on the build box.'],
+            open: 1,
+            capacity: null,
+          },
+        ],
+      },
+    ]);
+    expect(
+      await requestPolicyPlacement([studio, ruled], 'x', () => Promise.resolve({ answer: null }))
+    ).toEqual({
+      answer: null,
+      reason: '',
+    });
+    expect(
+      await requestPolicyPlacement([studio, ruled], 'x', () =>
+        Promise.reject(new Error('No Claude account is signed in.'))
+      )
+    ).toEqual({
+      answer: null,
+      reason:
+        'Your routing policies were not read (No Claude account is signed in), so it went to the machine with the most room.',
+    });
+    expect(describePolicyFailure('timeout')).toBe(
+      'Your routing policies were not read (timeout), so it went to the machine with the most room.'
+    );
+  });
+
+  it('asks the machine in front by POST /api/placement', async () => {
+    const answer = { machineId: 'box', reason: 'Benchmarks run on the build box.' };
+    const realFetch = globalThis.fetch;
+    const posted: string[] = [];
+    globalThis.fetch = mock((url: string) => {
+      posted.push(url);
+      return Promise.resolve(Response.json({ answer }));
+    }) as unknown as typeof globalThis.fetch;
+    const placed = await requestPolicyPlacement([studio, ruled], 'Run the benchmark');
+    globalThis.fetch = realFetch;
+    expect(placed).toEqual({ answer, reason: answer.reason });
+    expect(posted).toEqual(['/api/placement']);
+  });
+
+  it('says in the toast which machine took the task and why', () => {
+    expect(describePlacementDone('Started.', box, 'Benchmarks run there.')).toBe(
+      'Started. It runs on Build box. Benchmarks run there.'
+    );
+    expect(describePlacementDone('Started.', studio, '')).toBe('Started. It runs on This machine.');
+    expect(describePlacementDone('Started.', undefined, '')).toBe('Started.');
+  });
+
+  it('lists Automatic, with the policies’ hint when they decide, then each machine with its load', () => {
+    expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: false })).toEqual([
+      { value: 'auto', label: 'Automatic', icon: 'IconArrowSplitRight' },
+      { value: 'studio', label: 'This machine', icon: 'IconMacbookRemote', hint: '3 of 4 open tasks' },
+      { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
+    ]);
+    expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: true })[0]).toEqual({
+      value: 'auto',
+      label: 'Automatic',
+      icon: 'IconArrowSplitRight',
+      hint: 'Your routing policies decide when you start it',
+    });
+    expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
+  });
+
+  it('shows a machine this device cannot reach, disabled, and picks the one it can', () => {
+    const laptop = { id: 'laptop', name: 'Laptop' };
+    expect(hasMachineChoice([box], [])).toBe(false);
+    expect(hasMachineChoice([box], [laptop])).toBe(true);
+    expect(listNewTaskMachines([box], null, [laptop, { id: 'box', name: 'Build box' }])).toEqual([
+      { value: 'auto', label: 'Automatic', icon: 'IconArrowSplitRight' },
+      { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
+      {
+        value: 'laptop',
+        label: 'Laptop',
+        icon: 'IconMacbookRemote',
+        disabled: 'Add this device on Laptop first',
+      },
+    ]);
+    expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');
+  });
+
+  it('offers only the projects of the machine a task goes to', () => {
+    expect(isProjectOnMachine([studio, box], null, 'p1')).toBe(true);
+    expect(isProjectOnMachine([studio, box], 'studio', 'p1')).toBe(true);
+    expect(isProjectOnMachine([studio, box], 'box', 'p1')).toBe(false);
+    expect(isProjectOnMachine([studio, box], 'box', NO_PROJECT)).toBe(true);
   });
 });

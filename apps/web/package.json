@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:remote": "VITE_SHINSA_REMOTE=1 vite build",
     "check-types": "tsc --noEmit",
     "dev": "vite --port 5181 --strictPort",
     "test": "bun test --randomize"
@@ -32,7 +33,8 @@
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "shiki": "3.23.0"
+    "shiki": "3.23.0",
+    "uqr": "^0.1.3"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^21.0.4",

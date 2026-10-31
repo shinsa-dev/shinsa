@@ -4,6 +4,7 @@ node_modules
 .react-router
 build
 dist
+dist-remote
 .DS_Store
 .env
 .env.*

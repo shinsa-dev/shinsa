@@ -29,6 +29,7 @@ export interface ScheduleToolCall {
 export interface ScheduleToolContext {
   secrets: SecretStore;
   baseUrl: () => string;
+  hookUrl: (scheduleId: string, token: string) => string | null;
   timeZone: string;
   now: () => number;
 }
@@ -52,6 +53,8 @@ function findTaskOf(state: ShinsaState, runId: string) {
 export function findHookUrl(context: ScheduleToolContext, scheduleId: string) {
   const hook = context.secrets.selectHook(scheduleId);
   if (!hook) throw new DomainError('schedule_not_found', 'This schedule has no webhook.');
+  const remote = context.hookUrl(scheduleId, hook.token);
+  if (remote) return remote;
   return `${context.baseUrl()}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${hook.token}`;
 }
 

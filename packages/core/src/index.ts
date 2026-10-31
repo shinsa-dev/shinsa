@@ -50,6 +50,7 @@ export {
 } from './prompts/index.ts';
 export * from './protocol/index.ts';
 export * from './queue/index.ts';
+export * from './remote/index.ts';
 export {
   ATTACHED_EVIDENCE_KINDS,
   ATTENTION_LEVELS,

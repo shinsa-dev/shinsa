@@ -56,6 +56,11 @@ function pasteShot(field: HTMLElement) {
 }
 
 describe('AnswerBox', () => {
+  it('fades the text where it scrolls under the attachments and the footer', () => {
+    const field = renderBox(mock(async (_text: string) => true));
+    expect(field.classList.contains('scroll-fade')).toBe(true);
+  });
+
   it('sends a typed answer and clears it once sent', async () => {
     const onSubmit = mock(async (_text: string) => true);
     const field = renderBox(onSubmit) as HTMLTextAreaElement;

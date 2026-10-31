@@ -1807,10 +1807,12 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 - **Webhooks** (`apps/engine/src/schedules/webhook.ts`): each webhook schedule has a URL with a 24-byte token
   (`/api/hooks/<id>/<token>`, `secrets.json`), outside the host guard so services can reach it. The token is
   created when the schedule is written (and for any webhook schedule without one, on every state change), so
-  showing the URL never writes. The URL is this machine's own address (`http://<host>:<port>`, from `SHINSA_HOST`
-  and `SHINSA_PORT` or `config.json`), so a service on the internet cannot reach it as it is: run a tunnel to that
-  port (`cloudflared`, `ngrok`, Tailscale Funnel) and give the sender the tunnel's address with the same
-  `/api/hooks/<id>/<token>` path. A path that is not a hook, including one with a broken `%` escape, is 404. The
+  showing the URL never writes. With remote access on, the URL is the stable
+  `https://app.shinsa.dev/hooks/<instance>/<id>/<token>`, which reaches this machine through its tunnel (Remote
+  access, below). Otherwise it is this machine's own address (`http://<host>:<port>`, from `SHINSA_HOST` and
+  `SHINSA_PORT` or `config.json`), which a service on the internet cannot reach as it is: turn on remote access, or
+  run a tunnel of your own to that port and give the sender its address with the same `/api/hooks/<id>/<token>`
+  path. A path that is not a hook, including one with a broken `%` escape, is 404. The
   request is checked in order: the token (constant time), a rate limit (60 a minute per schedule, 429), paused
   (409), the body (1 MB, 413), then an optional HMAC-SHA256 signature over the raw body (`webhook.signature
   {header, prefix, encoding, secret_ref}`, 401). Then the prompt template (the schedule's message) is filled:
@@ -2350,6 +2352,155 @@ tools and T3's MCP toolkits.
   message it sends to a task with an open gate is kept for that task's next agent, never delivered into the gate
   (Gates → What a message does, above).
 
+## Remote access
+
+Reaching this machine from any device at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
+devices enrolled at the machine. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
+core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
+machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
+The dashboard has an origin of its own, apart from the marketing site on shinsa.dev. Two words keep the parts apart: a
+**machine** is a computer that runs the engine (a machine today; the engine itself needs nothing of macOS for this), the
+only place tasks run, each task on exactly one; a **browser** (or a phone's browser) is only a way in, enrolled on
+each machine it may reach, running nothing. The machine side is `apps/engine/src/remote/`:
+
+- **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
+  on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
+  `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, and the enrolled devices (public key, name,
+  enrolled and last seen). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
+- **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
+  `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
+- **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
+  `data/bin/cloudflared-<version>`, checked against its pinned SHA-256 before it is unpacked or made executable. The
+  connector (`connector.ts`) runs `cloudflared tunnel --no-autoupdate run --url <engine URL>` with the tunnel token in
+  `TUNNEL_TOKEN`, never in its arguments (a process list shows arguments), and counts it up once it prints
+  `Registered tunnel connection` (30 s at most).
+- **The supervisor** (`TunnelSupervisor`, Kanna's timings): connect, heartbeat with the engine's URL and version, ping
+  `https://<tunnel host>/health` every 30 seconds and heartbeat every fourth ping; three failed pings in a row, or
+  `cloudflared` exiting, restart it, every second for the first minute of a failure streak, then after 2, 4, 10 and 30
+  seconds. A revoked machine gives up for good and forgets its credentials. Turning it off marks the instance
+  offline, capped at 2 seconds. It comes up with the engine when `remote.json` says enabled, and goes down before
+  the terminals do at shutdown.
+- **The tunnel entry point** (`guard.ts`, `http/server.ts`): a request with `cf-connecting-ip`, which Cloudflare
+  stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
+  before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
+  `GET /remote`; everything else, and everything while remote access is off, is 404. `/remote` needs an Origin of
+  app.shinsa.dev (403) and a valid connect token in `?token=` (401): an HMAC with the connect key over the instance,
+  the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
+  off the endpoint; trust rests on the handshake.
+- **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
+  enrolled is refused unless the hello carries a proof made with a live enrollment secret (`Enrollments`: 32 random
+  bytes, 10 minutes, one use, at most five at once), which enrolls it. Both sides derive one AES-GCM key per
+  direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
+  fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
+  and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
+  routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
+  handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
+- **Pairing** (`pairing.ts`, `Remote.startPairing`): Settings → Remote access → Turn on, or `shinsa remote pair`,
+  makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
+  without `.local`, an all-capitals one such as `MAC` written `Mac`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
+  where you sign in with GitHub and approve. The engine polls every 2 seconds with a poll secret that never leaves it,
+  through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
+  `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
+  (`remote_paired`): remove it first.
+- **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
+  secret for a named device (60 characters at most) and answers its link,
+  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>` with the link's `id`; the device it enrolls takes
+  that name and keeps the link's id as `enrollmentId`. `shinsa
+  remote forget-device <key>` removes one. A device is a browser or a phone, a way in that runs nothing; a machine
+  runs the engine.
+- **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
+  channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
+  logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
+- **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
+  `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
+  sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
+  added devices with when each was last used and Forget, and Add device (only while it is on, since pausing drops
+  every link: `canEnrollDevices`): you name the device, and the one-time link
+  shows as a QR code to scan with a phone, with Copy and Add this device for the browser in front of you. That link
+  carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
+  is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
+  wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. The
+  dialog closes with a toast ("iPhone is added.") the moment a device with its link's id shows up, and a link that
+  expires while it is open gives way to Make new link. So does one remote access dropped: once a push says it is
+  paused, removed or removed at app.shinsa.dev, the link is marked stopped for good, since resuming does not bring
+  back the links `Remote.stop` cleared. Every change to remote access reaches every open page at once:
+  `Remote` notifies on each one (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a
+  pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
+  (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
+  The remote build leaves the section out, since every change to it is refused from off the machine.
+- **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
+  owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
+  `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).
+- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
+  Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
+  repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
+  takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
+  plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
+  programs, opening a task on the machine and restarting the engine; terminals and services are refused even to read.
+  Everything else, closing gates included, is you, as on the machine.
+- **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
+  `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
+  `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
+  machine's own address, as before.
+- **The hosted web app** (`apps/web/src/lib/remote/`, `routes/remote/`; `bun run --cwd apps/web build:remote` writes
+  `apps/web/dist-remote`, which `apps/cloud` serves): the same web app built with `VITE_SHINSA_REMOTE=1`, at the root
+  of `https://app.shinsa.dev`, the custom domain of `apps/cloud`. Its own pages are sign in with GitHub (a failed
+  sign-in's code said in words), the pairing approval
+  (`/pair?code=`: the machine's name and key fingerprint to compare with Settings) and adding this browser
+  (`/enroll#…`: the fragment is kept in `sessionStorage` through the GitHub sign-in and taken out of the address
+  bar at once). Adding a browser makes a P-256 key pair that cannot be exported, kept in IndexedDB (`shinsa-remote`)
+  with the machine key pinned from the link, and proves the one-time secret in its first handshake.
+- **One dashboard over every machine** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every machine
+  of your account that this browser was added to joins one `Fleet`, each over its own sealed channel (`RemoteLink`,
+  `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
+  (`replaceConnection`). Its state is every machine's state merged (`mergeFleetStates`: tasks, runs, gates, projects,
+  repositories, evidence, schedules, memories and usage side by side, keyed by their ids; settings and focus from the
+  first machine), and it remembers which machine owns each id. A command goes to the machine that owns an id it names
+  (`resolveCommandOwner`), a request to the machine that owns an id in its path or query (`resolveRequestOwner`), a
+  transcript to the machine of its run; the rest goes to the first machine. With more than one machine in the account (this device need not reach them all), a task shows its machine in
+  its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
+  `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
+  sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
+  its connection's retry opens a fresh channel with a new token. A machine that refuses this device's key is forgotten
+  here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
+  the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
+  work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
+  Settings → General → Machines lists every machine in rows like Remote access's: its name with its status beside it
+  (online or last seen), whether it is in this dashboard, and Remove; machines in the dashboard also show their open
+  tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
+  it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
+  machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
+  this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
+  Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
+  Terminal page says terminals stay on the machine.
+- **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
+  New task shows a Machine picker, Automatic by default (the label says only Automatic, with the arrow-split icon); with one there is none. Every
+  machine of the account is in it: one this device was not added to is listed disabled with "Add this device on <name>
+  first" (`listUnreachableMachines`, from the account's machines without a key here, and any that refused it since). A
+  task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
+  Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
+  disk; `resolveProjectMachine`); then, when any machine has a routing policy, the routing policies: each is a sentence in plain
+  English (`placementPolicies`, such as "Run Xcode simulator tests here."), and when you start the task the page sends
+  the request with every machine's policies and load to `POST /api/placement` on the first machine of the dashboard
+  (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
+  prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
+  none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
+  "Your routing policies decide when you start it", and the toast says where the task went and why; when every provider fails (no
+  Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
+  `placement_unreadable`, so the toast says the policies were not read and why (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
+  focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
+  passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
+  number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
+  the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
+  steers placement: a machine still runs a task you send it when full. Routing policies are each machine's own setting
+  too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
+  machine (`ShinsaConnection.command`'s machine).
+- **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
+  every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
+  reaches the engine, and the danger is a copy leaving the machine.
+
 ## Who can change Shinsa
 
 Shinsa is a local server for one person, and every agent runs as that person, on that machine, with a shell. There
@@ -2358,7 +2509,10 @@ agent with a shell can already run `gh pr merge` or `git push` without asking Sh
 plainly what protects what.
 
 - **The address.** `shinsa engine` binds to `127.0.0.1` (`SHINSA_HOST` changes it), so nothing off the machine
-  reaches it.
+  reaches it, except through remote access when you turn it on: then a tunnel request sees only health, webhooks and
+  the sealed channel, and the channel's keys are what let it in (Remote access, above). Those keys live in
+  `remote.json`, which an agent's shell could read like any of your files; what they unlock from off the machine is
+  only what an agent on it can already reach.
 - **Other websites.** `http/guard.ts` refuses a Host that is not loopback, `SHINSA_HOST` or `SHINSA_ALLOWED_HOSTS`
   (DNS rebinding), an Origin from anywhere else and `Sec-Fetch-Site: cross-site`, an `/api` request other than a GET
   or HEAD that is not `application/json` (so no cross-site form or `text/plain` post is ever "simple"; 415) and a
@@ -2384,6 +2538,8 @@ plainly what protects what.
   - accepting a suggested watch (`schedules accept`; core refuses `watch_suggestion.accept` on your behalf): an
     agent's new watch is a suggestion instead (Schedules and webhooks → Suggested watches, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
+  - remote access: pairing this Mac, pausing, resuming and removing it, and enrolling or forgetting a device
+    (`remote pair`, `enable`, `disable`, `remove`, `enroll`, `forget-device`; Remote access, above);
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
     command at all (Terminals, above);
@@ -2780,6 +2936,13 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   nothing and opens nothing) and its lane is free. Whatever it does afterwards is
   ignored: settling, retrying and failing only change an effect that is still `running`, and a
   late failure is only logged.
+- **Cancelling closes the pull requests.** A task settled as cancelled (by you, a rejected gate or Cancel on a
+  failure) queues `pull_request.close` with every pull request of it still open: the current round's and the
+  earlier rounds' stacked ones (`listStackedPullRequests`). The engine closes each with `gh pr close` and a comment
+  saying the task was cancelled, keeps the branch so it can be reopened, and reports back with
+  `pull_request.record_closed`, which core takes on the settled task: the closed ones show as closed on the task and
+  its rounds, and one that failed (no access, GitHub down) is an activity entry with the reason, never a failure
+  gate. Marking a task done or a merge closes nothing.
 - **A side lane for cheap work.** The pull request watch runs in `side:<taskId>`, so a read never
   waits behind a long merge or a push backing off in `task:<taskId>`. Every decision it feeds is
   guarded already (a push in flight, a merge running, a run active). It is the only per-task effect
@@ -4259,6 +4422,9 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  the engine's forwarder keeps (The agent loop → Compaction and fast mode)
     ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
     │                  the log)
+    ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
+    │                  (mode 600; never in the log; Remote access, above)
+    ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
     │                  and boot time (One server per data directory, below)
@@ -4270,7 +4436,9 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
-  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_WEB_DIR` serves
+  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_REMOTE_ORIGIN` points remote access at
+  another app.shinsa.dev (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
+  Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
@@ -4617,8 +4785,8 @@ how the tools are checked again.
 Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts, `surfaces` and `terminals` (Terminals, above); then every change of state goes to every socket as a patch, every change of the accounts
-and of the terminals whole, and a transcript only to the sockets following its run. Each terminal has a socket of
+accounts, `surfaces`, `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
+the terminals and remote access whole, and a transcript only to the sockets following its run. Each terminal has a socket of
 its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)
 and `browser` anywhere else, Floaty included. The server keeps each socket's surface and tells every socket, with

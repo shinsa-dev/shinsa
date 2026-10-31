@@ -52,7 +52,7 @@ src/
 │                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
 │                        the seam the command line and the management tools both run through), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
-│                        plugins, services, system),
+│                        plugins, services, remote, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
@@ -160,6 +160,18 @@ src/
 ├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
 │                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
+├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
+│                        credentials, the enrolled devices), control.ts (ControlClient for app.shinsa.dev, RevokedError),
+│                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
+│                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
+│                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
+│                        enrollments.ts (one-time enrollment secrets, each for a named device), channel.ts
+│                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
+│                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
+│                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
+│                        classifier reads every machine's policies with a new task's request and names its machine), index.ts (Remote: wires
+│                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
+│                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
 │                        MCP sign-ins
 ├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): what

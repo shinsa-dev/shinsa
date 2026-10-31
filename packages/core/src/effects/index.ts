@@ -16,6 +16,7 @@ export type ShinsaEffect =
   | { kind: 'pull_request.push'; taskId: string }
   | { kind: 'pull_request.merge'; taskId: string; headSha: string | null }
   | { kind: 'pull_request.watch'; taskId: string }
+  | { kind: 'pull_request.close'; taskId: string; numbers: number[] }
   | { kind: 'worktree.remove'; taskId: string }
   | { kind: 'scratch.remove'; taskId: string }
   | { kind: 'config.verify'; taskId: string }
@@ -41,6 +42,7 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'pull_request.push': 'replay_safe',
   'pull_request.merge': 'replay_safe',
   'pull_request.watch': 'replay_safe',
+  'pull_request.close': 'replay_safe',
   'worktree.remove': 'replay_safe',
   'scratch.remove': 'replay_safe',
   'config.verify': 'replay_safe',
@@ -96,6 +98,7 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'pull_request.push':
     case 'pull_request.merge':
     case 'pull_request.watch':
+    case 'pull_request.close':
       return `${effect.kind}:${effect.taskId}:${seq}`;
   }
 }
@@ -129,6 +132,7 @@ export function resolveEffectLane(effect: ShinsaEffect) {
     case 'pull_request.open':
     case 'pull_request.push':
     case 'pull_request.merge':
+    case 'pull_request.close':
       return `task:${effect.taskId}`;
   }
 }

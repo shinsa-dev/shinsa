@@ -3,6 +3,8 @@ import {
   applyStatePatch,
   type ChatEntry,
   type ClientMessage,
+  type PlacementMachine,
+  type RemoteSnapshot,
   type ServerMessage,
   type StatePatch,
   type Surface,
@@ -15,9 +17,9 @@ import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
 
-type ConnectionStatus = 'connecting' | 'open' | 'closed';
+export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
-interface Snapshot {
+export interface Snapshot {
   state: WireState | null;
   status: ConnectionStatus;
 }
@@ -36,7 +38,48 @@ interface TranscriptChunk {
 
 type Scheduler = (flush: () => void) => void;
 
-interface ConnectionOptions {
+export interface MachineView {
+  id: string;
+  name: string;
+  current: boolean;
+}
+
+export interface MachineChoice extends PlacementMachine {
+  current: boolean;
+}
+
+export interface UnreachableMachine {
+  id: string;
+  name: string;
+}
+
+export interface ShinsaConnection {
+  start: () => void;
+  subscribe: (listener: () => void) => () => void;
+  snapshot: () => Snapshot;
+  subscribeTranscripts: (listener: () => void) => () => void;
+  selectTranscript: (runId: string) => ChatEntry[];
+  watchTranscript: (runId: string) => () => void;
+  subscribeAccounts: (listener: () => void) => () => void;
+  selectAccounts: () => AccountsSnapshot | null;
+  replaceAccounts: (accounts: AccountsSnapshot | null) => void;
+  subscribeSurfaces: (listener: () => void) => () => void;
+  isDesktopConnected: () => boolean;
+  subscribeTerminals: (listener: () => void) => () => void;
+  selectTerminals: () => TerminalsSnapshot | null;
+  replaceTerminals: (terminals: TerminalsSnapshot) => void;
+  subscribeRemote: (listener: () => void) => () => void;
+  selectRemote: () => RemoteSnapshot | null;
+  replaceRemote: (remote: RemoteSnapshot) => void;
+  selectMachine: (id: string) => MachineView | null;
+  listMachines: () => MachineChoice[];
+  listUnreachableMachines: () => UnreachableMachine[];
+  command: (command: UserCommand, machineId?: string | null) => Promise<void>;
+  reset: () => void;
+  flush: () => void;
+}
+
+export interface ConnectionOptions {
   openSocket: () => WebSocket;
   retry: (reconnect: () => void, delayMs: number) => void;
   surface?: () => Surface;
@@ -49,7 +92,11 @@ const MAX_RESENDS = 2;
 
 const HIDDEN_FRAME_MS = 32;
 
-const NO_ENTRIES: ChatEntry[] = [];
+export const NO_ENTRIES: ChatEntry[] = [];
+
+export const NO_MACHINES: MachineChoice[] = [];
+
+export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
@@ -58,7 +105,7 @@ function openShinsaSocket() {
   return new WebSocket(`${protocol}://${location.host}/ws`);
 }
 
-function retryLater(reconnect: () => void, delayMs: number) {
+export function retryLater(reconnect: () => void, delayMs: number) {
   setTimeout(reconnect, delayMs);
 }
 
@@ -82,7 +129,7 @@ function mergeTranscript(entries: ChatEntry[], chunk: TranscriptChunk): ChatEntr
   return fresh.length === 0 ? entries : [...entries, ...fresh];
 }
 
-export class Connection {
+export class Connection implements ShinsaConnection {
   #socket: WebSocket | null = null;
   #snapshot: Snapshot = { state: null, status: 'connecting' };
   #confirmed: WireState | null = null;
@@ -94,6 +141,7 @@ export class Connection {
   #attempt = 0;
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
+  #remote: RemoteSnapshot | null = null;
   #desktopConnected = false;
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
@@ -101,6 +149,7 @@ export class Connection {
   readonly #accountsSignal = createSignal();
   readonly #surfacesSignal = createSignal();
   readonly #terminalsSignal = createSignal();
+  readonly #remoteSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
@@ -159,7 +208,22 @@ export class Connection {
     this.#terminalsSignal.publish();
   }
 
+  subscribeRemote = (listener: () => void) => this.#remoteSignal.subscribe(listener);
+
+  selectRemote = () => this.#remote;
+
+  replaceRemote(remote: RemoteSnapshot) {
+    this.#remote = remote;
+    this.#remoteSignal.publish();
+  }
+
   isDesktopConnected = () => this.#desktopConnected;
+
+  selectMachine = (_id: string): MachineView | null => null;
+
+  listMachines = (): MachineChoice[] => NO_MACHINES;
+
+  listUnreachableMachines = (): UnreachableMachine[] => NO_UNREACHABLE_MACHINES;
 
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
@@ -215,6 +279,7 @@ export class Connection {
     this.#syncing = false;
     this.#accounts = null;
     this.#terminals = null;
+    this.#remote = null;
     this.#desktopConnected = false;
     this.#pending.clear();
     this.#optimistic.clear();
@@ -225,6 +290,7 @@ export class Connection {
     this.#accountsSignal.publish();
     this.#surfacesSignal.publish();
     this.#terminalsSignal.publish();
+    this.#remoteSignal.publish();
   }
 
   flush() {
@@ -377,11 +443,32 @@ export class Connection {
       case 'terminals':
         this.replaceTerminals(message.terminals);
         return;
+      case 'remote':
+        this.replaceRemote(message.remote);
+        return;
     }
   }
 }
 
-export const connection = new Connection();
+const localConnection = new Connection();
+
+export let connection: ShinsaConnection = localConnection;
+
+export function replaceConnection(next: ShinsaConnection | null) {
+  connection = next ?? localConnection;
+}
+
+export function useMachines() {
+  return useSyncExternalStore(connection.subscribe, connection.listMachines);
+}
+
+export function useUnreachableMachines() {
+  return useSyncExternalStore(connection.subscribe, connection.listUnreachableMachines);
+}
+
+export function useMachine(id: string | null) {
+  return useSyncExternalStore(connection.subscribe, () => (id ? connection.selectMachine(id) : null));
+}
 
 export function useConnection() {
   return useSyncExternalStore(connection.subscribe, connection.snapshot);
@@ -401,6 +488,6 @@ export function useTranscript(runId: string | null) {
   );
 }
 
-export function sendCommand(command: UserCommand) {
-  return connection.command(command);
+export function sendCommand(command: UserCommand, machineId?: string | null) {
+  return connection.command(command, machineId);
 }

@@ -319,6 +319,26 @@ export function recordRoundPullRequest(state: ShinsaState, taskId: string, at: n
   );
 }
 
+export function recordRoundPullRequestsClosed(
+  state: ShinsaState,
+  taskId: string,
+  numbers: number[],
+  at: number
+) {
+  const task = state.tasks[taskId];
+  if (!task) return;
+  writeRounds(
+    state,
+    task,
+    at,
+    resolveTaskRounds(task).map((round): Round => {
+      const pullRequest = round.pullRequest;
+      if (pullRequest?.state !== 'open' || !numbers.includes(pullRequest.number)) return round;
+      return { ...round, pullRequest: { ...pullRequest, state: 'closed' } };
+    })
+  );
+}
+
 export function recordRoundBranch(state: ShinsaState, taskId: string, branch: string, at: number) {
   const task = state.tasks[taskId];
   if (!task) return;

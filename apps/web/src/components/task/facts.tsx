@@ -38,11 +38,13 @@ import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
+import { useMachine } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
+import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
@@ -90,6 +92,19 @@ function HandleFact({ task }: { task: Task }) {
       >
         {task.handle}
       </button>
+    </Hint>
+  );
+}
+
+function MachineFact({ task }: { task: Task }) {
+  const machine = useMachine(task.id);
+  if (!machine) return null;
+  return (
+    <Hint label='The machine this task runs on'>
+      <span className={FACT}>
+        <Icon size='sm' name={MACHINE_ICON} />
+        <span className='truncate'>{resolveMachineLabel(machine)}</span>
+      </span>
     </Hint>
   );
 }
@@ -506,6 +521,7 @@ export function TaskFacts({
       <PullRequestFact state={state} task={task} />
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
+      <MachineFact task={task} />
       <TaskServicesFact state={state} task={task} />
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />

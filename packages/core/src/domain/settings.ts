@@ -47,6 +47,8 @@ export interface Settings {
   watchdogHours?: number;
   watchdogFirstCheckMinutes?: number;
   watchdogMaxGapHours?: number;
+  taskCapacity?: number | null;
+  placementPolicies?: string[];
 }
 
 export const SETTINGS_KEYS = [
@@ -72,6 +74,8 @@ export const SETTINGS_KEYS = [
   'watchdogHours',
   'watchdogFirstCheckMinutes',
   'watchdogMaxGapHours',
+  'taskCapacity',
+  'placementPolicies',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -133,6 +137,8 @@ const DEFAULT_SETTINGS: Settings = {
   watchdogHours: WATCHDOG_DEFAULTS.hours,
   watchdogFirstCheckMinutes: WATCHDOG_DEFAULTS.firstCheckMinutes,
   watchdogMaxGapHours: WATCHDOG_DEFAULTS.maxGapHours,
+  taskCapacity: null,
+  placementPolicies: [],
 };
 
 export function createSettings(): Settings {

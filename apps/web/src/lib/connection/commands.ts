@@ -8,7 +8,7 @@ export function describeFailure(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function confirm(done: Done) {
+export function confirmDone(done: Done) {
   if (typeof done === 'string') toast.success(done);
   else toast.success(done.title, { description: done.description });
 }
@@ -16,7 +16,7 @@ function confirm(done: Done) {
 export async function requestWithToast(request: () => Promise<unknown>, done?: Done) {
   try {
     await request();
-    if (done) confirm(done);
+    if (done) confirmDone(done);
     return true;
   } catch (error) {
     toast.error(describeFailure(error));
@@ -24,8 +24,8 @@ export async function requestWithToast(request: () => Promise<unknown>, done?: D
   }
 }
 
-export function sendCommandWithToast(command: UserCommand, done?: string) {
-  return requestWithToast(() => sendCommand(command), done);
+export function sendCommandWithToast(command: UserCommand, done?: string, machineId?: string | null) {
+  return requestWithToast(() => sendCommand(command, machineId), done);
 }
 
 export function copyText(text: string) {

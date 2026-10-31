@@ -184,6 +184,7 @@ export const ICON_NAMES = [
   'IconListBulletsFilled',
   'IconLoadingCircle',
   'IconLock',
+  'IconMacbookRemote',
   'IconMagicBook',
   'IconMagnifyingGlass',
   'IconMap',
@@ -233,7 +234,6 @@ export const ICON_NAMES = [
   'IconSidebarSimpleLeftWide',
   'IconSidebarSimpleRightWide',
   'IconSlidesWide',
-  'IconSparkle',
   'IconSpeedHigh',
   'IconSpeedMiddle',
   'IconSplit',
@@ -557,7 +557,7 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
     '3': '<g><path d="M12.1716 3H8C6.34315 3 5 4.34315 5 6V18C5 19.6569 6.34315 21 8 21H16C17.6569 21 19 19.6569 19 18V9.82843C19 9.29799 18.7893 8.78929 18.4142 8.41421L13.5858 3.58579C13.2107 3.21071 12.702 3 12.1716 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13 3.5V7C13 8.10457 13.8954 9 15 9H18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 13H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 17H15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>',
   },
   IconFileTypeAgents: {
-    '3': '<g style="color:var(--file-icon-ink,var(--file-purple))"><g><path fill-rule="evenodd" clip-rule="evenodd" d="M21 12.5C14.75 12.5 12 15.4028 12 22C12 15.4028 9.25 12.5 3 12.5C9.25 12.5 12 9.59722 12 3C12 9.59722 14.75 12.5 21 12.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g></g>',
+    '3': '<g style="color:var(--file-icon-ink,var(--file-purple))"><g><circle cx="12" cy="6" r="2.5" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="18" r="2.5" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="18" r="2.5" stroke="currentColor" stroke-width="2"/><path d="M12 8.5V12M12 12H9C7.34315 12 6 13.3431 6 15V15.5M12 12H15C16.6569 12 18 13.3431 18 15V15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></g>',
   },
   IconFileTypeArchive: {
     '3': '<g style="color:var(--file-icon-ink,var(--file-amber))"><g><path d="M14.3787 3.87868L13.6716 4.58579V4.58579L14.3787 3.87868ZM18.1213 7.62132L18.8284 6.91421L18.8284 6.91421L18.1213 7.62132ZM14 3.5C14 2.94772 13.5523 2.5 13 2.5C12.4477 2.5 12 2.94772 12 3.5H14ZM18.5 10C19.0523 10 19.5 9.55228 19.5 9C19.5 8.44772 19.0523 8 18.5 8V10ZM6 18V6H4V18H6ZM10 18V16H8V18H10ZM12 16V14H10V16H12ZM10 14V12H8V14H10ZM12 20V18H10V20H12ZM16 20H8V22H16V20ZM13.6716 4.58579L17.4142 8.32843L18.8284 6.91421L15.0858 3.17157L13.6716 4.58579ZM12 3.5V6H14V3.5H12ZM16 10H18.5V8H16V10ZM18 9.74264V18H20V9.74264H18ZM8 4H12.2574V2H8V4ZM4 18C4 20.2091 5.79086 22 8 22V20C6.89543 20 6 19.1046 6 18H4ZM16 22C18.2091 22 20 20.2091 20 18H18C18 19.1046 17.1046 20 16 20V22ZM15.0858 3.17157C14.3356 2.42143 13.3182 2 12.2574 2V4C12.7878 4 13.2965 4.21071 13.6716 4.58579L15.0858 3.17157ZM17.4142 8.32843C17.7893 8.7035 18 9.21221 18 9.74264H20C20 8.68177 19.5786 7.66436 18.8284 6.91421L17.4142 8.32843ZM12 6C12 8.20914 13.7909 10 16 10V8C14.8954 8 14 7.10457 14 6H12ZM6 6C6 4.89543 6.89543 4 8 4V2C5.79086 2 4 3.79086 4 6H6Z" fill="currentColor"/></g></g>',
@@ -826,6 +826,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconLock: {
     '3': '<g><path d="M5 13C5 11.3431 6.34315 10 8 10H16C17.6569 10 19 11.3431 19 13V18C19 19.6569 17.6569 21 16 21H8C6.34315 21 5 19.6569 5 18V13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 9.5V7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7V9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 14V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
+  IconMacbookRemote: {
+    '3': '<g><path d="M1 16.5H23V17C23 18.6569 21.6569 20 20 20H4C2.34315 20 1 18.6569 1 17V16.5Z" stroke-width="2" stroke-linecap="square" stroke-linejoin="round" stroke="currentColor"/><path d="M21 14V16M3 16V7C3 5.34315 4.34315 4 6 4H11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M16 7C17.1046 7 18 7.89543 18 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M16 3C19.3137 3 22 5.68629 22 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/></g>',
+  },
   IconMagicBook: {
     '3': '<g><path fill-rule="evenodd" clip-rule="evenodd" d="M4 6C4 3.79086 5.79086 2 8 2H19C19.5523 2 20 2.44772 20 3V21C20 21.5523 19.5523 22 19 22H7C5.34315 22 4 20.6569 4 19V6ZM6 16.1707V6C6 4.89543 6.89543 4 8 4H18V16H7C6.64936 16 6.31278 16.0602 6 16.1707ZM18 18H7C6.44772 18 6 18.4477 6 19C6 19.5523 6.44772 20 7 20H18V18Z" fill="currentColor"/><path d="M12.1845 7.40787C12.2813 7.35949 12.3598 7.28103 12.4081 7.18426L13.0531 5.89443C13.2373 5.5259 13.7632 5.5259 13.9475 5.89443L14.5924 7.18426C14.6408 7.28103 14.7192 7.35949 14.816 7.40787L16.1058 8.05279C16.4744 8.23705 16.4744 8.76295 16.1058 8.94721L14.816 9.59213C14.7192 9.64051 14.6408 9.71897 14.5924 9.81574L13.9475 11.1056C13.7632 11.4741 13.2373 11.4741 13.0531 11.1056L12.4081 9.81574C12.3598 9.71897 12.2813 9.64051 12.1845 9.59213L10.8947 8.94721C10.5262 8.76295 10.5262 8.23705 10.8947 8.05279L12.1845 7.40787Z" fill="currentColor"/><path d="M8.5775 11.7114C8.63556 11.6824 8.68263 11.6353 8.71166 11.5772L9.23194 10.5367C9.3425 10.3155 9.65804 10.3155 9.7686 10.5367L10.2889 11.5772C10.3179 11.6353 10.365 11.6824 10.423 11.7114L11.4636 12.2317C11.6847 12.3422 11.6847 12.6578 11.4636 12.7683L10.423 13.2886C10.365 13.3176 10.3179 13.3647 10.2889 13.4228L9.7686 14.4633C9.65804 14.6845 9.3425 14.6845 9.23195 14.4633L8.71166 13.4228C8.68263 13.3647 8.63556 13.3176 8.5775 13.2886L7.53693 12.7683C7.31582 12.6578 7.31581 12.3422 7.53693 12.2317L8.5775 11.7114Z" fill="currentColor"/></g>',
   },
@@ -972,9 +975,6 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconSlidesWide: {
     '3': '<g><path d="M7 15H6C4.34315 15 3 13.6569 3 12V8C3 6.34315 4.34315 5 6 5H14C15.6569 5 17 6.34315 17 8V9" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/><path d="M10 19C8.34315 19 7 17.6569 7 16V12C7 10.3431 8.34315 9 10 9H18C19.6569 9 21 10.3431 21 12V16C21 17.6569 19.6569 19 18 19H10Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/></g>',
-  },
-  IconSparkle: {
-    '3': '<g><path fill-rule="evenodd" clip-rule="evenodd" d="M21 12.5C14.75 12.5 12 15.4028 12 22C12 15.4028 9.25 12.5 3 12.5C9.25 12.5 12 9.59722 12 3C12 9.59722 14.75 12.5 21 12.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',
   },
   IconSpeedHigh: {
     '3': '<g><path d="M6 18.7083C4.15875 17.0604 3 14.6655 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 14.6655 19.8412 17.0604 18 18.7083" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.468 14.2846C9.75795 13.4385 9.86832 12.177 10.7145 11.467C11.5606 10.757 12.8221 10.8673 13.5321 11.7135C14.6732 13.0733 15.3659 15.4676 15.6716 16.7416C15.7619 17.1178 15.403 17.419 15.0482 17.2647C13.8466 16.7424 11.609 15.6445 10.468 14.2846Z" fill="currentColor"/></g>',

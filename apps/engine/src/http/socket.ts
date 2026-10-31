@@ -3,16 +3,17 @@ import {
   type ClientMessage,
   DomainError,
   isSurface,
+  type RequestOrigin,
   resolveStatePatch,
   type ServerMessage,
   type Surface,
   serializeState,
   type UserCommand,
 } from '@shinsa/core';
-import type { ServerWebSocket } from 'bun';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
+import type { Remote } from '../remote/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { Classifier } from '../triage/message.ts';
@@ -22,9 +23,15 @@ export interface SocketData {
   kind: 'hub';
   transcripts: Map<string, () => void>;
   surface: Surface | null;
+  origin: RequestOrigin;
 }
 
-type Socket = ServerWebSocket<SocketData>;
+export interface HubSocket {
+  data: SocketData;
+  send: (payload: string) => unknown;
+}
+
+type Socket = HubSocket;
 
 function send(socket: Socket, message: ServerMessage) {
   socket.send(JSON.stringify(message));
@@ -81,7 +88,8 @@ export function createSocketHub(
   transcripts: Transcripts,
   accounts?: Accounts,
   classify: Classifier | null = null,
-  terminals?: Terminals
+  terminals?: Terminals,
+  remote?: Remote
 ) {
   const sockets = new Set<Socket>();
   let desktopConnected = false;
@@ -105,6 +113,8 @@ export function createSocketHub(
   const unsubscribeTerminals = terminals?.subscribe((snapshot) =>
     broadcast({ type: 'terminals', terminals: snapshot })
   );
+
+  const unsubscribeRemote = remote?.subscribe(() => broadcast({ type: 'remote', remote: remote.snapshot() }));
 
   const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
     if (sockets.size === 0) return;
@@ -138,7 +148,7 @@ export function createSocketHub(
         return;
       case 'command': {
         try {
-          await dispatchUserCommand(engine, message.command, message.id, classify);
+          await dispatchUserCommand(engine, message.command, message.id, classify, socket.data.origin);
           send(socket, { type: 'ack', id: message.id, error: null });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'command_failed';
@@ -170,6 +180,7 @@ export function createSocketHub(
       send(socket, { type: 'state', state: serializeState(engine.state) });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
+      if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });
       send(socket, { type: 'surfaces', desktop: desktopConnected });
     },
     close(socket: Socket) {
@@ -193,6 +204,7 @@ export function createSocketHub(
       unsubscribeTranscripts();
       unsubscribeAccounts?.();
       unsubscribeTerminals?.();
+      unsubscribeRemote?.();
     },
   };
 }

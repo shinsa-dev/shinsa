@@ -5,6 +5,8 @@ import { listDisclosureViolations } from './lint-disclosure.ts';
 import {
   APP,
   APP_AND_KIT,
+  BANNED_ICON_MESSAGE,
+  BANNED_ICON_PATTERN,
   BANNED_VERB_PATTERN,
   CATALOG,
   CLASS_RULES,
@@ -521,6 +523,14 @@ function collectRawSelection(file: string, source: string, violations: Violation
   });
 }
 
+function collectBannedIcons(file: string, source: string, violations: Violation[]): void {
+  if (!isUnder(file, APP_AND_KIT)) return;
+  source.split('\n').forEach((line, index) => {
+    if (BANNED_ICON_PATTERN.test(line))
+      violations.push({ file, line: index + 1, message: BANNED_ICON_MESSAGE });
+  });
+}
+
 function collectClassViolations(file: string, source: string, violations: Violation[]): void {
   if (!file.endsWith('.tsx')) return;
   source.split('\n').forEach((line, index) => {
@@ -552,6 +562,7 @@ function checkFile(file: string, violations: Violation[]): void {
     collectCommentViolations(file, parsed.comments ?? [], violations);
   }
   collectRawSelection(file, source, violations);
+  collectBannedIcons(file, source, violations);
   collectClassViolations(file, source, violations);
   collectSyntaxViolations(file, parsed.program, violations);
   if (file.endsWith('.tsx') && isUnder(file, APP)) {

@@ -14,6 +14,7 @@ import {
   selectFolderProject,
   WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
+import { isPlacementPoliciesValid, PLACEMENT_POLICY_LIMITS } from '../remote/placement.ts';
 import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -49,6 +50,20 @@ function assertSettings(patch: Partial<Settings>) {
   const attention = patch.attentionLimit;
   if (attention !== undefined && !isWholeBetween(attention, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError('settings_invalid', 'The attention limit must be a whole number of 1 or more.');
+  }
+  const capacity = patch.taskCapacity;
+  if (capacity !== undefined && capacity !== null && !isWholeBetween(capacity, 1, Number.MAX_SAFE_INTEGER)) {
+    throw new DomainError(
+      'settings_invalid',
+      'Task capacity must be a whole number of 1 or more, or no limit.'
+    );
+  }
+  const policies = patch.placementPolicies;
+  if (policies && !isPlacementPoliciesValid(policies)) {
+    throw new DomainError(
+      'settings_invalid',
+      `A machine has up to ${PLACEMENT_POLICY_LIMITS.perMachine} policies of 1 to ${PLACEMENT_POLICY_LIMITS.text} characters each.`
+    );
   }
   const switchAt = patch.accountSwitchAt;
   if (switchAt !== undefined && !isWholeBetween(switchAt, 1, 100)) {

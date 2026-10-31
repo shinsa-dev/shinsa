@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Round, Task } from '@shinsa/core';
 import {
+  closePullRequest,
   createPullRequest,
   mergePullRequest,
   type PullRequestDetails,
@@ -527,6 +528,21 @@ describe('the gh calls', () => {
     );
     await expect(mergePullRequest(repo, 7, 'squash', '--admin')).rejects.toThrow('is not a commit');
     await expect(retargetPullRequest(repo, 7, '--evil')).rejects.toThrow('is not a branch name');
+  });
+});
+
+describe('closing a pull request', () => {
+  test('closes it with the comment, does nothing to one already closed, and throws for an unknown one', async () => {
+    const github = useFakeGitHub([pull]);
+    const { repo } = await createGitRepo({ remote: false });
+    await closePullRequest(repo, 7, 'Cancelled.');
+    await closePullRequest(repo, 7, 'Cancelled.');
+    expect(github.read().pulls[0]).toMatchObject({ state: 'CLOSED' });
+    expect(github.read().calls.filter((call) => call[1] === 'close')).toEqual([
+      ['pr', 'close', '7', '--comment', 'Cancelled.'],
+      ['pr', 'close', '7', '--comment', 'Cancelled.'],
+    ]);
+    await expect(closePullRequest(repo, 9, 'Cancelled.')).rejects.toThrow();
   });
 });
 

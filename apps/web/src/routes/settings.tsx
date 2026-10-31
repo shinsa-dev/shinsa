@@ -12,9 +12,11 @@ import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
+import { RemoteAccessSettings } from '@/components/settings/remote-access.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
 import { StatisticsRange, StatisticsSettings } from '@/components/settings/stats/index.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
@@ -29,6 +31,7 @@ import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { readDesktopChannel, subscribeDesktopUpdate } from '@/lib/desktop.ts';
 import { useExplorerSide } from '@/lib/preferences/code.ts';
 import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { resolveHashSectionId } from '@/lib/settings.ts';
 import {
   findSettingsTab,
@@ -68,6 +71,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <AttentionSettings settings={state.settings} />
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
+          {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
           <UpdateSettings />
           <SetupSettings />
         </>

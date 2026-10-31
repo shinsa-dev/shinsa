@@ -1,8 +1,17 @@
+import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
 import { INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
+import {
+  isTunnelRequest,
+  markRemoteRequest,
+  type RemoteChannel,
+  resolveChannelOriginRefusal,
+  resolveLocalOnlyRoute,
+  resolveTunnelRoute,
+} from '../remote/index.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
@@ -33,12 +42,27 @@ export interface HttpContext extends ApiContext {
   refiner?: ServiceRefiner;
 }
 
-type ServerSocketData = SocketData | TerminalSocketData;
+interface RemoteSocketData {
+  kind: 'remote';
+  channel: RemoteChannel | null;
+}
+
+type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData;
 
 type ServerSocket = ServerWebSocket<ServerSocketData>;
 
 function isTerminalSocket(socket: ServerSocket): socket is ServerWebSocket<TerminalSocketData> {
   return socket.data.kind === 'terminal';
+}
+
+function isRemoteSocket(socket: ServerSocket): socket is ServerWebSocket<RemoteSocketData> {
+  return socket.data.kind === 'remote';
+}
+
+export interface RemoteSocketHandlers {
+  open: (socket: ServerWebSocket<RemoteSocketData>) => void;
+  close: (socket: ServerWebSocket<RemoteSocketData>) => void;
+  message: (socket: ServerWebSocket<RemoteSocketData>, raw: string | Buffer) => void;
 }
 
 export function resolveServerUrl(hostname: string, port: number) {
@@ -56,19 +80,23 @@ type TerminalSockets = ReturnType<typeof createTerminalSockets>;
 
 export function createSocketHandlers(
   hub: Pick<Hub, 'open' | 'close' | 'message'>,
-  terminals: TerminalSockets | null
+  terminals: TerminalSockets | null,
+  remote: RemoteSocketHandlers | null = null
 ) {
   return {
     open: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.open(socket);
+      else if (isRemoteSocket(socket)) remote?.open(socket);
       else hub.open(socket as ServerWebSocket<SocketData>);
     },
     close: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.close(socket);
+      else if (isRemoteSocket(socket)) remote?.close(socket);
       else hub.close(socket as ServerWebSocket<SocketData>);
     },
     message: (socket: ServerSocket, raw: string | Buffer) => {
       if (isTerminalSocket(socket)) terminals?.message(socket, raw);
+      else if (isRemoteSocket(socket)) remote?.message(socket, raw);
       else hub.message(socket as ServerWebSocket<SocketData>, raw);
     },
     drain: (socket: ServerSocket) => {
@@ -105,9 +133,11 @@ export function startServer(context: HttpContext) {
     context.transcripts,
     context.accounts,
     context.classify ?? null,
-    terminals
+    terminals,
+    context.remote
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
+  const { remote } = context;
 
   function upgrade(request: Request, bunServer: Bun.Server<ServerSocketData>, data: ServerSocketData) {
     const upgradeRefusal = resolveUpgradeRefusal(request);
@@ -131,6 +161,51 @@ export function startServer(context: HttpContext) {
     }
   }
 
+  function respondInsideChannel(request: Request) {
+    const url = new URL(request.url);
+    if (!url.pathname.startsWith('/api/'))
+      return Promise.resolve(respondError('not_found', 'No such endpoint.', 404));
+    if (resolveLocalOnlyRoute(request.method, url.pathname))
+      return Promise.resolve(respondError(LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, 403));
+    return respondApi(markRemoteRequest(request), url);
+  }
+
+  const remoteSockets: RemoteSocketHandlers | null = remote
+    ? {
+        open: (socket) => {
+          socket.data.channel = remote.openChannel(
+            {
+              send: (data) => socket.send(data),
+              close: (code, reason) => socket.close(code, reason),
+            },
+            { hub, respond: respondInsideChannel }
+          );
+        },
+        close: (socket) => {
+          if (socket.data.channel) remote.closeChannel(socket.data.channel);
+        },
+        message: (socket, raw) => {
+          void socket.data.channel?.receive(raw);
+        },
+      }
+    : null;
+
+  async function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
+    if (route === 'health') return Response.json({ ok: true });
+    if (route === 'hook' && context.schedules?.isWebhook(url.pathname)) {
+      if (config.inspect) return respondReadOnly();
+      return context.schedules.handleWebhook(request, url);
+    }
+    if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
+    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
+    if (originRefusal) return respondError('forbidden', originRefusal, 403);
+    const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
+    if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
+    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null } })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
+  }
+
   function respondOutside(request: Request, url: URL) {
     const { schedules, extensions } = context;
     if (schedules?.isWebhook(url.pathname)) {
@@ -151,19 +226,26 @@ export function startServer(context: HttpContext) {
       maxRequestBodySize: ATTACHMENT_REQUEST_LIMIT_BYTES,
       fetch(request, bunServer) {
         const url = new URL(request.url);
+        if (remote && isTunnelRequest(request, remote.tunnelHost))
+          return respondTunnel(request, url, bunServer);
         const outside = respondOutside(request, url);
         if (outside) return outside;
         const refusal = resolveRefusal(request, allowedHosts);
         if (refusal) return respondError('forbidden', refusal, 403);
         if (url.pathname === '/ws')
-          return upgrade(request, bunServer, { kind: 'hub', transcripts: new Map(), surface: null });
+          return upgrade(request, bunServer, {
+            kind: 'hub',
+            transcripts: new Map(),
+            surface: null,
+            origin: 'local',
+          });
         const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
         if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
         if (url.pathname.startsWith('/api/')) return respondApi(request, url);
         return serveStatic(config.webDir, url.pathname);
       },
       websocket: {
-        ...createSocketHandlers(hub, terminalSockets),
+        ...createSocketHandlers(hub, terminalSockets, remoteSockets),
         maxPayloadLength: MAX_BODY_BYTES,
       },
     })

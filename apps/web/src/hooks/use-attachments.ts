@@ -11,14 +11,14 @@ import { describeFailure } from '@/lib/connection/commands.ts';
 
 function useDraftPreviews(drafts: AttachmentDraft[], files: Map<string, File>) {
   const [previews, setPreviews] = React.useState<ReadonlyMap<string, string>>(new Map());
-  const imageKeys = drafts
-    .filter((draft) => draft.kind === 'image')
+  const uploadingKeys = drafts
+    .filter((draft) => draft.kind === 'image' && draft.stored === null)
     .map((draft) => draft.key)
     .join(' ');
 
   React.useLayoutEffect(() => {
     const made = new Map<string, string>();
-    for (const key of imageKeys.split(' ')) {
+    for (const key of uploadingKeys.split(' ')) {
       const file = files.get(key);
       if (file) made.set(key, URL.createObjectURL(file));
     }
@@ -26,10 +26,15 @@ function useDraftPreviews(drafts: AttachmentDraft[], files: Map<string, File>) {
     return () => {
       for (const url of made.values()) URL.revokeObjectURL(url);
     };
-  }, [imageKeys, files]);
+  }, [uploadingKeys, files]);
 
   return React.useMemo(
-    () => drafts.map((draft) => ({ ...draft, preview: previews.get(draft.key) ?? null })),
+    () =>
+      drafts.map((draft) => ({
+        ...draft,
+        preview:
+          draft.kind === 'image' && draft.stored ? draft.stored.url : (previews.get(draft.key) ?? null),
+      })),
     [drafts, previews]
   );
 }

@@ -26,6 +26,12 @@ describe('the command guard', () => {
     }
   });
 
+  test('denies reading or copying the remote access keys, but not reading about them', () => {
+    expect(denied('cat ~/.config/shinsa/data/remote.json')).toBe(true);
+    expect(denied('cp "$SHINSA_HOME/data/remote.json" /tmp/x')).toBe(true);
+    expect(denied('grep -n remote.json docs/engine.md')).toBe(false);
+  });
+
   test('allows reading history and moving between task branches', () => {
     for (const command of [
       'git log --grep commit',

@@ -6,7 +6,7 @@ import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
-import { navigate, resolveTaskPath } from '@/router.ts';
+import { navigate, resolveTaskPath, withRouteBase } from '@/router.ts';
 
 function WaitsOnHint({ waitsOn }: { waitsOn: Task[] }) {
   return (
@@ -33,7 +33,7 @@ export function WaitsOnLinks({ waitsOn }: { waitsOn: Task[] }) {
           <React.Fragment key={parent.id}>
             {index > 0 && <span className='shrink-0'>, </span>}
             <a
-              href={resolveTaskPath(parent)}
+              href={withRouteBase(resolveTaskPath(parent))}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();

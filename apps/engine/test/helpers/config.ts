@@ -28,6 +28,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     settleDelayMs: 3_600_000,
     pushRetryMs: 10,
     overloadRetryMs: 10,
+    remoteOrigin: 'http://127.0.0.1:1',
     ...overrides,
   };
   for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
