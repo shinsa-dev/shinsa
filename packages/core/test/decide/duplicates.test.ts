@@ -10,7 +10,13 @@ function createUntriaged(harness: Harness, request: string) {
   return { taskId, repoId };
 }
 
-function triageAsDuplicate(harness: Harness, request: string, duplicateOf: string, why?: string) {
+function triageAsDuplicate(
+  harness: Harness,
+  request: string,
+  duplicateOf: string,
+  why?: string,
+  waitsOn: string[] = []
+) {
   const { taskId, repoId } = createUntriaged(harness, request);
   harness.send({
     type: 'task.triage',
@@ -19,7 +25,7 @@ function triageAsDuplicate(harness: Harness, request: string, duplicateOf: strin
     repoId,
     size: 'small',
     branch: `fix/${taskId}`,
-    waitsOn: [],
+    waitsOn,
     duplicateOf,
     ...(why ? { reasons: { duplicate: why } } : {}),
   });
@@ -121,6 +127,19 @@ describe('duplicates', () => {
     readyWorktree(harness, copy);
     expect(harness.task(copy).stage).toBe('planning');
     expect(harness.task(copy).rounds?.at(-1)?.status).toBe('active');
+  });
+
+  test('not a duplicate keeps what triage made the task wait on', () => {
+    const harness = createHarness();
+    const blocker = createTask(harness, { request: 'Add the theme tokens' });
+    const original = createTask(harness, { request: 'Add dark mode' });
+    const copy = triageAsDuplicate(harness, 'Dark theme on the tokens', original, undefined, [blocker]);
+    expect(harness.task(copy).waitsOn).toEqual([blocker]);
+    harness.send({ type: 'task.clear_duplicate', taskId: copy });
+
+    expect(harness.task(copy).waitsOn).toEqual([blocker]);
+    expect(harness.task(copy).stage).toBe('waiting_on_tasks');
+    expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).not.toContain(copy);
   });
 
   test('only a duplicate triage closed can start again', () => {

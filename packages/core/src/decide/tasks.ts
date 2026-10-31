@@ -159,13 +159,13 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   if (task.auto.priority && command.priority && command.priority !== task.priority) {
     decider.emit({ type: 'task.prioritized', taskId: task.id, priority: command.priority });
   }
+  if (inferred.length > 0) {
+    decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
+  }
   const original = selectTriageDuplicate(decider, task, command.duplicateOf);
   if (original) {
     closeTriageDuplicate(decider, decider.task(task.id), original, command.reasons?.duplicate ?? null);
     return;
-  }
-  if (inferred.length > 0) {
-    decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }
   releaseInquiryFromBacklog(decider, task.id);
   startWork(decider, task.id);
