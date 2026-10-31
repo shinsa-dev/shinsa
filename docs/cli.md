@@ -385,7 +385,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 
 #### shinsa tasks share
 
-Share a task by a public link on app.shinsa.dev: read-only, without its chat.
+Share a task by a link that reads it live from this machine: read-only, without its chat.
 
 ```
 shinsa tasks share <task> [--json]

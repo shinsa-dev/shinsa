@@ -45,7 +45,7 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
-import { SharePublisher } from './remote/shares.ts';
+import { Shares } from './remote/shares.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -162,7 +162,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     machineName: resolveMachineName(),
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
-  const shares = new SharePublisher({ engine, remote, evidence });
+  const shares = new Shares({ engine, remote, evidence });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
     baseUrl: () => address.url,

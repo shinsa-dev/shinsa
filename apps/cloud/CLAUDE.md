@@ -4,19 +4,18 @@ The Worker on `https://app.shinsa.dev` that remote access runs through (`docs/en
 `docs/plans/remote-plan.md`). It signs you in with GitHub, pairs a machine, makes that machine's Cloudflare tunnel,
 lists your machines, mints the short connect token a browser opens a machine's channel with, forwards webhooks, and
 serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
-sealed end to end (core's `remote/`), and the Worker holds no key that opens it. The one task data it holds is what
-you chose to share: a shared task's publication (core's `SharedTask`, never a chat) and its files. It stores in D1,
-and the files of a publication in R2.
+sealed end to end (core's `remote/`), and the Worker holds no key that opens it. Everything it stores is in D1, and
+none of it is task data: a shared task is read live from its machine, never stored here.
 
 ## Layout
 
 ```
 src/
-├── index.ts       The Worker's entry: the bindings (DB, FILES, ASSETS, the variables and secrets) into a CloudWorld. The only
+├── index.ts       The Worker's entry: the bindings (DB, ASSETS, the variables and secrets) into a CloudWorld. The only
 │                  file outside coverage
 ├── router.ts      respond: /__remote/* routes (JSON, errors as { error: { code, message } }), /hooks/*, and every other
 │                  GET to the assets with the security headers; createWorld
-├── world.ts       CloudWorld (store, files, fetch, assets, now, config) and resolveCloudConfig from the Worker's environment
+├── world.ts       CloudWorld (store, fetch, assets, now, config) and resolveCloudConfig from the Worker's environment
 ├── database.ts    The D1 queries (createStore) over the Database interface D1 and the tests' SQLite both meet
 ├── session.ts     GitHub OAuth (sign-in, callback, sign-out), the native app's code and token, the session cookie
 │                  or bearer
@@ -24,9 +23,6 @@ src/
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
-├── shares.ts      Publications: the machine writes and removes a shared task and uploads its files; anyone with a
-│                  link reads it and its files
-├── files.ts       A file's R2 key, and removing a machine's files
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
 ├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, constant-time comparison
 └── log.ts         recordFailure: the one console call (Workers Logs)
@@ -77,33 +73,20 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds). It only keeps random traffic off the machine's endpoint; the machine still needs an enrolled device key.
+- **Share links.** `POST /__remote/shares/<instance>/connect`, with no session, tells a share page where the machine is:
+  `{ url: "wss://t-<instance>.shinsa.dev", online }` (`ShareConnectResponse`), 404 for an instance that does not
+  exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
+  which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/…` page carry
+  `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
   `Retry-After: 60`.
-- **Shared tasks.** A machine publishes a task you shared (machine token as bearer):
-  `POST /__remote/machine/publications/<task>` `{ shared, files, newLink }`, 1 MB at most, where `shared` is core's
-  `SharedTask` for that task id and `files` names each file it shows (`{ id, hash }`, 200 at most; the id is the
-  evidence id, `diff` or `code` (the changed files whole), and `diff` and `code` are refused unless `shared.code`). Every file must be uploaded first
-  (`file_missing`, 409): `POST /__remote/machine/files/check { hashes }` answers the missing ones, and
-  `POST /__remote/machine/files/<sha256>` takes the raw bytes, 50 MB at most, only as `image/png`, `jpeg`, `webp`,
-  `gif`, `video/mp4`, `webm` or `text/plain` (`SHARE_FILE_TYPES`; an SVG or HTML file could run script), and checks
-  the bytes against the hash. A file is stored once per machine, at `files/<instance>/<hash>` in the `FILES` bucket.
-  A task is published by one machine only (`publication_conflict`, 409). The first publication, or one with
-  `newLink`, makes a 32-byte link token and answers `{ url: "https://app.shinsa.dev/share/<token>" }`; D1 keeps only
-  its SHA-256, so a later publication answers `{ url: null }` and keeps the link. `…/<task>/remove` ends the link at
-  once. A file no publication lists is cleared an hour after its upload, or at once when the publication that listed it is
-  removed (a file another task uploaded but has not listed yet is kept),
-  and removing a machine removes its publications and every file. Anyone with the link reads
-  `GET /__remote/shares/<token>` (`SharedPublication`: the shared task, the ids of its files, when it was published)
-  and `…/files/<id>`, served with `default-src 'none'; sandbox` as its content security policy; an unknown link, a
-  removed share or a file it does not list is 404 `share_not_found`. Those answers and the `/share/<token>` page carry
-  `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
   cookie (`findSessionUser`). Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the
   Worker's own origin, unless it carries a bearer token (`findPageUser`, `assertPageRequest`): a forged cross-site
   request can send the cookie but never the token. Every response carries a strict content security policy (scripts only from the site, sockets
-  only to `wss://*.shinsa.dev`, no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
+  only to `wss://*.shinsa.dev` (and `blob:` reads and media, a share page's files), no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
 
 ## Running and deploying
 
@@ -114,8 +97,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
   `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
-  `wrangler.jsonc`) with the migrations applied (`bun run migrate`), an R2 bucket `shinsa-cloud-files`
-  (`wrangler r2 bucket create shinsa-cloud-files`), a GitHub OAuth app whose callback is
+  `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
   the `shinsa.dev` zone).

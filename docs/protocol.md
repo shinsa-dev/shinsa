@@ -207,7 +207,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
-| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once app.shinsa.dev answered with it (null while the first publish runs), `failure` the reason the last publish failed, cleared by the next that succeeds (`docs/engine.md` → Sharing a task) |
+| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `failure` the reason the link could not be made, cleared once it is (`docs/engine.md` → Sharing a task) |
 
 **Lifecycle and scheduling**
 
@@ -752,8 +752,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
-| `task.share` | shares it by a public link: publishes its projection (`SharedTask`) to app.shinsa.dev and keeps it published while it changes; again on a failed share it publishes once more; an automation's home is refused (`share_refused`) | `tasks share` | **human** |
-| `task.unshare` | stops sharing it: removes its publication, so the link stops working | `tasks unshare` | **human** |
+| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it); again on a failed share it asks for the link once more; an automation's home is refused (`share_refused`) | `tasks share` | **human** |
+| `task.unshare` | stops sharing it: every open link ends at once and the link stops working | `tasks unshare` | **human** |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
 | `watchdog.connect` | gives a watchdog that waits for a source its server (`server`, `data`), adds it to the project's sources for the repository, and starts its window | `watchdogs connect` | agent |
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
@@ -871,8 +871,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
 | `checks.record` | `checks.run` effect | records a round of checks (`results: ReportCheck[]`), with `outputs?` (`CheckEvidence[]`, one per check run: the output the server stored, attached as Shinsa's own `check` evidence with its `checkId`) and `coverage?` (`Coverage`) when the run before review measured it; ignored outside `checking` or with no results |
 | `pull_request.record` | open, merge and watch effects | records a pull request read; `ci` says whether the repository has CI for its base (`RepoCi`: `none`, `workflows`, `required`, `unknown` when absent), read only when the head has no checks |
-| `share.record` | `share.publish` effect | the link app.shinsa.dev answered (`url`, null when it kept the one recorded); clears the last failure |
-| `share.fail` | `share.publish` effect, when it gives up | the reason (`detail`), kept on `TaskShare.failure` for Share task; opens no gate |
+| `share.record` | `share.link` effect | the link the engine made (`url`, null when it kept the one recorded); clears the last failure |
+| `share.fail` | `share.link` effect, when it gives up; the engine, when the machine is paired again | the reason (`detail`), kept on `TaskShare.failure` for Share task; opens no gate |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
@@ -919,7 +919,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.shared`, `task.unshared` | you shared a task by link, or stopped (each adds an activity entry) |
-| `share.recorded`, `share.failed` | app.shinsa.dev answered a publish with its link (`url`, null when unchanged), or a publish failed (`detail`) |
+| `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
@@ -1022,8 +1022,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
-| `share.publish` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up; resolves `SharedTask`, uploads the files app.shinsa.dev lacks and posts the publication with the machine token (`docs/engine.md` → Sharing a task) |
-| `share.remove` | replay_safe | `share:<id>` | none: removes the publication; nothing to do when the machine is not paired |
+| `share.link` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up: makes a share id and a key for this machine's instance, unless a link to it is recorded; not paired fails at once (`SHARE_NOT_PAIRED`) |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
@@ -1215,23 +1214,29 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
-| `POST /__remote/machine/publications/<task>`, `…/remove` | The engine, with its machine token | `PublicationRequest` (`shared`, `files: { id, hash }[]`, `newLink`), 1 MB at most → `PublicationResponse` (`url`, only when a new link was made); removes it |
-| `POST /__remote/machine/files/check`, `POST /__remote/machine/files/<sha256>` | The engine, with its machine token | `{ hashes }` → `{ missing }` (`FilesCheckRequest`, `FilesCheckResponse`); a file's raw bytes as one of `SHARE_FILE_TYPES`, 50 MB at most (`PUBLICATION_LIMITS`) |
-| `GET /__remote/shares/<token>`, `…/files/<id>` | Anyone with the link | `SharedPublication` (`shared`, `files`: the ids it lists, `updatedAt`); one of its files (`resolveSharePath`, `resolveShareFilePath`); 404 `share_not_found` otherwise |
+| `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
 
 Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
 <token>`; a bearer request needs no `Origin`, since it is not a page.
 
-**Shared tasks** (`shares.ts` here, `share/` for the projection): `SharedTask` is `task` (a `Task` with every field
-not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a stored file's `uri` is `shared-evidence:<id>`,
-`SHARED_EVIDENCE_PREFIX`), `repo` and `project` (their records without path, folders or description), `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository with an open or
-merged pull request), the same for a public or a private repository (`docs/engine.md` → Sharing a task has the
-table). A file's id is
-its evidence id, `diff` (`SHARE_DIFF_FILE`) or `code` (`SHARE_CODE_FILE`, `{ files: { <path>: <content at the head> } }`), both refused unless `code` (`isShareCodeFile`). The share page is
-`https://app.shinsa.dev/share/<token>` (`resolveShareUrl`). On the machine, `GET /api/tasks/<id>/share/preview`
-answers `SharePreview` (`shared`, `files`: each file id's local address, `updatedAt`), `…/preview/diff` the diff
-and `…/preview/code` the whole files it would publish (`resolveSharePreviewApiPath`, `resolveSharePreviewDiffApiPath`,
-`resolveSharePreviewCodeApiPath`).
+**Shared tasks** (`shares.ts` and `share-channel.ts` here, `share/` for the projection): `SharedTask` is `task` (a
+`Task` with every field not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a
+stored file's `uri` is `shared-evidence:<id>`, `SHARED_EVIDENCE_PREFIX`), `repo` and `project` (their records without
+path, folders or description), `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository
+with an open or merged pull request), the same for a public or a private repository (`docs/engine.md` → Sharing a
+task has the table). A link is `ShareLink` (`instanceId`, `shareId` of `SHARE_ID_BYTES`, `key` of `SHARE_KEY_BYTES`),
+written `https://app.shinsa.dev/share/<instance>/<share id>#<key>` (`serializeShareUrl`, `parseShareUrl`,
+`parseShareLocation`). Its channel is the tunnel's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
+`resolveShareChannelUrl`): the page sends one `ShareHello` (`share`, a fresh P-256 `ephemeral`, `proof`: an HMAC with
+the key), the machine answers `ShareWelcome` (`welcome` with its fresh key and a proof over both, or `refused`), both
+derive one AES-GCM key (`deriveShareSessionKey`: HKDF over the ECDH and the key), and from then on only the machine
+sends, sealed frames of `ShareMessage`: `view` (a `ShareLiveView`: `shared`, `files`: each file id's `ShareFile`
+`{ version, type }`, `updatedAt`), `file`, `body` and `end` (a file in 256 KB chunks, one of `SHARE_FILE_TYPES`,
+`SHARE_FILE_BYTES` at most) and `closed` (the link ended, with the reason). A file's id is its evidence id, `diff`
+(`SHARE_DIFF_FILE`) or `code` (`SHARE_CODE_FILE`, `{ files: { <path>: <content at the head> } }`). On the machine,
+`GET /api/tasks/<id>/share/preview` answers `SharePreview` (`shared`, `files`: each file id's local address,
+`updatedAt`), `…/preview/diff` the diff and `…/preview/code` the whole files a link would show
+(`resolveSharePreviewApiPath`, `resolveSharePreviewDiffApiPath`, `resolveSharePreviewCodeApiPath`).
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine

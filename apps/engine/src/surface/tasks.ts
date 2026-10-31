@@ -448,7 +448,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['tasks', 'share'],
-    summary: 'Share a task by a public link on app.shinsa.dev: read-only, without its chat.',
+    summary: 'Share a task by a link that reads it live from this machine: read-only, without its chat.',
     command: 'task.share',
     humanOnly: true,
     fields: [TASK_FIELD],
@@ -456,7 +456,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
       type: 'task.share',
       taskId: await findTaskId(client, readValue(values, 'task')),
     }),
-    done: () => 'Shared. The link shows on the task once app.shinsa.dev has it.',
+    done: () => 'Shared. Its link shows on the task in a moment.',
   }),
   defineCommand({
     path: ['tasks', 'unshare'],

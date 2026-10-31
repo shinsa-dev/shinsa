@@ -1,17 +1,11 @@
 import {
-  type FilesCheckResponse,
   type HeartbeatRequest,
   type PairPollRequest,
   type PairPollResponse,
   type PairStartRequest,
   type PairStartResponse,
-  type PublicationRequest,
-  type PublicationResponse,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
-  resolveMachineFilePath,
-  resolveMachinePublicationPath,
-  resolveMachinePublicationRemovePath,
 } from '@shinsa/core';
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -19,13 +13,6 @@ type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 const CONTROL_TIMEOUT_MS = 15_000;
 
 const OFFLINE_TIMEOUT_MS = 2_000;
-
-const UPLOAD_TIMEOUT_MS = 120_000;
-
-interface ControlBody {
-  body: string | Uint8Array<ArrayBuffer>;
-  contentType: string;
-}
 
 export class RevokedError extends Error {
   constructor() {
@@ -58,23 +45,14 @@ export class ControlClient {
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
   }
 
-  #post<T>(path: string, body: unknown, token: string | null, timeoutMs = CONTROL_TIMEOUT_MS) {
-    return this.#send<T>(
-      path,
-      { body: JSON.stringify(body), contentType: 'application/json' },
-      token,
-      timeoutMs
-    );
-  }
-
-  async #send<T>(path: string, body: ControlBody, token: string | null, timeoutMs: number) {
+  async #post<T>(path: string, body: unknown, token: string | null, timeoutMs = CONTROL_TIMEOUT_MS) {
     const response = await this.#fetch(`${this.origin}${path}`, {
       method: 'POST',
       headers: {
-        'content-type': body.contentType,
+        'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
-      body: body.body,
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (response.status === 401 && token) throw new RevokedError();
@@ -100,26 +78,5 @@ export class ControlClient {
 
   async requestRemoval(machineToken: string) {
     await this.#post(REMOTE_PATHS.machineRemove, {}, machineToken);
-  }
-
-  writePublication(machineToken: string, taskId: string, request: PublicationRequest) {
-    return this.#post<PublicationResponse>(resolveMachinePublicationPath(taskId), request, machineToken);
-  }
-
-  async removePublication(machineToken: string, taskId: string) {
-    await this.#post(resolveMachinePublicationRemovePath(taskId), {}, machineToken);
-  }
-
-  requestMissingFiles(machineToken: string, hashes: string[]) {
-    return this.#post<FilesCheckResponse>(REMOTE_PATHS.machineFilesCheck, { hashes }, machineToken);
-  }
-
-  async uploadFile(machineToken: string, hash: string, bytes: Uint8Array<ArrayBuffer>, contentType: string) {
-    await this.#send(
-      resolveMachineFilePath(hash),
-      { body: bytes, contentType },
-      machineToken,
-      UPLOAD_TIMEOUT_MS
-    );
   }
 }

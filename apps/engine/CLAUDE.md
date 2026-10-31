@@ -170,10 +170,12 @@ src/
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
 │                        classifier reads every machine's policies with a new task's request and names its machine),
-│                        shares.ts (SharePublisher: the share.publish and share.remove effects, which publish a shared
-│                        task's projection to app.shinsa.dev with its evidence files by hash and its pull
-│                        request's diff and changed files whole, and GET /api/tasks/<id>/share/preview,
-│                        what it would publish now), index.ts (Remote: wires
+│                        shares.ts (Shares: the share.link effect, which makes a link's id and key; the live
+│                        view of a shared task, its evidence files by hash and its pull request's diff and changed
+│                        files whole; every open link, pushed on each state change and ended when sharing stops or
+│                        remote access goes off; GET /api/tasks/<id>/share/preview, what a link shows now),
+│                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
+│                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,

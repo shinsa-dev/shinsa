@@ -35,10 +35,10 @@ src/
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
 │   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
-│   │                    device, the benefits card and Check again), share.tsx (/share/<token>: a shared task,
-│   │                    read-only and without sign-in, docs/engine.md → Sharing a task)
+│   │                    device, the benefits card and Check again), share.tsx (/share/<machine>/<id>#<key>: a
+│   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task)
 │   ├── share-preview.tsx /tasks/<handle>/shared: on the machine, the page a share link would show, from the engine's
-│   │                    preview of what it would publish
+│   │                    preview of what a link shows
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -133,12 +133,14 @@ src/
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, share and unshare),
-    │                    sources.ts (a shared task from a publication on app.shinsa.dev or the engine's preview, and
-    │                    each file's address), view.ts (the read-only state and task the tab components render),
-    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the published diff and
+    │                    live.ts (openShareStream: the link's live channel to the machine, the hello and welcome
+    │                    checked with the key, the views and files it pushes as blob addresses, reconnecting),
+    │                    sources.ts (the engine's preview, a shared file's text, who is looking), view.ts (the read-only state and task the tab components render),
+    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the streamed diff and
     │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
     │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
-    │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides), and
+    │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides; useReadOnlyNote: the line
+    │                    the header shows above the title), and
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and

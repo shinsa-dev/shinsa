@@ -82,7 +82,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
   if (view.kind === 'share') {
     return (
       <RemoteShell session={session} dashboard={services.dashboard} wide>
-        <SharePage token={view.token} />
+        <SharePage link={view.link} />
       </RemoteShell>
     );
   }

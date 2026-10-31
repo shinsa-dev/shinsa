@@ -2,69 +2,33 @@ import { describe, expect, test } from 'bun:test';
 import { parseUserCommand } from '../../src/index.ts';
 import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
-function publishes(harness: Harness, taskId: string) {
-  return harness.effectsOf('share.publish').filter((effect) => effect.taskId === taskId).length;
+const URL = 'https://app.shinsa.dev/share/inst/AAAAAAAAAAAAAAAAAAAAAA#key';
+
+function links(harness: Harness, taskId: string) {
+  return harness.effectsOf('share.link').filter((effect) => effect.taskId === taskId).length;
 }
 
 describe('sharing a task', () => {
-  test('sharing publishes the task once and records it in the activity', () => {
+  test('asks for a link once and records it in the activity', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
     expect(harness.task(taskId).share).toEqual({ at: harness.now, url: null });
-    expect(publishes(harness, taskId)).toBe(1);
+    expect(links(harness, taskId)).toBe(1);
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'you',
       text: 'Shared this task by link',
     });
     expect(harness.send({ type: 'task.share', taskId }).events).toEqual([]);
-    expect(publishes(harness, taskId)).toBe(1);
+    expect(links(harness, taskId)).toBe(1);
   });
 
-  test('a change to what the task shows publishes it again, and a message to the agent does not', () => {
+  test('a change to the task asks for nothing, since open links read it live', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
-    harness.send({ type: 'task.message', taskId, text: 'My token is x.' });
-    expect(publishes(harness, taskId)).toBe(1);
-    harness.send({ type: 'agent.note', runId: harness.activeRun(taskId).id, note: 'A note.' });
-    expect(publishes(harness, taskId)).toBe(2);
     proposePlan(harness, taskId);
-    expect(publishes(harness, taskId)).toBe(3);
-  });
-
-  test('new evidence publishes the task again', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    proposePlan(harness, taskId);
-    harness.send({ type: 'task.share', taskId });
-    harness.send({
-      type: 'agent.attach_evidence',
-      runId: harness.activeRun(taskId).id,
-      kind: 'preview',
-      title: 'Preview',
-      uri: 'https://preview.example.dev',
-    });
-    expect(publishes(harness, taskId)).toBe(2);
-  });
-
-  test('renaming the project publishes every shared task again', () => {
-    const harness = createHarness();
-    const shared = createTask(harness);
-    const other = createTask(harness, { request: 'Another task' });
-    harness.send({ type: 'task.share', taskId: shared });
-    const project = Object.values(harness.state.projects)[0];
-    if (!project) throw new Error('no project');
-    harness.send({ type: 'project.write', project: { ...project, name: 'Paywalls' } });
-    expect(publishes(harness, shared)).toBe(2);
-    expect(publishes(harness, other)).toBe(0);
-  });
-
-  test('a task that is not shared is never published', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    proposePlan(harness, taskId);
-    expect(publishes(harness, taskId)).toBe(0);
+    expect(links(harness, taskId)).toBe(1);
   });
 
   test('an automation has nothing to share', () => {
@@ -113,19 +77,18 @@ describe('the link', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
-    const url = 'https://app.shinsa.dev/share/abc';
-    harness.send({ type: 'share.record', taskId, url });
-    expect(harness.task(taskId).share?.url).toBe(url);
-    expect(harness.send({ type: 'share.record', taskId, url }).events).toEqual([]);
+    harness.send({ type: 'share.record', taskId, url: URL });
+    expect(harness.task(taskId).share?.url).toBe(URL);
+    expect(harness.send({ type: 'share.record', taskId, url: URL }).events).toEqual([]);
     harness.send({ type: 'task.unshare', taskId });
-    expect(harness.send({ type: 'share.record', taskId, url }).events).toEqual([]);
-    expect(harness.send({ type: 'share.record', taskId: 'missing', url }).events).toEqual([]);
+    expect(harness.send({ type: 'share.record', taskId, url: URL }).events).toEqual([]);
+    expect(harness.send({ type: 'share.record', taskId: 'missing', url: URL }).events).toEqual([]);
     expect(harness.task(taskId).share).toBeNull();
   });
 });
 
-describe('a publication that fails', () => {
-  test('is kept on the task until a later publication succeeds, and sharing again retries it', () => {
+describe('a link that could not be made', () => {
+  test('is kept on the task until a link is recorded, and sharing again asks once more', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
@@ -134,21 +97,20 @@ describe('a publication that fails', () => {
     expect(harness.task(taskId).share?.failure).toBe(detail);
     expect(harness.send({ type: 'share.fail', taskId, detail }).events).toEqual([]);
     harness.send({ type: 'task.share', taskId });
-    expect(publishes(harness, taskId)).toBe(2);
+    expect(links(harness, taskId)).toBe(2);
     harness.send({ type: 'share.record', taskId, url: null });
     expect(harness.task(taskId).share).toMatchObject({ url: null, failure: null });
     expect(harness.send({ type: 'share.record', taskId, url: null }).events).toEqual([]);
   });
 
-  test('a later publication that keeps the link only clears the failure', () => {
+  test('a record that keeps the link only clears the failure', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
-    const url = 'https://app.shinsa.dev/share/abc';
-    harness.send({ type: 'share.record', taskId, url });
-    harness.send({ type: 'share.fail', taskId, detail: 'app.shinsa.dev did not answer.' });
+    harness.send({ type: 'share.record', taskId, url: URL });
+    harness.send({ type: 'share.fail', taskId, detail: 'Remote access was removed.' });
     harness.send({ type: 'share.record', taskId, url: null });
-    expect(harness.task(taskId).share?.url).toBe(url);
+    expect(harness.task(taskId).share?.url).toBe(URL);
     expect(harness.task(taskId).share?.failure).toBeNull();
   });
 
@@ -160,18 +122,15 @@ describe('a publication that fails', () => {
 });
 
 describe('stopping sharing', () => {
-  test('removes the publication, drops a publish still queued and records it', () => {
+  test('drops a link still being made and records it', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
     const decision = harness.send({ type: 'task.unshare', taskId });
     expect(decision.cancellations).toEqual([
-      { taskId, kinds: ['share.publish'], reason: 'The task is no longer shared.' },
+      { taskId, kinds: ['share.link'], reason: 'The task is no longer shared.' },
     ]);
-    expect(harness.effectsOf('share.remove')).toEqual([{ kind: 'share.remove', taskId }]);
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({ text: 'Stopped sharing this task' });
-    proposePlan(harness, taskId);
-    expect(publishes(harness, taskId)).toBe(1);
     expect(harness.send({ type: 'task.unshare', taskId }).events).toEqual([]);
   });
 });

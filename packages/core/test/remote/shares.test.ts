@@ -1,60 +1,59 @@
 import { describe, expect, test } from 'bun:test';
+import { serializeBase64Url } from '../../src/remote/bytes.ts';
 import {
-  isShareCodeFile,
-  isShareFileId,
-  isShareFileType,
-  resolveMachineFilePath,
-  resolveMachinePublicationPath,
-  resolveMachinePublicationRemovePath,
-  resolveShareFilePath,
+  isShareId,
+  parseShareLocation,
+  parseShareUrl,
+  resolveShareChannelUrl,
+  resolveShareConnectPath,
   resolveSharePagePath,
-  resolveSharePath,
   resolveSharePreviewApiPath,
   resolveSharePreviewCodeApiPath,
   resolveSharePreviewDiffApiPath,
-  resolveShareUrl,
-  SHARE_CODE_FILE,
-  SHARE_DIFF_FILE,
+  SHARE_ID_BYTES,
+  SHARE_KEY_BYTES,
+  serializeShareUrl,
 } from '../../src/remote/shares.ts';
 
-describe('the share contract', () => {
-  test('names the machine routes a publication goes through', () => {
-    expect(resolveMachinePublicationPath('task-1')).toBe('/__remote/machine/publications/task-1');
-    expect(resolveMachinePublicationRemovePath('task-1')).toBe(
-      '/__remote/machine/publications/task-1/remove'
+const SHARE_ID = serializeBase64Url(new Uint8Array(SHARE_ID_BYTES).fill(7));
+
+const KEY = serializeBase64Url(new Uint8Array(SHARE_KEY_BYTES).fill(9));
+
+describe('the share link', () => {
+  test('carries the machine and the share in its path, and the key only in its fragment', () => {
+    const url = serializeShareUrl('https://app.shinsa.dev', {
+      instanceId: 'inst',
+      shareId: SHARE_ID,
+      key: KEY,
+    });
+    expect(url).toBe(`https://app.shinsa.dev/share/inst/${SHARE_ID}#${KEY}`);
+    expect(new URL(url).pathname).not.toContain(KEY);
+    expect(parseShareUrl(url)).toEqual({ instanceId: 'inst', shareId: SHARE_ID, key: KEY });
+    expect(resolveSharePagePath('inst', SHARE_ID)).toBe(`/share/inst/${SHARE_ID}`);
+  });
+
+  test('is refused without its key, with a short id or key, or as anything but a share page', () => {
+    expect(parseShareLocation(`/share/inst/${SHARE_ID}`, '')).toBeNull();
+    expect(parseShareLocation(`/share/inst/${SHARE_ID}`, '#short')).toBeNull();
+    expect(parseShareLocation('/share/inst/short', `#${KEY}`)).toBeNull();
+    expect(parseShareLocation(`/tasks/${SHARE_ID}`, `#${KEY}`)).toBeNull();
+    expect(parseShareUrl(null)).toBeNull();
+    expect(parseShareUrl('not a url')).toBeNull();
+  });
+
+  test('knows a share id by its length', () => {
+    expect(isShareId(SHARE_ID)).toBe(true);
+    expect(isShareId('abc')).toBe(false);
+    expect(isShareId('../x')).toBe(false);
+  });
+
+  test('names the connect route, the channel and the preview routes', () => {
+    expect(resolveShareConnectPath('inst')).toBe('/__remote/shares/inst/connect');
+    expect(resolveShareChannelUrl('wss://t-inst.shinsa.dev', 'a b')).toBe(
+      'wss://t-inst.shinsa.dev/share?id=a%20b'
     );
-    expect(resolveMachineFilePath('ab12')).toBe('/__remote/machine/files/ab12');
-  });
-
-  test('names the public page, its data and its files by the share token', () => {
-    expect(resolveSharePagePath('tok')).toBe('/share/tok');
-    expect(resolveShareUrl('https://app.shinsa.dev', 'tok')).toBe('https://app.shinsa.dev/share/tok');
-    expect(resolveSharePath('tok')).toBe('/__remote/shares/tok');
-    expect(resolveShareFilePath('tok', SHARE_DIFF_FILE)).toBe('/__remote/shares/tok/files/diff');
-  });
-
-  test('names the engine routes a preview reads', () => {
     expect(resolveSharePreviewApiPath('task 1')).toBe('/api/tasks/task%201/share/preview');
     expect(resolveSharePreviewDiffApiPath('task-1')).toBe('/api/tasks/task-1/share/preview/diff');
     expect(resolveSharePreviewCodeApiPath('task-1')).toBe('/api/tasks/task-1/share/preview/code');
-  });
-
-  test('knows the files that carry code, and no other', () => {
-    expect(isShareCodeFile(SHARE_DIFF_FILE)).toBe(true);
-    expect(isShareCodeFile(SHARE_CODE_FILE)).toBe(true);
-    expect(isShareCodeFile('ab12')).toBe(false);
-  });
-
-  test('accepts only file types a page can show without running them', () => {
-    expect(isShareFileType('image/png')).toBe(true);
-    expect(isShareFileType('text/plain')).toBe(true);
-    expect(isShareFileType('image/svg+xml')).toBe(false);
-    expect(isShareFileType('text/html')).toBe(false);
-  });
-
-  test('accepts file ids that fit one path segment', () => {
-    expect(isShareFileId('0192f-evidence_1')).toBe(true);
-    expect(isShareFileId('../secret')).toBe(false);
-    expect(isShareFileId('')).toBe(false);
   });
 });

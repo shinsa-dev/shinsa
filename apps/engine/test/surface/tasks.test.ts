@@ -342,7 +342,7 @@ describe('the task commands', () => {
     [
       ['tasks', 'share', 'fix'],
       { type: 'task.share', taskId: 'task-123' },
-      'Shared. The link shows on the task once app.shinsa.dev has it.',
+      'Shared. Its link shows on the task in a moment.',
     ],
     [['tasks', 'unshare', 'fix'], { type: 'task.unshare', taskId: 'task-123' }, 'No longer shared.'],
     [

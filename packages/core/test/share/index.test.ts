@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
   hasSharedCode,
-  resolveSharedFingerprint,
   resolveSharedTask,
   SHARED_EVIDENCE_PREFIX,
   type SharedTaskContext,
@@ -539,21 +538,5 @@ describe('when a shared task has code', () => {
     expect(hasSharedCode(withPullRequest(task, 'merged'), repository)).toBe(true);
     expect(hasSharedCode(withPullRequest(task, 'closed'), repository)).toBe(false);
     expect(hasSharedCode(withPullRequest(task, 'open'), null)).toBe(false);
-  });
-});
-
-describe('the fingerprint of a shared task', () => {
-  test('exists only while the task is shared, and ignores what the projection leaves out', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    expect(resolveSharedFingerprint(harness.state, taskId)).toBeNull();
-    expect(resolveSharedFingerprint(harness.state, 'missing')).toBeNull();
-    harness.send({ type: 'task.share', taskId });
-    expect(harness.task(taskId).share).toEqual({ at: harness.now, url: null });
-    const before = resolveSharedFingerprint(harness.state, taskId);
-    harness.send({ type: 'task.message', taskId, text: 'My token is x.' });
-    expect(resolveSharedFingerprint(harness.state, taskId)).toBe(before);
-    proposePlan(harness, taskId);
-    expect(resolveSharedFingerprint(harness.state, taskId)).not.toBe(before);
   });
 });

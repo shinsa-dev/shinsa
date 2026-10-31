@@ -37,7 +37,7 @@ describe('the share dialog', () => {
     expect(resolveShareView(task, PAIRED)).toEqual({ kind: 'off' });
     expect(resolveShareView(task, null)).toEqual({ kind: 'off' });
     expect(resolveShareView({ ...task, share: { at: 1, url: null } }, PAIRED)).toEqual({
-      kind: 'publishing',
+      kind: 'linking',
     });
   });
 

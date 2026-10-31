@@ -55,8 +55,6 @@ const CODE_STATES: ReadonlySet<PullRequest['state']> = new Set(['open', 'merged'
 
 const PRIVATE_ACTIVITY: ReadonlySet<ActivityKind> = new Set(['message', 'question', 'answer', 'account']);
 
-const FINGERPRINT_CONTEXT: SharedTaskContext = { owner: null, machine: null, repository: '' };
-
 function scrubText(text: string) {
   return text
     .replace(SHINSA_LINK, (link, label: string, kind: string) => (SHARED_LINK_KINDS.has(kind) ? link : label))
@@ -343,11 +341,4 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
     repository: context.repository,
     code: hasSharedCode(task, context.repository),
   };
-}
-
-export function resolveSharedFingerprint(state: ShinsaState, taskId: string) {
-  const task = state.tasks[taskId];
-  if (!task?.share) return null;
-  const shared = resolveSharedTask(state, task, FINGERPRINT_CONTEXT);
-  return JSON.stringify({ ...shared, task: { ...shared.task, updatedAt: 0 } });
 }

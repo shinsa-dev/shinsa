@@ -12,7 +12,8 @@ describe('the router', () => {
     expect(await page.text()).toBe('asset /tasks/LOC-1');
     const policy = page.headers.get('content-security-policy') ?? '';
     expect(policy).toContain("script-src 'self'");
-    expect(policy).toContain("connect-src 'self' wss://*.shinsa.dev");
+    expect(policy).toContain("connect-src 'self' blob: wss://*.shinsa.dev");
+    expect(policy).toContain("media-src 'self' blob:");
     expect(policy).toContain("frame-ancestors 'none'");
     expect(page.headers.get('referrer-policy')).toBe('no-referrer');
     expect(page.headers.get('strict-transport-security')).toContain('max-age=');

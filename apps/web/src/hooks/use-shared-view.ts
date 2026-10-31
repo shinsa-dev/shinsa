@@ -27,55 +27,43 @@ function resolveFailure(error: unknown): SharedViewLoad {
   return { status: 'error', message: describeFailure(error), gone: error instanceof ShareGoneError };
 }
 
+export interface SharedViewHandlers {
+  onSource: (source: SharedSource) => void;
+  onError: (error: Error) => void;
+}
+
 export function useSharedView(
   key: string,
-  request: () => Promise<SharedSource>,
-  refreshMs: number | null = null
+  subscribe: (handlers: SharedViewHandlers) => () => void
 ): SharedViewLoad {
   const [load, setLoad] = React.useState<SharedViewLoad>({ status: 'loading' });
-  const requestRef = React.useRef(request);
-  requestRef.current = request;
-  const shownRef = React.useRef<{ updatedAt: number; release: () => void } | null>(null);
+  const subscribeRef = React.useRef(subscribe);
+  subscribeRef.current = subscribe;
+  const shownRef = React.useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
     let alive = true;
-    const show = (source: SharedSource) => {
-      if (shownRef.current?.updatedAt === source.updatedAt) return;
-      const view = resolveSharedView(source);
-      shownRef.current?.release();
-      shownRef.current = { updatedAt: source.updatedAt, release: registerSharedCode(view) };
-      setLoad({ status: 'ready', view });
-    };
-    const read = () =>
-      requestRef.current().then(
-        (source) => {
-          if (alive) show(source);
-        },
-        (error: unknown) => {
-          if (alive && (!shownRef.current || error instanceof ShareGoneError)) setLoad(resolveFailure(error));
-        }
-      );
-    void read();
-    if (refreshMs === null) {
-      return () => {
-        alive = false;
-      };
-    }
-    const refresh = () => {
-      if (document.visibilityState === 'visible') void read();
-    };
-    const timer = setInterval(refresh, refreshMs);
-    document.addEventListener('visibilitychange', refresh);
+    const stop = subscribeRef.current({
+      onSource: (source) => {
+        if (!alive) return;
+        const view = resolveSharedView(source);
+        shownRef.current?.();
+        shownRef.current = registerSharedCode(view);
+        setLoad({ status: 'ready', view });
+      },
+      onError: (error) => {
+        if (alive && (!shownRef.current || error instanceof ShareGoneError)) setLoad(resolveFailure(error));
+      },
+    });
     return () => {
       alive = false;
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', refresh);
+      stop();
     };
-  }, [key, refreshMs]);
+  }, [key]);
 
   React.useEffect(
     () => () => {
-      shownRef.current?.release();
+      shownRef.current?.();
       shownRef.current = null;
     },
     []

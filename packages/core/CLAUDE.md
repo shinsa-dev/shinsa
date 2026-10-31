@@ -263,12 +263,13 @@ src/
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
-│                    chats, runs, messages, gate questions and answers, and attachments), hasSharedCode, and
-│                    resolveSharedFingerprint, which decide's syncShares compares to republish a shared task only
-│                    when what it shows changed (decide/shares.ts: task.share and task.unshare, human-only;
-│                    share.record, the link the engine got back; share.fail, why a publish failed); its wire
-│                    contract with the Worker is remote/shares.ts (PublicationRequest, SharedPublication,
-│                    SharePreview, PUBLICATION_LIMITS, SHARE_FILE_TYPES and the share paths)
+│                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode
+│                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;
+│                    share.record, the link the engine made; share.fail, why it could not); the link and its
+│                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,
+│                    ShareLiveView, SharePreview, SHARE_FILE_TYPES and the share paths) and
+│                    remote/share-channel.ts (the hello and welcome HMACs with the link's key,
+│                    deriveShareSessionKey, the ShareMessage the machine alone sends)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,

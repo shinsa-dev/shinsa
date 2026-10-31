@@ -1,6 +1,11 @@
-import { REMOTE_APP_ORIGIN, REMOTE_CHANNEL_PATH, REMOTE_ENGINE_HOOK_PREFIX } from '@shinsa/core';
+import {
+  REMOTE_APP_ORIGIN,
+  REMOTE_CHANNEL_PATH,
+  REMOTE_ENGINE_HOOK_PREFIX,
+  SHARE_CHANNEL_PATH,
+} from '@shinsa/core';
 
-export type TunnelRoute = 'health' | 'hook' | 'channel';
+export type TunnelRoute = 'health' | 'hook' | 'channel' | 'share';
 
 const TUNNEL_HEADER = 'cf-connecting-ip';
 
@@ -18,6 +23,7 @@ export function resolveTunnelRoute(request: Request, url: URL): TunnelRoute | nu
   if (url.pathname === '/health' && request.method === 'GET') return 'health';
   if (url.pathname.startsWith(REMOTE_ENGINE_HOOK_PREFIX)) return 'hook';
   if (url.pathname === REMOTE_CHANNEL_PATH && request.method === 'GET') return 'channel';
+  if (url.pathname === SHARE_CHANNEL_PATH && request.method === 'GET') return 'share';
   return null;
 }
 

@@ -242,10 +242,8 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
-      case 'share.publish':
-        return this.#shares.publish(effect.taskId, context);
-      case 'share.remove':
-        return this.#shares.remove(effect.taskId);
+      case 'share.link':
+        return this.#shares.link(effect.taskId, context);
     }
   }
 
@@ -303,7 +301,7 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
-    if (effect.kind === 'share.publish') {
+    if (effect.kind === 'share.link') {
       await this.#engine.dispatch(
         { type: 'share.fail', taskId: effect.taskId, detail: error },
         { id: `${key}:share.fail` }

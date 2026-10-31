@@ -259,30 +259,20 @@ describe('routing effects', () => {
     expect(commandIds).toEqual(['push-key:effect.fail']);
   });
 
-  test('a share effect goes to the publisher, and a publication that failed for good is kept on its task', async () => {
+  test('a share link is made by the shares, and one that could not be made is kept on its task', async () => {
     const shared: string[] = [];
     const { runner, dispatched, commandIds } = setup(undefined, {
       shares: {
-        publish: (taskId, effectContext) => {
-          shared.push(`publish:${taskId}:${effectContext.key}`);
-          return Promise.resolve();
-        },
-        remove: (taskId) => {
-          shared.push(`remove:${taskId}`);
+        link: (taskId, effectContext) => {
+          shared.push(`link:${taskId}:${effectContext.key}`);
           return Promise.resolve();
         },
       },
     });
     const context = createContext();
-    await runner.apply({ kind: 'share.publish', taskId: 't1' }, context);
-    await runner.apply({ kind: 'share.remove', taskId: 't1' }, createContext());
-    expect(shared).toEqual([`publish:t1:${context.key}`, 'remove:t1']);
-    await runner.reportExhausted(
-      { kind: 'share.publish', taskId: 't1' },
-      'Turn on remote access.',
-      'share-key'
-    );
-    await runner.reportExhausted({ kind: 'share.remove', taskId: 't1' }, 'x', 'remove-key');
+    await runner.apply({ kind: 'share.link', taskId: 't1' }, context);
+    expect(shared).toEqual([`link:t1:${context.key}`]);
+    await runner.reportExhausted({ kind: 'share.link', taskId: 't1' }, 'Turn on remote access.', 'share-key');
     expect(dispatched).toEqual([{ type: 'share.fail', taskId: 't1', detail: 'Turn on remote access.' }]);
     expect(commandIds).toEqual(['share-key:share.fail']);
   });

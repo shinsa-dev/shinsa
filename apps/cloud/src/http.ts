@@ -23,14 +23,12 @@ export function respondError(error: CloudError) {
   return respondJson({ error: { code: error.code, message: error.message } }, error.status);
 }
 
-export async function readJsonFields(
-  request: Request,
-  limit = JSON_LIMIT_BYTES
-): Promise<Record<string, unknown>> {
+export async function readJsonFields(request: Request): Promise<Record<string, unknown>> {
   if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json'))
     throw new CloudError('content_type_invalid', 'Send the request body as application/json.', 415);
   const text = await request.text();
-  if (text.length > limit) throw new CloudError('body_too_large', 'The request body is too large.', 413);
+  if (text.length > JSON_LIMIT_BYTES)
+    throw new CloudError('body_too_large', 'The request body is too large.', 413);
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -87,7 +85,8 @@ const SECURITY_HEADERS: Record<string, string> = {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://avatars.githubusercontent.com",
     "font-src 'self' data:",
-    "connect-src 'self' wss://*.shinsa.dev",
+    "connect-src 'self' blob: wss://*.shinsa.dev",
+    "media-src 'self' blob:",
     "worker-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",
@@ -103,8 +102,6 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 export function applySecurityHeaders(response: Response) {
   const secured = new Response(response.body, response);
-  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
-    if (!secured.headers.has(name)) secured.headers.set(name, value);
-  }
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) secured.headers.set(name, value);
   return secured;
 }

@@ -6,17 +6,18 @@ import {
   REMOTE_CONNECT_PARAM,
   type RemoteInstance,
   resolveTunnelHost,
+  type ShareConnectResponse,
 } from '@shinsa/core';
 import { createCloudflare } from './cloudflare.ts';
 import { resolveTokenHash } from './crypto.ts';
 import type { InstanceRow, UserRow } from './database.ts';
-import { removeInstanceFiles } from './files.ts';
 import { CloudError, readBearer, readJsonFields, readText, respondJson } from './http.ts';
 import { findPageUser, findSessionUser } from './session.ts';
-
 import type { CloudWorld } from './world.ts';
 
 export const ONLINE_WINDOW_MS = 5 * 60_000;
+
+export const NOINDEX = 'noindex, nofollow, noarchive';
 
 function serializeInstance(row: InstanceRow, now: number): RemoteInstance {
   const recent = row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
@@ -38,7 +39,6 @@ async function findOwnInstance(user: UserRow, instanceId: string, world: CloudWo
 
 async function removeInstance(row: InstanceRow, world: CloudWorld) {
   await createCloudflare(world.config, world.fetch).removeTunnel(row.tunnel_id, row.dns_record_id);
-  await removeInstanceFiles(row.id, world);
   await world.store.removeInstance(row.id);
 }
 
@@ -59,13 +59,23 @@ export async function respondConnect(request: Request, instanceId: string, world
   return respondJson(answer);
 }
 
+export async function respondShareConnect(instanceId: string, world: CloudWorld) {
+  const row = await world.store.selectInstance(instanceId);
+  if (!row) throw new CloudError('not_found', 'This task is no longer shared, or the link is wrong.', 404);
+  const answer: ShareConnectResponse = {
+    url: `wss://${resolveTunnelHost(row.id)}`,
+    online: serializeInstance(row, world.now()).online,
+  };
+  return respondJson(answer, 200, { 'x-robots-tag': NOINDEX });
+}
+
 export async function respondInstanceRemove(request: Request, instanceId: string, world: CloudWorld) {
   const user = await findPageUser(request, world);
   await removeInstance(await findOwnInstance(user, instanceId, world), world);
   return respondJson({ ok: true });
 }
 
-export async function findMachine(request: Request, world: CloudWorld) {
+async function findMachine(request: Request, world: CloudWorld) {
   const token = readBearer(request);
   if (!token) throw new CloudError('revoked', 'This machine is not paired.', 401);
   const row = await world.store.selectMachineInstance(await resolveTokenHash(token));

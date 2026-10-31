@@ -164,6 +164,5 @@ export function createTestTerminal(
 }
 
 export const NO_SHARES: ShareEffects = {
-  publish: () => Promise.reject(new Error('This test shares no task.')),
-  remove: () => Promise.reject(new Error('This test shares no task.')),
+  link: () => Promise.reject(new Error('This test shares no task.')),
 };

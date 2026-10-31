@@ -93,7 +93,7 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
-import { failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
+import { failShare, recordShare, shareTask, unshareTask } from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
@@ -387,7 +387,6 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   dispatchRuns(decider);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
-  syncShares(decider, state);
   const changes = sealDraft(decider.state);
   return {
     events: decider.events,

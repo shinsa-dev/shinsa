@@ -2,33 +2,43 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type Bytes,
+  createFrameOpener,
+  createShareHello,
+  decodeText,
+  deriveShareSessionKey,
   type Evidence,
-  PUBLICATION_LIMITS,
-  type PublicationRequest,
-  REMOTE_PATHS,
-  resolveMachineFilePath,
-  resolveMachinePublicationPath,
-  resolveMachinePublicationRemovePath,
+  parseBodyChunk,
+  parseShareMessage,
+  parseShareUrl,
+  parseShareWelcome,
+  REMOTE_KEY_ALGORITHM,
   resolveSharePreviewApiPath,
   resolveSharePreviewCodeApiPath,
   resolveSharePreviewDiffApiPath,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
+  SHARE_FILE_BYTES,
+  type ShareLiveView,
+  type ShareMessage,
   type ShinsaState,
+  serializeBase64Url,
   type Task,
 } from '@shinsa/core';
 import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
+import { SHARE_GONE_REASON } from '../../src/remote/share-channel.ts';
 import {
   createSharePreviewRoutes,
   SHARE_LINK_LOST,
   SHARE_NOT_PAIRED,
+  SHARE_REMOTE_CHANGED,
   type ShareGitHub,
-  SharePublisher,
+  Shares,
 } from '../../src/remote/shares.ts';
 import { EffectError } from '../../src/runtime/failures.ts';
 import { EvidenceStore } from '../../src/store/evidence.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
@@ -40,9 +50,13 @@ const CREDENTIALS = {
   connectKey: 'key',
 };
 
-const CONTEXT = { key: 'share.publish:task-1:1', attempt: 1, signal: new AbortController().signal };
+const CONTEXT = { key: 'share.link:task-1:1', attempt: 1, signal: new AbortController().signal };
 
-const SHARE_URL = 'https://app.shinsa.dev/share/abc';
+const SHARE_ID = 'BwcHBwcHBwcHBwcHBwcHBw';
+
+const SHARE_KEY = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk';
+
+const SHARE_URL = `https://app.shinsa.dev/share/inst1/${SHARE_ID}#${SHARE_KEY}`;
 
 let running: FakeControlPlane | null = null;
 
@@ -144,218 +158,261 @@ function setUp(options: SetUp = {}) {
     options.patch?.(state);
   });
   const github = options.github ?? createGitHub();
-  const publisher = new SharePublisher({
+  let fill = 7;
+  const publisher = new Shares({
     engine: stub.engine,
     remote,
     evidence: new EvidenceStore(evidenceDir),
     github,
+    random: (bytes) => new Uint8Array(bytes).fill(fill++),
     ...(options.now ? { now: options.now } : {}),
   });
-  plane.answers.set(REMOTE_PATHS.machineFilesCheck, () =>
-    Response.json({ missing: (lastBody(REMOTE_PATHS.machineFilesCheck) as { hashes: string[] }).hashes })
-  );
-  plane.answers.set(resolveMachinePublicationPath('task-1'), () => Response.json({ url: SHARE_URL }));
   return { plane, stub, publisher, github, remote };
-}
-
-function lastBody(path: string) {
-  return running?.calls.filter((call) => call.path === path).at(-1)?.body;
-}
-
-function publication() {
-  return lastBody(resolveMachinePublicationPath('task-1')) as PublicationRequest;
 }
 
 function sha256(text: string) {
   return new Bun.CryptoHasher('sha256').update(text).digest('hex');
 }
 
-describe('publishing a shared task', () => {
-  test('a public task goes out with its owner, machine, evidence and the pull request’s diff', async () => {
-    const { plane, stub, publisher } = setUp();
-    await publisher.publish('task-1', CONTEXT);
-    const sent = publication();
-    expect(sent.newLink).toBe(true);
-    expect(sent.shared).toMatchObject({
+interface Viewer {
+  messages: ShareMessage[];
+  closed: { code: number; reason: string } | null;
+  refused: string | null;
+  views: () => ShareLiveView[];
+  files: () => Record<string, string>;
+  send: (data: string) => Promise<void>;
+}
+
+async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID): Promise<Viewer> {
+  const link = parseShareUrl(url);
+  if (!link) throw new Error('not a share link');
+  const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
+    'deriveBits',
+  ])) as CryptoKeyPair;
+  const hello = await createShareHello(link.shareId, link.key, ephemeral.publicKey);
+  let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
+  let queue: Promise<void> = Promise.resolve();
+  const viewer: Viewer = {
+    messages: [],
+    closed: null,
+    refused: null,
+    views: () =>
+      viewer.messages.flatMap((message) =>
+        message.t === 'view' ? [JSON.parse(message.data) as ShareLiveView] : []
+      ),
+    files: () => {
+      const files: Record<string, string> = {};
+      for (const message of viewer.messages) {
+        if (message.t === 'file') files[message.id] = '';
+        if (message.t === 'body') files[message.id] += decodeText(parseBodyChunk(message.chunk) as Bytes);
+      }
+      return files;
+    },
+    send: (data) => channel.receive(data),
+  };
+  const channel = publisher.openChannel(
+    {
+      send: (data) => {
+        queue = queue.then(async () => {
+          if (typeof data === 'string') {
+            const welcome = parseShareWelcome(data);
+            if (welcome?.type === 'refused') viewer.refused = welcome.reason;
+            if (welcome?.type !== 'welcome') return;
+            const key = await deriveShareSessionKey(
+              link.key,
+              { share: link.shareId, clientEphemeral: hello.ephemeral, serverEphemeral: welcome.ephemeral },
+              ephemeral.privateKey,
+              welcome.ephemeral
+            );
+            open = createFrameOpener(key);
+            return;
+          }
+          if (!open) throw new Error('a frame before the welcome');
+          const message = parseShareMessage(decodeText(await open(data as Bytes)));
+          if (message) viewer.messages.push(message);
+        });
+      },
+      close: (code, reason) => {
+        viewer.closed = { code, reason };
+      },
+    },
+    shareId
+  );
+  await channel.receive(JSON.stringify(hello));
+  await queue;
+  return viewer;
+}
+
+function sharedSetUp(options: SetUp = {}) {
+  return setUp({
+    ...options,
+    patch: (state) => {
+      state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+      options.patch?.(state);
+    },
+  });
+}
+
+describe('making a share link', () => {
+  test('a new share gets a link to this machine with a fresh id and a key only in its fragment', async () => {
+    const { stub, publisher, remote } = setUp();
+    await publisher.link('task-1', CONTEXT);
+    const recorded = stub.dispatched[0] as { url: string };
+    const key = serializeBase64Url(new Uint8Array(32).fill(8));
+    expect(recorded.url).toBe(`${remote.appOrigin}/share/inst1/${SHARE_ID}#${key}`);
+    expect(parseShareUrl(recorded.url)?.shareId).toBe(SHARE_ID);
+    expect(stub.commandIds).toEqual([`${CONTEXT.key}:share.record`]);
+  });
+
+  test('a link to this machine is kept, and one to an earlier pairing is replaced', async () => {
+    const { stub, publisher } = sharedSetUp();
+    await publisher.link('task-1', CONTEXT);
+    expect(stub.dispatched).toEqual([{ type: 'share.record', taskId: 'task-1', url: null }]);
+    stub.state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL.replace('inst1', 'old') } });
+    await publisher.link('task-1', CONTEXT);
+    expect(parseShareUrl((stub.dispatched[1] as { url: string }).url)?.instanceId).toBe('inst1');
+  });
+
+  test('a key and an id come from the system random source by default', async () => {
+    const { stub, remote } = setUp();
+    const shares = new Shares({ engine: stub.engine, remote, evidence: new EvidenceStore(createTempDir()) });
+    await shares.link('task-1', CONTEXT);
+    const link = parseShareUrl((stub.dispatched[0] as { url: string }).url);
+    expect(link?.key).toHaveLength(43);
+    expect(link?.shareId).not.toBe(SHARE_ID);
+  });
+
+  test('a machine that is not paired fails for good, saying how to turn remote access on', async () => {
+    const { publisher } = setUp({ paired: false });
+    const failure = await publisher.link('task-1', CONTEXT).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(EffectError);
+    expect((failure as EffectError).message).toBe(SHARE_NOT_PAIRED);
+    expect((failure as EffectError).policy.retryable).toBe(false);
+  });
+
+  test('a task that is no longer shared gets no link', async () => {
+    const { stub, publisher } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ share: null });
+      },
+    });
+    await publisher.link('task-1', CONTEXT);
+    await publisher.link('missing', CONTEXT);
+    expect(stub.dispatched).toEqual([]);
+  });
+});
+
+describe('a share link opened live', () => {
+  test('streams the task and its files, sealed with the key in the link, and nothing goes to app.shinsa.dev', async () => {
+    const { plane, publisher } = sharedSetUp();
+    expect(publisher.acceptsShare(SHARE_ID)).toBe(true);
+    expect(publisher.acceptsShare('other')).toBe(false);
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads it', () =>
+      viewer.messages.some((message) => message.t === 'end' && message.id === SHARE_CODE_FILE)
+    );
+    const [view] = viewer.views();
+    expect(view?.shared).toMatchObject({
       owner: 'mona',
       machine: 'Studio',
       repository: 'acme/app',
       code: true,
     });
-    expect(sent.shared.evidence.map((item) => item.uri)).toEqual(['shared-evidence:shot-1']);
-    expect(sent.files).toEqual([
-      { id: 'shot-1', hash: sha256('png bytes') },
-      { id: SHARE_DIFF_FILE, hash: sha256(DIFF) },
-      { id: SHARE_CODE_FILE, hash: sha256(CODE) },
-    ]);
-    expect(plane.calls.map((call) => [call.path, call.token])).toEqual([
-      [REMOTE_PATHS.machineFilesCheck, 'machine-token'],
-      [resolveMachineFilePath(sha256('png bytes')), 'machine-token'],
-      [resolveMachineFilePath(sha256(DIFF)), 'machine-token'],
-      [resolveMachineFilePath(sha256(CODE)), 'machine-token'],
-      [resolveMachinePublicationPath('task-1'), 'machine-token'],
-    ]);
-    expect(lastBody(resolveMachineFilePath(sha256('png bytes')))).toEqual({
-      contentType: 'image/png',
-      text: 'png bytes',
+    expect(view?.files).toEqual({
+      'shot-1': { version: sha256('png bytes'), type: 'image/png' },
+      [SHARE_DIFF_FILE]: { version: '7:abc123', type: 'text/plain' },
+      [SHARE_CODE_FILE]: { version: '7:abc123', type: 'text/plain' },
     });
-    expect(stub.dispatched).toEqual([{ type: 'share.record', taskId: 'task-1', url: SHARE_URL }]);
-    expect(stub.commandIds).toEqual([`${CONTEXT.key}:share.record`]);
+    expect(viewer.files()).toEqual({
+      'shot-1': 'png bytes',
+      [SHARE_DIFF_FILE]: DIFF,
+      [SHARE_CODE_FILE]: CODE,
+    });
+    expect(plane.calls).toEqual([]);
   });
 
-  test('a later publication keeps the link, uploads nothing the cloud has and reads GitHub only when it changed', async () => {
-    const { plane, stub, publisher, github } = setUp();
-    await publisher.publish('task-1', CONTEXT);
-    const task = stub.state.tasks['task-1'] as Task;
-    stub.state.tasks['task-1'] = { ...task, share: { at: 1, url: SHARE_URL } };
-    plane.answers.set(REMOTE_PATHS.machineFilesCheck, () => Response.json({ missing: [] }));
-    plane.answers.set(resolveMachinePublicationPath('task-1'), () => Response.json({ url: null }));
-    const before = plane.calls.length;
-    await publisher.publish('task-1', CONTEXT);
-    expect(publication().newLink).toBe(false);
-    expect(plane.calls.slice(before).map((call) => call.path)).toEqual([
-      REMOTE_PATHS.machineFilesCheck,
-      resolveMachinePublicationPath('task-1'),
-    ]);
-    expect(github.diffReads).toBe(1);
-    expect(stub.dispatched.at(-1)).toEqual({ type: 'share.record', taskId: 'task-1', url: null });
-    const shared = stub.state.tasks['task-1'] as Task;
-    stub.state.tasks['task-1'] = {
-      ...shared,
-      pullRequest: shared.pullRequest ? { ...shared.pullRequest, headSha: 'def456' } : null,
-    };
-    await publisher.publish('task-1', CONTEXT);
-    expect(github.diffReads).toBe(2);
-  });
-
-  test('a diff too large to share is left out, and not read again for the same head', async () => {
-    const github = createGitHub('x'.repeat(PUBLICATION_LIMITS.fileBytes + 1));
-    const { publisher } = setUp({ github });
-    await publisher.publish('task-1', CONTEXT);
-    expect(publication().files.map((file) => file.id)).toEqual(['shot-1']);
-    expect(publication().shared.code).toBe(true);
-    await publisher.publish('task-1', CONTEXT);
+  test('pushes a change at once, sends a file again only when it changed, and reads GitHub once per head', async () => {
+    const { stub, publisher, github } = sharedSetUp();
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads it', () =>
+      viewer.messages.some((message) => message.t === 'end' && message.id === SHARE_CODE_FILE)
+    );
+    const sent = viewer.messages.length;
+    stub.notify();
+    await Bun.sleep(0);
+    expect(viewer.messages.length).toBe(sent);
+    stub.state.tasks['task-1'] = shareTask({ title: 'Renamed', share: { at: 1, url: SHARE_URL } });
+    stub.notify();
+    await until('the viewer reads it', () => viewer.views().length === 2);
+    expect(viewer.views()[1]?.shared.task.title).toBe('Renamed');
+    expect(viewer.messages.slice(sent).filter((message) => message.t === 'file')).toEqual([]);
     expect(github.diffReads).toBe(1);
   });
 
-  test('evidence it cannot share safely is left out, not published as a broken item', async () => {
-    const { publisher } = setUp({
+  test('ends when you stop sharing, and refuses a link whose key is wrong', async () => {
+    const { stub, publisher } = sharedSetUp();
+    const viewer = await openViewer(publisher);
+    stub.state.tasks['task-1'] = shareTask({ share: null });
+    stub.notify();
+    await until('the viewer reads it', () => viewer.closed !== null);
+    expect(viewer.messages.at(-1)).toEqual({ t: 'closed', reason: SHARE_GONE_REASON });
+    expect(viewer.closed).toEqual({ code: 1000, reason: SHARE_GONE_REASON });
+    const stopped = await openViewer(publisher);
+    expect(stopped.refused).toBe(SHARE_GONE_REASON);
+    expect(publisher.acceptsShare(SHARE_ID)).toBe(true);
+    stub.state.tasks['task-1'] = shareTask({ share: { at: 1, url: SHARE_URL } });
+    const wrong = await openViewer(publisher, SHARE_URL.replace(/#.*/, `#${'A'.repeat(43)}`));
+    expect(wrong.refused).toBe(SHARE_GONE_REASON);
+    expect(wrong.closed?.code).toBe(1008);
+  });
+
+  test('takes nothing from the viewer: any message after the hello closes it', async () => {
+    const { publisher } = sharedSetUp();
+    const viewer = await openViewer(publisher);
+    await viewer.send(JSON.stringify({ type: 'task.prioritize', taskId: 'task-1', priority: 'urgent' }));
+    expect(viewer.closed).toEqual({ code: 1008, reason: 'A share link only listens.' });
+    const mismatched = await openViewer(publisher, SHARE_URL, 'other');
+    expect(mismatched.closed?.reason).toBe('The share link expects a hello first.');
+  });
+
+  test('ends every open link when remote access is turned off', async () => {
+    const { publisher, remote } = sharedSetUp();
+    const viewer = await openViewer(publisher);
+    await remote.disable();
+    await until('the viewer reads it', () => viewer.closed !== null);
+    expect(viewer.closed?.reason).toBe(SHARE_REMOTE_CHANGED);
+    expect(publisher.acceptsShare(SHARE_ID)).toBe(false);
+  });
+
+  test('a file too large to stream is left out, and the evidence it shows with it', async () => {
+    const github = createGitHub('x'.repeat(SHARE_FILE_BYTES + 1));
+    const { publisher } = sharedSetUp({
+      github,
       patch: (state) => {
-        state.evidence['page'] = createEvidence({
+        state.evidence.page = createEvidence({
           id: 'page',
           uri: '/api/evidence/page.html',
           attachedAt: 2,
         });
-        state.evidence['lost'] = createEvidence({ id: 'lost', uri: '/api/evidence/lost.png', attachedAt: 3 });
+        state.evidence.lost = createEvidence({ id: 'lost', uri: '/api/evidence/lost.png', attachedAt: 3 });
       },
     });
-    await publisher.publish('task-1', CONTEXT);
-    expect(publication().shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
-    expect(publication().files.map((file) => file.id)).toEqual(['shot-1', SHARE_DIFF_FILE, SHARE_CODE_FILE]);
+    const live = await publisher.resolveLive('task-1');
+    expect(Object.keys(live.view.files)).toEqual(['shot-1']);
+    expect(live.view.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
   });
 
-  test('the changed files go out whole from GitHub at the pushed head, without new, removed or binary ones', async () => {
-    const diff = [
-      'diff --git a/src/a.ts b/src/a.ts',
-      'diff --git a/src/new.ts b/src/new.ts',
-      'new file mode 100644',
-      'diff --git a/src/gone.ts b/src/gone.ts',
-      'deleted file mode 100644',
-      'diff --git a/logo.png b/logo.png',
-      'Binary files a/logo.png and b/logo.png differ',
-      'diff --git a/src/lost.ts b/src/lost.ts',
-    ].join('\n');
-    const github = createGitHub(diff, (_repo, ref, path) =>
-      path === 'src/lost.ts' ? Promise.reject(new Error('Not Found')) : Promise.resolve(`${path}@${ref}`)
-    );
-    const { publisher } = setUp({ github });
-    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({
-      files: { 'src/a.ts': 'src/a.ts@abc123' },
-    });
-    expect(github.fileReads).toEqual(['src/a.ts@abc123', 'src/lost.ts@abc123']);
-  });
-
-  test('changed files past the size a publication can carry are left out', async () => {
-    const big = 'x'.repeat(PUBLICATION_LIMITS.fileBytes);
-    const diff = ['diff --git a/a.ts b/a.ts', 'diff --git a/b.ts b/b.ts'].join('\n');
-    const github = createGitHub(diff, (_repo, _ref, path) => Promise.resolve(path === 'a.ts' ? 'a' : big));
-    const { publisher } = setUp({ github });
-    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({ files: { 'a.ts': 'a' } });
-  });
-
-  test('a pull request with no pushed head shares its diff and no whole files', async () => {
-    const { publisher, github } = setUp({
-      patch: (state) => {
-        const task = shareTask();
-        state.tasks['task-1'] = {
-          ...task,
-          pullRequest: task.pullRequest && { ...task.pullRequest, headSha: null },
-        };
-      },
-    });
-    await publisher.publish('task-1', CONTEXT);
-    expect(publication().files.map((file) => file.id)).toEqual(['shot-1', SHARE_DIFF_FILE]);
-    expect(Object.keys(publisher.preview('task-1').files)).toEqual(['shot-1', SHARE_DIFF_FILE]);
-    expect(github.fileReads).toEqual([]);
-  });
-
-  test('a task with no repository and no files is published without checking any or reading a diff', async () => {
-    const { plane, publisher } = setUp({
-      patch: (state) => {
-        state.tasks['task-1'] = shareTask({ repoId: null, pullRequest: null });
-        state.evidence = {};
-      },
-    });
-    await publisher.publish('task-1', CONTEXT);
-    expect(plane.calls.map((call) => call.path)).toEqual([resolveMachinePublicationPath('task-1')]);
-    expect(publication().shared).toMatchObject({ repository: null, code: false });
-  });
-
-  test('a task that is no longer shared, or is gone, is not published', async () => {
-    const { plane, publisher } = setUp({
-      patch: (state) => {
-        state.tasks['task-1'] = shareTask({ share: null });
-      },
-    });
-    await publisher.publish('task-1', CONTEXT);
-    await publisher.publish('missing', CONTEXT);
-    expect(plane.calls).toEqual([]);
+  test('a closed channel is forgotten', async () => {
+    const { stub, publisher } = sharedSetUp();
+    const viewer = await openViewer(publisher);
+    const channel = publisher.openChannel({ send: () => undefined, close: () => undefined }, SHARE_ID);
+    publisher.closeChannel(channel);
+    stub.notify();
+    expect(viewer.closed).toBeNull();
   });
 });
 
-describe('when publishing cannot work', () => {
-  test('a machine that is not paired fails for good, saying how to turn remote access on', async () => {
-    const { plane, publisher } = setUp({ paired: false });
-    const failure = await publisher.publish('task-1', CONTEXT).catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(EffectError);
-    expect((failure as EffectError).message).toBe(SHARE_NOT_PAIRED);
-    expect((failure as EffectError).policy.retryable).toBe(false);
-    await publisher.remove('task-1');
-    expect(plane.calls).toEqual([]);
-  });
-
-  test('a revoked machine or a refusal fails for good, and a cloud outage is retried', async () => {
-    const { plane, publisher } = setUp();
-    const path = resolveMachinePublicationPath('task-1');
-    plane.answers.set(path, () => new Response('', { status: 401 }));
-    const revoked = (await publisher
-      .publish('task-1', CONTEXT)
-      .catch((error: unknown) => error)) as EffectError;
-    expect(revoked.message).toBe(SHARE_NOT_PAIRED);
-    plane.answers.set(path, () => new Response('', { status: 409 }));
-    const refused = (await publisher
-      .publish('task-1', CONTEXT)
-      .catch((error: unknown) => error)) as EffectError;
-    expect(refused.policy.retryable).toBe(false);
-    expect(refused.message).toContain('status 409');
-    plane.answers.set(path, () => new Response('', { status: 503 }));
-    const outage = await publisher.publish('task-1', CONTEXT).catch((error: unknown) => error);
-    expect(outage).not.toBeInstanceOf(EffectError);
-    expect((outage as Error).message).toContain('status 503');
-  });
-});
-
-describe('when this machine loses its pairing', () => {
+describe('when this machine is paired again', () => {
   test('every link it shared is marked as no longer working, so Share again makes a new one', async () => {
     const { stub, remote } = setUp({
       patch: (state) => {
@@ -386,26 +443,13 @@ describe('when this machine loses its pairing', () => {
   });
 });
 
-describe('removing a publication', () => {
-  test('tells app.shinsa.dev with the machine token, and reads a refusal the same way', async () => {
-    const { plane, publisher } = setUp();
-    await publisher.remove('task-1');
-    expect(plane.calls).toEqual([
-      { path: resolveMachinePublicationRemovePath('task-1'), token: 'machine-token', body: {} },
-    ]);
-    plane.answers.set(resolveMachinePublicationRemovePath('task-1'), () => new Response('', { status: 401 }));
-    const failure = (await publisher.remove('task-1').catch((error: unknown) => error)) as EffectError;
-    expect(failure.message).toBe(SHARE_NOT_PAIRED);
-  });
-});
-
 describe('previewing a share', () => {
   test('shows what a viewer would see from local addresses, before the task is shared and with nothing sent', async () => {
     const { plane, publisher } = setUp({
       paired: false,
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ share: null });
-        state.evidence['page'] = createEvidence({
+        state.evidence.page = createEvidence({
           id: 'page',
           uri: '/api/evidence/page.html',
           attachedAt: 2,
@@ -457,5 +501,52 @@ describe('previewing a share', () => {
     const codeMatch = code?.pattern.exec(resolveSharePreviewCodeApiPath('task-1'));
     if (!code || !codeMatch) throw new Error('The code route does not match its path.');
     expect(await (await code.respond(codeMatch, new Request('http://x'))).text()).toBe(CODE);
+  });
+
+  test('the changed files come whole from GitHub at the pushed head, without new, removed or binary ones', async () => {
+    const diff = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      'diff --git a/src/new.ts b/src/new.ts',
+      'new file mode 100644',
+      'diff --git a/src/gone.ts b/src/gone.ts',
+      'deleted file mode 100644',
+      'diff --git a/logo.png b/logo.png',
+      'Binary files a/logo.png and b/logo.png differ',
+      'diff --git a/src/lost.ts b/src/lost.ts',
+    ].join('\n');
+    const github = createGitHub(diff, (_repo, ref, path) =>
+      path === 'src/lost.ts' ? Promise.reject(new Error('Not Found')) : Promise.resolve(`${path}@${ref}`)
+    );
+    const { publisher } = setUp({ github });
+    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({
+      files: { 'src/a.ts': 'src/a.ts@abc123' },
+    });
+    expect(github.fileReads).toEqual(['src/a.ts@abc123', 'src/lost.ts@abc123']);
+  });
+
+  test('changed files past the size a file can carry are left out', async () => {
+    const big = 'x'.repeat(SHARE_FILE_BYTES);
+    const diff = ['diff --git a/a.ts b/a.ts', 'diff --git a/b.ts b/b.ts'].join('\n');
+    const github = createGitHub(diff, (_repo, _ref, path) => Promise.resolve(path === 'a.ts' ? 'a' : big));
+    const { publisher } = setUp({ github });
+    expect(JSON.parse(await publisher.previewCode('task-1'))).toEqual({ files: { 'a.ts': 'a' } });
+  });
+
+  test('a pull request with no pushed head shares its diff and no whole files', async () => {
+    const { publisher, github } = setUp({
+      patch: (state) => {
+        const task = shareTask();
+        state.tasks['task-1'] = {
+          ...task,
+          pullRequest: task.pullRequest && { ...task.pullRequest, headSha: null },
+        };
+      },
+    });
+    expect(Object.keys(publisher.preview('task-1').files)).toEqual(['shot-1', SHARE_DIFF_FILE]);
+    expect(Object.keys((await publisher.resolveLive('task-1')).view.files)).toEqual([
+      'shot-1',
+      SHARE_DIFF_FILE,
+    ]);
+    expect(github.fileReads).toEqual([]);
   });
 });

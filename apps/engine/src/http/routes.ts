@@ -33,7 +33,7 @@ import { createProjectRoutes } from '../projects/routes.ts';
 import { type Remote, resolveRequestOrigin } from '../remote/index.ts';
 import { createPlacementRoutes, type PlacementAsker } from '../remote/placement.ts';
 import { createRemoteRoutes } from '../remote/routes.ts';
-import { createSharePreviewRoutes, type SharePreviewer } from '../remote/shares.ts';
+import { createSharePreviewRoutes, type ShareLinks } from '../remote/shares.ts';
 import { createLoginResolver, type LoginResolver, type RootSource } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
@@ -60,7 +60,7 @@ export type Launcher = (command: string[], cwd: string) => Promise<CommandResult
 export interface ApiContext {
   engine: Engine;
   remote?: Remote;
-  shares?: SharePreviewer;
+  shares?: ShareLinks;
   config: ServerConfig;
   instance?: ServerInstance;
   evidence: EvidenceStore;

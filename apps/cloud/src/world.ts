@@ -15,20 +15,8 @@ export interface CloudConfig {
   maxInstances: number;
 }
 
-interface StoredFile {
-  body: ReadableStream;
-  contentType: string;
-}
-
-export interface FileBucket {
-  put: (key: string, body: ArrayBuffer, contentType: string) => Promise<void>;
-  select: (key: string) => Promise<StoredFile | null>;
-  remove: (keys: string[]) => Promise<void>;
-}
-
 export interface CloudWorld {
   store: CloudStore;
-  files: FileBucket;
   fetch: Fetch;
   assets: (request: Request) => Promise<Response>;
   now: () => number;

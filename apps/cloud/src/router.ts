@@ -3,12 +3,14 @@ import { createStore, type Database } from './database.ts';
 import { respondHook } from './hooks.ts';
 import { applySecurityHeaders, CloudError, respondError, respondJson } from './http.ts';
 import {
+  NOINDEX,
   respondConnect,
   respondHeartbeat,
   respondInstanceRemove,
   respondInstances,
   respondMachineRemove,
   respondOffline,
+  respondShareConnect,
 } from './instances.ts';
 import { recordFailure } from './log.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
@@ -20,16 +22,7 @@ import {
   respondSignInToken,
   respondSignOut,
 } from './session.ts';
-import {
-  NOINDEX,
-  respondFilesCheck,
-  respondFileUpload,
-  respondPublicationRemove,
-  respondPublicationWrite,
-  respondShare,
-  respondShareFile,
-} from './shares.ts';
-import type { CloudConfig, CloudWorld, Fetch, FileBucket } from './world.ts';
+import type { CloudConfig, CloudWorld, Fetch } from './world.ts';
 
 type Handler = (
   request: Request,
@@ -108,6 +101,11 @@ const ROUTES: Route[] = [
   },
   {
     method: 'POST',
+    pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}/connect$`),
+    respond: (_request, _url, match, world) => respondShareConnect(match[1] ?? '', world),
+  },
+  {
+    method: 'POST',
     pattern: new RegExp(`^${REMOTE_PATHS.instances}/${SEGMENT}/remove$`),
     respond: (request, _url, match, world) => respondInstanceRemove(request, match[1] ?? '', world),
   },
@@ -125,36 +123,6 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(REMOTE_PATHS.machineRemove),
     respond: (request, _url, _match, world) => respondMachineRemove(request, world),
-  },
-  {
-    method: 'POST',
-    pattern: new RegExp(`^${REMOTE_PATHS.machinePublications}/${SEGMENT}$`),
-    respond: (request, _url, match, world) => respondPublicationWrite(request, match[1] ?? '', world),
-  },
-  {
-    method: 'POST',
-    pattern: new RegExp(`^${REMOTE_PATHS.machinePublications}/${SEGMENT}/remove$`),
-    respond: (request, _url, match, world) => respondPublicationRemove(request, match[1] ?? '', world),
-  },
-  {
-    method: 'POST',
-    pattern: exact(REMOTE_PATHS.machineFilesCheck),
-    respond: (request, _url, _match, world) => respondFilesCheck(request, world),
-  },
-  {
-    method: 'POST',
-    pattern: new RegExp(`^${REMOTE_PATHS.machineFiles}/${SEGMENT}$`),
-    respond: (request, _url, match, world) => respondFileUpload(request, match[1] ?? '', world),
-  },
-  {
-    method: 'GET',
-    pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}$`),
-    respond: (_request, _url, match, world) => respondShare(match[1] ?? '', world),
-  },
-  {
-    method: 'GET',
-    pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}/files/${SEGMENT}$`),
-    respond: (_request, _url, match, world) => respondShareFile(match[1] ?? '', match[2] ?? '', world),
   },
 ];
 
@@ -212,7 +180,6 @@ export async function respond(request: Request, world: CloudWorld) {
 
 export interface CloudBindings {
   db: Database;
-  files: FileBucket;
   assets: (request: Request) => Promise<Response>;
   fetch: Fetch;
   now: () => number;
@@ -222,7 +189,6 @@ export interface CloudBindings {
 export function createWorld(bindings: CloudBindings): CloudWorld {
   return {
     store: createStore(bindings.db),
-    files: bindings.files,
     assets: bindings.assets,
     fetch: bindings.fetch,
     now: bindings.now,

@@ -1,4 +1,4 @@
-import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM } from '@shinsa/core';
+import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM, SHARE_CHANNEL_PARAM } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
@@ -12,6 +12,7 @@ import {
   resolveLocalOnlyRoute,
   resolveTunnelRoute,
 } from '../remote/index.ts';
+import type { ShareChannel } from '../remote/share-channel.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
@@ -47,7 +48,13 @@ interface RemoteSocketData {
   channel: RemoteChannel | null;
 }
 
-type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData;
+interface ShareSocketData {
+  kind: 'share';
+  shareId: string;
+  channel: ShareChannel | null;
+}
+
+type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData | ShareSocketData;
 
 type ServerSocket = ServerWebSocket<ServerSocketData>;
 
@@ -59,10 +66,20 @@ function isRemoteSocket(socket: ServerSocket): socket is ServerWebSocket<RemoteS
   return socket.data.kind === 'remote';
 }
 
+function isShareSocket(socket: ServerSocket): socket is ServerWebSocket<ShareSocketData> {
+  return socket.data.kind === 'share';
+}
+
 export interface RemoteSocketHandlers {
   open: (socket: ServerWebSocket<RemoteSocketData>) => void;
   close: (socket: ServerWebSocket<RemoteSocketData>) => void;
   message: (socket: ServerWebSocket<RemoteSocketData>, raw: string | Buffer) => void;
+}
+
+export interface ShareSocketHandlers {
+  open: (socket: ServerWebSocket<ShareSocketData>) => void;
+  close: (socket: ServerWebSocket<ShareSocketData>) => void;
+  message: (socket: ServerWebSocket<ShareSocketData>, raw: string | Buffer) => void;
 }
 
 export function resolveServerUrl(hostname: string, port: number) {
@@ -81,22 +98,26 @@ type TerminalSockets = ReturnType<typeof createTerminalSockets>;
 export function createSocketHandlers(
   hub: Pick<Hub, 'open' | 'close' | 'message'>,
   terminals: TerminalSockets | null,
-  remote: RemoteSocketHandlers | null = null
+  remote: RemoteSocketHandlers | null = null,
+  shares: ShareSocketHandlers | null = null
 ) {
   return {
     open: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.open(socket);
       else if (isRemoteSocket(socket)) remote?.open(socket);
+      else if (isShareSocket(socket)) shares?.open(socket);
       else hub.open(socket as ServerWebSocket<SocketData>);
     },
     close: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.close(socket);
       else if (isRemoteSocket(socket)) remote?.close(socket);
+      else if (isShareSocket(socket)) shares?.close(socket);
       else hub.close(socket as ServerWebSocket<SocketData>);
     },
     message: (socket: ServerSocket, raw: string | Buffer) => {
       if (isTerminalSocket(socket)) terminals?.message(socket, raw);
       else if (isRemoteSocket(socket)) remote?.message(socket, raw);
+      else if (isShareSocket(socket)) shares?.message(socket, raw);
       else hub.message(socket as ServerWebSocket<SocketData>, raw);
     },
     drain: (socket: ServerSocket) => {
@@ -190,6 +211,37 @@ export function startServer(context: HttpContext) {
       }
     : null;
 
+  const { shares } = context;
+  const shareSockets: ShareSocketHandlers | null = shares
+    ? {
+        open: (socket) => {
+          socket.data.channel = shares.openChannel(
+            {
+              send: (data) => socket.send(data),
+              close: (code, reason) => socket.close(code, reason),
+            },
+            socket.data.shareId
+          );
+        },
+        close: (socket) => {
+          if (socket.data.channel) shares.closeChannel(socket.data.channel);
+        },
+        message: (socket, raw) => {
+          void socket.data.channel?.receive(raw);
+        },
+      }
+    : null;
+
+  function respondShareChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    if (!(remote && shares)) return respondError('not_found', 'No such endpoint.', 404);
+    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
+    if (originRefusal) return respondError('forbidden', originRefusal, 403);
+    const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
+    if (!shares.acceptsShare(shareId)) return respondError('not_found', 'No such endpoint.', 404);
+    if (bunServer.upgrade(request, { data: { kind: 'share', shareId, channel: null } })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
+  }
+
   async function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
     if (route === 'health') return Response.json({ ok: true });
@@ -197,6 +249,7 @@ export function startServer(context: HttpContext) {
       if (config.inspect) return respondReadOnly();
       return context.schedules.handleWebhook(request, url);
     }
+    if (route === 'share') return respondShareChannel(request, url, bunServer);
     if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
     const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
     if (originRefusal) return respondError('forbidden', originRefusal, 403);
@@ -245,7 +298,7 @@ export function startServer(context: HttpContext) {
         return serveStatic(config.webDir, url.pathname);
       },
       websocket: {
-        ...createSocketHandlers(hub, terminalSockets, remoteSockets),
+        ...createSocketHandlers(hub, terminalSockets, remoteSockets, shareSockets),
         maxPayloadLength: MAX_BODY_BYTES,
       },
     })

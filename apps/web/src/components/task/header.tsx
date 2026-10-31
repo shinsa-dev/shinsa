@@ -4,7 +4,7 @@ import { Choice } from '@/components/controls/choice.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
-import { useReadOnly } from '@/components/task/read-only.tsx';
+import { useReadOnly, useReadOnlyNote } from '@/components/task/read-only.tsx';
 import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
 import type { TaskView } from '@/hooks/use-task-view.ts';
 import { TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
@@ -28,8 +28,10 @@ export function TaskHeader({
   className?: string;
 }) {
   const readOnly = useReadOnly();
+  const note = useReadOnlyNote();
   return (
     <div className={cn('flex shrink-0 flex-col gap-2.5', className)}>
+      {note}
       {!readOnly && <TaskPageCommands state={state} task={task} view={view} />}
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
         <TaskHeading task={task} className='min-w-60 flex-1 py-0.5' />

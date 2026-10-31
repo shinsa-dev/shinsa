@@ -9,7 +9,10 @@ import { requestPreviewSource } from '@/lib/share/sources.ts';
 export function SharePreviewPage({ state, reference }: { state: ShinsaState; reference: string }) {
   const task = selectTaskByReference(state, reference);
   const taskId = task?.id ?? reference;
-  const load = useSharedView(`${taskId}:${task?.updatedAt ?? 0}`, () => requestPreviewSource(taskId));
+  const load = useSharedView(`${taskId}:${task?.updatedAt ?? 0}`, (handlers) => {
+    requestPreviewSource(taskId).then(handlers.onSource, handlers.onError);
+    return () => undefined;
+  });
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }

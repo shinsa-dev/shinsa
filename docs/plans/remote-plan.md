@@ -30,15 +30,16 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
    named tunnel; no inbound port is ever opened.
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
-   your local engine and holds no state of its own. Nothing is copied to the cloud, with one exception you choose
-   task by task: a task you share is published to app.shinsa.dev as a read-only projection (core's `SharedTask`), so
-   anyone with its link can read it without a device key: read-only remote access to that one task. A publication
-   carries what its owner sees on its Overview, Review and Code: the request, plan, phase reports, walkthrough,
-   review, checks with their output, evidence, activity, notes, gates without their answers, who worked and when, the
-   pull request whole, its diff and its changed files whole from GitHub, for a private repository too, shown on the
-   owner's own task page with every control taken away. Chats, transcripts, tool calls, live agent output, messages
-   to agents, gate answers, attachments and accounts never leave the machine. The same projection and publishing path will serve
-   teams (`docs/engine.md` → Sharing a task).
+   your local engine and holds no state of its own. Nothing is copied to the cloud, shared tasks included: a task you
+   share is read live from the machine, by read-only remote access to that one task. Its link
+   (`app.shinsa.dev/share/‹machine›/‹share id›#‹key›`) opens a channel through the machine's tunnel that is sealed with
+   the key in the link's fragment, which no server sees; the machine pushes the task down it the moment it changes and
+   reads nothing back. A link shows what its owner sees on its Overview, Review and Code: the request, plan, phase
+   reports, walkthrough, review, checks with their output, evidence, activity, notes, gates without their answers, who
+   worked and when, the pull request whole, its diff and its changed files whole from GitHub, for a private repository
+   too, on the owner's own task page with every control taken away. Chats, transcripts, tool calls, live agent output,
+   messages to agents, gate answers, attachments and accounts never leave the machine. The same projection and channel
+   will serve teams (`docs/engine.md` → Sharing a task).
 6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed
    with keys only those two hold. A browser is trusted once, by scanning a QR the machine shows; a GitHub account alone
@@ -57,9 +58,8 @@ browser on app.shinsa.dev ──HTTPS──► Worker (apps/cloud, D1)   sign-in
 t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── the engine
         sealed frames only                                    (127.0.0.1)
 
-the engine ──HTTPS, machine token──► Worker: a shared task's publication (D1)
-                                     and its files (R2), only for tasks you share
-anyone with the link ──HTTPS──► app.shinsa.dev/share/‹token›: read-only, no sign-in
+anyone with a share link ──wss, sealed with the link's key──► t-‹instance›.shinsa.dev/share
+        the machine pushes one task, reads nothing back; app.shinsa.dev stores nothing
 ```
 
 ## Risks
@@ -84,11 +84,10 @@ anyone with the link ──HTTPS──► app.shinsa.dev/share/‹token›: read
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.
 - **Metadata stays visible**: when you use Shinsa, from where, and how much.
-- **A shared task is readable by app.shinsa.dev.** A publication is not end to end encrypted: the Worker stores it,
-  so whoever controls the deploy or the Cloudflare account can read it, a private repository's diff included
-  (`docs/engine.md` → Sharing a task). Its link token is 256 random bits kept only as a hash, and Stop sharing
-  removes it at once. Check output and text an agent wrote are published as written, which is why Share task
-  offers Preview first.
+- **A share link is a key.** Whoever holds the link reads the task, live, for as long as it is shared; Stop sharing
+  ends every open link at once. app.shinsa.dev and Cloudflare never see the key (it is in the fragment) and carry
+  only sealed frames, but the trusted-origin risk above applies: altered code on app.shinsa.dev could read a page's
+  key. Check output and text an agent wrote are shown as written, which is why Share task offers Preview first.
 
 ## Later
 

@@ -40,7 +40,7 @@ function ShareBody({ view }: { view: ShareView }) {
       return <p className='text-fg-3 text-xs'>{SHARE_NEEDS_REMOTE}</p>;
     case 'off':
       return null;
-    case 'publishing':
+    case 'linking':
       return <LoadingLine label='Making the link' className='text-fg-2 text-xs' />;
     case 'failed':
       return (

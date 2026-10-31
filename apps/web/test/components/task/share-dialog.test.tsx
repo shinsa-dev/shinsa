@@ -30,7 +30,7 @@ afterEach(() => {
 describe('the share dialog', () => {
   it('says sharing needs remote access, and opens its settings or the preview', async () => {
     showTask({}, false);
-    expect(await screen.findByText(/sharing needs remote access/)).toBeTruthy();
+    expect(await screen.findByText(/reads this task from this machine through remote access/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(location.pathname).toBe('/tasks/SW-2/shared');
     act(() => openShareDialog('source'));

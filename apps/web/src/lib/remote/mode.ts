@@ -1,4 +1,4 @@
-import { parseEnrollFragment, REMOTE_PATHS } from '@shinsa/core';
+import { parseEnrollFragment, parseShareLocation, REMOTE_PATHS, type ShareLink } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 
 export const SERVICE_WORKER_PATH = `${REMOTE_PATHS.app}sw.js`;
@@ -33,20 +33,18 @@ export type RemoteView =
   | { kind: 'app' }
   | { kind: 'pair'; claimCode: string | null }
   | { kind: 'enroll' }
-  | { kind: 'share'; token: string };
-
-const SHARE_PAGE = new RegExp(`^${REMOTE_PATHS.sharePage}/([A-Za-z0-9_-]{1,64})$`);
+  | { kind: 'share'; link: ShareLink | null };
 
 export function isRemoteBuild(env: Record<string, unknown> = import.meta.env) {
   return env.VITE_SHINSA_REMOTE === '1';
 }
 
-export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'>): RemoteView {
+export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search' | 'hash'>): RemoteView {
   if (location.pathname === REMOTE_PATHS.pairPage)
     return { kind: 'pair', claimCode: new URLSearchParams(location.search).get('code') };
   if (location.pathname === REMOTE_PATHS.enrollPage) return { kind: 'enroll' };
-  const token = SHARE_PAGE.exec(location.pathname)?.[1];
-  if (token) return { kind: 'share', token };
+  if (location.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`))
+    return { kind: 'share', link: parseShareLocation(location.pathname, location.hash) };
   return { kind: 'app' };
 }
 

@@ -15,13 +15,15 @@ describe('the tunnel guard', () => {
     expect(isTunnelRequest(request('/'), null)).toBe(false);
   });
 
-  test('lets through only health, webhooks and the channel', () => {
+  test('lets through only health, webhooks, the channel and a share link', () => {
     const route = (path: string, method = 'GET') =>
       resolveTunnelRoute(request(path, { method }), new URL(`http://x${path}`));
     expect(route('/health')).toBe('health');
     expect(route('/api/hooks/s/t', 'POST')).toBe('hook');
     expect(route('/remote')).toBe('channel');
     expect(route('/remote', 'POST')).toBeNull();
+    expect(route('/share')).toBe('share');
+    expect(route('/share', 'POST')).toBeNull();
     expect(route('/health', 'POST')).toBeNull();
     expect(route('/api/tasks')).toBeNull();
     expect(route('/ws')).toBeNull();

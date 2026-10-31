@@ -10,7 +10,7 @@ import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
-import { type ShareGitHub, SharePublisher } from '../apps/engine/src/remote/shares.ts';
+import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
@@ -27,11 +27,13 @@ import {
   type RemoteInstance,
   type Repo,
   resolveKeyFingerprint,
-  resolveSharePagePath,
-  SHARE_CODE_FILE,
-  SHARE_DIFF_FILE,
-  type SharedPublication,
+  SHARE_CHANNEL_PATH,
+  SHARE_ID_BYTES,
+  SHARE_KEY_BYTES,
+  type ShareConnectResponse,
+  type ShareLink,
   serializeBase64Url,
+  serializeShareUrl,
   type Task,
 } from '../packages/core/src/index.ts';
 
@@ -73,15 +75,18 @@ interface Machine {
 }
 
 interface PreviewShare {
-  token: string;
+  url: string;
   label: string;
-  taskId: string;
   handle: string;
-  publisher: SharePublisher;
   port: number;
 }
 
-const SHARE_ROUTE = new RegExp(`^${REMOTE_PATHS.shares}/([A-Za-z0-9_-]+)(?:/files/([A-Za-z0-9_-]+))?$`);
+const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
+
+function createShareLink(instanceId: string): ShareLink {
+  const random = (bytes: number) => serializeBase64Url(crypto.getRandomValues(new Uint8Array(bytes)));
+  return { instanceId, shareId: random(SHARE_ID_BYTES), key: random(SHARE_KEY_BYTES) };
+}
 
 function seedStudio() {
   const seedDir = join(PREVIEW_DIR, 'studio');
@@ -146,7 +151,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     openUrl: () => Promise.resolve(),
   });
   const evidence = new EvidenceStore(config.evidenceDir);
-  const shares = new SharePublisher({
+  const shares = new Shares({
     engine,
     remote,
     evidence,
@@ -274,26 +279,15 @@ async function normalizeSeedRemote(engine: Engine, repo: Repo) {
 async function createPreviewShare(
   studio: Awaited<ReturnType<typeof startMachine>>,
   task: Task,
-  token: string,
   label: string
 ): Promise<PreviewShare | null> {
   const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
   if (!seeded) return null;
   await normalizeSeedRemote(studio.engine, seeded);
-  const publisher = new SharePublisher({
-    engine: studio.engine,
-    remote: studio.machine.remote,
-    evidence: studio.evidence,
-    github: createPreviewGitHub(studio.engine),
-  });
-  return {
-    token,
-    label,
-    taskId: task.id,
-    handle: task.handle ?? task.id,
-    publisher,
-    port: studio.machine.port,
-  };
+  const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
+  if (!task.share) await studio.engine.dispatch({ type: 'task.share', taskId: task.id });
+  await studio.engine.dispatch({ type: 'share.record', taskId: task.id, url });
+  return { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
 }
 
 async function recordPushedHead(engine: Engine, task: Task) {
@@ -322,44 +316,26 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   const pushed = coded && (await recordPushedHead(engine, coded));
   const shares = [
     pushed &&
-      (await createPreviewShare(
-        studio,
-        pushed,
-        'preview-code',
-        'A shared task with an open pull request, with Code'
-      )),
+      (await createPreviewShare(studio, pushed, 'A shared task with an open pull request, with Code')),
     evidenced &&
-      (await createPreviewShare(studio, evidenced, 'preview-evidence', 'A shared task with its evidence')),
+      evidenced.id !== pushed?.id &&
+      (await createPreviewShare(studio, evidenced, 'A shared task with its evidence')),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
 
-async function respondShare(match: RegExpExecArray, shares: PreviewShare[]) {
-  const [, token, fileId] = match;
-  const share = shares.find((entry) => entry.token === token);
-  if (!share)
+function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
+  const machine = machines.find((entry) => entry.id === match[1]);
+  if (!machine)
     return Response.json(
-      { error: { code: 'share_not_found', message: 'This task is no longer shared, or the link is wrong.' } },
+      { error: { code: 'not_found', message: 'This task is no longer shared, or the link is wrong.' } },
       { status: 404 }
     );
-  const preview = share.publisher.preview(share.taskId);
-  if (fileId === SHARE_DIFF_FILE && preview.files[fileId])
-    return new Response(await share.publisher.previewDiff(share.taskId), {
-      headers: { 'content-type': 'text/plain' },
-    });
-  if (fileId === SHARE_CODE_FILE && preview.files[fileId])
-    return new Response(await share.publisher.previewCode(share.taskId), {
-      headers: { 'content-type': 'text/plain' },
-    });
-  const uri = fileId ? preview.files[fileId] : undefined;
-  if (uri) return fetch(`http://127.0.0.1:${share.port}${uri}`);
-  if (fileId) return new Response(null, { status: 404 });
-  const publication: SharedPublication = {
-    shared: preview.shared,
-    files: Object.keys(preview.files),
-    updatedAt: preview.updatedAt,
+  const answer: ShareConnectResponse = {
+    url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}`,
+    online: true,
   };
-  return Response.json(publication);
+  return Response.json(answer);
 }
 
 function respondStatic(pathname: string) {
@@ -392,13 +368,13 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
     ['Settings, with Machines', '/settings'],
     ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
     ...shares.flatMap((share) => [
-      [`${share.label} (a public link, no sign-in)`, resolveSharePagePath(share.token)],
+      [`${share.label} (a live link, no sign-in)`, share.url],
       [
         `The same task, ${share.handle}, as you see it on Studio`,
         `http://${HOST}:${share.port}/tasks/${share.handle}`,
       ],
     ]),
-    ['A share link that no longer works', resolveSharePagePath('no-longer-shared')],
+    ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
     ...machines.map((machine) => [
       `${machine.name}'s own app on the machine: Settings, Remote access`,
       `http://${HOST}:${machine.port}/settings`,
@@ -469,17 +445,16 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
 
 interface TunnelData {
   machine: Machine;
-  token: string;
+  path: string;
   upstream: WebSocket | null;
   pending: (string | Uint8Array)[];
 }
 
 function openUpstream(socket: ServerWebSocket<TunnelData>) {
-  const { machine, token } = socket.data;
-  const upstream = new WebSocket(
-    `ws://127.0.0.1:${machine.port}${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
-    { headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1' } } as unknown as string[]
-  );
+  const { machine, path } = socket.data;
+  const upstream = new WebSocket(`ws://127.0.0.1:${machine.port}${path}`, {
+    headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1' },
+  } as unknown as string[]);
   upstream.binaryType = 'arraybuffer';
   upstream.addEventListener('open', () => {
     for (const message of socket.data.pending.splice(0)) upstream.send(message);
@@ -510,8 +485,8 @@ async function main() {
     async fetch(request, server) {
       const url = new URL(request.url);
       if (url.pathname === '/__preview') return respondIndex(machines, shares);
-      const share = SHARE_ROUTE.exec(url.pathname);
-      if (share) return respondShare(share, shares);
+      const share = SHARE_CONNECT.exec(url.pathname);
+      if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {
@@ -522,11 +497,13 @@ async function main() {
           302
         );
       }
-      const tunnel = /^\/__preview\/tunnel\/([a-z]+)$/.exec(url.pathname);
+      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share)?$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {
-        const token = url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '';
-        if (server.upgrade(request, { data: { machine, token, upstream: null, pending: [] } }))
+        const path = tunnel?.[2]
+          ? `${SHARE_CHANNEL_PATH}${url.search}`
+          : `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '')}`;
+        if (server.upgrade(request, { data: { machine, path, upstream: null, pending: [] } }))
           return undefined;
         return new Response('Upgrade failed', { status: 400 });
       }

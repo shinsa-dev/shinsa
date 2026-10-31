@@ -21,7 +21,6 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "shinsa-cloud-files" }],
   "vars": {
     "CLOUDFLARE_ACCOUNT_ID": "e8563b02f2bf2b6a136f2781445a486f",
     "TUNNEL_ZONE": "shinsa.dev",

@@ -2515,20 +2515,24 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 
 ## Sharing a task
 
-A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/<token>`, without signing in
-and without a device key: the one place task data leaves the machine outside the sealed channel. A link is read-only
-remote access to that one task: everything its owner sees on its Overview, Review and Code, for a public or a private
-repository alike, but its chat; chats and the agent sessions never leave the machine. The same projection and
-publishing path will serve teams.
+A task you share can be read by anyone with its link,
+`https://app.shinsa.dev/share/<machine>/<share id>#<key>`, without signing in and without a device key. A link is
+read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
+access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
+Overview, Review and Code, for a public or a private repository alike, but its chat; chats and the agent sessions never
+leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
+projection and channel will serve teams.
 
-- **The link.** Its token is 32 random bytes (256 bits, base64url), so it cannot be guessed; app.shinsa.dev keeps only
-  its SHA-256 hash, so its database opens no shared task, and shows the link once, to the engine that asked for it.
-  Every share answer and page carry `X-Robots-Tag: noindex, nofollow, noarchive` and `Referrer-Policy: no-referrer`,
-  so no search engine keeps it and no page it links to learns it. Stop sharing ends it at once; sharing again later
-  keeps the same link until the machine loses its pairing.
+- **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
+  (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The key sits in
+  the URL's fragment, which a browser never sends to a server, so neither app.shinsa.dev nor Cloudflare ever sees it.
+  The channel is sealed with it end to end: Cloudflare carries ciphertext, and a stand-in for the machine cannot
+  answer the handshake. The page and the connect answer carry `X-Robots-Tag: noindex, nofollow, noarchive` and every
+  page `Referrer-Policy: no-referrer`, so no search engine keeps it and no page it links to learns it. Stop sharing
+  ends every open link at once; sharing again later keeps the same link until the machine is paired again.
 - **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
-  core refuses them on your behalf (`human_only`), since they publish outside the machine. An automation's home is
+  core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
   refused (`share_refused`). The remote dashboard may share, as it may close a gate.
 - **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository })`) builds a
   `SharedTask`: a redacted `Task`, its gates and runs, its current evidence, its repository and project records
@@ -2560,65 +2564,68 @@ publishing path will serve teams.
 
   A task without a repository has no Code. Check output and text an agent wrote (a summary, a finding, a testing
   step) are kept as written; Preview is how you read them before you share.
-- **When it is published.** `task.share` emits `task.shared` and queues `share.publish` (`replay_safe`, lane
-  `share:<task>`, so a later publish waits for the one running). At the end of every `decide`, `syncShares` (beside
-  `syncMergeSteps`) compares the fingerprint of each touched shared task's projection before and after
-  (`resolveSharedFingerprint`, the projection under a fixed context) and queues `share.publish` only when it changed:
-  a new stage, phase report, check, activity entry or note publishes it, a message to an agent does not. `task.unshare` cancels a queued publish, emits
-  `task.unshared` and queues `share.remove`.
-- **Publishing** (`apps/engine/src/remote/shares.ts`, `SharePublisher`): it resolves the projection, lists its files and posts them with the machine token (`apps/cloud/CLAUDE.md` → Shared tasks). Evidence
-  stored on the machine (`/api/evidence/…`) is a file when it is a PNG, JPEG, WebP, GIF, MP4, WebM, text or Markdown
-  of 50 MB at most; anything else is left out of the publication rather than shown broken. Each file is hashed once
-  per size and modification time, the Worker is asked which hashes it lacks, and only those are uploaded. For a
-  task with an open or merged pull request, the diff is `gh pr diff <n>` (with the owner's own GitHub access, so a
-  private repository's diff too), and the `code` file holds every modified or renamed file of that diff whole at the
-  pushed head (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), so Code opens
-  each change in the editor as its owner sees it: an added or removed file comes whole from the diff, and a changed
-  file's base is rebuilt from its head and its hunks (`resolveBaseContent`). Both are read again only when the head
-  moves; the diff is left out above 50 MB, and the whole files with it. At most 200 files. The first publication asks for a
-  new link (`newLink` while `TaskShare.url` is null); its answer is recorded with `share.record`, and later ones keep
-  the link.
-- **Failures.** Not paired (no credentials, or a 401 that revokes the machine) fails at once with "Turn on remote
-  access in Settings → General to share this task…" (`SHARE_NOT_PAIRED`); another refusal from app.shinsa.dev (a 4xx)
-  fails at once with its message; a network error or a 5xx retries as any effect. A failed publish sends
-  `share.fail`, which keeps the reason on `TaskShare.failure` for Share task to show with Try again (`task.share`
-  again republishes, keeping the link); it opens no failure gate, since nothing in the task waits on it. A
-  successful publish clears it. Pausing remote access does not stop publishing: pausing closes the way in, not the
-  links you gave out. Removing remote access, or the machine on app.shinsa.dev, removes every publication and file
-  the machine made, so every link answers as no longer shared; once this machine loses its pairing (`remove`, or a
-  revocation), the publisher marks each shared task's link failed with "Remote access was removed from this machine…"
-  (`SHARE_LINK_LOST`), so Share task says so and Try again, once remote access is on, gets a new link.
+- **Making the link.** `task.share` emits `task.shared` and queues `share.link` (`replay_safe`, lane `share:<task>`).
+  The engine (`apps/engine/src/remote/shares.ts`, `Shares.link`) makes a share id and a key for this machine's
+  instance and records the URL with `share.record`; a link already made for this instance is kept (`share.record`
+  with `url: null` only clears a failure). `task.unshare` cancels a queued `share.link` and emits `task.unshared`.
+  Nothing is queued when the task changes: an open link reads it live.
+- **The live channel** (`SHARE_CHANNEL_PATH`, `/share?id=<share id>` on the tunnel; core's `remote/share-channel.ts`,
+  the engine's `remote/share-channel.ts`). The page asks app.shinsa.dev where the machine is
+  (`POST /__remote/shares/<machine>/connect`, no session, answering `{ url, online }`), then opens
+  `wss://t-<machine>.shinsa.dev/share?id=<share id>`. The engine upgrades it only from app.shinsa.dev's origin, while
+  remote access is on and the id is well formed (404 otherwise), so a stopped or unknown link learns it is gone from
+  the handshake rather than looking offline. The page's first and only message is a hello: a fresh P-256 key and an HMAC over it with the link's key. The machine checks it against the
+  task's key in constant time (else `refused`, "This task is no longer shared, or the link is wrong."), answers with
+  its own fresh key and an HMAC over both, which the page checks, and both derive one AES-GCM key from the ECDH of
+  the two fresh keys and the link's key (HKDF over the transcript), so only a holder of the link reads the stream,
+  and a recorded stream cannot be read later from the link alone. Frames are sealed in order (core's `frames.ts`).
+- **What the machine pushes.** A `ShareLiveView` (the projection below, the version and type of each file it shows,
+  when it was read) the moment the channel opens and again on every state change that alters it (compared as text,
+  so a message to an agent sends nothing), then each file the page does not have at that version: evidence stored
+  on the machine (`/api/evidence/…`) when it is a PNG, JPEG, WebP, GIF, MP4, WebM, text or Markdown of 50 MB at most,
+  versioned by its hash (each hashed once per size and modification time), and for a task with an open or merged
+  pull request the diff, `gh pr diff <n>` (with the owner's own GitHub access, so a private repository's diff too),
+  and the `code` file holding every modified or renamed file of that diff whole at the pushed head
+  (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), both versioned by the pull
+  request and its head and read from GitHub once per head. Code opens each change in the editor as its owner sees it:
+  an added or removed file comes whole from the diff, and a changed file's base is rebuilt from its head and its hunks
+  (`resolveBaseContent`). Anything else is left out of the view rather than shown broken. The page keeps each file
+  as a `blob:` address while it is open.
+- **The channel only listens.** After the hello the machine reads nothing from a link: any message closes the
+  channel (1008, "A share link only listens."). It carries no HTTP requests, no app socket and no commands, and it is
+  never connected to the hub, the API or the dispatcher, so no write can travel from a link to the engine, whatever
+  the page sends. Stop sharing sends `closed` and ends it; pausing or removing remote access ends every link
+  ("Remote access on the machine that shares this task was turned off."). A machine that is offline, asleep or
+  paused shows nothing new: the page says the machine is offline and opens the channel again on its own (1, 2, 5,
+  then every 10 seconds), keeping what it already showed.
+- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → General to share this
+  task…" (`SHARE_NOT_PAIRED`) and `share.fail` keeps it on `TaskShare.failure` for Share task to show with Try again
+  (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
+  machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
+  remote access again…" (`SHARE_LINK_LOST`), and Try again makes a new link.
 - **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one dialog over the task's
   `TaskShare` and the remote snapshot, in five views: remote access needed (Open Settings), ready (Share), making the link,
   failed (the reason, Stop sharing and Try again) and shared (the link, read-only and selectable, with Copy, Stop
   sharing and Done). Every view but the failed one offers Preview, so you can read what a link shows before you
   share or turn on remote access.
 - **Preview** (`/tasks/<handle>/shared`, `routes/share-preview.tsx`): the same page a link opens, from
-  `GET /api/tasks/<id>/share/preview` (`SharePreview`: the projection the engine would publish now, and the local
-  address of each file it would upload) and `…/share/preview/diff`, so it shows exactly what the link would before
+  `GET /api/tasks/<id>/share/preview` (`SharePreview`: the projection a link would show now, and the local
+  address of each file it would send) and `…/share/preview/diff`, so it shows exactly what the link would before
   anything leaves the machine. Its note says it is a preview and that chats never leave the machine.
-- **The shared page** (`routes/remote/share.tsx`, `components/share/shared-task-page.tsx`): the remote build's
-  `/share/<token>` reads `GET /__remote/shares/<token>` with no session, builds a state from the publication
+- **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
+  the remote build's `/share/<machine>/<share id>` reads the key from the fragment (a link without one says the task
+  is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives
   (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
-  and Code components, the same layout) inside `ReadOnlyProvider`, under one line saying it is read-only, who shared
-  it from which machine ("you" when the GitHub login signed in to app.shinsa.dev is its owner, and on the machine's
-  Preview) and when it was last published. Read-only takes away only what acts: the task menu, the ⌘K commands,
-  every card's buttons and links (`NowFrame`'s action, `QuietLink`), answer boxes, the composer, verdicts, merge-step
-  boxes, suggestion and watchdog buttons, a delegation's Stop, the priority menu, services and every way into a chat;
-  the live agent output is never shown. Its tabs are the owner's without Chat, Code only once a pull request is open
-  or merged, in its Changes view, read from the publication's `diff` and `code` files, never from a worktree. It follows the task while it is open: every `SHARE_REFRESH_MS` (3
-  seconds) while the tab is visible, and at once when it comes back into view, it reads the publication again and
-  swaps the view in place when its `updatedAt` moved, so a running task's stage, phases, checks and review show up as
-  the engine republishes them; a refresh that fails keeps the view, and a link that stopped working says so at once.
-  An unknown or removed link says "This task is no longer shared, or the
-  link is wrong." Every answer and the page carry `X-Robots-Tag: noindex, nofollow, noarchive`. Unlike remote access,
-  which the engine pushes over the sealed channel the moment state changes, a link lags by up to `SHARE_REFRESH_MS`
-  after the engine publishes.
-- **Nothing writes through a link.** Hiding controls is the first layer, not the guarantee. A link never reaches the
-  machine: the page talks only to app.shinsa.dev, whose share routes answer `GET` alone (any other method is 404), and
-  the share token is no machine token (every machine route answers it 401) and no connect token or device key (the
-  tunnel's `/remote` refuses it), so no command, request or webhook can travel from a link to the engine. On the page
-  itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
+  and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one
+  header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
+  app.shinsa.dev is its owner, and on the machine's Preview) and when the machine last read it. Read-only takes away
+  only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
+  answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
+  priority menu, services and every way into a chat; the live agent output is never shown. Its tabs are the owner's
+  without Chat, Code only once a pull request is open or merged, in its Changes view, from the streamed `diff` and
+  `code` files, never from a worktree. A link that stopped working says so at once.
+- **Nothing writes through a link.** The channel above only listens, and hiding controls is a second layer. On the
+  page itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
   rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
   can be changed from here." before anything is sent, on the public page and on the machine's Preview alike, so a
   control added later without a `useReadOnly` check still changes nothing.

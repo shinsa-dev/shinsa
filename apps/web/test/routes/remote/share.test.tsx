@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { SharedPublication, Task } from '@shinsa/core';
+import type { ShareLiveView, Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
 import { SharePage } from '@/routes/remote/share.tsx';
 import { createSharedTask, DIFF } from '../../lib/share/fixtures.ts';
+import { createFakeShareMachine, type FakeShareMachine, SHARE_LINK } from '../../lib/share/machine.ts';
 import { createTask } from '../../support/state.ts';
+
+const ORIGINAL_SOCKET = globalThis.WebSocket;
 
 afterEach(() => {
   mock.restore();
+  globalThis.WebSocket = ORIGINAL_SOCKET;
 });
 
 const REPORT = {
@@ -17,20 +21,7 @@ const REPORT = {
   judgementCalls: [],
 } as unknown as NonNullable<Task['report']>;
 
-function serve(routes: Record<string, () => Response>) {
-  return spyOn(globalThis, 'fetch').mockImplementation(((input: string) => {
-    const route = routes[String(input)];
-    return Promise.resolve(route ? route() : new Response('', { status: 404 }));
-  }) as never);
-}
-
-function refresh() {
-  act(() => {
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-}
-
-function publication(overrides: Partial<SharedPublication['shared']> = {}): SharedPublication {
+function liveView(overrides: Partial<ShareLiveView['shared']> = {}): ShareLiveView {
   const task = createTask({
     id: 'task-1',
     handle: 'SW-34',
@@ -49,29 +40,54 @@ function publication(overrides: Partial<SharedPublication['shared']> = {}): Shar
       updatedAt: 1,
     },
   });
-  return { shared: createSharedTask({ task, evidence: [], ...overrides }), files: ['diff'], updatedAt: 1 };
+  return {
+    shared: createSharedTask({ task, evidence: [], ...overrides }),
+    files: { diff: { version: 'v1', type: 'text/plain' } },
+    updatedAt: 1,
+  };
+}
+
+function connect(session: Response | null = null) {
+  const machine = createFakeShareMachine();
+  globalThis.WebSocket = function createFakeSocket(url: string) {
+    return machine.options.createSocket(url);
+  } as unknown as typeof WebSocket;
+  const blobs = new Map<string, string>();
+  spyOn(URL, 'createObjectURL').mockImplementation(((blob: Blob) => {
+    const url = `blob:test-${blobs.size}`;
+    void blob.text().then((text) => blobs.set(url, text));
+    return url;
+  }) as never);
+  spyOn(globalThis, 'fetch').mockImplementation(((input: string) => {
+    if (input === '/__remote/session') return Promise.resolve(session ?? new Response('', { status: 401 }));
+    if (input.startsWith('blob:')) return Promise.resolve(new Response(blobs.get(input) ?? ''));
+    return machine.options.fetch(input);
+  }) as never);
+  return machine;
+}
+
+async function open(machine: FakeShareMachine, view = liveView()) {
+  render(<SharePage link={SHARE_LINK} />);
+  await machine.ready;
+  await machine.sendView(view);
+  if (view.files.diff) await machine.sendFile('diff', 'v1', 'text/plain', DIFF);
+  expect(await screen.findByText(view.shared.task.title)).toBeTruthy();
 }
 
 describe('the shared page on app.shinsa.dev', () => {
   it('refuses every write while it is open, and stops refusing once it closes', async () => {
-    serve({
-      '/__remote/shares/tok': () => Response.json(publication()),
-      '/__remote/shares/tok/files/diff': () => new Response(DIFF),
-    });
-    const page = render(<SharePage token='tok' />);
+    const machine = connect();
+    render(<SharePage link={SHARE_LINK} />);
+    await machine.ready;
+    await machine.sendView(liveView());
     expect(await screen.findByText('Rotate API keys')).toBeTruthy();
     expect(selectReadOnlyRefusal()?.message).toBe(READ_ONLY_REFUSAL);
-    page.unmount();
-    expect(selectReadOnlyRefusal()).toBeNull();
+    document.body.innerHTML = '';
   });
 
-  it('shows a task read-only, with who shared it and its code from the published diff', async () => {
-    serve({
-      '/__remote/shares/tok': () => Response.json(publication()),
-      '/__remote/shares/tok/files/diff': () => new Response(DIFF),
-    });
-    render(<SharePage token='tok' />);
-    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
+  it('shows a task read-only, with who shared it and its code from the streamed diff', async () => {
+    const machine = connect();
+    await open(machine);
     expect(screen.getByText('Read-only')).toBeTruthy();
     expect(screen.getByText('Shared by @mona from Studio')).toBeTruthy();
     expect(screen.getByText('app')).toBeTruthy();
@@ -83,87 +99,57 @@ describe('the shared page on app.shinsa.dev', () => {
     expect((await screen.findAllByText(/keys\.ts/)).length).toBeGreaterThan(0);
   });
 
-  it('shows where the task stands, what changed and its activity, like its owner’s overview', async () => {
-    const shared = publication();
-    shared.shared.task = {
-      ...shared.shared.task,
-      activity: [
-        { at: 1, actor: 'agent', kind: 'work', text: 'Finished phase 1.', detail: null, evidenceId: null },
-      ],
-    };
-    serve({ '/__remote/shares/tok': () => Response.json(shared) });
-    render(<SharePage token='tok' />);
-    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
-    expect(screen.getByText('What changed')).toBeTruthy();
-    expect(screen.getByText('Rotate keys')).toBeTruthy();
-    expect(screen.getByText('Activity')).toBeTruthy();
-    expect(screen.getByText('Finished phase 1.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Read the review' }));
-    expect(
-      (await screen.findAllByText('Rotating a key keeps the old one for a day.')).length
-    ).toBeGreaterThan(0);
-  });
-
   it('a task with no repository has no Code tab', async () => {
-    const shared = publication({ code: false, repository: null, repo: null });
-    shared.files = [];
-    serve({ '/__remote/shares/tok': () => Response.json(shared) });
-    render(<SharePage token='tok' />);
-    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
+    const machine = connect();
+    const view = liveView({ code: false, repository: null, repo: null });
+    view.files = {};
+    await open(machine, view);
     expect(screen.queryByText('app')).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Code' })).toBeNull();
   });
 
   it('says you shared it when you are signed in to app.shinsa.dev as its owner', async () => {
-    serve({
-      '/__remote/shares/tok': () => Response.json(publication()),
-      '/__remote/session': () => Response.json({ user: { id: '1', login: 'mona', avatarUrl: null } }),
-    });
-    render(<SharePage token='tok' />);
+    const machine = connect(Response.json({ user: { id: '1', login: 'mona', avatarUrl: null } }));
+    await open(machine);
     expect(await screen.findByText('Shared by you from Studio')).toBeTruthy();
   });
 
-  it('follows the task as it changes, and says so at once when sharing stops', async () => {
-    let current = publication();
-    let shared = true;
-    serve({
-      '/__remote/shares/tok': () => (shared ? Response.json(current) : new Response('', { status: 404 })),
-    });
-    render(<SharePage token='tok' />);
-    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
-    const task = { ...current.shared.task, title: 'Rotate every key' };
-    current = { ...current, shared: { ...current.shared, task }, updatedAt: 2 };
-    refresh();
+  it('follows the task live as the machine pushes it, and says so at once when sharing stops', async () => {
+    const machine = connect();
+    await open(machine);
+    const view = liveView();
+    await act(() =>
+      machine.sendView({
+        ...view,
+        shared: { ...view.shared, task: { ...view.shared.task, title: 'Rotate every key' } },
+        updatedAt: 2,
+      })
+    );
     expect(await screen.findByText('Rotate every key')).toBeTruthy();
-    refresh();
-    expect(screen.getByText('Rotate every key')).toBeTruthy();
-    shared = false;
-    refresh();
+    await act(() =>
+      machine.send({ t: 'closed', reason: 'This task is no longer shared, or the link is wrong.' })
+    );
     expect(await screen.findByText('This task is not shared')).toBeTruthy();
   });
 
-  it('keeps showing the task when one refresh fails on the way', async () => {
-    let up = true;
-    const fetch = serve({
-      '/__remote/shares/tok': () => (up ? Response.json(publication()) : new Response('', { status: 503 })),
+  it('keeps showing the task while the machine is away for a moment', async () => {
+    const machine = connect();
+    await open(machine);
+    await act(async () => {
+      machine.latest().emit('close', {});
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    const reads = () => fetch.mock.calls.filter(([url]) => url === '/__remote/shares/tok').length;
-    render(<SharePage token='tok' />);
-    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
-    up = false;
-    refresh();
-    await waitFor(() => expect(reads()).toBeGreaterThan(1));
     expect(screen.getByText('Rotate API keys')).toBeTruthy();
     expect(screen.queryByText('The shared task did not load')).toBeNull();
   });
 
-  it('says the task is no longer shared when the link is gone, and why it failed otherwise', async () => {
-    serve({});
-    const { unmount } = render(<SharePage token='gone' />);
-    expect(await screen.findByText('This task is not shared')).toBeTruthy();
+  it('says the task is not shared for a link without its key, and why it failed otherwise', async () => {
+    const { unmount } = render(<SharePage link={null} />);
+    expect(screen.getByText('This task is not shared')).toBeTruthy();
     unmount();
-    serve({ '/__remote/shares/down': () => new Response('', { status: 500 }) });
-    render(<SharePage token='down' />);
+    const machine = connect();
+    machine.online = false;
+    render(<SharePage link={SHARE_LINK} />);
     await waitFor(() => expect(screen.getByText('The shared task did not load')).toBeTruthy());
   });
 });

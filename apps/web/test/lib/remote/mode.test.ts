@@ -32,22 +32,27 @@ describe('the remote page’s mode', () => {
   });
 
   it('shows the pair page, the enroll page, or the one dashboard of every machine, all at the root', () => {
-    expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ' })).toEqual({
+    expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ', hash: '' })).toEqual({
       kind: 'pair',
       claimCode: 'K7PQ',
     });
-    expect(resolveRemoteView({ pathname: '/pair', search: '' })).toEqual({
+    expect(resolveRemoteView({ pathname: '/pair', search: '', hash: '' })).toEqual({
       kind: 'pair',
       claimCode: null,
     });
-    expect(resolveRemoteView({ pathname: '/enroll', search: '' })).toEqual({ kind: 'enroll' });
-    expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '' })).toEqual({ kind: 'app' });
-    expect(resolveRemoteView({ pathname: '/', search: '' })).toEqual({ kind: 'app' });
-    expect(resolveRemoteView({ pathname: '/share/abc_D-9', search: '' })).toEqual({
+    expect(resolveRemoteView({ pathname: '/enroll', search: '', hash: '' })).toEqual({ kind: 'enroll' });
+    expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '', hash: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: '/', search: '', hash: '' })).toEqual({ kind: 'app' });
+    const shareId = 'BwcHBwcHBwcHBwcHBwcHBw';
+    const key = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk';
+    expect(resolveRemoteView({ pathname: `/share/k3x9/${shareId}`, search: '', hash: `#${key}` })).toEqual({
       kind: 'share',
-      token: 'abc_D-9',
+      link: { instanceId: 'k3x9', shareId, key },
     });
-    expect(resolveRemoteView({ pathname: '/share/a/b', search: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: `/share/k3x9/${shareId}`, search: '', hash: '' })).toEqual({
+      kind: 'share',
+      link: null,
+    });
     expect(SERVICE_WORKER_PATH).toBe('/sw.js');
     expect(SERVICE_WORKER_SCOPE).toBe('/');
   });

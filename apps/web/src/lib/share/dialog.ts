@@ -6,15 +6,15 @@ import { createSignal } from '@/lib/signal.ts';
 export const SHARE_TITLE = 'Share task';
 
 export const SHARE_DESCRIPTION =
-  'Anyone with the link can read this whole task on app.shinsa.dev without signing in, as it updates: its plan, review, checks, evidence, activity and code, for a private repository too. Chats, and messages and answers to agents, never leave this machine.';
+  'Anyone with the link can watch this whole task live, read-only and without signing in: its plan, review, checks, evidence, activity and code, for a private repository too. It is read from this machine while it is online. Chats, and messages and answers to agents, never leave this machine.';
 
 export const SHARE_NEEDS_REMOTE =
-  'The link is served from app.shinsa.dev, so sharing needs remote access. Turn it on in Settings, then share this task.';
+  'A link reads this task from this machine through remote access. Turn it on in Settings, then share this task.';
 
 export type ShareView =
   | { kind: 'unpaired' }
   | { kind: 'off' }
-  | { kind: 'publishing' }
+  | { kind: 'linking' }
   | { kind: 'failed'; message: string }
   | { kind: 'shared'; url: string };
 
@@ -40,7 +40,7 @@ export function resolveShareView(task: Task, remote: RemoteSnapshot | null): Sha
   const share = task.share;
   if (share?.failure) return { kind: 'failed', message: share.failure };
   if (share?.url) return { kind: 'shared', url: share.url };
-  if (share) return { kind: 'publishing' };
+  if (share) return { kind: 'linking' };
   if (remote && !remote.paired) return { kind: 'unpaired' };
   return { kind: 'off' };
 }
