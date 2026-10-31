@@ -413,7 +413,7 @@ describe('the status message of a task', () => {
     clock.now += 10_000;
     await slack.status(effect, context());
     expect(callsTo(relay, 'session')).toHaveLength(2);
-    answers['/__remote/slack/session'] = () => Response.json({ applied: false });
+    answers['/__remote/slack/session'] = () => new Response('busy', { status: 503 });
     stub.update((state) => {
       const gate = state.gates.q1;
       if (gate) gate.status = 'answered';
@@ -421,14 +421,22 @@ describe('the status message of a task', () => {
     clock.now += 10_000;
     await slack.status(effect, context());
     expect(callsTo(relay, 'session').at(-1)?.body).toMatchObject({ status: 'processing' });
-    answers['/__remote/slack/session'] = () => new Response('busy', { status: 503 });
+    expect(warnings).toHaveBeenCalledWith('[Slack] The thread status could not be set', expect.anything());
+  });
+
+  test('stops asking for the thread’s status in a workspace once Slack has refused it', async () => {
+    const { slack, stub, relay, answers, clock } = setUp({ link: { ...LINK, statusTs: '200.0' } });
+    answers['/__remote/slack/session'] = () => Response.json({ applied: false });
+    await slack.status(effect, context());
+    expect(callsTo(relay, 'session')).toHaveLength(1);
     stub.update((state) => {
       const task = state.tasks.t1;
       if (task) task.stage = 'awaiting_review';
     });
     clock.now += 10_000;
     await slack.status(effect, context());
-    expect(warnings).toHaveBeenCalledWith('[Slack] The thread status could not be set', expect.anything());
+    expect(callsTo(relay, 'session')).toHaveLength(1);
+    expect(callsTo(relay, 'post')).toHaveLength(2);
   });
 
   test('moves the reaction on the mention as the task moves, keeping one at a time', async () => {
