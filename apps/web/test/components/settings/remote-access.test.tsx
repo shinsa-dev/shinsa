@@ -5,7 +5,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
 import { resolveOnMachineUrl } from '@/lib/remote/mode.ts';
+import { spyOnToasts } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 const ENROLL_URL = 'https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1';
 
@@ -19,19 +21,31 @@ function createActions() {
     remove: mock(snapshot),
     forgetDevice: mock((_publicKey: string) => snapshot()),
     createEnrollment: mock((name: string) =>
-      Promise.resolve({ url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
     ),
   } satisfies RemoteAccessActions;
 }
 
 function renderGroup(snapshot: RemoteSnapshot | null, failure: string | null = null) {
   const actions = createActions();
-  render(
+  const view = (next: RemoteSnapshot | null) => (
     <TooltipProvider>
-      <RemoteAccessGroup snapshot={snapshot} failure={failure} actions={actions} />
+      <RemoteAccessGroup snapshot={next} failure={failure} actions={actions} />
     </TooltipProvider>
   );
-  return actions;
+  const { rerender } = render(view(snapshot));
+  return Object.assign(actions, { push: (next: RemoteSnapshot) => rerender(view(next)) });
+}
+
+async function openLink(name = 'iPhone') {
+  fireEvent.click(screen.getByRole('button', { name: 'Add device' }));
+  fireEvent.change(await screen.findByLabelText('Device name'), { target: { value: name } });
+  fireEvent.click(screen.getByRole('button', { name: 'Make link' }));
+  await screen.findByRole('img', { name: 'QR code for the link' });
+}
+
+function createDevice(publicKey: string, enrollmentId: string | null) {
+  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, enrollmentId };
 }
 
 describe('Settings → Remote access', () => {
@@ -83,6 +97,8 @@ describe('Settings → Remote access', () => {
 
   it('offers Resume when paused, and neither when app.shinsa.dev removed the machine', async () => {
     const paused = renderGroup(createRemoteSnapshot({ enabled: false }));
+    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.getByText('Devices that can reach this machine')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(paused.resume).toHaveBeenCalled());
   });
@@ -97,7 +113,15 @@ describe('Settings → Remote access', () => {
   it('lists the devices and forgets one after a confirmation', async () => {
     const actions = renderGroup(
       createRemoteSnapshot({
-        devices: [{ publicKey: 'dev-1', name: 'iPhone', enrolledAt: Date.now() - 1e6, lastSeenAt: null }],
+        devices: [
+          {
+            publicKey: 'dev-1',
+            name: 'iPhone',
+            enrolledAt: Date.now() - 1e6,
+            lastSeenAt: null,
+            enrollmentId: null,
+          },
+        ],
       })
     );
     expect(screen.getByText('iPhone')).toBeTruthy();
@@ -122,5 +146,73 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText('Add this device').closest('a')?.getAttribute('href')).toBe(
       resolveOnMachineUrl(ENROLL_URL)
     );
+  });
+
+  it('closes the dialog and says so the moment its own link adds a device, not another iPhone', async () => {
+    const toasts = spyOnToasts();
+    const actions = renderGroup(createRemoteSnapshot());
+    await openLink();
+    actions.push(createRemoteSnapshot({ devices: [createDevice('older', 'link-0')] }));
+    expect(screen.getByRole('img', { name: 'QR code for the link' })).toBeTruthy();
+    expect(toasts.success).not.toHaveBeenCalled();
+    actions.push(
+      createRemoteSnapshot({ devices: [createDevice('older', 'link-0'), createDevice('new', 'link-1')] })
+    );
+    await waitForGone(() => screen.queryByRole('img', { name: 'QR code for the link' }));
+    expect(toasts.success).toHaveBeenCalledTimes(1);
+    expect(toasts.success).toHaveBeenCalledWith('iPhone is added.');
+    toasts.restore();
+  });
+
+  it('replaces the QR code once the link expires, and makes a new one', async () => {
+    const actions = renderGroup(createRemoteSnapshot());
+    actions.createEnrollment.mockImplementation((name: string) =>
+      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 1500 })
+    );
+    await openLink();
+    await screen.findByText(
+      'This link expired before a device used it. Make a new one to add iPhone.',
+      {},
+      { timeout: 4000 }
+    );
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
+    expect(
+      screen.getByText('This link expired before a device used it. Make a new one to add iPhone.')
+    ).toBeTruthy();
+    actions.createEnrollment.mockImplementation((name: string) =>
+      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
+    await screen.findByRole('img', { name: 'QR code for the link' });
+    expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
+    expect(actions.createEnrollment).toHaveBeenLastCalledWith('iPhone');
+  });
+
+  it('drops the QR code the moment remote access stops, and keeps it dropped after Resume', async () => {
+    const actions = renderGroup(createRemoteSnapshot());
+    await openLink();
+    const stopped =
+      'Remote access stopped, so this link no longer works. Make a new one to add iPhone once it is on again.';
+    actions.push(createRemoteSnapshot({ enabled: false }));
+    await screen.findByText(stopped);
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Make new link' }).hasAttribute('disabled')).toBe(true);
+    actions.push(createRemoteSnapshot());
+    expect(screen.getByText(stopped)).toBeTruthy();
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
+    actions.createEnrollment.mockImplementation((name: string) =>
+      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
+    await screen.findByRole('img', { name: 'QR code for the link' });
+    expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops the QR code when the machine is removed here or at app.shinsa.dev', async () => {
+    const actions = renderGroup(createRemoteSnapshot());
+    await openLink();
+    actions.push(createRemoteSnapshot({ status: 'revoked' }));
+    await screen.findByText(/Remote access stopped/);
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
   });
 });

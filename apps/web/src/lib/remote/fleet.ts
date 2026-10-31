@@ -143,6 +143,7 @@ export class Fleet implements ShinsaConnection {
   readonly #accounts = createSignal();
   readonly #surfaces = createSignal();
   readonly #terminals = createSignal();
+  readonly #remote = createSignal();
 
   constructor(members: FleetMember[], unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES) {
     for (const member of members) this.#add(member);
@@ -164,6 +165,7 @@ export class Fleet implements ShinsaConnection {
         connection.subscribeAccounts(() => this.#accounts.publish()),
         connection.subscribeSurfaces(() => this.#surfaces.publish()),
         connection.subscribeTerminals(() => this.#terminals.publish()),
+        connection.subscribeRemote(() => this.#remote.publish()),
       ],
     });
   }
@@ -249,6 +251,13 @@ export class Fleet implements ShinsaConnection {
 
   replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) =>
     this.#home?.replaceTerminals(terminals);
+
+  subscribeRemote = (listener: () => void) => this.#remote.subscribe(listener);
+
+  selectRemote = () => this.#home?.selectRemote() ?? null;
+
+  replaceRemote = (remote: Parameters<ShinsaConnection['replaceRemote']>[0]) =>
+    this.#home?.replaceRemote(remote);
 
   selectMachine = (id: string) => {
     if (this.#entries.length + this.#unreachable.length < 2) return null;

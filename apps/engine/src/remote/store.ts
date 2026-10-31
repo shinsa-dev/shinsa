@@ -64,7 +64,16 @@ function readDevices(value: unknown): RemoteDevice[] {
     if (!isFields(entry) || typeof entry.publicKey !== 'string' || typeof entry.name !== 'string') return [];
     if (typeof entry.enrolledAt !== 'number') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
-    return [{ publicKey: entry.publicKey, name: entry.name, enrolledAt: entry.enrolledAt, lastSeenAt }];
+    const enrollmentId = typeof entry.enrollmentId === 'string' ? entry.enrollmentId : null;
+    return [
+      {
+        publicKey: entry.publicKey,
+        name: entry.name,
+        enrolledAt: entry.enrolledAt,
+        lastSeenAt,
+        enrollmentId,
+      },
+    ];
   });
 }
 

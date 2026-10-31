@@ -4,6 +4,7 @@ import {
   type ChatEntry,
   type ClientMessage,
   type PlacementMachine,
+  type RemoteSnapshot,
   type ServerMessage,
   type StatePatch,
   type Surface,
@@ -67,6 +68,9 @@ export interface ShinsaConnection {
   subscribeTerminals: (listener: () => void) => () => void;
   selectTerminals: () => TerminalsSnapshot | null;
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
+  subscribeRemote: (listener: () => void) => () => void;
+  selectRemote: () => RemoteSnapshot | null;
+  replaceRemote: (remote: RemoteSnapshot) => void;
   selectMachine: (id: string) => MachineView | null;
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
@@ -137,6 +141,7 @@ export class Connection implements ShinsaConnection {
   #attempt = 0;
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
+  #remote: RemoteSnapshot | null = null;
   #desktopConnected = false;
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
@@ -144,6 +149,7 @@ export class Connection implements ShinsaConnection {
   readonly #accountsSignal = createSignal();
   readonly #surfacesSignal = createSignal();
   readonly #terminalsSignal = createSignal();
+  readonly #remoteSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
@@ -200,6 +206,15 @@ export class Connection implements ShinsaConnection {
   replaceTerminals(terminals: TerminalsSnapshot) {
     this.#terminals = terminals;
     this.#terminalsSignal.publish();
+  }
+
+  subscribeRemote = (listener: () => void) => this.#remoteSignal.subscribe(listener);
+
+  selectRemote = () => this.#remote;
+
+  replaceRemote(remote: RemoteSnapshot) {
+    this.#remote = remote;
+    this.#remoteSignal.publish();
   }
 
   isDesktopConnected = () => this.#desktopConnected;
@@ -264,6 +279,7 @@ export class Connection implements ShinsaConnection {
     this.#syncing = false;
     this.#accounts = null;
     this.#terminals = null;
+    this.#remote = null;
     this.#desktopConnected = false;
     this.#pending.clear();
     this.#optimistic.clear();
@@ -274,6 +290,7 @@ export class Connection implements ShinsaConnection {
     this.#accountsSignal.publish();
     this.#surfacesSignal.publish();
     this.#terminalsSignal.publish();
+    this.#remoteSignal.publish();
   }
 
   flush() {
@@ -425,6 +442,9 @@ export class Connection implements ShinsaConnection {
         return;
       case 'terminals':
         this.replaceTerminals(message.terminals);
+        return;
+      case 'remote':
+        this.replaceRemote(message.remote);
         return;
     }
   }

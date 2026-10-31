@@ -5,7 +5,6 @@ import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { listPrefetchRuns, prefetchTranscript } from '@/lib/chat/prefetch.ts';
 import { prefetchSnippets, scheduleIdle } from '@/lib/code/prefetch.ts';
 import { refreshExtensions } from '@/lib/connection/extensions.ts';
-import { refreshRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { refreshVersions } from '@/lib/connection/versions.ts';
 import { prefetchEvidence } from '@/lib/evidence/prefetch.ts';
@@ -96,7 +95,6 @@ function useSettingsPrefetch() {
     if (!idle) return;
     void refreshVersions();
     void refreshExtensions();
-    void refreshRemoteAccess();
   }, [idle]);
 }
 

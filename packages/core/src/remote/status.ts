@@ -11,6 +11,7 @@ export interface RemoteDevice {
   name: string;
   enrolledAt: number;
   lastSeenAt: number | null;
+  enrollmentId: string | null;
 }
 
 export interface RemoteSnapshot {
@@ -26,6 +27,7 @@ export interface RemoteSnapshot {
 }
 
 export interface RemoteEnrollment {
+  id: string;
   url: string;
   name: string;
   expiresAt: number;

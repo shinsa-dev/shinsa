@@ -2394,7 +2394,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`remote_paired`): remove it first.
 - **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
   secret for a named device (60 characters at most) and answers its link,
-  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>`; the device it enrolls takes that name. `shinsa
+  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>` with the link's `id`; the device it enrolls takes
+  that name and keeps the link's id as `enrollmentId`. `shinsa
   remote forget-device <key>` removes one. A device is a browser or a phone, a way in that runs nothing; a machine
   runs the engine.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
@@ -2403,13 +2404,20 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used and Forget, and Add device: you name the device, and the one-time link
+  added devices with when each was last used and Forget, and Add device (only while it is on, since pausing drops
+  every link: `canEnrollDevices`): you name the device, and the one-time link
   shows as a QR code to scan with a phone, with Copy and Add this device for the browser in front of you. That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
-  wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. It reads
-  `GET /api/remote` when Settings opens and every 2 seconds while pairing or connecting. The remote build leaves the
-  section out, since every change to it is refused from off the machine.
+  wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. The
+  dialog closes with a toast ("iPhone is added.") the moment a device with its link's id shows up, and a link that
+  expires while it is open gives way to Make new link. So does one remote access dropped: once a push says it is
+  paused, removed or removed at app.shinsa.dev, the link is marked stopped for good, since resuming does not bring
+  back the links `Remote.stop` cleared. Every change to remote access reaches every open page at once:
+  `Remote` notifies on each one (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a
+  pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
+  (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
+  The remote build leaves the section out, since every change to it is refused from off the machine.
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
   owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
   `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).
@@ -4724,8 +4732,8 @@ how the tools are checked again.
 Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts, `surfaces` and `terminals` (Terminals, above); then every change of state goes to every socket as a patch, every change of the accounts
-and of the terminals whole, and a transcript only to the sockets following its run. Each terminal has a socket of
+accounts, `surfaces`, `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
+the terminals and remote access whole, and a transcript only to the sockets following its run. Each terminal has a socket of
 its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)
 and `browser` anywhere else, Floaty included. The server keeps each socket's surface and tells every socket, with

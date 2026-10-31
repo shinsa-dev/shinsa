@@ -5,13 +5,14 @@ import { ENROLLMENT_TTL_MS, Enrollments } from '../../src/remote/enrollments.ts'
 const KEYS = { machine: 'm', device: 'd', clientEphemeral: 'e' };
 
 describe('enrollments', () => {
-  test('redeem a proof made with a live secret exactly once, giving the name it was made for', async () => {
+  test('redeem a proof made with a live secret exactly once, giving the link and name it was made for', async () => {
     const enrollments = new Enrollments(() => 0);
-    const { secret, expiresAt } = enrollments.create('iPhone');
+    const { id, secret, expiresAt } = enrollments.create('iPhone');
     expect(expiresAt).toBe(ENROLLMENT_TTL_MS);
+    expect(enrollments.create('iPhone').id).not.toBe(id);
     const proof = await createEnrollProof(secret, KEYS);
     expect(await enrollments.redeem(proof, { ...KEYS, device: 'other' })).toBeNull();
-    expect(await enrollments.redeem(proof, KEYS)).toBe('iPhone');
+    expect(await enrollments.redeem(proof, KEYS)).toEqual({ id, name: 'iPhone' });
     expect(await enrollments.redeem(proof, KEYS)).toBeNull();
   });
 

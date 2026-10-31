@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import type { ServerMessage } from '@shinsa/core';
+import type { RemoteSnapshot, ServerMessage } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createSocketHub, type SocketData } from '../../src/http/socket.ts';
+import type { Remote } from '../../src/remote/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir } from '../helpers/index.ts';
@@ -92,6 +93,42 @@ describe('the socket hub', () => {
     });
     hub.close(socket);
     hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('remote access reaches a socket on connect and again on every change', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const listeners = new Set<() => void>();
+    let snapshot = { paired: true, devices: [] } as unknown as RemoteSnapshot;
+    const remote = {
+      snapshot: () => snapshot,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    } as unknown as Remote;
+    const hub = createSocketHub(
+      engine,
+      new Transcripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      undefined,
+      remote
+    );
+    const { socket, sent } = createSocket();
+    hub.open(socket);
+    snapshot = { ...snapshot, enabled: false };
+    for (const listener of listeners) listener();
+    expect(sent.filter((message) => message.type === 'remote')).toEqual([
+      { type: 'remote', remote: { paired: true, devices: [] } as unknown as RemoteSnapshot },
+      { type: 'remote', remote: snapshot },
+    ]);
+    hub.close(socket);
+    hub.stop();
+    expect(listeners.size).toBe(0);
     engine.stop();
     log.close();
   });

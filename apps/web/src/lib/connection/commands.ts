@@ -8,7 +8,7 @@ export function describeFailure(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function confirm(done: Done) {
+export function confirmDone(done: Done) {
   if (typeof done === 'string') toast.success(done);
   else toast.success(done.title, { description: done.description });
 }
@@ -16,7 +16,7 @@ function confirm(done: Done) {
 export async function requestWithToast(request: () => Promise<unknown>, done?: Done) {
   try {
     await request();
-    if (done) confirm(done);
+    if (done) confirmDone(done);
     return true;
   } catch (error) {
     toast.error(describeFailure(error));

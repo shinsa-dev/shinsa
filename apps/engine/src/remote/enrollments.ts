@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { type HandshakeKeys, serializeBase64Url, verifyEnrollProof } from '@shinsa/core';
 
 export const ENROLLMENT_TTL_MS = 10 * 60_000;
@@ -8,6 +8,7 @@ const SECRET_BYTES = 32;
 const MAX_PENDING = 5;
 
 interface PendingEnrollment {
+  id: string;
   secret: string;
   name: string;
   expiresAt: number;
@@ -25,8 +26,9 @@ export class Enrollments {
     const now = this.#now();
     const secret = serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES)));
     const expiresAt = now + ENROLLMENT_TTL_MS;
-    this.#pending = [...this.#listLive(now), { secret, name, expiresAt }].slice(-MAX_PENDING);
-    return { secret, expiresAt };
+    const id = randomUUID();
+    this.#pending = [...this.#listLive(now), { id, secret, name, expiresAt }].slice(-MAX_PENDING);
+    return { id, secret, expiresAt };
   }
 
   clear() {
@@ -42,7 +44,7 @@ export class Enrollments {
     for (const entry of live) {
       if (!(await verifyEnrollProof(entry.secret, proof, keys))) continue;
       this.#pending = this.#pending.filter((pending) => pending !== entry);
-      return entry.name;
+      return { id: entry.id, name: entry.name };
     }
     this.#pending = live;
     return null;
