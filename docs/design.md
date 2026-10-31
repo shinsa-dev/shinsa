@@ -376,7 +376,7 @@ Only these, and they win over anything below:
    - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
      `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
-     bubble in the chat: the queue docks above the composer on the Chat and Overview tabs (`Composer`'s `dock`), a
+     bubble in the chat: the queue docks above the composer on the Overview, Review and Chat tabs (`Composer`'s `dock`), a
      `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then when it sends in `fg-2`,
      `describeQueue` over core's `resolveRoundRelease`: "· Sends once round 2 is finished." while the round works
      and finishes by itself, and what you have to do first while it waits for you: "· Sends after you merge round
@@ -979,7 +979,7 @@ Only these, and they win over anything below:
       another task, because that is all a new dependency can still do. Stop waiting clears every one at once
       ("No longer waiting.").
     - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
-      Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
+      Needs your answer and Answered blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
       needed are orange like Paused, and Waiting to check in again, Waiting for the usage limit and Waiting for
       delegations are neutral: the agent is neither working nor waiting on you, so the status is grey and its
@@ -1001,7 +1001,7 @@ Only these, and they win over anything below:
 
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
-    approve, Needs your answer, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
+    approve, Needs your answer, Answered, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
     (both collapsed). Each section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
@@ -1026,6 +1026,9 @@ Only these, and they win over anything below:
       purple): a proposed change decides what gets built, like a plan, but it is not a plan yet.
     - **Operation to confirm** follows it (`IconConsole`, purple): a merged change whose operation waits for your
       OK on the merged code.
+    - **Answered** follows Needs your answer (`IconBubbleCheck`, blue, open): an answer, report or diagnosis that
+      waits for you to read it (the `result` gate). Its now card is the result with Close, which moves it to Done;
+      it never sits in Done before you have read it.
     - **Backlog** comes after Waiting on another task (`IconArchive`, neutral, open): every task kept for later
       (`Task.backlog`), planning or with its plan held (`isHeldInBacklog`). A held plan never reads as Plan to
       approve: its status label and glyph are the Backlog group's (`resolveTaskStatus`, `resolveTaskMenuIcon`). Any
@@ -1380,8 +1383,13 @@ Only these, and they win over anything below:
       go with the operation.", toast "Notes saved."), so the box shows them.
     - **What a message does** is the composer's placeholder at every gate and the toast after it, from one place
       (`resolveMessageHint` in `lib/tasks/messages.ts`, over core's `resolveMessageEffect`; `docs/engine.md` → Gates →
-      What a message does): the Overview's and the chat's composers and ⌘K's Message the agent all read it, and a task
-      that takes no message (finished, not a follow-up) shows no composer.
+      What a message does): the Overview's, the Review's and the chat's composers and ⌘K's Message the agent all read
+      it, and a task that takes no message (finished, not a follow-up) shows no composer.
+    - **One draft per task.** The composer docks at the foot of Overview, Review and Chat, and the three are one
+      draft (`lib/chat/task-drafts.ts`, keyed by the task's id, in memory until a reload): the text, the attachments
+      and their uploads carry across tabs and survive leaving the task, and sending from any tab clears it everywhere.
+      When the box loses focus to a click on the task's own tabs, the next tab's box takes it with the caret where it was; leaving the task drops that. The Code tab
+      has no composer; Home's new-task box and the answer box keep their own.
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
       each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the agent must attach, as a

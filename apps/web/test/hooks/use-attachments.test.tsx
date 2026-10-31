@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { act, render, renderHook, waitFor } from '@testing-library/react';
 import * as React from 'react';
 import { type Attachments, useAttachments } from '@/hooks/use-attachments.ts';
+import { resolveTaskDraft } from '@/lib/chat/task-drafts.ts';
 import { spyOnToasts } from '../support/commands.ts';
 
 const realFetch = globalThis.fetch;
@@ -140,5 +141,20 @@ describe('useAttachments', () => {
       '/api/attachments/1/b.png',
     ]);
     expect(created).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a keyed draft in the shared store, where an upload finishes after the input goes', async () => {
+    serve((name) => Response.json(stored(name)));
+    const first = renderHook(() => useAttachments('task-1'));
+    const second = renderHook(() => useAttachments('task-1'));
+    act(() => first.result.current.add([new File(['x'], 'a.txt')]));
+    expect(second.result.current.drafts.map((draft) => draft.name)).toEqual(['a.txt']);
+    first.unmount();
+    second.unmount();
+    await waitFor(() => expect(resolveTaskDraft('task-1').attachments[0]?.stored?.name).toBe('a.txt'));
+    const back = renderHook(() => useAttachments('task-1'));
+    expect(back.result.current.ready.map((item) => item.name)).toEqual(['a.txt']);
+    act(() => back.result.current.clear());
+    expect(resolveTaskDraft('task-1').attachments).toEqual([]);
   });
 });

@@ -67,6 +67,7 @@ import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
+import type { SlackEventBody } from './slack.ts';
 import type { WatchdogEventBody } from './watchdogs.ts';
 
 type QueuedRound = Pick<Round, 'number' | 'title' | 'request' | 'why' | 'shipping' | 'pipeline'>;
@@ -102,6 +103,7 @@ type EventBody =
     }
   | DelegationEventBody
   | ScheduleEventBody
+  | SlackEventBody
   | WatchdogEventBody
   | MemoryEventBody
   | {

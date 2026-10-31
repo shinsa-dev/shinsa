@@ -37,6 +37,7 @@ import { createLoginResolver, type LoginResolver, type RootSource } from '../rep
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
+import type { Slack } from '../slack/index.ts';
 import {
   ATTACHMENT_REQUEST_LIMIT_BYTES,
   AttachmentStore,
@@ -59,6 +60,7 @@ export type Launcher = (command: string[], cwd: string) => Promise<CommandResult
 export interface ApiContext {
   engine: Engine;
   remote?: Remote;
+  slack?: Slack;
   config: ServerConfig;
   instance?: ServerInstance;
   evidence: EvidenceStore;
@@ -361,6 +363,7 @@ export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
     ...(context.versions ? createVersionRoutes(context.versions) : []),
     ...(context.remote ? createRemoteRoutes(context.remote) : []),
     ...(context.place ? createPlacementRoutes(context.place) : []),
+    ...(context.slack ? context.slack.routes() : []),
     ...(context.roots
       ? createProjectRoutes({
           engine: context.engine,

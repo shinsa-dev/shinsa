@@ -7,9 +7,8 @@ import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
 import { resolveOnMachineUrl } from '@/lib/remote/mode.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
-import { waitForGone } from '../../support/wait.ts';
 
-const ENROLL_URL = 'https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1';
+const ENROLL_URL = 'https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1.tok';
 
 function createActions() {
   const snapshot = () => Promise.resolve(createRemoteSnapshot());
@@ -19,10 +18,12 @@ function createActions() {
     resume: mock(snapshot),
     pause: mock(snapshot),
     remove: mock(snapshot),
-    forgetDevice: mock((_publicKey: string) => snapshot()),
-    createEnrollment: mock((name: string) =>
-      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
-    ),
+    revokeDevice: mock((_publicKey: string) => snapshot()),
+    removeMember: mock((_userId: string) => snapshot()),
+    createLink: mock(snapshot),
+    removeLink: mock(snapshot),
+    acceptRequest: mock((_requestId: string) => snapshot()),
+    declineRequest: mock((_requestId: string) => snapshot()),
   } satisfies RemoteAccessActions;
 }
 
@@ -37,16 +38,19 @@ function renderGroup(snapshot: RemoteSnapshot | null, failure: string | null = n
   return Object.assign(actions, { push: (next: RemoteSnapshot) => rerender(view(next)) });
 }
 
-async function openLink(name = 'iPhone') {
-  fireEvent.click(screen.getByRole('button', { name: 'Add device' }));
-  fireEvent.change(await screen.findByLabelText('Device name'), { target: { value: name } });
-  fireEvent.click(screen.getByRole('button', { name: 'Make link' }));
-  await screen.findByRole('img', { name: 'QR code for the link' });
+function createDevice(publicKey: string) {
+  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, userId: null };
 }
 
-function createDevice(publicKey: string, enrollmentId: string | null) {
-  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, enrollmentId };
-}
+const KAI = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
+const REQUEST = {
+  id: 'r1',
+  publicKey: 'kai-phone',
+  deviceName: 'Kai iPhone',
+  user: KAI,
+  requestedAt: Date.now() - 60_000,
+};
 
 describe('Settings → Remote access', () => {
   it('waits for the snapshot, or says why it could not read it', () => {
@@ -61,7 +65,7 @@ describe('Settings → Remote access', () => {
 
   it('turns remote access on from the Off state', async () => {
     const actions = renderGroup(createRemoteSnapshot({ paired: false, status: 'off', owner: null }));
-    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Invite link' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
     await waitFor(() => expect(actions.pair).toHaveBeenCalled());
   });
@@ -97,7 +101,7 @@ describe('Settings → Remote access', () => {
 
   it('offers Resume when paused, and neither when app.shinsa.dev removed the machine', async () => {
     const paused = renderGroup(createRemoteSnapshot({ enabled: false }));
-    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Invite link' })).toBeNull();
     expect(screen.getByText('Devices that can reach this machine')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(paused.resume).toHaveBeenCalled());
@@ -107,10 +111,10 @@ describe('Settings → Remote access', () => {
     renderGroup(createRemoteSnapshot({ status: 'revoked' }));
     expect(screen.getByText('Removed')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Invite link' })).toBeNull();
   });
 
-  it('lists the devices and forgets one after a confirmation', async () => {
+  it('lists the devices and revokes one after a confirmation', async () => {
     const actions = renderGroup(
       createRemoteSnapshot({
         devices: [
@@ -119,100 +123,89 @@ describe('Settings → Remote access', () => {
             name: 'iPhone',
             enrolledAt: Date.now() - 1e6,
             lastSeenAt: null,
-            enrollmentId: null,
+            userId: null,
           },
         ],
       })
     );
     expect(screen.getByText('iPhone')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Forget' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Forget device' }));
-    await waitFor(() => expect(actions.forgetDevice).toHaveBeenCalledWith('dev-1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke device' }));
+    await waitFor(() => expect(actions.revokeDevice).toHaveBeenCalledWith('dev-1'));
   });
 
-  it('adds a device: names it, then shows its one-time link as a QR code', async () => {
+  it('makes the one invite link without asking for a name, then shows it as a QR code', async () => {
     const actions = renderGroup(createRemoteSnapshot());
-    expect(screen.getByText('Devices that can reach this machine')).toBeTruthy();
-    expect(screen.getByText(/None yet/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Add device' }));
-    const make = await screen.findByRole('button', { name: 'Make link' });
-    expect(make.hasAttribute('disabled')).toBe(true);
-    fireEvent.change(screen.getByLabelText('Device name'), { target: { value: ' iPhone ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Invite link' }));
+    expect(await screen.findByText(/Make one link for your own devices and for other people/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Make link' }));
-    await screen.findByRole('img', { name: 'QR code for the link' });
-    expect(actions.createEnrollment).toHaveBeenCalledWith('iPhone');
-    expect(screen.getByText('Add iPhone')).toBeTruthy();
+    await waitFor(() => expect(actions.createLink).toHaveBeenCalled());
+    actions.push(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));
+    expect(await screen.findByRole('img', { name: 'QR code for the link' })).toBeTruthy();
     expect(screen.getByText(ENROLL_URL)).toBeTruthy();
-    expect(screen.getByText('Add this device').closest('a')?.getAttribute('href')).toBe(
-      resolveOnMachineUrl(ENROLL_URL)
-    );
+    expect(screen.queryByText(/^Made /)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Make new link' })).toBeNull();
+    const here = screen.getByText('Add this device').closest('a');
+    expect(here?.getAttribute('href')).toBe(resolveOnMachineUrl(ENROLL_URL));
   });
 
-  it('closes the dialog and says so the moment its own link adds a device, not another iPhone', async () => {
+  it('turns the link off with a short toast', async () => {
     const toasts = spyOnToasts();
-    const actions = renderGroup(createRemoteSnapshot());
-    await openLink();
-    actions.push(createRemoteSnapshot({ devices: [createDevice('older', 'link-0')] }));
-    expect(screen.getByRole('img', { name: 'QR code for the link' })).toBeTruthy();
-    expect(toasts.success).not.toHaveBeenCalled();
-    actions.push(
-      createRemoteSnapshot({ devices: [createDevice('older', 'link-0'), createDevice('new', 'link-1')] })
-    );
-    await waitForGone(() => screen.queryByRole('img', { name: 'QR code for the link' }));
-    expect(toasts.success).toHaveBeenCalledTimes(1);
-    expect(toasts.success).toHaveBeenCalledWith('iPhone is added.');
+    const actions = renderGroup(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Invite link' }));
+    expect(await screen.findByText(/Open it on your own device, or share it/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off link' }));
+    await waitFor(() => expect(actions.removeLink).toHaveBeenCalled());
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('The link is off.'));
     toasts.restore();
   });
 
-  it('replaces the QR code once the link expires, and makes a new one', async () => {
-    const actions = renderGroup(createRemoteSnapshot());
-    actions.createEnrollment.mockImplementation((name: string) =>
-      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 1500 })
+  it('shows who asks for access and accepts or declines each request', async () => {
+    const toasts = spyOnToasts();
+    const mona = { id: '1', login: 'mona', name: null, avatarUrl: null };
+    const actions = renderGroup(
+      createRemoteSnapshot({
+        requests: [REQUEST, { ...REQUEST, id: 'r2', deviceName: 'Chrome on Mac', user: mona }],
+        access: { owner: mona, members: [] },
+      })
     );
-    await openLink();
-    await screen.findByText(
-      'This link expired before a device used it. Make a new one to add iPhone.',
-      {},
-      { timeout: 4000 }
-    );
-    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
-    expect(
-      screen.getByText('This link expired before a device used it. Make a new one to add iPhone.')
-    ).toBeTruthy();
-    actions.createEnrollment.mockImplementation((name: string) =>
-      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
-    await screen.findByRole('img', { name: 'QR code for the link' });
-    expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
-    expect(actions.createEnrollment).toHaveBeenLastCalledWith('iPhone');
+    expect(screen.getByText('Waiting for your answer')).toBeTruthy();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+    expect(screen.getByText(/^Kai iPhone · Asked/)).toBeTruthy();
+    expect(screen.getByText('Chrome on Mac')).toBeTruthy();
+    expect(screen.queryByText('@mona')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[0] as HTMLElement);
+    await waitFor(() => expect(actions.acceptRequest).toHaveBeenCalledWith('r1'));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Kai Lane joined.'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Decline' })[1] as HTMLElement);
+    await waitFor(() => expect(actions.declineRequest).toHaveBeenCalledWith('r2'));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Request declined.'));
+    toasts.restore();
   });
 
-  it('drops the QR code the moment remote access stops, and keeps it dropped after Resume', async () => {
-    const actions = renderGroup(createRemoteSnapshot());
-    await openLink();
-    const stopped =
-      'Remote access stopped, so this link no longer works. Make a new one to add iPhone once it is on again.';
-    actions.push(createRemoteSnapshot({ enabled: false }));
-    await screen.findByText(stopped);
-    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Make new link' }).hasAttribute('disabled')).toBe(true);
-    actions.push(createRemoteSnapshot());
-    expect(screen.getByText(stopped)).toBeTruthy();
-    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
-    actions.createEnrollment.mockImplementation((name: string) =>
-      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+  it('lists who can reach the machine, marks the devices a member added, and removes a member', async () => {
+    const kai = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: 'https://avatars.example/kai' };
+    const owner = { id: '1', login: 'mona', name: null, avatarUrl: null };
+    const actions = renderGroup(
+      createRemoteSnapshot({
+        devices: [{ ...createDevice('kai-phone'), userId: '7' }],
+        access: { owner, members: [{ user: kai, addedAt: Date.now() - 3_600_000 }] },
+      })
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
-    await screen.findByRole('img', { name: 'QR code for the link' });
-    expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('People who can reach this machine')).toBeTruthy();
+    expect(screen.getByText('You')).toBeTruthy();
+    expect(screen.queryByText('@mona')).toBeNull();
+    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+    expect(screen.getByText('@kai')).toBeTruthy();
+    expect(screen.getByText(/Added by Kai Lane/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1) as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+    await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('7'));
   });
 
-  it('drops the QR code when the machine is removed here or at app.shinsa.dev', async () => {
-    const actions = renderGroup(createRemoteSnapshot());
-    await openLink();
-    actions.push(createRemoteSnapshot({ status: 'revoked' }));
-    await screen.findByText(/Remote access stopped/);
-    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
+  it('says only you can reach it before anyone is invited', () => {
+    renderGroup(createRemoteSnapshot());
+    expect(screen.getByText(/Only you\. Share the invite link/)).toBeTruthy();
   });
 });

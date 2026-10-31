@@ -36,9 +36,17 @@ export function createRemoteRoutes(remote: Remote): ApiRoute[] {
     }),
     post('/disable', () => remote.disable()),
     post('/remove', () => remote.remove()),
-    post('/devices/enroll', (fields) =>
-      remote.createEnrollment(readText(fields, 'name', 'Name the device you are adding.'))
-    ),
+    post('/link/create', () => remote.createLink()),
+    post('/link/remove', () => remote.removeLink()),
+    post('/requests/accept', async (fields) => {
+      await remote.acceptRequest(readText(fields, 'requestId', 'Name the access request to accept.'));
+    }),
+    post('/requests/decline', (fields) => {
+      remote.declineRequest(readText(fields, 'requestId', 'Name the access request to decline.'));
+    }),
+    post('/members/remove', async (fields) => {
+      await remote.removeMember(readText(fields, 'userId', 'Name the member to remove by their GitHub id.'));
+    }),
     post('/devices/remove', (fields) => {
       const publicKey = readText(fields, 'publicKey', 'Name the device to remove by its key.');
       if (!remote.removeDevice(publicKey))

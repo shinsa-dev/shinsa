@@ -1,6 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { REMOTE_PATHS } from '@shinsa/core';
-import { isSameSecret } from '../src/crypto.ts';
 import { readCookie } from '../src/http.ts';
 import { resolveCloudConfig } from '../src/world.ts';
 import { createHarness } from './harness.ts';
@@ -69,12 +68,6 @@ describe('the router', () => {
 });
 
 describe('the helpers', () => {
-  test('compares secrets in full', () => {
-    expect(isSameSecret('abc', 'abc')).toBe(true);
-    expect(isSameSecret('abc', 'abd')).toBe(false);
-    expect(isSameSecret('abc', 'ab')).toBe(false);
-  });
-
   test('reads one cookie among many', () => {
     const request = new Request('https://x', { headers: { cookie: 'a=1; b=two=2' } });
     expect(readCookie(request, 'b')).toBe('two=2');
@@ -90,6 +83,10 @@ describe('the helpers', () => {
       cloudflareApiToken: '',
       tunnelZone: 'shinsa.dev',
       maxInstances: 50,
+      slackClientId: '',
+      slackClientSecret: '',
+      slackSigningSecret: '',
+      slackTokenKey: '',
     });
     expect(
       resolveCloudConfig({
@@ -100,6 +97,10 @@ describe('the helpers', () => {
         CLOUDFLARE_API_TOKEN: 'token',
         TUNNEL_ZONE: 'example.dev',
         MAX_INSTANCES: '3',
+        SLACK_CLIENT_ID: 'slack-id',
+        SLACK_CLIENT_SECRET: 'slack-secret',
+        SLACK_SIGNING_SECRET: 'signing',
+        SLACK_TOKEN_KEY: 'key',
       })
     ).toEqual({
       origin: 'http://localhost:5183',
@@ -109,6 +110,10 @@ describe('the helpers', () => {
       cloudflareApiToken: 'token',
       tunnelZone: 'example.dev',
       maxInstances: 3,
+      slackClientId: 'slack-id',
+      slackClientSecret: 'slack-secret',
+      slackSigningSecret: 'signing',
+      slackTokenKey: 'key',
     });
   });
 });

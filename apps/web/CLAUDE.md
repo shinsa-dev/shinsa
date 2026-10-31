@@ -33,7 +33,8 @@ src/
 │   │                    in the remote build, a note that terminals stay on the machine)
 │   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
-│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
+│   │                    pair.tsx, enroll.tsx, slack.tsx (SlackLinkedPage: /slack/linked after connecting Slack,
+│   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
 │   │                    device, the benefits card and Check again)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
@@ -54,7 +55,8 @@ src/
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
-│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares), review draft, the
+│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
+│                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
 │                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
@@ -72,7 +74,9 @@ src/
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
 │                        accounts.tsx is the Agent usage tab's Accounts card, with usage.tsx's windows, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
-│                        integrations.tsx reads the extensions for the search, context-optimizer.tsx,
+│                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
+│                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
+│                        linked workspace, and Disconnect on the machine only), context-optimizer.tsx,
 │                        mcp-servers.tsx (with mcp-server-row.tsx, mcp-server-menu.tsx and server-dialog.tsx),
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
@@ -132,14 +136,14 @@ src/
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
-    │                    machine owns each id, each machine's own state for placement (listMachines), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
+    │                    machine owns each id, each machine's own state for placement (listMachines), each machine's own remote access for its access requests (listMachineAccess), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
     │                    remote services and their context, for Settings → Machines),
     │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (enrollDevice), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, login and initial, the member who added a device), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)
@@ -182,7 +186,8 @@ src/
     │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
     │                    60 s while watched and the page is visible)
     ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
-    │                    limits, what is ready, whether it can send), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
+    │                    limits, what is ready, whether it can send), task-drafts.ts (one draft per task, in memory: the
+    │                    text, attachments and their files every tab's composer reads, and the caret a tab click carries), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
     │                    the transcript's blocks and the window of them rendered (window.ts), prefetch.ts (a
@@ -282,8 +287,10 @@ src/
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
-        remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
-        expiry and its QR code as an image, the device a link added; connection/remote-access.ts reads it from the
+        slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
+        reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
+        disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of
+        the invite link's dialog and its QR code as an image, an access request and the short toast accepting it shows; connection/remote-access.ts reads it from the
         socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the

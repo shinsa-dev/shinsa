@@ -3,6 +3,14 @@ import type { RemoteSnapshot } from '../../src/remote/index.ts';
 import { listAgentSpecs, SURFACE } from '../../src/surface/index.ts';
 import { createFakeClient, runSpec } from './fixtures.ts';
 
+const REQUEST = {
+  id: 'r1',
+  publicKey: 'dev-3',
+  deviceName: 'Kai iPhone',
+  user: { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null },
+  requestedAt: 0,
+} as const;
+
 const OFF: RemoteSnapshot = {
   paired: false,
   enabled: false,
@@ -13,6 +21,9 @@ const OFF: RemoteSnapshot = {
   machineKey: null,
   pairing: null,
   devices: [],
+  access: null,
+  link: null,
+  requests: [],
 };
 
 const ON: RemoteSnapshot = {
@@ -29,10 +40,17 @@ const ON: RemoteSnapshot = {
       name: 'iPhone',
       enrolledAt: 0,
       lastSeenAt: Date.UTC(2026, 9, 30),
-      enrollmentId: null,
+      userId: '1',
     },
-    { publicKey: 'dev-2', name: 'iPad', enrolledAt: 0, lastSeenAt: null, enrollmentId: null },
+    { publicKey: 'dev-2', name: 'iPad', enrolledAt: 0, lastSeenAt: null, userId: '7' },
   ],
+  access: {
+    owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+    members: [
+      { user: { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null }, addedAt: 0 },
+      { user: { id: '8', login: 'lee', name: null, avatarUrl: null }, addedAt: 0 },
+    ],
+  },
 };
 
 describe('shinsa remote', () => {
@@ -51,44 +69,100 @@ describe('shinsa remote', () => {
     expect(on.text).toBe(
       [
         'Remote access is connected for Studio, signed in as mona.',
-        'Open it at https://app.shinsa.dev.',
-        'Enrolled devices:',
+        'Open it in Shinsa Cloud at https://app.shinsa.dev.',
+        'Added devices:',
         '  iPhone (last used 2026-10-30T00:00:00.000Z) dev-1',
-        '  iPad (never used) dev-2',
+        '  iPad (never used, added by @kai) dev-2',
+        'Members:',
+        '  Kai Lane (@kai)',
+        '  @lee',
       ].join('\n')
     );
     const paused = await runSpec(
-      createFakeClient({ '/api/remote/disable': { ...ON, enabled: false, owner: null, devices: [] } }),
+      createFakeClient({
+        '/api/remote/disable': { ...ON, enabled: false, owner: null, devices: [], access: null },
+      }),
       ['remote', 'disable']
     );
     expect(paused.text).toContain('Remote access is paused for Studio, signed in as unknown.');
-    expect(paused.text).toContain('No devices are enrolled.');
+    expect(paused.text).toContain('No devices are added.');
+    expect(paused.text).toContain(
+      'No one else has access. Share the link from `shinsa remote link` to let someone ask.'
+    );
   });
 
-  test('turns it on, removes it, enrolls and forgets devices through their routes', async () => {
+  test('turns it on, removes it and forgets devices through their routes', async () => {
     const fake = createFakeClient({
       '/api/remote/enable': ON,
       '/api/remote/remove': OFF,
       '/api/remote/devices/remove': ON,
-      '/api/remote/devices/enroll': {
-        url: 'https://app.shinsa.dev/enroll#k3x9.key.secret',
-        name: 'iPhone',
-        expiresAt: 1,
-      },
     });
     await runSpec(fake, ['remote', 'enable']);
     await runSpec(fake, ['remote', 'remove']);
     await runSpec(fake, ['remote', 'forget-device', 'dev-1']);
-    const enrolled = await runSpec(fake, ['remote', 'enroll', 'iPhone']);
-    expect(enrolled.text).toBe(
-      'Open this link on iPhone within 10 minutes. It works once:\nhttps://app.shinsa.dev/enroll#k3x9.key.secret'
-    );
     expect(fake.posts).toEqual([
       { path: '/api/remote/enable', body: {} },
       { path: '/api/remote/remove', body: {} },
       { path: '/api/remote/devices/remove', body: { publicKey: 'dev-1' } },
-      { path: '/api/remote/devices/enroll', body: { name: 'iPhone' } },
     ]);
+  });
+
+  test('makes and turns off the link, and shows it with the waiting requests', async () => {
+    const linked: RemoteSnapshot = {
+      ...ON,
+      link: { url: 'https://app.shinsa.dev/enroll#k3x9.key.secret.invite', createdAt: 0 },
+      requests: [REQUEST],
+    };
+    const fake = createFakeClient({
+      '/api/remote/link/create': linked,
+      '/api/remote/link/remove': ON,
+      '/api/remote': linked,
+    });
+    const link = await runSpec(fake, ['remote', 'link']);
+    expect(link.text).toBe(
+      'Open this link on your own device, or share it. Whoever opens it signs in with GitHub and asks for access, which you accept or decline:\nhttps://app.shinsa.dev/enroll#k3x9.key.secret.invite'
+    );
+    await runSpec(fake, ['remote', 'link-off']);
+    expect(fake.posts).toEqual([
+      { path: '/api/remote/link/create', body: {} },
+      { path: '/api/remote/link/remove', body: {} },
+    ]);
+    const status = await runSpec(fake, ['remote', 'status']);
+    expect(status.text).toContain('Invite link: https://app.shinsa.dev/enroll#k3x9.key.secret.invite');
+    expect(status.text).toContain('  r1 Kai Lane (@kai) asks to add Kai iPhone');
+    const none = createFakeClient({ '/api/remote/link/create': ON });
+    expect((await runSpec(none, ['remote', 'link'])).text).toContain('No link was made.');
+  });
+
+  test('accepts and declines a request by its id or by the login that asked', async () => {
+    const twice: RemoteSnapshot = { ...ON, requests: [REQUEST, { ...REQUEST, id: 'r2' }] };
+    const fake = createFakeClient({
+      '/api/remote': { ...ON, requests: [REQUEST] },
+      '/api/remote/requests/accept': ON,
+      '/api/remote/requests/decline': ON,
+    });
+    await runSpec(fake, ['remote', 'accept', '@Kai']);
+    await runSpec(fake, ['remote', 'decline', 'r1']);
+    expect(fake.posts).toEqual([
+      { path: '/api/remote/requests/accept', body: { requestId: 'r1' } },
+      { path: '/api/remote/requests/decline', body: { requestId: 'r1' } },
+    ]);
+    await expect(runSpec(fake, ['remote', 'accept', 'nobody'])).rejects.toThrow(
+      'No access request matches nobody'
+    );
+    const many = createFakeClient({ '/api/remote': twice });
+    await expect(runSpec(many, ['remote', 'accept', 'kai'])).rejects.toThrow('@kai asked more than once');
+  });
+
+  test('removes a member by their GitHub login', async () => {
+    const fake = createFakeClient({ '/api/remote': ON, '/api/remote/members/remove': ON });
+    await runSpec(fake, ['remote', 'remove-member', '@Kai']);
+    expect(fake.posts).toEqual([{ path: '/api/remote/members/remove', body: { userId: '7' } }]);
+    await expect(runSpec(fake, ['remote', 'remove-member', 'nobody'])).rejects.toThrow(
+      '@nobody has no access to this machine.'
+    );
+    const off = createFakeClient({ '/api/remote': OFF });
+    await expect(runSpec(off, ['remote', 'remove-member', 'kai'])).rejects.toThrow('@kai has no access');
   });
 
   test('gives agents only the status, never pairing, devices or turning it off', () => {

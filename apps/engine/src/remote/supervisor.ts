@@ -1,6 +1,7 @@
-import type { MachineCredentials, TunnelStatus } from '@shinsa/core';
+import type { MachineCredentials, RemoteAccess, TunnelStatus } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import { type ControlClient, RevokedError } from './control.ts';
+import { readAccess } from './store.ts';
 
 export type { TunnelStatus } from '@shinsa/core';
 
@@ -36,6 +37,7 @@ export interface TunnelSupervisorOptions {
   localUrl: () => string;
   version: string;
   onRevoked: () => void;
+  onAccess?: (access: RemoteAccess) => void;
   timings?: TunnelTimings;
   now?: () => number;
 }
@@ -82,6 +84,10 @@ export class TunnelSupervisor {
     this.#streakStartedAt = null;
     this.#lateAttempts = 0;
     void this.#connect(this.#generation, 'starting');
+  }
+
+  async requestHeartbeat() {
+    await this.#heartbeat(this.#generation);
   }
 
   async stop() {
@@ -157,10 +163,12 @@ export class TunnelSupervisor {
     const credentials = this.#credentials;
     if (!credentials) return false;
     try {
-      await this.#options.control.recordHeartbeat(credentials.machineToken, {
+      const answer = await this.#options.control.recordHeartbeat(credentials.machineToken, {
         localUrl: this.#options.localUrl(),
         version: this.#options.version,
       });
+      const access = readAccess(answer);
+      if (access && this.#isCurrent(generation)) this.#options.onAccess?.(access);
     } catch (error) {
       if (error instanceof RevokedError) {
         this.#revoke(generation);
@@ -173,7 +181,7 @@ export class TunnelSupervisor {
 
   #revoke(generation: number) {
     if (!this.#isCurrent(generation)) return;
-    log.warn('[Remote] app.shinsa.dev removed this machine; remote access is off');
+    log.warn('[Remote] Shinsa Cloud removed this machine; remote access is off');
     this.#halt();
     this.#credentials = null;
     this.#updateStatus('revoked');

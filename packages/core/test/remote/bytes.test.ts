@@ -3,8 +3,10 @@ import {
   concatBytes,
   decodeText,
   encodeText,
+  isSameSecret,
   parseBase64Url,
   serializeBase64Url,
+  serializeHex,
 } from '../../src/remote/bytes.ts';
 
 describe('bytes', () => {
@@ -31,5 +33,15 @@ describe('bytes', () => {
     expect(parseBase64Url('a+b/')).toBeNull();
     expect(parseBase64Url('abcde')).toBeNull();
     expect(parseBase64Url('ab=')).toBeNull();
+  });
+
+  test('writes bytes as two hex digits each', () => {
+    expect(serializeHex(new Uint8Array([0, 15, 255]))).toBe('000fff');
+  });
+
+  test('compares secrets in full, whatever their length', () => {
+    expect(isSameSecret('abc', 'abc')).toBe(true);
+    expect(isSameSecret('abc', 'abd')).toBe(false);
+    expect(isSameSecret('abc', 'ab')).toBe(false);
   });
 });

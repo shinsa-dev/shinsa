@@ -45,6 +45,7 @@ export interface HttpContext extends ApiContext {
 interface RemoteSocketData {
   kind: 'remote';
   channel: RemoteChannel | null;
+  userId: string;
 }
 
 type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData;
@@ -178,7 +179,8 @@ export function startServer(context: HttpContext) {
               send: (data) => socket.send(data),
               close: (code, reason) => socket.close(code, reason),
             },
-            { hub, respond: respondInsideChannel }
+            { hub, respond: respondInsideChannel },
+            socket.data.userId
           );
         },
         close: (socket) => {
@@ -197,12 +199,17 @@ export function startServer(context: HttpContext) {
       if (config.inspect) return respondReadOnly();
       return context.schedules.handleWebhook(request, url);
     }
+    if (route === 'slack' && context.slack) {
+      if (config.inspect) return respondReadOnly();
+      return context.slack.handleTunnel(request, url);
+    }
     if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
     const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
     if (originRefusal) return respondError('forbidden', originRefusal, 403);
     const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
     if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
-    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null } })) return undefined;
+    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId: claim.userId } }))
+      return undefined;
     return new Response('Upgrade failed', { status: 400 });
   }
 

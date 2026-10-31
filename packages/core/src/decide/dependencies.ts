@@ -64,6 +64,7 @@ export function changeDependencies(
     case 'operating':
     case 'awaiting_proposal':
     case 'awaiting_operation':
+    case 'answered':
     case 'merged':
     case 'done':
     case 'cancelled':

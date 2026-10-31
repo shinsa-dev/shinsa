@@ -5,7 +5,9 @@ describe('local-only routes', () => {
   test('refuse remote changes to remote access, accounts, integrations, secrets, updates and setup', () => {
     for (const path of [
       '/api/remote/pair',
-      '/api/remote/devices/enroll',
+      '/api/remote/links/create',
+      '/api/remote/members/remove',
+      '/api/slack/disconnect',
       '/api/accounts/login',
       '/api/extensions/mcp/toggle',
       '/api/secrets/gate-1',
@@ -20,12 +22,20 @@ describe('local-only routes', () => {
   });
 
   test('let remote reads through, but never terminals or services', () => {
-    for (const path of ['/api/remote', '/api/accounts', '/api/extensions', '/api/schedules/s1/webhook']) {
+    for (const path of [
+      '/api/remote',
+      '/api/slack',
+      '/api/accounts',
+      '/api/extensions',
+      '/api/schedules/s1/webhook',
+    ]) {
       expect(resolveLocalOnlyRoute('GET', path)).toBe(false);
     }
     expect(resolveLocalOnlyRoute('GET', '/api/terminals')).toBe(true);
     expect(resolveLocalOnlyRoute('HEAD', '/api/services/s1/start')).toBe(true);
     expect(resolveLocalOnlyRoute('POST', '/api/commands')).toBe(false);
     expect(resolveLocalOnlyRoute('POST', '/api/remotely')).toBe(false);
+    expect(resolveLocalOnlyRoute('POST', '/api/remote/requests/accept')).toBe(false);
+    expect(resolveLocalOnlyRoute('POST', '/api/remote/requests/decline')).toBe(false);
   });
 });

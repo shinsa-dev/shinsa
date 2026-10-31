@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 import type { RemoteSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
+  acceptMachineRequest,
+  declineMachineRequest,
   REMOTE_ACCESS_ACTIONS,
   refreshRemoteAccess,
   resetRemoteAccess,
@@ -60,22 +62,31 @@ describe('remote access on this machine', () => {
 
   it('sends each action to its route and keeps the snapshot it answers with', async () => {
     const paused = createRemoteSnapshot({ enabled: false });
-    for (const path of ['/pair', '/pair/cancel', '/enable', '/disable', '/remove', '/devices/remove'])
+    for (const path of [
+      '/pair',
+      '/pair/cancel',
+      '/enable',
+      '/disable',
+      '/remove',
+      '/devices/remove',
+      '/members/remove',
+      '/link/create',
+      '/link/remove',
+      '/requests/accept',
+      '/requests/decline',
+    ])
       answerSnapshot(`POST /api/remote${path}`, paused);
-    answers['POST /api/remote/devices/enroll'] = () =>
-      Response.json({
-        id: 'link-1',
-        url: 'https://app.shinsa.dev/enroll#a.b.c',
-        name: 'iPhone',
-        expiresAt: 1,
-      });
     await REMOTE_ACCESS_ACTIONS.pair();
     await REMOTE_ACCESS_ACTIONS.cancelPairing();
     await REMOTE_ACCESS_ACTIONS.resume();
     await REMOTE_ACCESS_ACTIONS.pause();
     await REMOTE_ACCESS_ACTIONS.remove();
-    await REMOTE_ACCESS_ACTIONS.forgetDevice('dev-1');
-    expect(await REMOTE_ACCESS_ACTIONS.createEnrollment('iPhone')).toMatchObject({ name: 'iPhone' });
+    await REMOTE_ACCESS_ACTIONS.revokeDevice('dev-1');
+    await REMOTE_ACCESS_ACTIONS.createLink();
+    await REMOTE_ACCESS_ACTIONS.removeLink();
+    await REMOTE_ACCESS_ACTIONS.acceptRequest('r1');
+    await REMOTE_ACCESS_ACTIONS.declineRequest('r2');
+    await REMOTE_ACCESS_ACTIONS.removeMember('7');
     expect(selectRemoteAccess().snapshot).toEqual(paused);
     expect(sent.map((entry) => [entry.path, entry.body])).toEqual([
       ['/api/remote/pair', {}],
@@ -84,7 +95,23 @@ describe('remote access on this machine', () => {
       ['/api/remote/disable', {}],
       ['/api/remote/remove', {}],
       ['/api/remote/devices/remove', { publicKey: 'dev-1' }],
-      ['/api/remote/devices/enroll', { name: 'iPhone' }],
+      ['/api/remote/link/create', {}],
+      ['/api/remote/link/remove', {}],
+      ['/api/remote/requests/accept', { requestId: 'r1' }],
+      ['/api/remote/requests/decline', { requestId: 'r2' }],
+      ['/api/remote/members/remove', { userId: '7' }],
+    ]);
+  });
+
+  it('sends an answer to a request to the machine it waits on', async () => {
+    const snapshot = createRemoteSnapshot();
+    answerSnapshot('POST /api/remote/requests/accept?machine=k3x9', snapshot);
+    answerSnapshot('POST /api/remote/requests/decline?machine=w4t8', snapshot);
+    await acceptMachineRequest('k3x9', 'r1');
+    await declineMachineRequest('w4t8', 'r2');
+    expect(sent.map((entry) => [entry.path, entry.body])).toEqual([
+      ['/api/remote/requests/accept?machine=k3x9', { requestId: 'r1' }],
+      ['/api/remote/requests/decline?machine=w4t8', { requestId: 'r2' }],
     ]);
   });
 
@@ -93,7 +120,15 @@ describe('remote access on this machine', () => {
     const { result } = renderHook(() => useRemoteAccess());
     await waitFor(() => expect(result.current.snapshot?.status).toBe('connected'));
     const added = createRemoteSnapshot({
-      devices: [{ publicKey: 'd', name: 'iPhone', enrolledAt: 1, lastSeenAt: null, enrollmentId: 'link-1' }],
+      devices: [
+        {
+          publicKey: 'd',
+          name: 'iPhone',
+          enrolledAt: 1,
+          lastSeenAt: null,
+          userId: null,
+        },
+      ],
     });
     act(() => connection.replaceRemote(added));
     expect(result.current.snapshot).toBe(added);

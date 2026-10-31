@@ -19,6 +19,7 @@ import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from '
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
+import type { SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
 import type { WorkspaceMode } from './workspaces.ts';
@@ -42,6 +43,7 @@ export type TaskStage =
   | 'watching'
   | 'awaiting_proposal'
   | 'awaiting_operation'
+  | 'answered'
   | 'merged'
   | 'done'
   | 'cancelled';
@@ -148,7 +150,8 @@ export type GateType =
   | 'failure'
   | 'configuration'
   | 'sign_in'
-  | 'post_merge';
+  | 'post_merge'
+  | 'result';
 
 export type GateCause = 'budget' | 'monitor' | 'push_hook';
 
@@ -484,6 +487,7 @@ export interface Task {
   mergeStepsDone?: string[];
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
+  slack?: SlackThreadLink | null;
   backlog?: TaskBacklog | null;
   snoozed?: TaskSnooze | null;
   duplicate?: TaskDuplicate | null;

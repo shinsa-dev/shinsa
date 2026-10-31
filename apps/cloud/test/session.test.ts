@@ -46,7 +46,7 @@ describe('signing in with GitHub', () => {
     const session = await harness.signIn('mona', 42);
     expect(session.length).toBeGreaterThan(20);
     const answer = await readJson<RemoteSession>(await harness.call('/__remote/session', { session }));
-    expect(answer.user).toEqual({ id: '42', login: 'mona', avatarUrl: null });
+    expect(answer.user).toEqual({ id: '42', login: 'mona', name: null, avatarUrl: null });
   });
 
   test('stores only a hash of the session token', async () => {
@@ -177,7 +177,11 @@ async function startNative(harness: Harness, redirect = 'shinsa://signed-in') {
   );
   const authorize = new URL(start.headers.get('location') ?? '');
   const code = `native-${crypto.randomUUID()}`;
-  registerGitHubCode(code, { id: 7, login: 'octo' }, authorize.searchParams.get('code_challenge') ?? '');
+  registerGitHubCode(
+    code,
+    { id: 7, login: 'octo', name: 'Octo Cat' },
+    authorize.searchParams.get('code_challenge') ?? ''
+  );
   return {
     start,
     code,
@@ -222,7 +226,7 @@ describe('signing in from the native app', () => {
     const answer = await redeem(harness, appCode);
     expect(answer.status).toBe(200);
     const { token, user } = await readJson<NativeSignInTokenResponse>(answer);
-    expect(user).toEqual({ id: '7', login: 'octo', avatarUrl: null });
+    expect(user).toEqual({ id: '7', login: 'octo', name: 'Octo Cat', avatarUrl: null });
     const session = await harness.call('/__remote/session', {
       headers: { authorization: `Bearer ${token}` },
     });

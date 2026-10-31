@@ -159,6 +159,7 @@ function QueueSpecimens({ now }: { now: number }) {
       <Specimen label='MessageQueue · one queued message, docked above the composer'>
         <div className='w-full max-w-xl'>
           <Composer
+            draftKey='specimen-composer'
             placeholder='Tell the agent something.'
             submitLabel='Send message'
             onSubmit={acknowledgeSample}

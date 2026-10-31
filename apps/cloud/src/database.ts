@@ -14,6 +14,7 @@ export interface Database {
 export interface UserRow {
   id: string;
   login: string;
+  name: string | null;
   avatar_url: string | null;
 }
 
@@ -35,6 +36,16 @@ export interface InstanceRow {
   online: number;
   last_seen_at: number | null;
   created_at: number;
+}
+
+export interface SharedInstanceRow extends InstanceRow {
+  owner_login: string;
+  owner_name: string | null;
+  owner_avatar_url: string | null;
+}
+
+export interface MemberRow extends UserRow {
+  added_at: number;
 }
 
 export interface PairSessionRow {
@@ -60,17 +71,68 @@ export interface NewInstance {
   createdAt: number;
 }
 
-const INSTANCE_COLUMNS =
-  'id, user_id, name, fingerprint, tunnel_id, dns_record_id, connect_key, local_url, online, last_seen_at, created_at';
+const INSTANCE_COLUMN_NAMES = [
+  'id',
+  'user_id',
+  'name',
+  'fingerprint',
+  'tunnel_id',
+  'dns_record_id',
+  'connect_key',
+  'local_url',
+  'online',
+  'last_seen_at',
+  'created_at',
+];
+
+const INSTANCE_COLUMNS = INSTANCE_COLUMN_NAMES.join(', ');
+
+const SHARED_INSTANCE_COLUMNS = [
+  ...INSTANCE_COLUMN_NAMES.map((column) => `instances.${column}`),
+  'users.login AS owner_login',
+  'users.name AS owner_name',
+  'users.avatar_url AS owner_avatar_url',
+].join(', ');
+
+const USER_COLUMNS = 'users.id, users.login, users.name, users.avatar_url';
+
+export interface SlackWorkspaceRow {
+  team_id: string;
+  team_name: string;
+  bot_user_id: string;
+  bot_token: string;
+  installed_at: number;
+}
+
+export interface SlackLinkRow {
+  team_id: string;
+  team_name: string;
+  slack_user_id: string;
+  slack_user_name: string;
+  user_id: string;
+  instance_id: string;
+  linked_at: number;
+}
+
+export interface SlackThreadKey {
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+}
+
+const SLACK_EVENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+const SLACK_LINK_COLUMNS =
+  'slack_links.team_id, slack_workspaces.team_name, slack_links.slack_user_id, slack_links.slack_user_name, slack_links.user_id, slack_links.instance_id, slack_links.linked_at';
 
 export function createStore(db: Database) {
   return {
     async upsertUser(user: UserRow, now: number) {
       await db
         .prepare(
-          'INSERT INTO users (id, login, avatar_url, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET login = excluded.login, avatar_url = excluded.avatar_url'
+          'INSERT INTO users (id, login, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET login = excluded.login, name = excluded.name, avatar_url = excluded.avatar_url'
         )
-        .bind(user.id, user.login, user.avatar_url, now)
+        .bind(user.id, user.login, user.name, user.avatar_url, now)
         .run();
     },
 
@@ -84,7 +146,7 @@ export function createStore(db: Database) {
     selectSessionUser(tokenHash: string, now: number) {
       return db
         .prepare(
-          'SELECT users.id, users.login, users.avatar_url FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?'
+          `SELECT ${USER_COLUMNS} FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?`
         )
         .bind(tokenHash, now)
         .first<UserRow>();
@@ -95,7 +157,7 @@ export function createStore(db: Database) {
     },
 
     selectUser(id: string) {
-      return db.prepare('SELECT id, login, avatar_url FROM users WHERE id = ?').bind(id).first<UserRow>();
+      return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<UserRow>();
     },
 
     async createSignInCode(codeHash: string, row: SignInCodeRow, now: number) {
@@ -207,11 +269,21 @@ export function createStore(db: Database) {
       return row?.total ?? 0;
     },
 
+    async countOwnedInstances(userId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM instances WHERE user_id = ?')
+        .bind(userId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
     async listUserInstances(userId: string) {
       const { results } = await db
-        .prepare(`SELECT ${INSTANCE_COLUMNS} FROM instances WHERE user_id = ? ORDER BY created_at`)
-        .bind(userId)
-        .all<InstanceRow>();
+        .prepare(
+          `SELECT ${SHARED_INSTANCE_COLUMNS} FROM instances JOIN users ON users.id = instances.user_id WHERE instances.user_id = ? OR instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ?) ORDER BY instances.created_at`
+        )
+        .bind(userId, userId)
+        .all<SharedInstanceRow>();
       return results;
     },
 
@@ -242,6 +314,206 @@ export function createStore(db: Database) {
 
     async removeInstance(id: string) {
       await db.prepare('DELETE FROM instances WHERE id = ?').bind(id).run();
+    },
+
+    async replaceInvite(instanceId: string, tokenHash: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO instance_invites (instance_id, token_hash, created_at) VALUES (?, ?, ?) ON CONFLICT (instance_id) DO UPDATE SET token_hash = excluded.token_hash, created_at = excluded.created_at'
+        )
+        .bind(instanceId, tokenHash, now)
+        .run();
+    },
+
+    async removeInvite(instanceId: string) {
+      await db.prepare('DELETE FROM instance_invites WHERE instance_id = ?').bind(instanceId).run();
+    },
+
+    async selectInviteInstance(tokenHash: string) {
+      const row = await db
+        .prepare('SELECT instance_id FROM instance_invites WHERE token_hash = ?')
+        .bind(tokenHash)
+        .first<{ instance_id: string }>();
+      return row?.instance_id ?? null;
+    },
+
+    async recordRequester(instanceId: string, userId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO instance_requesters (instance_id, user_id, requested_at) VALUES (?, ?, ?) ON CONFLICT (instance_id, user_id) DO UPDATE SET requested_at = excluded.requested_at'
+        )
+        .bind(instanceId, userId, now)
+        .run();
+    },
+
+    async isRequester(instanceId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM instance_requesters WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async removeRequester(instanceId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM instance_requesters WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .run();
+    },
+
+    async createMember(instanceId: string, userId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO instance_members (instance_id, user_id, added_at) VALUES (?, ?, ?) ON CONFLICT (instance_id, user_id) DO NOTHING'
+        )
+        .bind(instanceId, userId, now)
+        .run();
+    },
+
+    async isMember(instanceId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM instance_members WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async countMembers(instanceId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM instance_members WHERE instance_id = ?')
+        .bind(instanceId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
+    async listMembers(instanceId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${USER_COLUMNS}, instance_members.added_at FROM instance_members JOIN users ON users.id = instance_members.user_id WHERE instance_members.instance_id = ? ORDER BY instance_members.added_at, users.login`
+        )
+        .bind(instanceId)
+        .all<MemberRow>();
+      return results;
+    },
+
+    async removeMember(instanceId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM instance_members WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .run();
+    },
+
+    async upsertSlackWorkspace(row: SlackWorkspaceRow) {
+      await db
+        .prepare(
+          'INSERT INTO slack_workspaces (team_id, team_name, bot_user_id, bot_token, installed_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (team_id) DO UPDATE SET team_name = excluded.team_name, bot_user_id = excluded.bot_user_id, bot_token = excluded.bot_token, installed_at = excluded.installed_at'
+        )
+        .bind(row.team_id, row.team_name, row.bot_user_id, row.bot_token, row.installed_at)
+        .run();
+    },
+
+    selectSlackWorkspace(teamId: string) {
+      return db
+        .prepare(
+          'SELECT team_id, team_name, bot_user_id, bot_token, installed_at FROM slack_workspaces WHERE team_id = ?'
+        )
+        .bind(teamId)
+        .first<SlackWorkspaceRow>();
+    },
+
+    async removeSlackWorkspace(teamId: string) {
+      await db.prepare('DELETE FROM slack_workspaces WHERE team_id = ?').bind(teamId).run();
+    },
+
+    async upsertSlackLink(row: Omit<SlackLinkRow, 'team_name'>) {
+      await db
+        .prepare(
+          'INSERT INTO slack_links (team_id, slack_user_id, slack_user_name, user_id, instance_id, linked_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (team_id, slack_user_id) DO UPDATE SET slack_user_name = excluded.slack_user_name, user_id = excluded.user_id, instance_id = excluded.instance_id, linked_at = excluded.linked_at'
+        )
+        .bind(
+          row.team_id,
+          row.slack_user_id,
+          row.slack_user_name,
+          row.user_id,
+          row.instance_id,
+          row.linked_at
+        )
+        .run();
+    },
+
+    selectSlackLink(teamId: string, slackUserId: string) {
+      return db
+        .prepare(
+          `SELECT ${SLACK_LINK_COLUMNS} FROM slack_links JOIN slack_workspaces ON slack_workspaces.team_id = slack_links.team_id WHERE slack_links.team_id = ? AND slack_links.slack_user_id = ?`
+        )
+        .bind(teamId, slackUserId)
+        .first<SlackLinkRow>();
+    },
+
+    async listInstanceSlackLinks(instanceId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${SLACK_LINK_COLUMNS} FROM slack_links JOIN slack_workspaces ON slack_workspaces.team_id = slack_links.team_id WHERE slack_links.instance_id = ? ORDER BY slack_links.linked_at`
+        )
+        .bind(instanceId)
+        .all<SlackLinkRow>();
+      return results;
+    },
+
+    async removeInstanceSlackLinks(instanceId: string) {
+      await db.prepare('DELETE FROM slack_links WHERE instance_id = ?').bind(instanceId).run();
+    },
+
+    async recordSlackThread(thread: SlackThreadKey, instanceId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO slack_threads (team_id, channel_id, thread_ts, instance_id, forwarded_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET forwarded_at = excluded.forwarded_at'
+        )
+        .bind(thread.teamId, thread.channelId, thread.threadTs, instanceId, now)
+        .run();
+    },
+
+    async hasSlackThread(thread: SlackThreadKey, instanceId: string) {
+      const row = await db
+        .prepare(
+          'SELECT 1 AS found FROM slack_threads WHERE team_id = ? AND channel_id = ? AND thread_ts = ? AND instance_id = ?'
+        )
+        .bind(thread.teamId, thread.channelId, thread.threadTs, instanceId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async recordSlackPost(teamId: string, channelId: string, ts: string, instanceId: string) {
+      await db
+        .prepare(
+          'INSERT OR IGNORE INTO slack_posts (team_id, channel_id, ts, instance_id) VALUES (?, ?, ?, ?)'
+        )
+        .bind(teamId, channelId, ts, instanceId)
+        .run();
+    },
+
+    async hasSlackPost(teamId: string, channelId: string, ts: string, instanceId: string) {
+      const row = await db
+        .prepare(
+          'SELECT 1 AS found FROM slack_posts WHERE team_id = ? AND channel_id = ? AND ts = ? AND instance_id = ?'
+        )
+        .bind(teamId, channelId, ts, instanceId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async recordSlackEvent(eventId: string, now: number) {
+      await db
+        .prepare('DELETE FROM slack_events WHERE received_at <= ?')
+        .bind(now - SLACK_EVENT_TTL_MS)
+        .run();
+      const row = await db
+        .prepare(
+          'INSERT INTO slack_events (event_id, received_at) VALUES (?, ?) ON CONFLICT (event_id) DO NOTHING RETURNING event_id'
+        )
+        .bind(eventId, now)
+        .first<{ event_id: string }>();
+      return row !== null;
     },
   };
 }

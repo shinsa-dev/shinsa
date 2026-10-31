@@ -1188,7 +1188,7 @@ Tones have meanings, from one map (`TONE_*`, nowhere else):
 | Tone | Text | Wash | Edge | Surface (tile, badge) | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | neutral | `text-fg-2` | `bg-bg-a1` | `border-border` | `bg-bg-a2 text-fg-3` | Waiting on another task, unknown |
-| blue (the accent) | `text-primary-text` | `bg-primary-a2` | `border-primary-a3` | `bg-primary-a2 text-primary-text` | Needs your answer, working stages, waiting to check in, waiting for a usage limit or delegations |
+| blue (the accent) | `text-primary-text` | `bg-primary-a2` | `border-primary-a3` | `bg-primary-a2 text-primary-text` | Needs your answer, Answered, working stages, waiting to check in, waiting for a usage limit or delegations |
 | amber | `text-amber-text` | `bg-amber-a2` | `border-amber-a3` | `bg-amber-a2 text-amber-text` | Changes to review; usage from 75% |
 | orange | `text-orange-text` | `bg-orange-a2` | `border-orange-a3` | `bg-orange-a2 text-orange-text` | Paused, setup incomplete, sign in needed; an agent review that disagrees |
 | green | `text-green-text` | `bg-green-a2` | `border-green-a3` | `bg-green-a2 text-green-text` | Ready to merge, added lines |
@@ -8912,7 +8912,8 @@ Mistakes that were made before and must not come back:
   | `checking` | Checking | `operating` | Running the operation |
   | `reviewing` | Agent review | `awaiting_proposal` | Change to approve |
   | `fixing` | Fixing | `awaiting_operation` | Operation to confirm |
-  | `awaiting_review` | Changes to review | `merged` / `done` / `cancelled` | Merged / Done / Cancelled |
+  | `awaiting_review` | Changes to review | `answered` | Answered |
+  | | | `merged` / `done` / `cancelled` | Merged / Done / Cancelled |
 
   Priorities: Urgent, High, Normal, Low; in a picker the non-urgent ones read "High priority", "Normal priority",
   "Low priority", Urgent stays "Urgent".

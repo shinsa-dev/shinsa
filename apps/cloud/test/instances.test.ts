@@ -2,47 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
-  type MachineCredentials,
-  type PairPollResponse,
-  type PairStartResponse,
-  REMOTE_KEY_ALGORITHM,
   REMOTE_PATHS,
   type RemoteInstance,
   resolveInstanceConnectPath,
   resolveInstanceRemovePath,
-  resolvePairApprovePath,
-  serializePublicKey,
   verifyConnectToken,
 } from '@shinsa/core';
 import { ONLINE_WINDOW_MS } from '../src/instances.ts';
-import { createHarness, type Harness, readJson } from './harness.ts';
-
-async function pairMachine(
-  harness: Harness,
-  session: string,
-  name = 'Studio',
-  auth: { session?: string; bearer?: string; sameOrigin?: boolean } = { session }
-) {
-  const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  const publicKey = await serializePublicKey(pair.publicKey);
-  const start = await readJson<PairStartResponse>(
-    await harness.post(REMOTE_PATHS.pairStart, { name, publicKey, version: '1' })
-  );
-  await harness.post(resolvePairApprovePath(start.claimCode), {}, auth);
-  const claimed = await readJson<PairPollResponse>(
-    await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
-  );
-  if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
-  return claimed.credentials;
-}
-
-function heartbeat(harness: Harness, credentials: MachineCredentials, localUrl = 'http://127.0.0.1:7446') {
-  return harness.post(
-    REMOTE_PATHS.heartbeat,
-    { localUrl, version: '1' },
-    { bearer: credentials.machineToken, sameOrigin: false }
-  );
-}
+import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 async function listInstances(harness: Harness, session: string) {
   return readJson<RemoteInstance[]>(await harness.call(REMOTE_PATHS.instances, { session }));
@@ -64,6 +31,8 @@ describe('instances', () => {
         online: false,
         lastSeenAt: null,
         createdAt: harness.clock.now,
+        owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+        role: 'owner',
       },
     ]);
     expect((await heartbeat(harness, studio)).status).toBe(200);

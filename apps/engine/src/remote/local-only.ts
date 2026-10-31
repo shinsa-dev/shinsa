@@ -4,7 +4,8 @@ interface LocalOnlyRoute {
 }
 
 const LOCAL_ONLY_ROUTES: LocalOnlyRoute[] = [
-  { pattern: /^\/api\/remote(?:\/|$)/, writesOnly: true },
+  { pattern: /^\/api\/remote(?:\/(?!requests\/)|$)/, writesOnly: true },
+  { pattern: /^\/api\/slack(?:\/|$)/, writesOnly: true },
   { pattern: /^\/api\/accounts(?:\/|$)/, writesOnly: true },
   { pattern: /^\/api\/extensions(?:\/|$)/, writesOnly: true },
   { pattern: /^\/api\/mcp(?:\/|$)/, writesOnly: false },

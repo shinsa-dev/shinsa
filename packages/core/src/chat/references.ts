@@ -284,6 +284,7 @@ export const STAGE_WORDS: Record<TaskStage, string> = {
   watching: 'checking a watchdog',
   awaiting_proposal: 'change to approve',
   awaiting_operation: 'operation to confirm',
+  answered: 'answered, to read',
   merged: 'merged',
   done: 'done',
   cancelled: 'cancelled',

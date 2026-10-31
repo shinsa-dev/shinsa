@@ -1,6 +1,7 @@
 import {
   decodeText,
   encodeText,
+  isSameSecret,
   type NativeSignInTokenResponse,
   parseBase64Url,
   REMOTE_NATIVE_CLIENT,
@@ -10,7 +11,7 @@ import {
   type RemoteUser,
   serializeBase64Url,
 } from '@shinsa/core';
-import { createCodeChallenge, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
+import { createCodeChallenge, createToken, resolveTokenHash } from './crypto.ts';
 import type { UserRow } from './database.ts';
 import {
   assertSameOrigin,
@@ -48,6 +49,7 @@ const GITHUB_USER = 'https://api.github.com/user';
 interface GitHubUser {
   id: number;
   login: string;
+  name?: string | null;
   avatar_url?: string;
 }
 
@@ -67,7 +69,7 @@ function readSessionToken(request: Request) {
   return readBearer(request) ?? readCookie(request, SESSION_COOKIE);
 }
 
-async function selectSessionUser(request: Request, world: CloudWorld) {
+export async function selectSessionUser(request: Request, world: CloudWorld) {
   const token = readSessionToken(request);
   if (!token) return null;
   return world.store.selectSessionUser(await resolveTokenHash(token), world.now());
@@ -88,8 +90,8 @@ export function findPageUser(request: Request, world: CloudWorld) {
   return findSessionUser(request, world);
 }
 
-function serializeUser(user: UserRow): RemoteUser {
-  return { id: user.id, login: user.login, avatarUrl: user.avatar_url };
+export function serializeUser(user: UserRow): RemoteUser {
+  return { id: user.id, login: user.login, name: user.name, avatarUrl: user.avatar_url };
 }
 
 export async function respondSession(request: Request, world: CloudWorld) {
@@ -216,7 +218,7 @@ async function requestGitHubUser(code: string, verifier: string, world: CloudWor
   const user = (await readResponseFields(userResponse)) as Partial<GitHubUser>;
   if (!userResponse.ok || typeof user.id !== 'number' || typeof user.login !== 'string')
     throw new CloudError('sign_in_failed', 'GitHub did not say who you are. Try again.', 400);
-  return { id: user.id, login: user.login, avatar_url: user.avatar_url };
+  return { id: user.id, login: user.login, name: user.name, avatar_url: user.avatar_url };
 }
 
 async function createSession(userId: string, world: CloudWorld) {
@@ -254,7 +256,12 @@ export async function respondSignInCallback(request: Request, url: URL, world: C
       400
     );
   const github = await requestGitHubUser(code, oauth.verifier, world);
-  const user: UserRow = { id: String(github.id), login: github.login, avatar_url: github.avatar_url ?? null };
+  const user: UserRow = {
+    id: String(github.id),
+    login: github.login,
+    name: typeof github.name === 'string' && github.name !== '' ? github.name : null,
+    avatar_url: github.avatar_url ?? null,
+  };
   await world.store.upsertUser(user, world.now());
   if (oauth.native) return respondNativeCallback(user, oauth.native, world);
   const token = await createSession(user.id, world);

@@ -54,8 +54,9 @@ export function PairPage({
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCheckCircle2' tone='blue' title={`${state.name} is paired`}>
-          It finishes setting up in a few seconds. To use it from this device, add the device on the machine:
-          Settings, Remote access, Add device.
+          {
+            'It finishes setting up in a few seconds. To use it from this device, open the invite link from Settings > Remote access on the machine here.'
+          }
         </RemoteHero>
         <RemoteBenefits />
         <Button className='w-full' nativeButton={false} render={<a href={REMOTE_PATHS.app} />}>

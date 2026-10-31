@@ -198,6 +198,7 @@ export function ChatTab({
       </div>
       {hint && (
         <Composer
+          draftKey={task.id}
           placeholder={hint.placeholder}
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}

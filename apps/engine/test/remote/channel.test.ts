@@ -10,7 +10,7 @@ import {
   serializePublicKey,
 } from '@shinsa/core';
 import type { HubSocket } from '../../src/http/socket.ts';
-import { type ChannelHost, RemoteChannel } from '../../src/remote/channel.ts';
+import { type AccessAnswer, type ChannelHost, RemoteChannel } from '../../src/remote/channel.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
 
 interface Harness {
@@ -24,7 +24,7 @@ interface Harness {
   machineKey: string;
   enrolled: Set<string>;
   seen: string[];
-  redeem: { ok: boolean };
+  access: { answer: AccessAnswer; asked: (string | null)[]; waiting: AccessAnswer | null };
 }
 
 async function createHarness(respond?: (request: Request) => Promise<Response>, maxBodyBytes = 1024) {
@@ -42,12 +42,16 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
     machineKey,
     enrolled: new Set<string>(),
     seen: [],
-    redeem: { ok: false },
+    access: { answer: { kind: 'refused', reason: 'This link was turned off.' }, asked: [], waiting: null },
   } as unknown as Harness;
   const host: ChannelHost = {
     resolveMachineKey: () => Promise.resolve({ publicKey: machineKey, privateKey: machine.privateKey }),
     isEnrolled: (device) => harness.enrolled.has(device),
-    redeemEnrollment: () => Promise.resolve(harness.redeem.ok),
+    requestAccess: (_proof, _keys, name) => {
+      harness.access.asked.push(name);
+      return Promise.resolve(harness.access.answer);
+    },
+    resumeAccess: () => harness.access.waiting,
     recordSeen: (device) => harness.seen.push(device),
     hub: {
       open: (socket) => {
@@ -131,18 +135,83 @@ describe('the sealed channel', () => {
     expect(harness.channel.isOpen).toBe(false);
   });
 
-  test('lets a new device in with a redeemed enrollment proof', async () => {
-    const harness = await createHarness();
-    harness.redeem.ok = true;
-    const start = await startHandshake({
+  async function startRequest(harness: Harness) {
+    return startHandshake({
       machineKey: harness.machineKey,
       device: await createKeyPair(),
       enrollSecret: serializeBase64Url(new Uint8Array(32).fill(1)),
+      name: 'Bob iPhone',
     });
-    await harness.channel.receive(start.hello);
-    const session = await start.finish(harness.sent[0] as string);
-    await until(() => harness.sent.length >= 2);
-    expect(await session.open(harness.sent[1] as Bytes)).toEqual({ t: 'ready' });
+  }
+
+  function createDecision() {
+    let decide: (approved: boolean) => void = () => undefined;
+    const decided = new Promise<boolean>((resolve) => {
+      decide = resolve;
+    });
+    return { answer: { kind: 'waiting', decided } satisfies AccessAnswer, decide };
+  }
+
+  test('a new device with a link proof asks for access, waits, and is let in once accepted', async () => {
+    const harness = await createHarness();
+    const decision = createDecision();
+    harness.access.answer = decision.answer;
+    const start = await startRequest(harness);
+    void harness.channel.receive(start.hello);
+    await until(() => harness.sent.length > 0);
+    expect(JSON.parse(harness.sent[0] as string)).toEqual({ type: 'pending' });
+    expect(harness.access.asked).toEqual(['Bob iPhone']);
+    decision.decide(true);
+    await until(() => harness.sent.length >= 3);
+    const session = await start.finish(harness.sent[1] as string);
+    expect(await session.open(harness.sent[2] as Bytes)).toEqual({ t: 'ready' });
+  });
+
+  test('a device that asked before comes back without its link and waits on the same request', async () => {
+    const harness = await createHarness();
+    const decision = createDecision();
+    harness.access.waiting = decision.answer;
+    const start = await startHandshake({ machineKey: harness.machineKey, device: await createKeyPair() });
+    void harness.channel.receive(start.hello);
+    await until(() => harness.sent.length > 0);
+    expect(JSON.parse(harness.sent[0] as string)).toEqual({ type: 'pending' });
+    expect(harness.access.asked).toEqual([]);
+    decision.decide(true);
+    await until(() => harness.sent.length >= 3);
+    const session = await start.finish(harness.sent[1] as string);
+    expect(await session.open(harness.sent[2] as Bytes)).toEqual({ t: 'ready' });
+  });
+
+  test('a declined request is refused, and a refused one says why', async () => {
+    const declined = await createHarness();
+    const decision = createDecision();
+    declined.access.answer = decision.answer;
+    void declined.channel.receive((await startRequest(declined)).hello);
+    await until(() => declined.sent.length > 0);
+    decision.decide(false);
+    await until(() => declined.closed.length > 0);
+    expect(JSON.parse(declined.sent[1] as string)).toEqual({
+      type: 'refused',
+      reason: 'Your request to reach this machine was declined.',
+    });
+    const refused = await createHarness();
+    await refused.channel.receive((await startRequest(refused)).hello);
+    expect(JSON.parse(refused.sent[0] as string)).toEqual({
+      type: 'refused',
+      reason: 'This link was turned off.',
+    });
+  });
+
+  test('says nothing more to a browser that left while it waited', async () => {
+    const harness = await createHarness();
+    const decision = createDecision();
+    harness.access.answer = decision.answer;
+    void harness.channel.receive((await startRequest(harness)).hello);
+    await until(() => harness.sent.length > 0);
+    harness.channel.close();
+    decision.decide(true);
+    await Bun.sleep(5);
+    expect(harness.sent).toHaveLength(1);
   });
 
   test('closes on anything but a hello first, a frame during the handshake, or plain text after it', async () => {

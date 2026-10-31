@@ -17,6 +17,8 @@ describe('the dashboard client', () => {
     await client.listInstances();
     await client.requestConnect('k3x9');
     await client.removeInstance('k3x9');
+    await client.leaveInstance('k3x9');
+    await client.acceptInvite('invite-1');
     await client.readPair('K7PQ');
     await client.approvePair('K7PQ');
     await client.signOut();
@@ -25,6 +27,8 @@ describe('the dashboard client', () => {
       { path: '/__remote/instances', method: 'GET', body: undefined },
       { path: '/__remote/instances/k3x9/connect', method: 'POST', body: '{}' },
       { path: '/__remote/instances/k3x9/remove', method: 'POST', body: '{}' },
+      { path: '/__remote/instances/k3x9/leave', method: 'POST', body: '{}' },
+      { path: '/__remote/invites/accept', method: 'POST', body: '{"token":"invite-1"}' },
       { path: '/__remote/pairs/K7PQ', method: 'GET', body: undefined },
       { path: '/__remote/pairs/K7PQ/approve', method: 'POST', body: '{}' },
       { path: '/__remote/sign-out', method: 'POST', body: '{}' },
@@ -47,7 +51,7 @@ describe('the dashboard client', () => {
     const odd = createClient(() => Response.json({ error: { code: 1 } }, { status: 500 }));
     await expect(odd.client.listInstances()).rejects.toMatchObject({
       code: 'failed',
-      message: 'app.shinsa.dev answered 500.',
+      message: 'Shinsa Cloud answered 500.',
     });
     const html = createClient(() => new Response('<html>', { status: 502 }));
     await expect(html.client.listInstances()).rejects.toMatchObject({ code: 'failed', status: 502 });
