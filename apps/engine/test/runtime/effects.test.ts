@@ -18,6 +18,7 @@ import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
 import { EffectError, ShippingError } from '../../src/runtime/failures.ts';
 import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
+import type { Slack } from '../../src/slack/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
 import {
@@ -255,6 +256,53 @@ describe('routing effects', () => {
       { type: 'effect.fail', taskId: 't1', title: 'Could not push the fixes', detail: 'push rejected' },
     ]);
     expect(commandIds).toEqual(['push-key:effect.fail']);
+  });
+});
+
+describe('the Slack effects', () => {
+  const THREAD = { teamId: 'T1', channelId: 'C1', threadTs: '1.1' };
+
+  test('go to the Slack service', async () => {
+    const handled: string[] = [];
+    const slack = {
+      evaluate: () => {
+        handled.push('evaluate');
+        return Promise.resolve();
+      },
+      status: () => {
+        handled.push('status');
+        return Promise.resolve();
+      },
+      post: () => {
+        handled.push('post');
+        return Promise.resolve();
+      },
+    } as unknown as Slack;
+    const { runner } = setup(() => undefined, { slack });
+    const mention = {
+      ...THREAD,
+      eventId: 'Ev1',
+      messageTs: '1.1',
+      userId: 'U1',
+      userName: 'A',
+      text: '',
+      permalink: null,
+      thread: [],
+    };
+    await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
+    await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
+    await runner.apply(
+      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'forwarded' } },
+      createContext()
+    );
+    expect(handled).toEqual(['evaluate', 'status', 'post']);
+  });
+
+  test('fail without one, so they wait in the outbox', async () => {
+    const { runner } = setup();
+    await expect(
+      runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext())
+    ).rejects.toThrow('Slack is not connected on this machine.');
   });
 });
 

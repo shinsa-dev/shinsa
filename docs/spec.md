@@ -384,6 +384,11 @@ the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashb
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`).
+Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
+and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
+that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
+can be answered with its button there, and every other decision is made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
+own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -1036,6 +1041,30 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   several at once, whatever project the box shows) and Backlog.
 - **No roadmap.** The word named nothing Shinsa has; the page is All tasks, its sections are task groups, and the
   backlog is the closest thing to a roadmap there is.
+
+### Slack (2026-10-31)
+
+- **Tag the bot, from anywhere in Slack.** A mention outside a thread starts one; in a thread the bot reads all of it,
+  so a bare mention under a bug report is enough. It always answers in the thread and never chats: the new task's
+  status message, "Sent to" the task the thread already has, or, for greetings, thanks and small talk, the one line
+  "Not a task, so nothing was started." and silence after. Work runs
+  the same loop as Home's input with everything on Auto: triage picks the project, the repository, the kind (a
+  question is answered and ends there) and the priority.
+- **One shared bot, locked to its owner.** The app lives on app.shinsa.dev and relays each mention to the machine of
+  the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
+  gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
+  a Slack token, and the relay stores no message text.
+- **The thread follows the task, in Block Kit**: one status message edited in place as it moves, one post for each
+  question, secret, plan and review, each a header, the gist bold or quoted, its details as fields or a list, a
+  button to decide in Shinsa and a small line naming the task and its `PR #<number>`, and the result's start with a
+  button to the rest. No icons in the posts: the state is the one reaction on your
+  message (⏳ sizing up, 🛠️ working, ✋ needs you, ✅ done), there from the moment the bot reads it. No streamed text
+  and no "Thinking…" placeholder. A question's choices are buttons: the person who started the task answers with one, the post then says who
+  answered what, and anyone else is told privately they cannot; plans, reviews, merges and the rest are decided only
+  in Shinsa.
+- **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every
+  machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
+  Mentions while a machine is offline are not kept.
 
 ### Duplicates (2026-10-31)
 

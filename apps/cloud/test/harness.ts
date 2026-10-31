@@ -67,6 +67,10 @@ export const TEST_CONFIG: CloudConfig = {
   cloudflareApiToken: 'api-token',
   tunnelZone: 'shinsa.dev',
   maxInstances: 50,
+  slackClientId: 'slack-client',
+  slackClientSecret: 'slack-secret',
+  slackSigningSecret: 'slack-signing',
+  slackTokenKey: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8',
 };
 
 export interface Harness {
@@ -75,6 +79,7 @@ export interface Harness {
   calls: UpstreamCall[];
   handlers: UpstreamHandler[];
   clock: { now: number };
+  settle: () => Promise<void>;
   call: (path: string, init?: RequestInit & { session?: string; sameOrigin?: boolean }) => Promise<Response>;
   post: (
     path: string,
@@ -102,6 +107,7 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
   const cloudflare = createCloudflareApi();
   const handlers: UpstreamHandler[] = [];
   const clock = { now: 1_800_000_000_000 };
+  const deferred: Promise<unknown>[] = [];
   const world = createWorld({
     db,
     assets: (request) => Promise.resolve(new Response(`asset ${new URL(request.url).pathname}`)),
@@ -138,6 +144,9 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
       return new Response('no upstream', { status: 404 });
     },
     now: () => clock.now,
+    defer: (work) => {
+      deferred.push(work);
+    },
     config: { ...TEST_CONFIG, ...config },
   });
 
@@ -206,7 +215,11 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     return ((await answer.json()) as { token: string }).token;
   }
 
-  return { db, world, calls, handlers, clock, call, post, signIn, signInNative };
+  async function settle() {
+    while (deferred.length > 0) await deferred.shift();
+  }
+
+  return { db, world, calls, handlers, clock, settle, call, post, signIn, signInNative };
 }
 
 export async function readJson<T>(response: Response) {

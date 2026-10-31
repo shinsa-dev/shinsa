@@ -23,17 +23,20 @@ import { PolicySettings } from '@/components/settings/policies.tsx';
 import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
+import { SlackGroup } from '@/components/settings/slack.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
+import type { SlackActions } from '@/lib/connection/slack.ts';
 import { replaceConnection } from '@/lib/connection/socket.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { SlackLinkedPage } from '../remote/slack.tsx';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
 import {
@@ -42,6 +45,7 @@ import {
   createSampleRemote,
   createSampleRemoteActions,
 } from './sample-remote.ts';
+import { createSampleSlack } from './sample-slack.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
@@ -258,6 +262,8 @@ const SAMPLE_MEMORY_ACTIONS: MemoryActions = {
 
 const SAMPLE_POLICY_ACTIONS: PolicyActions = { write: acknowledgeSample };
 
+const SAMPLE_SLACK_ACTIONS: SlackActions = { disconnect: acknowledgeSample };
+
 const SAMPLE_POLICY_MACHINES = [
   {
     id: 'studio',
@@ -384,9 +390,27 @@ export function SettingsSpecimens() {
   const [remote] = React.useState(() => createSampleRemote(now));
   const [remoteActions] = React.useState(() => createSampleRemoteActions(now));
   const [machines] = React.useState(() => createSampleMachineServices(now));
+  const [slack] = React.useState(() => createSampleSlack(now));
   const settings = createSettings();
   return (
     <>
+      {slack.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <SlackGroup snapshot={scene.snapshot} failure={null} actions={SAMPLE_SLACK_ACTIONS} />
+          </div>
+        </Specimen>
+      ))}
+      <Specimen label='SlackLinkedPage · on app.shinsa.dev after connecting Slack'>
+        <div className='w-full max-w-sm'>
+          <SlackLinkedPage search='?team=Overclock' />
+        </div>
+      </Specimen>
+      <Specimen label='SlackLinkedPage · when connecting failed'>
+        <div className='w-full max-w-sm'>
+          <SlackLinkedPage search='?error=slack_expired' />
+        </div>
+      </Specimen>
       {remote.map((scene) => (
         <Specimen key={scene.label} label={scene.label}>
           <div className='w-full max-w-xl'>

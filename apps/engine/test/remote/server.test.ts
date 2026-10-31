@@ -29,6 +29,7 @@ import {
 } from '../../src/remote/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
+import type { Slack } from '../../src/slack/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
 import { createKeyPair, startHandshake, type TestSession } from './client.ts';
@@ -52,6 +53,13 @@ afterEach(async () => {
 
 function createModels(models: AgentModel[]) {
   return { listModels: () => Promise.resolve(models) } as unknown as ModelSource;
+}
+
+function createFakeSlack() {
+  return {
+    handleTunnel: () => Promise.resolve(new Response('mentioned', { status: 202 })),
+    routes: () => [],
+  } as unknown as Slack;
 }
 
 function createFakeSchedules() {
@@ -115,6 +123,7 @@ async function start(
     onboarding: createTestOnboarding(engine, config).onboarding,
     schedules: createFakeSchedules(),
     remote,
+    slack: createFakeSlack(),
   });
   running.push(async () => {
     await remote.stop();
@@ -213,8 +222,18 @@ describe('the tunnel entry point', () => {
     expect((await tunnel('/remote', { headers: { origin: remote.appOrigin } })).status).toBe(404);
   });
 
+  test('hands a Slack mention from app.shinsa.dev to the Slack service, and only as a POST', async () => {
+    const { tunnel } = await start();
+    const mentioned = await tunnel('/api/slack/events', { method: 'POST', body: '{}' });
+    expect(mentioned.status).toBe(202);
+    expect(await mentioned.text()).toBe('mentioned');
+    expect((await tunnel('/api/slack/events')).status).toBe(404);
+    expect((await tunnel('/api/slack', { method: 'POST', body: '{}' })).status).toBe(404);
+  });
+
   test('keeps webhooks read-only in inspect mode', async () => {
     const { tunnel } = await start({ config: { inspect: true } });
+    expect((await tunnel('/api/slack/events', { method: 'POST', body: '{}' })).status).toBe(403);
     expect((await tunnel('/api/hooks/s/t', { method: 'POST', body: '{}' })).status).toBe(403);
   });
 
