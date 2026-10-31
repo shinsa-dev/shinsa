@@ -76,6 +76,8 @@ export const REMOTE_ACCESS_ACTIONS = {
   remove: () => act('/remove'),
   forgetDevice: (publicKey: string) => act('/devices/remove', { publicKey }),
   createEnrollment: (name: string) => requestJson<RemoteEnrollment>('/api/remote/devices/enroll', { name }),
+  createInvite: (name: string) => requestJson<RemoteEnrollment>('/api/remote/invites', { name }),
+  removeMember: (userId: string) => act('/members/remove', { userId }),
 };
 
 export type RemoteAccessActions = typeof REMOTE_ACCESS_ACTIONS;

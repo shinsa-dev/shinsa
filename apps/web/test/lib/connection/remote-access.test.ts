@@ -60,7 +60,15 @@ describe('remote access on this machine', () => {
 
   it('sends each action to its route and keeps the snapshot it answers with', async () => {
     const paused = createRemoteSnapshot({ enabled: false });
-    for (const path of ['/pair', '/pair/cancel', '/enable', '/disable', '/remove', '/devices/remove'])
+    for (const path of [
+      '/pair',
+      '/pair/cancel',
+      '/enable',
+      '/disable',
+      '/remove',
+      '/devices/remove',
+      '/members/remove',
+    ])
       answerSnapshot(`POST /api/remote${path}`, paused);
     answers['POST /api/remote/devices/enroll'] = () =>
       Response.json({
@@ -69,6 +77,8 @@ describe('remote access on this machine', () => {
         name: 'iPhone',
         expiresAt: 1,
       });
+    answers['POST /api/remote/invites'] = () =>
+      Response.json({ id: 'invite-1', kind: 'invite', url: 'u', name: 'Bob', expiresAt: 1 });
     await REMOTE_ACCESS_ACTIONS.pair();
     await REMOTE_ACCESS_ACTIONS.cancelPairing();
     await REMOTE_ACCESS_ACTIONS.resume();
@@ -76,6 +86,8 @@ describe('remote access on this machine', () => {
     await REMOTE_ACCESS_ACTIONS.remove();
     await REMOTE_ACCESS_ACTIONS.forgetDevice('dev-1');
     expect(await REMOTE_ACCESS_ACTIONS.createEnrollment('iPhone')).toMatchObject({ name: 'iPhone' });
+    expect(await REMOTE_ACCESS_ACTIONS.createInvite('Bob')).toMatchObject({ kind: 'invite' });
+    await REMOTE_ACCESS_ACTIONS.removeMember('7');
     expect(selectRemoteAccess().snapshot).toEqual(paused);
     expect(sent.map((entry) => [entry.path, entry.body])).toEqual([
       ['/api/remote/pair', {}],
@@ -85,6 +97,8 @@ describe('remote access on this machine', () => {
       ['/api/remote/remove', {}],
       ['/api/remote/devices/remove', { publicKey: 'dev-1' }],
       ['/api/remote/devices/enroll', { name: 'iPhone' }],
+      ['/api/remote/invites', { name: 'Bob' }],
+      ['/api/remote/members/remove', { userId: '7' }],
     ]);
   });
 

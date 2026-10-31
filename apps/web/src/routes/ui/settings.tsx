@@ -394,7 +394,7 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      <Specimen label='MachinesSettings · on app.shinsa.dev: every machine of the account, two in this dashboard'>
+      <Specimen label='MachinesSettings · on app.shinsa.dev: your machines and one shared with you, three in this dashboard'>
         <div className='w-full max-w-xl'>
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />

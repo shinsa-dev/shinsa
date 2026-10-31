@@ -11,6 +11,10 @@ import type { RemoteServices } from '@/lib/remote/services.ts';
 
 const HOUR_MS = 3_600_000;
 
+const SAMPLE_OWNER = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+
+const SAMPLE_MEMBER = { id: '2', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
 export function createSampleRemote(now: number) {
   const connected: RemoteSnapshot = {
     paired: true,
@@ -38,8 +42,16 @@ export function createSampleRemote(now: number) {
         enrollmentId: null,
         userId: null,
       },
+      {
+        publicKey: 'dev-3',
+        name: 'Kai’s laptop',
+        enrolledAt: now - 30 * HOUR_MS,
+        lastSeenAt: now - 20 * 60_000,
+        enrollmentId: null,
+        userId: SAMPLE_MEMBER.id,
+      },
     ],
-    access: { owner: SAMPLE_OWNER, members: [] },
+    access: { owner: SAMPLE_OWNER, members: [{ user: SAMPLE_MEMBER, addedAt: now - 30 * HOUR_MS }] },
   };
   return [
     {
@@ -71,8 +83,11 @@ export function createSampleRemote(now: number) {
         },
       },
     },
-    { label: 'RemoteAccessGroup · connected, two devices added', snapshot: connected },
-    { label: 'RemoteAccessGroup · paired, no devices yet', snapshot: { ...connected, devices: [] } },
+    { label: 'RemoteAccessGroup · connected, three devices and one member', snapshot: connected },
+    {
+      label: 'RemoteAccessGroup · paired, no devices or members yet',
+      snapshot: { ...connected, devices: [], access: { owner: SAMPLE_OWNER, members: [] } },
+    },
     { label: 'RemoteAccessGroup · paused', snapshot: { ...connected, enabled: false, status: 'off' } },
   ] satisfies { label: string; snapshot: RemoteSnapshot }[];
 }
@@ -86,6 +101,7 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
     pause: answer,
     remove: answer,
     forgetDevice: answer,
+    removeMember: answer,
     createEnrollment: (name) =>
       Promise.resolve({
         id: 'sample-link',
@@ -94,10 +110,18 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
         url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
         expiresAt: now + 10 * 60_000,
       }),
+    createInvite: (name) =>
+      Promise.resolve({
+        id: 'sample-invite',
+        kind: 'invite',
+        name,
+        url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH.Qm9iLWludml0ZS10b2tlbg',
+        expiresAt: now + 10 * 60_000,
+      }),
   };
 }
 
-const SAMPLE_OWNER = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+const SAMPLE_PARTNER = { id: '3', login: 'lee', name: 'Lee Park', avatarUrl: null };
 
 const SAMPLE_MACS: RemoteInstance[] = [
   {
@@ -130,6 +154,16 @@ const SAMPLE_MACS: RemoteInstance[] = [
     owner: SAMPLE_OWNER,
     role: 'owner',
   },
+  {
+    id: 'v9q1',
+    name: 'Team server',
+    fingerprint: '51ce 9a07 e3b4 28df 0c6a',
+    online: true,
+    lastSeenAt: null,
+    createdAt: 0,
+    owner: SAMPLE_PARTNER,
+    role: 'member',
+  },
 ];
 
 export function createSampleMachineServices(now: number): RemoteServices {
@@ -137,13 +171,15 @@ export function createSampleMachineServices(now: number): RemoteServices {
   const macs = SAMPLE_MACS.map((mac) =>
     mac.online ? { ...mac, lastSeenAt: now } : { ...mac, lastSeenAt: now - 26 * HOUR_MS }
   );
-  const added = new Set(['k3x9', 'p7m2']);
+  const added = new Set(['k3x9', 'p7m2', 'v9q1']);
   return {
     dashboard: {
       readSession: refuse,
       listInstances: () => Promise.resolve(macs),
       requestConnect: refuse,
       removeInstance: refuse,
+      leaveInstance: refuse,
+      acceptInvite: refuse,
       readPair: refuse,
       approvePair: refuse,
       signOut: refuse,

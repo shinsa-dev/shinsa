@@ -16,6 +16,9 @@ import {
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
   createSettings,
+  INVITE_TTL_MS,
+  type InviteAcceptResponse,
+  type InviteCreateResponse,
   type NativeSignInTokenResponse,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
@@ -276,6 +279,36 @@ function respondNativeSignIn(url: URL) {
   return new Response(null, { status: 302, headers: { location: redirect.toString() } });
 }
 
+const INVITES = new Map<string, string>();
+
+function respondInviteCreate(request: Request, machines: Machine[]) {
+  const bearer = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
+  const machine = machines.find((entry) => entry.id === bearer);
+  if (!machine) return Response.json({ error: { code: 'revoked', message: 'Not paired.' } }, { status: 401 });
+  const token = crypto.randomUUID().replaceAll('-', '');
+  INVITES.set(token, machine.id);
+  const answer: InviteCreateResponse = { token, expiresAt: Date.now() + INVITE_TTL_MS };
+  return Response.json(answer);
+}
+
+async function respondInviteAccept(request: Request, machines: Machine[]) {
+  const { token } = (await request.json()) as { token?: string };
+  const machine = machines.find((entry) => entry.id === INVITES.get(token ?? ''));
+  INVITES.delete(token ?? '');
+  if (!machine)
+    return Response.json(
+      {
+        error: {
+          code: 'invite_invalid',
+          message: 'This invite expired or was already used. Ask for a new one.',
+        },
+      },
+      { status: 404 }
+    );
+  const answer: InviteAcceptResponse = { instanceId: machine.id, name: machine.name, owner: USER };
+  return Response.json(answer);
+}
+
 async function respondDashboard(request: Request, url: URL, machines: Machine[]) {
   const { pathname } = url;
   if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
@@ -302,7 +335,10 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
   }
   const machine = machines.find((entry) => pathname.startsWith(`${REMOTE_PATHS.instances}/${entry.id}/`));
   if (machine && pathname.endsWith('/connect') && request.method === 'POST') return respondConnect(machine);
-  if (machine && pathname.endsWith('/remove')) return Response.json({});
+  if (machine && (pathname.endsWith('/remove') || pathname.endsWith('/leave'))) return Response.json({});
+  if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines);
+  if (pathname === REMOTE_PATHS.inviteAccept) return respondInviteAccept(request, machines);
+  if (pathname === REMOTE_PATHS.machineMemberRemove) return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 }
 

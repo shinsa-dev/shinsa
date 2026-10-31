@@ -2371,8 +2371,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 
 - **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
   on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
-  `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, and the enrolled devices (public key, name,
-  enrolled and last seen). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
+  `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, the enrolled devices (public key, name,
+  enrolled and last seen, the GitHub account that added it), and `access`, the owner and members the last heartbeat
+  answered. Read leniently: a file missing part of its credentials reads as not paired, never enabled.
 - **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
   `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
 - **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
@@ -2413,15 +2414,35 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>` with the link's `id`; the device it enrolls takes
   that name and keeps the link's id as `enrollmentId`. `shinsa
   remote forget-device <key>` removes one. A device is a browser or a phone, a way in that runs nothing; a machine
-  runs the engine.
+  runs the engine. Each device keeps the GitHub account whose connect token added it (`RemoteDevice.userId`, the
+  token's `userId`, which the socket now carries to the channel), and opens only under that account's token later; a
+  device from before members has none and counts as the owner's. An Add device link works only for the owner: a
+  proof redeemed under any other account's token, or before the first heartbeat said who the owner is, adds nothing
+  and the link is used up.
+- **Members** (`Remote.createInvite`, `removeMember`): Invite someone, or `shinsa remote invite <name>`, asks
+  app.shinsa.dev for a one-time invite token over the machine token (`ControlClient.requestInvite`; 5 waiting at
+  most, else `invites_full`), makes an enrollment of kind `invite` and answers
+  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>.<invite token>`. Whoever opens it signs in with
+  any GitHub account; the enroll page accepts the invite (which makes that account a member at app.shinsa.dev), then
+  enrolls the browser as usual, and the device is that member's. Redeeming an invite asks for a heartbeat at once
+  (`TunnelSupervisor.requestHeartbeat`), whose answer (`HeartbeatResponse`: the owner and the members as
+  `RemoteUser`s) the engine keeps as `access` (`#recordAccess`): every device whose account is no longer listed is
+  forgotten and its channels close, so a member who leaves on app.shinsa.dev loses their devices within one
+  heartbeat (about two minutes). Remove member, or `shinsa remote remove-member <login>`, tells app.shinsa.dev first
+  (`requestMemberRemoval`), so it stops minting that account's connect tokens, then forgets their devices at once. A
+  member controls the machine exactly as its owner does; the channel never checks the mirrored list, since
+  app.shinsa.dev already refuses tokens to anyone else.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used and Forget, and Add device (only while it is on, since pausing drops
-  every link: `canEnrollDevices`): you name the device, and the one-time link
+  added devices with when each was last used, which member added it, and Forget, the people who can reach the
+  machine (the owner, then each member with their GitHub avatar, name, login, when they joined and Remove, which asks
+  first), and Invite someone and Add device (only while it is on, since pausing drops every link:
+  `canEnrollDevices`). Invite someone asks who the invite is for and shows its one-time link as a QR code with Copy,
+  warning to send it only to someone trusted with the machine; Add device: you name the device, and the one-time link
   shows as a QR code to scan with a phone, with Copy and Add this device for the browser in front of you. That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
@@ -2435,8 +2456,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
   The remote build leaves the section out, since every change to it is refused from off the machine.
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
-  owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
-  `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).
+  owner, the machine's name and public key, a pairing under way, the devices, who has access), `POST /api/remote/pair`,
+  `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`), `/invites` (`{ name }`),
+  `/members/remove` (`{ userId }`) and `/devices/remove` (`{ publicKey }`).
 - **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
   Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
   repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
@@ -2477,8 +2499,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
-  Settings → General → Machines lists every machine in rows like Remote access's: its name with its status beside it
-  (online or last seen), whether it is in this dashboard, and Remove; machines in the dashboard also show their open
+  Every machine you are a member of joins it as your own do, once this browser is added there. The enroll page of an
+  invite says you are joining a shared machine and its button accepts the invite and adds the device in one step
+  (`enrollDevice` calls `acceptInvite` first). Settings → General → Machines lists every machine in rows like
+  Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
+  Remove, or for a machine shared with you its owner's avatar, "Shared by <owner>" and Leave, which also forgets this
+  browser's key for it; machines in the dashboard also show their open
   tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The

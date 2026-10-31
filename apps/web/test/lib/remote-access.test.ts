@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import {
   canEnrollDevices,
+  describeDeviceDetail,
   describeDeviceSeen,
   describeEnrollmentExpiry,
   describeEnrollmentStep,
+  describeMemberSince,
   describeRemoteStatus,
   isEnrollmentExpired,
   resolveEnrollmentState,
@@ -87,14 +89,37 @@ describe('remote access words', () => {
     expect(isEnrollmentExpired(NOW + 1, NOW)).toBe(false);
     expect(isEnrollmentExpired(NOW, NOW)).toBe(true);
     const enrollment = { id: 'link-1', kind: 'device' as const, url: 'u', name: 'iPhone', expiresAt: NOW };
-    expect(describeEnrollmentStep(null, 'live')).toStartWith('Name the device you are adding');
-    expect(describeEnrollmentStep(enrollment, 'live')).toStartWith('Scan this on the phone');
-    expect(describeEnrollmentStep(enrollment, 'expired')).toBe(
+    expect(describeEnrollmentStep('device', null, 'live')).toStartWith('Name the device you are adding');
+    expect(describeEnrollmentStep('device', enrollment, 'live')).toStartWith('Scan this on the phone');
+    expect(describeEnrollmentStep('invite', null, 'live')).toStartWith('Say who the invite is for');
+    expect(describeEnrollmentStep('invite', enrollment, 'expired')).toBe(
+      'This link expired before anyone used it. Make a new one to invite iPhone.'
+    );
+    expect(describeEnrollmentStep('device', enrollment, 'expired')).toBe(
       'This link expired before a device used it. Make a new one to add iPhone.'
     );
-    expect(describeEnrollmentStep(enrollment, 'stopped')).toBe(
+    expect(describeEnrollmentStep('device', enrollment, 'stopped')).toBe(
       'Remote access stopped, so this link no longer works. Make a new one to add iPhone once it is on again.'
     );
+  });
+
+  it('says which member added a device and when a member joined', () => {
+    const kai = { id: '7', login: 'kai', name: null, avatarUrl: null };
+    const access = {
+      owner: { ...kai, id: '1', login: 'mona' },
+      members: [{ user: kai, addedAt: NOW - 60_000 }],
+    };
+    const device = {
+      publicKey: 'k',
+      name: 'Phone',
+      enrolledAt: NOW - 3_600_000,
+      lastSeenAt: null,
+      enrollmentId: null,
+      userId: '7',
+    };
+    expect(describeDeviceDetail(device, access, NOW)).toMatch(/^Added .* · Added by @kai$/);
+    expect(describeDeviceDetail({ ...device, userId: null }, access, NOW)).not.toContain('Added by');
+    expect(describeMemberSince(access.members[0] ?? { user: kai, addedAt: 0 }, NOW)).toStartWith('Joined ');
   });
 
   it('calls a link stopped once remote access dropped it, even after it expired', () => {

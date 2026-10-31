@@ -20,6 +20,16 @@ function createActions() {
     pause: mock(snapshot),
     remove: mock(snapshot),
     forgetDevice: mock((_publicKey: string) => snapshot()),
+    removeMember: mock((_userId: string) => snapshot()),
+    createInvite: mock((name: string) =>
+      Promise.resolve({
+        id: 'invite-1',
+        kind: 'invite' as const,
+        url: `${ENROLL_URL}.invite`,
+        name,
+        expiresAt: Date.now() + 600_000,
+      })
+    ),
     createEnrollment: mock((name: string) =>
       Promise.resolve({
         id: 'link-1',
@@ -231,6 +241,45 @@ describe('Settings → Remote access', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
     await screen.findByRole('img', { name: 'QR code for the link' });
     expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
+  });
+
+  it('invites someone: says who it is for, then shows a link for them without adding this device', async () => {
+    const actions = renderGroup(createRemoteSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: 'Invite someone' }));
+    expect(await screen.findByText('Invite someone', { selector: 'h2' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Who it is for'), { target: { value: 'Bob’s laptop' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Make link' }));
+    await screen.findByRole('img', { name: 'QR code for the link' });
+    expect(actions.createInvite).toHaveBeenCalledWith('Bob’s laptop');
+    expect(actions.createEnrollment).not.toHaveBeenCalled();
+    expect(screen.getByText('Invite for Bob’s laptop')).toBeTruthy();
+    expect(screen.getByText(/Only send it to someone you trust/)).toBeTruthy();
+    expect(screen.queryByText('Add this device')).toBeNull();
+  });
+
+  it('lists who can reach the machine, marks the devices a member added, and removes a member', async () => {
+    const kai = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: 'https://avatars.example/kai' };
+    const owner = { id: '1', login: 'mona', name: null, avatarUrl: null };
+    const actions = renderGroup(
+      createRemoteSnapshot({
+        devices: [{ ...createDevice('kai-phone', null), userId: '7' }],
+        access: { owner, members: [{ user: kai, addedAt: Date.now() - 3_600_000 }] },
+      })
+    );
+    expect(screen.getByText('People who can reach this machine')).toBeTruthy();
+    expect(screen.getByText('@mona')).toBeTruthy();
+    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+    expect(screen.getByText('@kai')).toBeTruthy();
+    expect(screen.getByText(/Added by @kai/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1) as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+    await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('7'));
+  });
+
+  it('says only you can reach it before anyone is invited', () => {
+    renderGroup(createRemoteSnapshot());
+    expect(screen.getByText(/Only you\. Invite someone/)).toBeTruthy();
   });
 
   it('drops the QR code when the machine is removed here or at app.shinsa.dev', async () => {

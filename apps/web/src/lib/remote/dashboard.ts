@@ -1,11 +1,13 @@
 import {
   type ConnectResponse,
+  type InviteAcceptResponse,
   type PairApproveResponse,
   type PairView,
   REMOTE_PATHS,
   type RemoteInstance,
   type RemoteSession,
   resolveInstanceConnectPath,
+  resolveInstanceLeavePath,
   resolveInstanceRemovePath,
   resolvePairApprovePath,
   resolvePairPath,
@@ -52,13 +54,15 @@ export function resolveSignInUrl(returnPath: string) {
 }
 
 export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(input, init)) {
-  async function call<T>(path: string, method: 'GET' | 'POST' = 'GET'): Promise<T> {
+  async function call<T>(path: string, method: 'GET' | 'POST' = 'GET', body: unknown = {}): Promise<T> {
     let response: Response;
     try {
       response = await fetchApi(path, {
         method,
         credentials: 'same-origin',
-        ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}),
+        ...(method === 'POST'
+          ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+          : {}),
       });
     } catch {
       throw new DashboardError('offline', 'Couldn’t reach app.shinsa.dev.', 0);
@@ -73,6 +77,8 @@ export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(i
     requestConnect: (instanceId: string) =>
       call<ConnectResponse>(resolveInstanceConnectPath(instanceId), 'POST'),
     removeInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceRemovePath(instanceId), 'POST'),
+    leaveInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceLeavePath(instanceId), 'POST'),
+    acceptInvite: (token: string) => call<InviteAcceptResponse>(REMOTE_PATHS.inviteAccept, 'POST', { token }),
     readPair: (claimCode: string) => call<PairView>(resolvePairPath(claimCode)),
     approvePair: (claimCode: string) => call<PairApproveResponse>(resolvePairApprovePath(claimCode), 'POST'),
     signOut: () => call<{ ok: true }>(REMOTE_PATHS.signOut, 'POST'),

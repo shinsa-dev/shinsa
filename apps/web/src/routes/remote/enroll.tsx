@@ -36,7 +36,7 @@ export function EnrollPage({
   enroll = enrollDevice,
 }: {
   link: EnrollInput | null;
-  dashboard: Pick<DashboardClient, 'requestConnect'>;
+  dashboard: Pick<DashboardClient, 'requestConnect' | 'acceptInvite'>;
   devices: Pick<DeviceStore, 'writeDevice'>;
   enroll?: typeof enrollDevice;
 }) {
@@ -65,9 +65,16 @@ export function EnrollPage({
     );
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon={MACHINE_ICON} title='Add this device to your machine'>
-        Once it is added, this device opens Shinsa on your machine from anywhere.
-      </RemoteHero>
+      {link.invite ? (
+        <RemoteHero icon='IconUserAdd' title='Join a shared machine'>
+          You were invited to reach a machine with your own GitHub account. Accepting adds this device and
+          gives you full control of that machine from anywhere.
+        </RemoteHero>
+      ) : (
+        <RemoteHero icon={MACHINE_ICON} title='Add this device to your machine'>
+          Once it is added, this device opens Shinsa on your machine from anywhere.
+        </RemoteHero>
+      )}
       <SettingsCard className='w-full'>
         {ENROLL_POINTS.map((point) => (
           <div key={point.title} className='flex gap-3 px-2.5 py-2'>
@@ -99,7 +106,7 @@ export function EnrollPage({
             );
           }}
         >
-          Add this device
+          {link.invite ? 'Accept and add this device' : 'Add this device'}
         </Button>
         <p className='text-2xs text-fg-2'>
           Machine key: <span className='font-mono'>{fingerprint ?? '…'}</span>

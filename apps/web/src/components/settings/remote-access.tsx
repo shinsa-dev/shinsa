@@ -1,4 +1,11 @@
-import type { RemoteDevice, RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
+import type {
+  EnrollmentKind,
+  RemoteDevice,
+  RemoteEnrollment,
+  RemoteMember,
+  RemoteSnapshot,
+  RemoteUser,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
@@ -26,23 +33,31 @@ import {
 } from '@/lib/connection/remote-access.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
-  describeDeviceSeen,
+  describeDeviceDetail,
   describeEnrollmentExpiry,
   describeEnrollmentStep,
+  describeMemberSince,
   describeRemoteStatus,
+  LINK_COPY,
   REMOTE_ACCESS_SECTION,
   resolveEnrollmentState,
   resolveQrImage,
   selectEnrolledDevice,
 } from '@/lib/remote-access.ts';
 import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { UserRow } from './user-row.tsx';
 
 const NO_DEVICES: RemoteDevice[] = [];
 
+const NO_MEMBERS: RemoteMember[] = [];
+
 const DESCRIPTION =
-  'Reach this machine from any device at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once.';
+  'Reach this machine from any device at app.shinsa.dev, behind GitHub sign-in and end to end encrypted. Each device, a browser or a phone, is added here once. Invite someone to give them the same control with their own GitHub account.';
+
+const SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 ${ROW_INSET}`;
 
 function QrCode({ text }: { text: string }) {
   const image = React.useMemo(() => resolveQrImage(text), [text]);
@@ -62,19 +77,22 @@ function EnrollmentView({ enrollment, now }: { enrollment: RemoteEnrollment; now
   );
 }
 
-function AddDeviceDialog({
+function LinkDialog({
+  kind,
   control,
   devices,
   canEnroll,
   onCreate,
   onAdded,
 }: {
+  kind: EnrollmentKind;
   control: DialogControl;
   devices: RemoteDevice[];
   canEnroll: boolean;
-  onCreate: RemoteAccessActions['createEnrollment'];
+  onCreate: (name: string) => Promise<RemoteEnrollment>;
   onAdded: () => void;
 }) {
+  const copy = LINK_COPY[kind];
   const [name, setName] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [enrollment, setEnrollment] = React.useState<RemoteEnrollment | null>(null);
@@ -102,8 +120,8 @@ function AddDeviceDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a device'}</DialogTitle>
-          <DialogDescription>{describeEnrollmentStep(enrollment, state)}</DialogDescription>
+          <DialogTitle>{enrollment ? copy.titleFor(enrollment.name) : copy.title}</DialogTitle>
+          <DialogDescription>{describeEnrollmentStep(kind, enrollment, state)}</DialogDescription>
         </DialogHeader>
         {live && <EnrollmentView enrollment={enrollment} now={now} />}
         {!enrollment && (
@@ -118,8 +136,8 @@ function AddDeviceDialog({
             <Field>
               <Input
                 value={name}
-                aria-label='Device name'
-                placeholder='For example, iPhone'
+                aria-label={copy.field}
+                placeholder={copy.placeholder}
                 maxLength={60}
                 onChange={(event) => setName(event.target.value)}
               />
@@ -129,13 +147,15 @@ function AddDeviceDialog({
         <DialogFooter>
           {live && (
             <>
-              <Button
-                variant='secondary'
-                nativeButton={false}
-                render={<a href={resolveOnMachineUrl(enrollment.url)} target='_blank' rel='noreferrer' />}
-              >
-                Add this device
-              </Button>
+              {kind === 'device' && (
+                <Button
+                  variant='secondary'
+                  nativeButton={false}
+                  render={<a href={resolveOnMachineUrl(enrollment.url)} target='_blank' rel='noreferrer' />}
+                >
+                  Add this device
+                </Button>
+              )}
               <DialogClose render={<Button />}>Done</DialogClose>
             </>
           )}
@@ -240,12 +260,20 @@ function StatusActions({
   );
 }
 
-function DeviceRow({ device, onForget }: { device: RemoteDevice; onForget: () => void }) {
+function DeviceRow({
+  device,
+  snapshot,
+  onForget,
+}: {
+  device: RemoteDevice;
+  snapshot: RemoteSnapshot;
+  onForget: () => void;
+}) {
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
         <span className='truncate text-fg-4 text-xs'>{device.name}</span>
-        <span className='truncate text-2xs text-fg-2'>{describeDeviceSeen(device)}</span>
+        <span className='truncate text-2xs text-fg-2'>{describeDeviceDetail(device, snapshot.access)}</span>
       </div>
       <Button variant='secondary' size='sm' onClick={onForget}>
         Forget
@@ -254,7 +282,40 @@ function DeviceRow({ device, onForget }: { device: RemoteDevice; onForget: () =>
   );
 }
 
-type RemoteDialog = { kind: 'add' } | { kind: 'remove' } | { kind: 'forget'; device: RemoteDevice };
+function PeopleSection({
+  owner,
+  members,
+  onRemove,
+}: {
+  owner: RemoteUser | null;
+  members: RemoteMember[];
+  onRemove: (user: RemoteUser) => void;
+}) {
+  return (
+    <>
+      <p className={SUBHEADING}>People who can reach this machine</p>
+      {owner && <UserRow user={owner} detail='Owner' />}
+      {members.length === 0 && (
+        <SettingsEmpty>
+          Only you. Invite someone to give them full control of this machine with their own GitHub account.
+        </SettingsEmpty>
+      )}
+      {members.map((member) => (
+        <UserRow key={member.user.id} user={member.user} detail={describeMemberSince(member)}>
+          <Button variant='secondary' size='sm' onClick={() => onRemove(member.user)}>
+            Remove
+          </Button>
+        </UserRow>
+      ))}
+    </>
+  );
+}
+
+type RemoteDialog =
+  | { kind: 'link'; link: EnrollmentKind }
+  | { kind: 'remove' }
+  | { kind: 'forget'; device: RemoteDevice }
+  | { kind: 'member'; user: RemoteUser };
 
 function RemoteDialogs({
   dialog,
@@ -268,16 +329,34 @@ function RemoteDialogs({
   actions: RemoteAccessActions;
 }) {
   const { value } = dialog;
-  if (value?.kind === 'add')
+  if (value?.kind === 'link')
     return (
-      <AddDeviceDialog
+      <LinkDialog
+        kind={value.link}
         control={dialog.control}
         devices={devices}
         canEnroll={canEnroll}
-        onCreate={actions.createEnrollment}
+        onCreate={value.link === 'invite' ? actions.createInvite : actions.createEnrollment}
         onAdded={dialog.close}
       />
     );
+  if (value?.kind === 'member') {
+    const name = describeUserName(value.user);
+    return (
+      <ConfirmDialog
+        control={dialog.control}
+        title={`Remove ${name}?`}
+        body={`@${value.user.login} can no longer reach this machine from app.shinsa.dev. Every device they added is forgotten, and any page they have open closes. Invite them again to give it back.`}
+        action='Remove member'
+        onConfirm={() =>
+          void requestWithToast(
+            () => actions.removeMember(value.user.id),
+            `${name} no longer has access to this machine.`
+          )
+        }
+      />
+    );
+  }
   if (value?.kind === 'forget')
     return (
       <ConfirmDialog
@@ -324,14 +403,24 @@ export function RemoteAccessGroup({
       description={DESCRIPTION}
       action={
         canEnroll ? (
-          <Button
-            variant='secondary'
-            size='sm'
-            icon='IconPlusMedium'
-            onClick={() => dialog.show({ kind: 'add' })}
-          >
-            Add device
-          </Button>
+          <div className='flex items-center gap-1.5'>
+            <Button
+              variant='secondary'
+              size='sm'
+              icon='IconUserAdd'
+              onClick={() => dialog.show({ kind: 'link', link: 'invite' })}
+            >
+              Invite someone
+            </Button>
+            <Button
+              variant='secondary'
+              size='sm'
+              icon='IconPlusMedium'
+              onClick={() => dialog.show({ kind: 'link', link: 'device' })}
+            >
+              Add device
+            </Button>
+          </div>
         ) : undefined
       }
     >
@@ -339,11 +428,7 @@ export function RemoteAccessGroup({
       {snapshot && (
         <StatusRow snapshot={snapshot} actions={actions} onRemove={() => dialog.show({ kind: 'remove' })} />
       )}
-      {canAdd && (
-        <p className={`mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 ${ROW_INSET}`}>
-          Devices that can reach this machine
-        </p>
-      )}
+      {canAdd && <p className={SUBHEADING}>Devices that can reach this machine</p>}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
           None yet. Add device sets up the phone or browser you use away from this machine.
@@ -353,9 +438,17 @@ export function RemoteAccessGroup({
         <DeviceRow
           key={device.publicKey}
           device={device}
+          snapshot={snapshot}
           onForget={() => dialog.show({ kind: 'forget', device })}
         />
       ))}
+      {canAdd && (
+        <PeopleSection
+          owner={snapshot.access?.owner ?? null}
+          members={snapshot.access?.members ?? NO_MEMBERS}
+          onRemove={(user) => dialog.show({ kind: 'member', user })}
+        />
+      )}
       <RemoteDialogs
         dialog={dialog}
         devices={snapshot?.devices ?? NO_DEVICES}

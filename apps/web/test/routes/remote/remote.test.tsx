@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import type { PairView, RemoteInstance, RemoteSession } from '@shinsa/core';
+import type { PairView, RemoteInstance, RemoteSession, RemoteUser } from '@shinsa/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { Connection, connection } from '@/lib/connection/socket.ts';
@@ -40,6 +40,9 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     listInstances: () => Promise.resolve([STUDIO]),
     requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
     removeInstance: () => Promise.resolve({ ok: true }),
+    leaveInstance: () => Promise.resolve({ ok: true }),
+    acceptInvite: () =>
+      Promise.resolve({ instanceId: 'k3x9', name: 'Studio', owner: USER.user as RemoteUser }),
     readPair: () => Promise.resolve(PAIR),
     approvePair: () => Promise.resolve({ instanceId: 'k3x9', name: 'Studio' }),
     signOut: () => Promise.resolve({ ok: true }),
@@ -189,6 +192,39 @@ describe('the machines in Settings', () => {
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
   });
 
+  it('shows a shared machine with its owner, and leaves it instead of removing it', async () => {
+    const devices = createDevices(DEVICE);
+    const left: string[] = [];
+    const removed: string[] = [];
+    const shared: RemoteInstance = {
+      ...STUDIO,
+      owner: { id: '3', login: 'lee', name: 'Lee Park', avatarUrl: 'https://avatars.example/lee' },
+      role: 'member',
+    };
+    const dashboard = createDashboard({
+      listInstances: () => Promise.resolve([shared]),
+      leaveInstance: (instanceId) => {
+        left.push(instanceId);
+        return Promise.resolve({ ok: true });
+      },
+      removeInstance: (instanceId) => {
+        removed.push(instanceId);
+        return Promise.resolve({ ok: true });
+      },
+    });
+    render(
+      <RemoteServicesContext.Provider value={{ dashboard, devices, worker: createWorker() }}>
+        <MachinesSettings />
+      </RemoteServicesContext.Provider>
+    );
+    expect(await screen.findByText('Shared by Lee Park · In this dashboard')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
+    await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
+    expect(left).toEqual(['k3x9']);
+    expect(removed).toEqual([]);
+  });
+
   it('says when the machines cannot be read, and waits without the remote services', async () => {
     const { unmount } = render(
       <RemoteServicesContext.Provider
@@ -260,7 +296,13 @@ describe('the pair page', () => {
 });
 
 describe('the enroll page', () => {
-  const link = { instanceId: 'k3x9', machineKey: MACHINE_KEY, secret: 'secret_1', onMachine: false };
+  const link = {
+    instanceId: 'k3x9',
+    machineKey: MACHINE_KEY,
+    secret: 'secret_1',
+    invite: null,
+    onMachine: false,
+  };
 
   it('adds this browser and opens the machine', async () => {
     sessionStorage.setItem('shinsa.remote.enroll', 'x');
@@ -275,6 +317,20 @@ describe('the enroll page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add this device' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     expect(sessionStorage.getItem('shinsa.remote.enroll')).toBeNull();
+  });
+
+  it('offers to accept an invite to someone else’s machine', async () => {
+    render(
+      <EnrollPage
+        link={{ ...link, invite: 'invite-token' }}
+        dashboard={createDashboard()}
+        devices={createDevices()}
+        enroll={() => Promise.resolve({} as EnrolledDevice)}
+      />
+    );
+    expect(screen.getByText('Join a shared machine')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept and add this device' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
   });
 
   it('says why the machine refused, and what to do with a link that cannot work', async () => {

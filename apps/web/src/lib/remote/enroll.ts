@@ -6,11 +6,12 @@ export interface EnrollInput {
   instanceId: string;
   machineKey: string;
   secret: string;
+  invite: string | null;
   onMachine: boolean;
 }
 
 export interface EnrollOptions {
-  dashboard: Pick<DashboardClient, 'requestConnect'>;
+  dashboard: Pick<DashboardClient, 'requestConnect' | 'acceptInvite'>;
   devices: Pick<DeviceStore, 'writeDevice'>;
   now?: () => number;
   createKeys?: () => Promise<CryptoKeyPair>;
@@ -19,6 +20,7 @@ export interface EnrollOptions {
 
 export async function enrollDevice(input: EnrollInput, options: EnrollOptions): Promise<EnrolledDevice> {
   const keys = await (options.createKeys ?? createDeviceKeys)();
+  if (input.invite) await options.dashboard.acceptInvite(input.invite);
   const { url } = await options.dashboard.requestConnect(input.instanceId);
   const channel = await (options.openChannel ?? openRemoteChannel)({
     url,

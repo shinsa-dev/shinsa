@@ -17,6 +17,8 @@ describe('the dashboard client', () => {
     await client.listInstances();
     await client.requestConnect('k3x9');
     await client.removeInstance('k3x9');
+    await client.leaveInstance('k3x9');
+    await client.acceptInvite('invite-1');
     await client.readPair('K7PQ');
     await client.approvePair('K7PQ');
     await client.signOut();
@@ -25,6 +27,8 @@ describe('the dashboard client', () => {
       { path: '/__remote/instances', method: 'GET', body: undefined },
       { path: '/__remote/instances/k3x9/connect', method: 'POST', body: '{}' },
       { path: '/__remote/instances/k3x9/remove', method: 'POST', body: '{}' },
+      { path: '/__remote/instances/k3x9/leave', method: 'POST', body: '{}' },
+      { path: '/__remote/invites/accept', method: 'POST', body: '{"token":"invite-1"}' },
       { path: '/__remote/pairs/K7PQ', method: 'GET', body: undefined },
       { path: '/__remote/pairs/K7PQ/approve', method: 'POST', body: '{}' },
       { path: '/__remote/sign-out', method: 'POST', body: '{}' },
