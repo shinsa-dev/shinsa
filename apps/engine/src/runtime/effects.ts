@@ -65,6 +65,7 @@ import {
   verifySetup,
 } from '../repos/index.ts';
 import type { WatchWriter } from '../schedules/suggest.ts';
+import type { Slack } from '../slack/index.ts';
 import { EvidenceStore } from '../store/evidence.ts';
 import { measureTaskCoverage } from '../test-coverage/index.ts';
 import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
@@ -83,6 +84,7 @@ export interface EffectRunnerOptions {
   watchIntervalMs?: number;
   workspaces?: Workspaces;
   services?: TaskServices;
+  slack?: Slack;
 }
 
 export interface TaskServices {
@@ -159,6 +161,7 @@ export class EffectRunner {
   readonly #watchIntervalMs: number;
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
+  readonly #slack: Slack | null;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
@@ -189,6 +192,7 @@ export class EffectRunner {
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
+    this.#slack = options.slack ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
     this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
@@ -238,7 +242,18 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
+      case 'slack.evaluate':
+        return this.#withSlack((slack) => slack.evaluate(effect, context));
+      case 'slack.status':
+        return this.#withSlack((slack) => slack.status(effect, context));
+      case 'slack.post':
+        return this.#withSlack((slack) => slack.post(effect));
     }
+  }
+
+  #withSlack(run: (slack: Slack) => Promise<void>) {
+    if (!this.#slack) return Promise.reject(new Error('Slack is not connected on this machine.'));
+    return run(this.#slack);
   }
 
   async #suggestWatch(effect: SuggestEffect, context: EffectContext) {
@@ -296,7 +311,7 @@ export class EffectRunner {
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
     const title = FAILURE_TITLE[effect.kind];
-    if (!title || !('taskId' in effect)) return;
+    if (!title || !('taskId' in effect) || effect.taskId === null) return;
     await this.#engine.dispatch(
       { type: 'effect.fail', taskId: effect.taskId, title, detail: error },
       { id: `${key}:effect.fail` }

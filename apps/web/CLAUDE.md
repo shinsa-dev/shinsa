@@ -33,7 +33,8 @@ src/
 │   │                    in the remote build, a note that terminals stay on the machine)
 │   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
-│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
+│   │                    pair.tsx, enroll.tsx, slack.tsx (SlackLinkedPage: /slack/linked after connecting Slack,
+│   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
 │   │                    device, the benefits card and Check again)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
@@ -73,7 +74,9 @@ src/
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
 │                        accounts.tsx is the Agent usage tab's Accounts card, with usage.tsx's windows, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
-│                        integrations.tsx reads the extensions for the search, context-optimizer.tsx,
+│                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
+│                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
+│                        linked workspace, and Disconnect on the machine only), context-optimizer.tsx,
 │                        mcp-servers.tsx (with mcp-server-row.tsx, mcp-server-menu.tsx and server-dialog.tsx),
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
@@ -284,7 +287,9 @@ src/
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
-        remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
+        slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
+        reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
+        disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
         expiry and its QR code as an image, the device a link added; connection/remote-access.ts reads it from the
         socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,

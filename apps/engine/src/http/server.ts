@@ -197,6 +197,10 @@ export function startServer(context: HttpContext) {
       if (config.inspect) return respondReadOnly();
       return context.schedules.handleWebhook(request, url);
     }
+    if (route === 'slack' && context.slack) {
+      if (config.inspect) return respondReadOnly();
+      return context.slack.handleTunnel(request, url);
+    }
     if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
     const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
     if (originRefusal) return respondError('forbidden', originRefusal, 403);

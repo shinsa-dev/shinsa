@@ -16,7 +16,7 @@ async function answeredSource() {
     providers: (created) => new ProviderRegistry([created.agents.provider('claude', 'Claude')]),
   });
   const source = await world.createTask('Where does the greeting live?', { shape: 'answer' });
-  await world.untilStage(source, 'done');
+  await world.untilStage(source, 'answered');
   const sessionId = world.agents.sessions.find((session) => session.role === 'answerer')?.sessionId ?? '';
   expect(sessionId).not.toBe('');
   return { w: world, source, sessionId };
@@ -46,7 +46,7 @@ describe('forking a task', () => {
       expect(session).toMatchObject({ resume: own, fork: false, sessionId: own });
     }
     expect(Object.values(w.state.runs).filter((run) => run.taskId === source).length).toBe(1);
-    expect(w.task(source).stage).toBe('done');
+    expect(w.task(source).stage).toBe('answered');
   });
 
   test('a source session the agent lost is restored from the source task’s transcript instead', async () => {
@@ -80,6 +80,6 @@ describe('forking a task', () => {
     expect(listTaskSessions(w, forked).some((session) => !session.fork && session.resume === sessionId)).toBe(
       false
     );
-    expect(w.task(source).stage).toBe('done');
+    expect(w.task(source).stage).toBe('answered');
   });
 });

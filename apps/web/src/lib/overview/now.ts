@@ -95,7 +95,7 @@ const DELIVERING_STAGES: ReadonlySet<Task['stage']> = new Set(
 
 export function resolveResultPlace(state: ShinsaState, task: Task, gate: Gate | undefined): ResultPlace {
   if (!task.result) return 'hidden';
-  if (gate?.type === 'proposal') return 'now_card';
+  if (gate?.type === 'proposal' || gate?.type === 'result') return 'now_card';
   if (DELIVERING_STAGES.has(task.stage)) return 'hidden';
   if (gate) return 'panel';
   return resolveNowKind(state, task, gate) === 'result' ? 'now_card' : 'panel';

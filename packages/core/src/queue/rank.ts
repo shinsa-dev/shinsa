@@ -38,6 +38,7 @@ const GATE_RANK: Record<GateType, number> = {
   configuration: 4,
   sign_in: 4,
   post_merge: 3,
+  result: 3,
 };
 
 const WORKING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([

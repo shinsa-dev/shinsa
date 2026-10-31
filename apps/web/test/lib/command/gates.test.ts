@@ -86,6 +86,20 @@ describe('gate commands', () => {
     });
   });
 
+  it('closes an answered task from the menu', () => {
+    const task = createTask({ id: 't', stage: 'answered' });
+    const commands = commandsFor(
+      task,
+      createGate({ id: 'g', taskId: 't', type: 'result', title: 'Read the answer' })
+    );
+    expect(commands.map((command) => command.label)).toEqual(['Close']);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null },
+      'Closed. The task is done.'
+    );
+  });
+
   it('keeps the commands of two open questions on one task apart, each answering its own gate', () => {
     const task = createTask({ id: 't' });
     const gates = ['g1', 'g2'].map((id) =>

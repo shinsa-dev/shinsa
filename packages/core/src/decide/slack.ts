@@ -1,0 +1,132 @@
+import type { CommandOf } from '../commands/index.ts';
+import { DomainError } from '../domain/errors.ts';
+import { isTaskClosed } from '../domain/rounds.ts';
+import { isSameSlackThread, type SlackThreadRef } from '../domain/slack.ts';
+import type { Task } from '../domain/types.ts';
+import type { ShinsaEventInput } from '../events/index.ts';
+import { resolveSlackMentionThread, type SlackMention } from '../slack/contract.ts';
+import { SLACK_REACTIONS } from '../slack/messages.ts';
+import { SLACK_POSTED_GATES, type SlackPost } from '../slack/posts.ts';
+import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
+import type { ShinsaState } from '../state/project.ts';
+import { listOpenGates } from '../state/queries.ts';
+import type { Decider } from './decider.ts';
+import { answerGate } from './gates.ts';
+import { messageTask, recordHeldMessage } from './messages.ts';
+import { createTask } from './tasks.ts';
+
+function selectThreadTask(decider: Decider, thread: SlackThreadRef): Task | null {
+  return (
+    Object.values(decider.state.tasks).find(
+      (task) => task.slack && isSameSlackThread(task.slack, thread) && !isTaskClosed(task)
+    ) ?? null
+  );
+}
+
+function requestPost(decider: Decider, thread: SlackThreadRef, taskId: string, post: SlackPost) {
+  decider.run({ kind: 'slack.post', thread, taskId, post });
+}
+
+function forwardMention(decider: Decider, task: Task, mention: SlackMention) {
+  const text = serializeSlackMessage(mention);
+  const held = listOpenGates(decider.state, task.id).length > 0;
+  if (held) recordHeldMessage(decider, task.id, text);
+  else messageTask(decider, { type: 'task.message', taskId: task.id, text });
+  const post: SlackPost = { kind: held ? 'held' : 'forwarded' };
+  requestPost(decider, resolveSlackMentionThread(mention), task.id, post);
+}
+
+export function receiveSlackMention(decider: Decider, command: CommandOf<'slack.mention'>) {
+  const linked = selectThreadTask(decider, resolveSlackMentionThread(command.mention));
+  if (linked) {
+    forwardMention(decider, linked, command.mention);
+    return;
+  }
+  decider.run({ kind: 'slack.evaluate', mention: command.mention });
+}
+
+export function startSlackTask(decider: Decider, command: CommandOf<'slack.start_task'>) {
+  const { mention } = command;
+  const thread = resolveSlackMentionThread(mention);
+  const linked = selectThreadTask(decider, thread);
+  if (linked) {
+    forwardMention(decider, linked, mention);
+    return;
+  }
+  const taskId = createTask(decider, {
+    type: 'task.create',
+    request: serializeSlackRequest(mention, decider.context.newId()),
+    repoId: null,
+  });
+  decider.emit({
+    type: 'slack.thread_linked',
+    taskId,
+    link: {
+      ...thread,
+      userId: mention.userId,
+      messageTs: mention.messageTs,
+      permalink: mention.permalink,
+      statusTs: null,
+      reaction: SLACK_REACTIONS.sizing,
+    },
+  });
+}
+
+export function recordSlackStatus(decider: Decider, command: CommandOf<'slack.record_status'>) {
+  const link = decider.state.tasks[command.taskId]?.slack;
+  if (!link || (link.statusTs === command.ts && link.reaction === command.reaction)) return;
+  decider.emit({
+    type: 'slack.status_posted',
+    taskId: command.taskId,
+    ts: command.ts,
+    reaction: command.reaction,
+  });
+}
+
+export function answerSlackQuestion(decider: Decider, command: CommandOf<'slack.answer'>) {
+  const { answer } = command;
+  const gate = decider.state.gates[answer.gateId];
+  if (gate?.status !== 'open' || gate.type !== 'question')
+    throw new DomainError('slack_answer_closed', 'This question is no longer open.');
+  const link = decider.state.tasks[gate.taskId]?.slack;
+  if (!link || !isSameSlackThread(link, answer) || link.userId !== answer.userId)
+    throw new DomainError(
+      'slack_answer_refused',
+      'Only the person who started this task from Slack can answer it here. Answer it in Shinsa.'
+    );
+  const choice = gate.choices?.[answer.choice];
+  if (choice === undefined)
+    throw new DomainError(
+      'slack_answer_choice',
+      'That choice is no longer on the question. Answer it in Shinsa.'
+    );
+  answerGate(decider, gate.id, 'reply', choice);
+}
+
+function resolveEventTask(state: ShinsaState, event: ShinsaEventInput) {
+  if (event.type === 'gate.answered') return state.gates[event.gateId]?.taskId ?? null;
+  if (event.type === 'gate.opened') return SLACK_POSTED_GATES.has(event.gate.type) ? event.gate.taskId : null;
+  if (event.type === 'task.delivered' || event.type === 'task.staged') return event.taskId;
+  if (event.type === 'slack.thread_linked') return event.taskId;
+  return null;
+}
+
+function resolveEventPost(event: ShinsaEventInput): SlackPost | null {
+  if (event.type === 'gate.opened') return { kind: 'gate', gateId: event.gate.id };
+  if (event.type === 'task.delivered') return { kind: 'result' };
+  return null;
+}
+
+export function syncSlackThreads(decider: Decider) {
+  const restated = new Set<string>();
+  for (const event of decider.events) {
+    const taskId = resolveEventTask(decider.state, event);
+    const link = taskId ? decider.state.tasks[taskId]?.slack : null;
+    if (!taskId || !link) continue;
+    const post = resolveEventPost(event);
+    if (post) requestPost(decider, link, taskId, post);
+    if (restated.has(taskId)) continue;
+    restated.add(taskId);
+    decider.run({ kind: 'slack.status', taskId, thread: link });
+  }
+}

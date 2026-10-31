@@ -446,17 +446,36 @@ function GateCard({
       return <ReviewCard state={state} task={task} gate={gate} onOpen={onOpen} />;
     case 'post_merge':
       return <PostMergeCard state={state} task={task} />;
+    case 'result':
+      return <ResultCard state={state} task={task} gate={gate} onOpen={onOpen} />;
   }
+}
+
+function CloseButton({ onReply }: { onReply: GateReplier }) {
+  const { busy, run } = useBusy<'closeResult'>();
+  return (
+    <Button
+      size='sm'
+      loading={busy === 'closeResult'}
+      onClick={() => void run('closeResult', () => onReply('closeResult'))}
+    >
+      Close
+    </Button>
+  );
 }
 
 export function ResultCard({
   state,
   task,
+  gate,
   onOpen,
+  onReply = (key) => (gate ? replyToGate(gate, key) : Promise.resolve(false)),
 }: {
   state: ShinsaState;
   task: Task;
+  gate?: Gate;
   onOpen: (target: NowTarget, runId?: string) => void;
+  onReply?: GateReplier;
 }) {
   const result = task.result;
   if (!result) return null;
@@ -465,6 +484,7 @@ export function ResultCard({
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
       title={RESULT_TITLE[result.step]}
+      action={gate && <CloseButton onReply={onReply} />}
       footer={
         <FooterNote note={describeFollowUpNote(result.step, run?.role ?? null)}>
           <QuietLink onClick={() => onOpen('agent', result.runId ?? undefined)}>Open the chat</QuietLink>

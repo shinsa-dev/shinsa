@@ -8,7 +8,7 @@ interface WorkerEnv extends CloudEnv {
 }
 
 export default {
-  fetch: (request: Request, env: WorkerEnv) =>
+  fetch: (request: Request, env: WorkerEnv, context: { waitUntil: (work: Promise<unknown>) => void }) =>
     respond(
       request,
       createWorld({
@@ -16,6 +16,7 @@ export default {
         assets: (assetRequest) => env.ASSETS.fetch(assetRequest),
         fetch: (url, init) => fetch(url, init),
         now: Date.now,
+        defer: (work) => context.waitUntil(work),
         config: resolveCloudConfig(env),
       })
     ),

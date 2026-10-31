@@ -148,4 +148,12 @@ describe('what is working and what is waiting', () => {
       'Merged, and the task is done once you do the steps it left for you: 2 post-merge steps left'
     );
   });
+
+  test('an answered task says it moves to Done once you close it', () => {
+    const gate = { type: 'result', title: 'Read the answer' } as Gate;
+    expect(resolveGateWords(gate)).toMatchObject({ label: 'Answered' });
+    expect(resolveGateWords(gate).why(gate, {} as Task)).toBe(
+      'Read the answer, and the task moves to Done once you close it'
+    );
+  });
 });

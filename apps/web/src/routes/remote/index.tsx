@@ -14,6 +14,7 @@ import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
 import { RemoteLoading, RemoteShell, SignInPrompt } from './shell.tsx';
+import { SlackLinkedPage } from './slack.tsx';
 
 export function createRemoteServices(): RemoteServices {
   return {
@@ -68,6 +69,8 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
             devices={services.devices}
           />
         );
+      case 'slack':
+        return <SlackLinkedPage search={location.search} />;
       case 'app':
         return null;
     }

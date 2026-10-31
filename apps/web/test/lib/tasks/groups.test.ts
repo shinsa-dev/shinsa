@@ -36,6 +36,7 @@ describe('resolveTaskGroup', () => {
     expect(groupFor({ type: 'review' })).toBe('review');
     expect(groupFor({ type: 'plan' })).toBe('plan');
     expect(groupFor({ type: 'question' })).toBe('answer');
+    expect(groupFor({ type: 'result' }, { stage: 'answered' })).toBe('answered');
   });
 
   it('files a secret request as an answer and a failure or sign-in as paused', () => {
@@ -115,6 +116,7 @@ describe('TASK_GROUPS', () => {
       'Change to approve',
       'Operation to confirm',
       'Needs your answer',
+      'Answered',
       'Paused',
       'In progress',
       'Waiting on another task',
@@ -352,6 +354,7 @@ describe('listTaskGroupSections', () => {
       change: [],
       operation: [],
       answer: [],
+      answered: [],
       paused: [],
       working: ['high', 'old', 'new'],
       waiting: ['waiter', 'next:1'],

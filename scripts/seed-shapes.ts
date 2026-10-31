@@ -358,7 +358,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       shape: 'answer',
       auto: AUTO,
       decisions: ANSWER_DECISIONS,
-      stage: 'done',
+      stage: 'answered',
       reason: 'answered your question',
       branch: 'ask/webhook-retries',
       ageHours: 5,
@@ -372,6 +372,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
           runId: 'task-shape-auto-answer-run-0',
         },
       ],
+      gate: { type: 'result', title: 'Read the answer', body: 'Close the task once you have read it.' },
     },
     {
       id: 'task-shape-composed-ok',

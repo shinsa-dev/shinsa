@@ -33,6 +33,7 @@ export const ICON_NAMES = [
   'IconBranch',
   'IconBroom',
   'IconBrowserTabs',
+  'IconBubbleCheck',
   'IconBubbleQuestion',
   'IconBubbleText',
   'IconBug',
@@ -366,6 +367,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconBrowserTabs: {
     '3': '<g><path d="M18 5H6C4.34315 5 3 6.34315 3 8V16C3 17.6569 4.34315 19 6 19H18C19.6569 19 21 17.6569 21 16V8C21 6.34315 19.6569 5 18 5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 8.5L10.5 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8.5H17.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.5 8.5H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconBubbleCheck: {
+    '3': '<g><path d="M9.74976 11.25L11.2498 12.75L14.7498 9.24999M11.9977 20.5358L14.7377 18.2657C14.9171 18.1171 15.1427 18.0358 15.3757 18.0358L17.002 18.0358C18.6588 18.0358 20.002 16.6926 20.002 15.0358V7C20.002 5.34314 18.6588 4 17.0019 4L7.00195 4.00002C5.3451 4.00002 4.00195 5.34317 4.00195 7.00002V15.0358C4.00195 16.6926 5.3451 18.0358 7.00195 18.0358H8.65157C8.8865 18.0358 9.11393 18.1185 9.29398 18.2694L11.9977 20.5358Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconBubbleQuestion: {
     '3': '<g><path d="M12.0218 11.6633C12.1234 10.9868 12.5019 10.6214 12.8813 10.3636C13.2524 10.1113 13.6234 9.78387 13.6234 9.17768C13.6234 8.34097 12.9522 7.66333 12.1234 7.66333C11.2946 7.66333 10.6234 8.34097 10.6234 9.17768M11.9977 20.5358L14.7377 18.2657C14.9171 18.1171 15.1427 18.0358 15.3757 18.0358L17.002 18.0358C18.6588 18.0358 20.002 16.6926 20.002 15.0358V7C20.002 5.34314 18.6588 4 17.0019 4L7.00195 4.00002C5.3451 4.00002 4.00195 5.34317 4.00195 7.00002V15.0358C4.00195 16.6926 5.3451 18.0358 7.00195 18.0358H8.65157C8.8865 18.0358 9.11393 18.1185 9.29398 18.2694L11.9977 20.5358Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 13.625C12.4832 13.625 12.875 14.0168 12.875 14.5C12.875 14.9832 12.4832 15.375 12 15.375C11.5168 15.375 11.125 14.9832 11.125 14.5C11.125 14.0168 11.5168 13.625 12 13.625Z" fill="currentColor" stroke="currentColor" stroke-width="0.75"/></g>',
