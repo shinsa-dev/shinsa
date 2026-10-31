@@ -8,7 +8,7 @@ const DROPPED_HEADERS = new Set(['host', 'cookie', 'connection', 'content-length
 
 const DROPPED_PREFIXES = ['cf-', 'x-forwarded-', 'x-real-ip'];
 
-const OFFLINE_STATUSES = new Set([502, 503, 504, 530]);
+export const TUNNEL_OFFLINE_STATUSES = new Set([502, 503, 504, 530]);
 
 function resolveForwardHeaders(request: Request) {
   const headers = new Headers();
@@ -46,7 +46,7 @@ export async function respondHook(request: Request, url: URL, target: HookTarget
   } catch {
     return respondOffline();
   }
-  if (OFFLINE_STATUSES.has(answer.status)) return respondOffline();
+  if (TUNNEL_OFFLINE_STATUSES.has(answer.status)) return respondOffline();
   return new Response(answer.body, {
     status: answer.status,
     headers: { 'content-type': answer.headers.get('content-type') ?? 'text/plain' },

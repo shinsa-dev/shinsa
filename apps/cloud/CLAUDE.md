@@ -21,12 +21,17 @@ src/
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
+├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine
+├── slack.ts       Slack's events (signature, dedupe, uninstall), a mention forwarded to its author's machine with
+│                  the thread, and the machine's links, unlink and posts
+├── slack-api.ts   The Slack Web API (requestSlack, SlackApiError) and the scopes
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
-├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, constant-time comparison
+├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, constant-time comparison, the bot
+│                  tokens sealed with AES-GCM, Slack's request signature
 └── log.ts         recordFailure: the one console call (Workers Logs)
 migrations/        D1's schema (wrangler d1 migrations)
-test/              One file per route group, against harness.ts: D1 on bun:sqlite with the real migration, and
-                   GitHub, the Cloudflare API and a machine's tunnel as fakes
+test/              One file per route group, against harness.ts: D1 on bun:sqlite with the real migrations, and
+                   GitHub, the Cloudflare API, Slack and a machine's tunnel as fakes
 ```
 
 ## How it works
@@ -66,6 +71,22 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
   `Retry-After: 60`.
+- **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
+  Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one of yours, else the one seen last)
+  signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet goes on to add
+  the app (OAuth v2, the bot scopes in `SLACK_BOT_SCOPES`); either way it writes the link of your Slack user to that
+  machine and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
+  cookie, checked in constant time. A bot token is kept sealed with AES-GCM under `SLACK_TOKEN_KEY`, never in clear.
+  An event is checked against Slack's signature (`SLACK_SIGNING_SECRET`, five minutes), kept by id for a day so a
+  redelivery does nothing, and answered at once; the work runs after (`world.defer`, `waitUntil`). Removing the app
+  or revoking its bot token forgets the workspace and its links. A mention from someone with no link gets a private
+  reply with the link to connect; from someone linked, the Worker reads the thread (100 messages), names the people
+  in it, turns Slack's markup into text and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
+  with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
+  machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
+  through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
+  posted (`slack_threads`, `slack_posts`); `/__remote/slack/links` and `/unlink` read and remove its links. Message
+  text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every POST a page makes (sign-out, approve, connect, remove) needs an `Origin` of the
   Worker's own origin. Every response carries a strict content security policy (scripts only from the site, sockets
   only to `wss://*.shinsa.dev`, no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
@@ -81,6 +102,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone).
+  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json` and `SLACK_CLIENT_ID`,
+  `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` and `SLACK_TOKEN_KEY` (32 random bytes in base64url).
 - The custom domain `app.shinsa.dev` is created by `wrangler deploy` (it needs the `shinsa.dev` zone on the same
   account). The GitHub OAuth app's callback URL must be exactly `https://app.shinsa.dev/__remote/sign-in/callback`.

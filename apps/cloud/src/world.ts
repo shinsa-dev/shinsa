@@ -13,6 +13,10 @@ export interface CloudConfig {
   cloudflareApiToken: string;
   tunnelZone: string;
   maxInstances: number;
+  slackClientId: string;
+  slackClientSecret: string;
+  slackSigningSecret: string;
+  slackTokenKey: string;
 }
 
 export interface CloudWorld {
@@ -20,6 +24,7 @@ export interface CloudWorld {
   fetch: Fetch;
   assets: (request: Request) => Promise<Response>;
   now: () => number;
+  defer: (work: Promise<unknown>) => void;
   config: CloudConfig;
 }
 
@@ -31,6 +36,10 @@ export interface CloudEnv {
   TUNNEL_ZONE?: string;
   APP_ORIGIN?: string;
   MAX_INSTANCES?: string;
+  SLACK_CLIENT_ID?: string;
+  SLACK_CLIENT_SECRET?: string;
+  SLACK_SIGNING_SECRET?: string;
+  SLACK_TOKEN_KEY?: string;
 }
 
 export function resolveCloudConfig(env: CloudEnv): CloudConfig {
@@ -42,5 +51,9 @@ export function resolveCloudConfig(env: CloudEnv): CloudConfig {
     cloudflareApiToken: env.CLOUDFLARE_API_TOKEN ?? '',
     tunnelZone: env.TUNNEL_ZONE || 'shinsa.dev',
     maxInstances: Number(env.MAX_INSTANCES) || DEFAULT_MAX_INSTANCES,
+    slackClientId: env.SLACK_CLIENT_ID ?? '',
+    slackClientSecret: env.SLACK_CLIENT_SECRET ?? '',
+    slackSigningSecret: env.SLACK_SIGNING_SECRET ?? '',
+    slackTokenKey: env.SLACK_TOKEN_KEY ?? '',
   };
 }

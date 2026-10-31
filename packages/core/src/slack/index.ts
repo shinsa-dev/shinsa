@@ -49,4 +49,21 @@ export {
   serializeSlackMrkdwn,
 } from './mrkdwn.ts';
 export { SLACK_POSTED_GATES, type SlackPost } from './posts.ts';
+export {
+  createSlackForwardSignature,
+  listSlackMentionedUsers,
+  parseSlackRelayPost,
+  resolveSlackLinkedPath,
+  resolveSlackReadableText,
+  SLACK_FORWARD_HEADERS,
+  SLACK_FORWARD_WINDOW_MS,
+  SLACK_RELAY_MESSAGE_LIMITS,
+  SLACK_RELAY_PATHS,
+  type SlackLink,
+  type SlackLinks,
+  type SlackNames,
+  type SlackRelayPost,
+  type SlackRelayPosted,
+  verifySlackForwardSignature,
+} from './relay.ts';
 export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';

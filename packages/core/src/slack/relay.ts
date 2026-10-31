@@ -1,0 +1,154 @@
+import { encodeText } from '../remote/bytes.ts';
+import { SLACK_BLOCK_LIMITS } from './blocks.ts';
+import { SLACK_LIMITS } from './contract.ts';
+
+export const SLACK_RELAY_PATHS = {
+  connect: '/slack/connect',
+  connectCallback: '/slack/connect/callback',
+  installCallback: '/slack/install/callback',
+  events: '/slack/events',
+  linkedPage: '/slack/linked',
+  links: '/__remote/slack/links',
+  unlink: '/__remote/slack/unlink',
+  post: '/__remote/slack/post',
+} as const;
+
+export const SLACK_FORWARD_HEADERS = {
+  signature: 'x-shinsa-slack-signature',
+  timestamp: 'x-shinsa-slack-timestamp',
+} as const;
+
+export const SLACK_FORWARD_WINDOW_MS = 5 * 60_000;
+
+export const SLACK_RELAY_MESSAGE_LIMITS = { text: 40_000, blocks: SLACK_BLOCK_LIMITS.blocks } as const;
+
+export interface SlackRelayPost {
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  replaceTs: string | null;
+  message: { text: string; blocks: unknown[] };
+}
+
+export interface SlackRelayPosted {
+  ts: string;
+}
+
+export interface SlackLink {
+  teamId: string;
+  teamName: string;
+  userId: string;
+  userName: string;
+  linkedAt: number;
+}
+
+export interface SlackLinks {
+  links: SlackLink[];
+}
+
+const SIGNATURE_VERSION = 'v1';
+
+type Fields = Record<string, unknown>;
+
+function isFields(value: unknown): value is Fields {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function serializeHex(bytes: Uint8Array) {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function isSameText(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index++)
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+}
+
+async function signForward(connectKey: string, timestamp: string, body: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encodeText(`slack:${connectKey}`),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const payload = encodeText(`${SIGNATURE_VERSION}:${timestamp}:${body}`);
+  return `${SIGNATURE_VERSION}=${serializeHex(new Uint8Array(await crypto.subtle.sign('HMAC', key, payload)))}`;
+}
+
+export function createSlackForwardSignature(connectKey: string, timestamp: number, body: string) {
+  return signForward(connectKey, String(timestamp), body);
+}
+
+export async function verifySlackForwardSignature(
+  connectKey: string,
+  headers: { signature: string | null; timestamp: string | null },
+  body: string,
+  now: number
+) {
+  if (!headers.signature || !headers.timestamp || !/^\d{1,16}$/.test(headers.timestamp)) return false;
+  if (Math.abs(now - Number(headers.timestamp)) > SLACK_FORWARD_WINDOW_MS) return false;
+  return isSameText(await signForward(connectKey, headers.timestamp, body), headers.signature);
+}
+
+function readId(fields: Fields, key: string) {
+  const value = fields[key];
+  if (typeof value !== 'string' || value.length === 0 || value.length > SLACK_LIMITS.id) return null;
+  return /^[A-Za-z0-9._-]+$/.test(value) ? value : null;
+}
+
+function readMessage(value: unknown): SlackRelayPost['message'] | null {
+  if (!isFields(value)) return null;
+  const { text, blocks } = value;
+  if (typeof text !== 'string' || text.length === 0 || text.length > SLACK_RELAY_MESSAGE_LIMITS.text)
+    return null;
+  if (!Array.isArray(blocks) || blocks.length > SLACK_RELAY_MESSAGE_LIMITS.blocks) return null;
+  return blocks.every(isFields) ? { text, blocks } : null;
+}
+
+export function parseSlackRelayPost(value: unknown): SlackRelayPost | null {
+  if (!isFields(value)) return null;
+  const teamId = readId(value, 'teamId');
+  const channelId = readId(value, 'channelId');
+  const threadTs = readId(value, 'threadTs');
+  const replaceTs =
+    value.replaceTs === null || value.replaceTs === undefined ? null : readId(value, 'replaceTs');
+  const message = readMessage(value.message);
+  if (!teamId || !channelId || !threadTs || !message) return null;
+  if (replaceTs === null && value.replaceTs !== null && value.replaceTs !== undefined) return null;
+  return { teamId, channelId, threadTs, replaceTs, message };
+}
+
+export interface SlackNames {
+  users: ReadonlyMap<string, string>;
+  botUserId: string | null;
+}
+
+export function resolveSlackReadableText(text: string, names: SlackNames) {
+  return text
+    .replace(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g, (_match, id: string) => {
+      if (id === names.botUserId) return '';
+      return `@${names.users.get(id) ?? id}`;
+    })
+    .replace(/<#[A-Z0-9]+\|([^>]*)>/g, (_match, name: string) => `#${name}`)
+    .replace(/<!(here|channel|everyone)(?:\|[^>]*)?>/g, (_match, name: string) => `@${name}`)
+    .replace(/<!subteam\^[A-Z0-9]+\|([^>]*)>/g, (_match, name: string) => name)
+    .replace(/<(https?:\/\/[^|>]+)\|([^>]+)>/g, (_match, url: string, label: string) => `${label} (${url})`)
+    .replace(/<(https?:\/\/[^>]+)>/g, (_match, url: string) => url)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+export function listSlackMentionedUsers(text: string) {
+  return [...new Set([...text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g)].map((match) => match[1] as string))];
+}
+
+export function resolveSlackLinkedPath(result: { team: string } | { error: string }) {
+  const params = new URLSearchParams('team' in result ? { team: result.team } : { error: result.error });
+  return `${SLACK_RELAY_PATHS.linkedPage}?${params.toString()}`;
+}

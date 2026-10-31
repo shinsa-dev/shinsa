@@ -90,6 +90,10 @@ describe('the helpers', () => {
       cloudflareApiToken: '',
       tunnelZone: 'shinsa.dev',
       maxInstances: 50,
+      slackClientId: '',
+      slackClientSecret: '',
+      slackSigningSecret: '',
+      slackTokenKey: '',
     });
     expect(
       resolveCloudConfig({
@@ -100,6 +104,10 @@ describe('the helpers', () => {
         CLOUDFLARE_API_TOKEN: 'token',
         TUNNEL_ZONE: 'example.dev',
         MAX_INSTANCES: '3',
+        SLACK_CLIENT_ID: 'slack-id',
+        SLACK_CLIENT_SECRET: 'slack-secret',
+        SLACK_SIGNING_SECRET: 'signing',
+        SLACK_TOKEN_KEY: 'key',
       })
     ).toEqual({
       origin: 'http://localhost:5183',
@@ -109,6 +117,10 @@ describe('the helpers', () => {
       cloudflareApiToken: 'token',
       tunnelZone: 'example.dev',
       maxInstances: 3,
+      slackClientId: 'slack-id',
+      slackClientSecret: 'slack-secret',
+      slackSigningSecret: 'signing',
+      slackTokenKey: 'key',
     });
   });
 });

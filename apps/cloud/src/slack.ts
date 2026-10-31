@@ -1,0 +1,368 @@
+import {
+  createSlackForwardSignature,
+  listSlackMentionedUsers,
+  parseSlackRelayPost,
+  resolveSlackReadableText,
+  resolveTunnelHost,
+  SLACK_ENGINE_EVENTS_PATH,
+  SLACK_FORWARD_HEADERS,
+  SLACK_LIMITS,
+  SLACK_RELAY_PATHS,
+  type SlackLinks,
+  type SlackMention,
+  type SlackMessage,
+  type SlackRelayPosted,
+  type SlackThreadMessage,
+  serializeSlackLinkPrompt,
+  serializeSlackOffline,
+} from '@shinsa/core';
+import { createSlackSignature, decryptToken, isSameSecret } from './crypto.ts';
+import type { InstanceRow, SlackWorkspaceRow } from './database.ts';
+import { TUNNEL_OFFLINE_STATUSES } from './hooks.ts';
+import { CloudError, readJsonFields, respondJson } from './http.ts';
+import { findMachine, isInstanceOnline } from './instances.ts';
+import { recordFailure } from './log.ts';
+import { readSlackText, requestSlack, requestSlackUserName, SlackApiError } from './slack-api.ts';
+import type { CloudWorld } from './world.ts';
+
+export const SLACK_EVENT_BODY_LIMIT_BYTES = 1024 * 1024;
+
+const SLACK_POST_BODY_LIMIT_BYTES = 128 * 1024;
+
+const SLACK_SIGNATURE_WINDOW_SECONDS = 5 * 60;
+
+const SLACK_NAMED_USERS_LIMIT = 30;
+
+type Fields = Record<string, unknown>;
+
+interface MentionEvent {
+  eventId: string;
+  teamId: string;
+  channelId: string;
+  ts: string;
+  threadTs: string;
+  userId: string;
+  text: string;
+}
+
+interface ThreadEntry {
+  ts: string;
+  userId: string;
+  text: string;
+  botName: string | null;
+}
+
+function isFields(value: unknown): value is Fields {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readString(fields: Fields, key: string) {
+  const value = fields[key];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+async function assertSlackSignature(request: Request, body: string, world: CloudWorld) {
+  const timestamp = request.headers.get('x-slack-request-timestamp') ?? '';
+  const signature = request.headers.get('x-slack-signature') ?? '';
+  const seconds = Number(timestamp);
+  const fresh =
+    /^\d{1,12}$/.test(timestamp) && Math.abs(world.now() / 1000 - seconds) <= SLACK_SIGNATURE_WINDOW_SECONDS;
+  if (!fresh || !world.config.slackSigningSecret)
+    throw new CloudError('signature_invalid', 'The Slack signature does not match.', 401);
+  const expected = await createSlackSignature(world.config.slackSigningSecret, timestamp, body);
+  if (!isSameSecret(expected, signature))
+    throw new CloudError('signature_invalid', 'The Slack signature does not match.', 401);
+}
+
+function readMentionEvent(envelope: Fields): MentionEvent | null {
+  const event = isFields(envelope.event) ? envelope.event : {};
+  if (event.type !== 'app_mention' || event.bot_id !== undefined || event.subtype !== undefined) return null;
+  const eventId = readString(envelope, 'event_id');
+  const teamId = readString(envelope, 'team_id');
+  const channelId = readString(event, 'channel');
+  const ts = readString(event, 'ts');
+  const userId = readString(event, 'user');
+  if (!eventId || !teamId || !channelId || !ts || !userId) return null;
+  return {
+    eventId,
+    teamId,
+    channelId,
+    ts,
+    threadTs: readString(event, 'thread_ts') ?? ts,
+    userId,
+    text: typeof event.text === 'string' ? event.text : '',
+  };
+}
+
+function isUninstallEvent(envelope: Fields) {
+  const event = isFields(envelope.event) ? envelope.event : {};
+  if (event.type === 'app_uninstalled') return true;
+  const tokens = isFields(event.tokens) ? event.tokens : {};
+  return event.type === 'tokens_revoked' && Array.isArray(tokens.bot) && tokens.bot.length > 0;
+}
+
+export async function respondSlackEvents(request: Request, world: CloudWorld) {
+  const body = await request.text();
+  if (body.length > SLACK_EVENT_BODY_LIMIT_BYTES)
+    throw new CloudError('body_too_large', 'The Slack event is over 1 MB.', 413);
+  await assertSlackSignature(request, body, world);
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(body);
+  } catch {
+    throw new CloudError('body_invalid', 'The Slack event is not JSON.', 400);
+  }
+  if (!isFields(envelope)) throw new CloudError('body_invalid', 'The Slack event is not JSON.', 400);
+  if (envelope.type === 'url_verification') return respondJson({ challenge: envelope.challenge });
+  const eventId = readString(envelope, 'event_id');
+  if (envelope.type !== 'event_callback' || !eventId) return respondJson({ ok: true });
+  if (!(await world.store.recordSlackEvent(eventId, world.now()))) return respondJson({ ok: true });
+  const teamId = readString(envelope, 'team_id');
+  if (teamId && isUninstallEvent(envelope)) {
+    await world.store.removeSlackWorkspace(teamId);
+    return respondJson({ ok: true });
+  }
+  const mention = readMentionEvent(envelope);
+  if (mention) world.defer(recordMentionFailure(handleMention(mention, world), mention));
+  return respondJson({ ok: true });
+}
+
+async function recordMentionFailure(work: Promise<void>, mention: MentionEvent) {
+  try {
+    await work;
+  } catch (error) {
+    recordFailure('[Cloud] A Slack mention could not be forwarded', {
+      error,
+      teamId: mention.teamId,
+      eventId: mention.eventId,
+    });
+  }
+}
+
+async function postInThread(world: CloudWorld, token: string, mention: MentionEvent, message: SlackMessage) {
+  await requestSlack(world, 'chat.postMessage', {
+    token,
+    json: {
+      channel: mention.channelId,
+      thread_ts: mention.threadTs,
+      text: message.text,
+      blocks: message.blocks,
+      unfurl_links: false,
+      unfurl_media: false,
+    },
+  });
+}
+
+async function handleMention(mention: MentionEvent, world: CloudWorld) {
+  const workspace = await world.store.selectSlackWorkspace(mention.teamId);
+  if (!workspace) return;
+  const token = await decryptToken(world.config.slackTokenKey, workspace.bot_token);
+  const link = await world.store.selectSlackLink(mention.teamId, mention.userId);
+  if (!link) {
+    const prompt = serializeSlackLinkPrompt(`${world.config.origin}${SLACK_RELAY_PATHS.connect}`);
+    await requestSlack(world, 'chat.postEphemeral', {
+      token,
+      json: {
+        channel: mention.channelId,
+        user: mention.userId,
+        thread_ts: mention.threadTs,
+        text: prompt.text,
+        blocks: prompt.blocks,
+      },
+    });
+    return;
+  }
+  const instance = await world.store.selectInstance(link.instance_id);
+  if (!instance || !isInstanceOnline(instance, world.now())) {
+    await postInThread(world, token, mention, serializeSlackOffline(instance?.name ?? 'Your machine'));
+    return;
+  }
+  const forwarded = await resolveForwardedMention(mention, workspace, token, world);
+  await world.store.recordSlackThread(mention, instance.id, world.now());
+  if (!(await forwardMention(forwarded, instance, world)))
+    await postInThread(world, token, mention, serializeSlackOffline(instance.name));
+}
+
+function readThreadEntry(value: unknown): ThreadEntry | null {
+  if (!isFields(value)) return null;
+  const ts = readString(value, 'ts');
+  const botProfile = isFields(value.bot_profile) ? value.bot_profile : {};
+  const botName =
+    value.bot_id === undefined
+      ? null
+      : (readString(botProfile, 'name') ?? readString(value, 'username') ?? 'Bot');
+  const userId = readString(value, 'user') ?? readString(value, 'bot_id');
+  if (!ts || !userId) return null;
+  return { ts, userId, text: typeof value.text === 'string' ? value.text : '', botName };
+}
+
+async function listThreadEntries(
+  mention: MentionEvent,
+  token: string,
+  world: CloudWorld
+): Promise<ThreadEntry[]> {
+  const own: ThreadEntry = { ts: mention.ts, userId: mention.userId, text: mention.text, botName: null };
+  if (mention.threadTs === mention.ts) return [own];
+  try {
+    const replies = await requestSlack(world, 'conversations.replies', {
+      token,
+      form: { channel: mention.channelId, ts: mention.threadTs, limit: String(SLACK_LIMITS.threadMessages) },
+    });
+    const messages = Array.isArray(replies.messages) ? replies.messages : [];
+    const entries = messages.map(readThreadEntry).filter((entry): entry is ThreadEntry => entry !== null);
+    return entries.some((entry) => entry.ts === mention.ts) ? entries : [...entries, own];
+  } catch (error) {
+    recordFailure('[Cloud] A Slack thread could not be read', { error, teamId: mention.teamId });
+    return [own];
+  }
+}
+
+async function resolveUserNames(entries: ThreadEntry[], token: string, world: CloudWorld) {
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    if (entry.botName === null) ids.add(entry.userId);
+    for (const id of listSlackMentionedUsers(entry.text)) ids.add(id);
+  }
+  const names = new Map<string, string>();
+  for (const id of [...ids].slice(0, SLACK_NAMED_USERS_LIMIT)) {
+    const name = await requestSlackUserName(world, token, id);
+    if (name) names.set(id, name);
+  }
+  return names;
+}
+
+async function requestPermalink(mention: MentionEvent, token: string, world: CloudWorld) {
+  try {
+    const answer = await requestSlack(world, 'chat.getPermalink', {
+      token,
+      form: { channel: mention.channelId, message_ts: mention.ts },
+    });
+    return readSlackText(answer, 'permalink');
+  } catch {
+    return null;
+  }
+}
+
+async function resolveForwardedMention(
+  mention: MentionEvent,
+  workspace: SlackWorkspaceRow,
+  token: string,
+  world: CloudWorld
+): Promise<SlackMention> {
+  const entries = (await listThreadEntries(mention, token, world)).slice(-SLACK_LIMITS.threadMessages);
+  const users = await resolveUserNames(entries, token, world);
+  const names = { users, botUserId: workspace.bot_user_id };
+  const readable = (text: string) => resolveSlackReadableText(text, names).slice(0, SLACK_LIMITS.text);
+  const nameOf = (id: string) => (users.get(id) ?? id).slice(0, SLACK_LIMITS.userName);
+  const thread: SlackThreadMessage[] = entries.map((entry) => ({
+    ts: entry.ts,
+    userId: entry.userId,
+    userName: (entry.botName ?? nameOf(entry.userId)).slice(0, SLACK_LIMITS.userName),
+    text: readable(entry.text),
+    bot: entry.botName !== null || entry.userId === workspace.bot_user_id,
+  }));
+  return {
+    eventId: mention.eventId,
+    teamId: mention.teamId,
+    channelId: mention.channelId,
+    threadTs: mention.threadTs,
+    messageTs: mention.ts,
+    userId: mention.userId,
+    userName: nameOf(mention.userId),
+    text: readable(mention.text),
+    permalink: await requestPermalink(mention, token, world),
+    thread,
+  };
+}
+
+async function forwardMention(mention: SlackMention, instance: InstanceRow, world: CloudWorld) {
+  const body = JSON.stringify(mention);
+  const timestamp = world.now();
+  const signature = await createSlackForwardSignature(instance.connect_key, timestamp, body);
+  let answer: Response;
+  try {
+    answer = await world.fetch(`https://${resolveTunnelHost(instance.id)}${SLACK_ENGINE_EVENTS_PATH}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [SLACK_FORWARD_HEADERS.signature]: signature,
+        [SLACK_FORWARD_HEADERS.timestamp]: String(timestamp),
+      },
+      body,
+      redirect: 'manual',
+    });
+  } catch {
+    return false;
+  }
+  if (TUNNEL_OFFLINE_STATUSES.has(answer.status)) return false;
+  if (!answer.ok)
+    recordFailure('[Cloud] A machine refused a Slack mention', {
+      instanceId: instance.id,
+      status: answer.status,
+    });
+  return true;
+}
+
+export async function respondSlackLinks(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  const rows = await world.store.listInstanceSlackLinks(instance.id);
+  const answer: SlackLinks = {
+    links: rows.map((row) => ({
+      teamId: row.team_id,
+      teamName: row.team_name,
+      userId: row.slack_user_id,
+      userName: row.slack_user_name,
+      linkedAt: row.linked_at,
+    })),
+  };
+  return respondJson(answer);
+}
+
+export async function respondSlackUnlink(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  await world.store.removeInstanceSlackLinks(instance.id);
+  return respondJson({ ok: true });
+}
+
+async function requestSlackPost(world: CloudWorld, method: string, token: string, json: Fields) {
+  try {
+    return await requestSlack(world, method, { token, json });
+  } catch (error) {
+    const code = error instanceof SlackApiError ? error.code : 'failed';
+    throw new CloudError('slack_failed', `Slack did not take the post (${code}).`, 502);
+  }
+}
+
+export async function respondSlackPost(request: Request, world: CloudWorld) {
+  const instance = await findMachine(request, world);
+  const post = parseSlackRelayPost(await readJsonFields(request, SLACK_POST_BODY_LIMIT_BYTES));
+  if (!post) throw new CloudError('body_invalid', 'The Slack post is not one this relay sends.', 400);
+  if (!(await world.store.hasSlackThread(post, instance.id)))
+    throw new CloudError('thread_not_forwarded', 'This machine was never sent that Slack thread.', 403);
+  if (
+    post.replaceTs &&
+    !(await world.store.hasSlackPost(post.teamId, post.channelId, post.replaceTs, instance.id))
+  )
+    throw new CloudError('post_not_yours', 'This machine did not post that Slack message.', 403);
+  const workspace = await world.store.selectSlackWorkspace(post.teamId);
+  if (!workspace)
+    throw new CloudError('slack_not_installed', 'Shinsa is no longer in that Slack workspace.', 410);
+  const token = await decryptToken(world.config.slackTokenKey, workspace.bot_token);
+  const content = { channel: post.channelId, text: post.message.text, blocks: post.message.blocks };
+  if (post.replaceTs) {
+    await requestSlackPost(world, 'chat.update', token, { ...content, ts: post.replaceTs });
+    const answer: SlackRelayPosted = { ts: post.replaceTs };
+    return respondJson(answer);
+  }
+  const posted = await requestSlackPost(world, 'chat.postMessage', token, {
+    ...content,
+    thread_ts: post.threadTs,
+    unfurl_links: false,
+    unfurl_media: false,
+  });
+  const ts = readSlackText(posted, 'ts');
+  if (!ts) throw new CloudError('slack_failed', 'Slack did not say where the post went.', 502);
+  await world.store.recordSlackPost(post.teamId, post.channelId, ts, instance.id);
+  const answer: SlackRelayPosted = { ts };
+  return respondJson(answer);
+}

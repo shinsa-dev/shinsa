@@ -16,19 +16,22 @@ import type { CloudWorld } from './world.ts';
 
 export const ONLINE_WINDOW_MS = 5 * 60_000;
 
+export function isInstanceOnline(row: InstanceRow, now: number) {
+  return row.online === 1 && row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
+}
+
 function serializeInstance(row: InstanceRow, now: number): RemoteInstance {
-  const recent = row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
   return {
     id: row.id,
     name: row.name,
     fingerprint: row.fingerprint,
-    online: row.online === 1 && recent,
+    online: isInstanceOnline(row, now),
     lastSeenAt: row.last_seen_at,
     createdAt: row.created_at,
   };
 }
 
-async function findOwnInstance(user: UserRow, instanceId: string, world: CloudWorld) {
+export async function findOwnInstance(user: UserRow, instanceId: string, world: CloudWorld) {
   const row = await world.store.selectInstance(instanceId);
   if (!row || row.user_id !== user.id) throw new CloudError('not_found', 'No such machine.', 404);
   return row;
@@ -64,7 +67,7 @@ export async function respondInstanceRemove(request: Request, instanceId: string
   return respondJson({ ok: true });
 }
 
-async function findMachine(request: Request, world: CloudWorld) {
+export async function findMachine(request: Request, world: CloudWorld) {
   const token = readBearer(request);
   if (!token) throw new CloudError('revoked', 'This machine is not paired.', 401);
   const row = await world.store.selectMachineInstance(await resolveTokenHash(token));

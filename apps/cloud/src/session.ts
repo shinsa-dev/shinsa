@@ -31,7 +31,7 @@ interface GitHubUser {
   avatar_url?: string;
 }
 
-async function selectSessionUser(request: Request, world: CloudWorld) {
+export async function selectSessionUser(request: Request, world: CloudWorld) {
   const token = readCookie(request, SESSION_COOKIE);
   if (!token) return null;
   return world.store.selectSessionUser(await resolveTokenHash(token), world.now());

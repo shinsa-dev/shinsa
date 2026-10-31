@@ -21,7 +21,8 @@ function createStatement(sqlite: Sqlite, sql: string, values: SqlValue[] = []): 
 function createTestDatabase(): Database & { sqlite: Sqlite } {
   const sqlite = new Sqlite(':memory:');
   sqlite.exec('PRAGMA foreign_keys = ON');
-  sqlite.exec(readFileSync(join(import.meta.dirname, '../migrations/0001_remote.sql'), 'utf8'));
+  for (const migration of ['0001_remote.sql', '0002_slack.sql'])
+    sqlite.exec(readFileSync(join(import.meta.dirname, '../migrations', migration), 'utf8'));
   return { sqlite, prepare: (sql) => createStatement(sqlite, sql) };
 }
 
@@ -63,6 +64,10 @@ export const TEST_CONFIG: CloudConfig = {
   cloudflareApiToken: 'api-token',
   tunnelZone: 'shinsa.dev',
   maxInstances: 50,
+  slackClientId: 'slack-client',
+  slackClientSecret: 'slack-secret',
+  slackSigningSecret: 'slack-signing',
+  slackTokenKey: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8',
 };
 
 export interface Harness {
@@ -71,6 +76,7 @@ export interface Harness {
   calls: UpstreamCall[];
   handlers: UpstreamHandler[];
   clock: { now: number };
+  settle: () => Promise<void>;
   call: (path: string, init?: RequestInit & { session?: string; sameOrigin?: boolean }) => Promise<Response>;
   post: (
     path: string,
@@ -95,6 +101,7 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
   const cloudflare = createCloudflareApi();
   const handlers: UpstreamHandler[] = [];
   const clock = { now: 1_800_000_000_000 };
+  const deferred: Promise<unknown>[] = [];
   const world = createWorld({
     db,
     assets: (request) => Promise.resolve(new Response(`asset ${new URL(request.url).pathname}`)),
@@ -131,6 +138,9 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
       return new Response('no upstream', { status: 404 });
     },
     now: () => clock.now,
+    defer: (work) => {
+      deferred.push(work);
+    },
     config: { ...TEST_CONFIG, ...config },
   });
 
@@ -176,7 +186,11 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     return cookie.split(';')[0]?.split('=')[1] ?? '';
   }
 
-  return { db, world, calls, handlers, clock, call, post, signIn };
+  async function settle() {
+    while (deferred.length > 0) await deferred.shift();
+  }
+
+  return { db, world, calls, handlers, clock, settle, call, post, signIn };
 }
 
 export async function readJson<T>(response: Response) {

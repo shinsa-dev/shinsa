@@ -275,7 +275,10 @@ src/
 │                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS, createSlack*), and every
 │                    message the bot posts (messages.ts: the status message edited in place, a post per question,
 │                    secret, plan, review and proposal gate, the result, the bot's own replies, and
-│                    resolveSlackPostMessage for a `slack.post` from the outbox)
+│                    resolveSlackPostMessage for a `slack.post` from the outbox), and the relay's wire contract
+│                    (relay.ts: SLACK_RELAY_PATHS, the forward signature made with the machine's connect key and
+│                    checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost for a machine's post,
+│                    resolveSlackReadableText for Slack's <@U…> markup, SlackLinks)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,
