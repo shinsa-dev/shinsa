@@ -393,11 +393,7 @@ describe('the enroll page', () => {
     expect(screen.getByText('Add this device to your machine')).toBeTruthy();
     fireEvent.change(field, { target: { value: ' Work Mac ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
-    expect(
-      await screen.findByText(
-        /Accept it in Settings > Remote access on the machine\. You can close this page\./
-      )
-    ).toBeTruthy();
+    expect(await screen.findByText('Request sent. Accept it on the machine.')).toBeTruthy();
     expect(asked).toEqual(['Work Mac']);
     finish();
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
@@ -430,7 +426,7 @@ describe('the enroll page', () => {
     expect(screen.queryByText(/Request sent/)).toBeNull();
     fireEvent.change(screen.getByLabelText('Device name'), { target: { value: 'Mona iPhone' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
-    expect(await screen.findByText(/Once it is accepted, the machine shows up in Shinsa Cloud/)).toBeTruthy();
+    expect(await screen.findByText('Request sent. You can close this page.')).toBeTruthy();
   });
 
   it('says why the machine refused, and what to do with a link that cannot work', async () => {

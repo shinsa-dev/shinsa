@@ -43,9 +43,7 @@ function resolveBrowserDeviceName(invitee: RemoteUser | null) {
 function WaitingNote({ joining }: { joining: boolean }) {
   return (
     <p role='status' className='w-full text-pretty text-fg-2 text-xs'>
-      {joining
-        ? 'Request sent. Once it is accepted, the machine shows up in Shinsa Cloud. You can close this page.'
-        : 'Request sent. Accept it in Settings > Remote access on the machine. You can close this page.'}
+      {joining ? 'Request sent. You can close this page.' : 'Request sent. Accept it on the machine.'}
     </p>
   );
 }
