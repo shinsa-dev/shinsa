@@ -5,23 +5,20 @@ import type * as React from 'react';
 import { describeUserHandle, describeUserName, resolveUserInitial } from '@/lib/remote/users.ts';
 import { SETTING_ROW } from './group.tsx';
 
-export function UserAvatar({ user, className }: { user: RemoteUser; className?: string }) {
+function UserAvatar({ user }: { user: RemoteUser }) {
   if (user.avatarUrl)
     return (
       <img
         src={user.avatarUrl}
         alt=''
         referrerPolicy='no-referrer'
-        className={cn('size-6 shrink-0 rounded-full bg-bg-a2', className)}
+        className='size-6 shrink-0 rounded-full bg-bg-a2'
       />
     );
   return (
     <span
       aria-hidden
-      className={cn(
-        'grid size-6 shrink-0 place-items-center rounded-full bg-bg-a2 text-2xs text-fg-2',
-        className
-      )}
+      className='grid size-6 shrink-0 place-items-center rounded-full bg-bg-a2 text-2xs text-fg-2'
     >
       {resolveUserInitial(user)}
     </span>
