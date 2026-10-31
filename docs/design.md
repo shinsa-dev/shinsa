@@ -376,7 +376,7 @@ Only these, and they win over anything below:
    - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
      `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
-     bubble in the chat: the queue docks above the composer on the Chat and Overview tabs (`Composer`'s `dock`), a
+     bubble in the chat: the queue docks above the composer on the Overview, Review and Chat tabs (`Composer`'s `dock`), a
      `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then when it sends in `fg-2`,
      `describeQueue` over core's `resolveRoundRelease`: "· Sends once round 2 is finished." while the round works
      and finishes by itself, and what you have to do first while it waits for you: "· Sends after you merge round
@@ -1383,8 +1383,13 @@ Only these, and they win over anything below:
       go with the operation.", toast "Notes saved."), so the box shows them.
     - **What a message does** is the composer's placeholder at every gate and the toast after it, from one place
       (`resolveMessageHint` in `lib/tasks/messages.ts`, over core's `resolveMessageEffect`; `docs/engine.md` → Gates →
-      What a message does): the Overview's and the chat's composers and ⌘K's Message the agent all read it, and a task
-      that takes no message (finished, not a follow-up) shows no composer.
+      What a message does): the Overview's, the Review's and the chat's composers and ⌘K's Message the agent all read
+      it, and a task that takes no message (finished, not a follow-up) shows no composer.
+    - **One draft per task.** The composer docks at the foot of Overview, Review and Chat, and the three are one
+      draft (`lib/chat/task-drafts.ts`, keyed by the task's id, in memory until a reload): the text, the attachments
+      and their uploads carry across tabs and survive leaving the task, and sending from any tab clears it everywhere.
+      When the box loses focus to a click on the task's own tabs, the next tab's box takes it with the caret where it was; leaving the task drops that. The Code tab
+      has no composer; Home's new-task box and the answer box keep their own.
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
       each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the agent must attach, as a
