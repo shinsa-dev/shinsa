@@ -26,15 +26,20 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    device was added from, the dashboard calls that machine This machine.
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
    that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
-   instance belongs to one GitHub account and is never shared.
+   instance has one owner, the GitHub account that paired it, and may have members, who reach it exactly as the owner
+   does, so a team can share one machine, such as a server everyone uses. Nobody gets in by holding a link: the
+   machine's one reusable invite link lets any device, yours or someone else's with their own GitHub account, ask
+   for access, and you accept or decline each request on the machine or from any device that already reaches it.
+   Accepting a request from an account not yet on the machine makes it a member. Only the machine invites or removes a member; a member
+   can leave.
 4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
    named tunnel; no inbound port is ever opened.
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
    your local engine and holds no state of its own. Nothing is copied to the cloud.
 6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed
-   with keys only those two hold. A browser is trusted once, by scanning a QR the machine shows; a GitHub account alone
-   opens nothing.
+   with keys only those two hold. A browser is trusted once: it asks for access through a link the machine shows, and
+   the machine takes its key only once you accept; a GitHub account alone opens nothing.
 7. **Webhooks get a stable public URL through the hosted side**:
    `https://app.shinsa.dev/hooks/‹instance›/‹schedule›/‹token›`, forwarded to the machine's tunnel. Outside
    services (Maple alerts, GitHub, Stripe) call it; the URL does not change when the tunnel does.

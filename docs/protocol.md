@@ -1238,10 +1238,13 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
 | `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
-| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port; a 401 means revoked |
+| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members }` (`HeartbeatResponse`, a `RemoteAccess`), which the engine reads leniently; a 401 means revoked |
+| `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
+| `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member or the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
+| `POST /__remote/invites/accept` | The enroll page | `{ token }` (`InviteAcceptRequest`) records that the signed-in account asked and answers the machine's `instanceId`, `name`, `owner`, the account's `user` and a `connect` (`ConnectResponse`) to ask the machine with (`InviteAcceptResponse`); it makes no member |
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
-| `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
+| `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner` or `member`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member only) |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
 
 Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
@@ -1249,7 +1252,10 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
-key>.<secret>` (`resolveEnrollUrl`, `parseEnrollFragment`): everything after `#` stays in the browser.
+key>.<secret>`, with `.<invite token>` after it for an invite (`EnrollFragment`, `resolveEnrollUrl`,
+`parseEnrollFragment`): everything after `#` stays in the browser. A GitHub account is a `RemoteUser` everywhere
+(`id`, `login`, `name`, `avatarUrl`); a machine's people are a `RemoteAccess` (`owner`, and `members`, each a
+`RemoteMember`: `user`, `addedAt`).
 
 **Connect tokens** (`connect-token.ts`): `<payload>.<signature>`, base64url, the payload `{ i: instance, u: GitHub
 user, e: expiry }` and the signature an HMAC-SHA256 with the instance's connect key. `verifyConnectToken` refuses
@@ -1259,15 +1265,16 @@ another instance, an expired token and one that lives longer than `CONNECT_TOKEN
 
 | Message | From | Fields |
 | --- | --- | --- |
-| `hello` | The browser | `version`, `device` (its P-256 public key, raw, base64url), `ephemeral` (a fresh one), `enroll` (null, or the proof) |
+| `hello` | The browser | `version`, `device` (its P-256 public key, raw, base64url), `ephemeral` (a fresh one), `enroll` (null, or the proof), `name` (the device name it asks under, null, at most `DEVICE_NAME_LIMIT`, 60) |
+| `pending` | The engine | Nothing: the request waits for an answer, and `welcome` or `refused` follows on the same socket |
 | `welcome` | The engine | `ephemeral` (its fresh key) |
 | `refused` | The engine | `reason`; the socket then closes |
 
 Both sides compute three ECDH secrets, `ee` (the two ephemerals), `es` (the browser's ephemeral and the machine's
 key) and `se` (the device's key and the engine's ephemeral), and HKDF-SHA-256 over them, salted with a SHA-256 of
 the four public keys, gives one AES-256-GCM key per direction (`deriveClientSession`, `deriveServerSession`). Only
-the holder of the machine's private key and of an enrolled device's private key can finish it. The enrollment proof
-is an HMAC-SHA256 with the one-time secret over the machine key, the device key and the browser's ephemeral
+the holder of the machine's private key and of an added device's private key can finish it. The link proof is an
+HMAC-SHA256 with the link's secret over the machine key, the device key and the browser's ephemeral
 (`createEnrollProof`, `verifyEnrollProof`), so a proof seen on the way works for no other device.
 
 **Frames** (`frames.ts`): every message after the handshake is one binary frame, an 8-byte counter and the AES-GCM
@@ -1292,10 +1299,12 @@ arrived, never from the page.
 
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
-`machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`) and `devices` (`RemoteDevice`: `publicKey`,
-`name`, `enrolledAt`, `lastSeenAt`, `enrollmentId`: the id of the link that added it, null when unknown);
-`RemoteEnrollment` is the `id`, `url`, `name` and `expiresAt` Add device answers. The id is not a secret: it only
-tells the page which device its link added.
+`machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`), `devices` (`RemoteDevice`: `publicKey`,
+`name`, `enrolledAt`, `lastSeenAt`, `userId`: the GitHub account the device was added for, null for a device from
+before members), `access` (the `RemoteAccess` the last heartbeat answered, null until one did), `link`
+(`RemoteLink`: `url` and `createdAt`, the one invite link, or null while it is off) and `requests` (`AccessRequest`:
+`id`, `publicKey`, `deviceName`, `user`, a `RemoteUser`, and `requestedAt`). The enroll fragment
+(`EnrollFragment`) is `<instance>.<machine key>.<secret>.<invite token>`, all four parts required.
 
 ## Slack
 

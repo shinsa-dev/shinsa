@@ -57,7 +57,9 @@ async function selectConnectInstance(user: UserRow, instanceId: string | null, w
   if (instanceId) return findOwnInstance(user, instanceId, world);
   const instances = await world.store.listUserInstances(user.id);
   return (
-    [...instances].sort((left, right) => (right.last_seen_at ?? 0) - (left.last_seen_at ?? 0))[0] ?? null
+    instances
+      .filter((row) => row.user_id === user.id)
+      .sort((left, right) => (right.last_seen_at ?? 0) - (left.last_seen_at ?? 0))[0] ?? null
   );
 }
 

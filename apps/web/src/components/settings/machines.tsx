@@ -1,11 +1,17 @@
-import { resolveMachineLoad, type Settings } from '@shinsa/core';
+import { type RemoteInstance, resolveMachineLoad, type Settings } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { type MachineChoice, useMachines } from '@/lib/connection/socket.ts';
+import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
+import {
+  type MachineAccess,
+  type MachineChoice,
+  useMachineAccess,
+  useMachines,
+} from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
 import {
@@ -20,9 +26,44 @@ import { MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
+import { AccessRequestRows } from './remote-access.tsx';
+
+function resolveViewerId(instances: RemoteInstance[], machineId: string) {
+  const instance = instances.find((entry) => entry.id === machineId);
+  return instance?.role === 'owner' ? instance.owner.id : null;
+}
+
+const REQUESTS_DESCRIPTION =
+  'Devices and people asking to reach your machines. Accepting adds the device, and gives anyone new full control of the machine.';
+
+export function MachineAccessRequests({
+  machines,
+  instances,
+}: {
+  machines: MachineAccess[];
+  instances: RemoteInstance[];
+}) {
+  const waiting = machines.filter((machine) => (machine.remote?.requests.length ?? 0) > 0);
+  if (waiting.length === 0) return null;
+  return (
+    <SettingsGroup title='Access requests' description={REQUESTS_DESCRIPTION}>
+      {waiting.map((machine) => (
+        <AccessRequestRows
+          key={machine.id}
+          title={`Waiting on ${machine.name}`}
+          requests={machine.remote?.requests ?? []}
+          access={machine.remote?.access ?? null}
+          viewerId={resolveViewerId(instances, machine.id)}
+          onAccept={(request) => acceptMachineRequest(machine.id, request.id)}
+          onDecline={(request) => declineMachineRequest(machine.id, request.id)}
+        />
+      ))}
+    </SettingsGroup>
+  );
+}
 
 const MACHINES_DESCRIPTION =
-  'Every machine you turned remote access on for. The ones added on this device share this one dashboard, and each task runs on one machine. A new task goes to the machine of the project you pick, else where your routing policies send it, else to the one with the most room under its task capacity. To add a device, choose Add device in Settings, Remote access on that machine.';
+  'Your machines and the ones shared with you. Those added on this device share this dashboard. Add a device from Settings, Remote access on its machine.';
 
 function saveMachineSettings(machineId: string, patch: Partial<Settings>, done: string) {
   return sendCommandWithToast({ type: 'settings.change', patch }, done, machineId);
@@ -52,7 +93,7 @@ function MachineList({
   onRemove,
 }: {
   rows: MachineRow[];
-  onRemove: (instanceId: string) => Promise<void>;
+  onRemove: (row: MachineRow) => Promise<void>;
 }) {
   const [removing, setRemoving] = React.useState<string | null>(null);
   if (rows.length === 0)
@@ -70,7 +111,7 @@ function MachineList({
           removing={removing === row.instance.id}
           onRemove={() => {
             setRemoving(row.instance.id);
-            void onRemove(row.instance.id).finally(() => setRemoving(null));
+            void onRemove(row).finally(() => setRemoving(null));
           }}
         />
       ))}
@@ -103,7 +144,7 @@ function MachineItem({
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}
         <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
-          Remove
+          {row.instance.role === 'member' ? 'Leave' : 'Remove'}
         </Button>
       </div>
     </div>
@@ -130,10 +171,13 @@ function useMachineRows() {
       live = false;
     };
   }, [services, version]);
-  const remove = async (instanceId: string) => {
+  const remove = async (row: MachineRow) => {
     if (!services) return;
-    await services.dashboard.removeInstance(instanceId);
-    await services.devices.removeDevice(instanceId);
+    const id = row.instance.id;
+    await (row.instance.role === 'member'
+      ? services.dashboard.leaveInstance(id)
+      : services.dashboard.removeInstance(id));
+    await services.devices.removeDevice(id);
     setVersion((value) => value + 1);
   };
   return { rows, failure, remove };
@@ -142,8 +186,10 @@ function useMachineRows() {
 export function MachinesSettings() {
   const { rows, failure, remove } = useMachineRows();
   const machines = useMachines();
+  const access = useMachineAccess();
   return (
     <>
+      <MachineAccessRequests machines={access} instances={(rows ?? []).map((row) => row.instance)} />
       <SettingsGroup title={MACHINES_SECTION} description={MACHINES_DESCRIPTION}>
         {failure && (
           <p role='alert' className='px-2 py-1.5 text-destructive text-xs'>
@@ -159,7 +205,7 @@ export function MachinesSettings() {
       <PolicySettings
         machines={machines}
         unreachable={(rows ?? [])
-          .filter((row) => !row.device)
+          .filter((row) => !row.device || row.device.waiting)
           .map((row) => ({ id: row.instance.id, name: row.instance.name }))}
       />
     </>

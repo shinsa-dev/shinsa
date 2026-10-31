@@ -210,7 +210,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],
       ['folders', 'Choose the folders Shinsa searches for repositories.'],
       ['accounts', 'Sign in, import, refresh or remove the Claude accounts agents run on.'],
-      ['remote', 'Reach this machine from app.shinsa.dev: pair it, pause it and add or remove devices.'],
+      ['remote', 'Reach this machine from Shinsa Cloud: pair it, pause it and add or remove devices.'],
       ['settings', 'Read or change a setting by its name.'],
       ['setup', 'Show where setup stands, and check the tools Shinsa needs.'],
     ],

@@ -11,6 +11,15 @@ import {
   respondOffline,
 } from './instances.ts';
 import { recordFailure } from './log.ts';
+import {
+  respondInstanceLeave,
+  respondInviteAccept,
+  respondInviteCreate,
+  respondInviteRemove,
+  respondMachineMemberAdd,
+  respondMachineMemberRemove,
+  respondRequesterFind,
+} from './members.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
 import {
   resolveCallbackFailureLocation,
@@ -115,6 +124,41 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: new RegExp(`^${REMOTE_PATHS.instances}/${SEGMENT}/remove$`),
     respond: (request, _url, match, world) => respondInstanceRemove(request, match[1] ?? '', world),
+  },
+  {
+    method: 'POST',
+    pattern: new RegExp(`^${REMOTE_PATHS.instances}/${SEGMENT}/leave$`),
+    respond: (request, _url, match, world) => respondInstanceLeave(request, match[1] ?? '', world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.inviteAccept),
+    respond: (request, _url, _match, world) => respondInviteAccept(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineInvites),
+    respond: (request, _url, _match, world) => respondInviteCreate(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineInviteRemove),
+    respond: (request, _url, _match, world) => respondInviteRemove(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineRequester),
+    respond: (request, _url, _match, world) => respondRequesterFind(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineMemberAdd),
+    respond: (request, _url, _match, world) => respondMachineMemberAdd(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineMemberRemove),
+    respond: (request, _url, _match, world) => respondMachineMemberRemove(request, world),
   },
   {
     method: 'POST',

@@ -35,9 +35,15 @@ export async function startHandshake(input: {
   machineKey: string;
   device: CryptoKeyPair;
   enrollSecret?: string;
+  name?: string;
 }): Promise<HandshakeStart> {
   const ephemeral = await createKeyPair();
-  const hello = await createClientHello(input.device.publicKey, ephemeral.publicKey, null);
+  const hello = await createClientHello(
+    input.device.publicKey,
+    ephemeral.publicKey,
+    null,
+    input.name ?? null
+  );
   if (input.enrollSecret) {
     hello.enroll = await createEnrollProof(input.enrollSecret, {
       machine: input.machineKey,
