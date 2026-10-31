@@ -107,7 +107,7 @@ describe('a task the planner composes from a change and an operation', () => {
     expectOperationGate(w, taskId, gate);
 
     await expect(w.answer(gate, 'revise', 'Do it differently.')).rejects.toThrow(
-      'Run the operation or finish the task without it.'
+      'Run the operation or finish without it.'
     );
     expect(w.gates(taskId).map((open) => open.id)).toEqual([gate.id]);
     expect(w.agents.of('operate')).toHaveLength(0);

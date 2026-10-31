@@ -102,7 +102,7 @@ describe('the Integrations group', () => {
     expect(chooseServer.mock.calls[0]).toEqual([
       expect.objectContaining({ id: 'postgres' }),
       { enabled: true },
-      'Turned on postgres for Shinsa’s agents.',
+      'Turned on postgres.',
     ]);
     expect(choosePlugin.mock.calls[0]).toEqual([expect.objectContaining({ id: 'vercel' }), true]);
     expect(chooseSkill.mock.calls[0]).toEqual([expect.objectContaining({ id: 'pdf' }), true]);

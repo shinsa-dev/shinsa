@@ -98,7 +98,7 @@ describe('checking the setup before any agent starts', () => {
     const gate = harness.openGate(taskId);
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'reply', response: 'Go.' })
-    ).toThrow('Verify the setup again, or cancel the task.');
+    ).toThrow('Verify the setup again, or cancel.');
     expect(listOpenGates(harness.state, taskId)).toHaveLength(1);
   });
 

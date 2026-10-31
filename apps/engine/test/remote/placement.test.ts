@@ -38,11 +38,9 @@ describe('choosing a machine by its policies', () => {
 
   test('refuses when Claude does not answer or names no machine, so the page says the policies were not read', async () => {
     const silent = createPlacementAsker(<T>() => Promise.resolve(null as T));
-    await expect(silent(QUESTION)).rejects.toThrow(
-      'Claude did not answer: no account worked, or it timed out.'
-    );
+    await expect(silent(QUESTION)).rejects.toThrow('Claude did not answer. Try again.');
     const stray = createPlacementAsker(<T>() => Promise.resolve({ machine: 'laptop', reason: 'x' } as T));
-    await expect(stray(QUESTION)).rejects.toThrow('Claude’s answer named none of your machines.');
+    await expect(stray(QUESTION)).rejects.toThrow('Claude named none of your machines.');
   });
 
   test('POST /api/placement answers with the machine, and refuses a question it cannot read', async () => {

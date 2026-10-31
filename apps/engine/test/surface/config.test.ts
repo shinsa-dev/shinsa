@@ -229,7 +229,7 @@ describe('projects and focus', () => {
     const fake = createFakeClient({ '/api/projects': PROJECTS });
     await expect(
       runSpec(fake, ['projects', 'write', '--name', 'Basket', '--folders', '~/no-such-folder-here'])
-    ).rejects.toThrow('~/no-such-folder-here is not a folder on this machine.');
+    ).rejects.toThrow('That is not a folder on this machine.');
     expect(fake.sent).toEqual([]);
   });
 

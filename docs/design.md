@@ -1630,7 +1630,7 @@ Only these, and they win over anything below:
       (`RunAccount` in `account-items.tsx`, its latest attempt's account, else the one it is bound to). On the run
       of the step an agent works on now it is a click menu (hover `fg-4`), "Run this step again on" over every
       signed-in account with the current one checked; picking one restarts the step bound to that account, with
-      the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
+      the toast "Rerunning on a@b.com." ⌘K's This task has the same as "Run this step again on…".
       Earlier runs show the account as plain text.
     - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
       these. Seven are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
@@ -1726,7 +1726,7 @@ Only these, and they win over anything below:
       take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
       button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
       only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,
-      "macOS blocked a notification. Allow notifications for Shinsa in System Settings.", with the action Open
+      "macOS blocked a notification.", with the action Open
       settings (`apps/desktop/CLAUDE.md` → Rules).
     - **What triggers them**: a gate that newly enters Needs you within the focus project. The first snapshot after a
       load never chimes, a gate outside the focus project never does, and neither does one that comes into view when the
@@ -1840,8 +1840,7 @@ Only these, and they win over anything below:
       "Loads when needed · ~4.2k tokens" while the optimizer leaves it out. Then a primary `xs` Connect when it needs
       a sign-in (a Claude Code or plugin MCP's cost carries the tooltip that Claude runs can still use the sign-in
       made in Claude Code), the `Switch` (tooltip: "Only for Shinsa’s agents. Claude Code and Codex keep their own
-      settings."; toast on off: "Turned off ‹name› for Shinsa’s agents. Claude Code and Codex keep their own
-      settings.") and the `•••` menu ("MCP options"): Connect or Sign in again (web MCPs), Sign out, Check now, Show
+      settings."; toast on off: "Turned off ‹name›.") and the `•••` menu ("MCP options"): Connect or Sign in again (web MCPs), Sign out, Check now, Show
       details / Hide details, Use everywhere, Use in one project ▸, Use in one repository ▸ (radio items, the current
       place checked), Edit… (Shinsa's own) or Copy to Shinsa and edit…, and Remove behind `ConfirmDialog` (Shinsa's
       own only, "Remove MCP"). The details sit inside the row, indented to the name (`pl-7`, `pr-2`), with no surface
@@ -1933,7 +1932,7 @@ Only these, and they win over anything below:
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
     - **A split-off is a suggested task's row** in Suggested tasks with Make it a task (outline) and Keep it here
       (secondary, in Dismiss's place); keeping it sends it to this task now, as a message to the open round or a new
-      round of a resting task ("Kept in this task. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
+      round of a resting task ("Kept. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
       ("The agent takes it now") and, per round whose shipping can change, "Ship round 4 as a
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
@@ -2959,6 +2958,18 @@ Only these, and they win over anything below:
     - **Fork into a new task** is a task action (the task menu, an All tasks row's menu, ⌘K) on every task but a cancelled
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
+42. **A toast is one short line** (since 2026-10-31; `lib/connection/commands.ts`, `scripts/lint-toast.ts`). A toast
+    says what just happened in a few words and never wraps at the toaster's 420px: "Request declined.", "Device
+    revoked.", "Kai Lane joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or
+    count as 12; no description line under it, and no consequence the screen already shows. The one second line is a
+    running update's progress, clipped to one line. An error toast is the server's message, so a `DomainError` a
+    command or request from the web can return is one short sentence too ("This task is finished."); what an agent
+    needs to recover goes in the messages only agents receive. The toaster clips a title or a line that is still too
+    long, such as a git failure, so nothing ever breaks onto a second line. `bun lint:conventions` fails on a longer
+    toast and on toast text it cannot read: the text of every `toast.*`, `confirmDone`, `requestWithToast` and
+    `sendCommandWithToast` call must be a literal, a template, a constant or a function returning one (followed across
+    imports and destructuring), a `done` or `sent` value (checked where it is written), or a server message
+    (`error.message`, `describeFailure(error)`), which the clip covers.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
@@ -2975,7 +2986,11 @@ and those transitions only. Besides that it bans comments (outside `packages/ui`
 global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
 `hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (32, 34, 37); a terminal's keys go through xterm.js's own
 handler on its element (37). It also rejects an ad hoc selection (`select-text`, `select-all`,
-`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39).
+`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39). It
+rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,
+`requestWithToast`, `sendCommandWithToast` and any function with a `done` or `sent` parameter, and every `done` or
+`sent` property, followed through constants, lookup tables, both branches of a choice and the functions that return
+it, in any file of the app; an inserted value counts as 12. A message from the server is not caught.
 
 ---
 
@@ -3254,12 +3269,11 @@ the string. Product copy is US English ("organization", "canceled", "color").
 
 ### Punctuation and characters
 
-- **No trailing period** on a single phrase: labels, tooltips, badges, toast
-  titles, and combobox and list empty rows ("No campaigns found"). A toast
-  title built from a server message's first sentence drops its period. A
-  description that is a full sentence (hints, dialog bodies, toast
-  descriptions, empty-state bodies, integration row and section
-  descriptions) ends with a period.
+- **No trailing period** on a single phrase: labels, tooltips, badges and
+  combobox and list empty rows ("No campaigns found"). A toast is one short
+  line with no description (Where Shinsa differs, 42). A description that is
+  a full sentence (hints, dialog bodies, empty-state bodies, integration row
+  and section descriptions) ends with a period.
 - **Failure toasts are "Couldn’t {verb} {object}"** ("Couldn’t save
   paywall"), never "Could not…", "Unable to…" or "Failed to…". Inline error
   prose says "couldn’t" too. Don't repeat "Try again." in prose right above a

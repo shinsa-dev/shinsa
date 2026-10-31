@@ -153,7 +153,7 @@ describe('dependencies', () => {
     const c = createTask(harness, { request: 'C', waitsOn: [a] });
     const d = createTask(harness, { request: 'D', waitsOn: [b, c] });
     expect(() => harness.send({ type: 'task.wait_on', taskId: a, waitsOn: [d] })).toThrow(
-      '“D” already waits on this task.'
+      'That task already waits on this one.'
     );
 
     shipAndMerge(harness, a);
@@ -234,11 +234,11 @@ describe('dependencies', () => {
     const a = createTask(harness, { request: 'A' });
     const b = createTask(harness, { request: 'B', waitsOn: [a] });
     expect(() => harness.send({ type: 'task.wait_on', taskId: a, waitsOn: [b] })).toThrow(
-      '“B” already waits on this task.'
+      'That task already waits on this one.'
     );
     const gone = createTask(harness, { request: 'Gone' });
     harness.send({ type: 'task.cancel', taskId: gone });
-    expect(() => createTask(harness, { request: 'C', waitsOn: [gone] })).toThrow('“Gone” was cancelled');
+    expect(() => createTask(harness, { request: 'C', waitsOn: [gone] })).toThrow('That task was cancelled');
   });
 
   test('cancelling a parent pauses its waiting dependents with a clear note', () => {

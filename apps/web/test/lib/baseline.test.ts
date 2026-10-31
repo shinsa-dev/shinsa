@@ -55,9 +55,9 @@ describe('what always runs before review', () => {
     await changeBaseline(web, []);
     expect(spies.sent).toHaveBeenCalledWith(
       { type: 'repo.update', repoId: 'web', patch: { checkCommands: [] } },
-      'Nothing extra runs before review in web.'
+      'No review commands in web.'
     );
-    expect(describeBaselineChange(web, ['a'])).toBe('1 command runs before every review in web.');
-    expect(describeBaselineChange(web, ['a', 'b'])).toBe('2 commands run before every review in web.');
+    expect(describeBaselineChange(web, ['a'])).toBe('1 review command in web.');
+    expect(describeBaselineChange(web, ['a', 'b'])).toBe('2 review commands in web.');
   });
 });

@@ -66,7 +66,7 @@ export class AttachmentStore {
     if (bytes.byteLength > ATTACHMENT_LIMIT_BYTES) {
       throw new DomainError(
         'attachment_too_large',
-        `The file is ${Math.ceil(bytes.byteLength / 1024 / 1024)} MB; the limit is ${ATTACHMENT_LIMIT_BYTES / 1024 / 1024} MB.`
+        `The file is over ${ATTACHMENT_LIMIT_BYTES / 1024 / 1024} MB.`
       );
     }
     const id = Bun.randomUUIDv7();

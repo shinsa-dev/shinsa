@@ -26,15 +26,10 @@ function isNoPolicyAnswer(value: unknown) {
 export function createPlacementAsker(ask: QuickJson): PlacementAsker {
   return async (question) => {
     const said = await ask<unknown>(PLACEMENT_SYSTEM, serializePlacementPrompt(question), PLACEMENT_SCHEMA);
-    if (said === null)
-      throw new DomainError(
-        'placement_unavailable',
-        'Claude did not answer: no account worked, or it timed out.'
-      );
+    if (said === null) throw new DomainError('placement_unavailable', 'Claude did not answer. Try again.');
     if (isNoPolicyAnswer(said)) return null;
     const answer = parsePlacementAnswer(question, said);
-    if (!answer)
-      throw new DomainError('placement_unreadable', 'Claude’s answer named none of your machines.');
+    if (!answer) throw new DomainError('placement_unreadable', 'Claude named none of your machines.');
     return answer;
   };
 }

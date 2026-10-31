@@ -558,7 +558,7 @@ describe('services for a task over HTTP', () => {
     });
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.code).toBe('service_place_invalid');
-    expect(refused.error?.message).toContain('cannot run for this task');
+    expect(refused.error?.message).toContain('It cannot run in this task.');
   });
 });
 

@@ -79,10 +79,7 @@ function findArmedWait(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const wait = task.usageWait;
   if (wait?.status !== 'armed') {
-    throw new DomainError(
-      'usage_wait_missing',
-      'Nothing on this task is waiting for a usage limit to reset.'
-    );
+    throw new DomainError('usage_wait_missing', 'Nothing here waits for a usage reset.');
   }
   return { task, wait };
 }

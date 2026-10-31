@@ -58,7 +58,7 @@ describe('switch thresholds', () => {
 
   it('says what a threshold change and a custom one mean', () => {
     const account = createAccount({ id: 'a' });
-    expect(describeSwitchAtChange(account, 95)).toBe('Switches away from a@example.com at 95%.');
+    expect(describeSwitchAtChange(account, 95)).toBe('a@example.com switches at 95%.');
     expect(describeSwitchAtChange(account, null)).toBe('a@example.com follows the setting.');
     expect(describePercentChoice(account)).toBe(
       'New work moves off a@example.com once its usage reaches this percentage.'

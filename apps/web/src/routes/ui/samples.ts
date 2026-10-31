@@ -17,8 +17,11 @@ export const HOUR = 60 * MINUTE;
 
 export const DAY = 24 * HOUR;
 
+export const SAMPLE_GIT_FAILURE =
+  'fatal: unable to access https://github.com/acme/web.git/: Could not resolve host: github.com';
+
 export function acknowledgeSample() {
-  toast('Nothing was sent. This page only shows samples.');
+  toast('Samples only. Nothing was sent.');
   return Promise.resolve(true);
 }
 

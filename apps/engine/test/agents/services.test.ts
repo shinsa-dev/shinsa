@@ -202,11 +202,11 @@ describe('the service tools', () => {
       '`apps/web` is not in the repository’s own checkout yet.'
     );
     expect(call('add_service', { name: 'API', path: 'apps/api', command: 'x' })).rejects.toThrow(
-      'This project already has a service called “API”.'
+      'Another service has that name.'
     );
     expect(
       call('add_service', { name: 'web', command: 'x', preview_url: 'http://localhost:3000' })
-    ).rejects.toThrow('with {port} where the run’s port goes');
+    ).rejects.toThrow('Put {port} in an http or https URL.');
     expect(call('add_service', { name: 'web' })).rejects.toThrow('Send “command” as text');
   });
 

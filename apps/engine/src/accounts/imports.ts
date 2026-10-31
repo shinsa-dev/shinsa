@@ -43,7 +43,7 @@ export class AccountImports {
 
   async #importCswap(email: string) {
     if (this.#options.store.selectByIdentity({ email, organization: null }))
-      throw new DomainError('account_exists', `${email} is already in your accounts.`);
+      throw new DomainError('account_exists', `${email} is already added.`);
     await this.#options.signIn(email);
   }
 }

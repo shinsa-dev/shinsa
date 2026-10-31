@@ -19,7 +19,7 @@ import type { ApiRoute } from './routes.ts';
 function readText(value: unknown, name: string) {
   if (typeof value !== 'string') throw new DomainError('body_invalid', `${name} must be text.`);
   if (new TextEncoder().encode(value).length > CODE_LIMITS.blobBytes)
-    throw new DomainError('file_too_large', 'Shinsa saves files up to 2 MB from the editor.');
+    throw new DomainError('file_too_large', 'The editor saves files up to 2 MB.');
   return value;
 }
 

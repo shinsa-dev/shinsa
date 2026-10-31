@@ -34,7 +34,7 @@ function selectWatchdog(task: Task, watchdogId: string) {
 function findWatchdog(task: Task, watchdogId: string) {
   const watchdog = selectWatchdog(task, watchdogId);
   if (watchdog) return watchdog;
-  throw new DomainError('watchdog_not_found', 'This task has no such watchdog. Read the task again.');
+  throw new DomainError('watchdog_not_found', 'That watchdog is no longer there.');
 }
 
 function isArmedForRound(task: Task, round: number) {
@@ -107,7 +107,7 @@ function writeSource(decider: Decider, projectId: string, source: WatchSource) {
   if (!known && sources.length >= WATCHDOG_LIMITS.projectSources) {
     throw new DomainError(
       'too_many_sources',
-      `A project keeps at most ${WATCHDOG_LIMITS.projectSources} data sources. Remove one first.`
+      `A project keeps ${WATCHDOG_LIMITS.projectSources} data sources at most.`
     );
   }
   const repoIds = known ? [...new Set([...known.repoIds, ...source.repoIds])] : source.repoIds;
@@ -409,7 +409,7 @@ export function assertNoWatchdogsLeft(task: Task) {
   if (active.length === 0) return;
   throw new DomainError(
     'task_open',
-    `${describeCount(active.length, 'watchdog still watches', 'watchdogs still watch')} this task's change. Leave it open until they finish, or tell the human.`
+    `${describeCount(active.length, 'watchdog still watches', 'watchdogs still watch')} it.`
   );
 }
 
@@ -417,7 +417,7 @@ export function connectWatchdog(decider: Decider, command: CommandOf<'watchdog.c
   const task = decider.task(command.taskId);
   const watchdog = findWatchdog(task, command.watchdogId);
   if (watchdog.status !== 'needs_source') {
-    throw new DomainError('watchdog_has_source', 'This watchdog already has its data source.');
+    throw new DomainError('watchdog_has_source', 'It already has a data source.');
   }
   const source = { server: command.server.trim(), data: command.data.trim() };
   const project = decider.projectOf(task);

@@ -373,7 +373,7 @@ describe('an investigation', () => {
         decision: 'revise',
         response: 'x',
       })
-    ).toThrow('Approve the proposal or keep the task as it is.');
+    ).toThrow('Approve the proposal or keep the task.');
   });
 });
 
@@ -1134,7 +1134,7 @@ describe('the operation after the merge waits for your OK', () => {
         decision: 'revise',
         response: 'x',
       })
-    ).toThrow('Run the operation or finish the task without it.');
+    ).toThrow('Run the operation or finish without it.');
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,

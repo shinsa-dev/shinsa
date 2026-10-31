@@ -86,9 +86,7 @@ describe('snoozing a task', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.cancel', taskId });
-    expect(() => harness.send({ type: 'task.snooze', taskId })).toThrow(
-      'This task is finished, so there is nothing to snooze.'
-    );
+    expect(() => harness.send({ type: 'task.snooze', taskId })).toThrow('This task is finished.');
   });
 
   test('a snoozed task that settles leaves the snoozed list', () => {

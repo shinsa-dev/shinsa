@@ -141,7 +141,7 @@ describe('MEMORY_ACTIONS', () => {
         'Agents follow it from their next turn.',
       ],
       [{ type: 'memory.write', memoryId: 'm1', projectId: null, text: 'Keep plans shorter.' }, 'Rule saved.'],
-      [{ type: 'memory.accept', memoryId: 'p1' }, 'Kept. Agents follow it from their next turn.'],
+      [{ type: 'memory.accept', memoryId: 'p1' }, 'Rule kept.'],
       [{ type: 'memory.remove', memoryId: 'm1' }, 'Agents no longer follow it.'],
       [{ type: 'memory.remove', memoryId: 'p1' }, 'Dismissed.'],
     ]);

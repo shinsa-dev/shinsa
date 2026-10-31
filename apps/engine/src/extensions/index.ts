@@ -418,10 +418,7 @@ export class Extensions {
   removeServer(id: unknown) {
     const server = this.#findGroup(this.#catalog(), id).lead;
     if (!server.editable) {
-      throw new DomainError(
-        'server_not_removable',
-        `${server.name} comes from ${server.origin}. Turn it off instead.`
-      );
+      throw new DomainError('server_not_removable', `It comes from ${server.origin}. Turn it off.`);
     }
     this.#store.removeServer(server.id);
     this.#oauth.signOut(server.id);
@@ -488,7 +485,7 @@ export class Extensions {
       throw new DomainError('optimizer_invalid', 'Say whether it also leaves out skills.');
     }
     if (days !== undefined && !isOptimizerDays(days)) {
-      throw new DomainError('optimizer_invalid', 'Pick a whole number of days from 1 to 365.');
+      throw new DomainError('optimizer_invalid', 'Pick 1 to 365 days.');
     }
     this.#store.updateOptimizer({
       ...(enabled === undefined ? {} : { enabled }),
@@ -530,7 +527,7 @@ export class Extensions {
     const { lead } = group;
     const url = expandDefinition(lead.definition, this.#env).url;
     if (lead.definition.transport === 'stdio' || !url) {
-      throw new DomainError('sign_in_unavailable', `${lead.name} runs on this machine and has no sign-in.`);
+      throw new DomainError('sign_in_unavailable', 'It runs here and has no sign-in.');
     }
     const member = this.#selectSignedIn(group) ?? lead;
     const authorizationUrl = await this.#oauth.start(member.id, url);

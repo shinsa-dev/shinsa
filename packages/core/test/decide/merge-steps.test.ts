@@ -133,7 +133,7 @@ describe('the steps around the merge', () => {
     expect(gate.type).toBe('merge');
     expect(refusal(() => approve(harness, taskId))).toEqual({
       code: 'merge_steps_open',
-      message: 'Do the 1 pre-merge step first, and tick each: “Set STRIPE_WEBHOOK_SECRET”.',
+      message: 'Tick the 1 pre-merge step first.',
     });
     tick(harness, taskId, SECRET);
     expect(listOpenMergeSteps(harness.task(taskId), 'pre_merge')).toEqual([]);
@@ -202,7 +202,7 @@ describe('the steps around the merge', () => {
     const { harness, taskId } = reachMergeGate();
     expect(refusal(() => tick(harness, taskId, MIGRATION))).toEqual({
       code: 'merge_step_early',
-      message: '“Run the migration” is a post-merge step. Tick it once the pull request #42 merged.',
+      message: 'Tick this once pull request #42 merges.',
     });
     tick(harness, taskId, SECRET);
     approve(harness, taskId);
@@ -227,17 +227,17 @@ describe('the steps around the merge', () => {
       )
     ).toEqual({
       code: 'decision_invalid',
-      message: 'Tick each post-merge step once you did it; the gate closes with the last one.',
+      message: 'Tick each post-merge step once done.',
     });
     const left = {
       code: 'task_open',
-      message: '1 post-merge step is left: “Run the migration”. The task is done once each is ticked.',
+      message: '1 post-merge step is left.',
     };
     expect(refusal(() => harness.send({ type: 'task.complete', taskId }, { onBehalf: true }))).toEqual(left);
     expect(refusal(() => harness.send({ type: 'task.complete', taskId }))).toEqual(left);
     expect(refusal(() => tick(harness, taskId, SECRET, false))).toEqual({
       code: 'merge_step_early',
-      message: '“Set STRIPE_WEBHOOK_SECRET” is a pre-merge step, and the merge is done.',
+      message: 'This step was due before the merge.',
     });
     tick(harness, taskId, MIGRATION);
     expect(listOpenGates(harness.state, taskId)).toEqual([]);
@@ -276,7 +276,7 @@ describe('the steps around the merge', () => {
       refusal(() => harness.send({ type: 'merge_step.tick', taskId, key: 'pre_merge:Nothing', done: true }))
     ).toEqual({
       code: 'merge_step_not_found',
-      message: 'This task has no such step. Its steps around the merge may have changed; read them again.',
+      message: 'This step is no longer there.',
     });
     harness.send({ type: 'task.cancel', taskId });
     expect(refusal(() => tick(harness, taskId, SECRET)).code).toBe('task_settled');
@@ -288,7 +288,7 @@ describe('the steps around the merge', () => {
     const taskId = createTask(harness);
     handOver(harness, taskId, [MIGRATION]);
     expect(refusal(() => tick(harness, taskId, MIGRATION)).message).toBe(
-      '“Run the migration” is a post-merge step. Tick it once the pull request merged.'
+      'Tick this once the pull request merges.'
     );
   });
 

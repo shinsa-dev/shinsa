@@ -780,7 +780,7 @@ describe('a watchdog’s schedule', () => {
       'Watchdogs watch for 1 to 720 hours.'
     );
     expect(() => harness.send({ type: 'settings.change', patch: { watchdogMaxGapHours: 25 } })).toThrow(
-      'Checks are at most 1 to 24 hours apart.'
+      'Checks are 1 to 24 hours apart.'
     );
   });
 
@@ -1041,8 +1041,7 @@ describe('stopping watchdogs', () => {
     const { harness, taskId } = mergeWith([LATENCY, EVENTS]);
     expect(refusal(() => harness.send({ type: 'task.complete', taskId }, { onBehalf: true }))).toEqual({
       code: 'task_open',
-      message:
-        "2 watchdogs still watch this task's change. Leave it open until they finish, or tell the human.",
+      message: '2 watchdogs still watch it.',
     });
     harness.send({ type: 'task.complete', taskId });
     expect(harness.task(taskId).watchdogs?.map((dog) => dog.status)).toEqual(['stopped', 'stopped']);

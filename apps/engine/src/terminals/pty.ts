@@ -74,7 +74,7 @@ export function pickFreePort(
     const port = listen(0);
     if (port !== null && !taken.has(port)) return port;
   }
-  throw new DomainError('service_port_unavailable', 'Shinsa could not find a free port for the service.');
+  throw new DomainError('service_port_unavailable', 'No free port for the service.');
 }
 
 export type ForegroundReader = (pid: number) => Promise<string | null>;

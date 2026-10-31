@@ -94,10 +94,7 @@ export function findOpenWatchSuggestion(decider: Decider, suggestionId: string) 
   const suggestion = decider.state.watchSuggestions[suggestionId];
   if (!suggestion) throw new DomainError('suggestion_not_found', `No suggested watch ${suggestionId}.`);
   if (suggestion.status !== 'open') {
-    throw new DomainError(
-      'suggestion_decided',
-      `The suggested watch “${suggestion.name}” was already ${suggestion.status}.`
-    );
+    throw new DomainError('suggestion_decided', `That watch was already ${suggestion.status}.`);
   }
   return suggestion;
 }

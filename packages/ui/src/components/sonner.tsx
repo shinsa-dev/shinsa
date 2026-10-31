@@ -101,6 +101,11 @@ function Toaster(props: ToasterProps) {
       toastOptions={{
         classNames: {
           toast: 'bk-toast corner-superellipse/1.125 cursor-default rounded-popup font-medium',
+          // A toast is one line (docs/design.md → Where Shinsa differs, 42): clip what
+          // still runs long, such as a git error, instead of wrapping it.
+          content: 'min-w-0',
+          title: 'truncate',
+          description: 'truncate',
           // Sonner ships its own button styling; override to our button language.
           actionButton:
             'bk-toast-button corner-superellipse/1.125 !h-6 !cursor-pointer !rounded-control-sm !bg-primary !px-2.5 !font-medium !text-primary-foreground !text-xs',

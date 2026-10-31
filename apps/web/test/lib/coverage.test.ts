@@ -69,11 +69,9 @@ describe('the coverage setting', () => {
     await changeCoverage(web, { mode: 'off' });
     expect(spies.sent).toHaveBeenCalledWith(
       { type: 'repo.update', repoId: 'web', patch: { coverage: { mode: 'off' } } },
-      'Shinsa no longer measures test coverage in web.'
+      'Coverage off in web.'
     );
-    expect(describeCoverageChange(web, { mode: 'auto' })).toBe(
-      'The next checks in web measure test coverage with the tool Shinsa finds.'
-    );
+    expect(describeCoverageChange(web, { mode: 'auto' })).toBe('Coverage on in web.');
     expect(
       describeCoverageChange(web, {
         mode: 'custom',
@@ -81,7 +79,7 @@ describe('the coverage setting', () => {
         report: 'cover.out',
         format: null,
       })
-    ).toBe('The next checks in web measure test coverage with your command.');
+    ).toBe('Custom coverage on in web.');
   });
 
   it('starts the dialog empty, or from the custom command already set', () => {
