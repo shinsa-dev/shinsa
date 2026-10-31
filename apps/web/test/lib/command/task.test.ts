@@ -388,6 +388,7 @@ describe('the This task section', () => {
       'Fork into a new task',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });
@@ -425,6 +426,7 @@ describe('the This task section', () => {
       'Fork into a new task',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });

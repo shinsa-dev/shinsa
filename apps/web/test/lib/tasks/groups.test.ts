@@ -81,6 +81,9 @@ describe('resolveTaskGroup', () => {
     expect(groupFor({ type: 'merge' }, { stage: 'merged' })).toBe('done');
     expect(groupFor({ type: 'merge' }, { stage: 'done' })).toBe('done');
     expect(groupFor({ type: 'merge' }, { stage: 'cancelled' })).toBe('cancelled');
+    expect(
+      groupFor({ type: 'merge' }, { stage: 'cancelled', duplicate: { of: 'o', by: 'you', why: null } })
+    ).toBe('duplicate');
   });
 
   it('separates tasks waiting on another task from tasks agents are working on', () => {
@@ -97,7 +100,7 @@ describe('resolveTaskGroup', () => {
 });
 
 describe('TASK_GROUPS', () => {
-  it('lists the sections in to-do order with Done and Cancelled collapsed', () => {
+  it('lists the sections in to-do order with Done, Duplicates and Cancelled collapsed', () => {
     expect(TASK_GROUPS.map((group) => group.title)).toEqual([
       'Ready to merge',
       'Changes to review',
@@ -110,10 +113,12 @@ describe('TASK_GROUPS', () => {
       'Waiting on another task',
       'Backlog',
       'Done',
+      'Duplicates',
       'Cancelled',
     ]);
     expect(TASK_GROUPS.filter((group) => !group.defaultOpen).map((group) => group.key)).toEqual([
       'done',
+      'duplicate',
       'cancelled',
     ]);
   });
@@ -295,6 +300,18 @@ describe('listTaskGroupSections', () => {
     createTask({ id: 'done', stage: 'done', stageChangedAt: NOW - 1_000 }),
     createTask({ id: 'gone', stage: 'cancelled', stageChangedAt: NOW - 1_000 }),
     createTask({
+      id: 'copy',
+      stage: 'cancelled',
+      stageChangedAt: NOW - 2_000,
+      duplicate: { of: 'old', by: 'shinsa', why: null },
+    }),
+    createTask({
+      id: 'later-copy',
+      stage: 'cancelled',
+      stageChangedAt: NOW - 500,
+      duplicate: { of: 'old', by: 'you', why: null },
+    }),
+    createTask({
       id: 'waiter',
       stage: 'waiting_on_tasks',
       waitsOn: ['old'],
@@ -331,6 +348,7 @@ describe('listTaskGroupSections', () => {
       waiting: ['waiter', 'next:1'],
       backlog: [],
       done: ['done', 'merged'],
+      duplicate: ['later-copy', 'copy'],
       cancelled: ['gone'],
     });
   });

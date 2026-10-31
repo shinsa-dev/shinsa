@@ -23,6 +23,8 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
   restart: ['retry', 'rerun', 'again'],
   complete: ['complete', 'finish', 'close', 'resolve'],
+  duplicate: ['duplicate', 'same', 'repeat', 'already', 'close'],
+  notDuplicate: ['duplicate', 'start', 'reopen', 'restore'],
   cancel: ['stop', 'abandon', 'drop', 'close'],
 };
 

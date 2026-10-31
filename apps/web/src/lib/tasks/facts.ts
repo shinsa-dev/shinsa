@@ -22,6 +22,17 @@ export function listForkSources(state: ShinsaState, task: Task) {
   return source ? [source] : [];
 }
 
+export function selectDuplicateOriginal(state: ShinsaState, task: Task) {
+  return task.duplicate ? (state.tasks[task.duplicate.of] ?? null) : null;
+}
+
+export function describeDuplicateHint(duplicate: NonNullable<Task['duplicate']>) {
+  if (duplicate.by === 'you') return 'You closed this as a duplicate.';
+  return duplicate.why
+    ? `Shinsa closed this as a duplicate: ${duplicate.why}`
+    : 'Shinsa closed this as a duplicate.';
+}
+
 export function listForks(state: ShinsaState, task: Task) {
   return Object.values(state.tasks)
     .filter((candidate) => candidate.forkOf === task.id)

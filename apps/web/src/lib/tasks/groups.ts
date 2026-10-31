@@ -26,6 +26,7 @@ export type TaskGroupKey =
   | 'waiting'
   | 'backlog'
   | 'done'
+  | 'duplicate'
   | 'cancelled';
 
 export interface TaskGroup {
@@ -65,6 +66,13 @@ export const TASK_GROUPS: TaskGroup[] = [
   },
   { key: 'backlog', title: 'Backlog', icon: 'IconArchive', tone: 'neutral', defaultOpen: true },
   { key: 'done', title: 'Done', icon: 'IconCheckCircle2', tone: 'purple', defaultOpen: false },
+  {
+    key: 'duplicate',
+    title: 'Duplicates',
+    icon: 'IconSquareBehindSquare2',
+    tone: 'neutral',
+    defaultOpen: false,
+  },
   { key: 'cancelled', title: 'Cancelled', icon: 'IconCircleX', tone: 'neutral', defaultOpen: false },
 ];
 
@@ -74,6 +82,7 @@ export const TASK_GROUP = Object.fromEntries(TASK_GROUPS.map((group) => [group.k
 >;
 
 export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
+  if (task.duplicate) return 'duplicate';
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
   const gate = selectLeadGate(state, task);
@@ -162,7 +171,7 @@ export function selectTaskGroup(value: string | null) {
 function orderTaskGroup(state: ShinsaState, key: TaskGroupKey, tasks: Task[]): ChainEntry[] {
   if (key === 'waiting') return orderChains(state, tasks);
   const sorted =
-    key === 'done' || key === 'cancelled'
+    key === 'done' || key === 'duplicate' || key === 'cancelled'
       ? tasks.slice().sort((a, b) => b.stageChangedAt - a.stageChangedAt)
       : tasks.slice().sort(compareTasks);
   return sorted.map((task) => ({ task, depth: 0 }));

@@ -388,7 +388,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 
 1. **Classify.** One Sonnet call picks the title, the repository or none (A task without a repository,
    below), size, branch and, given every open task, the tasks this one waits on (`waits_on`, a list, usually
-   empty). Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
+   empty) and whether it is the same work as one of them (`duplicate_of`, Duplicates, below). A duplicate is
+   closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
@@ -984,6 +985,19 @@ them in the composer.
   change in one command (`task.wait_on`, `task.prioritize`); a part you changed is yours, not Auto, from then on; the
   kind does not change after triage except through the Agent while it plans and your OK. Without a
   model (off, failed or unreadable) the task stays a change at its priority, starting now, and the why says so.
+
+**Duplicates.** A task that repeats another is closed as its duplicate: cancelled like any cancel (its runs,
+effects, gates, pull requests, worktree and scratch folder settle the same way), with `task.duplicate` recording
+the task it repeats, who closed it and why; its stage stays `cancelled`, so everything that treats a cancelled task
+as finished still does, and the page shows the status Duplicate, a Duplicates group on All tasks and a "Duplicate of"
+fact linking the original. Triage asks `duplicate_of` whenever a task is open: one choice among the open tasks it
+offers `waits_on`, or `none`, with a strict bar (the same outcome; related, overlapping, follow-up, partial or
+uncertain work is `none`) and a `duplicate_why`. A pick outside the offered tasks, or without a project in another
+repository, is dropped; core drops one naming a settled task, itself or a duplicate. A triage-closed duplicate never
+got a worktree or a run, so Not a duplicate (`task.clear_duplicate`, `shinsa tasks not-duplicate`) clears the mark
+and starts it as triage would have; one you closed (`task.mark_duplicate`: Close as a duplicate in the task's menu,
+`shinsa tasks duplicate <task> --of <task>`, an agent's `tasks_duplicate`) cannot restart, since its cancel may have
+removed a worktree or closed a pull request.
 
 ## Steps and gates
 
@@ -3932,7 +3946,8 @@ it means, and the parser, which refuses an answer with anything outside the opti
 are used for triage's `size` (`small` or `large`), `shape` (the six task shapes, each with what it means), `priority`
 and `waits_on` (the open tasks triage offers, Automatic options, each by its id with its title as its meaning;
 refused whole, it waits on nothing), the last three asked only for what the task left on Auto and each with a short why (Task shapes → Automatic
-options), the briefing's `now.task` and every `next[].task` (a
+options), triage's `duplicate_of` (a choice among the same open tasks and `none`, asked whenever one is open, with
+a `duplicate_why`; Duplicates), the briefing's `now.task` and every `next[].task` (a
 choice among the listed decisions' ids; `parseBriefing` still validates), and each setup question that takes one
 option (`model`, `merge`, `plans`, `accounts`, `prerequisites`: its option values plus `unclear`).
 

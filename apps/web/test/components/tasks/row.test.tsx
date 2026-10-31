@@ -80,6 +80,7 @@ describe('the row context menu', () => {
       'Move to the backlog',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });

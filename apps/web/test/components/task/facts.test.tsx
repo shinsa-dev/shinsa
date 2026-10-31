@@ -401,3 +401,21 @@ describe('the related task facts', () => {
     );
   });
 });
+
+describe('a duplicate', () => {
+  it('links the task it duplicates and says why Shinsa closed it', async () => {
+    const original = createTask({ id: 'o', handle: 'SW-1', title: 'Add dark mode' });
+    const copy = createTask({
+      id: 'c',
+      handle: 'SW-3',
+      stage: 'cancelled',
+      duplicate: { of: 'o', by: 'shinsa', why: 'Both ask for a dark theme.' },
+    });
+    renderFacts(copy, [original]);
+    expect(screen.getByText('Duplicate')).toBeTruthy();
+    const link = screen.getByRole('button', { name: /Duplicate of SW-1 Add dark mode/ });
+    expect(await findTooltipText(link)).toBe('Shinsa closed this as a duplicate: Both ask for a dark theme.');
+    fireEvent.click(link);
+    expect(window.location.pathname).toBe('/tasks/SW-1');
+  });
+});

@@ -1031,6 +1031,18 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **No roadmap.** The word named nothing Shinsa has; the page is All tasks, its sections are task groups, and the
   backlog is the closest thing to a roadmap there is.
 
+### Duplicates (2026-10-31)
+
+- **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
+  cancel, linked to the task it repeats, and shown as Duplicate, in its own Duplicates group on All tasks, with a
+  "Duplicate of" fact that opens the original and says who closed it and why.
+- **Triage catches them before any work.** It is asked whether a new request is the same work as an open task of its
+  project, with a strict bar: the same outcome only. A task it closes never got a worktree or an agent, so Not a
+  duplicate starts it as if triage had not flagged it. You close one yourself with Close as a duplicate in the
+  task's menu or ⌘K, and agents with `tasks_duplicate`.
+- **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
+  links, machines shared with other accounts and duplicates found across a team are their own tasks.
+
 ## 11. Open questions
 
 1. **Plan gate threshold.** Today: `shinsa do --plan-first` and `shinsa import` always stop at the plan gate, and
