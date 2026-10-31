@@ -36,7 +36,16 @@ const links = [
       }
     </nav>
     <div class='ms-auto flex items-center gap-1.5 md:ms-0'>
-      <Button href={site.githubUrl} variant='secondary' icon='IconGithub' external class='max-sm:hidden'>GitHub</Button>
+      <Button
+        href={site.githubUrl}
+        variant='secondary'
+        size='icon'
+        icon='IconGithub'
+        iconSize='md'
+        label='GitHub'
+        external
+      />
+      <Button href={site.cloudUrl} variant='secondary'>Sign in</Button>
       <Button href={site.canaryUrl}>Download (Canary)</Button>
     </div>
   </div>
