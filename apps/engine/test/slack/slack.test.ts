@@ -424,19 +424,28 @@ describe('the status message of a task', () => {
     expect(warnings).toHaveBeenCalledWith('[Slack] The thread status could not be set', expect.anything());
   });
 
-  test('stops asking for the thread’s status in a workspace once Slack has refused it', async () => {
+  test('stops asking for the thread’s status in a workspace once Slack says it cannot show one', async () => {
     const { slack, stub, relay, answers, clock } = setUp({ link: { ...LINK, statusTs: '200.0' } });
-    answers['/__remote/slack/session'] = () => Response.json({ applied: false });
+    answers['/__remote/slack/session'] = () =>
+      Response.json({ error: { code: 'slack_failed', message: 'channel_not_found' } }, { status: 502 });
     await slack.status(effect, context());
     expect(callsTo(relay, 'session')).toHaveLength(1);
+    answers['/__remote/slack/session'] = () => Response.json({ applied: false });
     stub.update((state) => {
       const task = state.tasks.t1;
       if (task) task.stage = 'awaiting_review';
     });
     clock.now += 10_000;
     await slack.status(effect, context());
-    expect(callsTo(relay, 'session')).toHaveLength(1);
-    expect(callsTo(relay, 'post')).toHaveLength(2);
+    expect(callsTo(relay, 'session')).toHaveLength(2);
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.stage = 'building';
+    });
+    clock.now += 10_000;
+    await slack.status(effect, context());
+    expect(callsTo(relay, 'session')).toHaveLength(2);
+    expect(callsTo(relay, 'post')).toHaveLength(3);
   });
 
   test('moves the reaction on the mention as the task moves, keeping one at a time', async () => {

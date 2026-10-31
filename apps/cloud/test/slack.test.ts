@@ -772,7 +772,7 @@ describe('what a machine does through the relay', () => {
     expect(slack.callsTo('chat.postEphemeral')).toHaveLength(1);
   });
 
-  test('sets the thread’s status in Slack, says so when Slack will not take it, and logs only a real refusal', async () => {
+  test('sets the thread’s status in Slack, says so when the workspace cannot show one, and fails and logs any other refusal', async () => {
     const { harness, machine, slack } = await forwardedSetup();
     const session = (body: unknown) =>
       harness.post(SLACK_RELAY_PATHS.session, body, { bearer: machine.machineToken, sameOrigin: false });
@@ -796,7 +796,8 @@ describe('what a machine does through the relay', () => {
     expect(failures).not.toHaveBeenCalled();
     slack.answers['agents.sessions.setStatus'] = () => ({ ok: false, error: 'channel_not_found' });
     const refused = await session({ teamId: 'T1', channelId: 'C1', threadTs: '100.1', status: 'active' });
-    expect(await refused.json()).toEqual({ applied: false });
+    expect(refused.status).toBe(502);
+    expect(await refused.json()).toMatchObject({ error: { code: 'slack_failed' } });
     expect(failures).toHaveBeenCalledWith('[Cloud] Slack did not take a thread status', {
       error: expect.objectContaining({ code: 'channel_not_found' }),
       teamId: 'T1',

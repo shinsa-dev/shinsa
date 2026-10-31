@@ -2748,8 +2748,10 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   `agent_view`, Agents & AI Apps), and that stays off, because switching it on cannot be undone, needs Marketplace
   review and opens an agent pane and direct messages the bot never answers. Without it Slack answers `not_authorized`
   (`feature_disabled` in a workspace without agent features); app.shinsa.dev says `applied: false` without logging
-  either (`STATUS_UNAVAILABLE_CODES`) and logs any other refusal, and the engine then makes no more status calls for
-  that workspace until it restarts (`#sessionRefused`). The posts, reactions and status message carry on as they are.
+  either (`STATUS_UNAVAILABLE_CODES`), and the engine then makes no more status calls for that workspace until it
+  restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
+  answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
+  passing failure never turns the status off. The posts, reactions and status message carry on as they are.
 - **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
