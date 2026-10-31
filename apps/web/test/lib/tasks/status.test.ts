@@ -174,7 +174,7 @@ describe('resolveTaskStatus', () => {
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
       label: 'Waiting to check in again',
-      tone: 'blue',
+      tone: 'neutral',
     });
   });
 
@@ -220,7 +220,7 @@ describe('resolveTaskStatus', () => {
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [step] }), task)).toEqual({
       label: 'Waiting for delegations',
-      tone: 'blue',
+      tone: 'neutral',
     });
     const working = createRun({ id: 'r', taskId: 't', status: 'running' });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [working] }), task).label).toBe(
@@ -245,7 +245,7 @@ describe('resolveTaskStatus', () => {
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
       label: 'Waiting for the usage limit',
-      tone: 'blue',
+      tone: 'neutral',
     });
   });
 

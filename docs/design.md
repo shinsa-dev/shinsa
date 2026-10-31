@@ -974,7 +974,8 @@ Only these, and they win over anything below:
       Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
       needed are orange like Paused, and Waiting to check in again, Waiting for the usage limit and Waiting for
-      delegations are blue like working. The All tasks section icons,
+      delegations are neutral: the agent is neither working nor waiting on you, so the status is grey and its
+      line is still, while its icon stays blue with the working tasks. The All tasks section icons,
       the queue's section icons, the gate tiles, ⌘K's task icons and the status labels all read
       them (`resolveTaskGlyph`, `resolveTaskStatus`).
     - **Resolving conflicts** is the status of a task fixing a conflict with its base (`fixFor` `conflict`, a pull
@@ -1274,7 +1275,7 @@ Only these, and they win over anything below:
       (`lib/overview/verdicts.ts`).
     - **A wait** (`wait-card.tsx`): "The agent is waiting on something outside the repository",
       the agent's notes, "Check-in 2 of 10 · gives up in 3 hours" under them and Check in now (outline);
-      the eyebrow's `TimeAgo` counts down to the next check-in. Status "Waiting to check in again", blue.
+      the eyebrow's `TimeAgo` counts down to the next check-in. Status "Waiting to check in again", neutral.
     - **The live feed** (`live-feed.tsx`, `listFeedLines`): the run's last four messages and tool
       calls as 24px `text-2xs` rows, so the card holds its height once four have arrived and a new
       step swaps in at the bottom. The newest row carries the pulse and names its step in the
@@ -1651,7 +1652,7 @@ Only these, and they win over anything below:
       · 1 done" in the header) right under the now card: one row per delegation, children
       indented under the task that delegated them with `IconArrowCornerDownRight`, the same mark,
       role, title, status and Stop; the title opens the chat at its card, opened along with every
-      card it sits in. A task whose step waits for its delegations is "Waiting for delegations" (blue)
+      card it sits in. A task whose step waits for its delegations is "Waiting for delegations" (neutral)
       wherever its status shows, and ⌘K offers Stop ‹role› ‹title› per live one.
 
 27. **Schedules, secrets and notifications** (harness plan WS7; `lib/schedules.ts`, `lib/secrets.ts`,
