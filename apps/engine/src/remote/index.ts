@@ -1,8 +1,10 @@
 import { hostname } from 'node:os';
-import type { RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
+import type { EnrollmentKind, RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
 import {
   type ConnectClaim,
   DomainError,
+  MAX_PENDING_INVITES,
+  type RemoteAccess,
   type RequestOrigin,
   resolveEnrollUrl,
   resolveRemoteHookUrl,
@@ -11,7 +13,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
-import { ControlClient } from './control.ts';
+import { ControlClient, ControlError } from './control.ts';
 import { Enrollments } from './enrollments.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
 import { RemoteStore } from './store.ts';
@@ -61,6 +63,12 @@ export interface RemoteOptions {
 }
 
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
+
+function resolveDeviceName(name: string) {
+  const deviceName = name.trim().slice(0, DEVICE_NAME_LIMIT);
+  if (!deviceName) throw new DomainError('device_name_missing', 'Name the device you are adding.');
+  return deviceName;
+}
 
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
@@ -112,6 +120,7 @@ export class Remote {
       localUrl: options.localUrl,
       version: options.version,
       onRevoked: () => this.#forget(),
+      onAccess: (access) => this.#recordAccess(access),
       ...(options.timings ? { timings: options.timings } : {}),
       now: this.#now,
     });
@@ -143,6 +152,7 @@ export class Remote {
       machineKey: file.machine?.publicKey ?? null,
       pairing: this.#pairing?.view ?? null,
       devices: file.devices,
+      access: file.access,
     };
   }
 
@@ -227,22 +237,74 @@ export class Remote {
     } catch (error) {
       log.warn('[Remote] app.shinsa.dev did not confirm the removal', { error: describeError(error) });
     }
-    this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, devices: [] }));
+    this.store.update((file) => ({
+      ...file,
+      credentials: null,
+      owner: null,
+      enabled: false,
+      devices: [],
+      access: null,
+    }));
     this.#publish();
   }
 
-  async createEnrollment(name: string): Promise<RemoteEnrollment> {
+  async #createLink(name: string, kind: EnrollmentKind, invite: string | null): Promise<RemoteEnrollment> {
     const credentials = this.#assertPaired();
-    const deviceName = name.trim().slice(0, DEVICE_NAME_LIMIT);
-    if (!deviceName) throw new DomainError('device_name_missing', 'Name the device you are adding.');
     const machine = await this.store.resolveMachineKey();
-    const { id, secret, expiresAt } = this.enrollments.create(deviceName);
-    return {
-      id,
-      url: resolveEnrollUrl(credentials.instanceId, machine.publicKey, secret, this.appOrigin),
-      name: deviceName,
-      expiresAt,
-    };
+    const { id, secret, expiresAt } = this.enrollments.create(name, kind);
+    const fragment = { instanceId: credentials.instanceId, machineKey: machine.publicKey, secret, invite };
+    return { id, kind, url: resolveEnrollUrl(fragment, this.appOrigin), name, expiresAt };
+  }
+
+  createEnrollment(name: string) {
+    return this.#createLink(resolveDeviceName(name), 'device', null);
+  }
+
+  async createInvite(name: string) {
+    const credentials = this.#assertPaired();
+    const deviceName = resolveDeviceName(name);
+    try {
+      const invite = await this.control.requestInvite(credentials.machineToken);
+      return await this.#createLink(deviceName, 'invite', invite.token);
+    } catch (error) {
+      if (error instanceof ControlError && error.status === 429)
+        throw new DomainError(
+          'invites_full',
+          `${MAX_PENDING_INVITES} invites are waiting already. Wait for one to be used or expire, then invite again.`
+        );
+      throw error;
+    }
+  }
+
+  async removeMember(userId: string) {
+    const credentials = this.#assertPaired();
+    const access = this.store.file.access;
+    if (!access?.members.some((member) => member.user.id === userId))
+      throw new DomainError(
+        'member_not_found',
+        'No member with that GitHub account has access to this machine.'
+      );
+    await this.control.requestMemberRemoval(credentials.machineToken, userId);
+    this.#recordAccess({
+      ...access,
+      members: access.members.filter((member) => member.user.id !== userId),
+    });
+  }
+
+  #recordAccess(access: RemoteAccess) {
+    const changed = JSON.stringify(access) !== JSON.stringify(this.store.file.access);
+    if (changed) this.store.update((file) => ({ ...file, access }));
+    const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
+    const removed = new Set(this.store.removeDevicesOutside(allowed));
+    this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
+    if (changed || removed.size > 0) this.#publish();
+  }
+
+  #admits(device: string, userId: string) {
+    const enrolled = this.store.selectDevice(device);
+    if (!enrolled) return false;
+    const owner = this.store.file.access?.owner.id ?? userId;
+    return (enrolled.userId ?? owner) === userId;
   }
 
   subscribe(listener: () => void) {
@@ -268,7 +330,7 @@ export class Remote {
   }
 
   #forget() {
-    this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false }));
+    this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, access: null }));
     this.#closeChannels(isAnyChannel);
     this.#publish();
   }
@@ -279,22 +341,28 @@ export class Remote {
     return verifyConnectToken(credentials.connectKey, token, credentials.instanceId, this.#now());
   }
 
-  openChannel(peer: ChannelPeer, parts: ChannelParts) {
+  openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {
     const channel = new RemoteChannel(peer, {
       ...parts,
       resolveMachineKey: () => this.store.resolveMachineKey(),
-      isEnrolled: (device) => this.store.selectDevice(device) !== null,
+      isEnrolled: (device) => this.#admits(device, userId),
       redeemEnrollment: async (proof, keys) => {
         const enrollment = await this.enrollments.redeem(proof, keys);
         if (enrollment === null) return false;
+        if (enrollment.kind === 'device' && this.store.file.access?.owner.id !== userId) {
+          log.warn('[Remote] Refused a device link opened by another account than the owner');
+          return false;
+        }
         this.store.upsertDevice({
           publicKey: keys.device,
           name: enrollment.name,
           enrolledAt: this.#now(),
           lastSeenAt: null,
           enrollmentId: enrollment.id,
+          userId,
         });
         this.#publish();
+        if (enrollment.kind === 'invite') void this.supervisor.requestHeartbeat();
         return true;
       },
       recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),

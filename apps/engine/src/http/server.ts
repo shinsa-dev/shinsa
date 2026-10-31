@@ -45,6 +45,7 @@ export interface HttpContext extends ApiContext {
 interface RemoteSocketData {
   kind: 'remote';
   channel: RemoteChannel | null;
+  userId: string;
 }
 
 type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData;
@@ -178,7 +179,8 @@ export function startServer(context: HttpContext) {
               send: (data) => socket.send(data),
               close: (code, reason) => socket.close(code, reason),
             },
-            { hub, respond: respondInsideChannel }
+            { hub, respond: respondInsideChannel },
+            socket.data.userId
           );
         },
         close: (socket) => {
@@ -202,7 +204,8 @@ export function startServer(context: HttpContext) {
     if (originRefusal) return respondError('forbidden', originRefusal, 403);
     const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
     if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
-    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null } })) return undefined;
+    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId: claim.userId } }))
+      return undefined;
     return new Response('Upgrade failed', { status: 400 });
   }
 

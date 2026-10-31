@@ -52,12 +52,19 @@ describe('the remote page’s mode', () => {
     stashEnrollFragment(sessionStorage, '#broken');
     expect(selectEnrollFragment(sessionStorage, '')).toBeNull();
     stashEnrollFragment(sessionStorage, FRAGMENT);
-    const expected = { instanceId: 'k3x9', machineKey: 'machine-key', secret: 'secret_1', onMachine: false };
+    const expected = {
+      instanceId: 'k3x9',
+      machineKey: 'machine-key',
+      secret: 'secret_1',
+      invite: null,
+      onMachine: false,
+    };
     expect(selectEnrollFragment(sessionStorage, '')).toEqual(expected);
     expect(selectEnrollFragment(sessionStorage, '#a.b.c')).toEqual({
       instanceId: 'a',
       machineKey: 'b',
       secret: 'c',
+      invite: null,
       onMachine: false,
     });
     stashEnrollFragment(sessionStorage, FRAGMENT, '?on=machine');

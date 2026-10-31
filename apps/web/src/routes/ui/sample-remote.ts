@@ -28,6 +28,7 @@ export function createSampleRemote(now: number) {
         enrolledAt: now - 72 * HOUR_MS,
         lastSeenAt: now - 2 * HOUR_MS,
         enrollmentId: null,
+        userId: null,
       },
       {
         publicKey: 'dev-2',
@@ -35,8 +36,10 @@ export function createSampleRemote(now: number) {
         enrolledAt: now - 5 * HOUR_MS,
         lastSeenAt: null,
         enrollmentId: null,
+        userId: null,
       },
     ],
+    access: { owner: SAMPLE_OWNER, members: [] },
   };
   return [
     {
@@ -86,6 +89,7 @@ export function createSampleRemoteActions(now: number): RemoteAccessActions {
     createEnrollment: (name) =>
       Promise.resolve({
         id: 'sample-link',
+        kind: 'device',
         name,
         url: 'https://app.shinsa.dev/enroll#k3x9.BHq2f0pCrDqGkQ4w7sYhJ1nT8vU3mZkL9xRbE6aW5cO.rT3dX8vQ1pLm0sZ7yK4nW2jH',
         expiresAt: now + 10 * 60_000,

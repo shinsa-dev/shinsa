@@ -21,7 +21,13 @@ function createActions() {
     remove: mock(snapshot),
     forgetDevice: mock((_publicKey: string) => snapshot()),
     createEnrollment: mock((name: string) =>
-      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+      Promise.resolve({
+        id: 'link-1',
+        kind: 'device' as const,
+        url: ENROLL_URL,
+        name,
+        expiresAt: Date.now() + 600_000,
+      })
     ),
   } satisfies RemoteAccessActions;
 }
@@ -45,7 +51,7 @@ async function openLink(name = 'iPhone') {
 }
 
 function createDevice(publicKey: string, enrollmentId: string | null) {
-  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, enrollmentId };
+  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, enrollmentId, userId: null };
 }
 
 describe('Settings → Remote access', () => {
@@ -120,6 +126,7 @@ describe('Settings → Remote access', () => {
             enrolledAt: Date.now() - 1e6,
             lastSeenAt: null,
             enrollmentId: null,
+            userId: null,
           },
         ],
       })
@@ -167,7 +174,13 @@ describe('Settings → Remote access', () => {
   it('replaces the QR code once the link expires, and makes a new one', async () => {
     const actions = renderGroup(createRemoteSnapshot());
     actions.createEnrollment.mockImplementation((name: string) =>
-      Promise.resolve({ id: 'link-1', url: ENROLL_URL, name, expiresAt: Date.now() + 1500 })
+      Promise.resolve({
+        id: 'link-1',
+        kind: 'device' as const,
+        url: ENROLL_URL,
+        name,
+        expiresAt: Date.now() + 1500,
+      })
     );
     await openLink();
     await screen.findByText(
@@ -180,7 +193,13 @@ describe('Settings → Remote access', () => {
       screen.getByText('This link expired before a device used it. Make a new one to add iPhone.')
     ).toBeTruthy();
     actions.createEnrollment.mockImplementation((name: string) =>
-      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+      Promise.resolve({
+        id: 'link-2',
+        kind: 'device' as const,
+        url: ENROLL_URL,
+        name,
+        expiresAt: Date.now() + 600_000,
+      })
     );
     fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
     await screen.findByRole('img', { name: 'QR code for the link' });
@@ -201,7 +220,13 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText(stopped)).toBeTruthy();
     expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
     actions.createEnrollment.mockImplementation((name: string) =>
-      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+      Promise.resolve({
+        id: 'link-2',
+        kind: 'device' as const,
+        url: ENROLL_URL,
+        name,
+        expiresAt: Date.now() + 600_000,
+      })
     );
     fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
     await screen.findByRole('img', { name: 'QR code for the link' });

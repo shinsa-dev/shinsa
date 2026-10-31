@@ -93,7 +93,16 @@ describe('remote access on this machine', () => {
     const { result } = renderHook(() => useRemoteAccess());
     await waitFor(() => expect(result.current.snapshot?.status).toBe('connected'));
     const added = createRemoteSnapshot({
-      devices: [{ publicKey: 'd', name: 'iPhone', enrolledAt: 1, lastSeenAt: null, enrollmentId: 'link-1' }],
+      devices: [
+        {
+          publicKey: 'd',
+          name: 'iPhone',
+          enrolledAt: 1,
+          lastSeenAt: null,
+          enrollmentId: 'link-1',
+          userId: null,
+        },
+      ],
     });
     act(() => connection.replaceRemote(added));
     expect(result.current.snapshot).toBe(added);

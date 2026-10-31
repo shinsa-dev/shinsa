@@ -12,8 +12,15 @@ describe('enrollments', () => {
     expect(enrollments.create('iPhone').id).not.toBe(id);
     const proof = await createEnrollProof(secret, KEYS);
     expect(await enrollments.redeem(proof, { ...KEYS, device: 'other' })).toBeNull();
-    expect(await enrollments.redeem(proof, KEYS)).toEqual({ id, name: 'iPhone' });
+    expect(await enrollments.redeem(proof, KEYS)).toEqual({ id, name: 'iPhone', kind: 'device' });
     expect(await enrollments.redeem(proof, KEYS)).toBeNull();
+  });
+
+  test('remember an invite as an invite', async () => {
+    const enrollments = new Enrollments(() => 0);
+    const { id, secret } = enrollments.create('Bob’s laptop', 'invite');
+    const proof = await createEnrollProof(secret, KEYS);
+    expect(await enrollments.redeem(proof, KEYS)).toEqual({ id, name: 'Bob’s laptop', kind: 'invite' });
   });
 
   test('refuse a secret once it expired or was cleared', async () => {

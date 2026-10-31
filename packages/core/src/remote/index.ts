@@ -23,6 +23,7 @@ export {
 } from './connect-token.ts';
 export {
   type ConnectResponse,
+  type EnrollFragment,
   type HeartbeatRequest,
   type HeartbeatResponse,
   INVITE_TTL_MS,
@@ -51,6 +52,7 @@ export {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   REMOTE_TUNNEL_DOMAIN,
+  type RemoteAccess,
   type RemoteInstance,
   type RemoteMember,
   type RemoteRole,
@@ -119,6 +121,7 @@ export {
   serializePlacementPrompt,
 } from './placement.ts';
 export type {
+  EnrollmentKind,
   PairingView,
   RemoteDevice,
   RemoteEnrollment,

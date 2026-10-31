@@ -39,11 +39,27 @@ describe('remote.json', () => {
         owner: 'mona',
         enabled: true,
         devices: [
-          { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, enrollmentId: 'link-1' },
+          {
+            publicKey: 'd1',
+            name: 'Phone',
+            enrolledAt: 1,
+            lastSeenAt: 2,
+            enrollmentId: 'link-1',
+            userId: '7',
+          },
           { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, enrollmentId: 4 },
           { publicKey: 'd3', name: 'Broken' },
           'nope',
         ],
+        access: {
+          owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: 3 },
+          members: [
+            { user: { id: '7', login: 'kai', avatarUrl: 'https://a/7' }, addedAt: 5 },
+            { user: { id: '8' }, addedAt: 6 },
+            { user: { id: '9', login: 'lee' } },
+            'nope',
+          ],
+        },
       })
     );
     expect(readRemoteFile(path)).toEqual({
@@ -53,9 +69,20 @@ describe('remote.json', () => {
       owner: 'mona',
       enabled: true,
       devices: [
-        { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, enrollmentId: 'link-1' },
-        { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, lastSeenAt: null, enrollmentId: null },
+        { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, enrollmentId: 'link-1', userId: '7' },
+        {
+          publicKey: 'd2',
+          name: 'Laptop',
+          enrolledAt: 3,
+          lastSeenAt: null,
+          enrollmentId: null,
+          userId: null,
+        },
       ],
+      access: {
+        owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
+        members: [{ user: { id: '7', login: 'kai', name: null, avatarUrl: 'https://a/7' }, addedAt: 5 }],
+      },
     });
   });
 
@@ -75,8 +102,14 @@ describe('remote.json', () => {
     expect(file.enabled).toBe(false);
     expect(file.machine).toBeNull();
     expect(warn).toHaveBeenCalled();
-    writeFileSync(path, JSON.stringify({ credentials: 'x', devices: 'x' }));
+    writeFileSync(path, JSON.stringify({ credentials: 'x', devices: 'x', access: { owner: 'mona' } }));
     expect(readRemoteFile(path).credentials).toBeNull();
+    expect(readRemoteFile(path).access).toBeNull();
+    writeFileSync(path, JSON.stringify({ access: { owner: { id: '1', login: 'mona' }, members: 'x' } }));
+    expect(readRemoteFile(path).access).toEqual({
+      owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+      members: [],
+    });
     warn.mockRestore();
   });
 });
@@ -90,6 +123,7 @@ describe('the remote store', () => {
       enrolledAt: 1,
       lastSeenAt: null,
       enrollmentId: 'a',
+      userId: null,
     });
     store.upsertDevice({
       publicKey: 'd1',
@@ -97,17 +131,29 @@ describe('the remote store', () => {
       enrolledAt: 2,
       lastSeenAt: null,
       enrollmentId: 'b',
+      userId: null,
     });
     store.recordDeviceSeen('d1', 5);
     store.recordDeviceSeen('unknown', 5);
     expect(statSync(store.path).mode & 0o777).toBe(0o600);
     expect(store.file.devices).toEqual([
-      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, enrollmentId: 'b' },
+      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, enrollmentId: 'b', userId: null },
     ]);
     expect(store.selectDevice('d1')?.name).toBe('Phone again');
     expect(store.removeDevice('d1')).toBe(true);
     expect(store.removeDevice('d1')).toBe(false);
     expect(new RemoteStore(store.path).file.devices).toEqual([]);
+  });
+
+  test('forgets only the devices of accounts that lost access, keeping devices from before accounts were recorded', () => {
+    const store = new RemoteStore(createPath());
+    const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
+    store.upsertDevice({ ...device, publicKey: 'mine', userId: '1' });
+    store.upsertDevice({ ...device, publicKey: 'kai', userId: '7' });
+    store.upsertDevice({ ...device, publicKey: 'old', userId: null });
+    expect(store.removeDevicesOutside(new Set(['1', '7']))).toEqual([]);
+    expect(store.removeDevicesOutside(new Set(['1']))).toEqual(['kai']);
+    expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine', 'old']);
   });
 
   test('creates the machine key once and reads it back after a restart', async () => {

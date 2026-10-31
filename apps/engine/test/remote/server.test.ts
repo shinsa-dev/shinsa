@@ -10,6 +10,8 @@ import {
   parseEnrollFragment,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
+  type RemoteAccess,
+  type RemoteUser,
   type ServerMessage,
   serializeBase64Url,
 } from '@shinsa/core';
@@ -31,7 +33,7 @@ import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
-import { createKeyPair, startHandshake, type TestSession } from './client.ts';
+import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
 import { startFakeControlPlane } from './control-plane.ts';
 
 const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(9));
@@ -43,6 +45,12 @@ const CREDENTIALS = {
   tunnelHost: 't-k3x9.shinsa.dev',
   connectKey: CONNECT_KEY,
 };
+
+const OWNER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+
+const KAI: RemoteUser = { id: '7', login: 'kai', name: null, avatarUrl: null };
+
+const ACCESS: RemoteAccess = { owner: OWNER, members: [] };
 
 const running: (() => Promise<void>)[] = [];
 
@@ -66,6 +74,7 @@ async function start(
   options: {
     enabled?: boolean;
     paired?: boolean;
+    access?: RemoteAccess | null;
     config?: Partial<ServerConfig>;
     openUrl?: (url: string) => Promise<void>;
   } = {}
@@ -77,7 +86,12 @@ async function start(
   if (options.paired ?? true)
     writeFileSync(
       path,
-      JSON.stringify({ credentials: CREDENTIALS, enabled: options.enabled ?? true, owner: 'mona' })
+      JSON.stringify({
+        credentials: CREDENTIALS,
+        enabled: options.enabled ?? true,
+        owner: 'mona',
+        access: options.access === undefined ? ACCESS : options.access,
+      })
     );
   const opened: string[] = [];
   const connectors: { stopped: boolean }[] = [];
@@ -132,8 +146,8 @@ async function start(
   return { remote, base, tunnel, local, port: http.server.port, plane, connectors, opened };
 }
 
-async function createToken(expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS) {
-  return createConnectToken(CONNECT_KEY, { instanceId: 'k3x9', userId: '1', expiresAt });
+async function createToken(expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS, userId = OWNER.id) {
+  return createConnectToken(CONNECT_KEY, { instanceId: 'k3x9', userId, expiresAt });
 }
 
 interface OpenChannel {
@@ -148,9 +162,10 @@ async function openChannel(
   origin: string,
   port: number | undefined,
   enrollSecret: string,
-  machineKey: string
+  machineKey: string,
+  as: { userId?: string; device?: CryptoKeyPair } = {}
 ): Promise<OpenChannel> {
-  const token = await createToken();
+  const token = await createToken(undefined, as.userId);
   const socket = new WebSocket(`ws://127.0.0.1:${port}/remote?token=${encodeURIComponent(token)}`, {
     headers: { origin, 'cf-connecting-ip': '203.0.113.9' },
   } as unknown as string[]);
@@ -169,7 +184,11 @@ async function openChannel(
     while (inbox.length === 0) await new Promise<void>((resolve) => waiters.push(resolve));
     return inbox.shift() as string | Bytes;
   };
-  const handshake = await startHandshake({ machineKey, device: await createKeyPair(), enrollSecret });
+  const handshake = await startHandshake({
+    machineKey,
+    device: as.device ?? (await createKeyPair()),
+    enrollSecret,
+  });
   socket.send(handshake.hello);
   const session = await handshake.finish((await take()) as string);
   const next = async () => {
@@ -567,6 +586,157 @@ describe('managing remote access on the machine', () => {
     }
     expect(Object.fromEntries(statuses)).toEqual({ pair: 403, read: 200, cmd: 400 });
     expect(remote.snapshot().enabled).toBe(true);
+  });
+});
+
+describe('members of this machine', () => {
+  async function readEnrollment(response: Response) {
+    return (await response.json()) as { id: string; kind: string; url: string; name: string };
+  }
+
+  function answerAccess(access: RemoteAccess) {
+    return () => Response.json({ ok: true, ...access });
+  }
+
+  test('an invite link adds the device of whoever accepted it, for their own account, and syncs members at once', async () => {
+    const { remote, local, port, plane } = await start();
+    plane.answers.set(REMOTE_PATHS.machineInvites, () =>
+      Response.json({ token: 'invite-token', expiresAt: Date.now() + 60_000 })
+    );
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const invite = await readEnrollment(await local('/api/remote/invites', { name: ' Bob’s laptop ' }));
+    expect(invite).toMatchObject({ kind: 'invite', name: 'Bob’s laptop' });
+    const fragment = parseEnrollFragment(new URL(invite.url).hash);
+    expect(fragment?.invite).toBe('invite-token');
+    expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineInvites)?.token).toBe('machine');
+    plane.answers.set(
+      REMOTE_PATHS.heartbeat,
+      answerAccess({ owner: OWNER, members: [{ user: KAI, addedAt: 1 }] })
+    );
+    const machine = await remote.store.resolveMachineKey();
+    const channel = await openChannel(remote.appOrigin, port, fragment?.secret ?? '', machine.publicKey, {
+      userId: KAI.id,
+    });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    expect(remote.snapshot().devices).toEqual([
+      expect.objectContaining({ name: 'Bob’s laptop', userId: KAI.id, enrollmentId: invite.id }),
+    ]);
+    await until('members synced', () => remote.snapshot().access?.members.length === 1);
+    expect(await readError(await local('/api/remote/invites', {}))).toBe('name_invalid');
+  });
+
+  test('a device link works only for the owner’s account, and not before the owner is known', async () => {
+    const { remote, local, port } = await start();
+    const machine = await remote.store.resolveMachineKey();
+    const link = await readEnrollment(await local('/api/remote/devices/enroll', { name: 'iPhone' }));
+    expect(link.kind).toBe('device');
+    const secret = parseEnrollFragment(new URL(link.url).hash)?.secret ?? '';
+    await expect(
+      openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id })
+    ).rejects.toThrow('not enrolled');
+    await expect(openChannel(remote.appOrigin, port, secret, machine.publicKey)).rejects.toThrow(
+      'not enrolled'
+    );
+    expect(remote.snapshot().devices).toEqual([]);
+    const unknown = await start({ access: null });
+    const unknownKey = await unknown.remote.store.resolveMachineKey();
+    await expect(
+      openChannel(
+        unknown.remote.appOrigin,
+        unknown.port,
+        unknown.remote.enrollments.create('iPhone').secret,
+        unknownKey.publicKey
+      )
+    ).rejects.toThrow('not enrolled');
+  });
+
+  test('a device opens only for the account that added it, and older devices only for the owner', async () => {
+    const { remote, port } = await start();
+    const machine = await remote.store.resolveMachineKey();
+    const kaiDevice = await createKeyPair();
+    const legacyDevice = await createKeyPair();
+    const base = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
+    remote.store.upsertDevice({ ...base, publicKey: await serializeDeviceKey(kaiDevice), userId: KAI.id });
+    remote.store.upsertDevice({ ...base, publicKey: await serializeDeviceKey(legacyDevice), userId: null });
+    await expect(
+      openChannel(remote.appOrigin, port, '', machine.publicKey, { device: kaiDevice })
+    ).rejects.toThrow('not enrolled');
+    const kai = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: kaiDevice,
+      userId: KAI.id,
+    });
+    expect(await kai.next()).toEqual({ t: 'ready' });
+    await expect(
+      openChannel(remote.appOrigin, port, '', machine.publicKey, { device: legacyDevice, userId: KAI.id })
+    ).rejects.toThrow('not enrolled');
+    const legacy = await openChannel(remote.appOrigin, port, '', machine.publicKey, { device: legacyDevice });
+    expect(await legacy.next()).toEqual({ t: 'ready' });
+  });
+
+  test('a heartbeat that no longer lists a member forgets their devices and closes their sessions', async () => {
+    const { remote, port, plane } = await start({
+      access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
+    });
+    const machine = await remote.store.resolveMachineKey();
+    const kaiDevice = await createKeyPair();
+    const base = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
+    remote.store.upsertDevice({ ...base, publicKey: await serializeDeviceKey(kaiDevice), userId: KAI.id });
+    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+      device: kaiDevice,
+      userId: KAI.id,
+    });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    const pushes: number[] = [];
+    remote.subscribe(() => pushes.push(1));
+    plane.answers.set(
+      REMOTE_PATHS.heartbeat,
+      answerAccess({ owner: OWNER, members: [{ user: KAI, addedAt: 1 }] })
+    );
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const settled = pushes.length;
+    await remote.supervisor.requestHeartbeat();
+    expect(pushes.length).toBe(settled);
+    plane.answers.set(REMOTE_PATHS.heartbeat, answerAccess(ACCESS));
+    await remote.supervisor.requestHeartbeat();
+    expect(remote.snapshot().access).toEqual(ACCESS);
+    expect(remote.snapshot().devices).toEqual([]);
+    expect(await channel.closed).toBe(1008);
+  });
+
+  test('removing a member tells app.shinsa.dev, then forgets their devices', async () => {
+    const { remote, local, plane } = await start({
+      access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
+    });
+    const base = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, enrollmentId: null };
+    remote.store.upsertDevice({ ...base, publicKey: 'kai-phone', userId: KAI.id });
+    remote.store.upsertDevice({ ...base, publicKey: 'my-phone', userId: OWNER.id });
+    expect(await readError(await local('/api/remote/members/remove', {}))).toBe('userId_invalid');
+    expect(await readError(await local('/api/remote/members/remove', { userId: '99' }))).toBe(
+      'member_not_found'
+    );
+    const removed = await readSnapshot(await local('/api/remote/members/remove', { userId: KAI.id }));
+    expect(removed.access?.members).toEqual([]);
+    expect(removed.devices.map((device) => device.publicKey)).toEqual(['my-phone']);
+    expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineMemberRemove)).toMatchObject({
+      token: 'machine',
+      body: { userId: KAI.id },
+    });
+  });
+
+  test('says when too many invites wait, and passes on any other failure', async () => {
+    const { local, plane } = await start();
+    plane.answers.set(REMOTE_PATHS.machineInvites, () => new Response('', { status: 429 }));
+    expect(await readError(await local('/api/remote/invites', { name: 'Bob' }))).toBe('invites_full');
+    plane.answers.set(REMOTE_PATHS.machineInvites, () => new Response('', { status: 500 }));
+    expect(await readError(await local('/api/remote/invites', { name: 'Bob' }))).toBe('request_failed');
+  });
+
+  test('forgets who has access when the machine is removed', async () => {
+    const { remote, local } = await start();
+    expect(remote.snapshot().access).toEqual(ACCESS);
+    expect((await readSnapshot(await local('/api/remote/remove', {}))).access).toBeNull();
   });
 });
 

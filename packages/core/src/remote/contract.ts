@@ -88,10 +88,13 @@ export interface RemoteMember {
   addedAt: number;
 }
 
-export interface HeartbeatResponse {
-  ok: true;
+export interface RemoteAccess {
   owner: RemoteUser;
   members: RemoteMember[];
+}
+
+export interface HeartbeatResponse extends RemoteAccess {
+  ok: true;
 }
 
 export type RemoteRole = 'owner' | 'member';
@@ -203,22 +206,26 @@ export function parseRemoteHookPath(pathname: string) {
   return { instanceId, enginePath: `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}` };
 }
 
-export function serializeEnrollFragment(instanceId: string, machineKey: string, secret: string) {
-  return [instanceId, machineKey, secret].join('.');
+export interface EnrollFragment {
+  instanceId: string;
+  machineKey: string;
+  secret: string;
+  invite: string | null;
 }
 
-export function parseEnrollFragment(fragment: string) {
+export function serializeEnrollFragment(fragment: EnrollFragment) {
+  const parts = [fragment.instanceId, fragment.machineKey, fragment.secret];
+  return [...parts, ...(fragment.invite ? [fragment.invite] : [])].join('.');
+}
+
+export function parseEnrollFragment(fragment: string): EnrollFragment | null {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
-  const [instanceId, machineKey, secret] = parts as [string, string, string];
-  return { instanceId, machineKey, secret };
+  if (parts.length < 3 || parts.length > 4 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part)))
+    return null;
+  const [instanceId, machineKey, secret, invite] = parts as [string, string, string, string?];
+  return { instanceId, machineKey, secret, invite: invite ?? null };
 }
 
-export function resolveEnrollUrl(
-  instanceId: string,
-  machineKey: string,
-  secret: string,
-  origin: string = REMOTE_APP_ORIGIN
-) {
-  return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(instanceId, machineKey, secret)}`;
+export function resolveEnrollUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {
+  return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(fragment)}`;
 }

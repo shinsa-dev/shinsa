@@ -56,13 +56,14 @@ describe('remote access words', () => {
   });
 
   it('finds the device a link added by the link, never by its name', () => {
-    const enrollment = { id: 'link-2', url: 'u', name: 'iPhone', expiresAt: NOW };
+    const enrollment = { id: 'link-2', kind: 'device' as const, url: 'u', name: 'iPhone', expiresAt: NOW };
     const earlier = {
       publicKey: 'a',
       name: 'iPhone',
       enrolledAt: NOW,
       lastSeenAt: null,
       enrollmentId: 'link-1',
+      userId: null,
     };
     const added = { ...earlier, publicKey: 'b', enrollmentId: 'link-2' };
     expect(selectEnrolledDevice([earlier], enrollment)).toBeNull();
@@ -77,6 +78,7 @@ describe('remote access words', () => {
       enrolledAt: NOW - 3_600_000,
       lastSeenAt: null,
       enrollmentId: null,
+      userId: null,
     };
     expect(describeDeviceSeen(device, NOW)).toStartWith('Added ');
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
@@ -84,7 +86,7 @@ describe('remote access words', () => {
     expect(describeEnrollmentExpiry(NOW, NOW)).toBe('This link expired. Make a new one.');
     expect(isEnrollmentExpired(NOW + 1, NOW)).toBe(false);
     expect(isEnrollmentExpired(NOW, NOW)).toBe(true);
-    const enrollment = { id: 'link-1', url: 'u', name: 'iPhone', expiresAt: NOW };
+    const enrollment = { id: 'link-1', kind: 'device' as const, url: 'u', name: 'iPhone', expiresAt: NOW };
     expect(describeEnrollmentStep(null, 'live')).toStartWith('Name the device you are adding');
     expect(describeEnrollmentStep(enrollment, 'live')).toStartWith('Scan this on the phone');
     expect(describeEnrollmentStep(enrollment, 'expired')).toBe(
@@ -96,7 +98,13 @@ describe('remote access words', () => {
   });
 
   it('calls a link stopped once remote access dropped it, even after it expired', () => {
-    const enrollment = { id: 'link-1', url: 'u', name: 'iPhone', expiresAt: NOW + 1 };
+    const enrollment = {
+      id: 'link-1',
+      kind: 'device' as const,
+      url: 'u',
+      name: 'iPhone',
+      expiresAt: NOW + 1,
+    };
     expect(resolveEnrollmentState(null, null, NOW)).toBe('live');
     expect(resolveEnrollmentState(enrollment, null, NOW)).toBe('live');
     expect(resolveEnrollmentState(enrollment, 'link-0', NOW + 1)).toBe('expired');

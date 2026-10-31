@@ -96,7 +96,14 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
   };
   writeFileSync(
     join(dataDir, REMOTE_FILE),
-    JSON.stringify({ version: 1, credentials, enabled: true, owner: USER.login, devices: [] })
+    JSON.stringify({
+      version: 1,
+      credentials,
+      enabled: true,
+      owner: USER.login,
+      devices: [],
+      access: { owner: USER, members: [] },
+    })
   );
 }
 

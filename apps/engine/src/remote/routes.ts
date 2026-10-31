@@ -39,6 +39,12 @@ export function createRemoteRoutes(remote: Remote): ApiRoute[] {
     post('/devices/enroll', (fields) =>
       remote.createEnrollment(readText(fields, 'name', 'Name the device you are adding.'))
     ),
+    post('/invites', (fields) =>
+      remote.createInvite(readText(fields, 'name', 'Say who the invite is for, such as Bob’s laptop.'))
+    ),
+    post('/members/remove', async (fields) => {
+      await remote.removeMember(readText(fields, 'userId', 'Name the member to remove by their GitHub id.'));
+    }),
     post('/devices/remove', (fields) => {
       const publicKey = readText(fields, 'publicKey', 'Name the device to remove by its key.');
       if (!remote.removeDevice(publicKey))

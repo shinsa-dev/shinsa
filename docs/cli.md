@@ -2075,6 +2075,34 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<name>` | text, required | What to call the device, such as iPhone. |
 
+#### shinsa remote invite
+
+Make a one-time link that gives someone else full remote access with their own GitHub account and adds their device.
+
+```
+shinsa remote invite <name> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<name>` | text, required | Who or which device the invite is for, such as Bob’s laptop. |
+
+#### shinsa remote remove-member
+
+Take away someone’s remote access: forget the devices they added and close their open sessions.
+
+```
+shinsa remote remove-member <login> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<login>` | text, required | Their GitHub login, from `shinsa remote status`. |
+
 #### shinsa remote forget-device
 
 Remove an enrolled device and close its open sessions.

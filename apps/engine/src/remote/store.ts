@@ -4,6 +4,9 @@ import {
   type MachineCredentials,
   parsePrivateKey,
   REMOTE_KEY_ALGORITHM,
+  type RemoteAccess,
+  type RemoteMember,
+  type RemoteUser,
   serializePrivateKey,
   serializePublicKey,
 } from '@shinsa/core';
@@ -26,6 +29,7 @@ export interface RemoteFile {
   owner: string | null;
   enabled: boolean;
   devices: RemoteDevice[];
+  access: RemoteAccess | null;
 }
 
 type Fields = Record<string, unknown>;
@@ -65,6 +69,7 @@ function readDevices(value: unknown): RemoteDevice[] {
     if (typeof entry.enrolledAt !== 'number') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
     const enrollmentId = typeof entry.enrollmentId === 'string' ? entry.enrollmentId : null;
+    const userId = typeof entry.userId === 'string' ? entry.userId : null;
     return [
       {
         publicKey: entry.publicKey,
@@ -72,13 +77,51 @@ function readDevices(value: unknown): RemoteDevice[] {
         enrolledAt: entry.enrolledAt,
         lastSeenAt,
         enrollmentId,
+        userId,
       },
     ];
   });
 }
 
+function readOptionalText(value: unknown) {
+  return typeof value === 'string' ? value : null;
+}
+
+function readUser(value: unknown): RemoteUser | null {
+  if (!isFields(value) || typeof value.id !== 'string' || typeof value.login !== 'string') return null;
+  return {
+    id: value.id,
+    login: value.login,
+    name: readOptionalText(value.name),
+    avatarUrl: readOptionalText(value.avatarUrl),
+  };
+}
+
+function readMembers(value: unknown): RemoteMember[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const user = isFields(entry) ? readUser(entry.user) : null;
+    if (!(user && isFields(entry) && typeof entry.addedAt === 'number')) return [];
+    return [{ user, addedAt: entry.addedAt }];
+  });
+}
+
+export function readAccess(value: unknown): RemoteAccess | null {
+  const owner = isFields(value) ? readUser(value.owner) : null;
+  if (!(owner && isFields(value))) return null;
+  return { owner, members: readMembers(value.members) };
+}
+
 function createRemoteFile(): RemoteFile {
-  return { version: 1, machine: null, credentials: null, owner: null, enabled: false, devices: [] };
+  return {
+    version: 1,
+    machine: null,
+    credentials: null,
+    owner: null,
+    enabled: false,
+    devices: [],
+    access: null,
+  };
 }
 
 export function readRemoteFile(path: string): RemoteFile {
@@ -99,6 +142,7 @@ export function readRemoteFile(path: string): RemoteFile {
     owner: typeof fields.owner === 'string' ? fields.owner : null,
     enabled: credentials !== null && fields.enabled === true,
     devices: readDevices(fields.devices),
+    access: readAccess(fields.access),
   };
 }
 
@@ -150,6 +194,18 @@ export class RemoteStore {
       ...file,
       devices: [...file.devices.filter((entry) => entry.publicKey !== device.publicKey), device],
     }));
+  }
+
+  removeDevicesOutside(userIds: ReadonlySet<string>) {
+    const removed = this.#file.devices.filter(
+      (device) => device.userId !== null && !userIds.has(device.userId)
+    );
+    if (removed.length === 0) return [];
+    this.update((file) => ({
+      ...file,
+      devices: file.devices.filter((device) => !removed.includes(device)),
+    }));
+    return removed.map((device) => device.publicKey);
   }
 
   removeDevice(publicKey: string) {

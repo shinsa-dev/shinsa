@@ -1,5 +1,7 @@
 import {
   type HeartbeatRequest,
+  type HeartbeatResponse,
+  type InviteCreateResponse,
   type PairPollRequest,
   type PairPollResponse,
   type PairStartRequest,
@@ -68,8 +70,16 @@ export class ControlClient {
     return this.#post<PairPollResponse>(REMOTE_PATHS.pairPoll, request, null);
   }
 
-  async recordHeartbeat(machineToken: string, request: HeartbeatRequest) {
-    await this.#post(REMOTE_PATHS.heartbeat, request, machineToken);
+  recordHeartbeat(machineToken: string, request: HeartbeatRequest) {
+    return this.#post<HeartbeatResponse>(REMOTE_PATHS.heartbeat, request, machineToken);
+  }
+
+  requestInvite(machineToken: string) {
+    return this.#post<InviteCreateResponse>(REMOTE_PATHS.machineInvites, {}, machineToken);
+  }
+
+  async requestMemberRemoval(machineToken: string, userId: string) {
+    await this.#post(REMOTE_PATHS.machineMemberRemove, { userId }, machineToken);
   }
 
   async recordOffline(machineToken: string) {
