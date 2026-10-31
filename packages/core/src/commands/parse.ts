@@ -324,6 +324,7 @@ function readPlacementPatch(fields: Record<string, unknown>): Partial<Settings> 
   if ('taskCapacity' in fields) patch.taskCapacity = readNullableInteger(fields, 'taskCapacity');
   if ('placementPolicies' in fields)
     patch.placementPolicies = readList(fields, 'placementPolicies', readText);
+  if ('slackProjectId' in fields) patch.slackProjectId = readNullableId(fields, 'slackProjectId');
   return patch;
 }
 

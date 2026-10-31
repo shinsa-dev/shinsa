@@ -184,6 +184,11 @@ src/
 │   │                forks of any task, a watchdog's of its own), report_read (to endIntakeRead or endWatchCheck),
 │   │                missRead (a read that gives up), isReadBusy, listSourceFiledTasks
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
+│   ├── slack.ts     A Slack mention: to the open task of its thread (forwarded, said in the thread), else the
+│   │                slack.evaluate effect; the evaluation's answer (a task in the default project for Slack, linked
+│   │                to the thread with `slack.thread_linked`, or a declined post); the status message's ts; and
+│   │                syncSlackThreads (after every command): a linked task's question, secret, plan, review and
+│   │                proposal gates and its result as `slack.post`, and one `slack.status` per changed task
 │   ├── on-behalf.ts What a user command sent on your behalf records (`on_behalf.acted`, its sentence, task and
 │   │                acting task, kept as `OnBehalfAction`); a system command records nothing here
 │   └── liveness.ts  isTaskLive and the stuck-task failure gate
@@ -259,6 +264,13 @@ src/
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
 │                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
+├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
+│                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
+│                    thread as text with its budget, the request of a task from Slack with the thread fenced as
+│                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
+│                    (evaluation.ts: SLACK_EVALUATION_SYSTEM, serializeSlackEvaluationPrompt, parseSlackEvaluation)
+│                    and what is posted back (posts.ts: SlackPost, SLACK_POSTED_GATES); the thread key is
+│                    domain/slack.ts (resolveSlackThreadKey, Task.slack)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,

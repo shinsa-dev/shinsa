@@ -56,6 +56,7 @@ import type {
 import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+import type { SlackSystemCommand } from './slack.ts';
 import type { WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
@@ -354,6 +355,7 @@ type SystemCommand =
   | { type: 'account.removed'; accountId: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand
+  | SlackSystemCommand
   | WatchdogSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };

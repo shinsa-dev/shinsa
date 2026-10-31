@@ -238,6 +238,10 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
+      case 'slack.evaluate':
+      case 'slack.status':
+      case 'slack.post':
+        return Promise.reject(new Error('Slack is not connected on this machine.'));
     }
   }
 
@@ -296,7 +300,7 @@ export class EffectRunner {
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
     const title = FAILURE_TITLE[effect.kind];
-    if (!title || !('taskId' in effect)) return;
+    if (!title || !('taskId' in effect) || effect.taskId === null) return;
     await this.#engine.dispatch(
       { type: 'effect.fail', taskId: effect.taskId, title, detail: error },
       { id: `${key}:effect.fail` }

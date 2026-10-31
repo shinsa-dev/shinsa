@@ -94,6 +94,7 @@ import {
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
+import { receiveSlackMention, recordSlackEvaluation, recordSlackStatus, syncSlackThreads } from './slack.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
   cancelTask,
@@ -359,6 +360,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return reportRead(decider, command);
     case 'agent.file_report':
       return fileReport(decider, command);
+    case 'slack.mention':
+      return receiveSlackMention(decider, command);
+    case 'slack.record_evaluation':
+      return recordSlackEvaluation(decider, command);
+    case 'slack.record_status':
+      return recordSlackStatus(decider, command);
   }
 }
 
@@ -376,6 +383,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   syncMergeSteps(decider);
   enforceLiveness(decider);
   dispatchRuns(decider);
+  syncSlackThreads(decider);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
   const changes = sealDraft(decider.state);

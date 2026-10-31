@@ -55,6 +55,7 @@ import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged
 import { applyRunEvent } from './runs.ts';
 import { applyScheduledTask, applyScheduleEvent, describeSchedule } from './schedules.ts';
 import { applyShapeEvent, describeShape } from './shapes.ts';
+import { applySlackEvent } from './slack.ts';
 import { applySuggested, applySuggestionSettled } from './suggestions.ts';
 import { applyWaitEvent } from './waits.ts';
 import { applyWatchSuggestionEvent } from './watch-suggestions.ts';
@@ -957,6 +958,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'watch_source.written':
     case 'watch_source.removed':
       applyWatchdogEvent(state, event);
+      break;
+    case 'slack.thread_linked':
+    case 'slack.status_posted':
+      applySlackEvent(state, event);
       break;
     case 'memory.written':
     case 'memory.proposed':
