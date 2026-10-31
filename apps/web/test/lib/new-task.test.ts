@@ -276,16 +276,16 @@ describe('the machine a new task runs on', () => {
     expect(describePlacementDone('Started.', undefined, '')).toBe('Started.');
   });
 
-  it('lists Automatic with the machine it chose, or as the policies’ choice, then each machine with its load', () => {
+  it('lists Automatic, with the policies’ hint when they decide, then each machine with its load', () => {
     expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: false })).toEqual([
-      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle' },
+      { value: 'auto', label: 'Automatic', icon: 'IconArrowSplitRight' },
       { value: 'studio', label: 'This machine', icon: 'IconMacbookRemote', hint: '3 of 4 open tasks' },
       { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
     ]);
     expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: true })[0]).toEqual({
       value: 'auto',
       label: 'Automatic',
-      icon: 'IconSparkle',
+      icon: 'IconArrowSplitRight',
       hint: 'Your routing policies decide when you start it',
     });
     expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
@@ -296,7 +296,7 @@ describe('the machine a new task runs on', () => {
     expect(hasMachineChoice([box], [])).toBe(false);
     expect(hasMachineChoice([box], [laptop])).toBe(true);
     expect(listNewTaskMachines([box], null, [laptop, { id: 'box', name: 'Build box' }])).toEqual([
-      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle' },
+      { value: 'auto', label: 'Automatic', icon: 'IconArrowSplitRight' },
       { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
       {
         value: 'laptop',

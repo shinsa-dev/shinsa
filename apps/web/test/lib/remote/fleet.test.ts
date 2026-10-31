@@ -181,6 +181,16 @@ describe('merging the state of several machines', () => {
     });
     expect(fleet.selectMachine('t')).toBeNull();
   });
+
+  it('shows a task’s machine once the account has another machine, even one this device cannot reach', () => {
+    const studio = createMember('m1', 'Studio');
+    const fleet = new Fleet([studio.member], [{ id: 'm2', name: 'Laptop' }]);
+    studio.connection.push({
+      state: createWire(1, { tasks: { t: createTask({ id: 't' }) } }),
+      status: 'open',
+    });
+    expect(fleet.selectMachine('t')).toEqual({ id: 'm1', name: 'Studio', current: false });
+  });
 });
 
 describe('sending to the machine that owns it', () => {

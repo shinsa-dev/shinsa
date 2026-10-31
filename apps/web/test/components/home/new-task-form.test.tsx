@@ -119,7 +119,7 @@ describe('NewTaskForm with several machines', () => {
       listUnreachableMachines: () => unreachable,
     });
     renderForm();
-    expect(combobox('Machine').textContent).toBe('Automatic: This machine');
+    expect(combobox('Machine').textContent).toBe('Automatic');
     fireEvent.click(combobox('Machine'));
     const laptop = await screen.findByRole('option', { name: /Laptop/ });
     expect(laptop.getAttribute('aria-disabled')).toBe('true');
@@ -149,7 +149,7 @@ describe('NewTaskForm with several machines', () => {
     globalThis.fetch = realFetch;
     expect(asked).toMatchObject([{ request: 'Review the build' }]);
     await pick('Project', /Superwall on Studio/, /Superwall/);
-    expect(combobox('Machine').textContent).toBe('Automatic: Studio');
+    expect(combobox('Machine').textContent).toBe('Automatic');
     await pick('Machine', /Build box/, 'Build box');
     expect(combobox('Project').textContent).toBe('No project');
     expect(await listOptions('Project')).toEqual(['No project']);

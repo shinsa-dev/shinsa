@@ -2370,7 +2370,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   repositories, evidence, schedules, memories and usage side by side, keyed by their ids; settings and focus from the
   first machine), and it remembers which machine owns each id. A command goes to the machine that owns an id it names
   (`resolveCommandOwner`), a request to the machine that owns an id in its path or query (`resolveRequestOwner`), a
-  transcript to the machine of its run; the rest goes to the first machine. With more than one machine, a task shows its machine in
+  transcript to the machine of its run; the rest goes to the first machine. With more than one machine in the account (this device need not reach them all), a task shows its machine in
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
@@ -2388,7 +2388,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
-  New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. Every
+  New task shows a Machine picker, Automatic by default (the label says only Automatic, with the arrow-split icon); with one there is none. Every
   machine of the account is in it: one this device was not added to is listed disabled with "Add this device on <name>
   first" (`listUnreachableMachines`, from the account's machines without a key here, and any that refused it since). A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.

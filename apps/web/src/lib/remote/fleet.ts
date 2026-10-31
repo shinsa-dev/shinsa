@@ -251,7 +251,7 @@ export class Fleet implements ShinsaConnection {
     this.#home?.replaceTerminals(terminals);
 
   selectMachine = (id: string) => {
-    if (this.#entries.length < 2) return null;
+    if (this.#entries.length + this.#unreachable.length < 2) return null;
     const owner = this.#ownerOf(id);
     return this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
   };

@@ -183,6 +183,11 @@ export const CLASS_RULES: ClassRule[] = [
   },
 ];
 
+export const BANNED_ICON_PATTERN = /['"`]IconSparkle['"`]/;
+
+export const BANNED_ICON_MESSAGE =
+  'The sparkle icon. Shinsa never draws IconSparkle; pick an icon that names what the thing is (docs/design.md → Iconography)';
+
 export const GREEN_MESSAGE =
   "A green checkmark. Checkmarks are the accent (only the progress track's done steps are green): CheckMark / CHECK_TEXT from components/status/check-mark.tsx";
 

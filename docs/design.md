@@ -3840,6 +3840,10 @@ section with no skeleton is `SectionLoading` (a 20px `icon-tertiary`
 
 ## Iconography
 
+- **Never the sparkle.** `IconSparkle`, the four-pointed star, is banned everywhere in the app and the kit: name what
+  a thing is with its own icon (Automatic choices use `IconArrowSplitRight`, an agent's file `IconAgent`).
+  `bun lint:conventions` rejects it, and `generate:icons` skips the built `dist` and `dist-remote` folders so a stale
+  build cannot bring it back.
 - **Outline, not filled.** Every glyph in the app is an outline stroke in
   `currentColor` — Lucide, or an owned glyph drawn the same way. A state is
   said by colour (teal for "on", status ink), never by filling the glyph: the

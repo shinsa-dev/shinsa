@@ -111,7 +111,7 @@ export const TONED_ICON_SOURCES: Record<string, { icon: string; tone: FileTint }
   IconFileTypeReadme: { icon: 'IconCircleInfo', tone: 'azure' },
   IconFileTypeLicense: { icon: 'IconLaw', tone: 'amber' },
   IconFileTypeClaude: { icon: 'IconClaudeai', tone: 'orange' },
-  IconFileTypeAgents: { icon: 'IconSparkle', tone: 'purple' },
+  IconFileTypeAgents: { icon: 'IconAgent', tone: 'purple' },
   IconFileTypeEnv: { icon: 'IconKey1', tone: 'gold' },
   IconFileTypeTest: { icon: 'IconTestTube', tone: 'green' },
   IconFileTypeImage: { icon: 'IconImages1', tone: 'purple' },

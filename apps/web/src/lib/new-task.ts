@@ -226,14 +226,11 @@ export function listNewTaskMachines(
   placement: NewTaskPlacement | null,
   unreachable: UnreachableMachine[] = []
 ): NewTaskItem<string>[] {
-  const automatic =
-    machines.find((machine) => machine.id === placement?.id) ??
-    (machines.length === 1 ? machines[0] : undefined);
   return [
     {
       value: 'auto',
-      label: placement?.byPolicy || !automatic ? 'Automatic' : `Automatic: ${resolveMachineLabel(automatic)}`,
-      icon: 'IconSparkle',
+      label: 'Automatic',
+      icon: 'IconArrowSplitRight',
       ...(placement?.byPolicy ? { hint: 'Your routing policies decide when you start it' } : {}),
     },
     ...machines.map((machine) => ({
