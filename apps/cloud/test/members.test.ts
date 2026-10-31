@@ -159,7 +159,25 @@ describe('machine members', () => {
     const { harness, mona, studio, invite } = await shareMachine();
     expect((await acceptInvite(harness, mona, invite.token)).status).toBe(200);
     expect((await readHeartbeat(harness, studio)).members).toEqual([]);
-    expect((await acceptInvite(harness, mona, invite.token)).status).toBe(404);
+    expect((await acceptInvite(harness, mona, invite.token)).status).toBe(200);
+  });
+
+  test('the account that accepted an invite can accept it again to retry adding its device, until it expires', async () => {
+    const { harness, kai, studio, invite } = await shareMachine();
+    const first = await readJson<InviteAcceptResponse>(await acceptInvite(harness, kai, invite.token));
+    const retried = await acceptInvite(harness, kai, invite.token);
+    expect(retried.status).toBe(200);
+    expect(await readJson<InviteAcceptResponse>(retried)).toEqual(first);
+    expect((await readHeartbeat(harness, studio)).members).toHaveLength(1);
+    harness.clock.now += INVITE_TTL_MS;
+    expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
+  });
+
+  test('a member removed after accepting cannot use the invite again', async () => {
+    const { harness, kai, studio, invite } = await shareMachine();
+    await acceptInvite(harness, kai, invite.token);
+    await harness.post(REMOTE_PATHS.machineMemberRemove, { userId: '2' }, machineAuth(studio));
+    expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
   });
 
   test('an invite expires, and an unknown one is refused', async () => {

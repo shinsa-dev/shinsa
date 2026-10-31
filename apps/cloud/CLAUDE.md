@@ -79,9 +79,11 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   /__remote/machine/invites` (machine token) answers a random one-time token that lives 10 minutes (`INVITE_TTL_MS`),
   of which D1 keeps only the SHA-256 (`instance_invites`), at most 5 waiting per machine (429 `invites_full`). The
   machine puts it in the link it shows; whoever opens the link signs in with any GitHub account and the page sends
-  `POST /__remote/invites/accept { token }`, which claims it in one conditional update (a second claim, an expired or
-  unknown token is 404 `invite_invalid`), makes that account a member (409 `members_full` past the limit) and answers
-  the machine's id, name and owner. The owner opening their own invite only uses it up. A member sees the machine in
+  `POST /__remote/invites/accept { token }`, which claims it in one conditional update (another account's claim, an
+  expired or unknown token is 404 `invite_invalid`), makes that account a member (409 `members_full` past the limit)
+  and answers the machine's id, name and owner. The account that claimed it may accept it again until it expires, as
+  long as it still has access, so a device whose handshake failed can try again. The owner opening their own invite
+  only uses it up. A member sees the machine in
   their list with `role: 'member'` and its `owner`, gets connect tokens for it and can `POST
   /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot leave (409). The
   machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines do not count

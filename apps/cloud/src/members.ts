@@ -56,18 +56,29 @@ async function assertRoomForMember(row: InstanceRow, userId: string, world: Clou
     );
 }
 
+async function claimInvite(row: InstanceRow, tokenHash: string, userId: string, world: CloudWorld) {
+  const now = world.now();
+  await assertRoomForMember(row, userId, world);
+  if (!(await world.store.claimInvite(tokenHash, userId, now))) throw INVITE_INVALID;
+  if (row.user_id !== userId) await world.store.createMember(row.id, userId, now);
+}
+
+async function isAcceptedAgain(row: InstanceRow, claimedBy: string, userId: string, world: CloudWorld) {
+  if (claimedBy !== userId) return false;
+  return row.user_id === userId || world.store.isMember(row.id, userId);
+}
+
 export async function respondInviteAccept(request: Request, world: CloudWorld) {
   const user = await findPageUser(request, world);
   const fields = await readJsonFields(request);
   const tokenHash = await resolveTokenHash(readText(fields, 'token', 100));
   const now = world.now();
   const invite = await world.store.selectInvite(tokenHash);
-  if (!invite || invite.claimed_by !== null || invite.expires_at <= now) throw INVITE_INVALID;
+  if (!invite || invite.expires_at <= now) throw INVITE_INVALID;
   const row = await world.store.selectInstance(invite.instance_id);
   if (!row) throw INVITE_INVALID;
-  await assertRoomForMember(row, user.id, world);
-  if (!(await world.store.claimInvite(tokenHash, user.id, now))) throw INVITE_INVALID;
-  if (row.user_id !== user.id) await world.store.createMember(row.id, user.id, now);
+  if (invite.claimed_by === null) await claimInvite(row, tokenHash, user.id, world);
+  else if (!(await isAcceptedAgain(row, invite.claimed_by, user.id, world))) throw INVITE_INVALID;
   const { owner } = await listInstanceMembers(row, world);
   const answer: InviteAcceptResponse = { instanceId: row.id, name: row.name, owner };
   return respondJson(answer);
