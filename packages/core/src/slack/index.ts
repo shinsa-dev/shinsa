@@ -1,5 +1,4 @@
 export {
-  createSlackContext,
   createSlackMessage,
   createSlackSection,
   SLACK_BLOCK_LIMITS,

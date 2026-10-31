@@ -2551,7 +2551,8 @@ Slack ──event──► app.shinsa.dev /slack/events
   (`parseSlackEvaluation`). Shinsa does work as tasks and never chats: greetings, thanks, small talk and questions
   about Shinsa itself are `none`, answered once per thread with the one line "Not a task, so nothing was started."
   (`serializeSlackDeclined`; the engine remembers the threads it said it in until it restarts) and then silence, with
-  no reply of the model's own. Anything someone wants done or wants to know about their code, product or work is a
+  no reply of the model's own. Every later mention in that thread is read again with the whole thread, so one that
+  asks for work there still starts a task. Anything someone wants done or wants to know about their code, product or work is a
   task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
   key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
   posted while it reads.

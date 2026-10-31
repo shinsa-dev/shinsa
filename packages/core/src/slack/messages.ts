@@ -4,7 +4,7 @@ import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
 import type { Gate, Task, TaskStage } from '../domain/types.ts';
 import { assembleReport } from '../report/assemble.ts';
 import type { ShinsaState } from '../state/index.ts';
-import { createSlackContext, createSlackMessage, createSlackSection, type SlackMessage } from './blocks.ts';
+import { createSlackMessage, createSlackSection, type SlackMessage } from './blocks.ts';
 import { escapeSlackText, listSlackChunks, serializeSlackMrkdwn } from './mrkdwn.ts';
 import type { SlackPost } from './posts.ts';
 import type { SlackSessionStatus } from './relay.ts';
@@ -14,6 +14,8 @@ export const SLACK_RESULT_LIMIT = 1500;
 const SLACK_LEAD_LIMIT = 280;
 
 const SLACK_DECLINED_TEXT = 'Not a task, so nothing was started.';
+
+const SLACK_DECLINED_MRKDWN = '⚪ *Not a task*, so nothing was started.';
 
 const NEEDS_YOU_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_plan',
@@ -189,24 +191,24 @@ export function serializeSlackResult(task: Task, taskUrl: string): SlackMessage 
   const { chunks } = listSlackChunks(serializeSlackMrkdwn(body), 2800, SLACK_RESULT_LIMIT + 100);
   return createSlackMessage(resolveLead(body) || describeTask(task), [
     ...chunks.map((chunk) => createSlackSection(chunk)),
-    createSlackContext([describeShinsaLink(cut ? 'Read the rest in Shinsa' : 'Open in Shinsa', taskUrl)]),
+    createSlackSection(describeShinsaLink(cut ? 'Read the rest in Shinsa' : 'Open in Shinsa', taskUrl)),
   ]);
 }
 
 export function serializeSlackForwarded(task: Task, taskUrl: string) {
   return createSlackMessage(`Sent to ${describeTask(task)}.`, [
-    createSlackContext([`↪️ Sent to ${describeTaskLink(task, taskUrl)}`]),
+    createSlackSection(`↪️ Sent to ${describeTaskLink(task, taskUrl)}`),
   ]);
 }
 
 export function serializeSlackHeld(task: Task, taskUrl: string) {
   return createSlackMessage(`Kept for ${describeTask(task)}. It waits on you in Shinsa.`, [
-    createSlackContext([`📌 Kept for ${describeTaskLink(task, taskUrl)}. It waits on you in Shinsa.`]),
+    createSlackSection(`📌 Kept for ${describeTaskLink(task, taskUrl)}. It waits on you in Shinsa.`),
   ]);
 }
 
 export function serializeSlackDeclined() {
-  return createSlackMessage(SLACK_DECLINED_TEXT, [createSlackContext([SLACK_DECLINED_TEXT])]);
+  return createSlackMessage(SLACK_DECLINED_TEXT, [createSlackSection(SLACK_DECLINED_MRKDWN)]);
 }
 
 export function serializeSlackLinkPrompt(linkUrl: string) {

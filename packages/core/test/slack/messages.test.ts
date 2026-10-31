@@ -33,11 +33,7 @@ import {
 const URL = 'https://app.shinsa.dev/tasks/t1';
 
 function readText(message: SlackMessage) {
-  return message.blocks
-    .map((block: SlackBlock) =>
-      block.type === 'section' ? block.text.text : block.elements.map((element) => element.text).join(' ')
-    )
-    .join('\n');
+  return message.blocks.map((block: SlackBlock) => block.text.text).join('\n');
 }
 
 function startShaped(harness: Harness, shape: TaskShape, request = 'Why does the export hang?') {
@@ -306,14 +302,20 @@ describe('the result', () => {
 });
 
 describe("the bot's own replies", () => {
-  test('forwarded, held, not a task, the connect link and offline are each one short line', () => {
+  test('forwarded, held, not a task, the connect link and offline are each one line at full size', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness, { request: 'Fix it' }));
     expect(readText(serializeSlackForwarded(task, URL))).toBe(`↪️ Sent to <${URL}|SUP-1 · Fix it>`);
     expect(readText(serializeSlackHeld(task, URL))).toBe(
       `📌 Kept for <${URL}|SUP-1 · Fix it>. It waits on you in Shinsa.`
     );
-    expect(readText(serializeSlackDeclined())).toBe('Not a task, so nothing was started.');
+    const declined = serializeSlackDeclined();
+    expect(declined.text).toBe('Not a task, so nothing was started.');
+    expect(declined.blocks).toEqual([
+      { type: 'section', text: { type: 'mrkdwn', text: '⚪ *Not a task*, so nothing was started.' } },
+    ]);
+    for (const message of [serializeSlackForwarded(task, URL), serializeSlackHeld(task, URL)])
+      expect(message.blocks.map((block) => block.type)).toEqual(['section']);
     expect(readText(serializeSlackLinkPrompt('https://app.shinsa.dev/slack/connect'))).toEndWith(
       '<https://app.shinsa.dev/slack/connect|Connect Slack>'
     );
@@ -340,16 +342,13 @@ describe('a post from the outbox', () => {
 });
 
 describe('Slack limits on every message', () => {
-  test('a long fallback is cut, and empty contexts and extra blocks are dropped', () => {
-    const blocks = [
-      ...Array.from({ length: 60 }, () => createSlackSection('x')),
-      { type: 'context' as const, elements: [] },
-    ];
+  test('a long fallback is cut, and extra blocks are dropped', () => {
+    const blocks = Array.from({ length: 60 }, () => createSlackSection('x'));
     const message = createSlackMessage('y'.repeat(5000), blocks);
     expect(message.blocks.length).toBe(SLACK_BLOCK_LIMITS.blocks);
     expect(message.text.length).toBe(SLACK_BLOCK_LIMITS.fallback);
     const section = createSlackSection('z'.repeat(4000));
-    const text = section.type === 'section' ? section.text.text : '';
+    const text = section.text.text;
     expect(text.length).toBeLessThanOrEqual(SLACK_BLOCK_LIMITS.section);
     expect(text).toEndWith('…');
   });
