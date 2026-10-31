@@ -320,7 +320,7 @@ describe('a row’s summary line', () => {
     expect(row(/Build the export/).textContent).toContain('Build 1/2');
   });
 
-  it('shimmers a waiting agent’s action too', () => {
+  it('keeps a waiting agent’s action still', () => {
     renderQueue({
       variant: 'wide',
       state: createShinsaState({
@@ -330,9 +330,7 @@ describe('a row’s summary line', () => {
     });
     pushTranscript('run-wait', [createAgentEntry('Waiting on the planner.', 'interim')]);
     expect(row(/Build the export/).textContent).toContain('Waiting on the planner.');
-    expect(row(/Build the export/).querySelectorAll('[data-char]')).toHaveLength(
-      'Waiting on the planner.'.length
-    );
+    expect(row(/Build the export/).querySelectorAll('[data-char]')).toHaveLength(0);
   });
 
   it('says the steps are still being worked out while triage shapes the task', () => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveShimmerTiming } from '@shinsa/ui/lib/shimmer';
 import { countVisibleChars } from '@shinsa/ui/lib/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { motion, useReducedMotion, type Variants } from 'motion/react';
@@ -70,26 +71,29 @@ export function ShimmeringText({
   const { ref, visible } = useVisibleLength(text.length);
 
   const createCharVariants = useCallback(
-    (charIndex: number): Variants => ({
-      running: {
-        color: ['var(--color)', 'var(--shimmering-color)', 'var(--color)'],
-        transition: {
-          duration,
-          repeat: Number.POSITIVE_INFINITY,
-          repeatType: 'loop',
-          repeatDelay: visible * 0.05,
-          delay: (charIndex * duration) / visible,
-          ease: 'easeInOut',
+    (charIndex: number): Variants => {
+      const { stagger, rest } = resolveShimmerTiming(visible, duration);
+      return {
+        running: {
+          color: ['var(--color)', 'var(--shimmering-color)', 'var(--color)'],
+          transition: {
+            duration,
+            repeat: Number.POSITIVE_INFINITY,
+            repeatType: 'loop',
+            repeatDelay: rest,
+            delay: charIndex * stagger,
+            ease: 'easeInOut',
+          },
         },
-      },
-      stopped: {
-        color: 'var(--color)',
-        transition: {
-          duration: duration * 0.5,
-          ease: 'easeOut',
+        stopped: {
+          color: 'var(--color)',
+          transition: {
+            duration: duration * 0.5,
+            ease: 'easeOut',
+          },
         },
-      },
-    }),
+      };
+    },
     [duration, visible]
   );
 

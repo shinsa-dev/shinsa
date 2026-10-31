@@ -13,6 +13,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { MiniTrack } from '@/components/overview/mini-track.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
+import { describeParkedRun } from '@/lib/chat/delegations.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveLatestActivity } from '@/lib/overview/now.ts';
@@ -27,6 +28,7 @@ import { resolveRowStatus } from '@/lib/tasks/status.ts';
 function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) {
   const text = resolveLatestActivity(useTranscript(run.id)) ?? fallback;
   if (!text) return null;
+  if (describeParkedRun(run)) return <Truncate>{text}</Truncate>;
   return (
     <Truncate key={text} tooltip={text} className='leading-normal'>
       <ShimmeringText text={text} className='inline leading-normal' />
