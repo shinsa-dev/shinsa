@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, jest, type Mock, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import type { RemoteSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
@@ -8,7 +8,7 @@ import {
   selectRemoteAccess,
   useRemoteAccess,
 } from '@/lib/connection/remote-access.ts';
-import { REMOTE_POLL_MS } from '@/lib/remote-access.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 
 let answers: Record<string, () => Response> = {};
@@ -63,7 +63,12 @@ describe('remote access on this machine', () => {
     for (const path of ['/pair', '/pair/cancel', '/enable', '/disable', '/remove', '/devices/remove'])
       answerSnapshot(`POST /api/remote${path}`, paused);
     answers['POST /api/remote/devices/enroll'] = () =>
-      Response.json({ url: 'https://app.shinsa.dev/enroll#a.b.c', name: 'iPhone', expiresAt: 1 });
+      Response.json({
+        id: 'link-1',
+        url: 'https://app.shinsa.dev/enroll#a.b.c',
+        name: 'iPhone',
+        expiresAt: 1,
+      });
     await REMOTE_ACCESS_ACTIONS.pair();
     await REMOTE_ACCESS_ACTIONS.cancelPairing();
     await REMOTE_ACCESS_ACTIONS.resume();
@@ -83,26 +88,25 @@ describe('remote access on this machine', () => {
     ]);
   });
 
-  it('reads once while open, and again every few seconds only while pairing or connecting', async () => {
-    jest.useFakeTimers();
-    answerSnapshot('GET /api/remote', createRemoteSnapshot({ status: 'starting' }));
-    const { result, unmount } = renderHook(() => useRemoteAccess());
-    await waitFor(() => expect(result.current.snapshot?.status).toBe('starting'));
-    const reads = () => sent.filter((entry) => entry.path === '/api/remote').length;
-    const before = reads();
+  it('reads once when opened, then shows every snapshot the server pushes without asking again', async () => {
     answerSnapshot('GET /api/remote', createRemoteSnapshot());
-    await act(async () => {
-      jest.advanceTimersByTime(REMOTE_POLL_MS);
-    });
+    const { result } = renderHook(() => useRemoteAccess());
     await waitFor(() => expect(result.current.snapshot?.status).toBe('connected'));
-    expect(reads()).toBeGreaterThan(before);
-    const settled = reads();
-    await act(async () => {
-      jest.advanceTimersByTime(REMOTE_POLL_MS * 3);
+    const added = createRemoteSnapshot({
+      devices: [{ publicKey: 'd', name: 'iPhone', enrolledAt: 1, lastSeenAt: null, enrollmentId: 'link-1' }],
     });
-    expect(reads()).toBe(settled);
-    unmount();
-    renderHook(() => useRemoteAccess(false));
-    expect(reads()).toBe(settled);
+    act(() => connection.replaceRemote(added));
+    expect(result.current.snapshot).toBe(added);
+    expect(sent.filter((entry) => entry.path === '/api/remote')).toHaveLength(1);
+  });
+
+  it('never lets the first read replace a newer pushed snapshot, and clears a failure once one arrives', async () => {
+    const pushed = createRemoteSnapshot({ enabled: false });
+    await refreshRemoteAccess();
+    expect(selectRemoteAccess().failure).toBe('Shinsa answered with status 503.');
+    connection.replaceRemote(pushed);
+    answerSnapshot('GET /api/remote', createRemoteSnapshot());
+    await refreshRemoteAccess();
+    expect(selectRemoteAccess()).toEqual({ snapshot: pushed, failure: null });
   });
 });

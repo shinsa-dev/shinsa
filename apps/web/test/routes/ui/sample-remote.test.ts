@@ -63,6 +63,8 @@ describe('the /ui remote access samples', () => {
     expect(fleet.isDesktopConnected()).toBe(false);
     expect(fleet.selectTerminals()).toBeNull();
     fleet.replaceTerminals(null as never);
+    expect(fleet.selectRemote()).toBeNull();
+    fleet.replaceRemote(null as never);
     expect(fleet.selectMachine('task')).toBeNull();
     expect(fleet.listMachines().map((machine) => machine.name)).toEqual(['Studio', 'Laptop']);
     expect(fleet.listUnreachableMachines()).toEqual([]);

@@ -76,7 +76,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - `bun run dev:worker` builds the web app's remote build, then runs `wrangler dev` on :5183; `APP_ORIGIN` points the
   Worker at that origin, and `SHINSA_REMOTE_ORIGIN` points an engine at it (its channel origin check, enroll and webhook
   links follow). It is not called `dev`, so the root `bun dev` (turbo) never starts it.
-- The assets are `../web/dist-remote`, the web app's remote build: `bun run --cwd apps/web build:remote` before a deploy.
+- The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
+  `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and

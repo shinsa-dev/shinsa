@@ -22,6 +22,7 @@ import {
   useTranscript,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
+import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -490,6 +491,24 @@ describe('Connection terminals', () => {
     latest().receive({ type: 'terminals', terminals });
     expect(subject.selectTerminals()).toEqual(terminals);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Connection remote access', () => {
+  it('keeps the remote access the server pushes, tells its listeners and forgets it on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeRemote(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectRemote()).toBeNull();
+    const remote = createRemoteSnapshot();
+    latest().receive({ type: 'remote', remote });
+    expect(subject.selectRemote()).toEqual(remote);
+    expect(listener).toHaveBeenCalledTimes(1);
+    subject.reset();
+    expect(subject.selectRemote()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });
 

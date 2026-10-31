@@ -24,8 +24,14 @@ const ON: RemoteSnapshot = {
   owner: 'mona',
   machineKey: 'key',
   devices: [
-    { publicKey: 'dev-1', name: 'iPhone', enrolledAt: 0, lastSeenAt: Date.UTC(2026, 9, 30) },
-    { publicKey: 'dev-2', name: 'iPad', enrolledAt: 0, lastSeenAt: null },
+    {
+      publicKey: 'dev-1',
+      name: 'iPhone',
+      enrolledAt: 0,
+      lastSeenAt: Date.UTC(2026, 9, 30),
+      enrollmentId: null,
+    },
+    { publicKey: 'dev-2', name: 'iPad', enrolledAt: 0, lastSeenAt: null, enrollmentId: null },
   ],
 };
 
