@@ -146,6 +146,21 @@ describe('the shinsa tool server', () => {
     expect(fixWalkthrough.properties).toBe(phase.walkthrough.properties);
     expect('required' in fixWalkthrough).toBe(false);
     expect(TOOL_SPECS.complete_fix.inputSchema.required).toEqual(['summary']);
+    const reply = TOOL_SPECS.complete_fix.inputSchema.properties.reply;
+    expect(reply.required).toEqual(['headline', 'points']);
+    expect(reply.properties.headline.maxLength).toBe(PROTOCOL_LIMITS.replyHeadline);
+    expect(reply.properties.points).toMatchObject({ minItems: 1, maxItems: PROTOCOL_LIMITS.replyPoints });
+    expect(reply.properties.points.items.properties.outcome.enum).toEqual([
+      'done',
+      'answered',
+      'not_changed',
+    ]);
+    expect(reply.properties.points.items.properties.ask.maxLength).toBe(PROTOCOL_LIMITS.replyAsk);
+    expect(reply.properties.points.items.properties.note.maxLength).toBe(PROTOCOL_LIMITS.replyNote);
+    expect(reply.properties.points.items.required).toEqual(['ask', 'outcome', 'note']);
+    expect(reply.properties.next.maxLength).toBe(PROTOCOL_LIMITS.replyNext);
+    expect(reply.properties.details.maxLength).toBe(PROTOCOL_LIMITS.replyDetails);
+    expect(steps.items.properties.detail.description).toContain('in markdown');
     const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
     expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);
     expect(call.call.maxLength).toBe(PROTOCOL_LIMITS.call);

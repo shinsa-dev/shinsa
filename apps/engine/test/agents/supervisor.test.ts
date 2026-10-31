@@ -2386,10 +2386,16 @@ describe('the process tools and what a run cost', () => {
     const call = (name: string, input: Record<string, unknown>) =>
       fake.input.tools.handle(name, input, new AbortController().signal);
     writeFiles(path, { 'a.txt': 'a' });
-    await call('complete_fix', { summary: 'Fixed.', walkthrough: { flow: 'a → b' } });
+    const reply = {
+      headline: 'Moved it.',
+      points: [{ ask: 'Move it', outcome: 'done', note: 'Under Remote access.' }],
+      next: 'Restart the engine.',
+    };
+    await call('complete_fix', { summary: 'Fixed.', walkthrough: { flow: 'a → b' }, reply });
     const tree = await git(path, 'rev-parse', 'HEAD^{tree}');
     expect(dispatched.find((command) => command.type === 'agent.complete_fix')).toMatchObject({
       summary: 'Fixed.',
+      reply: { ...reply, details: null },
       walkthrough: { flow: 'a → b' },
       treeHash: tree,
     });
