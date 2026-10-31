@@ -1022,6 +1022,8 @@ function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaComman
 
 const FINISHED_STAGES = new Set(['merged', 'done']);
 
+const SETTLED = new Set(['merged', 'done', 'cancelled']);
+
 const CLOSING_EVENTS = new Set(['gate.answered', 'gate.withdrawn', 'gate.superseded']);
 
 function assertHumanGatesKept(
@@ -1029,10 +1031,17 @@ function assertHumanGatesKept(
   events: ReturnType<typeof decide>['events'],
   command: ShinsaCommand
 ) {
-  const open = new Map(listOpenGates(prior).map((gate) => [gate.id, gate.type]));
+  const open = new Map(listOpenGates(prior).map((gate) => [gate.id, gate]));
+  const settledIds = new Set(
+    events.flatMap((event) =>
+      event.type === 'task.staged' && SETTLED.has(event.stage) ? [event.taskId] : []
+    )
+  );
   for (const event of events) {
     if (!CLOSING_EVENTS.has(event.type) || !('gateId' in event)) continue;
-    if (event.type === 'gate.withdrawn' && open.get(event.gateId) === 'result') continue;
+    const gate = open.get(event.gateId);
+    const followedUp = gate?.type === 'result' && !settledIds.has(gate.taskId);
+    if (event.type === 'gate.withdrawn' && followedUp) continue;
     expect(open.has(event.gateId), `${command.type} on your behalf closed an open gate (${event.type})`).toBe(
       false
     );

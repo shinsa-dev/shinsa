@@ -125,6 +125,18 @@ describe('ask mode', () => {
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
   });
 
+  test('an agent on your behalf can neither mark an answered question done nor cancel it', () => {
+    const { harness, taskId } = ask();
+    answer(harness, taskId);
+    for (const type of ['task.complete', 'task.cancel'] as const) {
+      expect(() => harness.send({ type, taskId }, { onBehalf: true, byTask: 'other' })).toThrow(
+        /waits for (a decision only the human makes|you|the human)/
+      );
+    }
+    expect(harness.task(taskId).stage).toBe('answered');
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
+  });
+
   test('marking an answered question done withdraws the gate', () => {
     const { harness, taskId } = ask();
     answer(harness, taskId);

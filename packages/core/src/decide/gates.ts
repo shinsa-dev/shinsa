@@ -49,12 +49,21 @@ function findOpenGate(decider: Decider, gateId: string) {
   return gate;
 }
 
+function isFollowedUp(decider: Decider, gate: Gate) {
+  const task = decider.state.tasks[gate.taskId];
+  return (
+    gate.type === 'result' &&
+    decider.state.gates[gate.id]?.status === 'withdrawn' &&
+    task !== undefined &&
+    !isTaskSettled(task)
+  );
+}
+
 export function assertGatesStayOpen(decider: Decider, before: ShinsaState) {
   if (!decider.context.onBehalf) return;
-  const closed = listOpenGates(before).some((gate) => {
-    const status = decider.state.gates[gate.id]?.status;
-    return status !== 'open' && !(gate.type === 'result' && status === 'withdrawn');
-  });
+  const closed = listOpenGates(before).some(
+    (gate) => decider.state.gates[gate.id]?.status !== 'open' && !isFollowedUp(decider, gate)
+  );
   if (!closed) return;
   throw new DomainError(
     'human_only',
