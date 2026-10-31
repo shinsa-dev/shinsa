@@ -1194,7 +1194,8 @@ recorded, and a message it reads as new work queues the next round,
 and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
 on your behalf, or a schedule sends, to a task with any open gate is not delivered into the gate: core records it
 (`task.messaged` with `kept`) and keeps it in `Task.untoldMessages`, and the next run of the task's own session (the
-Agent, an answerer, an investigator or a researcher, never the reviewer) is told it once, at the tail of its prompt
+Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
+which can only report) is told it once, at the tail of its prompt
 after your own words ("While this task waited for the human, these messages were left for you…", each "Sent by an
 agent on the human’s behalf: …" or "Sent by a schedule: …"; `Decider.startRun`, `task.messages_told`). The tail
 comes after the house rules, so a resumed session that already holds them gets it too: the fix your reply at a

@@ -296,7 +296,7 @@ export class Decider {
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
     const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
-    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${this.#tellMessages(task.id, role)}${tellOverlaps(this, task.id, role)}`;
+    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${this.#tellMessages(task.id, role, purpose)}${tellOverlaps(this, task.id, role)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
@@ -333,9 +333,10 @@ export class Decider {
     return `\n\n${describeHumanEdits(untold)}`;
   }
 
-  #tellMessages(taskId: string, role: RunRole) {
+  #tellMessages(taskId: string, role: RunRole, purpose: RunPurpose | null) {
     const untold = this.task(taskId).untoldMessages ?? [];
     if (untold.length === 0 || !isTaskSessionRole(role)) return '';
+    if (purpose === 'watch' || purpose === 'intake') return '';
     this.emit({ type: 'task.messages_told', taskId });
     return `\n\n${describeUntoldMessages(untold)}`;
   }

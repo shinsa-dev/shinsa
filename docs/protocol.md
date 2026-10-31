@@ -697,7 +697,7 @@ task already has), `check_phases_invalid` (a phase the plan does not have), `che
 
 A message sent on your behalf (or by a schedule) to a task with any open gate is not delivered into the gate: core
 records it (`task.messaged` with `kept`) into `Task.untoldMessages`, and the next run of the task's session (never
-the reviewer) is told it once at the tail of its prompt, resumed or fresh ("Sent by an agent on the human’s behalf:
+the reviewer, a watchdog's check or a watch's read) is told it once at the tail of its prompt, resumed or fresh ("Sent by an agent on the human’s behalf:
 …", or "Sent by a schedule: …"; `task.messages_told`). `resolveLaterMessages` leaves it out until then.
 
 `task.message` carries an optional `kind` (`MessageKind`), with the classifier's `title`, `why` and `shape` for new
