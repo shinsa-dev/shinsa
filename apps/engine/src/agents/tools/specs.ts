@@ -337,6 +337,10 @@ export const TOOL_SPECS = {
     inputSchema: {
       type: 'object',
       properties: {
+        title: limitedText(
+          'Only when the work has moved away from the task’s title, such as a question that became a change: a new title, imperative and in sentence case, with no trailing period. The task takes it once the plan is accepted. Leave it out while the title still fits.',
+          L.taskTitle
+        ),
         goal: limitedText('The outcome in one or two sentences.', L.goal),
         phases: {
           type: 'array',

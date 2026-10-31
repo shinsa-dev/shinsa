@@ -393,6 +393,25 @@ describe('plan revisions', () => {
     expect(harness.task(taskId).plan?.changes).toBeUndefined();
   });
 
+  test('the plan gate shows the title the plan proposes, and the task title when it proposes none', () => {
+    const { harness, taskId } = approvingPlans();
+    proposePlan(harness, taskId);
+    expect(harness.openGate(taskId).title).toBe(harness.task(taskId).title);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Rename it.',
+    });
+    harness.send({
+      type: 'agent.propose_plan',
+      runId: harness.activeRun(taskId).id,
+      document: { ...PLAN, title: 'Fix the overflow on narrow screens' },
+      changeSummary: 'Renamed it.',
+    });
+    expect(harness.openGate(taskId).title).toBe('Fix the overflow on narrow screens');
+  });
+
   test('a revision keeps the earlier version with what changed and why', () => {
     const { harness, taskId } = approvingPlans();
     proposePlan(harness, taskId);
