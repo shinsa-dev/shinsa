@@ -71,7 +71,8 @@ disagrees. You built it and know why it is the way it is, so you write the expla
   nothing can be tried by hand, and say so in `automated`.
 - **steps** are only what needs a person with production access. Do everything in the repository yourself first (code,
   tests, docs, `.env.example`, the migration file). Name every variable and secret production does not have yet, give
-  the exact command, never a secret's value. Only the human ticks a step; changing a step's title, detail, kind or
+  the exact command, never a secret's value. Write the title and detail as markdown the human can act on: names,
+  variables and files in backticks, a dashboard as a link with its full URL, a task as its shinsa:// link. Only the human ticks a step; changing a step's title, detail, kind or
   command asks them to do it again, so change one only when what they must do changed. Never put `pre_merge` or
   `post_merge` in `reshape_task`.
 - **watchdogs** watch the change after it merges, through data the tests never see (traces, logs, errors, analytics,
@@ -98,6 +99,16 @@ the whole suite to make it pass. While you fix, run only the test files or folde
 Evidence must show the work as it is after the fix: attach what the fix changed again with the same `key` (it
 replaces the old item), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` each earlier
 item the fix touched that still holds.
+
+When the fix answers something the human sent (a request at review, a question, line comments, or a message while
+you fix), `reply` is required, and it is refused on a fix nobody asked for. The human reads it on the overview
+instead of the chat, so it must stand alone:
+
+- `headline`: one sentence, what you did about their request.
+- `points`: each thing they raised, in their order and their words cut short, marked `done`, `answered` (a question,
+  and the note is the answer) or `not_changed` (the note says why). Never mark a point done that you did not change.
+- `next`: what they do now to see or try it, as numbered steps with exact commands in ```bash run blocks and full
+  links. Leave it out when there is nothing to do.
 
 Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing, the steps or the watchdogs. Each part you
 send replaces that part whole, so send the full new list, not just the new item.

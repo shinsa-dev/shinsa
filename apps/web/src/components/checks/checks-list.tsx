@@ -6,6 +6,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { OutputToggle } from '@/components/evidence/evidence-text.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
+import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { InfoSection } from '@/components/overlays/info-popover.tsx';
 import { CHECK_TEXT } from '@/components/status/check-mark.tsx';
@@ -20,6 +21,7 @@ import {
   type CheckStageStatus,
   type CheckState,
   type ChecksView,
+  isChecksOpenByDefault,
 } from '@/lib/tasks/checks.ts';
 
 const STATE_GLYPH: Record<Exclude<CheckState, 'running'>, { icon: IconName; className: string }> = {
@@ -164,17 +166,20 @@ function StageHeader({ stage }: { stage: CheckStage }) {
 export function ChecksBlock({
   taskId,
   view,
+  headers = 'always',
   className,
 }: {
   taskId: string;
   view: ChecksView;
+  headers?: 'always' | 'several';
   className?: string;
 }) {
+  const showHeaders = headers === 'always' || view.stages.length > 1;
   return (
     <div className={cn('flex min-w-0 flex-col gap-2', className)}>
       {view.stages.map((stage) => (
         <section key={stage.key} className='flex min-w-0 flex-col gap-1'>
-          <StageHeader stage={stage} />
+          {showHeaders && <StageHeader stage={stage} />}
           {stage.rows.length > 0 && (
             <ul className={cn(INSET, 'flex min-w-0 flex-col divide-y divide-border')}>
               {stage.rows.map((row) => (
@@ -184,6 +189,23 @@ export function ChecksBlock({
           )}
         </section>
       ))}
+    </div>
+  );
+}
+
+export function FoldedChecks({ taskId, view }: { taskId: string; view: ChecksView }) {
+  const disclosure = useDisclosure(
+    resolveTaskDisclosureId(taskId, 'checks', 'folded', view.status),
+    isChecksOpenByDefault(view)
+  );
+  return (
+    <div className='flex min-w-0 flex-col gap-2'>
+      <DisclosureHeader disclosure={disclosure} label='the checks' className='h-6 gap-1.5 text-xs'>
+        <span className='text-fg-2'>Checks</span>
+        <span className={cn('tabular-nums', STATUS_TEXT[view.status])}>{view.summary}</span>
+        <DisclosureChevron className='text-fg-3' />
+      </DisclosureHeader>
+      {disclosure.open && <ChecksBlock taskId={taskId} view={view} headers='several' />}
     </div>
   );
 }

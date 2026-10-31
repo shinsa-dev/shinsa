@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Evidence, ShinsaCommand } from '../../src/index.ts';
-import { createHarness, createTask, PASSING, PLAN, proposePlan } from '../harness.ts';
+import { createHarness, createTask, PASSING, PLAN, proposePlan, resolveReply } from '../harness.ts';
 
 type Harness = ReturnType<typeof createHarness>;
 
@@ -74,6 +74,7 @@ function completeFix(harness: Harness, runId: string, files: string[], evidenceK
     runId,
     summary: 'Darker labels.',
     files,
+    ...resolveReply(harness, runId),
     ...(evidenceKept ? { evidenceKept } : {}),
   });
 }

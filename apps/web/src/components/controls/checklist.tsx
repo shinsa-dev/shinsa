@@ -12,7 +12,7 @@ import {
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
-import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
+import { LinkedInlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { describeChecklistProgress } from '@/lib/format/checklist.ts';
 
 export interface ChecklistProps<Item extends ChecklistItem> {
@@ -77,7 +77,7 @@ export function ItemChecklist<Item extends ChecklistItem>({
             }
           >
             <ChecklistTitle meta={meta?.(item)}>
-              <InlineMarkdown text={item.title} />
+              <LinkedInlineMarkdown text={item.title} />
             </ChecklistTitle>
             {item.detail && (
               <ChecklistDetail>

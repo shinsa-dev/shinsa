@@ -38,6 +38,7 @@ import type {
 import type {
   CheckChangeHandOver,
   CodeSpot,
+  FixReply,
   JudgementCall,
   LinkedEvidenceKind,
   PlanDocument,
@@ -163,6 +164,7 @@ type AgentCommand =
       type: 'agent.complete_fix';
       runId: string;
       summary: string;
+      reply?: FixReply | null;
       walkthrough?: ReportWalkthroughRevision | null;
       checks?: string[];
       checkChanges?: CheckChangeHandOver[];

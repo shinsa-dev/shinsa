@@ -47,6 +47,7 @@ import { removeEntry, writeEntry } from './draft.ts';
 import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
@@ -774,6 +775,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.message_routed':
     case 'task.message_dropped':
       applyInboxEvent(state, event);
+      break;
+    case 'iteration.requested':
+    case 'iteration.answered':
+      applyIterationEvent(state, event);
       break;
     case 'task.recovered':
       updateTask(state, event.taskId, event.at, {
