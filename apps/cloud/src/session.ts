@@ -79,7 +79,7 @@ export async function findSessionUser(request: Request, world: CloudWorld) {
   return user;
 }
 
-export function assertPageRequest(request: Request, world: CloudWorld) {
+function assertPageRequest(request: Request, world: CloudWorld) {
   if (readBearer(request) === null) assertSameOrigin(request, world.config.origin);
 }
 
