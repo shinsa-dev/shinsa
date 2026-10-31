@@ -41,7 +41,7 @@ describe('the settings a command may change', () => {
       delegationLimit: null,
       mergeMethod: 'squash',
       attentionLimit: 1,
-      approvePlans: false,
+      approvePlans: 'when_asked',
       agentModels: {},
       agentProviders: {},
       agentFastModes: {},

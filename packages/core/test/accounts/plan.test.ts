@@ -8,6 +8,8 @@ describe('resolvePlanLabel', () => {
     expect(resolvePlanLabel('TEAM')).toBe('Team');
     expect(resolvePlanLabel('enterprise')).toBe('Enterprise');
     expect(resolvePlanLabel('max_20x')).toBe('Max 20x');
+    expect(resolvePlanLabel('ultra')).toBe('Ultra');
+    expect(resolvePlanLabel('Claude Ultra')).toBe('Ultra');
     expect(resolvePlanLabel(null)).toBeNull();
   });
 });

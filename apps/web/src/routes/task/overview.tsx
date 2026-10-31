@@ -141,11 +141,11 @@ export function OverviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
+          <SuggestionsPanel task={task} />
           <PostMergePanel state={state} task={task} gate={gate} />
           <WatchdogsPanel state={state} task={task} />
           {resolveResultPlace(state, task, gate) === 'panel' && <ResultPanel task={task} />}
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
-          <SuggestionsPanel task={task} />
           {code && (
             <Panel persistId={resolveOverviewPanelId(task, 'summary')} title='Summary' icon='IconNote1'>
               {summary ? (

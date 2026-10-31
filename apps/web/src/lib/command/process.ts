@@ -78,7 +78,7 @@ function listSuggestionCommands(task: Task): Command[] {
         label: `Add the suggested task “${suggestion.title}”`,
         hint: suggestion.why,
         icon: 'IconPlusMedium',
-        keywords: ['suggested task', 'suggestion', 'roadmap', 'accept', 'add'],
+        keywords: ['suggested task', 'suggestion', 'accept', 'add'],
         page: {
           kind: 'list',
           crumb: 'Add',
@@ -105,7 +105,7 @@ function listSuggestionCommands(task: Task): Command[] {
             kind: 'run',
             id: `${id}.keep`,
             label: `Keep “${suggestion.title}” in this task`,
-            hint: 'As the next round',
+            hint: 'The agent takes it now',
             icon: ROUND_ICON,
             keywords: ['split', 'separate', 'round', 'keep', 'decline'],
             run: () => void keepSuggestion(task, suggestion),

@@ -32,7 +32,7 @@ const SECTION_EDGES =
 const SKIPPED_OFFSCREEN =
   'supports-[overflow-anchor:auto]:[content-visibility:auto] supports-[overflow-anchor:auto]:[contain-intrinsic-block-size:auto_600px]';
 
-const PAINT_ROOM = '-mx-0.5 mt-1.5 px-0.5 pt-0.5';
+const PAINT_ROOM = '-mx-0.5 mt-1.5 mb-2.5 p-0.5';
 
 const NO_MESSAGES: HumanMessage[] = [];
 
@@ -93,6 +93,7 @@ function TurnView({
             attachments={turn.human.attachments}
             status={turn.human.status}
             reason={turn.human.reason}
+            splitOff={turn.human.splitOff}
           />
         </div>
       )}
@@ -229,6 +230,7 @@ export const RunSection = React.memo(function RunSectionView({
               attachments={opening.attachments}
               status={opening.status}
               reason={opening.reason}
+              splitOff={opening.splitOff}
             />
           </div>
         )}

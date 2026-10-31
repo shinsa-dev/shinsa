@@ -173,7 +173,7 @@ export function isTaskResting(task: Pick<Task, 'closedAt' | 'stage'>) {
 }
 
 export function formatRoundLabel(round: Pick<Round, 'number'>) {
-  return `round ${round.number}`;
+  return `Round ${round.number}`;
 }
 
 export function selectShippingTarget(task: RoundSource, round: Pick<Round, 'number' | 'status'>) {

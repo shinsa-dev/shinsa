@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ELLIPSIS, isClipped, resolveMiddleTruncation } from '../../src/lib/truncate';
+import { countVisibleChars, ELLIPSIS, isClipped, resolveMiddleTruncation } from '../../src/lib/truncate';
 
 const monospace = (candidate: string) => candidate.length * 10;
 
@@ -37,5 +37,21 @@ describe('isClipped', () => {
   it('reads the block axis for line clamps, ignoring a sub-pixel rounding', () => {
     expect(isClipped({ ...box, scrollHeight: 41 }, 'block')).toBe(false);
     expect(isClipped({ ...box, scrollHeight: 42 }, 'block')).toBe(true);
+  });
+});
+
+describe('countVisibleChars', () => {
+  it('counts the characters that end inside the box', () => {
+    expect(countVisibleChars([10, 20, 30, 40], 25)).toBe(2);
+    expect(countVisibleChars([10, 20, 30.4], 30)).toBe(3);
+  });
+
+  it('counts every character when none is cut off', () => {
+    expect(countVisibleChars([10, 20], 100)).toBe(2);
+  });
+
+  it('never counts fewer than one', () => {
+    expect(countVisibleChars([10, 20], 0)).toBe(1);
+    expect(countVisibleChars([], 0)).toBe(1);
   });
 });

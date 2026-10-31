@@ -61,12 +61,13 @@ const OPEN_COMMANDS: CliCommand[] = [
   },
   {
     name: 'do',
-    usage: 'shinsa do <request...> [--plan-first] [--urgent | --high]',
+    usage: 'shinsa do <request...> [--plan-first | --backlog] [--urgent | --high]',
     summary: 'Create a task from a request; Shinsa picks the kind of work and runs it.',
     detail:
       'The folder you run it in tells triage where the work is. Shinsa classifies the request, plans it and builds it, and brings it back when it needs a decision.',
     options: [
       { flag: '--plan-first', text: 'Wait for you to approve a plan before building.' },
+      { flag: '--backlog', text: 'Plan it now and keep it in the backlog until you start building it.' },
       ...PRIORITY_OPTIONS,
     ],
     examples: ['shinsa do "fix the scroll in tab groups"', 'shinsa do "add search to the docs" --plan-first'],

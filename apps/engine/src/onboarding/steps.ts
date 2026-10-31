@@ -8,6 +8,8 @@ import {
   type OnboardingOption,
   type OnboardingProjectChoice,
   type OnboardingStepId,
+  PLAN_SIZE_LIMITS,
+  type PlanApproval,
   type ProjectSuggestion,
   parseChoiceValue,
   type RootSuggestions,
@@ -24,7 +26,7 @@ export interface SetupPatch {
   roots?: string[];
   defaultModel?: string | null;
   mergeMethod?: Settings['mergeMethod'];
-  approvePlans?: boolean;
+  approvePlans?: PlanApproval;
 }
 
 interface StepContext {
@@ -246,25 +248,45 @@ function listMergeChoices(context: StepReadContext, answered: boolean) {
   );
 }
 
+const RECOMMENDED_PLANS: PlanApproval = 'large';
+
+const PLAN_OPTIONS: { value: PlanApproval; label: string; detail: string; summary: string }[] = [
+  {
+    value: 'large',
+    label: 'Show me large plans first',
+    detail: `Before building a plan with more than ${PLAN_SIZE_LIMITS.phases} phases or ${PLAN_SIZE_LIMITS.files} files, the agent waits for you to approve it.`,
+    summary: 'Large plans first',
+  },
+  {
+    value: 'always',
+    label: 'Show me every plan first',
+    detail: 'The agent waits for you to approve every plan before it builds.',
+    summary: 'Every plan first',
+  },
+  {
+    value: 'when_asked',
+    label: 'Start building',
+    detail: 'Agents plan on their own and show you a plan only when you ask for one.',
+    summary: 'Start building',
+  },
+];
+
 function listPlanChoices(context: StepReadContext, answered: boolean) {
-  const picked = !answered || context.settings.approvePlans === true ? 'yes' : 'no';
-  return [
+  const picked = answered ? (context.settings.approvePlans ?? 'when_asked') : RECOMMENDED_PLANS;
+  return PLAN_OPTIONS.map((option) =>
     createChoice(
       'plans',
-      'yes',
-      'Show me the plan first',
-      'Before building a large task, the agent waits for you to approve its plan.',
+      option.value,
+      option.label,
+      option.detail,
       picked,
-      true
-    ),
-    createChoice(
-      'plans',
-      'no',
-      'Start building',
-      'Agents plan on their own and show you a plan only when you ask for one.',
-      picked
-    ),
-  ];
+      option.value === RECOMMENDED_PLANS
+    )
+  );
+}
+
+function resolvePlanLabel(approval: PlanApproval | undefined) {
+  return PLAN_OPTIONS.find((option) => option.value === (approval ?? 'when_asked'))?.summary as string;
 }
 
 async function listDefaultGroups(
@@ -274,7 +296,7 @@ async function listDefaultGroups(
   return [
     { id: 'model', label: 'Model', options: await listModelChoices(context) },
     { id: 'merge', label: 'Merging', options: listMergeChoices(context, answered) },
-    { id: 'plans', label: 'Large tasks', options: listPlanChoices(context, answered) },
+    { id: 'plans', label: 'Plans', options: listPlanChoices(context, answered) },
   ];
 }
 
@@ -310,7 +332,7 @@ const DEFAULTS: StepDefinition = {
     const parts = [
       defaultModel ? resolveModelLabel(defaultModel) : 'Each role’s own model',
       resolveMergeLabel(mergeMethod),
-      approvePlans === true ? 'Plan first' : 'Start building',
+      resolvePlanLabel(approvePlans),
     ];
     return Promise.resolve(parts.join(' · '));
   },
@@ -321,7 +343,7 @@ const DEFAULTS: StepDefinition = {
     await context.save({
       defaultModel: model === ROLE_MODELS ? null : (model as string),
       mergeMethod: merge as Settings['mergeMethod'],
-      approvePlans: plans === 'yes',
+      approvePlans: plans as PlanApproval,
     });
   },
 };

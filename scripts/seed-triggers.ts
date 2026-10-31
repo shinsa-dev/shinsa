@@ -60,10 +60,15 @@ export function writeAccountFiles(data: string) {
         window('session', 'session', '5-hour limit', 100, 40 * MINUTE),
         window('weekly_all', 'weekly', 'Weekly · All models', 93, 2 * 24 * HOUR),
       ]),
-      [SPARE.id]: createAccountUsage([
-        window('session', 'session', '5-hour limit', 3, 4 * HOUR),
-        window('weekly_all', 'weekly', 'Weekly · All models', 12, 6 * 24 * HOUR),
-      ]),
+      [SPARE.id]: {
+        ...createAccountUsage([
+          window('session', 'session', '5-hour limit', 3, 4 * HOUR),
+          window('weekly_all', 'weekly', 'Weekly · All models', 12, 6 * 24 * HOUR),
+        ]),
+        detail: 'Rate limited by Claude.',
+        checkedAt: NOW - 3 * HOUR,
+        retryAt: NOW + 12 * MINUTE,
+      },
     },
   };
   writeFileSync(join(data, 'usage-limits.json'), `${JSON.stringify(limits, null, 2)}\n`);

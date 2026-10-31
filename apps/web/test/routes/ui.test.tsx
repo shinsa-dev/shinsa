@@ -122,14 +122,12 @@ describe('the /ui gallery', () => {
     ]) {
       expect(settings.getAllByText(text).length).toBeGreaterThan(0);
     }
-    expect(settings.getAllByText(/^Out of usage until/).length).toBeGreaterThan(0);
+    expect(settings.getAllByText(/^Out of usage(, resets in | until )/).length).toBeGreaterThan(0);
     expect(settings.getByText(/^Next at/)).toBeTruthy();
-    expect(settings.getAllByText(/^christo@example\.com is in your accounts twice\./).length).toBeGreaterThan(
-      0
-    );
+    expect(settings.queryByText(/in your accounts twice/)).toBeNull();
     const accounts = findSection('shinsa-accounts');
     expect(accounts.getByText('Needs sign-in')).toBeTruthy();
-    expect(accounts.getByText(/^Out of usage until/)).toBeTruthy();
+    expect(accounts.getByText(/^Out of usage(, resets in | until )/)).toBeTruthy();
     expect(findSection('shinsa').getByText(/^Shinsa skipped 2 damaged entries/)).toBeTruthy();
   });
 

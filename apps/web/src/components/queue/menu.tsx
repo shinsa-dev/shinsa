@@ -4,7 +4,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { COMPACT_POPOVER, COMPACT_POPOVER_INSET } from '@/components/layout/compact-section.tsx';
+import { COMPACT_POPOVER_INSET, QUEUE_POPOVER } from '@/components/layout/compact-section.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { describeNeedsCount } from '@/lib/queue.ts';
 
@@ -32,7 +32,7 @@ export function QueueMenu({ state, activeTaskId }: { state: ShinsaState; activeT
         align='start'
         sideOffset={6}
         collisionAvoidance={{ fallbackAxisSide: 'none' }}
-        className={cn(COMPACT_POPOVER, 'overflow-y-auto')}
+        className={cn(QUEUE_POPOVER, 'overflow-y-auto')}
       >
         <TaskQueue
           state={state}

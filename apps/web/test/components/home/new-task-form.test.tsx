@@ -252,20 +252,14 @@ describe('NewTaskForm', () => {
     expect(await listOptions('Project')).toEqual(['No project', 'Basket', 'Superwall']);
   });
 
-  it('offers to wait only on open tasks of the focus project', async () => {
+  it('offers four ways to start, each with its hint', async () => {
     pushProjects('p1');
     renderForm();
-    expect(await listOptions('When to start')).toEqual(['Auto start', 'Start now', 'After Redo the paywall']);
-  });
-
-  it('offers to wait only on open tasks of the project you pick', async () => {
-    pushProjects('p1');
-    renderForm();
-    await pick('Project', /Basket/, 'Basket');
     expect(await listOptions('When to start')).toEqual([
-      'Auto start',
-      'Start now',
-      'After Count the baskets',
+      'Auto startNow, or after work it builds on',
+      'Start nowNow, even if related work is open',
+      'After another task…When the tasks you pick finish',
+      'BacklogPlans now, builds when you start it',
     ]);
   });
 
@@ -290,11 +284,25 @@ describe('NewTaskForm', () => {
     await waitFor(() => expect(combobox('Project').textContent).toBe('Superwall'));
   });
 
-  it('sends No project as no project, and adds a task that waits on another', async () => {
+  it('waits on open tasks of any project, picked from a search, and names them', async () => {
     pushProjects('p1');
     renderForm();
     await pick('Project', /No project/, 'No project');
-    await pick('When to start', /After Fix the schema/, 'After Fix the schema');
+    fireEvent.click(combobox('When to start'));
+    const after = await screen.findByRole('option', { name: /After another task/ });
+    fireEvent.pointerDown(after, { pointerType: 'mouse' });
+    fireEvent.click(after);
+    const search = await screen.findByPlaceholderText('Search open tasks');
+    fireEvent.change(search, { target: { value: 'basket' } });
+    await waitFor(() => expect(screen.queryByRole('option', { name: /Redo the paywall/ })).toBeNull());
+    fireEvent.click(await screen.findByRole('option', { name: /Count the baskets/ }));
+    fireEvent.change(search, { target: { value: '' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Fix the schema/ }));
+    await waitFor(() =>
+      expect(combobox('When to start').textContent).toBe('After Fix the schema and 1 more')
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /Fix the schema/ }));
+    await waitFor(() => expect(combobox('When to start').textContent).toBe('After Count the baskets'));
     fireEvent.change(field(), { target: { value: 'How are exports chunked?' } });
     await send('Add');
     expect(listSentCommands()).toEqual([
@@ -303,8 +311,19 @@ describe('NewTaskForm', () => {
         request: 'How are exports chunked?',
         repoId: null,
         projectId: null,
-        waitsOn: ['base'],
+        waitsOn: ['basket'],
       },
+    ]);
+  });
+
+  it('adds a task to the backlog', async () => {
+    pushProjects(null);
+    renderForm();
+    await pick('When to start', /Backlog/, 'Backlog');
+    fireEvent.change(field(), { target: { value: 'Add search to the docs' } });
+    await send('Add');
+    expect(listSentCommands()).toEqual([
+      { type: 'task.create', request: 'Add search to the docs', repoId: null, backlog: true },
     ]);
   });
 });

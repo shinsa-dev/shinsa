@@ -24,17 +24,17 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
 import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
-import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
+import type { TaskGroupKey } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 import { PullRequestBadge } from './pull-request-badge.tsx';
 import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
 
-export const ROADMAP_COLUMNS =
+export const TASK_LIST_COLUMNS =
   'grid-cols-[minmax(0,1fr)_7.5rem_12rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
-export const ROADMAP_ROW_HEIGHT = 36;
+export const TASK_LIST_ROW_HEIGHT = 36;
 
 export const FILED_COLUMNS =
   'grid-cols-[minmax(0,1fr)_10rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
@@ -106,21 +106,21 @@ function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
   );
 }
 
-function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: RoadmapGroupKey }) {
+function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: TaskGroupKey }) {
   if (group === 'waiting') return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
   return <StatusText state={state} task={task} className='truncate text-xs' />;
 }
 
-export const RoadmapRow = React.memo(function RoadmapRowItem({
+export const TaskListRow = React.memo(function TaskListRowItem({
   state,
   task,
   group,
   depth,
-  columns = ROADMAP_COLUMNS,
+  columns = TASK_LIST_COLUMNS,
 }: {
   state: ShinsaState;
   task: Task;
-  group: RoadmapGroupKey;
+  group: TaskGroupKey;
   depth: number;
   columns?: string;
 }) {
@@ -157,7 +157,7 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
           <TaskHandle task={task} />
           <Truncate className='text-fg-4'>{task.title}</Truncate>
         </span>
-        {columns === ROADMAP_COLUMNS && (
+        {columns === TASK_LIST_COLUMNS && (
           <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
             {repo && <RepoMark state={state} repo={repo} />}
             <Truncate>{repo?.name ?? 'No repository'}</Truncate>

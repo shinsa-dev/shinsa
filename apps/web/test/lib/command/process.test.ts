@@ -112,21 +112,24 @@ describe('process commands', () => {
           ? [
               ['After this task merges', 'Suggested'],
               ['Start now', undefined],
+              ['Backlog', undefined],
             ]
           : [
               ['Start now', 'Suggested'],
               ['After this task merges', undefined],
+              ['Backlog', undefined],
             ]
       );
       for (const choice of choices) run(choice);
       expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis },
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: !waitsOnThis },
+        { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, backlog: true },
       ] as never);
     }
   });
 
-  it('keeps a separate-task suggestion here as the next round, and switches how a waiting round ships', () => {
+  it('keeps a separate-task suggestion here, and switches how a waiting round ships', () => {
     const task = createTask({
       id: 't',
       stage: 'building',

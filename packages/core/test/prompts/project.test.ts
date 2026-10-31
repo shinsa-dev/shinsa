@@ -37,10 +37,11 @@ function createBasket(harness: Harness) {
 }
 
 const GUIDE = [
-  'Each task works in one repository and ships one pull request. When this change also needs code in another of these repositories:',
-  '- Read that repository at its path to settle what the two sides share (an endpoint, a type, an SDK call). Change files only in your own worktree.',
-  '- File the other part with `create_task`: `repository` set to it, `fork_from` set to this task so its agent starts from this conversation, and a request that says exactly what it changes there.',
+  'Each task works in one repository and ships one pull request. When this change also needs work in another repository of the project, one listed above or any repository in its folders:',
+  '- Read that repository at its path to settle what the two sides share (an endpoint, a type, an SDK call). Change files only in your own worktree: never edit, stage or commit in another checkout.',
+  '- File the other part with `create_task`: `repository` set to its name (for a repository in the folders that is not listed yet, its folder name; it is registered when you name it), `fork_from` set to this task so its agent starts from this conversation, and a request that says exactly what it changes there.',
   '- Set the order. `after_this` when the other part uses what this task adds, so it starts once this task is finished. `this_task_waits` when this task needs the other part merged first; it is refused while you plan, so file that part in your first phase.',
+  '- Never hand the human a step to commit, push or open a pull request in another repository: that part is a task of its own, and its order holds the merge.',
   '- Say so in your plan and hand-over, and link the task for the human.',
 ];
 
@@ -102,6 +103,17 @@ describe('the project context', () => {
     );
   });
 
+  test('teaches cross-repository work when the only other repositories sit unregistered in the project folders', () => {
+    const harness = createHarness();
+    harness.send({
+      type: 'project.write',
+      project: { name: 'Superwall', color: 'blue', folders: ['/code'] },
+    });
+    const cli = registerRepo(harness, 'superwall', 'Superwall');
+    const taskId = createTask(harness, { repoId: cli });
+    expect(resolveProjectContext(harness.state, harness.task(taskId))).toContain(GUIDE.join('\n'));
+  });
+
   test('is empty for a task without a project, and for a project that is gone', () => {
     const harness = createHarness();
     const loose = createTask(harness, { repoId: registerRepo(harness, 'scratch', null) });
@@ -111,7 +123,7 @@ describe('the project context', () => {
 
   test('a fresh run’s prompt carries the project context and a resumed run’s does not', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const { server } = createBasket(harness);
     const taskId = createTask(harness, { repoId: server, size: 'large' });
     const context = resolveProjectContext(harness.state, harness.task(taskId));

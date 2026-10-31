@@ -1,5 +1,6 @@
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
+  type BacklogCause,
   createSettings,
   type Evidence,
   type Focus,
@@ -22,6 +23,7 @@ import {
   SHAPE_PIPELINES,
   type Task,
   type TaskShape,
+  type TaskStage,
   type WatchSuggestion,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
@@ -242,6 +244,12 @@ function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
   });
 }
 
+function resolveCancelledFrom(task: Task | undefined, stage: TaskStage) {
+  if (stage !== 'cancelled') return task?.cancelledFrom ? { cancelledFrom: null } : {};
+  if (!task || task.stage === 'cancelled') return {};
+  return { cancelledFrom: task.stage };
+}
+
 function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   const task = state.tasks[event.taskId];
   const previous = task?.stage;
@@ -250,6 +258,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stage,
     stageReason: event.reason,
     stageChangedAt: event.at,
+    ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
   const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
@@ -278,6 +287,21 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
     actor: event.by ?? 'you',
     kind: 'stage',
     text: describeDependencies(titles),
+  });
+}
+
+const BACKLOG_LEFT: Record<BacklogCause, string> = {
+  you: 'Removed from the backlog',
+  started: 'Started building from the backlog',
+  inquiry: 'Started at once: questions, research and investigations never wait in the backlog',
+};
+
+function applyBacklogChanged(state: ShinsaState, event: EventOf<'task.backlog_changed'>) {
+  updateTask(state, event.taskId, event.at, { backlog: event.backlog ? { at: event.at } : null });
+  record(state, event.taskId, event.at, {
+    actor: event.cause === 'you' ? 'you' : 'shinsa',
+    kind: 'stage',
+    text: event.backlog ? 'Moved to the backlog' : BACKLOG_LEFT[event.cause],
   });
 }
 
@@ -453,6 +477,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       kind: 'round',
       text: NEW_WORK_TEXT[event.kind],
       detail: event.text,
+      ...(event.suggestionId ? { suggestionId: event.suggestionId } : {}),
     });
     return;
   }
@@ -713,6 +738,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.waits_on_changed':
       applyWaitsOnChanged(state, event);
+      break;
+    case 'task.backlog_changed':
+      applyBacklogChanged(state, event);
       break;
     case 'task.noted':
       applyNoted(state, event);

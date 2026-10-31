@@ -259,7 +259,7 @@ async function requestOAuthUsage(
   if (response.status === 401 || response.status === 403) return null;
   if (response.status === 429) {
     return {
-      read: fail('limited', 'Codex asked Shinsa to read usage less often.', readRetryAfter(response)),
+      read: fail('limited', 'Rate limited by Codex.', readRetryAfter(response)),
       email: null,
       plan: null,
     };

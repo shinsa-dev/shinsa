@@ -29,7 +29,14 @@ function chance(random: Random, odds: number) {
   return random() < odds;
 }
 
-const KINDS: MessageKind[] = ['new_round', 'new_round', 'new_round', 'feedback', 'separate_task'];
+const KINDS: MessageKind[] = [
+  'new_round',
+  'new_round',
+  'new_round',
+  'new_round',
+  'feedback',
+  'separate_task',
+];
 
 const SHAPES = [undefined, undefined, 'change', 'fix', 'answer', 'operation'] as const;
 

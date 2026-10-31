@@ -252,7 +252,7 @@ describe('resolveTriage with structured output', () => {
       uniqueItems: true,
     });
     expect(calls[0]?.prompt).toContain(
-      'Decisions:\n- size (choice): How much agreement does the work need before building starts? Options: "small": a contained fix'
+      'Decisions:\n- size (choice): How big is the work? Options: "small": a contained fix'
     );
     expect(calls[0]?.prompt).toContain(
       '- waits_on (choices): Which open tasks must be finished before this one can start? Often none.'

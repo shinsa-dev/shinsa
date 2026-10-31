@@ -108,15 +108,16 @@ describe('the command line drives the whole lifecycle of a task', () => {
     expect((await shinsa(port, 'merges', 'approve', created.taskId)).code).toBe(0);
     await w.untilStage(created.taskId, 'merged');
 
-    expect((await shinsa(port, 'settings', 'set', 'approvePlans', 'true')).code).toBe(0);
+    expect((await shinsa(port, 'settings', 'set', 'approvePlans', 'true')).code).not.toBe(0);
+    expect((await shinsa(port, 'settings', 'set', 'approvePlans', 'large')).code).toBe(0);
     expect((await shinsa(port, 'settings', 'set', 'maxFixRounds', '3')).code).toBe(0);
-    expect(w.state.settings).toMatchObject({ approvePlans: true, maxFixRounds: 3 });
-    expect((await shinsa(port, 'settings', 'get', 'approvePlans')).text).toBe('approvePlans = true');
+    expect(w.state.settings).toMatchObject({ approvePlans: 'large', maxFixRounds: 3 });
+    expect((await shinsa(port, 'settings', 'get', 'approvePlans')).text).toBe('approvePlans = "large"');
   });
 
   test('an answer to a plan, a question and a revision goes to the right gate', async () => {
     const { w, port } = await open();
-    await shinsa(port, 'settings', 'set', 'approvePlans', 'true');
+    await shinsa(port, 'settings', 'set', 'approvePlans', 'always');
     const { taskId } = await shinsaJson<{ taskId: string }>(
       port,
       'tasks',
@@ -213,7 +214,7 @@ describe('the command line drives the whole lifecycle of a task', () => {
     expect(w.state.projects).toEqual({});
 
     expect((await shinsa(port, 'health')).text).toMatch(/^Healthy\./);
-    expect((await shinsa(port, 'tasks', '--help')).text).toContain('  create        Create a task.');
+    expect((await shinsa(port, 'tasks', '--help')).text).toContain('  create               Create a task.');
     expect((await shinsa(port, 'tasks', 'create', '--help')).text).toContain('--plan-first');
   });
 });

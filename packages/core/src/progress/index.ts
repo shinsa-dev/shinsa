@@ -15,7 +15,7 @@ import { resolveChecklistProgress } from '../report/checklist.ts';
 import { listMergeSteps, listOpenMergeSteps } from '../report/merge-steps.ts';
 import type { MergeStepTiming } from '../report/types.ts';
 
-export type DisplayPhaseStatus = 'done' | 'active' | 'waiting' | 'pending' | 'skipped';
+export type DisplayPhaseStatus = 'done' | 'active' | 'waiting' | 'pending' | 'skipped' | 'cancelled';
 
 export interface DisplayPhase {
   key: string;
@@ -282,7 +282,7 @@ function resolveWatchPhase(task: Task): DisplayPhase[] {
   ];
 }
 
-export function resolveTaskProgress(task: Task): TaskProgress {
+function listTaskPhases(task: Task) {
   const keys = listDisplayKeys(task);
   const current = resolveCurrentIndex(task, keys);
   const phases = keys.flatMap((key, index): DisplayPhase[] => {
@@ -290,7 +290,33 @@ export function resolveTaskProgress(task: Task): TaskProgress {
     if (key === 'build') return resolvePlanPhases(task, status);
     return [resolveDisplayPhase(task, key, status, index === current)];
   });
-  return summarizeProgress([...phases, ...resolveWatchPhase(task)]);
+  return [...phases, ...resolveWatchPhase(task)];
+}
+
+function isOpenPhase(phase: DisplayPhase) {
+  return phase.status === 'active' || phase.status === 'waiting';
+}
+
+function resolveCancelledDetail(phase: DisplayPhase) {
+  return phase.planned || phase.count ? phase.detail : null;
+}
+
+function isFinishedPhase(phase: DisplayPhase) {
+  return phase.status === 'done' || phase.status === 'skipped';
+}
+
+function listCancelledPhases(task: Task, stage: TaskStage) {
+  const phases = listTaskPhases({ ...task, stage });
+  const stopped = phases.findIndex((phase) => !isFinishedPhase(phase));
+  return phases.map(
+    (phase, index): DisplayPhase =>
+      index === stopped ? { ...phase, status: 'cancelled', detail: resolveCancelledDetail(phase) } : phase
+  );
+}
+
+export function resolveTaskProgress(task: Task): TaskProgress {
+  const stopped = task.stage === 'cancelled' ? task.cancelledFrom : null;
+  return summarizeProgress(stopped ? listCancelledPhases(task, stopped) : listTaskPhases(task));
 }
 
 const ROUND_STEP_STATUS: Record<RoundStatus, (key: DisplayKey) => DisplayPhaseStatus> = {
@@ -306,8 +332,8 @@ const ROUND_STEP_STATUS: Record<RoundStatus, (key: DisplayKey) => DisplayPhaseSt
 };
 
 function summarizeProgress(phases: DisplayPhase[]): TaskProgress {
-  const currentIndex = phases.findIndex((phase) => phase.status === 'active' || phase.status === 'waiting');
-  const done = phases.filter((phase) => phase.status === 'done' || phase.status === 'skipped').length;
+  const currentIndex = phases.findIndex(isOpenPhase);
+  const done = phases.filter(isFinishedPhase).length;
   return {
     phases,
     current: currentIndex === -1 ? null : (phases[currentIndex] ?? null),

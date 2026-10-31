@@ -9,6 +9,7 @@ import {
   listChildRuns,
   listLiveChildRuns,
   PROTOCOL_LIMITS,
+  type Repo,
   type Run,
   type RunRole,
   resolveDelegationStatus,
@@ -142,7 +143,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task on the roadmap for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both.',
+      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -167,6 +168,11 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'boolean',
           description:
             'The new task waits until this one is finished (merged, or done when it ships no pull request), then starts.',
+        },
+        backlog: {
+          type: 'boolean',
+          description:
+            'The new task triages and plans, then waits in the human’s backlog until they start building it. Only when the human asked to keep it for later.',
         },
         client_request_id: CLIENT_REQUEST_ID,
       },
@@ -213,6 +219,7 @@ export interface OrchestrationCall {
   state: () => ShinsaState;
   dispatch: (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
   resolveBaseCommit: () => Promise<string>;
+  registerRepo: (task: Task, name: string) => Promise<Repo | null>;
   hasProvider: (id: string) => boolean;
   awaitDelegation: (childRunId: string, timeoutMs: number, signal: AbortSignal) => Promise<DelegationOutcome>;
   recordStarted: (childRunId: string) => void;
@@ -352,12 +359,17 @@ async function answerDelegation(input: Record<string, unknown>, call: Orchestrat
   return 'Answered. The agent carries on, and its result arrives here when it finishes.';
 }
 
-function resolveRepoId(state: ShinsaState, task: Task, name: string | null) {
+async function resolveRepoId(call: OrchestrationCall, task: Task, name: string | null) {
   if (!name) return null;
-  const repo = Object.values(state.repos).find((candidate) => candidate.name === name);
+  const state = call.state();
+  const repo =
+    Object.values(state.repos).find((candidate) => candidate.name === name) ??
+    (await call.registerRepo(task, name));
   if (!repo) {
     const known = Object.values(state.repos).map((candidate) => candidate.name);
-    throw new Error(`There is no repository "${name}". Known: ${known.join(', ') || 'none'}.`);
+    throw new Error(
+      `There is no repository "${name}" in Shinsa or in the project's folders. Known: ${known.join(', ') || 'none'}.`
+    );
   }
   return repo.id === task.repoId ? null : repo.id;
 }
@@ -383,6 +395,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
   const request = assertProtocol(validateCourierTask(input));
   const source = findTaskOf(call, findParent(call));
   const requestKey = request.requestKey ?? call.requestKey;
+  const repoId = await resolveRepoId(call, source, request.repository);
   await call.dispatch(
     {
       type: 'agent.create_task',
@@ -390,10 +403,11 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       attemptId: call.attemptId,
       requestKey,
       request: request.request,
-      repoId: resolveRepoId(call.state(), source, request.repository),
+      repoId,
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,
+      backlog: request.backlog,
     },
     resolveCommandId(call, 'create_task', request.requestKey)
   );

@@ -4,6 +4,7 @@ import {
   type AccountUsage,
   CLAUDE_PROVIDER,
   listRelevantWindows,
+  MINUTE_MS,
   type ProviderLogin,
   resolveAgentModel,
   resolveAgentProvider,
@@ -15,7 +16,7 @@ import {
   type UsageWindow,
 } from '@shinsa/core';
 import { type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
-import { formatMoment, formatSince, formatUntil } from '@/lib/format/time.ts';
+import { formatDuration, formatMoment, formatSince, formatUntil, isSameDay } from '@/lib/format/time.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 
 const USAGE_WARNING = 75;
@@ -56,6 +57,8 @@ export interface UsageAccountHeader {
   isDefault: boolean;
   status: AccountStatus | null;
   checkedAt: number | null;
+  retryAt: number | null;
+  reason: string | null;
 }
 
 export function resolveUsageTone(percent: number): Tone {
@@ -174,8 +177,11 @@ export function describeUsageDetail(account: { usage: AccountUsage }) {
   return account.usage.detail ?? 'No usage reported yet.';
 }
 
-export function describeUsageChecked(checkedAt: number, now: number) {
-  return formatSince('Updated', checkedAt, now);
+export function describeUsageChecked(checkedAt: number, retryAt: number | null, now: number) {
+  const updated = formatSince('Updated', checkedAt, now);
+  return retryAt !== null && retryAt > now
+    ? `${updated} · ${formatUntil('next read', retryAt, now)}`
+    : updated;
 }
 
 export function describeResetsIn(resetsAt: number, now: number) {
@@ -194,7 +200,12 @@ export function resolveAccountStatus(
 }
 
 export function describeAccountStatus(status: AccountStatus, now: number) {
-  return status.until === null ? status.label : `${status.label} until ${formatMoment(status.until, now)}`;
+  const { until } = status;
+  if (until === null) return status.label;
+  if (until > now && isSameDay(until, now)) {
+    return `${status.label}, resets in ${formatDuration(Math.max(MINUTE_MS, until - now))}`;
+  }
+  return `${status.label} until ${formatMoment(until, now)}`;
 }
 
 export function resolveAccountHeader(
@@ -208,5 +219,7 @@ export function resolveAccountHeader(
     isDefault: account.isDefault,
     status: resolveAccountStatus(account, model, now),
     checkedAt: account.usage.checkedAt,
+    retryAt: account.usage.retryAt ?? null,
+    reason: account.usage.detail,
   };
 }

@@ -63,7 +63,7 @@ export const PROCESS_TOOL_SPECS = {
   suggest_tasks: {
     name: 'suggest_tasks',
     description:
-      'Suggest tasks for work you noticed that is outside this task. Each becomes a suggested task the human can add to the roadmap or dismiss; nothing starts until they accept. Do not suggest work this task already covers. When the human asked in this chat for something that does not belong in this task, suggest it with `split_off`: they can make it a task of its own or keep it here as the next round.',
+      'Suggest tasks for work you noticed that is outside this task. Each becomes a suggested task the human can add as a task or dismiss; nothing starts until they accept. Do not suggest work this task already covers. When the human asked in this chat for something that does not belong in this task, suggest it with `split_off`: they can make it a task of its own or keep it here as the next round.',
     inputSchema: {
       type: 'object',
       properties: {

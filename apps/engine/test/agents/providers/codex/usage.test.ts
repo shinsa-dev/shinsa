@@ -256,7 +256,7 @@ describe('reading Codex’s usage', () => {
       read: {
         ok: false,
         reason: 'limited',
-        detail: 'Codex asked Shinsa to read usage less often.',
+        detail: 'Rate limited by Codex.',
         retryAfterMs: 120_000,
       },
       email: null,

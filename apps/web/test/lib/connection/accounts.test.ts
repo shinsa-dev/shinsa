@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   bindTaskAccount,
   closeSignIn,
@@ -7,6 +7,7 @@ import {
   refreshUsage,
   removeAccount,
   rerunStep,
+  resetUsageRecheck,
   resumeUsageWaitNow,
   retrySignIn,
   startSignIn,
@@ -75,9 +76,11 @@ describe('the accounts snapshot', () => {
 });
 
 describe('watching usage', () => {
-  it('hands back how to stop watching, which is safe to call twice', () => {
+  it('reads only the usage while watching, and hands back how to stop, which is safe to call twice', async () => {
     fake = startFakeOnboarding({ 'POST /api/accounts/refresh': { answer: ACCOUNTS } });
+    resetUsageRecheck();
     const stop = watchUsage();
+    await waitFor(() => expect(requestsTo('/api/accounts/refresh')).toEqual([{ scope: 'usage' }]));
     stop();
     stop();
     expect(typeof stop).toBe('function');

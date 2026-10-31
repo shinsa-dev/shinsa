@@ -8,17 +8,22 @@ import { createPullRequest } from '../../support/pull-request.ts';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
+const REPOS = [createRepo({ id: 'app', name: 'app' }), createRepo({ id: 'web', name: 'web' })];
+
 function createWorld(extra: Task[] = []) {
   return createShinsaState({
     tasks: [
-      createTask({ id: 'task-1', title: 'Fix the flaky checkout test' }),
+      createTask({ id: 'task-1', repoId: 'app', title: 'Fix the flaky checkout test' }),
       createTask({
         id: 'task-2',
+        repoId: 'app',
         title: 'Build the login form',
         pullRequest: createPullRequest({ number: 42 }),
       }),
+      createTask({ id: 'task-web', repoId: 'web', title: 'Restyle the pricing page' }),
       ...extra,
     ],
+    repos: REPOS,
   });
 }
 
@@ -94,19 +99,34 @@ describe('ReferenceText', () => {
     expect(view.container.textContent).toBe('See shinsa://pr/not-a-number here.');
   });
 
-  it('links a bare pull request number that only one task has', () => {
+  it('links a bare pull request number of the open task’s repository', () => {
+    openTaskPage('task-1');
     const view = renderText(createWorld(), 'Merged in #42.');
     const link = view.getByRole('link');
     expect(link.getAttribute('href')).toBe('https://github.com/you/app/pull/42');
     expect(link.textContent).toBe('#42');
   });
 
-  it('leaves a bare pull request number alone when two tasks share it', () => {
+  it('leaves a bare pull request number of another repository alone', () => {
+    openTaskPage('task-web');
+    const view = renderText(createWorld(), 'Merged in #42.');
+    expect(view.queryByRole('link')).toBeNull();
+    expect(view.container.textContent).toBe('Merged in #42.');
+  });
+
+  it('leaves a bare pull request number alone outside a task page', () => {
+    const view = renderText(createWorld(), 'Merged in #42.');
+    expect(view.queryByRole('link')).toBeNull();
+  });
+
+  it('leaves a bare pull request number alone when two tasks of the repository share it', () => {
     const twin = createTask({
       id: 'task-3',
+      repoId: 'app',
       title: 'Another change',
       pullRequest: createPullRequest({ number: 42 }),
     });
+    openTaskPage('task-1');
     const view = renderText(createWorld([twin]), 'Merged in #42.');
     expect(view.queryByRole('link')).toBeNull();
     expect(view.container.textContent).toBe('Merged in #42.');
@@ -168,5 +188,12 @@ describe('ReferenceAnchor', () => {
     openTaskPage('task-3');
     const view = renderAnchor(createWorld([twin]), 'shinsa://pr/42', '#42');
     expect(view.getByRole('link').getAttribute('href')).toBe('https://github.com/you/app/pull/42');
+  });
+
+  it('never resolves a pull request with no repository to another repository’s', () => {
+    openTaskPage('task-web');
+    const view = renderAnchor(createWorld(), 'shinsa://pr/42', '#42');
+    expect(view.queryByRole('link')).toBeNull();
+    expect(view.container.textContent).toBe('#42');
   });
 });

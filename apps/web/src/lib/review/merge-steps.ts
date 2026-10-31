@@ -1,8 +1,12 @@
 import {
+  type ChecklistItem,
+  isTaskSettled,
   listMergeSteps,
   type MergeStepKind,
   type MergeStepTiming,
   type MergeStepView,
+  type ShinsaState,
+  serializeReference,
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
@@ -62,4 +66,39 @@ export function resolveTickBlock(task: Task, step: MergeStepView) {
   if (task.stage === 'cancelled') return 'The task was cancelled';
   if (step.done || step.due) return null;
   return step.when === 'pre_merge' ? 'The merge is done' : 'Tick it once the pull request merged';
+}
+
+export interface MergeWaitView extends ChecklistItem {
+  taskId: string;
+}
+
+export type PreMergeItem = MergeStepView | MergeWaitView;
+
+export function isMergeWait(item: PreMergeItem): item is MergeWaitView {
+  return 'taskId' in item;
+}
+
+export function listMergeWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWaitView[] {
+  return task.waitsOn.flatMap((id) => {
+    const other = state.tasks[id];
+    if (!other) return [];
+    const link = `[${other.title}](${serializeReference({ kind: 'task', id })})`;
+    return [
+      {
+        key: `wait:${id}`,
+        taskId: id,
+        title:
+          other.stage === 'cancelled'
+            ? `No longer waits for ${link}: it was cancelled`
+            : `Merges after ${link} finishes`,
+        detail: null,
+        command: null,
+        done: isTaskSettled(other),
+      },
+    ];
+  });
+}
+
+export function resolveWaitBlock(wait: MergeWaitView) {
+  return wait.done ? 'That task finished' : 'Ticks itself once that task finishes';
 }

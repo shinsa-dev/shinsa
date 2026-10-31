@@ -147,6 +147,13 @@ describe('a proposed change', () => {
 });
 
 describe('resolveTaskStatus', () => {
+  it('shows a plan held in the backlog as Backlog, never as a plan to approve', () => {
+    const { state, task } = withGate({ type: 'plan' }, { stage: 'awaiting_plan', backlog: { at: 1 } });
+    expect(resolveTaskStatus(state, task)).toEqual({ label: 'Backlog', tone: 'neutral' });
+    expect(resolveTaskStatusIcon(state, task)).toBe('IconArchive');
+    expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconArchive', tone: 'neutral' });
+  });
+
   it('show a setup gate as setup incomplete in orange, in the paused group', () => {
     const setup = gate({ type: 'configuration' });
     expect(resolveGateGlyph(setup)).toEqual({ icon: 'IconToolbox', tone: 'orange' });
@@ -174,7 +181,7 @@ describe('resolveTaskStatus', () => {
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
       label: 'Waiting to check in again',
-      tone: 'blue',
+      tone: 'neutral',
     });
   });
 
@@ -220,7 +227,7 @@ describe('resolveTaskStatus', () => {
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [step] }), task)).toEqual({
       label: 'Waiting for delegations',
-      tone: 'blue',
+      tone: 'neutral',
     });
     const working = createRun({ id: 'r', taskId: 't', status: 'running' });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [working] }), task).label).toBe(
@@ -245,7 +252,7 @@ describe('resolveTaskStatus', () => {
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
       label: 'Waiting for the usage limit',
-      tone: 'blue',
+      tone: 'neutral',
     });
   });
 

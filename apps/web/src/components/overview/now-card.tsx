@@ -51,6 +51,8 @@ import { describePlanEyebrow, resolvePlanVersion } from '@/lib/overview/plan-ver
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
+import { listMergeWaits } from '@/lib/review/merge-steps.ts';
+import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
@@ -121,14 +123,14 @@ export function QuestionCard({
 }) {
   const { busy, run } = useBusy<'answer'>();
   const asked = gate.runId ? state.runs[gate.runId] : undefined;
-  const answer = (response: string) => void run('answer', () => onReply('answer', response));
+  const answer = (response: string) => run('answer', () => onReply('answer', response));
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={asked ? 'The agent asked' : undefined} />}
       title={gate.title}
     >
       {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
-      <QuestionChoices gate={gate} busy={busy !== null} onPick={answer} />
+      <QuestionChoices gate={gate} busy={busy !== null} onPick={(choice) => void answer(choice)} />
       <AnswerBox
         label='Your answer'
         placeholder={describeAnswerPlaceholder(gate)}
@@ -203,21 +205,22 @@ export function PlanCard({
 }) {
   const { busy, run } = useBusy<GateReply>();
   const approve = resolvePlanReply(task);
+  const copy = describePlanCard(task);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
-      title='The agent wants your go-ahead on this plan'
+      title={copy.title}
       action={
         <Button
           size='sm'
           loading={busy === approve}
           onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))}
         >
-          Approve plan
+          {copy.approve}
         </Button>
       }
       footer={
-        <FooterNote note='Want something different? Say it in the chat and the agent revises it.'>
+        <FooterNote note={copy.note}>
           <QuietLink busy={busy !== null} onClick={() => onOpen('agent')}>
             Open the chat
           </QuietLink>
@@ -286,6 +289,7 @@ function ReviewCard({
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
+  const waits = listMergeWaits(state, task);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -305,7 +309,7 @@ function ReviewCard({
       </p>
       {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
-      {merge && <MergeStepsBlock task={task} when='pre_merge' />}
+      {(merge || waits.length > 0) && <MergeStepsBlock task={task} when='pre_merge' waits={waits} />}
     </NowFrame>
   );
 }

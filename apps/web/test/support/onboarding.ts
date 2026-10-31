@@ -76,10 +76,11 @@ function createDefaultGroups(): OnboardingChoiceGroup[] {
     },
     {
       id: 'plans',
-      label: 'Large tasks',
+      label: 'Plans',
       options: [
-        createOption({ value: 'plans=yes', label: 'Show me the plan first', chosen: true }),
-        createOption({ value: 'plans=no', label: 'Start building' }),
+        createOption({ value: 'plans=large', label: 'Show me large plans first', chosen: true }),
+        createOption({ value: 'plans=always', label: 'Show me every plan first' }),
+        createOption({ value: 'plans=when_asked', label: 'Start building' }),
       ],
     },
   ];

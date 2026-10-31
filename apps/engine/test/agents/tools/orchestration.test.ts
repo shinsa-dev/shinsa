@@ -95,6 +95,7 @@ interface Options {
   state?: () => ShinsaState;
   runId?: string;
   requestKey?: string;
+  registerRepo?: OrchestrationCall['registerRepo'];
 }
 
 function createCall(core: ReturnType<typeof createCore>, runId: string, options: Options = {}) {
@@ -117,6 +118,7 @@ function createCall(core: ReturnType<typeof createCore>, runId: string, options:
       commits += 1;
       return Promise.resolve('abc1234');
     },
+    registerRepo: options.registerRepo ?? (() => Promise.resolve(null)),
     hasProvider: (id) => id === 'claude',
     awaitDelegation: (_child, timeoutMs) => {
       waits.push(timeoutMs);
@@ -441,11 +443,39 @@ describe('create_task and split_task', () => {
         { request: 'Do it.', repository: 'web' },
         createCall(core, run.id).call
       )
-    ).rejects.toThrow('There is no repository "web". Known: app, admin.');
+    ).rejects.toThrow(
+      'There is no repository "web" in Shinsa or in the project\'s folders. Known: app, admin.'
+    );
     const empty = createCall(core, run.id, { state: () => ({ ...core.state, repos: {} }) }).call;
     await expect(
       handleOrchestrationTool('create_task', { request: 'Do it.', repository: 'web' }, empty)
     ).rejects.toThrow('Known: none.');
+  });
+
+  test('create_task registers a repository it names from the project folders, and files the task there', async () => {
+    const { core, run, taskId } = await building();
+    const named: string[] = [];
+    const registerRepo: OrchestrationCall['registerRepo'] = async (task, name) => {
+      named.push(`${task.id}:${name}`);
+      await core.dispatch({
+        type: 'repo.register',
+        repo: { name, path: `/code/${name}`, defaultBranch: 'main', remote: null, checkCommands: [] },
+        projectName: null,
+      });
+      return Object.values(core.state.repos).find((repo) => repo.name === name) ?? null;
+    };
+    const { call } = createCall(core, run.id, { registerRepo });
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Document the agent login.', repository: 'docs', after_this: true },
+      call
+    );
+    const docs = Object.values(core.state.repos).find((repo) => repo.name === 'docs');
+    const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
+    expect(named).toEqual([`${taskId}:docs`]);
+    expect(created).toMatchObject({ repoId: docs?.id, waitsOn: [taskId] });
+    await handleOrchestrationTool('create_task', { request: 'More docs.', repository: 'docs' }, call);
+    expect(named).toHaveLength(1);
   });
 
   test('a run whose task is gone is told to end its turn', async () => {

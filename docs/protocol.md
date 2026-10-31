@@ -15,7 +15,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | Term | Definition | Code | UI |
 | --- | --- | --- | --- |
 | task | The conversation about one goal you asked for, worked in rounds; the only object with a lifecycle. A small task is a task with one round | `Task` | task |
-| round | One unit of work inside a task, with its own steps, plan, build, review and pull request; numbered within the task (`SW-14 · round 3`). One is active at a time | `Round`, `Task.rounds` | round |
+| round | One unit of work inside a task, with its own steps, plan, build, review and pull request; numbered within the task (`SW-14 · Round 3`). One is active at a time | `Round`, `Task.rounds` | round |
 | request | What you wrote when you created the task (round 1), or the message that started a later round; the first line becomes the title | `Task.request`, `Round.request` | request |
 | shipping | How a round's commits reach GitHub: onto the task's open pull request (the default), or as its own pull request stacked on it | `RoundShipping` (`onto_pull_request`, `stacked`) | "Onto #12", "As a stacked pull request" |
 | resting | A task whose last round finished on its own (merged, answered, ran): open, holding no run or gate, and a message starts its next round | `isTaskResting` | Merged, Done |
@@ -55,7 +55,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
-| merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
+| merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it. Never shipping code: a step that stages, commits, pushes or opens a pull request is refused. Each task the merge waits on (`Task.waitsOn`) shows among them as a linked row you never tick, done once that task finishes | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
 | watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; each check is a read of that source scoped to the change, and a report it files is a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `file_report`, `report_read` | Watchdogs, Watching |
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
 | watch | An automation that reads one of its project's integrations on a clock or a webhook and files a task per new report, from a home task no list shows | `Schedule.source`, `Task.watchHome`, `isWatchHome`, purpose `intake` | Watch, Show its reads |
@@ -74,6 +74,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
+| backlog | Where work you want planned now and built later waits: a status of a task, never a kind; it is triaged and planned, then its plan waits out of Needs you until you start building it. Only you, or an agent you asked, put work there | `Task.backlog` (`TaskBacklog`), `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `isHeldInBacklog`, `queue.backlog`, plan gate reason `backlog` | Backlog, "Move to the backlog", "Remove from the backlog", "Start building" |
+| All tasks | Every task in to-do order, in status groups (the Backlog one of them) | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
 | schedule (automation) | A trigger (once, interval, daily, webhook) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
@@ -85,7 +87,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
-| split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here as the next round | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
+| split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here, which sends it to this task now | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
 
 ### Two names for one thing
 
@@ -94,6 +96,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
+| The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
 | Your OK | step `your_ok`; gate type `proposal`; stage `awaiting_proposal`; `ChangeProposal`, `task.change_proposed|approved|declined`, `propose_change`; UI "Your OK", "Change to approve" (also for an operation), "Make it a change" |
 | Ask for changes | decision `revise`; UI "Ask for changes", "Request changes"; CLI `plans revise`, `reviews revise`; message effects `revise_plan`, `request_changes`, `send_back` |
@@ -119,7 +122,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 
 ## Naming decisions
 
-All nineteen are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
+All twenty are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
 command, stored shape and route uses the current one. Old shapes already in the user's log are rewritten once on start
 (`apps/engine/src/store/legacy.ts`, `docs/engine.md` → State in memory), so code never reads them.
 
@@ -164,6 +167,11 @@ command, stored shape and route uses the current one. Old shapes already in the 
 19. **Sign in names a provider**: `Gate.provider` on every Sign in gate (`claude` for a Claude account) and
     `Gate.account` (null for a provider with its own login); a Codex sign-out is `RunFailure.login`, and
     `provider.record_sign_in` answers that provider's open Sign in gates.
+20. **Backlog, never roadmap** (since 2026-10-30): planned work you start later is the backlog (`Task.backlog`,
+    `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `tasks move-to-backlog`, `tasks
+    remove-from-backlog`, `--backlog`); the list of every task is All tasks, its groups `TaskGroup` (`resolveTaskGroup`,
+    `TASK_GROUPS`, `components/tasks/`, the disclosure scope `tasks:group:`). "Roadmap" names nothing, in code, tools,
+    the command line or on screen.
 
 ## The task
 
@@ -198,6 +206,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
+| `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
 
 **Lifecycle and scheduling**
 
@@ -205,6 +214,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | --- | --- | --- |
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
+| `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
@@ -533,8 +543,10 @@ An inquiry has no gate of its own: a proposal goes to `your_ok`. An inquiry that
 pull_request, merge]` (`resolveProposalUpgrade`) and waits at `your_ok`, so a proposal and a composed OK take one path.
 
 **The plan gate rule** is data, `PLAN_GATE_RULE` (`domain/steps.ts`): `always` when the task operates, was created
-plan first or the plan asks for approval (`operates`, `plan_first`, `asks_approval`); with Approve plans on, also when
-the task is large or the plan is a revision (`withApprovePlans`: `large`, `revised`). `describePlanGateRule()` writes
+plan first, is in the backlog or the plan asks for approval (`operates`, `plan_first`, `backlog`, `asks_approval`); with Approve plans
+(`approvePlans`, a `PlanApproval`: `when_asked`, `large`, `always`) on Large plans, also when the plan has more than 3
+phases or 6 files or is a revision (`withLargePlans`: `large`, `revised`; the limits are `PLAN_SIZE_LIMITS`, counted on
+the plan document, never the triage size); on Always, every plan. `describePlanGateRule()` writes
 the plan step's `when` from it and `needsPlanApproval` (`decide/lifecycle.ts`) evaluates it, so the prose and the
 check cannot drift.
 
@@ -723,7 +735,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, waits on, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
@@ -731,6 +743,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `round.send` | sends a round waiting to start to the current round now: it leaves the queue (`round.removed`) and its request is delivered as your message, read as `feedback` (What a message does); a round that started is refused (`round_started`) | `rounds send` | agent |
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
+| `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
+| `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
@@ -740,9 +754,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
 | `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); approving a merge gate needs every step before the merge ticked (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
 | `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
-| `suggestion.accept` | adds a suggested task, optionally waiting on this one | `suggestions accept` | agent |
+| `suggestion.accept` | adds a suggested task, optionally waiting on this one or in the backlog (`backlog`) | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
-| `suggestion.keep` | keeps a split-off in this task as its next round (`shape` optional; the server asks the classifier when it is left out) | `suggestions keep` | agent |
+| `suggestion.keep` | keeps a split-off in this task and sends it now: feedback to the open round, or a new round on a resting task (`shape` optional; the server asks the classifier for a new round when it is left out) | `suggestions keep` | agent |
 | `memory.write` | writes a rule (`text`, `projectId` or null for every project) or, with `memoryId`, changes one; writing over a proposal keeps it; at most 240 characters and 20 kept rules per scope (`memory_invalid`, `memory_full`) | `memory write` | **human** |
 | `memory.accept` | keeps a rule an agent proposed | `memory keep` | **human** |
 | `memory.remove` | forgets a rule, or dismisses a proposal | `memory remove` | **human** |
@@ -823,7 +837,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`) or forked from a task (`forkOf`) |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`) or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
@@ -897,7 +911,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
-| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work |
+| `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
+| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off |
 | `task.message_received`, `task.message_routed`, `task.message_dropped` | a message of yours entered the inbox, left it to be delivered, or left it undelivered (`reason`) |
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
 | `round.started` | a round became the active one (`branch`, `base`, `onto`: the pull request it ships onto); the round before it, if any, is archived as shipped |

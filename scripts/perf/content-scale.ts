@@ -14,7 +14,7 @@ export const LONG_CHAT_TASK: ScaledTask = {
 
 const SUBJECTS = [
   'settings list',
-  'roadmap filter',
+  'task list filter',
   'usage meter',
   'queue badge',
   'review card',

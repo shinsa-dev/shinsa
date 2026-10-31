@@ -45,7 +45,10 @@ export function useAccounts() {
   return useSyncExternalStore(connection.subscribeAccounts, connection.selectAccounts);
 }
 
-const usageRecheck = createUsageRecheck({ refresh: () => requestAccounts('/api/accounts/refresh', {}) });
+const usageRecheck = createUsageRecheck({
+  refresh: () => requestAccounts('/api/accounts/refresh', {}),
+  read: () => requestAccounts('/api/accounts/refresh', { scope: 'usage' }),
+});
 
 export function refreshUsage() {
   return requestWithToast(async () => {
@@ -56,6 +59,10 @@ export function refreshUsage() {
 
 export function watchUsage() {
   return usageRecheck.watch();
+}
+
+export function resetUsageRecheck() {
+  usageRecheck.reset();
 }
 
 export function submitLoginCode(loginId: string, code: string) {

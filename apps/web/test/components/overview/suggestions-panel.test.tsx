@@ -85,12 +85,12 @@ describe('suggested follow-ups', () => {
       within(list)
         .getAllByRole('option')
         .map((option) => option.textContent)
-    ).toEqual(['After this task mergesSuggested', 'Start now']);
+    ).toEqual(['After this task mergesSuggested', 'Start now', 'Backlog']);
   });
 });
 
 describe('a separate-task suggestion', () => {
-  it('can be made a task of its own or kept in this task as the next round', async () => {
+  it('can be made a task of its own or kept in this task', async () => {
     const task = createTask({ id: 't', suggestions: [{ ...suggestion('s1', false), splitOff: true }] });
     render(
       <TooltipProvider>

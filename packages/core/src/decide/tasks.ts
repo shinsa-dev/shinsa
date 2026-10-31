@@ -25,6 +25,12 @@ import {
   listPendingDependencies,
   resolveTaskWorkspace,
 } from '../state/queries.ts';
+import {
+  addToBacklog,
+  buildFromBacklog,
+  isStartingFromBacklog,
+  releaseInquiryFromBacklog,
+} from './backlog.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { changeDependencies, resolveDependencies } from './dependencies.ts';
 import { settleTask, startWork } from './lifecycle.ts';
@@ -96,6 +102,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
       by: lineage.createdBy ? 'shinsa' : 'you',
     });
   }
+  if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });
   return taskId;
 }
@@ -154,6 +161,7 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   if (inferred.length > 0) {
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }
+  releaseInquiryFromBacklog(decider, task.id);
   startWork(decider, task.id);
 }
 
@@ -262,6 +270,10 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
   const pending = listPendingDependencies(decider.state, task);
   if (pending.length > 0) {
     decider.stage(task.id, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
+    return;
+  }
+  if (isStartingFromBacklog(task)) {
+    buildFromBacklog(decider, task.id);
     return;
   }
   startStep(decider, task.id, resolveNextStep(task));

@@ -133,7 +133,8 @@ src/
 │   │                new work never waits behind your own decision: new_round (or separate_task with no room for a
 │   │                suggestion) that would only start after you approve or merge is delivered as feedback
 │   │                (isHeldByYourDecision); sendQueuedRound (round.send) gives a waiting round to the current one
-│   │                as your message;
+│   │                as your message; keepSuggestion (suggestion.keep) sends a split-off now, as feedback to the
+│   │                open round or as a new round of a resting task, never queued for after the merge;
 │   │                the inbox: receiveMessage, routeMessage (delivers with the classifier's kind), dropMessage
 │   ├── retry.ts     Retry: restart the current step with a fresh fix budget
 │   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),
@@ -149,8 +150,8 @@ src/
 │   ├── tasks.ts     Creating, triaging, prioritising, cancelling and completing tasks; worktrees
 │   ├── workspaces.ts  Asking for a task's workspace in its repository's mode, and waiting for a main checkout
 │   │                another task holds (holdForCheckout)
-│   ├── suggestions.ts  Tasks an agent suggests, accepting and dismissing them, split-offs and keeping one
-│   │                as the next round
+│   ├── suggestions.ts  Tasks an agent suggests, accepting and dismissing them, and split-offs (keeping one is
+│   │                messages.ts's keepSuggestion)
 │   ├── memory.ts    The rules agents remember: writing, keeping and removing one (human-only, refused on your behalf),
 │   │                an agent's proposal (agent.remember) and a removed project's rules
 │   ├── rounds.ts    A new round waiting, starting the next one when the current one rests (startQueuedRounds, after

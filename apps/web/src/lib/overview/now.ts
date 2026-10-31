@@ -7,6 +7,7 @@ import {
   listActiveRuns,
   listOpenGates,
   type Run,
+  resolveTaskProgress,
   type ShinsaState,
   STEP_SCHEMA,
   type Task,
@@ -17,10 +18,11 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
+import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
 import { describeChecksPassed } from '@/lib/tasks/checks.ts';
+import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
-import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
-import { resolveTaskStatus } from '@/lib/tasks/status.ts';
+import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export type NowTarget = 'review' | 'changes' | 'agent';
@@ -42,6 +44,18 @@ const SETTLED_TITLE: Partial<Record<Task['stage'], string>> = {
   cancelled: 'Cancelled.',
 };
 
+const CANCEL_REASON: Record<string, string> = {
+  'pull request closed': 'the pull request was closed without merging',
+  'cancelled by you': 'you cancelled the task',
+};
+
+function describeCancelled(task: Task) {
+  const step = selectCancelledStep(resolveSteps(resolveTaskProgress(task)));
+  if (!step) return SETTLED_TITLE.cancelled ?? '';
+  const reason = CANCEL_REASON[task.stageReason] ?? task.stageReason;
+  return reason ? `Cancelled at ${step.label}: ${reason}.` : `Cancelled at ${step.label}.`;
+}
+
 const WATCHED_TITLE = 'Merged. Its watchdogs keep watching the change.';
 
 export function resolveNowTitle(
@@ -54,6 +68,7 @@ export function resolveNowTitle(
   if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
   if (!run && isWatchedTask(task)) return WATCHED_TITLE;
+  if (!run && task.stage === 'cancelled') return describeCancelled(task);
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
   return describeConflict(task) ?? capitalise(task.stageReason);
 }
@@ -93,7 +108,8 @@ export function isAgentWorking(state: ShinsaState, task: Task) {
 }
 
 export function isTaskWatchable(state: ShinsaState, task: Task) {
-  return resolveTaskStatus(state, task).tone !== 'neutral';
+  const status = resolveTaskStatus(state, task);
+  return status.tone !== 'neutral' || isPausedStatus(status);
 }
 
 export function describeReviewFacts(task: Task, merge: boolean) {

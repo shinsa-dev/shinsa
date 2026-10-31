@@ -119,14 +119,14 @@ describe('the step schema', () => {
 
   test('the plan gate rule is data, and the plan step describes it', () => {
     expect(PLAN_GATE_RULE).toEqual({
-      always: ['operates', 'plan_first', 'asks_approval'],
-      withApprovePlans: ['large', 'revised'],
+      always: ['operates', 'plan_first', 'backlog', 'asks_approval'],
+      withLargePlans: ['large', 'revised'],
     });
     expect(describePlanGateRule()).toBe(
-      'Always when the task runs an operation, it was created plan first or the plan asks for approval; with Approve plans on, also when the task is large or the plan is a revision.'
+      'Always when the task runs an operation, it was created plan first, it is in the backlog or the plan asks for approval; with Approve plans on Large plans, also when the plan has more than 3 phases or 6 files or the plan is a revision; on Always, every plan.'
     );
-    expect(describePlanGateRule({ always: ['large'], withApprovePlans: ['revised'] })).toBe(
-      'Always when the task is large; with Approve plans on, also when the plan is a revision.'
+    expect(describePlanGateRule({ always: ['large'], withLargePlans: ['revised'] })).toBe(
+      'Always when the plan has more than 3 phases or 6 files; with Approve plans on Large plans, also when the plan is a revision; on Always, every plan.'
     );
     expect(STEP_SCHEMA.plan.gate.when).toBe(describePlanGateRule());
   });

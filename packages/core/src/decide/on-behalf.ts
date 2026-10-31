@@ -60,6 +60,9 @@ const DESCRIPTIONS: Descriptions = {
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,
   'task.wait_on': (state, command) => `Changed what ${quoteTask(state, command.taskId)} waits on`,
+  'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
+  'task.remove_from_backlog': (state, command) =>
+    `Moved ${quoteTask(state, command.taskId)} out of the backlog`,
   'task.cancel': (state, command) => `Cancelled ${quoteTask(state, command.taskId)}`,
   'task.complete': (state, command) => `Marked ${quoteTask(state, command.taskId)} as done`,
   'task.retry': (state, command) => `Retried ${quoteTask(state, command.taskId)}`,
@@ -77,8 +80,7 @@ const DESCRIPTIONS: Descriptions = {
     `Removed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
   'round.send': (state, command) =>
     `Sent queued round ${command.number} of ${quoteTask(state, command.taskId)} to its current round`,
-  'suggestion.keep': (state, command) =>
-    `Kept a split-off of ${quoteTask(state, command.taskId)} as its next round`,
+  'suggestion.keep': (state, command) => `Kept a split-off in ${quoteTask(state, command.taskId)}`,
   'monitor.check_in_now': (state, command) =>
     `Checked now what ${quoteTask(state, command.taskId)} waits for`,
   'run.snooze_silence': (state, command) =>

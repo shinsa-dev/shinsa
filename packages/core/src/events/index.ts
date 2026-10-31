@@ -1,5 +1,6 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
+  BacklogCause,
   ConfigProblem,
   DeliveringStep,
   EditsApproval,
@@ -120,6 +121,7 @@ type EventBody =
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
+  | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }
   | {
       type: 'task.messaged';
@@ -128,6 +130,7 @@ type EventBody =
       scheduleId?: string | null;
       kind?: MessageKind;
       round?: number;
+      suggestionId?: string;
     }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }

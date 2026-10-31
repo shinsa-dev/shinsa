@@ -1,5 +1,11 @@
 export type * from './accounts.ts';
 export {
+  BACKLOG_REFUSAL_TEXT,
+  type BacklogRefusal,
+  canWaitInBacklog,
+  resolveBacklogRefusal,
+} from './backlog.ts';
+export {
   describeWholeSuiteRefusal,
   isBlockingCheck,
   isWholeSuiteCommand,
@@ -128,6 +134,8 @@ export {
   MAX_COMPACTION_LEAD_MINUTES,
   MERGE_METHODS,
   type MergeMethod,
+  PLAN_APPROVALS,
+  type PlanApproval,
   resolveAccountSwitchAt,
   resolveAgentFastMode,
   resolveAttentionLimit,
@@ -205,6 +213,7 @@ export {
   PIPELINE_ORDER,
   type PipelineStep,
   PLAN_GATE_RULE,
+  PLAN_SIZE_LIMITS,
   type PlanGateReason,
   type PlanGateRule,
   resolveGateDefinition,

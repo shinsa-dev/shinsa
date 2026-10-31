@@ -1,6 +1,9 @@
+import { describeCount } from '../chat/text.ts';
 import {
+  DAY_MS,
   type Evidence,
   type EvidenceItem,
+  HOUR_MS,
   hasStep,
   isComposedByAgent,
   isLaterRound,
@@ -196,6 +199,16 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
     .join('\n');
 }
 
+function describeWait(waitedMs: number) {
+  if (waitedMs >= DAY_MS) return describeCount(Math.floor(waitedMs / DAY_MS), 'day');
+  if (waitedMs >= HOUR_MS) return describeCount(Math.floor(waitedMs / HOUR_MS), 'hour');
+  return 'less than an hour';
+}
+
+export function resolveBacklogStart(waitedMs: number) {
+  return `\n\nThis plan waited in the backlog for ${describeWait(waitedMs)} before the human started it, and the worktree now holds the latest default branch. Before you build, check that the plan still fits the code. Where it no longer does, adapt it as you build and record what you changed as a judgement call.`;
+}
+
 export function resolvePhaseInstruction(
   task: Task,
   repo: Repo | null,
@@ -226,7 +239,7 @@ export function resolvePhaseInstruction(
     '  Leave boilerplate and mechanical edits out.',
     '- judgement_calls: every choice the human might make differently, each with the alternatives you rejected and why.',
     last
-      ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, the local preview you attached, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.' +
+      ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Never a step to stage, commit, push or open a pull request: work in another repository is a task you file with `create_task`. Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, the local preview you attached, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.' +
         describeWatchdogGuide(sources, defaults)
       : '',
     'Then stop.',
@@ -301,7 +314,7 @@ function describeMergeStepsForReview(task: Task) {
   return [
     '',
     ...listed,
-    'Check the list is complete: an environment variable, secret, migration, deploy, config or feature flag the change needs that is missing from it is a blocking finding, and so is a step an agent could have done in the repository (code, tests, docs, `.env.example`, a migration file) or a secret value written into a step.',
+    'Check the list is complete: an environment variable, secret, migration, deploy, config or feature flag the change needs that is missing from it is a blocking finding, and so is a step an agent could have done in the repository (code, tests, docs, `.env.example`, a migration file), a step that stages, commits, pushes or opens a pull request anywhere (work in another repository is a task the agent files with `create_task`), or a secret value written into a step.',
   ].join('\n');
 }
 

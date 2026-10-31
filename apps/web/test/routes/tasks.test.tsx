@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { TasksPage } from '@/routes/tasks.tsx';
 import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
-const ROADMAP = createShinsaState({
+const TASKS = createShinsaState({
   tasks: [
     createTask({ id: 'merge', title: 'Land the billing change', stage: 'awaiting_merge' }),
     createTask({ id: 'review', title: 'Review the login fix', stage: 'reviewing' }),
@@ -41,7 +41,7 @@ function visit(path: string) {
   dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function renderPage(state: ShinsaState = ROADMAP, path = '/tasks') {
+function renderPage(state: ShinsaState = TASKS, path = '/tasks') {
   visit(path);
   return render(
     <TooltipProvider>
@@ -71,7 +71,7 @@ function rowTitles(titles: string[]) {
   return rows().map((row) => titles.find((title) => row.textContent?.startsWith(title) ?? false));
 }
 
-describe('the roadmap groups', () => {
+describe('the task groups', () => {
   it('lists every group in order with its count, Done and Cancelled collapsed', () => {
     renderPage();
     expect(groupHeaders()).toEqual([
@@ -120,7 +120,7 @@ describe('the roadmap groups', () => {
 
 describe('filtering', () => {
   it('shows only the status in the URL, opened, with a button that clears it', () => {
-    renderPage(ROADMAP, '/tasks?status=done');
+    renderPage(TASKS, '/tasks?status=done');
     expect(groupHeaders()).toEqual(['Done1|true']);
     expect(screen.getByText('Rename the settings page')).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Done' })));
@@ -129,7 +129,7 @@ describe('filtering', () => {
   });
 
   it('ignores a status it does not know', () => {
-    renderPage(ROADMAP, '/tasks?status=someday');
+    renderPage(TASKS, '/tasks?status=someday');
     expect(groupHeaders()).toHaveLength(9);
   });
 
@@ -138,7 +138,7 @@ describe('filtering', () => {
     ['the intent', 'geist', 'Cancelled1|false'],
     ['the branch', 'feat/search', 'In progress1|true'],
   ])('searches %s', (_, query, group) => {
-    renderPage(ROADMAP, `/tasks?q=${encodeURIComponent(query)}`);
+    renderPage(TASKS, `/tasks?q=${encodeURIComponent(query)}`);
     expect(groupHeaders()).toEqual([group]);
     expect((screen.getByRole('searchbox', { name: 'Search tasks' }) as HTMLInputElement).value).toBe(query);
   });
@@ -159,14 +159,14 @@ describe('filtering', () => {
   });
 
   it('says nothing matches a search without results', () => {
-    renderPage(ROADMAP, '/tasks?q=nothing-like-this');
+    renderPage(TASKS, '/tasks?q=nothing-like-this');
     expect(screen.getByText('Nothing matches')).toBeTruthy();
     expect(
       screen.getByText('Try another word from the title, branch or repository, or clear the filter.')
     ).toBeTruthy();
   });
 
-  it('says there are no tasks yet on an empty roadmap', () => {
+  it('says there are no tasks yet on an empty task list', () => {
     renderPage(createShinsaState({}));
     expect(screen.getByText('No tasks yet')).toBeTruthy();
     expect(

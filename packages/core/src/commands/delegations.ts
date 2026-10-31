@@ -27,6 +27,7 @@ export type DelegationAgentCommand =
       repoId: string | null;
       thisWaits: boolean;
       afterThis?: boolean;
+      backlog?: boolean;
       forkOf?: string;
     }
   | { type: 'agent.split_task'; runId: string; requests: string[]; thisWaits: boolean };

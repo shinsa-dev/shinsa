@@ -39,6 +39,7 @@ export interface CourierRequest {
   forkFrom: string | null;
   thisTaskWaits: boolean;
   afterThis: boolean;
+  backlog: boolean;
 }
 
 export interface SplitRequest {
@@ -105,6 +106,7 @@ export function validateCourierTask(input: Record<string, unknown>): Validation<
     forkFrom: reader.optionalText(input.fork_from, 'fork_from', DELEGATION_LIMITS.name),
     thisTaskWaits: reader.flag(input.this_task_waits, 'this_task_waits'),
     afterThis: reader.flag(input.after_this, 'after_this'),
+    backlog: reader.flag(input.backlog, 'backlog'),
   });
 }
 

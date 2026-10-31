@@ -102,7 +102,7 @@ describe('the setup page', () => {
     const options = within(merge).getAllByRole('option');
     expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['true', 'false']);
     expect(within(options[0] as HTMLElement).getByText('Recommended')).toBeTruthy();
-    expect(screen.getByRole('listbox', { name: 'Large tasks' })).toBeTruthy();
+    expect(screen.getByRole('listbox', { name: 'Plans' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Continue/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Back/ })).toBeTruthy();
   });
@@ -113,7 +113,7 @@ describe('the setup page', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Continue/ }));
     expect(await screen.findByRole('heading', { name: 'Accounts' })).toBeTruthy();
     expect(sentReplies()).toEqual([
-      { type: 'answer', stepId: 'defaults', values: ['merge=squash', 'plans=yes'] },
+      { type: 'answer', stepId: 'defaults', values: ['merge=squash', 'plans=large'] },
     ]);
   });
 
@@ -144,7 +144,7 @@ describe('the setup page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
       expect(sentReplies()).toEqual([
-        { type: 'answer', stepId: 'defaults', values: ['merge=rebase', 'plans=no'] },
+        { type: 'answer', stepId: 'defaults', values: ['merge=rebase', 'plans=when_asked'] },
       ])
     );
   });

@@ -179,6 +179,9 @@ describe('listReviewChapters', () => {
         (prose) => prose.key
       )
     ).toEqual(['post_merge']);
+    expect(listReviewChapters(REPORT, [], [], [], null, true)[0]?.prose.map((prose) => prose.key)).toEqual([
+      'pre_merge',
+    ]);
   });
 
   it('shows a key piece of code by its title and explanation, with why it matters under them', () => {

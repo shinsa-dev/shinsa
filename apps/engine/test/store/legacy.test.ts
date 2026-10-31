@@ -242,6 +242,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
     const watchdogReads = ['task.created', 'watchdog.armed', 'watchdog.checked'];
+    const later = [...watchdogReads, 'settings.changed'];
     expect(listLegacyEventTypes(2)).toEqual([
       'phase.completed',
       'work.submitted',
@@ -250,26 +251,27 @@ describe('a walkthrough’s testing as a plain list', () => {
       'pull_request.watched',
       ...gitbutler,
       'schedule.written',
-      ...watchdogReads,
+      ...later,
     ]);
     expect(listLegacyEventTypes(3)).toEqual([
       'run.metered',
       'pull_request.watched',
       ...gitbutler,
       'schedule.written',
-      ...watchdogReads,
+      ...later,
     ]);
     expect(listLegacyEventTypes(4)).toEqual([
       'pull_request.watched',
       ...gitbutler,
       'schedule.written',
-      ...watchdogReads,
+      ...later,
     ]);
-    expect(listLegacyEventTypes(5)).toEqual([...gitbutler, 'schedule.written', ...watchdogReads]);
-    expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written', ...watchdogReads]);
-    expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...watchdogReads]);
-    expect(listLegacyEventTypes(8)).toEqual(watchdogReads);
-    expect(listLegacyEventTypes(9)).toEqual([]);
+    expect(listLegacyEventTypes(5)).toEqual([...gitbutler, 'schedule.written', ...later]);
+    expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written', ...later]);
+    expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...later]);
+    expect(listLegacyEventTypes(8)).toEqual(later);
+    expect(listLegacyEventTypes(9)).toEqual(['settings.changed']);
+    expect(listLegacyEventTypes(10)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -285,7 +287,42 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(9);
+    expect(readStoredLog(path).version).toBe(10);
+  });
+});
+
+describe('Approve plans saved as a switch', () => {
+  test('on becomes Large plans and off becomes When you ask; a mode is left alone', () => {
+    expect(
+      rewrite(
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', approvePlans: true } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', approvePlans: false } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude', approvePlans: 'always' } },
+        { type: 'settings.changed', settings: { defaultProvider: 'claude' } }
+      ).map((row) => [row.seq, row.event.settings])
+    ).toEqual([
+      [1, { defaultProvider: 'claude', approvePlans: 'large' }],
+      [2, { defaultProvider: 'claude', approvePlans: 'when_asked' }],
+    ]);
+  });
+
+  test('is rewritten on boot in a log of the watchdog reads’ version', () => {
+    const path = writeLegacyLog([{ type: 'settings.changed', settings: { approvePlans: true } }]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 9');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    const stored = readStoredLog(path);
+    expect(stored.version).toBe(10);
+    expect(stored.rows).toEqual([
+      {
+        seq: 1,
+        type: 'settings.changed',
+        payload: JSON.stringify({ type: 'settings.changed', settings: { approvePlans: 'large' } }),
+      },
+    ]);
   });
 });
 
@@ -310,7 +347,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(9);
+    expect(stored.version).toBe(10);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);

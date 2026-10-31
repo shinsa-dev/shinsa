@@ -82,6 +82,27 @@ describe('resolveNowTitle', () => {
     );
   });
 
+  it('names the step a cancelled task stopped at and why', () => {
+    const closed = createTask({
+      id: 'closed',
+      repoId: 'repo-1',
+      stage: 'cancelled',
+      cancelledFrom: 'awaiting_merge',
+      stageReason: 'pull request closed',
+    });
+    expect(resolveNowTitle(closed, [], null, undefined)).toBe(
+      'Cancelled at Merge: the pull request was closed without merging.'
+    );
+    const yours = { ...closed, cancelledFrom: 'planning' as const, stageReason: 'cancelled by you' };
+    expect(resolveNowTitle(yours, [], null, undefined)).toBe('Cancelled at Plan: you cancelled the task.');
+    const failed = { ...closed, stageReason: 'cancelled after a failure' };
+    expect(resolveNowTitle(failed, [], null, undefined)).toBe(
+      'Cancelled at Merge: cancelled after a failure.'
+    );
+    const silent = { ...closed, stageReason: '' };
+    expect(resolveNowTitle(silent, [], null, undefined)).toBe('Cancelled at Merge.');
+  });
+
   it('falls back to the stage reason, capitalised', () => {
     const task = createTask({ id: 'task-1', stage: 'shipping', stageReason: 'waiting for CI' });
     expect(resolveNowTitle(task, [], phase({ key: 'pull-request' }), undefined)).toBe('Waiting for CI');
@@ -165,6 +186,27 @@ describe('isTaskWatchable', () => {
     expect(isTaskWatchable(createShinsaState({ tasks: [building] }), building)).toBe(true);
     const done = createTask({ id: 'task-2', stage: 'done' });
     expect(isTaskWatchable(createShinsaState({ tasks: [done] }), done)).toBe(false);
+  });
+
+  it('still offers to watch a task whose agent is paused, though its status is grey', () => {
+    const paused = createTask({
+      id: 'task-3',
+      stage: 'building',
+      monitor: {
+        id: 'm',
+        runId: 'r',
+        role: 'agent',
+        phaseIndex: 0,
+        notes: 'n',
+        armedAt: 0,
+        nextCheckAt: 1,
+        timeoutAt: 2,
+        attempts: 0,
+        maxAttempts: 1,
+        status: 'armed',
+      },
+    });
+    expect(isTaskWatchable(createShinsaState({ tasks: [paused] }), paused)).toBe(true);
   });
 });
 

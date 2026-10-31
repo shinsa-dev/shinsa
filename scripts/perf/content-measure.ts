@@ -167,7 +167,7 @@ const scenarios: Record<string, (page: Page, taskId: string) => Promise<Record<s
   async lists(page) {
     await navigate(page, '/');
     await settle(page);
-    const roadmap = await navigate(page, '/tasks', 'a[href^="/tasks/"]');
+    const tasks = await navigate(page, '/tasks', 'a[href^="/tasks/"]');
     await settle(page);
     const scroll = await page.evaluate<{ p95: number; max: number; long: { max: number } } | null>(
       `window.__perf.scroll('a[href^="/tasks/"]', 'down', 120, 120)`
@@ -175,10 +175,10 @@ const scenarios: Record<string, (page: Page, taskId: string) => Promise<Record<s
     const home = await navigate(page, '/', 'a[href^="/tasks/"]');
     await settle(page);
     return {
-      roadmapPaintMs: roadmap.ms,
-      roadmapLongMax: roadmap.long.max,
-      roadmapScrollMax: scroll?.max ?? 0,
-      roadmapScrollLongMax: scroll?.long.max ?? 0,
+      tasksPaintMs: tasks.ms,
+      tasksLongMax: tasks.long.max,
+      tasksScrollMax: scroll?.max ?? 0,
+      tasksScrollLongMax: scroll?.long.max ?? 0,
       homePaintMs: home.ms,
       homeLongMax: home.long.max,
     };

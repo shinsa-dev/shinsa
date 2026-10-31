@@ -19,6 +19,12 @@ export function dismissSilence(runId: string) {
   return sendCommandWithToast({ type: 'run.dismiss_silence', runId }, 'Dismissed for this step.');
 }
 
+const SUGGESTION_ACCEPTED: Record<SuggestionStart, string> = {
+  now: 'Added the task. It starts now.',
+  after: 'Added the task. It starts after this task merges.',
+  backlog: 'Added to the backlog. It plans now and builds when you start it.',
+};
+
 export function acceptSuggestion(task: Task, suggestion: TaskSuggestion, start: SuggestionStart) {
   return sendCommandWithToast(
     {
@@ -26,10 +32,9 @@ export function acceptSuggestion(task: Task, suggestion: TaskSuggestion, start: 
       taskId: task.id,
       suggestionId: suggestion.id,
       waitsOnThis: start === 'after',
+      ...(start === 'backlog' ? { backlog: true } : {}),
     },
-    start === 'after'
-      ? 'Added to the roadmap. It starts after this task merges.'
-      : 'Added to the roadmap. It starts now.'
+    SUGGESTION_ACCEPTED[start]
   );
 }
 
@@ -43,7 +48,7 @@ export function dismissSuggestion(task: Task, suggestion: TaskSuggestion) {
 export function keepSuggestion(task: Task, suggestion: TaskSuggestion) {
   return sendCommandWithToast(
     { type: 'suggestion.keep', taskId: task.id, suggestionId: suggestion.id },
-    'Kept in this task. It starts as the next round.'
+    'Kept in this task. The agent takes it now.'
   );
 }
 

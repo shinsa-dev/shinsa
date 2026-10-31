@@ -36,12 +36,14 @@ describe('when a follow-up starts', () => {
     expect(listSuggestionStarts(waits)).toEqual([
       { value: 'after', label: 'After this task merges', icon: 'IconHourglass', hint: 'Suggested' },
       { value: 'now', label: 'Start now', icon: 'IconRocket' },
+      { value: 'backlog', label: 'Backlog', icon: 'IconArchive' },
     ]);
     const now = suggestion('b', 'open');
     expect(resolveSuggestionStart(now)).toBe('now');
     expect(listSuggestionStarts(now)).toEqual([
       { value: 'now', label: 'Start now', icon: 'IconRocket', hint: 'Suggested' },
       { value: 'after', label: 'After this task merges', icon: 'IconHourglass' },
+      { value: 'backlog', label: 'Backlog', icon: 'IconArchive' },
     ]);
   });
 });

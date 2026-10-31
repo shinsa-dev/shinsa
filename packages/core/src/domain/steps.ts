@@ -74,23 +74,26 @@ export interface StepGate {
   when: string | null;
 }
 
-export type PlanGateReason = 'operates' | 'plan_first' | 'asks_approval' | 'large' | 'revised';
+export type PlanGateReason = 'operates' | 'plan_first' | 'backlog' | 'asks_approval' | 'large' | 'revised';
 
 export interface PlanGateRule {
   always: readonly PlanGateReason[];
-  withApprovePlans: readonly PlanGateReason[];
+  withLargePlans: readonly PlanGateReason[];
 }
 
 export const PLAN_GATE_RULE: PlanGateRule = {
-  always: ['operates', 'plan_first', 'asks_approval'],
-  withApprovePlans: ['large', 'revised'],
+  always: ['operates', 'plan_first', 'backlog', 'asks_approval'],
+  withLargePlans: ['large', 'revised'],
 };
+
+export const PLAN_SIZE_LIMITS = { phases: 3, files: 6 } as const;
 
 const PLAN_GATE_REASON_TEXT: Record<PlanGateReason, string> = {
   operates: 'the task runs an operation',
   plan_first: 'it was created plan first',
+  backlog: 'it is in the backlog',
   asks_approval: 'the plan asks for approval',
-  large: 'the task is large',
+  large: `the plan has more than ${PLAN_SIZE_LIMITS.phases} phases or ${PLAN_SIZE_LIMITS.files} files`,
   revised: 'the plan is a revision',
 };
 
@@ -100,7 +103,7 @@ function joinReasons(reasons: readonly PlanGateReason[]) {
 }
 
 export function describePlanGateRule(rule: PlanGateRule = PLAN_GATE_RULE) {
-  return `Always when ${joinReasons(rule.always)}; with Approve plans on, also when ${joinReasons(rule.withApprovePlans)}.`;
+  return `Always when ${joinReasons(rule.always)}; with Approve plans on Large plans, also when ${joinReasons(rule.withLargePlans)}; on Always, every plan.`;
 }
 
 export interface StepDefinition {

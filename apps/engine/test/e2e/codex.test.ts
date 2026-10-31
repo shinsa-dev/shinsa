@@ -114,9 +114,9 @@ describe('a task on Codex', () => {
       'fix: write the second file',
       'fix: write the first file',
     ]);
-    expect(
+    await w.until('every run to be metered', () =>
       listRuns(w, taskId).every((run) => (run.usage?.inputTokens ?? 0) > 0 && (run.usage?.costUsd ?? 0) > 0)
-    ).toBe(true);
+    );
     await w.answer(await w.untilGate(taskId, 'review'), 'approve');
     await w.until('the pull request to open', () => w.task(taskId).pullRequest !== null);
     w.github.update(1, { checks: 'passing' });

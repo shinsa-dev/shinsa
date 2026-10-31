@@ -7,6 +7,7 @@ import * as connectionAccounts from '@/lib/connection/accounts.ts';
 import { closeSignIn, useSignInDialog } from '@/lib/connection/accounts.ts';
 import { createAccount, createProviderLogin, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { findTooltipText } from '../../support/hover.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 
@@ -128,7 +129,7 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('Default')).toBeTruthy();
     expect(screen.getByText('Needs sign-in')).toBeTruthy();
     expect(screen.getByText('Paused')).toBeTruthy();
-    expect(screen.getByText(/^Out of usage until /)).toBeTruthy();
+    expect(screen.getByText(/^Out of usage(, resets in | until )/)).toBeTruthy();
     expect(screen.getAllByText('20%')).toHaveLength(4);
   });
 
@@ -149,7 +150,7 @@ describe('the Accounts settings', () => {
         ],
       })
     );
-    expect(screen.getByText(/^Out of usage until /)).toBeTruthy();
+    expect(screen.getByText(/^Out of usage(, resets in | until )/)).toBeTruthy();
   });
 
   it('shows every window of every account with its reset, bar and percentage', () => {
@@ -201,6 +202,29 @@ describe('the Accounts settings', () => {
     expect(screen.getAllByText('Updated 2m ago')).toHaveLength(1);
     expect(screen.getByText('Claude did not report usage.')).toBeTruthy();
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
+  });
+
+  it('says why the last reading is kept in the tooltip of when it was read, never as a row under its windows', async () => {
+    const expired = 'The login needs refreshing. It refreshes the next time an agent runs on this account.';
+    renderAccounts(
+      createSnapshot({
+        accounts: [
+          createAccount({
+            id: 'a',
+            usage: {
+              status: 'ok',
+              windows: [createWindow({ id: 's', usedPercent: 42 })],
+              detail: expired,
+              checkedAt: Date.now() - 3 * HOUR,
+              source: 'read',
+            },
+          }),
+        ],
+      })
+    );
+    expect(screen.getByText('42%')).toBeTruthy();
+    expect(screen.queryByText(expired)).toBeNull();
+    expect(await findTooltipText(screen.getByText('Updated 3h ago'))).toContain(expired);
   });
 
   it('refreshes the usage of every account from one button in the section header', async () => {

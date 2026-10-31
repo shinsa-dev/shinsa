@@ -375,6 +375,7 @@ export interface Activity {
   round?: number;
   noted?: boolean;
   undelivered?: UndeliveredMessage;
+  suggestionId?: string;
 }
 
 export interface UndeliveredMessage {
@@ -399,6 +400,7 @@ export interface Task {
   planFirst: boolean;
   stage: TaskStage;
   stageReason: string;
+  cancelledFrom?: TaskStage | null;
   priority: TaskPriority;
   branch: string | null;
   worktreePath: string | null;
@@ -474,7 +476,14 @@ export interface Task {
   mergeStepsDone?: string[];
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
+  backlog?: TaskBacklog | null;
 }
+
+export interface TaskBacklog {
+  at: number;
+}
+
+export type BacklogCause = 'you' | 'started' | 'inquiry';
 
 export interface InboxMessage {
   id: string;

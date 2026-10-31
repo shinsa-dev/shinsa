@@ -15,7 +15,13 @@ import type {
   WebhookEncoding,
   WebhookSignature,
 } from '../domain/schedules.ts';
-import { COMPACTION_MODES, MERGE_METHODS, SETTINGS_KEYS, type Settings } from '../domain/settings.ts';
+import {
+  COMPACTION_MODES,
+  MERGE_METHODS,
+  PLAN_APPROVALS,
+  SETTINGS_KEYS,
+  type Settings,
+} from '../domain/settings.ts';
 import { TASK_SHAPES, type TaskShape } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
 import type {
@@ -313,6 +319,14 @@ function readRoleSwitches(value: unknown) {
   return switches;
 }
 
+function readPlacementPatch(fields: Record<string, unknown>): Partial<Settings> {
+  const patch: Partial<Settings> = {};
+  if ('taskCapacity' in fields) patch.taskCapacity = readNullableInteger(fields, 'taskCapacity');
+  if ('placementPolicies' in fields)
+    patch.placementPolicies = readList(fields, 'placementPolicies', readText);
+  return patch;
+}
+
 function readSettingsPatch(value: unknown): Partial<Settings> {
   const fields = readObject(value, 'patch');
   readKnownKeys(fields, SETTINGS_KEYS, 'Settings');
@@ -323,9 +337,8 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('delegationLimit' in fields) patch.delegationLimit = readNullableInteger(fields, 'delegationLimit');
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
-  if ('taskCapacity' in fields) patch.taskCapacity = readNullableInteger(fields, 'taskCapacity');
-  if ('placementPolicies' in fields) patch.placementPolicies = readList(fields, 'placementPolicies', readText);
-  if ('approvePlans' in fields) patch.approvePlans = readBoolean(fields, 'approvePlans');
+  Object.assign(patch, readPlacementPatch(fields));
+  if ('approvePlans' in fields) patch.approvePlans = readChoice(fields, 'approvePlans', PLAN_APPROVALS);
   if ('agentModels' in fields) patch.agentModels = readRoleIds(fields.agentModels, 'agentModels');
   if ('agentProviders' in fields) {
     patch.agentProviders = readRoleIds(fields.agentProviders, 'agentProviders');
@@ -365,6 +378,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
     ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
+    ...(fields.backlog === undefined ? {} : { backlog: readBoolean(fields, 'backlog') }),
   };
 }
 
@@ -423,6 +437,7 @@ function readSuggestionAccept(fields: Fields): UserCommand {
     taskId: readId(fields, 'taskId'),
     suggestionId: readId(fields, 'suggestionId'),
     waitsOnThis: readBoolean(fields, 'waitsOnThis'),
+    ...(fields.backlog === undefined ? {} : { backlog: readBoolean(fields, 'backlog') }),
   };
 }
 
@@ -635,6 +650,11 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.create': readTaskCreate,
   'task.prioritize': readTaskPrioritize,
   'task.wait_on': readTaskWaitOn,
+  'task.move_to_backlog': (fields) => ({ type: 'task.move_to_backlog', taskId: readId(fields, 'taskId') }),
+  'task.remove_from_backlog': (fields) => ({
+    type: 'task.remove_from_backlog',
+    taskId: readId(fields, 'taskId'),
+  }),
   'task.cancel': (fields) => ({ type: 'task.cancel', taskId: readId(fields, 'taskId') }),
   'task.complete': (fields) => ({ type: 'task.complete', taskId: readId(fields, 'taskId') }),
   'task.retry': readRetry,

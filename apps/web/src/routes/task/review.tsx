@@ -39,6 +39,7 @@ import { createDisclosureId, notPersisted } from '@/lib/preferences/disclosure.t
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
 import { resolveReviewItemIdentity } from '@/lib/review/identity.ts';
 import type { ReviewStep } from '@/lib/review/keys.ts';
+import { listMergeWaits, type MergeWaitView } from '@/lib/review/merge-steps.ts';
 import {
   describeAgentReview,
   describeItemPlace,
@@ -195,11 +196,13 @@ function BuiltPart({
   task,
   report,
   checks,
+  waits,
   prose,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
+  waits: MergeWaitView[];
   prose: ReviewProseId;
 }) {
   const walkthrough = report.walkthrough;
@@ -228,7 +231,12 @@ function BuiltPart({
     case 'pre_merge':
     case 'post_merge':
       return (
-        <MergeStepsPanel persistId={resolveReviewDisclosure(task, 'panel', prose)} task={task} when={prose} />
+        <MergeStepsPanel
+          persistId={resolveReviewDisclosure(task, 'panel', prose)}
+          task={task}
+          when={prose}
+          waits={waits}
+        />
       );
   }
 }
@@ -237,12 +245,14 @@ function HowItIsBuilt({
   task,
   report,
   checks,
+  waits,
   chapter,
   selected,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
+  waits: MergeWaitView[];
   chapter: ReviewChapter;
   selected: string | null;
 }) {
@@ -250,7 +260,7 @@ function HowItIsBuilt({
     <Chapter title={chapter.title}>
       {chapter.prose.map((prose) => (
         <Stop key={prose.key} stop={prose.key} selected={selected}>
-          <BuiltPart task={task} report={report} checks={checks} prose={prose.key} />
+          <BuiltPart task={task} report={report} checks={checks} waits={waits} prose={prose.key} />
         </Stop>
       ))}
     </Chapter>
@@ -516,12 +526,14 @@ function ReviewChapters({
   task,
   report,
   checks,
+  waits,
   chapters,
   selected,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
+  waits: MergeWaitView[];
   chapters: ReviewChapter[];
   selected: string | null;
 }) {
@@ -533,6 +545,7 @@ function ReviewChapters({
           task={task}
           report={report}
           checks={checks}
+          waits={waits}
           chapter={chapter}
           selected={selected}
         />
@@ -555,6 +568,8 @@ export function ReviewTab({
   summary?: React.ReactNode;
 }) {
   const diff = useReviewDiff(task);
+  const { tasks } = state;
+  const waits = React.useMemo(() => listMergeWaits({ tasks }, task), [tasks, task]);
   const diffValue = diff.status === 'ready' ? diff.value : null;
   const report = React.useMemo(
     () => task.report ?? (diffValue ? resolveFallbackReport(diffValue, task.summary ?? task.title) : null),
@@ -567,9 +582,10 @@ export function ReviewTab({
         task.findings,
         task.reviewDisagreements,
         listMergeSteps(task),
-        task.coverage ?? null
+        task.coverage ?? null,
+        waits.length > 0
       ),
-    [report, task]
+    [report, task, waits]
   );
   const points = React.useMemo(() => listReviewPoints(chapters), [chapters]);
   const { repos, evidence } = state;
@@ -637,7 +653,14 @@ export function ReviewTab({
             />
           )}
           <EvidenceSection state={state} task={task} showEmpty />
-          <ReviewChapters task={task} report={report} checks={checks} chapters={chapters} selected={lit} />
+          <ReviewChapters
+            task={task}
+            report={report}
+            checks={checks}
+            waits={waits}
+            chapters={chapters}
+            selected={lit}
+          />
           <AgentReview
             task={task}
             chapter={chapters.find((chapter) => chapter.id === 'review')}

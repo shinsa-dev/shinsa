@@ -381,7 +381,7 @@ describe('plan revisions', () => {
   function approvingPlans() {
     const harness = createHarness();
     registerRepo(harness);
-    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     const taskId = createTask(harness, { size: 'large' });
     return { harness, taskId };
   }

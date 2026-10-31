@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { MERGE_METHODS, PRIORITY_RANK, replayEventLog, type ShinsaState } from '@shinsa/core';
+import { MERGE_METHODS, PLAN_APPROVALS, PRIORITY_RANK, replayEventLog, type ShinsaState } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -190,7 +190,7 @@ function assertWellFormed(state: ShinsaState) {
   expect(state.settings.maxFixRounds === null || Number.isInteger(state.settings.maxFixRounds)).toBe(true);
   expect(Number.isInteger(state.settings.delegationLimit ?? 1)).toBe(true);
   expect(Number.isInteger(state.settings.attentionLimit ?? 1)).toBe(true);
-  expect(['boolean', 'undefined'].includes(typeof state.settings.approvePlans)).toBe(true);
+  expect(PLAN_APPROVALS.has(state.settings.approvePlans ?? 'when_asked')).toBe(true);
   expect(state.settings.defaultModel === null || typeof state.settings.defaultModel === 'string').toBe(true);
   expect(typeof state.settings.defaultProvider).toBe('string');
   expect('worktreesDirectory' in state.settings).toBe(false);

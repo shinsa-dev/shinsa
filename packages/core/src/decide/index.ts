@@ -22,6 +22,7 @@ import {
   removeEvidence,
   reportReview,
 } from './agents.ts';
+import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
@@ -36,6 +37,7 @@ import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import {
   dropMessage,
+  keepSuggestion,
   messageTask,
   receiveMessage,
   redeliverMessage,
@@ -91,7 +93,7 @@ import {
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
-import { acceptSuggestion, dismissSuggestion, keepSuggestion, suggestTasks } from './suggestions.ts';
+import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
   cancelTask,
   completeTask,
@@ -151,6 +153,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return prioritizeTask(decider, command);
     case 'task.wait_on':
       return waitOnTasks(decider, command);
+    case 'task.move_to_backlog':
+      return moveToBacklog(decider, command);
+    case 'task.remove_from_backlog':
+      return removeFromBacklog(decider, command);
     case 'task.cancel':
       return cancelTask(decider, command);
     case 'task.complete':

@@ -133,6 +133,15 @@ export const PLAN: PlanDocument = {
   questions: [],
 };
 
+export const LARGE_PLAN: PlanDocument = {
+  ...PLAN,
+  phases: [
+    ...PLAN.phases,
+    { title: 'Cover the edge cases', detail: 'Test narrow and wide panels.' },
+    { title: 'Write the docs', detail: 'Describe the clamp.' },
+  ],
+};
+
 export const IMPACT =
   'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 
@@ -180,6 +189,7 @@ export function createTask(
     waitsOn?: string[];
     triageWaitsOn?: string | string[];
     planFirst?: boolean;
+    backlog?: boolean;
   } = {}
 ) {
   const repoId = options.repoId ?? (Object.keys(harness.state.repos)[0] || registerRepo(harness));
@@ -191,6 +201,7 @@ export function createTask(
     priority: options.priority,
     waitsOn: options.waitsOn,
     planFirst: options.planFirst,
+    backlog: options.backlog,
   });
   const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
   harness.send({

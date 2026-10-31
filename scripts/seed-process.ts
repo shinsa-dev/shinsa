@@ -250,6 +250,20 @@ const RATE_LIMIT_PLAN: PlanDocument = {
   questions: [],
 };
 
+const DOCS_SEARCH_PLAN: PlanDocument = {
+  goal: 'Search the docs from every page, from an index built with the site.',
+  phases: [
+    { title: 'Build the index', detail: 'Pagefind indexes every page when the site builds.' },
+    { title: 'Add the search box', detail: 'A search field in the header opens the results under it.' },
+  ],
+  behaviour: ['Typing in the header lists matching pages.'],
+  approach: 'A static Pagefind index, so the docs need no search server.',
+  files: [{ path: 'docs/astro.config.mjs', change: 'Run Pagefind after the build.' }],
+  outOfScope: ['Searching the API reference.'],
+  verification: [createPlanCheck('Docs build', 'bun run --cwd docs build', [1, 2])],
+  questions: [],
+};
+
 const RATE_LIMIT_REVISED: PlanDocument = {
   ...RATE_LIMIT_PLAN,
   phases: [
@@ -591,6 +605,30 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
         body: 'Version 2 reads limits from the billing plan.',
         details: { planVersion: 2 },
       },
+    },
+    {
+      id: 'task-docs-search',
+      request: 'Add search to the docs site',
+      title: 'Add search to the docs',
+      repo: paywall,
+      size: 'small',
+      stage: 'awaiting_plan',
+      reason: 'in the backlog',
+      priority: 'low',
+      branch: 'feat/docs-search',
+      ageHours: 30,
+      plan: DOCS_SEARCH_PLAN,
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 5,
+          summary: 'Planned a static search index for the docs.',
+          handover: createPlanHandover(DOCS_SEARCH_PLAN),
+        },
+      ],
+      extra: [{ type: 'task.backlog_changed', taskId: 'task-docs-search', backlog: true, cause: 'you' }],
+      gate: { type: 'plan', title: 'Add search to the docs', body: DOCS_SEARCH_PLAN.goal },
     },
     {
       id: 'task-export-backoff',

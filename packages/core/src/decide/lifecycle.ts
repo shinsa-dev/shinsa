@@ -5,6 +5,7 @@ import {
   listRepoWatchSources,
   needsRepository,
   PLAN_GATE_RULE,
+  PLAN_SIZE_LIMITS,
   type PlanGateReason,
   type ReviewEscalation,
   resolveTaskPipeline,
@@ -90,15 +91,24 @@ export function startPlanning(decider: Decider, taskId: string, feedback: string
 const PLAN_GATE_TEST: Record<PlanGateReason, (task: Task) => boolean> = {
   operates: (task) => hasStep(task, 'operate'),
   plan_first: (task) => task.planFirst,
+  backlog: (task) => Boolean(task.backlog),
   asks_approval: (task) => task.plan?.document?.approval === true,
-  large: (task) => task.size === 'large',
+  large: isLargePlan,
   revised: (task) => (task.plan?.version ?? 0) > 1,
 };
 
+function isLargePlan(task: Task) {
+  const phases = task.plan?.document?.phases.length ?? 0;
+  const files = task.plan?.document?.files.length ?? 0;
+  return phases > PLAN_SIZE_LIMITS.phases || files > PLAN_SIZE_LIMITS.files;
+}
+
 export function needsPlanApproval(decider: Decider, task: Task) {
+  const mode = decider.state.settings.approvePlans ?? 'when_asked';
+  if (mode === 'always') return true;
   const passes = (reason: PlanGateReason) => PLAN_GATE_TEST[reason](task);
   if (PLAN_GATE_RULE.always.some(passes)) return true;
-  return decider.state.settings.approvePlans === true && PLAN_GATE_RULE.withApprovePlans.some(passes);
+  return mode === 'large' && PLAN_GATE_RULE.withLargePlans.some(passes);
 }
 
 export function startPhase(decider: Decider, taskId: string, index: number, addition = '') {
