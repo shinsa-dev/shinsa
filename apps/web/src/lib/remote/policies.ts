@@ -1,7 +1,7 @@
 import { PLACEMENT_POLICY_LIMITS } from '@shinsa/core';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import type { MachineChoice } from '@/lib/connection/socket.ts';
-import { resolveMachineLabel } from './mode.ts';
+import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
+import { describeUnreachableMachine, resolveMachineLabel } from './mode.ts';
 
 export const POLICIES_SECTION = 'Routing policies';
 
@@ -24,15 +24,6 @@ export interface PolicyGroup {
 
 export function listPolicyGroups(machines: MachineChoice[]): PolicyGroup[] {
   return machines.map((machine) => ({ machine, policies: machine.state.settings.placementPolicies ?? [] }));
-}
-
-export interface UnreachableMachine {
-  id: string;
-  name: string;
-}
-
-export function describeUnreachableMachine(name: string) {
-  return `Add this device on ${name} first`;
 }
 
 export interface PolicyMachineItem {

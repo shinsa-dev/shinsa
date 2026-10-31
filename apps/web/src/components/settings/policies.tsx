@@ -7,7 +7,7 @@ import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
-import type { MachineChoice } from '@/lib/connection/socket.ts';
+import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
 import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
 import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import {
@@ -23,7 +23,6 @@ import {
   type PolicyRef,
   resolvePolicyRemoval,
   resolvePolicyWrites,
-  type UnreachableMachine,
   validatePolicy,
 } from '@/lib/remote/policies.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';

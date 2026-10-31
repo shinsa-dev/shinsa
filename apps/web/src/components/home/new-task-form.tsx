@@ -15,13 +15,22 @@ import { ProjectOption } from '@/components/status/project-dot.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { connection, type MachineChoice, useConnection, useMachines } from '@/lib/connection/socket.ts';
+import {
+  connection,
+  type MachineChoice,
+  NO_UNREACHABLE_MACHINES,
+  type UnreachableMachine,
+  useConnection,
+  useMachines,
+  useUnreachableMachines,
+} from '@/lib/connection/socket.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import {
   AUTO_CHOICES,
   createNewTaskCommand,
   describeNewTask,
   describePlacementDone,
+  hasMachineChoice,
   isProjectOnMachine,
   isWaitingStart,
   listNewTaskMachines,
@@ -99,11 +108,13 @@ export function NewTaskFields({
   state,
   chosen,
   machines,
+  unreachable = NO_UNREACHABLE_MACHINES,
   onChoose,
 }: {
   state: ShinsaState | null;
   chosen: NewTaskChoices;
   machines: MachineChoice[];
+  unreachable?: UnreachableMachine[];
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
   const { choices, shownProject, startItems, placement } = resolveForm(state, chosen, machines);
@@ -115,13 +126,13 @@ export function NewTaskFields({
     : [];
   return (
     <>
-      {machines.length > 1 && (
+      {hasMachineChoice(machines, unreachable) && (
         <SelectField
           label='Machine'
           size='sm'
           variant='ghost'
           align='start'
-          items={listNewTaskMachines(machines, placement)}
+          items={listNewTaskMachines(machines, placement, unreachable)}
           value={choices.machine}
           onValueChange={(next) => onChoose({ machine: next })}
           className='min-w-0 max-w-56'
@@ -160,6 +171,7 @@ export function NewTaskFields({
 export function NewTaskForm() {
   const { state } = useConnection();
   const machines = useMachines();
+  const unreachable = useUnreachableMachines();
   const [request, setRequest] = React.useState('');
   const [chosen, setChosen] = React.useState<NewTaskChoices>(AUTO_CHOICES);
   const [busy, setBusy] = React.useState(false);
@@ -223,7 +235,13 @@ export function NewTaskForm() {
       />
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
         <AttachButton attachments={attachments} />
-        <NewTaskFields state={state} chosen={chosen} machines={machines} onChoose={choose} />
+        <NewTaskFields
+          state={state}
+          chosen={chosen}
+          machines={machines}
+          unreachable={unreachable}
+          onChoose={choose}
+        />
         <span className='flex-1' />
         <Button size='sm' disabled={!ready} loading={busy} onClick={() => void submit()}>
           {copy.submit}

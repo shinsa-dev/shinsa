@@ -59,3 +59,7 @@ export function clearEnrollFragment(storage: Storage) {
   storage.removeItem(ENROLL_KEY);
   storage.removeItem(ENROLL_ON_MACHINE_KEY);
 }
+
+export function describeUnreachableMachine(name: string) {
+  return `Add this device on ${name} first`;
+}

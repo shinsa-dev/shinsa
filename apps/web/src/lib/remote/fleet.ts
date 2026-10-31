@@ -5,8 +5,10 @@ import {
   type MachineView,
   NO_ENTRIES,
   NO_MACHINES,
+  NO_UNREACHABLE_MACHINES,
   type ShinsaConnection,
   type Snapshot,
+  type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { replaceSharedHandles } from '@/router.ts';
@@ -135,14 +137,16 @@ export class Fleet implements ShinsaConnection {
   #snapshot: Snapshot = { state: null, status: 'closed' };
   #owners: ReadonlyMap<string, string> = EMPTY_OWNERS;
   #machines: MachineChoice[] = NO_MACHINES;
+  #unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
   readonly #state = createSignal();
   readonly #transcripts = createSignal();
   readonly #accounts = createSignal();
   readonly #surfaces = createSignal();
   readonly #terminals = createSignal();
 
-  constructor(members: FleetMember[]) {
+  constructor(members: FleetMember[], unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES) {
     for (const member of members) this.#add(member);
+    this.#unreachable = unreachable;
   }
 
   get members() {
@@ -169,6 +173,7 @@ export class Fleet implements ShinsaConnection {
     if (!entry) return;
     for (const release of entry.release) release();
     this.#entries = this.#entries.filter((candidate) => candidate !== entry);
+    this.#unreachable = [...this.#unreachable, { id: entry.member.id, name: entry.member.name }];
     this.#state.publish();
     this.#transcripts.publish();
   }
@@ -255,6 +260,8 @@ export class Fleet implements ShinsaConnection {
     this.snapshot();
     return this.#machines;
   };
+
+  listUnreachableMachines = () => this.#unreachable;
 
   command = (command: UserCommand, machineId?: string | null) => {
     this.snapshot();

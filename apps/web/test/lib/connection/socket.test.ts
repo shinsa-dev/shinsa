@@ -20,6 +20,7 @@ import {
   useMachine,
   useMachines,
   useTranscript,
+  useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
@@ -703,14 +704,18 @@ describe('the shared connection', () => {
       { id: 'm2', name: 'Laptop', current: false, state: { tasks: {}, projects: {}, settings: {} } },
     ];
     expect(renderHook(() => useMachines()).result.current).toEqual([]);
+    expect(renderHook(() => useUnreachableMachines()).result.current).toEqual([]);
+    const unreachable = [{ id: 'm3', name: 'Build box' }];
     const fleet = {
       ...local,
+      listUnreachableMachines: () => unreachable,
       selectMachine: (id: string) => (id === 'task-1' ? machine : null),
       listMachines: () => machines,
     };
     replaceConnection(fleet);
     expect(connection).toBe(fleet);
     expect(renderHook(() => useMachines()).result.current).toBe(machines);
+    expect(renderHook(() => useUnreachableMachines()).result.current).toBe(unreachable);
     expect(renderHook(() => useMachine('task-1')).result.current).toBe(machine);
     expect(renderHook(() => useMachine(null)).result.current).toBeNull();
     replaceConnection(null);

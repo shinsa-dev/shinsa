@@ -47,6 +47,11 @@ export interface MachineChoice extends PlacementMachine {
   current: boolean;
 }
 
+export interface UnreachableMachine {
+  id: string;
+  name: string;
+}
+
 export interface ShinsaConnection {
   start: () => void;
   subscribe: (listener: () => void) => () => void;
@@ -64,6 +69,7 @@ export interface ShinsaConnection {
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
   selectMachine: (id: string) => MachineView | null;
   listMachines: () => MachineChoice[];
+  listUnreachableMachines: () => UnreachableMachine[];
   command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
   flush: () => void;
@@ -85,6 +91,8 @@ const HIDDEN_FRAME_MS = 32;
 export const NO_ENTRIES: ChatEntry[] = [];
 
 export const NO_MACHINES: MachineChoice[] = [];
+
+export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
@@ -199,6 +207,8 @@ export class Connection implements ShinsaConnection {
   selectMachine = (_id: string): MachineView | null => null;
 
   listMachines = (): MachineChoice[] => NO_MACHINES;
+
+  listUnreachableMachines = (): UnreachableMachine[] => NO_UNREACHABLE_MACHINES;
 
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
@@ -430,6 +440,10 @@ export function replaceConnection(next: ShinsaConnection | null) {
 
 export function useMachines() {
   return useSyncExternalStore(connection.subscribe, connection.listMachines);
+}
+
+export function useUnreachableMachines() {
+  return useSyncExternalStore(connection.subscribe, connection.listUnreachableMachines);
 }
 
 export function useMachine(id: string | null) {

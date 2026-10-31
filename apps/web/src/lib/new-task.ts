@@ -17,11 +17,11 @@ import {
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import * as React from 'react';
 import { requestJson } from '@/lib/connection/http.ts';
-import type { MachineChoice } from '@/lib/connection/socket.ts';
+import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
 import { selectFocus } from '@/lib/focus.ts';
 import { listPriorityItems } from '@/lib/format/labels.ts';
 import { listProjects } from '@/lib/projects.ts';
-import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
+import { describeUnreachableMachine, MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 
 let pendingDraft: string | null = null;
 const draftListeners = new Set<() => void>();
@@ -111,6 +111,7 @@ interface NewTaskItem<Value extends string> {
   label: string;
   icon: MenuItemIcon;
   hint?: string;
+  disabled?: string;
 }
 
 export interface NewTaskProjectItem {
@@ -216,11 +217,18 @@ export function describePlacementDone(done: string, machine: MachineChoice | und
   return reason ? `${done} ${runs} ${reason}` : `${done} ${runs}`;
 }
 
+export function hasMachineChoice(machines: MachineChoice[], unreachable: UnreachableMachine[]) {
+  return machines.length + unreachable.length > 1;
+}
+
 export function listNewTaskMachines(
   machines: MachineChoice[],
-  placement: NewTaskPlacement | null
+  placement: NewTaskPlacement | null,
+  unreachable: UnreachableMachine[] = []
 ): NewTaskItem<string>[] {
-  const automatic = machines.find((machine) => machine.id === placement?.id);
+  const automatic =
+    machines.find((machine) => machine.id === placement?.id) ??
+    (machines.length === 1 ? machines[0] : undefined);
   return [
     {
       value: 'auto',
@@ -234,6 +242,14 @@ export function listNewTaskMachines(
       icon: MACHINE_ICON,
       hint: describeMachineLoad(resolveMachineLoad(machine)),
     })),
+    ...unreachable
+      .filter((machine) => !machines.some((reachable) => reachable.id === machine.id))
+      .map((machine) => ({
+        value: machine.id,
+        label: machine.name,
+        icon: MACHINE_ICON,
+        disabled: describeUnreachableMachine(machine.name),
+      })),
   ];
 }
 

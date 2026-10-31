@@ -6,6 +6,7 @@ import {
   describeMachineLoad,
   describeNewTask,
   describePlacementDone,
+  hasMachineChoice,
   isProjectOnMachine,
   isWaitingStart,
   listNewTaskMachines,
@@ -288,6 +289,22 @@ describe('the machine a new task runs on', () => {
       hint: 'Your routing policies decide when you start it',
     });
     expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
+  });
+
+  it('shows a machine this device cannot reach, disabled, and picks the one it can', () => {
+    const laptop = { id: 'laptop', name: 'Laptop' };
+    expect(hasMachineChoice([box], [])).toBe(false);
+    expect(hasMachineChoice([box], [laptop])).toBe(true);
+    expect(listNewTaskMachines([box], null, [laptop, { id: 'box', name: 'Build box' }])).toEqual([
+      { value: 'auto', label: 'Automatic: Build box', icon: 'IconSparkle' },
+      { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
+      {
+        value: 'laptop',
+        label: 'Laptop',
+        icon: 'IconMacbookRemote',
+        disabled: 'Add this device on Laptop first',
+      },
+    ]);
     expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');
   });
 

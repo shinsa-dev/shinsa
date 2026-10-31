@@ -107,6 +107,25 @@ function connectTwoMachines() {
 }
 
 describe('NewTaskForm with several machines', () => {
+  it('shows a machine this device cannot reach in the picker, disabled with what to do', async () => {
+    const local = connection;
+    const machines: MachineChoice[] = [
+      { id: 'studio', name: 'Studio', current: true, state: { tasks: {}, projects: {}, settings: {} } },
+    ];
+    const unreachable = [{ id: 'laptop', name: 'Laptop' }];
+    replaceConnection({
+      ...local,
+      listMachines: () => machines,
+      listUnreachableMachines: () => unreachable,
+    });
+    renderForm();
+    expect(combobox('Machine').textContent).toBe('Automatic: This machine');
+    fireEvent.click(combobox('Machine'));
+    const laptop = await screen.findByRole('option', { name: /Laptop/ });
+    expect(laptop.getAttribute('aria-disabled')).toBe('true');
+    expect(laptop.textContent).toContain('Add this device on Laptop first');
+  });
+
   it('shows no machine picker with one machine', () => {
     renderForm();
     expect(screen.queryByRole('combobox', { name: 'Machine' })).toBeNull();

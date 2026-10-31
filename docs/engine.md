@@ -2388,7 +2388,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
-  New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. A
+  New task shows a Machine picker, Automatic by default and naming the machine it chose; with one there is none. Every
+  machine of the account is in it: one this device was not added to is listed disabled with "Add this device on <name>
+  first" (`listUnreachableMachines`, from the account's machines without a key here, and any that refused it since). A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
   disk; `resolveProjectMachine`); then, when any machine has a routing policy, the routing policies: each is a sentence in plain

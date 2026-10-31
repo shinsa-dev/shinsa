@@ -1,6 +1,11 @@
 import type { RemoteInstance, RemoteSnapshot, ShinsaState, WireState } from '@shinsa/core';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
-import { NO_ENTRIES, NO_MACHINES, type ShinsaConnection } from '@/lib/connection/socket.ts';
+import {
+  NO_ENTRIES,
+  NO_MACHINES,
+  NO_UNREACHABLE_MACHINES,
+  type ShinsaConnection,
+} from '@/lib/connection/socket.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
 
@@ -153,6 +158,7 @@ function createStaticConnection(state: ShinsaState): ShinsaConnection {
     replaceTerminals: () => undefined,
     selectMachine: none,
     listMachines: () => NO_MACHINES,
+    listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,
     command: () => Promise.reject(new Error('This is a sample. Nothing changes here.')),
     reset: () => undefined,
     flush: () => undefined,

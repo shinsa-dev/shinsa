@@ -60,6 +60,7 @@ class FakeConnection implements ShinsaConnection {
   };
   selectMachine = () => null;
   listMachines = () => [];
+  listUnreachableMachines = () => [];
   command = (command: UserCommand) => {
     this.commands.push(command);
     return Promise.resolve();
@@ -235,10 +236,18 @@ describe('sending to the machine that owns it', () => {
     await fleet.command({ type: 'task.create', request: 'Run it', repoId: null });
     expect(laptop.connection.commands.map((command) => command.type)).toEqual(['task.create']);
     expect(studio.connection.commands.map((command) => command.type)).toEqual(['task.create']);
+    expect(fleet.listUnreachableMachines()).toEqual([]);
     fleet.removeMember('m2');
     expect(fleet.listMachines().map((machine) => machine.id)).toEqual(['m1']);
+    expect(fleet.listUnreachableMachines()).toEqual([{ id: 'm2', name: 'Laptop' }]);
     fleet.removeMember('m1');
     expect(fleet.listMachines()).toEqual([]);
+  });
+
+  it('keeps the account’s machines this device cannot reach, to show them disabled', () => {
+    const studio = createMember('m1', 'Studio');
+    const fleet = new Fleet([studio.member], [{ id: 'm3', name: 'Build box' }]);
+    expect(fleet.listUnreachableMachines()).toEqual([{ id: 'm3', name: 'Build box' }]);
   });
 
   it('reads accounts and terminals from the first machine, and is quiet while any machine has its desktop app open', () => {

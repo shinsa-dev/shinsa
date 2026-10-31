@@ -94,7 +94,10 @@ export function FleetApp({
           })
         );
         release.push(...members.map((entry) => entry.close));
-        fleet = new Fleet(members.map((entry) => entry.member));
+        fleet = new Fleet(
+          members.map((entry) => entry.member),
+          rows.flatMap((row) => (row.device ? [] : [{ id: row.instance.id, name: row.instance.name }]))
+        );
         release.push(() => fleet?.close());
         await startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE);
         if (!live) return;
