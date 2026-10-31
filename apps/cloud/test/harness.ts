@@ -1,5 +1,5 @@
 import { Database as Sqlite } from 'bun:sqlite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REMOTE_APP_ORIGIN } from '@shinsa/core';
 import { createCodeChallenge } from '../src/crypto.ts';
@@ -21,8 +21,11 @@ function createStatement(sqlite: Sqlite, sql: string, values: SqlValue[] = []): 
 function createTestDatabase(): Database & { sqlite: Sqlite } {
   const sqlite = new Sqlite(':memory:');
   sqlite.exec('PRAGMA foreign_keys = ON');
-  for (const migration of ['0001_remote.sql', '0002_slack.sql'])
-    sqlite.exec(readFileSync(join(import.meta.dirname, '../migrations', migration), 'utf8'));
+  const migrations = join(import.meta.dirname, '../migrations');
+  for (const migration of readdirSync(migrations)
+    .filter((name) => name.endsWith('.sql'))
+    .sort())
+    sqlite.exec(readFileSync(join(migrations, migration), 'utf8'));
   return { sqlite, prepare: (sql) => createStatement(sqlite, sql) };
 }
 

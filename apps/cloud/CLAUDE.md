@@ -108,7 +108,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
   the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json`, with public distribution on
-  (Manage Distribution) so other workspaces can add it, the `0002_slack.sql` migration, and the secrets
+  (Manage Distribution) so other workspaces can add it, the `0003_slack.sql` migration, and the secrets
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
   later makes every stored bot token unreadable, so each workspace has to add the app again.
