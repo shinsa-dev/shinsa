@@ -96,7 +96,7 @@ async function boot(options: { idleMs?: number; compaction?: boolean }): Promise
   if (options.compaction) {
     await shinsa.engine.dispatch({
       type: 'settings.change',
-      patch: { compaction: 'claude', idleCompaction: true },
+      patch: { compaction: 'provider', idleCompaction: true },
     });
   }
   agents.state = () => shinsa.engine.state;

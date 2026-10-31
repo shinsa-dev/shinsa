@@ -40,7 +40,7 @@ describe('settings events', () => {
   test('a settings event is taken as written', () => {
     const settings = {
       ...createSettings(),
-      compaction: 'claude' as const,
+      compaction: 'provider' as const,
       idleCompaction: true,
       fastMode: false,
     };

@@ -10,13 +10,14 @@ export type QueueItem =
   | { kind: 'working' | 'idle'; key: string; task: Task; since: number; sinceLabel: string };
 
 export interface QueueSection {
-  key: 'needs' | 'working' | 'waiting';
+  key: 'needs' | 'working' | 'waiting' | 'snoozed';
   title: string;
   icon: IconName;
   tone: Tone;
   items: QueueItem[];
   empty: string | null;
   startsCollapsed: boolean;
+  opensOnHome: boolean;
 }
 
 function listGateItems(entries: QueuedGate[]): QueueItem[] {
@@ -31,7 +32,7 @@ function listGateItems(entries: QueuedGate[]): QueueItem[] {
 }
 
 function createGroupSection(
-  key: 'working' | 'waiting',
+  key: 'working' | 'waiting' | 'snoozed',
   items: QueueItem[],
   empty: string | null
 ): QueueSection {
@@ -44,6 +45,7 @@ function createGroupSection(
     items,
     empty,
     startsCollapsed: key !== 'working',
+    opensOnHome: key !== 'snoozed',
   };
 }
 
@@ -57,6 +59,7 @@ export function listQueueSections(state: ShinsaState, queue: Queue): QueueSectio
       items: listGateItems(queue.ready),
       empty: 'Nothing is waiting on you.',
       startsCollapsed: false,
+      opensOnHome: true,
     },
     createGroupSection(
       'working',
@@ -77,6 +80,17 @@ export function listQueueSections(state: ShinsaState, queue: Queue): QueueSectio
         task,
         since: task.createdAt,
         sinceLabel: 'Asked for',
+      })),
+      null
+    ),
+    createGroupSection(
+      'snoozed',
+      queue.snoozed.map((task) => ({
+        kind: 'idle',
+        key: task.id,
+        task,
+        since: task.snoozed?.at ?? task.updatedAt,
+        sinceLabel: 'Snoozed',
       })),
       null
     ),

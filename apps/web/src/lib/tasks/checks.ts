@@ -2,7 +2,6 @@ import {
   type CheckSource,
   type CiRun,
   type Evidence,
-  isBlockingCheck,
   listTaskChecks,
   type PullRequestCheckStatus,
   type ReportCheck,
@@ -316,6 +315,10 @@ function describePassCount(passed: number, total: number) {
   return `${passed} of ${formatCount(total, 'check', 'checks')} passed`;
 }
 
+export function isChecksOpenByDefault(view: ChecksView) {
+  return view.status === 'failed' || view.status === 'running';
+}
+
 export function resolveChecksView(
   state: Pick<ShinsaState, 'repos' | 'evidence'>,
   task: Task
@@ -326,10 +329,6 @@ export function resolveChecksView(
   if (stages.length === 0) return null;
   const status = resolveViewStatus(stages);
   return { stages, summary: describeViewSummary(stages, status), status };
-}
-
-export function describeChecksPassed(results: readonly ReportCheck[]) {
-  return describePassCount(results.filter((result) => !isBlockingCheck(result)).length, results.length);
 }
 
 export function resolveEvidenceCheckRow(

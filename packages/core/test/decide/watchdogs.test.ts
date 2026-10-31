@@ -5,6 +5,7 @@ import {
   HOUR_MS,
   listActiveRuns,
   listOpenGates,
+  type MergeStep,
   MINUTE_MS,
   replayEventLog,
   resolveTaskProgress,
@@ -63,7 +64,7 @@ function refusal(run: () => unknown) {
   throw new Error('expected a refusal');
 }
 
-function handOver(harness: Harness, taskId: string, watchdogs: WatchdogSpec[]) {
+function handOver(harness: Harness, taskId: string, watchdogs: WatchdogSpec[], steps: MergeStep[] = []) {
   proposePlan(harness, taskId);
   linkSession(harness, taskId, 'agent-session');
   completePhase(harness, taskId);
@@ -79,13 +80,14 @@ function handOver(harness: Harness, taskId: string, watchdogs: WatchdogSpec[]) {
       risks: [],
       testing: { automated: [], manual: [] },
       watchdogs,
+      ...(steps.length > 0 ? { steps } : {}),
     },
   });
 }
 
-function mergeIn(harness: Harness, watchdogs: WatchdogSpec[] = [LATENCY]) {
+function mergeIn(harness: Harness, watchdogs: WatchdogSpec[] = [LATENCY], steps: MergeStep[] = []) {
   const taskId = createTask(harness);
-  handOver(harness, taskId, watchdogs);
+  handOver(harness, taskId, watchdogs, steps);
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   harness.send({
     type: 'agent.report_review',
@@ -267,12 +269,13 @@ describe('arming watchdogs', () => {
 });
 
 describe('a watch check', () => {
-  test('runs as a read-only turn of the task’s own session and goes back to rest after a healthy report', () => {
+  test('runs as a read-only turn of a watch session of its own and goes back to rest after a healthy report', () => {
     const { harness, taskId } = mergeWith();
     fire(harness, taskId);
     const run = harness.activeRun(taskId);
     expect(harness.task(taskId).stage).toBe('watching');
-    expect(run).toMatchObject({ role: 'agent', purpose: 'watch', sessionId: 'agent-session', resume: true });
+    expect(run).toMatchObject({ role: 'agent', purpose: 'watch', sessionId: null, resume: false });
+    expect(run.prompt).toContain('Sped up checkout.');
     expect(readInstruction(run)).toContain('the watchdog “Checkout latency”');
     expect(readInstruction(run)).toContain('the MCP server `maple`');
     expect(watchdog(harness, taskId).runId).toBe(run.id);
@@ -285,6 +288,60 @@ describe('a watch check', () => {
     ]);
     expect(after.nextCheckAt).toBe((after.checks[0]?.at ?? 0) + 6 * HOUR_MS);
     expect(listActiveRuns(harness.state, taskId)).toEqual([]);
+  });
+
+  test('a check is not told a message kept for the next agent; it waits for a turn that can act on it', () => {
+    const harness = createHarness();
+    const taskId = mergeIn(
+      harness,
+      [LATENCY],
+      [
+        {
+          when: 'post_merge',
+          kind: 'migration',
+          title: 'Run the migration',
+          detail: 'Adds the invoices table.',
+          command: null,
+        },
+      ]
+    );
+    expect(harness.openGate(taskId).type).toBe('post_merge');
+    harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.' },
+      { onBehalf: true, byTask: 'agent-task' }
+    );
+    fire(harness, taskId);
+    const run = harness.activeRun(taskId);
+    expect(run.purpose).toBe('watch');
+    expect(run.prompt).not.toContain('Keep the old flag.');
+    expect(harness.task(taskId).untoldMessages).toHaveLength(1);
+  });
+
+  test('the next check resumes the watch session, and the Agent’s next round resumes its own, never the watch’s', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, forHours: 16 }]);
+    fire(harness, taskId);
+    linkSession(harness, taskId, 'watch-session');
+    report(harness, taskId, true);
+    fire(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({
+      purpose: 'watch',
+      sessionId: 'watch-session',
+      resume: true,
+    });
+    report(harness, taskId, true);
+    harness.send({ type: 'task.message', taskId, text: 'Cache the tax lookup too.', kind: 'new_round' });
+    harness.send({ type: 'config.record', taskId, problems: [] });
+    harness.send({
+      type: 'worktree.ready',
+      taskId,
+      path: `/wt/${taskId}`,
+      branch: harness.task(taskId).branch ?? '',
+    });
+    expect(harness.activeRun(taskId)).toMatchObject({
+      purpose: 'plan',
+      sessionId: 'agent-session',
+      resume: true,
+    });
   });
 
   test('passes once the next check would fall past its window, and later checks see the earlier ones', () => {

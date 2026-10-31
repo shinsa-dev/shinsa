@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { resolveSdkPackage } from '../../src/agents/providers/claude/executable.ts';
 import { resolveConfig } from '../../src/config/index.ts';
-import { resolveEunoeCommand } from '../../src/eunoe/proxy.ts';
 import {
   BUNDLE,
   createServerInstance,
@@ -45,13 +44,11 @@ describe('the engine bundle', () => {
     );
   });
 
-  test('a bundled engine reads its plugin, interface, Eunoe and versions from beside itself', async () => {
+  test('a bundled engine reads its plugin, interface and versions from beside itself', async () => {
     const bundle = createBundle();
     const config = resolveConfig({ SHINSA_HOME: createTempDir() }, bundle);
     expect(config.pluginDir).toBe(join(bundle.root, 'plugin'));
     expect(config.webDir).toBe(join(bundle.root, 'web'));
-    expect(resolveEunoeCommand(null, undefined, bundle)).toEqual([join(bundle.bin, 'shinsa'), 'eunoe']);
-    expect(resolveEunoeCommand('/opt/eunoe', undefined, bundle)).toEqual(['/opt/eunoe']);
     expect(resolveSdkPackage(undefined, bundle)).toEqual(bundle.sdk);
     expect(createServerInstance(null, 5, bundle).version).toBe('1.4.0');
     const instance = await resolveServerInstance('/nowhere', bundle);

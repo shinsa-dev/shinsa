@@ -12,7 +12,14 @@ import {
 } from './instances.ts';
 import { recordFailure } from './log.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
-import { respondSession, respondSignIn, respondSignInCallback, respondSignOut } from './session.ts';
+import {
+  resolveCallbackFailureLocation,
+  respondSession,
+  respondSignIn,
+  respondSignInCallback,
+  respondSignInToken,
+  respondSignOut,
+} from './session.ts';
 import {
   respondSlackEvents,
   respondSlackInteractions,
@@ -63,6 +70,11 @@ const ROUTES: Route[] = [
     method: 'GET',
     pattern: exact(REMOTE_PATHS.signInCallback),
     respond: (request, url, _match, world) => respondSignInCallback(request, url, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.signInToken),
+    respond: (request, _url, _match, world) => respondSignInToken(request, world),
   },
   {
     method: 'POST',
@@ -176,11 +188,11 @@ const SLACK_ROUTES: Route[] = [
 
 const API_PREFIX = '/__remote/';
 
-function respondCallbackFailure(error: CloudError) {
+function respondCallbackFailure(request: Request, error: CloudError) {
   return new Response(null, {
     status: 302,
     headers: {
-      location: `${REMOTE_PATHS.app}?sign_in_error=${encodeURIComponent(error.code)}`,
+      location: resolveCallbackFailureLocation(request, error.code),
       'cache-control': 'no-store',
     },
   });
@@ -201,7 +213,7 @@ async function respondApi(request: Request, url: URL, world: CloudWorld) {
       return await route.respond(request, url, [...match], world);
     } catch (error) {
       const failure = describeFailure(error);
-      if (url.pathname === REMOTE_PATHS.signInCallback) return respondCallbackFailure(failure);
+      if (url.pathname === REMOTE_PATHS.signInCallback) return respondCallbackFailure(request, failure);
       return respondError(failure);
     }
   }

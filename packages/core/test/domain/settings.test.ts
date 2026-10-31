@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   createSettings,
   createState,
+  isEunoeCompaction,
+  isFoldingCompaction,
   MAX_COMPACTION_LEAD_MINUTES,
   resolveAccountSwitchAt,
   resolveAgentFastMode,
@@ -52,7 +54,7 @@ describe('the settings a command may change', () => {
       accountSwitchAt: 90,
       idleCompaction: false,
       compactionLeadMinutes: 2,
-      compaction: 'eunoe_compact',
+      compaction: 'fold',
       fastMode: false,
       watchdogHours: 72,
       watchdogFirstCheckMinutes: 30,
@@ -118,7 +120,7 @@ describe('resolveIdleCompaction', () => {
       enabled: false,
       leadMinutes: 2,
     });
-    expect(resolveIdleCompaction({ ...createSettings(), compaction: 'claude' }, claude)).toEqual({
+    expect(resolveIdleCompaction({ ...createSettings(), compaction: 'provider' }, claude)).toEqual({
       available: true,
       enabled: false,
       leadMinutes: 2,
@@ -126,7 +128,7 @@ describe('resolveIdleCompaction', () => {
   });
 
   test('compacts before the cache expires only with Claude Code compacting, within 1 to 30 minutes', () => {
-    const settings = { ...createSettings(), compaction: 'claude' as const, idleCompaction: true };
+    const settings = { ...createSettings(), compaction: 'provider' as const, idleCompaction: true };
     expect(resolveIdleCompaction(settings, claude)).toEqual({
       available: true,
       enabled: true,
@@ -144,7 +146,7 @@ describe('resolveIdleCompaction', () => {
   });
 
   test('eunoe or no compaction leaves nothing to compact for Claude while a session is idle', () => {
-    for (const compaction of ['eunoe_compact', 'eunoe_default', 'off'] as const) {
+    for (const compaction of ['fold', 'compact', 'off'] as const) {
       expect(
         resolveIdleCompaction({ ...createSettings(), compaction, idleCompaction: true }, claude)
       ).toMatchObject({
@@ -155,7 +157,7 @@ describe('resolveIdleCompaction', () => {
   });
 
   test('Codex compacts natively under every setting but off, so idle compaction is there for it', () => {
-    for (const compaction of ['eunoe_compact', 'eunoe_default', 'claude'] as const) {
+    for (const compaction of ['fold', 'compact', 'provider'] as const) {
       const settings = { ...createSettings(), compaction, idleCompaction: true };
       expect(resolveIdleCompaction(settings, ['codex'])).toMatchObject({ available: true, enabled: true });
       expect(resolveIdleCompaction(settings, ['claude', 'codex'])).toMatchObject({ available: true });
@@ -166,10 +168,23 @@ describe('resolveIdleCompaction', () => {
   });
 });
 
+describe('isEunoeCompaction and isFoldingCompaction', () => {
+  test('the default and compaction only go through Eunoe, and only the default folds at each step', () => {
+    expect(isEunoeCompaction('fold')).toBe(true);
+    expect(isEunoeCompaction('compact')).toBe(true);
+    expect(isEunoeCompaction('provider')).toBe(false);
+    expect(isEunoeCompaction('off')).toBe(false);
+    expect(isFoldingCompaction('fold')).toBe(true);
+    expect(isFoldingCompaction('compact')).toBe(false);
+    expect(isFoldingCompaction('provider')).toBe(false);
+    expect(isFoldingCompaction('off')).toBe(false);
+  });
+});
+
 describe('resolveCompaction and resolveFastMode', () => {
-  test('eunoe compacts and agents run at standard speed by default', () => {
-    expect(resolveCompaction(createSettings())).toBe('eunoe_compact');
-    expect(resolveCompaction({ ...createSettings(), compaction: undefined })).toBe('eunoe_compact');
+  test('folding is the default and agents run at standard speed', () => {
+    expect(resolveCompaction(createSettings())).toBe('fold');
+    expect(resolveCompaction({ ...createSettings(), compaction: undefined })).toBe('fold');
     expect(resolveFastMode(createSettings())).toBe(false);
     expect(resolveFastMode({ ...createSettings(), fastMode: undefined })).toBe(false);
     expect(resolveFastMode({ ...createSettings(), fastMode: true })).toBe(true);

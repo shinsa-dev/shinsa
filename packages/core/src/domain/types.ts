@@ -2,6 +2,7 @@ import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   CarriedMergeStep,
   CodeSpot,
+  FixReply,
   JudgementCall,
   PlanDocument,
   ReportCheck,
@@ -379,6 +380,12 @@ export interface Activity {
   suggestionId?: string;
 }
 
+export interface UntoldMessage {
+  at: number;
+  text: string;
+  sender: 'agent' | 'schedule';
+}
+
 export interface UndeliveredMessage {
   text: string;
   reason: string;
@@ -471,6 +478,7 @@ export interface Task {
   inbox?: InboxMessage[];
   editedPaths?: string[];
   untoldEdits?: string[];
+  untoldMessages?: UntoldMessage[];
   overlaps?: TaskOverlap[];
   approvedEdits?: EditsApproval | null;
   pushHookFailure?: PushHookFailure | null;
@@ -479,9 +487,39 @@ export interface Task {
   watchdogs?: Watchdog[];
   slack?: SlackThreadLink | null;
   backlog?: TaskBacklog | null;
+  snoozed?: TaskSnooze | null;
+  duplicate?: TaskDuplicate | null;
+  iterations?: Iteration[];
+}
+
+export type DuplicateActor = 'you' | 'shinsa';
+
+export interface TaskDuplicate {
+  of: string;
+  by: DuplicateActor;
+  why: string | null;
+}
+
+export interface IterationRequest {
+  text: string;
+  comments: number;
+  at: number;
+}
+
+export interface Iteration {
+  id: string;
+  round: number;
+  requests: IterationRequest[];
+  reply: FixReply | null;
+  runId: string | null;
+  repliedAt: number | null;
 }
 
 export interface TaskBacklog {
+  at: number;
+}
+
+export interface TaskSnooze {
   at: number;
 }
 
@@ -518,6 +556,7 @@ export interface Run {
   resumePending?: boolean;
   continuations?: number[];
   monitorId?: string | null;
+  continues?: string;
   feedback?: string | null;
   usage?: RunUsage | null;
   meters?: RunMeter[];
@@ -528,6 +567,7 @@ export interface Run {
   cohort?: DeliveryCohort | null;
   waitingOn?: RunWait | null;
   compactions?: string[];
+  cacheExpiresAt?: number;
   fork?: RunFork | null;
   round?: number;
 }

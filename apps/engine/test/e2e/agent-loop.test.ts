@@ -298,7 +298,7 @@ describe('restarts', () => {
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
     const [first, second] = w.agents.of('build');
-    expect(first?.prompt).toStartWith('The plan is in, so building starts.');
+    expect(first?.prompt).toContain('The plan is in, so building starts.');
     expect(second?.resume).toBe(first?.sessionId);
     expect(second?.prompt).toContain('Your conversation may no longer hold this round');
     expect(second?.prompt).toContain('Wrote the first greeting.');

@@ -236,8 +236,9 @@ export class Remote {
     const deviceName = name.trim().slice(0, DEVICE_NAME_LIMIT);
     if (!deviceName) throw new DomainError('device_name_missing', 'Name the device you are adding.');
     const machine = await this.store.resolveMachineKey();
-    const { secret, expiresAt } = this.enrollments.create(deviceName);
+    const { id, secret, expiresAt } = this.enrollments.create(deviceName);
     return {
+      id,
       url: resolveEnrollUrl(credentials.instanceId, machine.publicKey, secret, this.appOrigin),
       name: deviceName,
       expiresAt,
@@ -284,13 +285,14 @@ export class Remote {
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.store.selectDevice(device) !== null,
       redeemEnrollment: async (proof, keys) => {
-        const name = await this.enrollments.redeem(proof, keys);
-        if (name === null) return false;
+        const enrollment = await this.enrollments.redeem(proof, keys);
+        if (enrollment === null) return false;
         this.store.upsertDevice({
           publicKey: keys.device,
-          name,
+          name: enrollment.name,
           enrolledAt: this.#now(),
           lastSeenAt: null,
+          enrollmentId: enrollment.id,
         });
         this.#publish();
         return true;

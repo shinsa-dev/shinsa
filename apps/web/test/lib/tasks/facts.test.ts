@@ -2,11 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import type { Task, Watchdog } from '@shinsa/core';
 import { formatMoment } from '@/lib/format/time.ts';
 import {
+  describeDuplicateHint,
   describePullRequestFact,
   describeStarted,
+  listDuplicates,
   listForkSources,
   listForks,
   resolveReportFact,
+  selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
 import { createSchedule } from '../../support/schedules.ts';
 import { createShinsaState, createTask, NOW } from '../../support/state.ts';
@@ -80,6 +83,43 @@ describe('forks', () => {
     expect(listForkSources(state, source)).toEqual([]);
     expect(listForkSources(state, createTask({ id: 'x', forkOf: 'gone' }))).toEqual([]);
     expect(listForks(state, source).map((task) => task.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('duplicates', () => {
+  it('finds the task a duplicate repeats, if it is still known', () => {
+    const original = createTask({ id: 'o' });
+    const copy = createTask({ id: 'c', stage: 'cancelled', duplicate: { of: 'o', by: 'you', why: null } });
+    const state = createShinsaState({ tasks: [original, copy] });
+    expect(selectDuplicateOriginal(state, copy)).toBe(original);
+    expect(selectDuplicateOriginal(state, original)).toBeNull();
+    expect(
+      selectDuplicateOriginal(state, { ...copy, duplicate: { of: 'gone', by: 'you', why: null } })
+    ).toBeNull();
+  });
+
+  it('lists the tasks closed as duplicates of a task, oldest first', () => {
+    const original = createTask({ id: 'o' });
+    const later = createTask({ id: 'b', duplicate: { of: 'o', by: 'you', why: null }, createdAt: NOW - 1 });
+    const earlier = createTask({
+      id: 'a',
+      duplicate: { of: 'o', by: 'shinsa', why: null },
+      createdAt: NOW - 2,
+    });
+    const other = createTask({ id: 'x', duplicate: { of: 'b', by: 'you', why: null } });
+    const state = createShinsaState({ tasks: [original, later, earlier, other] });
+    expect(listDuplicates(state, original).map((task) => task.id)).toEqual(['a', 'b']);
+    expect(listDuplicates(state, earlier)).toEqual([]);
+  });
+
+  it('says who closed it, and why when Shinsa did', () => {
+    expect(describeDuplicateHint({ of: 'o', by: 'you', why: null })).toBe('You closed this as a duplicate.');
+    expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: null })).toBe(
+      'Shinsa closed this as a duplicate.'
+    );
+    expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: 'Both add the export.' })).toBe(
+      'Shinsa closed this as a duplicate: Both add the export.'
+    );
   });
 });
 

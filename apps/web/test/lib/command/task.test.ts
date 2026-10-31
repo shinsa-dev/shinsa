@@ -386,8 +386,10 @@ describe('the This task section', () => {
       'Open a terminal',
       'Show in Finder',
       'Fork into a new task',
+      'Snooze',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });
@@ -423,8 +425,10 @@ describe('the This task section', () => {
       'Set priority',
       'Message the agent',
       'Fork into a new task',
+      'Snooze',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });

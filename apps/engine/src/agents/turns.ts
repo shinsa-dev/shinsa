@@ -2,6 +2,7 @@ import {
   type ChatEntry,
   type Handoff,
   type HandoffSource,
+  needsRoundBrief,
   type Run,
   type RunFork,
   type RunHandoff,
@@ -139,7 +140,8 @@ export async function resolveTurnPlan(context: TurnContext): Promise<TurnPlan> {
 }
 
 function readBriefing(entry: ChatEntry, rules: string) {
-  if (entry.type === 'notice' && entry.notice.kind === 'compaction') return false;
+  if (entry.type === 'notice' && entry.notice.kind === 'compaction')
+    return entry.notice.by === 'eunoe' ? null : false;
   if (entry.type === 'user' && entry.from === 'shinsa' && entry.text.includes(rules)) return true;
   return null;
 }
@@ -167,10 +169,38 @@ function resolveResumedPrompt(context: TurnContext, resume: string, prompt: stri
   return splitHouseRules(prompt)?.instruction ?? prompt;
 }
 
-export function resolveTurnPrompt(context: TurnContext, plan: TurnPlan, prompt: string, brief: string) {
+export interface TurnFoldInput {
+  run: Run;
+  plan: TurnPlan;
+  stepPrompt: boolean;
+  firstAttempt: boolean;
+  folds: boolean;
+}
+
+export function resolveTurnFold({ run, plan, stepPrompt, firstAttempt, folds }: TurnFoldInput) {
+  if (!folds || !stepPrompt || !firstAttempt || !plan.resume || plan.fork || plan.handoff) return false;
+  if (run.continues) return false;
+  return run.role === 'agent' && needsRoundBrief(run);
+}
+
+export function isSessionCacheWarm(context: TurnContext, sessionId: string, now: number) {
+  const earlier = listSessionRuns(context, sessionId).filter(
+    (run) => run.id !== context.run.id && run.cacheExpiresAt !== undefined
+  );
+  const expiresAt = earlier.at(-1)?.cacheExpiresAt;
+  return expiresAt !== undefined && now < expiresAt;
+}
+
+export function resolveTurnPrompt(
+  context: TurnContext,
+  plan: TurnPlan,
+  prompt: string,
+  brief: string,
+  fold = false
+) {
   if (plan.handoff) return resolveHandoffPrompt(plan.handoff.text, brief);
   if (!plan.resume) return brief;
-  const turn = resolveResumedPrompt(context, plan.resume, prompt, brief);
+  const turn = resolveResumedPrompt(context, plan.resume, fold ? brief : prompt, brief);
   const started = selectSessionCwd(context.state, plan.resume, context.run.id);
   if (!started || started === context.cwd) return turn;
   return `${turn}\n\n${resolveMovedNote(context.cwd)}`;

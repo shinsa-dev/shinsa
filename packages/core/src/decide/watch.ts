@@ -63,7 +63,11 @@ function isFailedCheck(check: CiRun) {
 }
 
 function resolveRemarkTime(remark: PullRequestRemark) {
-  return remark.editedAt ?? remark.createdAt;
+  return remark.bot ? remark.createdAt : (remark.editedAt ?? remark.createdAt);
+}
+
+function isBotNotice(remark: PullRequestRemark) {
+  return remark.bot === true && remark.path === null && remark.reviewState === null;
 }
 
 function evaluateChecks(watch: PullRequestWatch, checks: CiRun[], headMoved: boolean) {
@@ -103,7 +107,8 @@ function evaluateRemarks(
     const at = Date.parse(resolveRemarkTime(remark));
     return (
       (at > through || (at === through && !watch.remarkIds.includes(remark.id))) &&
-      remark.author?.toLowerCase() !== own
+      remark.author?.toLowerCase() !== own &&
+      !isBotNotice(remark)
     );
   });
   const latest = Math.max(through, ...fresh.map((remark) => Date.parse(resolveRemarkTime(remark))));

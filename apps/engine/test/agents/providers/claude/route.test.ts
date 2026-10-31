@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { EunoeLink, EunoeMode } from '../../../../src/agents/providers/claude/index.ts';
+import type { EunoeLink } from '../../../../src/agents/providers/claude/index.ts';
 import {
   BLOCKING_LIMIT_ENV,
   DIRECT_BASE_URL,
@@ -7,13 +7,14 @@ import {
 } from '../../../../src/agents/providers/claude/route.ts';
 
 function createLink(status: Awaited<ReturnType<EunoeLink['ensure']>>) {
-  const asked: { mode: EunoeMode; configDir: string | null }[] = [];
+  const asked: string[] = [];
   const link: EunoeLink = {
-    ensure: (mode, configDir) => {
-      asked.push({ mode, configDir });
+    ensure: () => {
+      asked.push('ensure');
       return Promise.resolve(status);
     },
     watch: () => () => undefined,
+    fold: () => () => undefined,
   };
   return { link, asked };
 }
@@ -21,9 +22,9 @@ function createLink(status: Awaited<ReturnType<EunoeLink['ensure']>>) {
 const UP = { ok: true as const, url: 'http://127.0.0.1:40001', dir: '/data/eunoe' };
 
 describe('resolveClaudeRoute', () => {
-  test('Claude Code compacting talks to Anthropic directly with its own compaction on', async () => {
+  test('provider compaction talks to Anthropic directly with Claude Code’s own compaction on', async () => {
     const { link, asked } = createLink(UP);
-    expect(await resolveClaudeRoute('claude', link, '/accounts/one')).toEqual({
+    expect(await resolveClaudeRoute('provider', link)).toEqual({
       env: { ANTHROPIC_BASE_URL: DIRECT_BASE_URL, [BLOCKING_LIMIT_ENV]: '' },
       autoCompact: true,
       eunoe: false,
@@ -33,18 +34,15 @@ describe('resolveClaudeRoute', () => {
   });
 
   test('off talks to Anthropic directly and never compacts', async () => {
-    const route = await resolveClaudeRoute('off', null, null);
+    const route = await resolveClaudeRoute('off', null);
     expect(route).toMatchObject({ autoCompact: false, eunoe: false, notice: null });
     expect(route.env.ANTHROPIC_BASE_URL).toBe(DIRECT_BASE_URL);
   });
 
-  test('each eunoe mode goes through the proxy in that mode, with Claude Code’s compaction and limit off', async () => {
-    for (const [compaction, mode] of [
-      ['eunoe_compact', 'compact'],
-      ['eunoe_default', 'default'],
-    ] as const) {
+  test('the default and compaction only go through Shinsa’s forwarder, with Claude Code’s compaction and limit off', async () => {
+    for (const compaction of ['fold', 'compact'] as const) {
       const { link, asked } = createLink(UP);
-      expect(await resolveClaudeRoute(compaction, link, '/accounts/one')).toEqual({
+      expect(await resolveClaudeRoute(compaction, link)).toEqual({
         env: {
           ANTHROPIC_BASE_URL: 'http://127.0.0.1:40001',
           [BLOCKING_LIMIT_ENV]: '1000000000',
@@ -54,13 +52,13 @@ describe('resolveClaudeRoute', () => {
         eunoe: true,
         notice: null,
       });
-      expect(asked).toEqual([{ mode, configDir: '/accounts/one' }]);
+      expect(asked).toEqual(['ensure']);
     }
   });
 
   test('when eunoe is down the run goes direct with Claude Code compacting, and says why', async () => {
-    const { link } = createLink({ ok: false, reason: 'eunoe did not start within 15 s.' });
-    expect(await resolveClaudeRoute('eunoe_compact', link, null)).toEqual({
+    const { link } = createLink({ ok: false, reason: 'Eunoe could not start: port in use.' });
+    expect(await resolveClaudeRoute('fold', link)).toEqual({
       env: { ANTHROPIC_BASE_URL: DIRECT_BASE_URL, [BLOCKING_LIMIT_ENV]: '' },
       autoCompact: true,
       eunoe: false,
@@ -68,10 +66,10 @@ describe('resolveClaudeRoute', () => {
         kind: 'proxy',
         proxy: 'eunoe',
         status: 'unavailable',
-        detail: 'eunoe did not start within 15 s.',
+        detail: 'Eunoe could not start: port in use.',
       },
     });
-    expect((await resolveClaudeRoute('eunoe_default', null, null)).notice).toEqual({
+    expect((await resolveClaudeRoute('compact', null)).notice).toEqual({
       kind: 'proxy',
       proxy: 'eunoe',
       status: 'unavailable',

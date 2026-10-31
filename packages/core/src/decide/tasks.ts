@@ -33,6 +33,7 @@ import {
 } from './backlog.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { changeDependencies, resolveDependencies } from './dependencies.ts';
+import { closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { retryTask } from './retry.ts';
@@ -160,6 +161,11 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   }
   if (inferred.length > 0) {
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
+  }
+  const original = selectTriageDuplicate(decider, task, command.duplicateOf);
+  if (original) {
+    closeTriageDuplicate(decider, decider.task(task.id), original, command.reasons?.duplicate ?? null);
+    return;
   }
   releaseInquiryFromBacklog(decider, task.id);
   startWork(decider, task.id);

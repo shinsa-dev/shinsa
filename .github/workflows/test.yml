@@ -28,4 +28,6 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
+      - name: Bundle the engine entry
+        run: bun build apps/engine/scripts/engine-main.ts --target=bun --outdir "$RUNNER_TEMP/engine-entry"
       - run: bun run test

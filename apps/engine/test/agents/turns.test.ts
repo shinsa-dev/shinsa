@@ -1,16 +1,28 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type Run, resolveHouseRules, type ShinsaState } from '@shinsa/core';
+import {
+  applyEvent,
+  createState,
+  decide,
+  type Run,
+  resolveHouseRules,
+  type ShinsaCommand,
+  type ShinsaEvent,
+  type ShinsaState,
+} from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
 import {
+  isSessionCacheWarm,
   resolveRestorePlan,
+  resolveTurnBrief,
+  resolveTurnFold,
   resolveTurnPlan,
   resolveTurnPrompt,
   type TurnContext,
 } from '../../src/agents/turns.ts';
 import { createTempDir } from '../helpers/index.ts';
-import { createRun } from '../helpers/state.ts';
+import { createGate, createRepo, createRound, createRun, createTask } from '../helpers/state.ts';
 
 function provider(overrides: Partial<AgentProvider> = {}): AgentProvider {
   return {
@@ -194,5 +206,142 @@ describe('forking a task', () => {
     );
     expect(prompt.startsWith('The instruction.')).toBe(true);
     expect(prompt).toContain('You now work in `/work`');
+  });
+});
+
+describe('a message kept for the next agent', () => {
+  function send(state: ShinsaState, command: ShinsaCommand, onBehalf = false) {
+    const decision = decide(state, command, { now: 50, newId: () => 'fix-run', onBehalf });
+    return decision.events.reduce(
+      (next, event) => applyEvent(next, { ...event, seq: next.seq + 1, at: 50 } as ShinsaEvent),
+      state
+    );
+  }
+
+  test('reaches a resumed session that already has the house rules', () => {
+    const rules = resolveHouseRules('agent');
+    const built = createRun({
+      id: 'built-run',
+      status: 'running',
+      sessionId: 'session-1',
+      startedAt: 10,
+      endedAt: 20,
+      outcome: 'completed',
+    });
+    let state = createState();
+    state.repos['repo-1'] = createRepo();
+    state.tasks['task-1'] = createTask({
+      stage: 'awaiting_review',
+      activity: [],
+      rounds: [createRound({ status: 'active' })],
+    });
+    state.runs[built.id] = built;
+    state.gates['gate-1'] = createGate({ type: 'review', runId: null, title: 'Review' });
+    state = send(state, { type: 'task.message', taskId: 'task-1', text: 'Keep the old flag.' }, true);
+    state = send(state, { type: 'task.message', taskId: 'task-1', text: 'hello', kind: 'feedback' });
+    const fix = state.runs['fix-run'];
+    if (!fix) throw new Error('no fix run');
+    expect(fix).toMatchObject({ purpose: 'fix', resume: true, sessionId: 'session-1' });
+    const turn = context(fix, [built], { state });
+    turn.transcripts.record('built-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const plan = { resume: 'session-1', fork: false, handoff: null, record: null };
+    const prompt = resolveTurnPrompt(turn, plan, fix.prompt ?? '', resolveTurnBrief(state, fix, null));
+    expect(prompt.startsWith(rules)).toBe(false);
+    expect(prompt).toContain('hello');
+    expect(prompt).toContain('- Sent by an agent on the human’s behalf: Keep the old flag.');
+  });
+});
+
+describe('folding at a step boundary', () => {
+  const resumed = { resume: 'session-1', fork: false, handoff: null, record: null };
+
+  function folds(run: Run, overrides: Partial<Parameters<typeof resolveTurnFold>[0]> = {}) {
+    return resolveTurnFold({
+      run,
+      plan: resumed,
+      stepPrompt: true,
+      firstAttempt: true,
+      folds: true,
+      ...overrides,
+    });
+  }
+
+  test('the Agent’s resumed build, fix or operation turn folds on its first attempt with its own prompt', () => {
+    for (const purpose of ['build', 'fix', 'operate'] as const) {
+      expect(folds(createRun({ role: 'agent', purpose }))).toBe(true);
+    }
+  });
+
+  test('planning, other roles, a fresh, forked or handed-over session, a later attempt or another prompt never fold', () => {
+    const build = createRun({ role: 'agent', purpose: 'build' });
+    expect(folds(createRun({ role: 'agent', purpose: 'plan' }))).toBe(false);
+    expect(folds(createRun({ role: 'reviewer' }))).toBe(false);
+    expect(folds(build, { folds: false })).toBe(false);
+    expect(folds(build, { stepPrompt: false })).toBe(false);
+    expect(folds(build, { firstAttempt: false })).toBe(false);
+    expect(folds(build, { plan: { ...resumed, resume: null } })).toBe(false);
+    expect(folds(build, { plan: { ...resumed, fork: true } })).toBe(false);
+    const handoff = {
+      text: 'Earlier.',
+      totalEntries: 1,
+      includedEntries: 1,
+      elidedEntries: 0,
+      approxTokens: 1,
+    };
+    expect(folds(build, { plan: { ...resumed, handoff } })).toBe(false);
+    expect(folds(createRun({ role: 'agent', purpose: 'build', continues: 'run-0' }))).toBe(false);
+  });
+
+  test('a folded turn sends the round brief instead of the bare instruction, without the house rules it already has', () => {
+    const rules = resolveHouseRules('agent');
+    const run = createRun({ id: 'run-2', sessionId: 'session-1', role: 'agent', purpose: 'build' });
+    const earlier = createRun({ id: 'run-1', sessionId: 'session-1', role: 'agent', purpose: 'plan' });
+    const turn = context(run, [earlier]);
+    turn.transcripts.record('run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const prompt = `${rules}\n\nNow build phase 1 of 2.`;
+    const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 1 of 2.`;
+    expect(resolveTurnPrompt(turn, resumed, prompt, brief)).toBe('Now build phase 1 of 2.');
+    expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(
+      'The plan in full.\n\nNow build phase 1 of 2.'
+    );
+  });
+
+  test('a session’s cache is warm until the expiry its last ended run recorded, and unknown counts as cold', () => {
+    const run = createRun({ id: 'r3', sessionId: 's', startedAt: 30 });
+    const older = createRun({ id: 'r1', sessionId: 's', startedAt: 10, cacheExpiresAt: 500 });
+    const newer = createRun({ id: 'r2', sessionId: 's', startedAt: 20, cacheExpiresAt: 1_000 });
+    expect(isSessionCacheWarm(context(run, [older, newer]), 's', 999)).toBe(true);
+    expect(isSessionCacheWarm(context(run, [older, newer]), 's', 1_000)).toBe(false);
+    expect(isSessionCacheWarm(context(run, []), 's', 0)).toBe(false);
+    expect(isSessionCacheWarm(context({ ...run, cacheExpiresAt: 9_999 }, []), 's', 0)).toBe(false);
+  });
+
+  test('an eunoe fold or cut keeps the session’s first message, so the house rules are not sent again; Claude Code’s own summary drops them', () => {
+    const rules = resolveHouseRules('agent');
+    const run = createRun({ id: 'run-3', sessionId: 'session-1', role: 'agent', purpose: 'build' });
+    const plan = createRun({
+      id: 'run-1',
+      sessionId: 'session-1',
+      role: 'agent',
+      purpose: 'plan',
+      startedAt: 1,
+    });
+    const build = createRun({
+      id: 'run-2',
+      sessionId: 'session-1',
+      role: 'agent',
+      purpose: 'build',
+      startedAt: 2,
+    });
+    const turn = context(run, [plan, build]);
+    turn.transcripts.record('run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const fold = { kind: 'compaction' as const, trigger: 'fold' as const, preTokens: null, summary: null };
+    turn.transcripts.record('run-2', { type: 'notice', notice: { ...fold, by: 'eunoe' as const } });
+    const prompt = `${rules}\n\nNow build phase 2 of 2.`;
+    const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 2 of 2.`;
+    const folded = 'The plan in full.\n\nNow build phase 2 of 2.';
+    expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(folded);
+    turn.transcripts.record('run-2', { type: 'notice', notice: { ...fold, trigger: 'auto' as const } });
+    expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(brief);
   });
 });

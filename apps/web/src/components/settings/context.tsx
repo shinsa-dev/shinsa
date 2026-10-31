@@ -12,9 +12,9 @@ import { SettingRow, SettingsGroup } from './group.tsx';
 export function ContextSettings({ settings }: { settings: Settings }) {
   return (
     <SettingsGroup title='Context'>
-      <SettingRow title='Compaction'>
+      <SettingRow title='Management'>
         <SelectField
-          label='Compaction'
+          label='Management'
           items={COMPACTION_MODE_ITEMS}
           value={resolveCompaction(settings)}
           onValueChange={(compaction) => void updateSettings({ compaction })}

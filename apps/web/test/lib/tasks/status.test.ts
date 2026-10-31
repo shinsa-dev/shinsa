@@ -422,3 +422,13 @@ describe('ATTENTION', () => {
     expect(ATTENTION.normal).toEqual({ label: 'Context', tone: 'neutral' });
   });
 });
+
+describe('a duplicate', () => {
+  it('shows Duplicate with its own icon instead of Cancelled', () => {
+    const task = createTask({ id: 't', stage: 'cancelled', duplicate: { of: 'o', by: 'shinsa', why: null } });
+    const state = createShinsaState({ tasks: [task] });
+    expect(resolveTaskStatus(state, task)).toEqual({ label: 'Duplicate', tone: 'neutral' });
+    expect(resolveTaskStatusIcon(state, task)).toBe('IconSquareBehindSquare2');
+    expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconSquareBehindSquare2', tone: 'neutral' });
+  });
+});

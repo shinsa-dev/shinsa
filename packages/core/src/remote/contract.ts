@@ -24,7 +24,12 @@ export const REMOTE_PATHS = {
   instances: '/__remote/instances',
   pairs: '/__remote/pairs',
   hooks: '/hooks/',
+  signInToken: '/__remote/sign-in/token',
 } as const;
+
+export const REMOTE_NATIVE_CLIENT = 'native';
+
+export const REMOTE_NATIVE_REDIRECT_SCHEMES = ['shinsa:', 'shinsa-dev:'] as const;
 
 export interface PairStartRequest {
   name: string;
@@ -77,6 +82,18 @@ export interface RemoteInstance {
 
 export interface RemoteSession {
   user: { id: string; login: string; avatarUrl: string | null } | null;
+}
+
+export type RemoteUser = NonNullable<RemoteSession['user']>;
+
+export interface NativeSignInTokenRequest {
+  code: string;
+  codeVerifier: string;
+}
+
+export interface NativeSignInTokenResponse {
+  token: string;
+  user: RemoteUser;
 }
 
 export interface PairView {

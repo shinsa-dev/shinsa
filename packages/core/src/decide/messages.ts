@@ -25,6 +25,7 @@ import type { Decider } from './decider.ts';
 import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
+import { requestIteration } from './iterations.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
@@ -164,6 +165,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'kept':
       return;
     case 'steer':
+      if (delivery.run.purpose === 'fix') requestIteration(decider, task.id, text, 0);
       decider.run({ kind: 'run.steer', runId: delivery.run.id, text });
       return;
     case 'wake':
@@ -200,6 +202,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'send_back':
     case 'fix':
       decider.withdrawGates(task.id, (gate) => gate.type === 'review' || gate.type === 'merge');
+      requestIteration(decider, task.id, text, 0);
       startFix(decider, task.id, 'you', resolveHumanFixPrompt(text, []), null);
   }
 }
@@ -287,7 +290,7 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
   if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
-    recordMessages(decider, task.id, texts, scheduled);
+    recordMessages(decider, task.id, texts, { ...scheduled, kept: true });
     return;
   }
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);

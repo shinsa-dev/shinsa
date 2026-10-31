@@ -10,6 +10,7 @@ import {
   parseEnrollFragment,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
+  type ServerMessage,
   serializeBase64Url,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
@@ -476,6 +477,40 @@ describe('managing remote access on the machine', () => {
       'remote_not_paired'
     );
     warn.mockRestore();
+  });
+
+  test('pushes remote access to every open page the moment a link is redeemed or a device forgotten', async () => {
+    const { remote, base, local, port } = await start();
+    const socket = new WebSocket(`${base.replace('http', 'ws')}/ws`, {
+      headers: { origin: 'http://localhost:5181' },
+    } as unknown as string[]);
+    running.push(() => {
+      socket.close();
+      return Promise.resolve();
+    });
+    const pushed: Extract<ServerMessage, { type: 'remote' }>['remote'][] = [];
+    socket.addEventListener('message', (event) => {
+      const message = JSON.parse(String(event.data)) as ServerMessage;
+      if (message.type === 'remote') pushed.push(message.remote);
+    });
+    await until('remote access on connect', () => pushed.length === 1);
+    expect(pushed[0]).toMatchObject({ paired: true, devices: [] });
+    const enrollment = (await (await local('/api/remote/devices/enroll', { name: 'iPhone' })).json()) as {
+      id: string;
+      url: string;
+    };
+    const machine = await remote.store.resolveMachineKey();
+    const secret = parseEnrollFragment(new URL(enrollment.url).hash)?.secret ?? '';
+    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey);
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    await until('the added device', () => pushed.some((snapshot) => snapshot.devices.length === 1));
+    const added = pushed.find((snapshot) => snapshot.devices.length === 1);
+    expect(added?.devices[0]).toMatchObject({ name: 'iPhone', enrollmentId: enrollment.id });
+    const count = pushed.length;
+    remote.removeDevice(added?.devices[0]?.publicKey ?? '');
+    await until('the forgotten device', () => pushed.length > count);
+    expect(pushed.at(-1)?.devices).toEqual([]);
+    expect(await channel.closed).toBe(1008);
   });
 
   test('enrolls a named device from a one-time link and forgets it on request', async () => {

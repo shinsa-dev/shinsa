@@ -78,6 +78,7 @@ describe('waiting with wait_for', () => {
       sessionId: 'builder-1',
       provider: 'claude',
     });
+    const waited = harness.activeRun(taskId);
     waitFor(harness, taskId);
     fire(harness, taskId);
     const run = harness.activeRun(taskId);
@@ -87,6 +88,7 @@ describe('waiting with wait_for', () => {
       phaseIndex: 0,
       sessionId: 'builder-1',
       monitorId: harness.task(taskId).monitor?.id,
+      continues: waited.id,
     });
     expect(run.prompt).toContain('Shinsa woke you to check again (check 1 of 10).');
     expect(run.prompt).toContain('call `wait_for` again');

@@ -33,6 +33,7 @@ import type {
   Settings,
   ShapeActor,
   TaskAuto,
+  TaskDuplicate,
   TaskMode,
   TaskPriority,
   TaskShape,
@@ -54,6 +55,7 @@ import type {
 import type { SourceReport } from '../domain/schedules.ts';
 import type {
   CheckChange,
+  FixReply,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -123,8 +125,11 @@ type EventBody =
   | { type: 'task.change_approved'; taskId: string }
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
+  | { type: 'task.duplicated'; taskId: string; duplicate: TaskDuplicate }
+  | { type: 'task.duplicate_cleared'; taskId: string }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
+  | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }
   | {
       type: 'task.messaged';
@@ -134,7 +139,18 @@ type EventBody =
       kind?: MessageKind;
       round?: number;
       suggestionId?: string;
+      kept?: true;
     }
+  | {
+      type: 'iteration.requested';
+      taskId: string;
+      iterationId: string;
+      round: number;
+      text: string;
+      comments: number;
+    }
+  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: FixReply; runId: string }
+  | { type: 'task.messages_told'; taskId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }
   | { type: 'task.message_dropped'; taskId: string; messageId: string; reason: string }
@@ -246,6 +262,7 @@ type EventBody =
   | { type: 'run.continued'; runId: string; reason: RunContinuationReason }
   | { type: 'run.session_lost'; runId: string; sessionId: string }
   | { type: 'run.compacted'; runId: string; sessionId: string }
+  | { type: 'run.cached'; runId: string; cacheExpiresAt: number }
   | { type: 'evidence.attached'; evidence: Evidence; replaces?: string[] }
   | { type: 'evidence.removed'; taskId: string; ids: string[]; reason: string; runId: string }
   | { type: 'evidence.uploaded'; taskId: string; uploads: EvidenceUpload[] }

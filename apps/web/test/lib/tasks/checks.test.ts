@@ -4,7 +4,6 @@ import {
   CHECK_STATE_LABEL,
   type ChecksView,
   describeCheckPhases,
-  describeChecksPassed,
   listRunningCheckIds,
   resolveBaseBranch,
   resolveChecksView,
@@ -341,19 +340,6 @@ describe('resolveEvidenceCheckRow', () => {
       'No longer one of the task’s checks',
       null,
     ]);
-  });
-});
-
-describe('describeChecksPassed', () => {
-  it('counts a check failing on the base as passed, as the activity does', () => {
-    expect(describeChecksPassed([result(UNIT)])).toBe('The check passed');
-    expect(describeChecksPassed([result(UNIT, { outcome: 'fail' })])).toBe('The check failed');
-    expect(
-      describeChecksPassed([result(UNIT), result(TYPES, { outcome: 'fail', note: 'fails_on_base' })])
-    ).toBe('All 2 checks passed');
-    expect(describeChecksPassed([result(UNIT), result(TYPES, { outcome: 'fail' })])).toBe(
-      '1 of 2 checks passed'
-    );
   });
 });
 

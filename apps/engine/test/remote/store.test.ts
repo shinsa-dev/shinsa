@@ -39,8 +39,8 @@ describe('remote.json', () => {
         owner: 'mona',
         enabled: true,
         devices: [
-          { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2 },
-          { publicKey: 'd2', name: 'Laptop', enrolledAt: 3 },
+          { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, enrollmentId: 'link-1' },
+          { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, enrollmentId: 4 },
           { publicKey: 'd3', name: 'Broken' },
           'nope',
         ],
@@ -53,8 +53,8 @@ describe('remote.json', () => {
       owner: 'mona',
       enabled: true,
       devices: [
-        { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2 },
-        { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, lastSeenAt: null },
+        { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, enrollmentId: 'link-1' },
+        { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, lastSeenAt: null, enrollmentId: null },
       ],
     });
   });
@@ -84,13 +84,25 @@ describe('remote.json', () => {
 describe('the remote store', () => {
   test('writes with mode 600 and keeps devices by public key', () => {
     const store = new RemoteStore(createPath());
-    store.upsertDevice({ publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: null });
-    store.upsertDevice({ publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: null });
+    store.upsertDevice({
+      publicKey: 'd1',
+      name: 'Phone',
+      enrolledAt: 1,
+      lastSeenAt: null,
+      enrollmentId: 'a',
+    });
+    store.upsertDevice({
+      publicKey: 'd1',
+      name: 'Phone again',
+      enrolledAt: 2,
+      lastSeenAt: null,
+      enrollmentId: 'b',
+    });
     store.recordDeviceSeen('d1', 5);
     store.recordDeviceSeen('unknown', 5);
     expect(statSync(store.path).mode & 0o777).toBe(0o600);
     expect(store.file.devices).toEqual([
-      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5 },
+      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, enrollmentId: 'b' },
     ]);
     expect(store.selectDevice('d1')?.name).toBe('Phone again');
     expect(store.removeDevice('d1')).toBe(true);

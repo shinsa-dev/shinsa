@@ -378,6 +378,8 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       'shape',
       'priority',
       'waits_on',
+      'duplicate_of',
+      'duplicate_why',
       'shape_why',
       'priority_why',
       'waits_on_why',
@@ -387,7 +389,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     expect(prompt).toContain('"operation": run a one-off action in the repository');
     expect(prompt).toContain('- priority (choice): How soon does this need doing');
     expect(prompt).toContain(
-      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why.'
+      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why, duplicate_why.'
     );
     expect(prompt).not.toContain('The human chose');
   });
@@ -488,7 +490,14 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       'The human chose: the kind of task is answer; the priority is high; it waits for “Add the export”, “another task”.'
     );
     expect(prompt).toContain('This request is a question to answer from the code');
-    expect(Object.keys(calls[0]?.schema?.properties ?? {})).toEqual(['title', 'repo', 'size', 'branch']);
+    expect(Object.keys(calls[0]?.schema?.properties ?? {})).toEqual([
+      'title',
+      'repo',
+      'size',
+      'branch',
+      'duplicate_of',
+      'duplicate_why',
+    ]);
     expect(prompt).not.toContain('waits_on');
 
     await resolveTriage(state, newTask({ auto: { shape: true, start: false, priority: true } }), LOCAL, ask);
@@ -744,5 +753,66 @@ describe('the project a repository triage registers goes to', () => {
     expect(resolveRepoProject(state, newTask({ projectId: 'empty' }), '/code/kanna')).toBe('empty');
     expect(resolveRepoProject(state, newTask({ projectId: 'full' }), '/code/kanna')).toBeNull();
     expect(resolveRepoProject(state, newTask(), '/code/kanna')).toBeNull();
+  });
+});
+
+describe('resolveTriage for duplicates', () => {
+  const state = stateWith((draft) => {
+    draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
+    draft.tasks.same = createTask({ id: 'same', repoId: 'r1', title: 'Add the export' });
+    draft.tasks.other = createTask({ id: 'other', repoId: 'r9', title: 'Add the import' });
+    draft.tasks.done = createTask({ id: 'done', repoId: 'r1', stage: 'merged', title: 'Old export' });
+  });
+  const base = { title: 'Add an export', repo: 'api', size: 'small', branch: 'feat/export' };
+
+  function record(value: unknown) {
+    const calls: { prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
+      calls.push({ prompt, schema: shape });
+      return Promise.resolve(value as T);
+    };
+    return { calls, ask };
+  }
+
+  test('offers the open tasks or none, with a strict bar, and names the duplicate with its reason', async () => {
+    const { calls, ask } = record({
+      ...base,
+      duplicate_of: 'same',
+      duplicate_why: 'Both add the same export.',
+    });
+    const triage = await resolveTriage(state, newTask(), LOCAL, ask);
+    expect(triage).toMatchObject({
+      duplicateOf: 'same',
+      reasons: { duplicate: 'Both add the same export.' },
+    });
+    expect(calls[0]?.schema?.properties.duplicate_of).toEqual({
+      type: 'string',
+      enum: ['none', 'same', 'other'],
+    });
+    const prompt = calls[0]?.prompt ?? '';
+    expect(prompt).toContain('- duplicate_of (choice): Is this request the same work as an open task');
+    expect(prompt).toContain('Related, overlapping, follow-up or partly the same work is "none"');
+    expect(prompt).toContain('"same": Add the export');
+    expect(prompt).not.toContain('"done": Old export');
+  });
+
+  test('a missing reason is filled in from the original', async () => {
+    const triage = await resolveTriage(state, newTask(), LOCAL, answer({ ...base, duplicate_of: 'same' }));
+    expect(triage?.reasons?.duplicate).toBe('It asks for the same work as “Add the export”.');
+  });
+
+  test('none, an unknown task, or a task in another repository is no duplicate', async () => {
+    for (const duplicate_of of ['none', 'done', 'missing', 7, 'other']) {
+      const triage = await resolveTriage(state, newTask(), LOCAL, answer({ ...base, duplicate_of }));
+      expect(triage?.duplicateOf).toBeUndefined();
+      expect(triage?.reasons?.duplicate).toBeUndefined();
+    }
+  });
+
+  test('with no open task there is nothing to ask', async () => {
+    const { calls, ask } = record(base);
+    await resolveTriage(stateWith(), newTask(), LOCAL, ask);
+    expect(calls[0]?.schema?.properties.duplicate_of).toBeUndefined();
+    expect(calls[0]?.prompt).not.toContain('duplicate_of');
   });
 });

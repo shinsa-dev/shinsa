@@ -9,6 +9,7 @@ import {
   isPausingGate,
   isTaskSessionRole,
   isTaskSettled,
+  isWatchSession,
   type Run,
   type RunAccount,
   type RunFailure,
@@ -24,6 +25,7 @@ import {
 } from '../domain/index.ts';
 import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effects/index.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
+import { describeUntoldMessages } from '../prompts/context.ts';
 import { describeForkSource, resolveForkNote } from '../prompts/forks.ts';
 import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
@@ -59,6 +61,7 @@ interface StartRunOptions {
   monitorId?: string | null;
   usageWaitId?: string | null;
   account?: RunAccount | null;
+  continues?: string | null;
 }
 
 interface KeptWaits {
@@ -167,10 +170,15 @@ export class Decider {
     this.emit({ type: 'task.staged', taskId, stage, reason, ...(by ? { by } : {}) });
   }
 
-  taskSession(taskId: string, role: RunRole): Run | null {
+  taskSession(taskId: string, role: RunRole, purpose: RunPurpose | null = null): Run | null {
     const roles = isTaskSessionRole(role) ? TASK_SESSION_ROLES : [role];
+    const watch = isWatchSession({ role, purpose: purpose ?? undefined });
     const runs = Object.values(this.state.runs).filter(
-      (run) => run.taskId === taskId && !isDelegatedRun(run) && run.sessionId !== null
+      (run) =>
+        run.taskId === taskId &&
+        !isDelegatedRun(run) &&
+        run.sessionId !== null &&
+        isWatchSession(run) === watch
     );
     const ended = new Set(runs.filter(endsSession).map((run) => run.sessionId));
     let latest: Run | null = null;
@@ -209,7 +217,7 @@ export class Decider {
 
   resumableFrom(run: Run | null) {
     if (!run || run.sessionId || isDelegatedRun(run)) return run;
-    return this.taskSession(run.taskId, run.role);
+    return this.taskSession(run.taskId, run.role, run.purpose ?? null);
   }
 
   endRun(run: Run, outcome: RunOutcome, summary: string | null, failure: RunFailure | null = null) {
@@ -295,7 +303,7 @@ export class Decider {
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
     const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
-    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}`;
+    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${this.#tellMessages(task.id, role, purpose)}${tellOverlaps(this, task.id, role)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
@@ -317,6 +325,7 @@ export class Decider {
       ...(fork ? { fork } : {}),
       ...(options.feedback ? { feedback: options.feedback } : {}),
       ...(options.monitorId ? { monitorId: options.monitorId } : {}),
+      ...(options.continues ? { continues: options.continues } : {}),
       ...(options.usageWaitId ? { usageWaitId: options.usageWaitId } : {}),
       ...(account ? { account } : {}),
       ...resolveRoundStamp(task),
@@ -330,6 +339,14 @@ export class Decider {
     if (untold.length === 0) return '';
     this.emit({ type: 'task.edits_told', taskId });
     return `\n\n${describeHumanEdits(untold)}`;
+  }
+
+  #tellMessages(taskId: string, role: RunRole, purpose: RunPurpose | null) {
+    const untold = this.task(taskId).untoldMessages ?? [];
+    if (untold.length === 0 || !isTaskSessionRole(role)) return '';
+    if (purpose === 'watch' || purpose === 'intake') return '';
+    this.emit({ type: 'task.messages_told', taskId });
+    return `\n\n${describeUntoldMessages(untold)}`;
   }
 
   bindNextRun(taskId: string, account: RunAccount) {

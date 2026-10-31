@@ -17,6 +17,12 @@ export interface UserRow {
   avatar_url: string | null;
 }
 
+export interface SignInCodeRow {
+  user_id: string;
+  code_challenge: string;
+  expires_at: number;
+}
+
 export interface InstanceRow {
   id: string;
   user_id: string;
@@ -115,6 +121,29 @@ export function createStore(db: Database) {
 
     async removeSession(tokenHash: string) {
       await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run();
+    },
+
+    selectUser(id: string) {
+      return db.prepare('SELECT id, login, avatar_url FROM users WHERE id = ?').bind(id).first<UserRow>();
+    },
+
+    async createSignInCode(codeHash: string, row: SignInCodeRow, now: number) {
+      await db.prepare('DELETE FROM sign_in_codes WHERE expires_at <= ?').bind(now).run();
+      await db
+        .prepare(
+          'INSERT INTO sign_in_codes (code_hash, user_id, code_challenge, expires_at) VALUES (?, ?, ?, ?)'
+        )
+        .bind(codeHash, row.user_id, row.code_challenge, row.expires_at)
+        .run();
+    },
+
+    takeSignInCode(codeHash: string) {
+      return db
+        .prepare(
+          'DELETE FROM sign_in_codes WHERE code_hash = ? RETURNING user_id, code_challenge, expires_at'
+        )
+        .bind(codeHash)
+        .first<SignInCodeRow>();
     },
 
     async createPairSession(row: Omit<PairSessionRow, 'credentials' | 'owner'>, clientIp: string) {

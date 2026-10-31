@@ -30,6 +30,7 @@ import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting } from './dependencies.ts';
+import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
@@ -101,6 +102,7 @@ import {
   startSlackTask,
   syncSlackThreads,
 } from './slack.ts';
+import { snoozeTask, unsnoozeTask } from './snooze.ts';
 import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions.ts';
 import {
   cancelTask,
@@ -165,8 +167,16 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':
       return removeFromBacklog(decider, command);
+    case 'task.snooze':
+      return snoozeTask(decider, command);
+    case 'task.unsnooze':
+      return unsnoozeTask(decider, command);
     case 'task.cancel':
       return cancelTask(decider, command);
+    case 'task.mark_duplicate':
+      return markDuplicate(decider, command);
+    case 'task.clear_duplicate':
+      return clearDuplicate(decider, command);
     case 'task.complete':
       return completeTask(decider, command);
     case 'task.retry':

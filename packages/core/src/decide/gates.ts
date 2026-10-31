@@ -18,6 +18,7 @@ import { acknowledgeBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
+import { requestIteration } from './iterations.ts';
 import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
@@ -180,6 +181,7 @@ function reviseWork(decider: Decider, gate: Gate, response: string | null, comme
   const prompt = judged
     ? resolveVerdictFixPrompt(findings, response, comments)
     : resolveHumanFixPrompt(response, comments);
+  requestIteration(decider, gate.taskId, response, comments.length);
   startFix(decider, gate.taskId, 'you', prompt, null);
 }
 

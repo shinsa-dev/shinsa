@@ -739,7 +739,7 @@ describe('compacting a Codex thread', () => {
   test('with compaction off Codex never compacts on its own', async () => {
     const codex = new FakeCodex();
     await start(codex, createInput('plan', { compaction: 'off' })).done;
-    await start(codex, createInput('plan', { compaction: 'eunoe_compact' })).done;
+    await start(codex, createInput('plan', { compaction: 'fold' })).done;
     const [off, on] = codex.requests('thread/start');
     expect(off?.config).toMatchObject({ model_auto_compact_token_limit: Number.MAX_SAFE_INTEGER });
     expect(on?.config).not.toHaveProperty('model_auto_compact_token_limit');

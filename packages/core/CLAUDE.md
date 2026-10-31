@@ -80,7 +80,8 @@ src/
 ├── decide/          decide() (index.ts): one exhaustive switch over the command, then releaseWaiting,
 │   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a draft and emits
 │   │                events and effects (taskSession: the one session every run of a task resumes, whatever its
-│   │                kind of work, and the reviewer's own; resumableFrom for a run that failed before it had one);
+│   │                kind of work, the watch session watchdog checks resume apart from it (isWatchSession), and the
+│   │                reviewer's own; resumableFrom for a run that failed before it had one);
 │   │                equality.ts (isSameValue)
 │   ├── lifecycle.ts Starting each step (work, planning, a phase, checks, review), the review gate, settling a task
 │   │                (which removes its worktree and its scratch folder: worktree.remove, scratch.remove)
@@ -127,8 +128,9 @@ src/
 │   │                web's composer hint reads it), then it is delivered, only recorded (acknowledge), queued as a new
 │   │                round or suggested as a separate task by its kind (at a gate that takes words, always delivered:
 │   │                FEEDBACK_ONLY_EFFECTS); the same text twice within a window is taken once (isRepeatedMessage);
-│   │                superseding an open question; a message sent for you to a task at a gate is only recorded, for
-│   │                its next agent; needsMessageKind (the server classifies such a message first, never at those
+│   │                superseding an open question; a message sent for you to a task at a gate is only recorded and
+│   │                kept (`untoldMessages`), told once by the next run of the task's session (Decider.startRun);
+│   │                needsMessageKind (the server classifies such a message first, never at those
 │   │                gates);
 │   │                new work never waits behind your own decision: new_round (or separate_task with no room for a
 │   │                suggestion) that would only start after you approve or merge is delivered as feedback
@@ -162,7 +164,7 @@ src/
 │   ├── config.ts    Setup verification and its configuration gate
 │   ├── monitors.ts  wait_for: arming, waking and checking a monitor
 │   ├── watchdogs.ts Watchdogs after a merge: arming them from the walkthrough (syncWatchdogs, after every command),
-│   │                firing a check as a read-only `watch` turn of the task's session, deferring it while the task
+│   │                firing a check as a read-only `watch` turn of the task's watch session, deferring it while the task
 │   │                works, ending a check (endWatchCheck: tripped by the reports it filed, missed when the source
 │   │                was out of reach, healthy otherwise; `live` while it waits for production), stopping them,
 │   │                connecting a source;
@@ -395,7 +397,8 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     task-session role resumes the session of the task's latest such run with a session (one session per task, across
     phases, fixes, rounds, kinds of work and models) unless that session ended in a context overflow or an image
     error, the previous run of the role failed with a fresh-class failure, or it belongs to another kind of work on
-    another provider; every reviewer resumes the reviewer's own session the same way; a run that forks
+    another provider; watchdog checks (purpose `watch`) form a lane of their own, each resuming only the latest
+    watch run's session and no other run resuming theirs; every reviewer resumes the reviewer's own session the same way; a run that forks
     (`assertForkStartsSession`) is a task-session role's, of a task forked from the task it names, starts that
     task's first session (it neither resumes nor follows a session the task already had) and copies a session its
     source run really had; checked as each `run.started` is applied;

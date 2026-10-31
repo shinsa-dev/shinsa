@@ -55,6 +55,7 @@ export {
   selectEvidenceItem,
 } from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export { selectOpenIteration } from './iterations.ts';
 export {
   isMemoryOf,
   MEMORY_LIMITS,
@@ -131,6 +132,8 @@ export {
   createSettings,
   HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
+  isEunoeCompaction,
+  isFoldingCompaction,
   MAX_COMPACTION_LEAD_MINUTES,
   MERGE_METHODS,
   type MergeMethod,
@@ -244,6 +247,7 @@ export {
   isHandOverTool,
   isShinsaToolName,
   isTaskSessionRole,
+  isWatchSession,
   listCallableToolNames,
   listToolNames,
   PURPOSE_HAND_OVERS,

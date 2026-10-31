@@ -40,9 +40,9 @@ describe('a task from request to merge', () => {
     expect([planning?.readOnly, first?.readOnly, second?.readOnly]).toEqual([true, false, false]);
     expect(first?.resume).toBe(planning?.sessionId);
     expect(second?.resume).toBe(planning?.sessionId);
-    expect(second?.prompt).toStartWith(
-      'Phase 1 is committed.\nNow build phase 2 of 2: Write the second file.'
-    );
+    expect(second?.prompt).toContain('Your conversation may no longer hold this round');
+    expect(second?.prompt).toContain('2. Write the second file: Create b.txt.');
+    expect(second?.prompt).toContain('Phase 1 is committed.\nNow build phase 2 of 2: Write the second file.');
     expect(w.agents.of('reviewer')[0]?.resume).toBeNull();
     expect(w.agents.of('reviewer')[0]?.prompt).toContain('You did not write this code.');
     const runs = Object.values(w.state.runs).filter((run) => run.taskId === taskId);
@@ -105,7 +105,8 @@ describe('fix loops', () => {
     const session = w.agents.of('plan')[0]?.sessionId ?? null;
     expect(w.agents.of('build').map((build) => build.resume)).toEqual([session, session]);
     expect(fixer?.resume).toBe(session);
-    expect(fixer?.prompt).toStartWith('The checks failed');
+    expect(fixer?.prompt).toContain('Your conversation may no longer hold this round');
+    expect(fixer?.prompt).toContain('The checks failed');
     expect(w.task(taskId).fixRounds).toBe(1);
     expect(w.task(taskId).fixFor).toBe('checks');
     expect(await w.branchLog(w.task(taskId).branch ?? '')).toContain('fix: make the checks pass');

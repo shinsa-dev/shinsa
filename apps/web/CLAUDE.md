@@ -288,7 +288,8 @@ src/
         slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
         reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
         disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
-        expiry and its QR code as an image; connection/remote-access.ts reads and changes /api/remote),
+        expiry and its QR code as an image, the device a link added; connection/remote-access.ts reads it from the
+        socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
         server form and its checks), versions.ts (Settings → Agents → Versions: rows, statuses and the update labels)

@@ -47,6 +47,7 @@ import { removeEntry, writeEntry } from './draft.ts';
 import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
@@ -263,7 +264,8 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
   const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
-  const text = answered ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
+  const duplicated = stage === 'cancelled' && Boolean(task?.duplicate);
+  const text = answered || duplicated ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
   if (text && previous !== stage) {
     record(state, event.taskId, event.at, { actor: event.by ?? 'shinsa', kind: 'stage', text });
   }
@@ -278,6 +280,22 @@ function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>
     kind: 'stage',
     text: `Set the priority to ${event.priority}`,
   });
+}
+
+function applyDuplicated(state: ShinsaState, event: EventOf<'task.duplicated'>) {
+  updateTask(state, event.taskId, event.at, { duplicate: { ...event.duplicate } });
+  const original = state.tasks[event.duplicate.of];
+  const handle = original?.handle ? `${original.handle} ` : '';
+  record(state, event.taskId, event.at, {
+    actor: event.duplicate.by,
+    kind: 'stage',
+    text: `Closed as a duplicate of ${handle}“${original?.title ?? 'another task'}”`,
+  });
+}
+
+function applyDuplicateCleared(state: ShinsaState, event: EventOf<'task.duplicate_cleared'>) {
+  updateTask(state, event.taskId, event.at, { duplicate: null, closedAt: null, cancelledFrom: null });
+  record(state, event.taskId, event.at, { actor: 'you', kind: 'stage', text: 'Not a duplicate after all' });
 }
 
 function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_changed'>) {
@@ -303,6 +321,15 @@ function applyBacklogChanged(state: ShinsaState, event: EventOf<'task.backlog_ch
     actor: event.cause === 'you' ? 'you' : 'shinsa',
     kind: 'stage',
     text: event.backlog ? 'Moved to the backlog' : BACKLOG_LEFT[event.cause],
+  });
+}
+
+function applySnoozeChanged(state: ShinsaState, event: EventOf<'task.snooze_changed'>) {
+  updateTask(state, event.taskId, event.at, { snoozed: event.snoozed ? { at: event.at } : null });
+  record(state, event.taskId, event.at, {
+    actor: 'you',
+    kind: 'stage',
+    text: event.snoozed ? 'Snoozed: it keeps its place, out of Needs you and Home' : 'Unsnoozed',
   });
 }
 
@@ -490,6 +517,16 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       : describeMessage(event),
     detail: event.text,
     ...(event.kind === 'acknowledge' ? { noted: true } : {}),
+  });
+  if (event.kept) keepMessage(state, event);
+}
+
+function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const sender = event.scheduleId ? 'schedule' : 'agent';
+  updateTask(state, event.taskId, event.at, {
+    untoldMessages: [...(task.untoldMessages ?? []), { at: event.at, text: event.text, sender }],
   });
 }
 
@@ -737,11 +774,20 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.prioritized':
       applyPrioritized(state, event);
       break;
+    case 'task.duplicated':
+      applyDuplicated(state, event);
+      break;
+    case 'task.duplicate_cleared':
+      applyDuplicateCleared(state, event);
+      break;
     case 'task.waits_on_changed':
       applyWaitsOnChanged(state, event);
       break;
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);
+      break;
+    case 'task.snooze_changed':
+      applySnoozeChanged(state, event);
       break;
     case 'task.noted':
       applyNoted(state, event);
@@ -753,6 +799,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.message_routed':
     case 'task.message_dropped':
       applyInboxEvent(state, event);
+      break;
+    case 'iteration.requested':
+    case 'iteration.answered':
+      applyIterationEvent(state, event);
       break;
     case 'task.recovered':
       updateTask(state, event.taskId, event.at, {
@@ -874,6 +924,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.edits_told':
       updateTask(state, event.taskId, event.at, { untoldEdits: [] });
       break;
+    case 'task.messages_told':
+      updateTask(state, event.taskId, event.at, { untoldMessages: [] });
+      break;
     case 'task.overlapped':
     case 'task.overlaps_told':
       applyOverlapEvent(state, event);
@@ -925,6 +978,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'run.silence_snoozed':
     case 'run.silence_dismissed':
     case 'run.compacted':
+    case 'run.cached':
       applyRunEvent(state, event);
       break;
     case 'delegation.asked':

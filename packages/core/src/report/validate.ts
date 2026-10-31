@@ -27,6 +27,7 @@ import type {
   EvidenceRemovalHandOver,
   EvidenceSource,
   FixHandOver,
+  FixReply,
   JudgementAlternative,
   JudgementCall,
   ManualTestStep,
@@ -39,6 +40,8 @@ import type {
   PlanDocument,
   PlanHandOver,
   QuestionHandOver,
+  ReplyOutcome,
+  ReplyPoint,
   ReportRisk,
   ReportTesting,
   ReportWalkthrough,
@@ -144,7 +147,14 @@ export const PROTOCOL_LIMITS = {
   evidenceKey: 60,
   evidenceItems: 24,
   evidenceReason: 200,
+  replyHeadline: 240,
+  replyPoints: 8,
+  replyAsk: 160,
+  replyNote: 280,
+  replyNext: 1_200,
 } as const;
+
+export const REPLY_OUTCOMES: readonly [ReplyOutcome, ...ReplyOutcome[]] = ['done', 'answered', 'not_changed'];
 
 export const ATTACHED_EVIDENCE_KINDS: readonly [EvidenceItemKind, ...EvidenceItemKind[]] = [
   ...EVIDENCE_KINDS,
@@ -655,10 +665,33 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
   });
 }
 
+function readReplyPoints(reader: Reader, input: unknown): ReplyPoint[] {
+  return reader.list(input, 'reply.points', PROTOCOL_LIMITS.replyPoints, 1).map((raw, index) => {
+    const path = `reply.points[${index}]`;
+    const record = reader.record(raw, path);
+    return {
+      ask: reader.text(record.ask, `${path}.ask`, PROTOCOL_LIMITS.replyAsk),
+      outcome: reader.pick(record.outcome, `${path}.outcome`, REPLY_OUTCOMES),
+      note: reader.text(record.note, `${path}.note`, PROTOCOL_LIMITS.replyNote),
+    };
+  });
+}
+
+function readReply(reader: Reader, input: unknown): FixReply | null {
+  if (input === undefined || input === null) return null;
+  const record = reader.record(input, 'reply');
+  return {
+    headline: reader.text(record.headline, 'reply.headline', PROTOCOL_LIMITS.replyHeadline),
+    points: readReplyPoints(reader, record.points),
+    next: reader.optionalText(record.next, 'reply.next', PROTOCOL_LIMITS.replyNext),
+  };
+}
+
 export function validateFixHandOver(input: Record<string, unknown>): Validation<FixHandOver> {
   const reader = new Reader();
   return reader.result({
     summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.phaseSummary),
+    reply: readReply(reader, input.reply),
     walkthrough: readWalkthroughRevision(reader, input.walkthrough),
     checks: readCheckIds(reader, input.checks),
     checkChanges: readCheckChanges(reader, input.check_changes),

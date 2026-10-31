@@ -55,6 +55,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
+| request (an iteration) | Something you sent the Agent after its work was in (changes at the review or merge gate, line comments, a question, a message while that fix runs), with the Agent's reply: a headline, each point you raised marked done, answered or not changed with a note, what you do now and any details. The overview shows the latest on the review card and the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `FixReply` (`complete_fix`'s `reply`), `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
 | merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it. Never shipping code: a step that stages, commits, pushes or opens a pull request is refused. Each task the merge waits on (`Task.waitsOn`) shows among them as a linked row you never tick, done once that task finishes | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
 | watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; each check is a read of that source scoped to the change, and a report it files is a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `file_report`, `report_read` | Watchdogs, Watching |
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
@@ -96,6 +97,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
+| Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
 | Your OK | step `your_ok`; gate type `proposal`; stage `awaiting_proposal`; `ChangeProposal`, `task.change_proposed|approved|declined`, `propose_change`; UI "Your OK", "Change to approve" (also for an operation), "Make it a change" |
@@ -215,6 +217,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
 | `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
+| `duplicate?` | `{ of, by, why }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
@@ -239,6 +242,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
+| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 
@@ -258,6 +262,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: the pull request conflicts with its base, read by the pull request watch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
+| `iterations?` | `Iteration[]` | every request you sent after the work was in, with its reply, oldest first; kept across rounds, each with its `round` (not archived by a new round): `id`, `round`, `requests` (`text`, `comments`: the line comments sent with it, `at`), `reply` (`FixReply` \| null while open), `runId` and `repliedAt` of the fix that answered it. At most one is open, the last (`selectOpenIteration`) |
 
 **Pull request**
 
@@ -394,7 +399,8 @@ holds an active run; Shinsa's own stages hold an effect.
 | `merged`, `done`, `cancelled` | merge / none | | settled |
 
 Any working or gate stage can also hold a failure gate (paused), a monitor or a usage wait; `task.cancel` and
-`task.complete` settle from anywhere open.
+`task.complete` settle from anywhere open, and so does `task.mark_duplicate`, a cancel that records the task it
+duplicates (`task.duplicated`, then `cancelled`).
 
 **Rounds and the lifecycle.** A task's stage belongs to its active round. `merged` and `done` reached on their own
 leave the task **resting**: settled (no run, gate or worktree) but open, and a message starts its next round. A new
@@ -465,6 +471,8 @@ executable changed line (`selectMeasuredCoverage`).
 | `failure?` | `RunFailure` | class (13), message, code, retryable, `resetAt`, `account` (a Claude account), `login` (a provider's own sign-in: `{ provider, email }`) |
 | `resumePending?`, `continuations?` | | restart continuation and its loop guard |
 | `monitorId?`, `usageWaitId?` | | the wait it was woken from |
+| `cacheExpiresAt?` | number | when the prompt cache the run last wrote expires |
+| `continues?` | | the run whose step it carries on (a recovery nudge, a `wait_for` wake-up, a usage-limit resume); such a run never folds the turns before it |
 | `feedback?` | string \| null | your words it carries |
 | `usage?`, `meters?` | | tokens and cost; per attempt (`RunMeter`), its window (`account:<id>` or `provider:<id>`), time span, usage and the weekly readings taken at its start and end, which teach its window's rate; its share of the weekly window is its cost at that rate (`resolveUsageShares`) |
 | `silence?` | `RunSilence` | the quiet-run mark, snooze and dismissal |
@@ -696,8 +704,9 @@ task already has), `check_phases_invalid` (a phase the plan does not have), `che
 (replaces the operation gate's notes), `restart_step`, `kept`, `follow_up` (any resting task), `closed`.
 
 A message sent on your behalf (or by a schedule) to a task with any open gate is not delivered into the gate: core
-records it (`task.messaged`) and nothing else, and the next agent's brief carries it (`resolveLaterMessages`: "Sent by
-an agent on the human’s behalf: …", or "Sent by a schedule: …").
+records it (`task.messaged` with `kept`) into `Task.untoldMessages`, and the next run of the task's session (never
+the reviewer, a watchdog's check or a watch's read) is told it once at the tail of its prompt, resumed or fresh ("Sent by an agent on the human’s behalf:
+…", or "Sent by a schedule: …"; `task.messages_told`). `resolveLaterMessages` leaves it out until then.
 
 `task.message` carries an optional `kind` (`MessageKind`), with the classifier's `title`, `why` and `shape` for new
 work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. Where the
@@ -723,6 +732,16 @@ with core's refusal (`message.drop` with `messageIds`, a `task.message_dropped` 
 activity that keeps the text and the reason as `undelivered`). An agent's `tasks_message` is classified
 before it is dispatched, since the agent waits for the answer.
 
+**Requests and replies.** A message or a gate answer that starts a fix for you (`request_changes`, `send_back`,
+`fix`, and Request changes at the review or merge gate, verdicts and line comments included) emits
+`iteration.requested` before the fix starts (`decide/iterations.ts`, `requestIteration`); so does a message that
+steers a running fix (`purpose: fix`), whatever the fix is for. While the last iteration has no reply, a request
+joins it (same `iterationId`), so one reply answers everything sent during one fix; otherwise it opens the next.
+`complete_fix` must carry `reply` while an iteration is open (`reply_required`) and must not otherwise
+(`reply_unasked`); the reply is `iteration.answered`. A message that steers a build phase, a follow-up to an
+inquiry and a plan revision open none: plan revisions keep their feedback in `planHistory`, which the overview's
+Earlier requests lists beside the iterations (`apps/web/src/lib/overview/exchanges.ts`).
+
 ## Commands
 
 Every command has an id; a repeat is answered from its receipt. `parseUserCommand` checks a user command field by field
@@ -746,8 +765,12 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
+| `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
+| `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
+| `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
+| `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
 | `watchdog.connect` | gives a watchdog that waits for a source its server (`server`, `data`), adds it to the project's sources for the repository, and starts its window | `watchdogs connect` | agent |
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
@@ -818,7 +841,7 @@ role without the tool (`hasTool`).
 | --- | --- | --- |
 | `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`) |
 | `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls and `checkChanges?` (`check_changes`, recorded as `checks.changed`); Shinsa commits it, adds `treeHash` and `files` (the files the commit changed, kept on the `PhaseReport`) and runs the phase's checks (the last one needs the evidence) |
-| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, `walkthrough` when it changes how the change works, `checks?`: the ids to run again, `checkChanges?`, `evidenceKept?`: earlier evidence that still applies); refused while an earlier item whose files the fix changed is not replaced, removed or kept (`evidence_stale`, `docs/engine.md` → Evidence); Shinsa commits and adds `treeHash` and `files`, then runs the failing checks, those, the changed ones and the checks of every phase whose files the fix changed, or pushes when shipping |
+| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, `reply` while a request of yours is open and only then (`reply_required`, `reply_unasked`; Messages → Requests and replies), `walkthrough` when it changes how the change works, `checks?`: the ids to run again, `checkChanges?`, `evidenceKept?`: earlier evidence that still applies); refused while an earlier item whose files the fix changed is not replaced, removed or kept (`evidence_stale`, `docs/engine.md` → Evidence); Shinsa commits and adds `treeHash` and `files`, then runs the failing checks, those, the changed ones and the checks of every phase whose files the fix changed, or pushes when shipping |
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
@@ -856,7 +879,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task closes it as that task's duplicate before any work |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
@@ -916,9 +939,13 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
+| `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why }`); the `cancelled` stage follows |
+| `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
+| `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
-| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off |
+| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off, `kept` when it was sent for you while a gate was open (adds it to `untoldMessages`) |
+| `task.messages_told` | a new run of the task's session was told the messages in `untoldMessages`; clears it |
 | `task.message_received`, `task.message_routed`, `task.message_dropped` | a message of yours entered the inbox, left it to be delivered, or left it undelivered (`reason`) |
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
 | `round.started` | a round became the active one (`branch`, `base`, `onto`: the pull request it ships onto); the round before it, if any, is archived as shipped |
@@ -963,6 +990,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `checks.started` | Shinsa started a run of checks (`checkIds`); sets `Task.runningChecks` |
 | `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
+| `iteration.requested` | you sent a request after the work was in (`iterationId`, `round`, `text`, `comments`); appends to the iteration with that id or opens it |
+| `iteration.answered` | the fix that answered it handed over its `reply` (`iterationId`, `runId`); sets `reply`, `runId` and `repliedAt` |
 | `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check; `replaces`: the ids of the pieces it replaced, which get `replacedBy`) |
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
@@ -973,6 +1002,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.ended` | a run ended (outcome, failure) |
 | `run.interrupted`, `run.continued` | marked at shutdown; continued after a restart |
 | `run.session_lost`, `run.compacted` | a session is gone; an idle session was compacted |
+| `run.cached` | a run ended with its prompt cache's expiry known (`run.end`'s `cacheExpiresAt`), kept as `Run.cacheExpiresAt` for the next step's fold |
 | `run.metered` | usage and cost were charged, with the weekly readings (`readings`) the attempt took |
 | `run.silenced`, `run.silence_snoozed`, `run.silence_dismissed` | a run went quiet; the warning snoozed or dismissed |
 | `run.waiting` | a step's turn ended while its delegations work |
@@ -1094,7 +1124,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | --- | --- | --- |
 | `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `impact`, `evidence`, `approval`, `operation`, `change_summary` | goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; change summary 240 |
 | `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`), `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**))), asked for on the last phase; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 300; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command) |
-| `complete_fix` | **`summary`**; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is) | summary 240; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60 |
+| `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is) | summary 240; reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60 |
 | `report_review` | **`findings`** (**`severity`**: `blocking`, `should_fix` or `optional`, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
 | `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**) | answer 8,000; request 2,000, why 240 |
 | `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |
@@ -1151,6 +1181,7 @@ or `browser` (a tab, Floaty).
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
+| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing): `RemoteSnapshot` (Remote access, below) |
 
 Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
 → Terminals): binary frames carry the shell's output and what you type, text frames carry `reset { cols, rows }` and
@@ -1206,8 +1237,12 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
 | `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port; a 401 means revoked |
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
+| `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove` | The page | Your instances (`RemoteInstance`), a connect token and the channel's URL (`ConnectResponse`), removal |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
+
+Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
+<token>`; a bearer request needs no `Origin`, since it is not a page.
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
@@ -1255,7 +1290,9 @@ arrived, never from the page.
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
 `machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`) and `devices` (`RemoteDevice`: `publicKey`,
-`name`, `enrolledAt`, `lastSeenAt`); `RemoteEnrollment` is the `url`, `name` and `expiresAt` Add browser answers.
+`name`, `enrolledAt`, `lastSeenAt`, `enrollmentId`: the id of the link that added it, null when unknown);
+`RemoteEnrollment` is the `id`, `url`, `name` and `expiresAt` Add device answers. The id is not a secret: it only
+tells the page which device its link added.
 
 ## Slack
 

@@ -22,10 +22,10 @@ function createTestDatabase(): Database & { sqlite: Sqlite } {
   const sqlite = new Sqlite(':memory:');
   sqlite.exec('PRAGMA foreign_keys = ON');
   const migrations = join(import.meta.dirname, '../migrations');
-  for (const migration of readdirSync(migrations)
+  for (const file of readdirSync(migrations)
     .filter((name) => name.endsWith('.sql'))
     .sort())
-    sqlite.exec(readFileSync(join(migrations, migration), 'utf8'));
+    sqlite.exec(readFileSync(join(migrations, file), 'utf8'));
   return { sqlite, prepare: (sql) => createStatement(sqlite, sql) };
 }
 
@@ -87,7 +87,10 @@ export interface Harness {
     options?: { session?: string; bearer?: string; sameOrigin?: boolean }
   ) => Promise<Response>;
   signIn: (login?: string, id?: number) => Promise<string>;
+  signInNative: (login?: string, id?: number) => Promise<string>;
 }
+
+export const NATIVE_VERIFIER = 'native-verifier-that-is-long-enough-for-pkce-0123456789';
 
 const GITHUB_USERS = new Map<string, { id: number; login: string }>();
 
@@ -189,11 +192,34 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     return cookie.split(';')[0]?.split('=')[1] ?? '';
   }
 
+  async function signInNative(login = 'mona', id = 42) {
+    const code = `native-code-${login}-${id}`;
+    GITHUB_USERS.set(code, { id, login });
+    const challenge = await createCodeChallenge(NATIVE_VERIFIER);
+    const start = await call(
+      `/__remote/sign-in?client=native&redirect=shinsa://signed-in&code_challenge=${challenge}`
+    );
+    const authorize = new URL(start.headers.get('location') ?? '');
+    GITHUB_CHALLENGES.set(code, authorize.searchParams.get('code_challenge') ?? '');
+    const oauth = (start.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+    const done = await call(
+      `/__remote/sign-in/callback?code=${code}&state=${authorize.searchParams.get('state') ?? ''}`,
+      { headers: { cookie: oauth } }
+    );
+    const appCode = new URL(done.headers.get('location') ?? '').searchParams.get('code') ?? '';
+    const answer = await post(
+      '/__remote/sign-in/token',
+      { code: appCode, codeVerifier: NATIVE_VERIFIER },
+      { sameOrigin: false }
+    );
+    return ((await answer.json()) as { token: string }).token;
+  }
+
   async function settle() {
     while (deferred.length > 0) await deferred.shift();
   }
 
-  return { db, world, calls, handlers, clock, settle, call, post, signIn };
+  return { db, world, calls, handlers, clock, settle, call, post, signIn, signInNative };
 }
 
 export async function readJson<T>(response: Response) {

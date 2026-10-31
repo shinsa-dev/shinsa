@@ -242,7 +242,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
   and file chips, an answer's under the question it answers, and the agent gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
-  say in the chat what to change), Review (§5), Merge, Question, a proposed change.
+  say in the chat what to change), Review (§5), Merge, Question, a proposed change. Once you sent changes back,
+  the review card leads with the Agent's reply to them, point by point.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
   progress, evidence, the pull request), Code (the review and every changed file) and Chat (the
   agents' transcripts; you can write to the agent).
@@ -267,7 +268,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
 - **All tasks.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
-  that handle several parents), the backlog, then done and cancelled, collapsed. Priority then age
+  that handle several parents), then snoozed, the backlog, done and cancelled, collapsed. Priority then age
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
@@ -278,6 +279,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   and builds; Remove from the backlog (the task's menu or ⌘K) makes it a plan to approve. You put work there yourself (When to start → Backlog,
   Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
   Shinsa never decides it for you. Questions, research and investigations never wait there.
+- **Snoozing.** Snooze (the task's menu, a row's menu, ⌘K or `shinsa tasks snooze`) takes an open task in any step
+  out of Needs you, In progress, the queue, the guide, the Dock badge and notifications, and changes nothing else:
+  its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
+  section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
+  its own.
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and
@@ -649,7 +655,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   protection for the default branch; it is what really guards a merge. Shinsa itself answers only
   on this machine and refuses requests from other websites.
 - **Idle sessions let go.** A session left waiting on you is stopped and your answer resumes it.
-  With Claude Code's compaction picked, a finished session near its context limit can also be
+  With provider compaction picked, a finished session near its context limit can also be
   compacted just before its prompt cache expires (Settings → General → Context, off by default).
 - **Shinsa tells you when something needs you**: the tab title counts it ("[3] Shinsa"), a sound
   plays (by default only when Shinsa is in the background) and, if you allow it, a browser
@@ -679,20 +685,39 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   priority") is gone: the facts row shows the kind, the priority and when the task started, and
   why Shinsa chose each one is that fact's tooltip, with its menu to change it.
 
+### Leaner agent sessions (2026-10-31)
+
+- **Each step starts from the plan, not the history.** The Agent keeps one session per task, but
+  when a build phase, a fix or an operation starts, everything before it is folded and the turn
+  opens with the round brief: the request, the accepted plan and the earlier hand-overs in full.
+  The builder never carries the planning conversation, and a fix never re-reads the whole build.
+- **eunoe runs inside Shinsa.** eunoe's core is a library now, and Shinsa serves it from its own
+  engine on a local port: nothing to install, no second process. A conversation eunoe cannot fit
+  any more ends its turn and starts fresh with a handoff, instead of rewriting its cache on every
+  call.
+- **Watchdog checks have a session of their own.** A check reads logs after the merge in a watch
+  session that starts with the brief and is resumed by the next check; the Agent's own session never
+  carries a check's output, and a check never carries the Agent's build.
+- **Context management is a setting.** Settings → General → Context, Management: Default
+  (folds at each step and compacts near the limit), Compaction only (eunoe near the limit, no folds
+  between steps), Provider compaction (Claude Code's or Codex's own) or Off.
+- **Bots don't wake the Agent for notices.** A bot's comment on the pull request conversation (a
+  preview deployment, a "reviewing…" placeholder) no longer starts a fix, and nor does a bot editing
+  its comment. A bot's review and its inline comments still do.
+
 ### Compaction through eunoe and fast mode (2026-10-23)
 
-- **eunoe compacts, not Claude Code.** Claude sessions go through eunoe, a local proxy Shinsa runs
-  for itself on its own port, in its own folder: at the context limit it folds the finished turns
+- **eunoe compacts, not Claude Code.** Claude sessions go through eunoe, served by Shinsa itself
+  (since 2026-10-31, inside the engine), in its own folder: at the context limit it folds the finished turns
   to your messages, the output that mattered and the replies, so nothing is summarised away and the
-  full transcript stays searchable. Settings → General → Context, Compaction picks eunoe compaction
-  (the default), eunoe always fold (folds as the session grows, too), Claude Code's compaction, or
-  off. Each fold shows as a quiet line in the chat.
-- **A missing proxy never stops work.** When eunoe cannot start or is missing, the run talks to
-  Claude directly with Claude Code's compaction, the chat says why, and Shinsa tries eunoe again a
-  minute later. Shinsa's eunoe is its own: its own port and folder under Shinsa's data, never the
-  eunoe you run yourself or its settings.
-- **Compaction only near the limit.** By default nothing is compacted before a session nears its
-  context limit: eunoe compaction folds at the limit, and compacting idle sessions is off.
+  full transcript stays searchable. Settings → General → Context picks how (Management,
+  since 2026-10-31). Each fold shows as a quiet line in the chat.
+- **A missing eunoe never stops work.** When eunoe cannot start, the run talks to Claude directly
+  with Claude Code's compaction and the chat says why. Shinsa's eunoe is its own: its own port and
+  folder under Shinsa's data, never the eunoe you run yourself or its settings.
+- **Compaction near the limit, folds at each step.** Within a step nothing is compacted before the
+  session nears its context limit, and compacting idle sessions is off; each new build, fix or
+  operation folds the steps before it (Leaner agent sessions, above).
 - **Fast mode when you want it.** Settings → Agents, each role's speed (Standard by default), runs
   that role's Claude or Codex agents, their subagents and delegations, and the quick calls at
   the faster speed. When a model or account
@@ -1040,6 +1065,34 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every
   machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
   Mentions while a machine is offline are not kept.
+
+### Duplicates (2026-10-31)
+
+- **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
+  cancel, linked to the task it repeats, and shown as Duplicate, in its own Duplicates group on All tasks, with a
+  "Duplicate of" fact that opens the original and says who closed it and why. The original shows it too, as a
+  "Kept over" fact linking every task closed in its favour.
+- **Triage catches them before any work.** It is asked whether a new request is the same work as an open task of its
+  project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
+  as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
+  task's menu or ⌘K, and agents with `tasks_duplicate`.
+- **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
+  links, machines shared with other accounts and duplicates found across a team are their own tasks.
+
+### Replies on the Overview, not in the chat (2026-10-31)
+
+- **The goal is never to need the chat.** At review you iterate: you ask for a change, ask a question, add a second
+  thought. Whether the Agent addressed it was only in the chat, so every round meant scrolling a transcript. Now
+  each thing you send after the work is in is a request, and the fix that answers it must hand over a reply
+  (`complete_fix`'s `reply`, `docs/engine.md` → Your requests and their replies).
+- **Confirmations, not a thread.** Five designs were tried in `/ui`; the one chosen reads as a report: a headline,
+  each point you raised marked Done, Answered or Not changed with a note, then What to do now. What you sent folds
+  above it as a quote of your own words; no bubbles, no inline chat: the plan and the reply are one shared record, and
+  earlier requests (plan feedback included) fold below as the same report. Every fact on the card is a live link
+  (the pull request with its hover card), never plain text that names one.
+- **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
+  pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
+  cards).
 
 ## 11. Open questions
 
