@@ -33,6 +33,7 @@ import {
   describeNoRepository,
   describePhaseChecks,
   describePlan,
+  describePlanDetail,
   describePreviousPhases,
   describeRepository,
   describeRounds,
@@ -269,6 +270,7 @@ export function describeRound(task: Task, repo: Repo | null, bases: Task[], befo
     joinLines([
       describeGoal(task),
       describePlan(task),
+      describePlanDetail(task),
       describeApprovedPlan(task),
       task.planAnswers ? `The human answered:\n${task.planAnswers}` : '',
     ]),

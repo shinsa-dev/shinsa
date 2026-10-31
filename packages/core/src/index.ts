@@ -28,6 +28,7 @@ export {
   type Handoff,
   type HandoffRequest,
   type HandoffSource,
+  needsRoundBrief,
   QUESTION_WITHDRAWN,
   readAnsweredReply,
   resolveAnsweredReply,

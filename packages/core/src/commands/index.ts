@@ -280,6 +280,7 @@ type SystemCommand =
       summary: string | null;
       attemptId?: string | null;
       failure?: RunFailure | null;
+      cacheExpiresAt?: number | null;
     }
   | {
       type: 'run.attempt';

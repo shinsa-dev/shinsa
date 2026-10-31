@@ -464,6 +464,8 @@ executable changed line (`selectMeasuredCoverage`).
 | `failure?` | `RunFailure` | class (13), message, code, retryable, `resetAt`, `account` (a Claude account), `login` (a provider's own sign-in: `{ provider, email }`) |
 | `resumePending?`, `continuations?` | | restart continuation and its loop guard |
 | `monitorId?`, `usageWaitId?` | | the wait it was woken from |
+| `cacheExpiresAt?` | number | when the prompt cache the run last wrote expires |
+| `continues?` | | the run whose step it carries on (a recovery nudge, a `wait_for` wake-up, a usage-limit resume); such a run never folds the turns before it |
 | `feedback?` | string \| null | your words it carries |
 | `usage?`, `meters?` | | tokens and cost; per attempt (`RunMeter`), its window (`account:<id>` or `provider:<id>`), time span, usage and the weekly readings taken at its start and end, which teach its window's rate; its share of the weekly window is its cost at that rate (`resolveUsageShares`) |
 | `silence?` | `RunSilence` | the quiet-run mark, snooze and dismissal |
@@ -968,6 +970,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.ended` | a run ended (outcome, failure) |
 | `run.interrupted`, `run.continued` | marked at shutdown; continued after a restart |
 | `run.session_lost`, `run.compacted` | a session is gone; an idle session was compacted |
+| `run.cached` | a run ended with its prompt cache's expiry known (`run.end`'s `cacheExpiresAt`), kept as `Run.cacheExpiresAt` for the next step's fold |
 | `run.metered` | usage and cost were charged, with the weekly readings (`readings`) the attempt took |
 | `run.silenced`, `run.silence_snoozed`, `run.silence_dismissed` | a run went quiet; the warning snoozed or dismissed |
 | `run.waiting` | a step's turn ended while its delegations work |

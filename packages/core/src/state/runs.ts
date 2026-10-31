@@ -31,7 +31,8 @@ type RunEvent = Extract<
       | 'run.silenced'
       | 'run.silence_snoozed'
       | 'run.silence_dismissed'
-      | 'run.compacted';
+      | 'run.compacted'
+      | 'run.cached';
   }
 >;
 
@@ -194,6 +195,9 @@ export function applyRunEvent(state: ShinsaState, event: RunEvent) {
       updateRun(state, event.runId, {
         compactions: [...(state.runs[event.runId]?.compactions ?? []), event.sessionId],
       });
+      return;
+    case 'run.cached':
+      updateRun(state, event.runId, { cacheExpiresAt: event.cacheExpiresAt });
       return;
   }
 }

@@ -5,6 +5,7 @@ import {
   type DelegatedRun,
   DomainError,
   isDelegatedRun,
+  isFoldingCompaction,
   isReadOnlyRun,
   type LoadedExtensions,
   listLiveRuns,
@@ -73,8 +74,10 @@ import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
+  isSessionCacheWarm,
   resolveRestorePlan,
   resolveTurnBrief,
+  resolveTurnFold,
   resolveTurnPlan,
   resolveTurnPrompt,
   type TurnContext,
@@ -115,6 +118,7 @@ interface Turn {
   defaultBranch: string;
   prompt: string;
   brief: string;
+  stepPrompt: boolean;
   provider: AgentProvider;
   active: ActiveRun;
 }
@@ -291,7 +295,8 @@ export class RunSupervisor {
       const prompt = override ?? run.prompt ?? '';
       const brief = resolveTurnBrief(this.#engine.state, current, override);
       const { cwd, defaultBranch } = this.#prepareWorkspace(workspace);
-      const turn = { run: current, cwd, defaultBranch, prompt, brief, provider, active };
+      const stepPrompt = override === null;
+      const turn = { run: current, cwd, defaultBranch, prompt, brief, stepPrompt, provider, active };
       result = await this.#prepareAndDrive(turn, workspace.repo);
       if (isReadOnlyRun(run) && !isSharedCheckout(run, workspace)) await this.#discardEdits(cwd, run.role);
       if (isDelegatedRun(current)) result = await this.#resolveDelegatedResult(current, cwd, result);
@@ -607,6 +612,7 @@ export class RunSupervisor {
 
   async #attempt(turn: Turn, plan: TurnPlan) {
     const { run, active, provider } = turn;
+    const firstAttempt = (this.#engine.state.runs[run.id]?.attempts ?? []).length === 0;
     const { attemptId, account } = await this.#recordAttempt(turn, plan);
     const weeklyBefore = this.#leasing.readWeeklyReading(run.id, active.lease, provider.id, false);
     const pin = plan.resume ? this.#extensionSets.select(plan.resume) : null;
@@ -619,11 +625,18 @@ export class RunSupervisor {
     const startSession = this.#startSession ?? provider.startSession;
     let sessionId = plan.fork ? null : plan.resume;
     const options = await this.#resolveSpeed(run, provider, active.lease, true);
+    const fold = resolveTurnFold({
+      run,
+      plan,
+      stepPrompt: turn.stepPrompt,
+      firstAttempt,
+      folds: resolveCapabilities(provider).folds && isFoldingCompaction(options.compaction ?? 'off'),
+    });
     const session = startSession({
       role: run.role,
       readOnly: isReadOnlyRun(run),
       cwd: turn.cwd,
-      prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt, turn.brief),
+      prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt, turn.brief, fold),
       model: this.#resolveModel(turn),
       resume: plan.resume,
       fork: plan.fork,
@@ -637,6 +650,9 @@ export class RunSupervisor {
         ? { extensions, announceExtensions: !pin || !isSameExtensionSet(pin, extensions.loaded) }
         : {}),
       ...options,
+      ...(fold && plan.resume
+        ? { fold, cacheWarm: isSessionCacheWarm(this.#context(turn), plan.resume, Date.now()) }
+        : {}),
       ...(active.lease ? { account: { id: active.lease.id, configDir: active.lease.configDir } } : {}),
       usageBaseline: this.#readSessionUsage,
       onSession: (linked) => {
@@ -771,6 +787,7 @@ export class RunSupervisor {
       summary: result.summary,
       ...(attemptId ? { attemptId } : {}),
       ...(result.failure ? { failure: result.failure } : {}),
+      ...(result.context?.cacheExpiresAt ? { cacheExpiresAt: result.context.cacheExpiresAt } : {}),
     };
     await this.#engine.dispatch(command, { id: `run.end:${attemptId ?? runId}` });
   }

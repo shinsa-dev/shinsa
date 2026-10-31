@@ -25,7 +25,7 @@ const CONTEXT: SessionContext = {
 
 function idleState(patch: (state: ShinsaState) => void = () => undefined) {
   const state = createState();
-  Object.assign(state.settings, { compaction: 'claude', idleCompaction: true });
+  Object.assign(state.settings, { compaction: 'provider', idleCompaction: true });
   state.tasks['task-1'] = createTask({ stage: 'awaiting_review' });
   state.runs['run-1'] = createRun({
     role: 'agent',
@@ -68,11 +68,7 @@ describe('when an idle session compacts', () => {
   test.each<[string, (state: ShinsaState) => void, Partial<SessionContext> | null]>([
     ['the setting is off', (state) => void Object.assign(state.settings, { idleCompaction: false }), {}],
     ['it was never turned on', (state) => void Reflect.deleteProperty(state.settings, 'idleCompaction'), {}],
-    [
-      'eunoe compacts instead',
-      (state) => void Object.assign(state.settings, { compaction: 'eunoe_compact' }),
-      {},
-    ],
+    ['eunoe compacts instead', (state) => void Object.assign(state.settings, { compaction: 'fold' }), {}],
     ['nothing compacts', (state) => void Object.assign(state.settings, { compaction: 'off' }), {}],
     ['the run is gone', (state) => void Reflect.deleteProperty(state.runs, 'run-1'), {}],
     ['the task is gone', (state) => void Reflect.deleteProperty(state.tasks, 'task-1'), {}],

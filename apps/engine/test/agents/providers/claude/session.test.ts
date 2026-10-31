@@ -7,7 +7,7 @@ import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
 import { AsyncQueue } from '../../../../src/agents/providers/claude/async-queue.ts';
 import { appendStderr } from '../../../../src/agents/providers/claude/classify.ts';
 import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable.ts';
-import type { EunoeLink, EunoeListener } from '../../../../src/agents/providers/claude/index.ts';
+import type { EunoeLink, EunoeWatcher } from '../../../../src/agents/providers/claude/index.ts';
 import type { ClaudeProcess } from '../../../../src/agents/providers/claude/process.ts';
 import { startClaudeSession } from '../../../../src/agents/providers/claude/session.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
@@ -913,7 +913,8 @@ describe('what an idle session leaves behind', () => {
 });
 
 function createEunoe(up = true) {
-  const watching: { sessionId: string; listener: EunoeListener; stopped: boolean }[] = [];
+  const watching: { sessionId: string; watcher: EunoeWatcher; stopped: boolean }[] = [];
+  const folds: { sessionId: string; warm: boolean; released: boolean }[] = [];
   const link: EunoeLink = {
     ensure: () =>
       Promise.resolve(
@@ -921,22 +922,29 @@ function createEunoe(up = true) {
           ? { ok: true as const, url: 'http://127.0.0.1:40001', dir: '/data/eunoe' }
           : { ok: false as const, reason: 'eunoe did not start within 15 s.' }
       ),
-    watch: (sessionId, listener) => {
-      const entry = { sessionId, listener, stopped: false };
+    watch: (sessionId, watcher) => {
+      const entry = { sessionId, watcher, stopped: false };
       watching.push(entry);
       return () => {
         entry.stopped = true;
       };
     },
+    fold: (sessionId, warm) => {
+      const entry = { sessionId, warm, released: false };
+      folds.push(entry);
+      return () => {
+        entry.released = true;
+      };
+    },
   };
-  return { link, watching };
+  return { link, watching, folds };
 }
 
 describe('compaction and fast mode', () => {
   test('a session goes through eunoe in its mode, with Claude Code’s compaction off and fast mode on', async () => {
     const { link } = createEunoe();
     const { input } = createInput({
-      compaction: 'eunoe_compact',
+      compaction: 'fold',
       fastMode: true,
       account: { id: 'acc-1', configDir: '/accounts/acc-1' },
     });
@@ -975,7 +983,7 @@ describe('compaction and fast mode', () => {
 
   test('when eunoe is down the session says so and runs directly with Claude Code compacting', async () => {
     const { link, watching } = createEunoe(false);
-    const { input, entries } = createInput({ compaction: 'eunoe_default' });
+    const { input, entries } = createInput({ compaction: 'compact' });
     const { session, messages, calls } = startScripted(input, { eunoe: link });
     messages.push(init);
     messages.push(success('ok'));
@@ -989,7 +997,7 @@ describe('compaction and fast mode', () => {
 
   test('eunoe’s folds of the session land in its transcript until the session ends', async () => {
     const { link, watching } = createEunoe();
-    const { input, entries } = createInput({ compaction: 'eunoe_compact' });
+    const { input, entries } = createInput({ compaction: 'fold' });
     const { session, messages } = startScripted(input, { eunoe: link });
     messages.push(init);
     await until('the watch', () => watching.length === 1);
@@ -1003,12 +1011,83 @@ describe('compaction and fast mode', () => {
       summary: null,
       by: 'eunoe' as const,
     };
-    watching[1]?.listener(fold);
+    watching[1]?.watcher.notice(fold);
     messages.push(success('ok'));
     await session.done;
     expect(watching.map((entry) => entry.sessionId)).toEqual(['sess-1', 'sess-1']);
     expect(watching[1]?.stopped).toBe(true);
     expect(notices(entries)).toContainEqual(fold);
+  });
+
+  test('a thread eunoe reports stuck ends the turn as a full context window, once, so the next attempt starts fresh', async () => {
+    const { link, watching } = createEunoe();
+    const { input, entries } = createInput({ compaction: 'fold' });
+    const interrupts: string[] = [];
+    const { session, messages } = startScripted(input, {
+      eunoe: link,
+      controls: {
+        interrupt: () => {
+          interrupts.push('interrupt');
+          return Promise.resolve();
+        },
+      },
+    });
+    messages.push(init);
+    await until('the watch', () => watching.length === 1);
+    watching[0]?.watcher.stuck();
+    watching[0]?.watcher.stuck();
+    const result = await session.done;
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      summary: 'Claude stopped: the conversation no longer fits the model’s context window.',
+      failure: { class: 'context_window_full', code: 'eunoe_stuck' },
+    });
+    expect(interrupts).toEqual(['interrupt']);
+    expect(entries.filter((entry) => entry.type === 'error')).toHaveLength(1);
+  });
+
+  test('a turn that asks for a fold queues one for the session it resumes, until the turn ends', async () => {
+    const { link, folds } = createEunoe();
+    const { input } = createInput({ compaction: 'fold', fold: true, cacheWarm: true, resume: 'sess-1' });
+    const { session, messages } = startScripted(input, { eunoe: link });
+    messages.push(init);
+    await until('the fold', () => folds.length === 1);
+    expect(folds).toEqual([{ sessionId: 'sess-1', warm: true, released: false }]);
+    messages.push(success('ok'));
+    await session.done;
+    expect(folds).toEqual([{ sessionId: 'sess-1', warm: true, released: true }]);
+  });
+
+  test('no fold is queued for a new session, a fork, a turn that does not ask, or a session that goes direct', async () => {
+    const cases = [
+      { link: createEunoe(), input: { compaction: 'fold' as const, fold: true } },
+      {
+        link: createEunoe(),
+        input: { compaction: 'fold' as const, fold: true, resume: 's', fork: true },
+      },
+      { link: createEunoe(), input: { compaction: 'fold' as const, resume: 's' } },
+      { link: createEunoe(false), input: { compaction: 'fold' as const, fold: true, resume: 's' } },
+      { link: createEunoe(), input: { compaction: 'provider' as const, fold: true, resume: 's' } },
+    ];
+    for (const { link, input: overrides } of cases) {
+      const { input } = createInput(overrides);
+      const { session, messages } = startScripted(input, { eunoe: link.link });
+      messages.push(init);
+      messages.push(success('ok'));
+      await session.done;
+      expect(link.folds).toEqual([]);
+    }
+  });
+
+  test('a stuck report after the run was cancelled leaves it cancelled', async () => {
+    const { link, watching } = createEunoe();
+    const { input } = createInput({ compaction: 'fold' });
+    const { session, messages } = startScripted(input, { eunoe: link });
+    messages.push(init);
+    await until('the watch', () => watching.length === 1);
+    await session.cancel();
+    watching[0]?.watcher.stuck();
+    expect((await session.done).outcome).toBe('cancelled');
   });
 
   test('fast mode that cannot run is noted when the session starts, and the run carries on', async () => {

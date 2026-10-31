@@ -98,6 +98,7 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
     monitorId: run?.monitorId ?? null,
     usageWaitId: wait.id,
     account: run?.account ?? null,
+    continues: wait.runId,
   });
   moveWatchCheck(decider, wait.runId, next.id);
 }

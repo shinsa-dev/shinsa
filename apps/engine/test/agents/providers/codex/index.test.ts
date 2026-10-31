@@ -39,6 +39,7 @@ describe('the Codex provider', () => {
       structuredOutput: true,
       accounts: false,
       compaction: true,
+      folds: false,
       fastMode: true,
     });
     expect(provider.compactSession).toBeInstanceOf(Function);

@@ -244,6 +244,7 @@ type EventBody =
   | { type: 'run.continued'; runId: string; reason: RunContinuationReason }
   | { type: 'run.session_lost'; runId: string; sessionId: string }
   | { type: 'run.compacted'; runId: string; sessionId: string }
+  | { type: 'run.cached'; runId: string; cacheExpiresAt: number }
   | { type: 'evidence.attached'; evidence: Evidence; replaces?: string[] }
   | { type: 'evidence.removed'; taskId: string; ids: string[]; reason: string; runId: string }
   | { type: 'evidence.uploaded'; taskId: string; uploads: EvidenceUpload[] }

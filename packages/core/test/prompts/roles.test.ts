@@ -234,6 +234,8 @@ describe('a later phase', () => {
     proposePlan(harness, taskId, {
       ...PLAN,
       outOfScope: ['Mobile', 'Dark mode'],
+      behaviour: ['Saves on every edit.'],
+      files: [{ path: 'src/save.ts', change: 'Debounced save.' }],
       phases: [
         { title: 'One', detail: 'First.' },
         { title: 'Two', detail: 'Second.' },
@@ -246,6 +248,9 @@ describe('a later phase', () => {
     const brief = describeRound({ ...task, phaseReports: [...task.phaseReports].reverse() }, null, [], 2);
     expect(brief).toContain('Out of scope: Mobile; Dark mode');
     expect(brief).toContain('The plan:\n1. One: First.\n2. Two: Second.\n3. Three: Third.');
+    expect(brief).toContain(
+      'How it behaves after the change:\n- Saves on every edit.\nThe files it changes:\n- src/save.ts: Debounced save.'
+    );
     expect(brief).toContain(
       'Already done by earlier phases (their changes are in your worktree):\n- One: Did one.\n- Two: Did two.'
     );

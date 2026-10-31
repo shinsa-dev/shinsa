@@ -434,7 +434,7 @@ describe('idle compaction', () => {
       '10 minutes before the cache expires',
     ]);
     expect(resolveCompactionValue(base)).toBe('off');
-    expect(resolveCompactionValue({ ...base, compaction: 'claude', idleCompaction: true })).toBe('2');
+    expect(resolveCompactionValue({ ...base, compaction: 'provider', idleCompaction: true })).toBe('2');
     const odd = { ...base, compactionLeadMinutes: 7 };
     expect(listCompactionItems(odd).map((item) => item.value)).toEqual(['off', '1', '2', '5', '7', '10']);
     expect(resolveCompactionValue({ ...base, idleCompaction: false })).toBe('off');
@@ -447,11 +447,11 @@ describe('idle compaction', () => {
 });
 
 describe('compaction and fast mode', () => {
-  it('offers Eunoe’s two modes, Claude Code’s compaction and off', () => {
+  it('offers folding by default, compaction only, the provider’s own compaction and off', () => {
     expect(COMPACTION_MODE_ITEMS.map((item) => [item.value, item.label])).toEqual([
-      ['eunoe_compact', 'Eunoe compaction'],
-      ['eunoe_default', 'Eunoe always fold'],
-      ['claude', 'Claude Code’s compaction'],
+      ['fold', 'Default'],
+      ['compact', 'Compaction only'],
+      ['provider', 'Provider compaction'],
       ['off', 'Off'],
     ]);
   });

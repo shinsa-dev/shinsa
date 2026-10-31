@@ -529,11 +529,28 @@ export const SOUND_ITEMS: SettingItem<SoundId>[] = [
   { value: 'pop', label: 'Pop', icon: 'IconBell' },
 ];
 
+export const CONTEXT_MANAGEMENT = 'Context management';
+
 export const COMPACTION_MODE_ITEMS: SettingItem<CompactionMode>[] = [
-  { value: 'eunoe_compact', label: 'Eunoe compaction', icon: 'IconMinimize' },
-  { value: 'eunoe_default', label: 'Eunoe always fold', icon: 'IconLayersTwo' },
-  { value: 'claude', label: 'Claude Code’s compaction', icon: 'IconBubbleText' },
-  { value: 'off', label: 'Off', icon: 'IconPause' },
+  {
+    value: 'fold',
+    label: 'Default',
+    icon: 'IconLayersTwo',
+    hint: 'Folds the earlier steps when a new one starts, and compacts near the limit',
+  },
+  {
+    value: 'compact',
+    label: 'Compaction only',
+    icon: 'IconMinimize',
+    hint: 'Compacts near the context limit, never between steps',
+  },
+  {
+    value: 'provider',
+    label: 'Provider compaction',
+    icon: 'IconBubbleText',
+    hint: 'Each provider compacts in its own way, like Claude Code or Codex',
+  },
+  { value: 'off', label: 'Off', icon: 'IconPause', hint: 'Nothing is compacted' },
 ];
 
 export const FAST_MODE_ITEMS: SettingItem<string>[] = [

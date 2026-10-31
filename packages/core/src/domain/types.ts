@@ -516,6 +516,7 @@ export interface Run {
   resumePending?: boolean;
   continuations?: number[];
   monitorId?: string | null;
+  continues?: string;
   feedback?: string | null;
   usage?: RunUsage | null;
   meters?: RunMeter[];
@@ -526,6 +527,7 @@ export interface Run {
   cohort?: DeliveryCohort | null;
   waitingOn?: RunWait | null;
   compactions?: string[];
+  cacheExpiresAt?: number;
   fork?: RunFork | null;
   round?: number;
 }

@@ -1,4 +1,9 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { isDecisionGate, isTaskSettled, listOpenGates, resolveTaskShape } from '@shinsa/core';
+import { listDefaultProviders, ProviderRegistry } from '../../src/agents/providers/index.ts';
+import { EunoeServer } from '../../src/eunoe/index.ts';
 import { World } from '../e2e/harness.ts';
 
 const FILES = {
@@ -51,7 +56,30 @@ async function runShaped(label: string, request: string) {
 
 const started = Date.now();
 const elapsed = () => `${((Date.now() - started) / 1000).toFixed(0)}s`;
-const world = await World.create({ live: true, checks: ['bun test'], files: FILES });
+const eunoe = new EunoeServer({ dir: join(mkdtempSync(join(tmpdir(), 'shinsa-live-eunoe-')), 'eunoe') });
+const world = await World.create({
+  live: true,
+  checks: ['bun test'],
+  files: FILES,
+  providers: () => new ProviderRegistry(listDefaultProviders(eunoe)),
+});
+
+function printEunoe() {
+  const requests = readFileSync(join(eunoe.dir, 'requests.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((request) => request.path === '/v1/messages');
+  const actionsOf = (request: Record<string, unknown>) =>
+    Array.isArray(request.actions) ? request.actions : [];
+  const folds = requests.filter((request) => actionsOf(request).includes('fold'));
+  const failed = requests.filter((request) => request.status !== 200);
+  print('\n=== EUNOE ===');
+  print('requests', requests.length, 'folds', folds.length, 'not ok', failed.length, eunoe.dir);
+  print('fold inputs', JSON.stringify(folds.map((request) => request.input)));
+  print('statuses', JSON.stringify([...new Set(requests.map((request) => request.status))]));
+  for (const request of failed) print('not ok', request.status, String(request.error ?? '').slice(0, 300));
+}
 const seen = new Set<string>();
 const timer = setInterval(() => {
   for (const task of Object.values(world.state.tasks)) {
@@ -132,6 +160,8 @@ try {
   await runShaped('SUPPORT QUESTION', 'How do I run the tests in this repository?');
 } finally {
   clearInterval(timer);
+  printEunoe();
   print(`total ${elapsed()}`);
   await world.dispose();
+  await eunoe.stop();
 }

@@ -23,6 +23,7 @@ export interface PullRequestRemark {
   path: string | null;
   url: string | null;
   reviewState: string | null;
+  bot?: boolean;
 }
 
 export type MergeQueueState =

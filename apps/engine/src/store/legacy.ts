@@ -1,5 +1,6 @@
 import {
   type Briefing,
+  type CompactionMode,
   DEFAULT_WORKSPACE_MODE,
   DELEGATE_ROLES,
   type PlanApproval,
@@ -72,7 +73,13 @@ const SCHEDULE_SOURCE_LOG_VERSION = 8;
 
 const WATCHDOG_READS_LOG_VERSION = 9;
 
-const PLAN_APPROVAL_LOG_VERSION = 10;
+const CONTEXT_MANAGEMENT_LOG_VERSION = 11;
+
+const COMPACTION_BY_EUNOE_MODE = new Map<unknown, CompactionMode>([
+  ['eunoe_compact', 'fold'],
+  ['eunoe_default', 'fold'],
+  ['claude', 'provider'],
+]);
 
 const PLAN_APPROVAL_BY_SWITCH = new Map<unknown, PlanApproval>([
   [true, 'large'],
@@ -99,7 +106,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < FINDING_LEVELS_LOG_VERSION ? ['review.reported'] : []),
     ...(version < SCHEDULE_SOURCE_LOG_VERSION ? ['schedule.written'] : []),
     ...(version < WATCHDOG_READS_LOG_VERSION ? WATCHDOG_READS_EVENT_TYPES : []),
-    ...(version < PLAN_APPROVAL_LOG_VERSION ? ['settings.changed'] : []),
+    ...(version < CONTEXT_MANAGEMENT_LOG_VERSION ? ['settings.changed'] : []),
   ];
 }
 
@@ -182,7 +189,12 @@ function resolvePlanFirst(event: Payload): Payload {
 function resolveSettings(settings: Payload) {
   const current = withoutKeys(settings, ['worktreesDirectory']);
   const approvePlans = PLAN_APPROVAL_BY_SWITCH.get(current.approvePlans);
-  return approvePlans ? { ...current, approvePlans } : current;
+  const compaction = COMPACTION_BY_EUNOE_MODE.get(current.compaction);
+  return {
+    ...current,
+    ...(approvePlans ? { approvePlans } : {}),
+    ...(compaction ? { compaction } : {}),
+  };
 }
 
 function resolveGate(event: Payload) {

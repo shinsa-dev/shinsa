@@ -102,7 +102,7 @@ function createDetails(
 
 const comment = (id: string, createdAt: string, author: string | null = 'bot') => ({
   id,
-  author: author ? { login: author } : null,
+  author: author ? { login: author, __typename: author === 'bot' ? 'Bot' : 'User' } : null,
   createdAt,
   lastEditedAt: null,
   body: `said ${id}`,
@@ -333,12 +333,18 @@ describe('the comments a watch reads', () => {
       },
     });
     expect(
-      resolveRemarks(details)?.map((remark) => [remark.id, remark.author, remark.path, remark.reviewState])
+      resolveRemarks(details)?.map((remark) => [
+        remark.id,
+        remark.author,
+        remark.path,
+        remark.reviewState,
+        remark.bot,
+      ])
     ).toEqual([
-      ['tc1', 'bot', 'src/a.ts', null],
-      ['r1', 'human', null, 'changes requested'],
-      ['r2', 'bot', null, 'commented'],
-      ['c1', null, null, null],
+      ['tc1', 'bot', 'src/a.ts', null, true],
+      ['r1', 'human', null, 'changes requested', false],
+      ['r2', 'bot', null, 'commented', true],
+      ['c1', null, null, null, false],
     ]);
   });
 

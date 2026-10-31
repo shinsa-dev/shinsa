@@ -41,6 +41,7 @@ interface PullRequestView {
 
 interface Login {
   login: string;
+  __typename?: string;
 }
 
 interface CommentNode {
@@ -133,9 +134,9 @@ const QUEUE_STATES = new Set<MergeQueueState>([
 
 const MEANINGFUL_REVIEWS = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
 
-const COMMENT_FIELDS = 'totalCount nodes{id author{login} createdAt lastEditedAt body url}';
+const COMMENT_FIELDS = 'totalCount nodes{id author{login __typename} createdAt lastEditedAt body url}';
 
-const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
+const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login __typename} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
 
 const PULL_REQUEST_FIELDS =
   'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup,additions,deletions,changedFiles';
@@ -207,10 +208,15 @@ export function resolveRepoSlug(repo: Repo) {
   return { owner, name };
 }
 
+function isBot(author: Login | null) {
+  return author?.__typename === 'Bot';
+}
+
 function serializeComment(node: CommentNode, path: string | null): PullRequestRemark {
   return {
     id: node.id,
     author: node.author?.login ?? null,
+    bot: isBot(node.author),
     createdAt: node.createdAt,
     editedAt: node.lastEditedAt,
     body: node.body,
@@ -227,6 +233,7 @@ function listReviewRemarks(reviews: ReviewNode[]): PullRequestRemark[] {
       {
         id: review.id,
         author: review.author?.login ?? null,
+        bot: isBot(review.author),
         createdAt: review.submittedAt,
         editedAt: review.lastEditedAt,
         body: review.body,
