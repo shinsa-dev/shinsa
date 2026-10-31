@@ -1022,7 +1022,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
-| `share.publish` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up; reads the repository's visibility, resolves `SharedTask`, uploads the files app.shinsa.dev lacks and posts the publication with the machine token (`docs/engine.md` → Sharing a task) |
+| `share.publish` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up; resolves `SharedTask`, uploads the files app.shinsa.dev lacks and posts the publication with the machine token (`docs/engine.md` → Sharing a task) |
 | `share.remove` | replay_safe | `share:<id>` | none: removes the publication; nothing to do when the machine is not paired |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
@@ -1224,9 +1224,9 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 
 **Shared tasks** (`shares.ts` here, `share/` for the projection): `SharedTask` is `task` (a `Task` with every field
 not copied by name left empty), `evidence` (current evidence; a stored file's `uri` is `shared-evidence:<id>`,
-`SHARED_EVIDENCE_PREFIX`), `project`, `owner`, `machine`, `repository` (its name, only when public) and `code`
-(`hasSharedCode`: public, with an open or merged pull request). `RepositoryVisibility` is `public`, `private` or
-`unknown`; anything but `public` drops every path (`docs/engine.md` → Sharing a task has the table). A file's id is
+`SHARED_EVIDENCE_PREFIX`), `project`, `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository with an open or
+merged pull request), the same for a public or a private repository (`docs/engine.md` → Sharing a task has the
+table). A file's id is
 its evidence id or `diff` (`SHARE_DIFF_FILE`, refused unless `code`). The share page is
 `https://app.shinsa.dev/share/<token>` (`resolveShareUrl`). On the machine, `GET /api/tasks/<id>/share/preview`
 answers `SharePreview` (`shared`, `files`: each file id's local address, `updatedAt`) and `…/preview/diff` the diff

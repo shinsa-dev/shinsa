@@ -21,14 +21,16 @@ describe('sharing a task', () => {
     expect(publishes(harness, taskId)).toBe(1);
   });
 
-  test('a change to what the task shows publishes it again, and a private change does not', () => {
+  test('a change to what the task shows publishes it again, and a message to the agent does not', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.share', taskId });
-    harness.send({ type: 'agent.note', runId: harness.activeRun(taskId).id, note: 'Private thought.' });
+    harness.send({ type: 'task.message', taskId, text: 'My token is x.' });
     expect(publishes(harness, taskId)).toBe(1);
-    proposePlan(harness, taskId);
+    harness.send({ type: 'agent.note', runId: harness.activeRun(taskId).id, note: 'A note.' });
     expect(publishes(harness, taskId)).toBe(2);
+    proposePlan(harness, taskId);
+    expect(publishes(harness, taskId)).toBe(3);
   });
 
   test('new evidence publishes the task again', () => {

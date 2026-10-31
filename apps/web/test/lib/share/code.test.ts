@@ -6,6 +6,7 @@ import {
   createSharedCodeSource,
   NO_SHARED_CODE,
   ONLY_CHANGES,
+  resolveSharedHead,
   SHARED_BASE,
   SHARED_HEAD,
 } from '@/lib/share/code.ts';
@@ -31,6 +32,19 @@ describe('the shared code source', () => {
     const one = (await source('diff', new URLSearchParams({ path: 'src/other.ts' }))) as TaskDiff;
     expect(one.files).toEqual([]);
     expect(reads).toBe(1);
+  });
+
+  it('names its head after the pull request’s, so a new push reads the new diff', async () => {
+    const pushed = (headSha: string) => createTask({ id: 't', pullRequest: { headSha } as never });
+    expect(resolveSharedHead(pushed('abc'))).toBe(`${SHARED_HEAD}-abc`);
+    expect(resolveSharedHead(createTask({ id: 't', pullRequest: null }))).toBe(`${SHARED_HEAD}-none`);
+    const source = createSharedCodeSource(
+      () => Promise.resolve(DIFF),
+      null,
+      resolveSharedHead(pushed('def'))
+    );
+    expect(((await source('refs', new URLSearchParams())) as TaskRefs).head).toBe(`${SHARED_HEAD}-def`);
+    expect(((await source('diff', new URLSearchParams())) as TaskDiff).head).toBe(`${SHARED_HEAD}-def`);
   });
 
   it('refuses whole files, and everything when the task shares no code', async () => {

@@ -2516,10 +2516,16 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 ## Sharing a task
 
 A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/<token>`, without signing in
-and without a device key: the one place task data leaves the machine outside the sealed channel. What leaves is a
-read-only projection a pull request could carry; chats and everything else from the agent sessions never do. The
-same projection and publishing path will serve teams.
+and without a device key: the one place task data leaves the machine outside the sealed channel. A link is read-only
+remote access to that one task: everything its owner sees on its Overview, Review and Code, for a public or a private
+repository alike, but its chat; chats and the agent sessions never leave the machine. The same projection and
+publishing path will serve teams.
 
+- **The link.** Its token is 32 random bytes (256 bits, base64url), so it cannot be guessed; app.shinsa.dev keeps only
+  its SHA-256 hash, so its database opens no shared task, and shows the link once, to the engine that asked for it.
+  Every share answer and page carry `X-Robots-Tag: noindex, nofollow, noarchive` and `Referrer-Policy: no-referrer`,
+  so no search engine keeps it and no page it links to learns it. Stop sharing ends it at once; sharing again later
+  keeps the same link until the machine loses its pairing.
 - **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
   core refuses them on your behalf (`human_only`), since they publish outside the machine. An automation's home is
@@ -2528,46 +2534,40 @@ same projection and publishing path will serve teams.
   `SharedTask`: a redacted `Task` (so the web's tab components render it unchanged), the task's current evidence, the
   project's name, the owner's GitHub login and the machine's name from `remote.json`, the repository's name and
   whether it shares code. It copies fields by name: a field added to `Task` later stays empty until it is added here
-  on purpose. What it keeps and drops:
+  on purpose. What it keeps and drops, the same for every repository:
 
-  | Part | Public repository | Private, or visibility unknown |
-  | --- | --- | --- |
-  | Title, handle, status and its reason, priority, kind of task, request text, summary, result, proposal | kept | kept |
-  | Request attachments (pasted images, files) | dropped | dropped |
-  | Plan: goal, phases, behaviour, approach, out of scope, its changes and approval | kept | kept, without its files |
-  | Plan files, check commands, `shinsa://file`, `branch`, `pr` and `repo` links | kept | dropped |
-  | Phase reports, walkthrough, review report, findings, decisions | kept | kept, without file, line ranges or commands |
-  | A testing step's target | a public `https://` address only | a public `https://` address only |
-  | Check results | label and outcome (and note) | label and outcome (and note) |
-  | Check output, coverage | output never; coverage kept | dropped |
-  | Branches, base, the pull request's address, head and merge commit | kept | dropped |
-  | Pull request number, state, checks and check runs, comment count, changes | kept (check runs' links too) | kept, without links |
-  | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed | the same |
-  | The diff (Code) | the pull request's, once one is open or merged | never |
-  | Chats, transcripts, runs, tool calls, sessions, accounts, costs | never | never |
-  | Gates' questions and answers, plan answers, your review comments, verdict notes | never | never |
-  | Activity, notes, inbox, messages, watchdogs, delegations, worktree, waits | never | never |
-  | Links to other tasks (`shinsa://task/…`) | their label as plain text | their label as plain text |
+  | Part | Shared |
+  | --- | --- |
+  | Title, handle, status and its reason, priority, kind of task, request text, summary, result, proposal | kept |
+  | Request attachments (pasted images, files) | dropped |
+  | The plan whole: goal, phases, behaviour, approach, files, checks, its changes and approval | kept |
+  | Phase reports, walkthrough (watchdogs and steps with their commands), review report, findings, decisions, with their files and lines | kept |
+  | Checks, their commands, results, output and coverage | kept |
+  | Branches, base, the pull request whole: address, head, merge commit, checks and check runs, changes | kept |
+  | Merge steps and which are ticked | kept |
+  | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed |
+  | The diff (Code) | the pull request's, from GitHub, once one is open or merged |
+  | Activity | kept, without messages, gate questions and answers, and account changes |
+  | Notes | kept |
+  | Chats, transcripts, runs, tool calls, sessions, accounts, costs | never |
+  | Messages to agents, gates' questions and answers, plan answers, verdict notes' drafts, the inbox | never |
+  | Worktree, waits, delegations, the task's origin | never |
+  | Links to other tasks (`shinsa://task/…`) | their label as plain text |
 
-  Visibility is `public` only when GitHub says so (`gh api repos/<owner>/<name> --jq .visibility`,
-  `resolveRepoVisibility`, kept 10 minutes per repository, `VISIBILITY_TTL_MS`); `internal` reads as `private`, and a
-  repository without a GitHub remote, a failed read or any other answer is `unknown`, treated as private. Visibility is
-  read on each publish but is not part of the fingerprint, so a public repository made private is published again,
-  without its code and paths, only when the task next changes; stop sharing and share it again to take the code down
-  at once. A task without a repository has no Code. Text an agent wrote freely
-  (a summary, a finding's message, a testing step) is kept as written and can name a file; Preview is how you check it.
+  A task without a repository has no Code. Check output and text an agent wrote (a summary, a finding, a testing
+  step) are kept as written; Preview is how you read them before you share.
 - **When it is published.** `task.share` emits `task.shared` and queues `share.publish` (`replay_safe`, lane
   `share:<task>`, so a later publish waits for the one running). At the end of every `decide`, `syncShares` (beside
   `syncMergeSteps`) compares the fingerprint of each touched shared task's projection before and after
   (`resolveSharedFingerprint`, the projection under a fixed context) and queues `share.publish` only when it changed:
-  a note, a message or a run's activity publishes nothing. `task.unshare` cancels a queued publish, emits
+  a new stage, phase report, check, activity entry or note publishes it, a message to an agent does not. `task.unshare` cancels a queued publish, emits
   `task.unshared` and queues `share.remove`.
-- **Publishing** (`apps/engine/src/remote/shares.ts`, `SharePublisher`): it reads the visibility, resolves the
-  projection, lists its files and posts them with the machine token (`apps/cloud/CLAUDE.md` → Shared tasks). Evidence
+- **Publishing** (`apps/engine/src/remote/shares.ts`, `SharePublisher`): it resolves the projection, lists its files and posts them with the machine token (`apps/cloud/CLAUDE.md` → Shared tasks). Evidence
   stored on the machine (`/api/evidence/…`) is a file when it is a PNG, JPEG, WebP, GIF, MP4, WebM, text or Markdown
   of 50 MB at most; anything else is left out of the publication rather than shown broken. Each file is hashed once
   per size and modification time, the Worker is asked which hashes it lacks, and only those are uploaded. For a
-  public repository with an open or merged pull request, the diff is `gh pr diff <n>`, read again only when the
+  task with an open or merged pull request, the diff is `gh pr diff <n>` (with the owner's own GitHub access, so a
+  private repository's diff too), read again only when the
   head moves, and left out above 50 MB (Code then shows no diff). At most 200 files. The first publication asks for a
   new link (`newLink` while `TaskShare.url` is null); its answer is recorded with `share.record`, and later ones keep
   the link.
@@ -2587,18 +2587,18 @@ same projection and publishing path will serve teams.
   sharing and Done). Every view but the failed one offers Preview, so you can read what a link shows before you
   share or turn on remote access.
 - **Preview** (`/tasks/<handle>/shared`, `routes/share-preview.tsx`): the same page a link opens, from
-  `GET /api/tasks/<id>/share/preview` (`SharePreview`: the projection the engine would publish now, with its real
-  visibility, and the local address of each file it would upload) and `…/share/preview/diff`, so it shows exactly what
-  the link would, private-repository rules included, before anything leaves the machine. Its note says it is a
-  preview and that chats, activity and notes never leave the machine.
+  `GET /api/tasks/<id>/share/preview` (`SharePreview`: the projection the engine would publish now, and the local
+  address of each file it would upload) and `…/share/preview/diff`, so it shows exactly what the link would before
+  anything leaves the machine. Its note says it is a preview and that chats never leave the machine.
 - **The shared page** (`routes/remote/share.tsx`, `components/share/shared-task-page.tsx`): the remote build's
   `/share/<token>` reads `GET /__remote/shares/<token>` with no session and shows the task read-only: its heading, its
   facts (handle, status, project, repository, pull request with its checks, who shared it from which machine, "you"
   when the GitHub login signed in to app.shinsa.dev is its owner and on the machine's Preview, and when it was last
-  published), and the tabs Overview (result, summary, plan, evidence), Review (the review tab read only:
+  published), and the tabs Overview (where the task stands with its checks, CI, merge steps and track, result,
+  summary, evidence, what changed, plan and activity), Review (the review tab read only:
   no verdict, no comments, no drafts, merge steps listed without a box to tick) when the task reached review, and Code
-  for a public repository: every file of the published diff, read from the publication's `diff` file, never from a
-  worktree. No control on it sends a command. It follows the task while it is open: every `SHARE_REFRESH_MS` (10
+  once a pull request is open or merged: every file of the published diff, read from the publication's `diff` file, never from a
+  worktree. No control on it sends a command. It follows the task while it is open: every `SHARE_REFRESH_MS` (3
   seconds) while the tab is visible, and at once when it comes back into view, it reads the publication again and
   swaps the view in place when its `updatedAt` moved, so a running task's stage, phases, checks and review show up as
   the engine republishes them; a refresh that fails keeps the view, and a link that stopped working says so at once.

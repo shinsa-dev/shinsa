@@ -47,7 +47,6 @@ interface FakeState {
   rulesetChecks?: string[];
   baseChecks?: boolean;
   repositoryId?: number;
-  visibility?: string;
   diffs?: Record<string, string>;
   uploads?: number;
   failUploads?: boolean;
@@ -343,15 +342,6 @@ if (group === 'api' && /^repos\/[^/]+\/[^/]+$/.test(command ?? '') && flag('--jq
     process.exit(1);
   }
   console.log(String(state.repositoryId));
-  process.exit(0);
-}
-if (group === 'api' && /^repos\/[^/]+\/[^/]+$/.test(command ?? '') && flag('--jq') === '.visibility') {
-  save();
-  if (state.visibility === undefined) {
-    console.error('HTTP 404: Not Found');
-    process.exit(1);
-  }
-  console.log(state.visibility);
   process.exit(0);
 }
 if (group === 'pr' && command === 'diff') {

@@ -15,7 +15,6 @@ import {
   resolveRemarks,
   resolveRepoSlug,
   resolveRepositoryId,
-  resolveRepoVisibility,
   retargetPullRequest,
   serializePullRequest,
   serializePullRequestTitle,
@@ -50,7 +49,6 @@ interface FakePull {
 }
 
 interface FakeExtra {
-  visibility?: string;
   diffs?: Record<string, string>;
   mergeQueue?: boolean;
   failReads?: number;
@@ -562,21 +560,6 @@ function createFailingGraphql() {
 }
 
 describe('what a shared task reads from GitHub', () => {
-  test('reads whether the repository is public, and treats anything else or a failure as not public', async () => {
-    const repo = createRepo({ path: createTempDir() });
-    useFakeGitHub([], { visibility: 'public' });
-    expect(await resolveRepoVisibility(repo)).toBe('public');
-    useFakeGitHub([], { visibility: 'private' });
-    expect(await resolveRepoVisibility(repo)).toBe('private');
-    useFakeGitHub([], { visibility: 'internal' });
-    expect(await resolveRepoVisibility(repo)).toBe('private');
-    useFakeGitHub([], { visibility: 'secret' });
-    expect(await resolveRepoVisibility(repo)).toBe('unknown');
-    useFakeGitHub([]);
-    expect(await resolveRepoVisibility(repo)).toBe('unknown');
-    expect(await resolveRepoVisibility({ ...repo, remote: null })).toBe('unknown');
-  });
-
   test('reads a pull request’s diff from GitHub, not from the worktree', async () => {
     const github = useFakeGitHub([], { diffs: { '7': 'diff --git a/x b/x' } });
     const repo = createRepo({ path: createTempDir() });

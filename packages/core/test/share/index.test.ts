@@ -17,21 +17,7 @@ import {
   registerRepo,
 } from '../harness.ts';
 
-const PUBLIC: SharedTaskContext = {
-  owner: 'mona',
-  machine: 'Studio',
-  repository: { name: 'superwall/paywall-next', visibility: 'public' },
-};
-
-const PRIVATE: SharedTaskContext = {
-  ...PUBLIC,
-  repository: { ...PUBLIC.repository!, visibility: 'private' },
-};
-
-const UNKNOWN: SharedTaskContext = {
-  ...PUBLIC,
-  repository: { ...PUBLIC.repository!, visibility: 'unknown' },
-};
+const CONTEXT: SharedTaskContext = { owner: 'mona', machine: 'Studio', repository: 'superwall/paywall-next' };
 
 const REQUEST =
   'Fix the scroll in tab groups\n\n<attachments>\n<attachment kind="image" display_name="shot.png" path="/data/attachments/01b/shot.png" url="/api/attachments/01b/shot.png" />\n</attachments>';
@@ -172,11 +158,11 @@ function withPullRequest(task: Task, state: 'open' | 'merged' | 'closed'): Task 
 }
 
 describe('what a shared task shows', () => {
-  test('a public repository keeps the paths, the plan and the pull request, and never the private parts', () => {
+  test('keeps the plan, the reports, the review, the checks and the pull request whole, and never the private parts', () => {
     const harness = createHarness();
     const taskId = reachReview(harness);
     const task = withPullRequest(harness.task(taskId), 'open');
-    const shared = resolveSharedTask(harness.state, task, PUBLIC);
+    const shared = resolveSharedTask(harness.state, task, CONTEXT);
     expect(shared).toMatchObject({
       project: 'Superwall',
       owner: 'mona',
@@ -192,7 +178,6 @@ describe('what a shared task shows', () => {
       repoId: null,
       projectId: null,
       origin: null,
-      activity: [],
       waitsOn: [],
       planAnswers: null,
       updatedAt: task.stageChangedAt,
@@ -202,90 +187,99 @@ describe('what a shared task shows', () => {
     expect(shared.task.plan?.feedback).toBeNull();
     expect(shared.task.phaseReports.map((report) => report.files)).toEqual([['src/a.ts'], ['src/b.ts']]);
     expect(shared.task.phaseReports.every((report) => report.runId === null)).toBe(true);
+    expect(shared.task.phaseReports[0]?.spots[0]).toMatchObject({ file: 'src/a.ts', start: 1, end: 3 });
     expect(shared.task.phaseReports[1]?.summary).toBe(
       'Clamped it in [panel.ts](shinsa://file/src/panel.ts#L3) after the other task and  too.'
     );
     const walkthrough = shared.task.phaseReports[1]?.walkthrough;
-    expect(walkthrough?.watchdogs).toEqual([]);
+    expect(walkthrough?.watchdogs).toHaveLength(1);
     expect(walkthrough?.steps?.[0]?.command).toBe('bun run migrate');
-    expect(walkthrough?.testing.manual.map((step) => step.target)).toEqual([
-      { kind: 'url', value: 'https://app.example.dev' },
-      null,
-      null,
-    ]);
-    expect(shared.task.checkResults?.every((check) => check.detail === null)).toBe(true);
+    expect(walkthrough?.testing.manual.map((step) => step.target?.kind)).toEqual(['url', 'url', 'file']);
+    expect(shared.task.checkResults?.every((check) => check.detail === 'secret output')).toBe(true);
     expect(shared.task.checks?.[0]?.command).toBe('bun test src/panel');
-    expect(shared.task.findings[0]).toMatchObject({ file: 'src/b.ts', line: 5, verdictNote: null });
+    expect(shared.task.findings[0]).toMatchObject({ file: 'src/b.ts', line: 5 });
     expect(shared.task.pullRequest).toMatchObject({
       url: 'https://github.com/superwall/paywall-next/pull/42',
       headSha: 'abc',
+      mergeCommit: 'def',
       unresolvedThreads: [],
     });
     expect(shared.task.pullRequest?.checkRuns?.[0]?.url).toBe('https://github.com/run/1');
   });
 
-  test('a private repository drops every path, line, command and link, and shows no code', () => {
+  test('keeps the activity without messages, gate questions and answers, accounts or runs', () => {
     const harness = createHarness();
     const taskId = reachReview(harness);
-    const task = withPullRequest(harness.task(taskId), 'merged');
-    const shared = resolveSharedTask(harness.state, task, PRIVATE);
-    expect(shared).toMatchObject({ repository: null, code: false });
-    expect(shared.task.plan?.document?.files).toEqual([]);
-    expect(shared.task.plan?.document?.verification[0]?.command).toBe('');
-    expect(shared.task.plan?.body).not.toContain('src/panel.ts');
-    expect(shared.task.plan?.body).toContain('- Panel tests (phases 1, 2)');
-    expect(shared.task.plan?.body).not.toContain('``');
-    expect(shared.task.phaseReports.flatMap((report) => report.spots)).toEqual([
-      { file: '', start: 0, end: 0, attention: 'critical', why: 'The change.', title: 'Clamp' },
-      { file: '', start: 0, end: 0, attention: 'high', why: 'The other change.' },
-    ]);
-    expect(shared.task.phaseReports[0]?.judgementCalls[0]).toMatchObject({ file: null, line: null });
-    expect(shared.task.phaseReports.map((report) => report.files)).toEqual([[], []]);
-    expect(shared.task.phaseReports[1]?.summary).toBe(
-      'Clamped it in panel.ts after the other task and  too.'
-    );
-    const walkthrough = shared.task.phaseReports[1]?.walkthrough;
-    expect(walkthrough?.risks[0]).toMatchObject({ file: null, line: null, end: null });
-    expect(walkthrough?.steps?.[0]?.command).toBeNull();
-    expect(shared.task.report?.sections.flatMap((section) => section.spots.map((spot) => spot.file))).toEqual(
-      shared.task.report?.sections.flatMap((section) => section.spots.map(() => '')) ?? []
-    );
-    expect(shared.task.report?.checks.every((check) => check.command === '' && check.detail === null)).toBe(
-      true
-    );
-    expect(shared.task.report?.judgementCalls.every((call) => call.file === null)).toBe(true);
-    expect(shared.task.report?.walkthrough?.risks.every((risk) => risk.file === null)).toBe(true);
-    expect(shared.task.checks?.[0]?.command).toBe('');
-    expect(shared.task.findings[0]).toMatchObject({ file: null, line: null, end: null });
-    expect(shared.task.coverage).toBeNull();
-    expect(shared.task.pullRequest).toMatchObject({ url: '', headSha: null, mergeCommit: null });
-    expect(shared.task.pullRequest?.checkRuns?.[0]?.url).toBeNull();
-    expect(shared.task.rounds?.[0]?.pullRequest).toBeNull();
-    expect(shared.task.branch).toBeNull();
-    expect(shared.task.rounds?.every((round) => round.branch === null)).toBe(true);
-    expect(shared.evidence.map((evidence) => evidence.title)).toEqual([
-      'Shot of panel.ts',
-      'Shot of panel.ts',
-      'Panel tests',
+    const task: Task = {
+      ...harness.task(taskId),
+      activity: [
+        {
+          at: 1,
+          actor: 'agent',
+          kind: 'work',
+          text: 'Built it.',
+          detail: null,
+          evidenceId: null,
+          runId: 'r1',
+        },
+        { at: 2, actor: 'you', kind: 'message', text: 'My token is x.', detail: null, evidenceId: null },
+        { at: 3, actor: 'agent', kind: 'question', text: 'Which key?', detail: null, evidenceId: null },
+        { at: 4, actor: 'you', kind: 'answer', text: 'The red one.', detail: null, evidenceId: null },
+        {
+          at: 5,
+          actor: 'shinsa',
+          kind: 'account',
+          text: 'Moved to me@x.dev.',
+          detail: null,
+          evidenceId: null,
+        },
+        {
+          at: 6,
+          actor: 'you',
+          kind: 'review',
+          text: 'Asked for changes.',
+          detail: null,
+          evidenceId: null,
+          gateType: 'review',
+          onBehalf: true,
+          round: 2,
+          comments: [],
+          undelivered: { text: 'x', reason: 'y' },
+        },
+      ],
+    };
+    expect(resolveSharedTask(harness.state, task, CONTEXT).task.activity).toEqual([
+      { at: 1, actor: 'agent', kind: 'work', text: 'Built it.', detail: null, evidenceId: null, runId: null },
+      {
+        at: 6,
+        actor: 'you',
+        kind: 'review',
+        text: 'Asked for changes.',
+        detail: null,
+        evidenceId: null,
+        runId: null,
+        gateType: 'review',
+        onBehalf: true,
+        round: 2,
+        comments: [],
+      },
     ]);
   });
 
-  test('a repository of unknown visibility, or none, is treated as private', () => {
+  test('a task with no repository shows no code', () => {
     const harness = createHarness();
     const taskId = reachReview(harness);
     const task = withPullRequest(harness.task(taskId), 'open');
-    const unknown = resolveSharedTask(harness.state, task, UNKNOWN);
-    const none = resolveSharedTask(harness.state, task, { ...PUBLIC, repository: null });
-    for (const shared of [unknown, none]) {
-      expect(shared).toMatchObject({ repository: null, code: false });
-      expect(shared.task.plan?.document?.files).toEqual([]);
-    }
+    expect(resolveSharedTask(harness.state, task, { ...CONTEXT, repository: null })).toMatchObject({
+      repository: null,
+      code: false,
+    });
   });
 
   test('evidence keeps stored files by id and public addresses, and drops local addresses', () => {
     const harness = createHarness();
     const taskId = reachReview(harness);
-    const shared = resolveSharedTask(harness.state, harness.task(taskId), PUBLIC);
+    const shared = resolveSharedTask(harness.state, harness.task(taskId), CONTEXT);
     expect(shared.evidence.map((evidence) => evidence.uri)).toEqual([
       `${SHARED_EVIDENCE_PREFIX}${shared.evidence[0]?.id}`,
       'https://preview.example.dev',
@@ -311,7 +305,7 @@ describe('what a shared task shows', () => {
       taskId,
       uploads: [{ evidenceId: id ?? '', url: 'https://github.com/user-attachments/1' }],
     });
-    const shared = resolveSharedTask(harness.state, harness.task(taskId), PUBLIC);
+    const shared = resolveSharedTask(harness.state, harness.task(taskId), CONTEXT);
     expect(shared.evidence.map((evidence) => evidence.uri)).toContain(
       'https://github.com/user-attachments/1'
     );
@@ -321,7 +315,7 @@ describe('what a shared task shows', () => {
     const harness = createHarness();
     registerRepo(harness);
     const taskId = createTask(harness, { request: REQUEST });
-    const shared = resolveSharedTask(harness.state, harness.task(taskId), PUBLIC);
+    const shared = resolveSharedTask(harness.state, harness.task(taskId), CONTEXT);
     expect(shared.task).toMatchObject({
       request: 'Fix the scroll in tab groups',
       plan: null,
@@ -344,12 +338,12 @@ describe('what a shared task shows', () => {
       result: { step: 'answer', body: 'It clamps.', runId: 'run-1', at: 5 },
       proposal: { request: 'Clamp it', why: 'It overflows.', status: 'open', runId: 'run-1', at: 5 },
     };
-    const shared = resolveSharedTask(harness.state, task, PUBLIC);
+    const shared = resolveSharedTask(harness.state, task, CONTEXT);
     expect(shared.task.result).toEqual({ step: 'answer', body: 'It clamps.', runId: null, at: 5 });
     expect(shared.task.proposal?.runId).toBeNull();
   });
 
-  test('earlier rounds keep their pull request and merge steps only for a public repository', () => {
+  test('earlier rounds keep their pull request without the attachments of their request', () => {
     const harness = createHarness();
     const base = harness.task(createTask(harness));
     const round = base.rounds?.[0];
@@ -364,62 +358,31 @@ describe('what a shared task shows', () => {
           pullRequest: { number: 7, url: 'https://github.com/o/r/pull/7', state: 'merged', base: 'main' },
         },
       ],
-      carriedMergeSteps: [
-        {
-          when: 'post_merge',
-          kind: 'deploy',
-          title: 'Deploy',
-          detail: 'Ship it.',
-          command: 'wrangler deploy',
-          round: 1,
-          done: false,
-        },
-      ],
     };
-    const open = resolveSharedTask(harness.state, task, PUBLIC).task;
-    const closed = resolveSharedTask(harness.state, task, PRIVATE).task;
-    expect(open.rounds?.[0]).toMatchObject({ request: 'Fix the scroll in tab groups', base: 'main' });
-    expect(open.rounds?.[0]?.pullRequest).toMatchObject({
-      url: 'https://github.com/o/r/pull/7',
+    expect(resolveSharedTask(harness.state, task, CONTEXT).task.rounds?.[0]).toMatchObject({
+      request: 'Fix the scroll in tab groups',
       base: 'main',
+      pullRequest: { url: 'https://github.com/o/r/pull/7', base: 'main' },
     });
-    expect(open.carriedMergeSteps?.[0]?.command).toBe('wrangler deploy');
-    expect(closed.rounds?.[0]).toMatchObject({ base: null, pullRequest: { number: 7, url: '', base: null } });
-    expect(closed.carriedMergeSteps?.[0]?.command).toBeNull();
-  });
-
-  test('a revised plan keeps its changes, but not how many files changed for a private repository', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    proposePlan(harness, taskId);
-    const plan = harness.task(taskId).plan;
-    if (!plan) throw new Error('no plan');
-    const task: Task = {
-      ...harness.task(taskId),
-      plan: { ...plan, changes: [{ kind: 'goal' }, { kind: 'files', added: 1, removed: 0 }] },
-    };
-    expect(resolveSharedTask(harness.state, task, PUBLIC).task.plan?.changes).toHaveLength(2);
-    expect(resolveSharedTask(harness.state, task, PRIVATE).task.plan?.changes).toEqual([{ kind: 'goal' }]);
   });
 
   test('a task with no project names none', () => {
     const harness = createHarness();
     harness.send({ type: 'task.create', request: 'What is the clamp?', repoId: null });
     const task = Object.values(harness.state.tasks)[0] as Task;
-    expect(resolveSharedTask(harness.state, task, { ...PUBLIC, repository: null }).project).toBeNull();
+    expect(resolveSharedTask(harness.state, task, { ...CONTEXT, repository: null }).project).toBeNull();
   });
 });
 
 describe('when a shared task has code', () => {
-  test('only a public repository with an open or merged pull request', () => {
+  test('only a task in a repository with an open or merged pull request', () => {
     const harness = createHarness();
     const task = harness.task(createTask(harness));
-    const repository = PUBLIC.repository;
+    const repository = CONTEXT.repository;
     expect(hasSharedCode(task, repository)).toBe(false);
     expect(hasSharedCode(withPullRequest(task, 'open'), repository)).toBe(true);
     expect(hasSharedCode(withPullRequest(task, 'merged'), repository)).toBe(true);
     expect(hasSharedCode(withPullRequest(task, 'closed'), repository)).toBe(false);
-    expect(hasSharedCode(withPullRequest(task, 'open'), PRIVATE.repository)).toBe(false);
     expect(hasSharedCode(withPullRequest(task, 'open'), null)).toBe(false);
   });
 });
@@ -433,7 +396,7 @@ describe('the fingerprint of a shared task', () => {
     harness.send({ type: 'task.share', taskId });
     expect(harness.task(taskId).share).toEqual({ at: harness.now, url: null });
     const before = resolveSharedFingerprint(harness.state, taskId);
-    harness.send({ type: 'agent.note', runId: harness.activeRun(taskId).id, note: 'Private thought.' });
+    harness.send({ type: 'task.message', taskId, text: 'My token is x.' });
     expect(resolveSharedFingerprint(harness.state, taskId)).toBe(before);
     proposePlan(harness, taskId);
     expect(resolveSharedFingerprint(harness.state, taskId)).not.toBe(before);

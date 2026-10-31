@@ -5,18 +5,16 @@ import {
   type MachineCredentials,
   PUBLICATION_LIMITS,
   type Repo,
-  type RepositoryVisibility,
   resolveSharedTask,
   resolveSharePreviewDiffApiPath,
   SHARE_DIFF_FILE,
   SHARED_EVIDENCE_PREFIX,
-  type SharedRepository,
   type SharedTask,
   type ShareFileType,
   type SharePreview,
   type Task,
 } from '@shinsa/core';
-import { readPullRequestDiff, resolveRepoSlug, resolveRepoVisibility } from '../github/index.ts';
+import { readPullRequestDiff, resolveRepoSlug } from '../github/index.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
@@ -30,8 +28,6 @@ export const SHARE_NOT_PAIRED =
 
 export const SHARE_LINK_LOST =
   'Remote access was removed from this machine, so app.shinsa.dev no longer serves this link. Turn remote access on again, then share this task again for a new link.';
-
-export const VISIBILITY_TTL_MS = 10 * 60_000;
 
 const FINAL = { retryable: false, delayMs: null };
 
@@ -48,12 +44,11 @@ const FILE_TYPES: Readonly<Record<string, ShareFileType>> = {
 };
 
 export interface ShareGitHub {
-  resolveVisibility: (repo: Repo) => Promise<RepositoryVisibility>;
   readDiff: (repo: Repo, number: number) => Promise<string>;
 }
 
 export interface SharePreviewer {
-  preview: (taskId: string) => Promise<SharePreview>;
+  preview: (taskId: string) => SharePreview;
   previewDiff: (taskId: string) => Promise<string>;
 }
 
@@ -83,7 +78,13 @@ interface HashedFile {
   hash: string;
 }
 
-const GITHUB: ShareGitHub = { resolveVisibility: resolveRepoVisibility, readDiff: readPullRequestDiff };
+const GITHUB: ShareGitHub = { readDiff: readPullRequestDiff };
+
+function resolveRepositoryName(repo: Repo | null) {
+  if (!repo) return null;
+  const slug = resolveRepoSlug(repo);
+  return slug ? `${slug.owner}/${slug.name}` : repo.name;
+}
 
 function resolveBytesHash(bytes: Uint8Array) {
   return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
@@ -105,7 +106,8 @@ export function createSharePreviewRoutes(shares: SharePreviewer): ApiRoute[] {
     {
       method: 'GET',
       pattern: /^\/api\/tasks\/([^/]+)\/share\/preview$/,
-      respond: async ([, taskId = '']) => Response.json(await shares.preview(decodeURIComponent(taskId))),
+      respond: ([, taskId = '']) =>
+        Promise.resolve(taskId).then((id) => Response.json(shares.preview(decodeURIComponent(id)))),
     },
     {
       method: 'GET',
@@ -140,7 +142,6 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
   readonly #evidence: EvidenceStore;
   readonly #github: ShareGitHub;
   readonly #now: () => number;
-  readonly #visibilities = new Map<string, { visibility: RepositoryVisibility; at: number }>();
   readonly #hashes = new Map<string, HashedFile>();
   readonly #diffs = new Map<string, { key: string; file: PublishedFile | null }>();
   #pairedAs: string | null;
@@ -176,9 +177,9 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     }
   }
 
-  async preview(taskId: string): Promise<SharePreview> {
+  preview(taskId: string): SharePreview {
     const task = this.#findTask(taskId);
-    const { shared } = await this.#resolveShared(task);
+    const { shared } = this.#resolveShared(task);
     const files: Record<string, string> = {};
     for (const item of shared.evidence) {
       if (!item.uri.startsWith(SHARED_EVIDENCE_PREFIX)) continue;
@@ -195,7 +196,7 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
 
   async previewDiff(taskId: string) {
     const task = this.#findTask(taskId);
-    const { shared, repo } = await this.#resolveShared(task);
+    const { shared, repo } = this.#resolveShared(task);
     const [file] = await this.#listDiffFiles(shared, task, repo);
     if (!file) throw new DomainError('share_no_code', 'This task shares no code.');
     return new TextDecoder().decode(await file.read());
@@ -207,12 +208,12 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     return task;
   }
 
-  async #resolveShared(task: Task) {
+  #resolveShared(task: Task) {
     const repo = task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
     const shared = resolveSharedTask(this.#engine.state, task, {
       owner: this.#remote.store.file.owner,
       machine: this.#remote.snapshot().machineName,
-      repository: await this.#resolveRepository(repo),
+      repository: resolveRepositoryName(repo),
     });
     return { shared, repo };
   }
@@ -221,7 +222,7 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     const task = this.#engine.state.tasks[taskId];
     if (!task?.share) return;
     const credentials = this.#findCredentials();
-    const { shared, repo } = await this.#resolveShared(task);
+    const { shared, repo } = this.#resolveShared(task);
     const files = [
       ...(await this.#listEvidenceFiles(shared)),
       ...(await this.#listDiffFiles(shared, task, repo)),
@@ -256,17 +257,6 @@ export class SharePublisher implements ShareEffects, SharePreviewer {
     const { credentials } = this.#remote.store.file;
     if (!credentials) throw new EffectError(SHARE_NOT_PAIRED, SHARE_NOT_PAIRED, FINAL);
     return credentials;
-  }
-
-  async #resolveRepository(repo: Repo | null): Promise<SharedRepository | null> {
-    if (!repo) return null;
-    const slug = resolveRepoSlug(repo);
-    const name = slug ? `${slug.owner}/${slug.name}` : repo.name;
-    const cached = this.#visibilities.get(repo.id);
-    if (cached && this.#now() - cached.at < VISIBILITY_TTL_MS) return { name, visibility: cached.visibility };
-    const visibility = await this.#github.resolveVisibility(repo);
-    this.#visibilities.set(repo.id, { visibility, at: this.#now() });
-    return { name, visibility };
   }
 
   async #listEvidenceFiles(shared: SharedTask) {

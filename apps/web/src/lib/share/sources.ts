@@ -10,7 +10,7 @@ import {
 import { requestJson } from '@/lib/connection/http.ts';
 import type { SharedSource } from '@/lib/share/view.ts';
 
-export const SHARE_REFRESH_MS = 10_000;
+export const SHARE_REFRESH_MS = 3_000;
 
 export const SHARE_GONE =
   'This task is no longer shared, or the link is wrong. Ask whoever sent it for a new one.';
@@ -57,7 +57,7 @@ export async function requestPublicationSource(token: string, read: typeof fetch
 }
 
 export async function requestDiffText(url: string, read: typeof fetch = fetch) {
-  const response = await read(url);
+  const response = await read(url, { cache: 'no-store' });
   if (!response.ok) throw new Error('The changes did not load. Reload the page to try again.');
   return response.text();
 }

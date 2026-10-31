@@ -262,9 +262,8 @@ src/
 │                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
-│                    from the task, its current evidence and the project's name; chats, activity, runs, gate answers,
-│                    notes, attachments and check output never; a repository whose visibility is not `public` also
-│                    loses every path, line, command and pull request address, and has no code), hasSharedCode, and
+│                    from the task, its current evidence and the project's name; everything its owner sees but
+│                    chats, runs, messages, gate questions and answers, and attachments), hasSharedCode, and
 │                    resolveSharedFingerprint, which decide's syncShares compares to republish a shared task only
 │                    when what it shows changed (decide/shares.ts: task.share and task.unshare, human-only;
 │                    share.record, the link the engine got back; share.fail, why a publish failed); its wire

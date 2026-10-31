@@ -26,7 +26,6 @@ import {
   REMOTE_PATHS,
   type RemoteInstance,
   type Repo,
-  type RepositoryVisibility,
   resolveKeyFingerprint,
   resolveSharePagePath,
   SHARE_DIFF_FILE,
@@ -150,7 +149,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     engine,
     remote,
     evidence,
-    github: createPreviewGitHub(engine, 'public'),
+    github: createPreviewGitHub(engine),
   });
   const http = startServer({
     engine,
@@ -238,9 +237,8 @@ function countStoredEvidence(engine: Engine, taskId: string) {
   ).length;
 }
 
-function createPreviewGitHub(engine: Engine, visibility: RepositoryVisibility): ShareGitHub {
+function createPreviewGitHub(engine: Engine): ShareGitHub {
   return {
-    resolveVisibility: () => Promise.resolve(visibility),
     readDiff: (repo, number) => {
       const task = Object.values(engine.state.tasks).find(
         (entry) => entry.repoId === repo.id && entry.pullRequest?.number === number
@@ -268,8 +266,7 @@ async function createPreviewShare(
   studio: Awaited<ReturnType<typeof startMachine>>,
   task: Task,
   token: string,
-  label: string,
-  visibility: RepositoryVisibility
+  label: string
 ): Promise<PreviewShare | null> {
   const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
   if (!seeded) return null;
@@ -278,7 +275,7 @@ async function createPreviewShare(
     engine: studio.engine,
     remote: studio.machine.remote,
     evidence: studio.evidence,
-    github: createPreviewGitHub(studio.engine, visibility),
+    github: createPreviewGitHub(studio.engine),
   });
   return {
     token,
@@ -305,18 +302,11 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
       (await createPreviewShare(
         studio,
         coded,
-        'preview-public',
-        'A shared task from a public repository, with Code',
-        'public'
+        'preview-code',
+        'A shared task with an open pull request, with Code'
       )),
     evidenced &&
-      (await createPreviewShare(
-        studio,
-        evidenced,
-        'preview-private',
-        'A shared task from a private repository, with its evidence: no code, no paths',
-        'private'
-      )),
+      (await createPreviewShare(studio, evidenced, 'preview-evidence', 'A shared task with its evidence')),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
@@ -329,7 +319,7 @@ async function respondShare(match: RegExpExecArray, shares: PreviewShare[]) {
       { error: { code: 'share_not_found', message: 'This task is no longer shared, or the link is wrong.' } },
       { status: 404 }
     );
-  const preview = await share.publisher.preview(share.taskId);
+  const preview = share.publisher.preview(share.taskId);
   if (fileId === SHARE_DIFF_FILE && preview.files[fileId])
     return new Response(await share.publisher.previewDiff(share.taskId), {
       headers: { 'content-type': 'text/plain' },

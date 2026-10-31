@@ -6,7 +6,6 @@ import {
   PUBLICATION_LIMITS,
   type PublicationRequest,
   REMOTE_PATHS,
-  type RepositoryVisibility,
   resolveMachineFilePath,
   resolveMachinePublicationPath,
   resolveMachinePublicationRemovePath,
@@ -24,7 +23,6 @@ import {
   SHARE_NOT_PAIRED,
   type ShareGitHub,
   SharePublisher,
-  VISIBILITY_TTL_MS,
 } from '../../src/remote/shares.ts';
 import { EffectError } from '../../src/runtime/failures.ts';
 import { EvidenceStore } from '../../src/store/evidence.ts';
@@ -52,21 +50,12 @@ afterEach(async () => {
 });
 
 interface FakeGitHub extends ShareGitHub {
-  visibilityReads: number;
   diffReads: number;
 }
 
-function createGitHub(
-  visibility: RepositoryVisibility,
-  diff = 'diff --git a/src/a.ts b/src/a.ts'
-): FakeGitHub {
+function createGitHub(diff = 'diff --git a/src/a.ts b/src/a.ts'): FakeGitHub {
   const github: FakeGitHub = {
-    visibilityReads: 0,
     diffReads: 0,
-    resolveVisibility: () => {
-      github.visibilityReads += 1;
-      return Promise.resolve(visibility);
-    },
     readDiff: () => {
       github.diffReads += 1;
       return Promise.resolve(diff);
@@ -92,6 +81,7 @@ function createEvidence(overrides: Partial<Evidence>): Evidence {
 function shareTask(overrides: Partial<Task> = {}) {
   return createTask({
     repoId: 'repo-1',
+    activity: [],
     share: { at: 1, url: null },
     pullRequest: {
       number: 7,
@@ -141,7 +131,7 @@ function setUp(options: SetUp = {}) {
     state.evidence['shot-1'] = createEvidence({});
     options.patch?.(state);
   });
-  const github = options.github ?? createGitHub('public');
+  const github = options.github ?? createGitHub();
   const publisher = new SharePublisher({
     engine: stub.engine,
     remote,
@@ -213,7 +203,7 @@ describe('publishing a shared task', () => {
       REMOTE_PATHS.machineFilesCheck,
       resolveMachinePublicationPath('task-1'),
     ]);
-    expect(github).toMatchObject({ visibilityReads: 1, diffReads: 1 });
+    expect(github.diffReads).toBe(1);
     expect(stub.dispatched.at(-1)).toEqual({ type: 'share.record', taskId: 'task-1', url: null });
     const shared = stub.state.tasks['task-1'] as Task;
     stub.state.tasks['task-1'] = {
@@ -224,38 +214,14 @@ describe('publishing a shared task', () => {
     expect(github.diffReads).toBe(2);
   });
 
-  test('a private repository, or one whose visibility is unknown, sends no diff and never reads one', async () => {
-    for (const visibility of ['private', 'unknown'] as const) {
-      const github = createGitHub(visibility);
-      const { publisher } = setUp({ github });
-      await publisher.publish('task-1', CONTEXT);
-      expect(publication().shared).toMatchObject({ code: false, repository: null });
-      expect(publication().files.map((file) => file.id)).toEqual(['shot-1']);
-      expect(github.diffReads).toBe(0);
-      await running?.stop();
-    }
-  });
-
   test('a diff too large to share is left out, and not read again for the same head', async () => {
-    const github = createGitHub('public', 'x'.repeat(PUBLICATION_LIMITS.fileBytes + 1));
+    const github = createGitHub('x'.repeat(PUBLICATION_LIMITS.fileBytes + 1));
     const { publisher } = setUp({ github });
     await publisher.publish('task-1', CONTEXT);
     expect(publication().files.map((file) => file.id)).toEqual(['shot-1']);
     expect(publication().shared.code).toBe(true);
     await publisher.publish('task-1', CONTEXT);
     expect(github.diffReads).toBe(1);
-  });
-
-  test('reads the repository’s visibility again once the cached answer is old', async () => {
-    let now = 1_000;
-    const github = createGitHub('public');
-    const { publisher } = setUp({ github, now: () => now });
-    await publisher.publish('task-1', CONTEXT);
-    await publisher.publish('task-1', CONTEXT);
-    expect(github.visibilityReads).toBe(1);
-    now += VISIBILITY_TTL_MS;
-    await publisher.publish('task-1', CONTEXT);
-    expect(github.visibilityReads).toBe(2);
   });
 
   test('evidence it cannot share safely is left out, not published as a broken item', async () => {
@@ -274,7 +240,7 @@ describe('publishing a shared task', () => {
     expect(publication().files.map((file) => file.id)).toEqual(['shot-1', SHARE_DIFF_FILE]);
   });
 
-  test('a task with no repository and no files is published without checking any', async () => {
+  test('a task with no repository and no files is published without checking any or reading a diff', async () => {
     const { plane, publisher } = setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ repoId: null, pullRequest: null });
@@ -387,7 +353,7 @@ describe('previewing a share', () => {
         });
       },
     });
-    const preview = await publisher.preview('task-1');
+    const preview = publisher.preview('task-1');
     expect(preview.files).toEqual({
       'shot-1': '/api/evidence/settings.png',
       [SHARE_DIFF_FILE]: resolveSharePreviewDiffApiPath('task-1'),
@@ -398,9 +364,13 @@ describe('previewing a share', () => {
     expect(plane.calls).toEqual([]);
   });
 
-  test('a private repository previews with no code, and its diff is refused', async () => {
-    const { publisher, github } = setUp({ github: createGitHub('private') });
-    const preview = await publisher.preview('task-1');
+  test('a task without a pull request previews with no code, and its diff is refused', async () => {
+    const { publisher, github } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ pullRequest: null });
+      },
+    });
+    const preview = publisher.preview('task-1');
     expect(preview.files).toEqual({ 'shot-1': '/api/evidence/settings.png' });
     expect(preview.shared.code).toBe(false);
     await expect(publisher.previewDiff('task-1')).rejects.toThrow('This task shares no code.');
@@ -409,7 +379,7 @@ describe('previewing a share', () => {
 
   test('an unknown task cannot be previewed', async () => {
     const { publisher } = setUp();
-    await expect(publisher.preview('missing')).rejects.toThrow('No such task.');
+    expect(() => publisher.preview('missing')).toThrow('No such task.');
   });
 
   test('the routes answer the preview as JSON and the diff as plain text', async () => {

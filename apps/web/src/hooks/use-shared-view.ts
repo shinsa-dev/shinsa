@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { registerCodeSource } from '@/lib/connection/code.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
-import { createSharedCodeSource } from '@/lib/share/code.ts';
+import { createSharedCodeSource, resolveSharedHead } from '@/lib/share/code.ts';
 import { requestDiffText, ShareGoneError } from '@/lib/share/sources.ts';
 import { resolveSharedView, type SharedSource, type SharedView } from '@/lib/share/view.ts';
 
@@ -13,7 +13,10 @@ export type SharedViewLoad =
 function registerSharedCode(view: SharedView) {
   const { diffUrl } = view;
   const readDiff = diffUrl ? () => requestDiffText(diffUrl) : null;
-  return registerCodeSource(view.task.id, createSharedCodeSource(readDiff, view.task.branch));
+  return registerCodeSource(
+    view.task.id,
+    createSharedCodeSource(readDiff, view.task.branch, resolveSharedHead(view.task))
+  );
 }
 
 function resolveFailure(error: unknown): SharedViewLoad {

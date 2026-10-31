@@ -6,7 +6,7 @@ import { createSignal } from '@/lib/signal.ts';
 export const SHARE_TITLE = 'Share task';
 
 export const SHARE_DESCRIPTION =
-  'Anyone with the link can read this task on app.shinsa.dev without signing in: its request, plan, review, evidence and pull request. Chats never leave this machine, and nothing of a private repository’s code or file names is shared.';
+  'Anyone with the link can read this whole task on app.shinsa.dev without signing in, as it updates: its plan, review, checks, evidence, activity and code, for a private repository too. Chats, and messages and answers to agents, never leave this machine.';
 
 export const SHARE_NEEDS_REMOTE =
   'The link is served from app.shinsa.dev, so sharing needs remote access. Turn it on in Settings, then share this task.';

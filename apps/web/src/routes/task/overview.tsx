@@ -43,7 +43,7 @@ function EvidencePlace({
   return <EvidenceSection state={state} task={task} />;
 }
 
-function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
+export function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
   const report = task.report;
   if (!report || report.sections.length === 0) return null;
   const points = listReviewPoints(listReviewChapters(report, task.findings, task.reviewDisagreements));
@@ -94,7 +94,7 @@ function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task;
   );
 }
 
-function ActivityPanel({
+export function ActivityPanel({
   state,
   task,
   onOpenRun,

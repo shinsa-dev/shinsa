@@ -1,13 +1,17 @@
-import { type DiffFile, serializePlanMarkdown, type Task } from '@shinsa/core';
+import { type DiffFile, resolveTaskProgress, serializePlanMarkdown, type Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import { ChecksBlock } from '@/components/checks/checks-list.tsx';
 import { Choice } from '@/components/controls/choice.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
+import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
+import { TaskTrack } from '@/components/overview/progress-track.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
+import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { FACT } from '@/components/task/fact.ts';
 import { TaskHeading } from '@/components/task/heading.tsx';
@@ -19,7 +23,9 @@ import { resolveFileSource } from '@/lib/code/diff-view.ts';
 import { useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
 import { STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { resolveNowTitle } from '@/lib/overview/now.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
+import { listTimedSteps } from '@/lib/review/merge-steps.ts';
 import {
   describeSharedBy,
   listSharedTabs,
@@ -29,10 +35,12 @@ import {
   type SharedTab,
 } from '@/lib/share/page.ts';
 import type { SharedView } from '@/lib/share/view.ts';
+import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import { describePullRequestFact } from '@/lib/tasks/facts.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { resolveStageLabel, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
+import { ActivityPanel, ChangesPanel } from '@/routes/task/overview.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 
 function SharedFacts({ view, viewer }: { view: SharedView; viewer: string | null }) {
@@ -87,18 +95,38 @@ function SharedFacts({ view, viewer }: { view: SharedView; viewer: string | null
   );
 }
 
+function SharedStatus({ view }: { view: SharedView }) {
+  const { task, state } = view;
+  const checks = resolveChecksView(state, task);
+  const steps = listTimedSteps(task, 'pre_merge').length > 0;
+  return (
+    <NowFrame
+      eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={task.stageChangedAt} />} />}
+      title={resolveNowTitle(task, [], resolveTaskProgress(task).current, undefined)}
+      footer={<TaskTrack task={task} />}
+    >
+      {checks && <ChecksBlock taskId={task.id} view={checks} />}
+      {steps && <MergeStepsBlock task={task} when='pre_merge' readOnly />}
+    </NowFrame>
+  );
+}
+
 function SharedOverview({ view }: { view: SharedView }) {
   const { task, state } = view;
   const plan = task.plan?.document ?? null;
+  const openReview = () => updateSearchParams({ tab: 'review' });
   return (
     <PageScroll>
       <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
+        <SharedStatus view={view} />
         <ResultPanel task={task} />
         {task.summary && (
           <Panel persistId={resolveOverviewPanelId(task, 'summary')} title='Summary' icon='IconNote1'>
             <Markdown text={task.summary} className='selectable text-fg-4' />
           </Panel>
         )}
+        <EvidenceSection state={state} task={task} />
+        <ChangesPanel task={task} onOpen={openReview} />
         <Panel persistId={resolveOverviewPanelId(task, 'plan')} title='Plan' icon='IconChecklist'>
           {plan ? (
             <Markdown text={serializePlanMarkdown(plan)} className='selectable text-fg-4' />
@@ -106,7 +134,7 @@ function SharedOverview({ view }: { view: SharedView }) {
             <p className='text-fg-2 text-xs'>{NO_PLAN_YET}</p>
           )}
         </Panel>
-        <EvidenceSection state={state} task={task} />
+        {task.activity.length > 0 && <ActivityPanel state={state} task={task} onOpenRun={() => undefined} />}
       </div>
     </PageScroll>
   );

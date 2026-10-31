@@ -10,7 +10,7 @@ export const SHARED_TAB_LABEL: Record<SharedTab, string> = {
 };
 
 export const SHARED_PREVIEW_NOTE =
-  'A preview of what anyone with the link sees. Chats, activity and notes never leave this machine.';
+  'A preview of what anyone with the link sees. Chats never leave this machine.';
 
 export const SHARED_READ_ONLY_NOTE = 'Read-only. Only its owner can change this task, from their own Shinsa.';
 

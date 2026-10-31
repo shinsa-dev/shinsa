@@ -51,7 +51,7 @@ function publication(overrides: Partial<SharedPublication['shared']> = {}): Shar
 }
 
 describe('the shared page on app.shinsa.dev', () => {
-  it('shows a public task read-only, with who shared it and its code from the published diff', async () => {
+  it('shows a task read-only, with who shared it and its code from the published diff', async () => {
     serve({
       '/__remote/shares/tok': () => Response.json(publication()),
       '/__remote/shares/tok/files/diff': () => new Response(DIFF),
@@ -70,19 +70,33 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(await screen.findByText('src/keys.ts')).toBeTruthy();
   });
 
-  it('shows a private task without its repository, its code or a link to its pull request', async () => {
+  it('shows where the task stands, what changed and its activity, like its owner’s overview', async () => {
+    const shared = publication();
+    shared.shared.task = {
+      ...shared.shared.task,
+      activity: [
+        { at: 1, actor: 'agent', kind: 'work', text: 'Finished phase 1.', detail: null, evidenceId: null },
+      ],
+    };
+    serve({ '/__remote/shares/tok': () => Response.json(shared) });
+    render(<SharePage token='tok' />);
+    expect(await screen.findByText('Rotate API keys')).toBeTruthy();
+    expect(screen.getByText('What changed')).toBeTruthy();
+    expect(screen.getByText('Rotate keys')).toBeTruthy();
+    expect(screen.getByText('Activity')).toBeTruthy();
+    expect(screen.getByText('Finished phase 1.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Read the review' }));
+    expect(await screen.findByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
+  });
+
+  it('a task with no repository has no Code tab', async () => {
     const shared = publication({ code: false, repository: null });
     shared.files = [];
-    const task = shared.shared.task;
-    shared.shared.task = { ...task, pullRequest: task.pullRequest && { ...task.pullRequest, url: '' } };
     serve({ '/__remote/shares/tok': () => Response.json(shared) });
     render(<SharePage token='tok' />);
     expect(await screen.findByText('Rotate API keys')).toBeTruthy();
     expect(screen.queryByText('acme/app')).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Code' })).toBeNull();
-    expect(screen.getByText('#7').closest('a')?.getAttribute('href')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: 'Review' }));
-    expect(await screen.findByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
   });
 
   it('says you shared it when you are signed in to app.shinsa.dev as its owner', async () => {
