@@ -2399,8 +2399,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
   prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
   none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went and why; when the call fails, no
-  Claude account or a timeout, the toast says the policies were not read and why, `requestPolicyPlacement`); then, with no answer, the
+  "Your routing policies decide when you start it", and the toast says where the task went and why; when every provider fails (no
+  Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
+  `placement_unreadable`, so the toast says the policies were not read and why (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
   focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole

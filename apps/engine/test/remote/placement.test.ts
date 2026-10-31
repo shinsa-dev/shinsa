@@ -30,8 +30,19 @@ describe('choosing a machine by its policies', () => {
     expect(asked[0]?.[0]).toBe(PLACEMENT_SYSTEM);
     expect(asked[0]?.[1]).toContain('Run Xcode simulator tests on this machine.');
     expect(asked[0]?.[2]).toBe(PLACEMENT_SCHEMA);
+    const none = createPlacementAsker(<T>() =>
+      Promise.resolve({ machine: 'none', reason: 'No policy fits.' } as T)
+    );
+    expect(await none(QUESTION)).toBeNull();
+  });
+
+  test('refuses when Claude does not answer or names no machine, so the page says the policies were not read', async () => {
     const silent = createPlacementAsker(<T>() => Promise.resolve(null as T));
-    expect(await silent(QUESTION)).toBeNull();
+    await expect(silent(QUESTION)).rejects.toThrow(
+      'Claude did not answer: no account worked, or it timed out.'
+    );
+    const stray = createPlacementAsker(<T>() => Promise.resolve({ machine: 'laptop', reason: 'x' } as T));
+    await expect(stray(QUESTION)).rejects.toThrow('Claude’s answer named none of your machines.');
   });
 
   test('POST /api/placement answers with the machine, and refuses a question it cannot read', async () => {
