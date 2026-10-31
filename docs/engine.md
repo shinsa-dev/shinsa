@@ -1236,7 +1236,8 @@ Where you decide, above). Elsewhere, a message the classifier reads as needing n
 recorded, and a message it reads as new work queues the next round,
 and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
 on your behalf, or a schedule sends, to a task with any open gate but the result gate is not delivered into the gate (at an
-answered task it asks the follow-up, which brings the gate back with the new answer; only new work there is kept): core records it
+answered task it asks the follow-up, which brings the gate back with the new answer, and new work there, a kept
+suggestion too, queues its round, which starts once you close the answer): core records it
 (`task.messaged` with `kept`) and keeps it in `Task.untoldMessages`, and the next run of the task's own session (the
 Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
 which can only report) is told it once, at the tail of its prompt

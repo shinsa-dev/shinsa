@@ -277,8 +277,8 @@ function isRepeatedMessage(task: Task, text: string, now: number) {
   );
 }
 
-function isHeldForYou(state: ShinsaState, task: Task, kind: MessageKind) {
-  return listOpenGates(state, task.id).some((gate) => gate.type !== 'result' || kind === 'new_round');
+function isHeldForYou(state: ShinsaState, task: Task) {
+  return listOpenGates(state, task.id).some((gate) => gate.type !== 'result');
 }
 
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
@@ -290,7 +290,7 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
-  if (sentForYou && isHeldForYou(decider.state, task, kind)) {
+  if (sentForYou && isHeldForYou(decider.state, task)) {
     recordMessages(decider, task.id, texts, { ...scheduled, kept: true });
     return;
   }

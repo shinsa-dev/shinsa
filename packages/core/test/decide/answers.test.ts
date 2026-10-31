@@ -5,6 +5,7 @@ import {
   isTaskSettled,
   listActiveRuns,
   listOpenGates,
+  listQueuedRounds,
   resolveCurrentRound,
   resolveMessageEffect,
   resolveQueue,
@@ -107,7 +108,7 @@ describe('ask mode', () => {
     expect(listOpenGates(harness.state, taskId).filter((gate) => gate.type === 'result')).toHaveLength(0);
   });
 
-  test('an agent on your behalf can ask an answered question a follow-up, but not close it with new work', () => {
+  test('an agent on your behalf can ask an answered question a follow-up, and its new work waits until you close it', () => {
     const { harness, taskId } = ask();
     answer(harness, taskId);
     harness.send(
@@ -115,6 +116,9 @@ describe('ask mode', () => {
       { onBehalf: true, byTask: 'other' }
     );
     expect(harness.task(taskId).stage).toBe('answered');
+    expect(listQueuedRounds(harness.task(taskId)).map((round) => round.request)).toEqual([
+      'Make it retry five times.',
+    ]);
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
     harness.send(
       { type: 'task.message', taskId, text: 'And on a timeout?' },
@@ -123,6 +127,18 @@ describe('ask mode', () => {
     expect(harness.task(taskId).stage).toBe('answering');
     answer(harness, taskId, 'It gives up after a minute.');
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
+    expect(resolveCurrentRound(harness.task(taskId)).number).toBe(1);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(resolveCurrentRound(harness.task(taskId))).toMatchObject({
+      number: 2,
+      request: 'Make it retry five times.',
+    });
+    expect(listQueuedRounds(harness.task(taskId))).toHaveLength(0);
   });
 
   test('an agent on your behalf can neither mark an answered question done nor cancel it', () => {
@@ -137,7 +153,7 @@ describe('ask mode', () => {
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
   });
 
-  test('a suggestion kept for you waits behind the answer, and kept by you closes it and starts the round', () => {
+  test('a suggestion kept for you queues its round behind the answer, and kept by you closes it and starts the rounds', () => {
     const { harness, taskId } = ask();
     const retry = {
       title: 'Retry five times',
@@ -159,9 +175,12 @@ describe('ask mode', () => {
     );
     expect(harness.task(taskId).stage).toBe('answered');
     expect(resolveCurrentRound(harness.task(taskId)).number).toBe(1);
+    expect(listQueuedRounds(harness.task(taskId)).map((round) => round.number)).toEqual([2]);
+    expect(harness.task(taskId).suggestions?.find((entry) => entry.id === first)?.keptRound).toBe(2);
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['result']);
     harness.send({ type: 'suggestion.keep', taskId, suggestionId: second ?? '' });
-    expect(resolveCurrentRound(harness.task(taskId)).number).toBe(2);
+    expect(resolveCurrentRound(harness.task(taskId))).toMatchObject({ number: 2, title: 'Retry five times' });
+    expect(listQueuedRounds(harness.task(taskId)).map((round) => round.number)).toEqual([3]);
     expect(listOpenGates(harness.state, taskId).filter((gate) => gate.type === 'result')).toHaveLength(0);
   });
 
