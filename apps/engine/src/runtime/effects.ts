@@ -445,6 +445,7 @@ export class EffectRunner {
         size: triage.size,
         branch: triage.branch,
         waitsOn: triage.waitsOn.map((dependency) => dependency.id),
+        duplicateOf: triage.duplicateOf,
         shape: triage.shape,
         priority: triage.priority,
         reasons: triage.reasons,

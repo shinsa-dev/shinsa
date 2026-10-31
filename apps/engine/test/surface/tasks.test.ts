@@ -338,6 +338,16 @@ describe('the task commands', () => {
       'Running this step again on acc-1.',
     ],
     [['tasks', 'cancel', 'fix'], { type: 'task.cancel', taskId: 'task-123' }, 'Cancelled.'],
+    [
+      ['tasks', 'duplicate', 'fix', '--of', 'search'],
+      { type: 'task.mark_duplicate', taskId: 'task-123', duplicateOf: 'task-456' },
+      'Closed as a duplicate.',
+    ],
+    [
+      ['tasks', 'not-duplicate', 'fix'],
+      { type: 'task.clear_duplicate', taskId: 'task-123' },
+      'Started it again.',
+    ],
     [['tasks', 'done', 'fix'], { type: 'task.complete', taskId: 'task-123' }, 'Marked as done.'],
     [
       ['tasks', 'prioritize', 'fix', 'urgent'],
