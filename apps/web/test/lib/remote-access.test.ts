@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  canEnrollDevices,
   describeDeviceSeen,
   describeEnrollmentExpiry,
   describeEnrollmentStep,
   describeRemoteStatus,
   isEnrollmentExpired,
+  resolveEnrollmentState,
   resolveQrImage,
   selectEnrolledDevice,
 } from '@/lib/remote-access.ts';
@@ -83,11 +85,31 @@ describe('remote access words', () => {
     expect(isEnrollmentExpired(NOW + 1, NOW)).toBe(false);
     expect(isEnrollmentExpired(NOW, NOW)).toBe(true);
     const enrollment = { id: 'link-1', url: 'u', name: 'iPhone', expiresAt: NOW };
-    expect(describeEnrollmentStep(null, false)).toStartWith('Name the device you are adding');
-    expect(describeEnrollmentStep(enrollment, false)).toStartWith('Scan this on the phone');
-    expect(describeEnrollmentStep(enrollment, true)).toBe(
+    expect(describeEnrollmentStep(null, 'live')).toStartWith('Name the device you are adding');
+    expect(describeEnrollmentStep(enrollment, 'live')).toStartWith('Scan this on the phone');
+    expect(describeEnrollmentStep(enrollment, 'expired')).toBe(
       'This link expired before a device used it. Make a new one to add iPhone.'
     );
+    expect(describeEnrollmentStep(enrollment, 'stopped')).toBe(
+      'Remote access stopped, so this link no longer works. Make a new one to add iPhone once it is on again.'
+    );
+  });
+
+  it('calls a link stopped once remote access dropped it, even after it expired', () => {
+    const enrollment = { id: 'link-1', url: 'u', name: 'iPhone', expiresAt: NOW + 1 };
+    expect(resolveEnrollmentState(null, null, NOW)).toBe('live');
+    expect(resolveEnrollmentState(enrollment, null, NOW)).toBe('live');
+    expect(resolveEnrollmentState(enrollment, 'link-0', NOW + 1)).toBe('expired');
+    expect(resolveEnrollmentState(enrollment, 'link-1', NOW + 1)).toBe('stopped');
+  });
+
+  it('takes a new device only while paired, on and not removed at app.shinsa.dev', () => {
+    expect(canEnrollDevices(null)).toBe(false);
+    expect(canEnrollDevices(createRemoteSnapshot())).toBe(true);
+    expect(canEnrollDevices(createRemoteSnapshot({ status: 'reconnecting' }))).toBe(true);
+    expect(canEnrollDevices(createRemoteSnapshot({ enabled: false }))).toBe(false);
+    expect(canEnrollDevices(createRemoteSnapshot({ paired: false }))).toBe(false);
+    expect(canEnrollDevices(createRemoteSnapshot({ status: 'revoked' }))).toBe(false);
   });
 
   it('draws the link as a square QR code on white, one black cell per dark module', () => {

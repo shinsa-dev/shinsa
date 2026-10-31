@@ -57,10 +57,29 @@ export function isEnrollmentExpired(expiresAt: number, now = Date.now()) {
   return expiresAt <= now;
 }
 
-export function describeEnrollmentStep(enrollment: RemoteEnrollment | null, expired: boolean) {
+export type EnrollmentState = 'live' | 'expired' | 'stopped';
+
+export function canEnrollDevices(snapshot: RemoteSnapshot | null) {
+  return snapshot?.paired === true && snapshot.enabled && snapshot.status !== 'revoked';
+}
+
+export function resolveEnrollmentState(
+  enrollment: RemoteEnrollment | null,
+  stoppedId: string | null,
+  now = Date.now()
+): EnrollmentState {
+  if (enrollment && enrollment.id === stoppedId) return 'stopped';
+  if (enrollment && isEnrollmentExpired(enrollment.expiresAt, now)) return 'expired';
+  return 'live';
+}
+
+export function describeEnrollmentStep(enrollment: RemoteEnrollment | null, state: EnrollmentState) {
   if (!enrollment)
     return 'Name the device you are adding, a browser or a phone. Shinsa makes a one-time link for it.';
-  if (expired) return `This link expired before a device used it. Make a new one to add ${enrollment.name}.`;
+  if (state === 'stopped')
+    return `Remote access stopped, so this link no longer works. Make a new one to add ${enrollment.name} once it is on again.`;
+  if (state === 'expired')
+    return `This link expired before a device used it. Make a new one to add ${enrollment.name}.`;
   return 'Scan this on the phone, or open the link on the device you are adding, and sign in with GitHub.';
 }
 

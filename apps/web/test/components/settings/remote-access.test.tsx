@@ -97,6 +97,8 @@ describe('Settings → Remote access', () => {
 
   it('offers Resume when paused, and neither when app.shinsa.dev removed the machine', async () => {
     const paused = renderGroup(createRemoteSnapshot({ enabled: false }));
+    expect(screen.queryByRole('button', { name: 'Add device' })).toBeNull();
+    expect(screen.getByText('Devices that can reach this machine')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(paused.resume).toHaveBeenCalled());
   });
@@ -184,5 +186,33 @@ describe('Settings → Remote access', () => {
     await screen.findByRole('img', { name: 'QR code for the link' });
     expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
     expect(actions.createEnrollment).toHaveBeenLastCalledWith('iPhone');
+  });
+
+  it('drops the QR code the moment remote access stops, and keeps it dropped after Resume', async () => {
+    const actions = renderGroup(createRemoteSnapshot());
+    await openLink();
+    const stopped =
+      'Remote access stopped, so this link no longer works. Make a new one to add iPhone once it is on again.';
+    actions.push(createRemoteSnapshot({ enabled: false }));
+    await screen.findByText(stopped);
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Make new link' }).hasAttribute('disabled')).toBe(true);
+    actions.push(createRemoteSnapshot());
+    expect(screen.getByText(stopped)).toBeTruthy();
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
+    actions.createEnrollment.mockImplementation((name: string) =>
+      Promise.resolve({ id: 'link-2', url: ENROLL_URL, name, expiresAt: Date.now() + 600_000 })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
+    await screen.findByRole('img', { name: 'QR code for the link' });
+    expect(actions.createEnrollment).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops the QR code when the machine is removed here or at app.shinsa.dev', async () => {
+    const actions = renderGroup(createRemoteSnapshot());
+    await openLink();
+    actions.push(createRemoteSnapshot({ status: 'revoked' }));
+    await screen.findByText(/Remote access stopped/);
+    expect(screen.queryByRole('img', { name: 'QR code for the link' })).toBeNull();
   });
 });

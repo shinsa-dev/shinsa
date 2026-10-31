@@ -27,12 +27,13 @@ import {
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
 import {
+  canEnrollDevices,
   describeDeviceSeen,
   describeEnrollmentExpiry,
   describeEnrollmentStep,
   describeRemoteStatus,
-  isEnrollmentExpired,
   REMOTE_ACCESS_SECTION,
+  resolveEnrollmentState,
   resolveQrImage,
   selectEnrolledDevice,
 } from '@/lib/remote-access.ts';
@@ -64,11 +65,13 @@ function EnrollmentView({ enrollment, now }: { enrollment: RemoteEnrollment; now
 function AddDeviceDialog({
   control,
   devices,
+  canEnroll,
   onCreate,
   onAdded,
 }: {
   control: DialogControl;
   devices: RemoteDevice[];
+  canEnroll: boolean;
   onCreate: RemoteAccessActions['createEnrollment'];
   onAdded: () => void;
 }) {
@@ -76,8 +79,11 @@ function AddDeviceDialog({
   const [busy, setBusy] = React.useState(false);
   const [enrollment, setEnrollment] = React.useState<RemoteEnrollment | null>(null);
   const formId = React.useId();
+  const [stoppedId, setStoppedId] = React.useState<string | null>(null);
   const now = useNow();
-  const expired = enrollment !== null && isEnrollmentExpired(enrollment.expiresAt, now);
+  if (enrollment && !canEnroll && stoppedId !== enrollment.id) setStoppedId(enrollment.id);
+  const state = resolveEnrollmentState(enrollment, stoppedId, now);
+  const live = enrollment !== null && state === 'live';
   const addedKey = selectEnrolledDevice(devices, enrollment)?.publicKey ?? null;
 
   React.useEffect(() => {
@@ -97,9 +103,9 @@ function AddDeviceDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{enrollment ? `Add ${enrollment.name}` : 'Add a device'}</DialogTitle>
-          <DialogDescription>{describeEnrollmentStep(enrollment, expired)}</DialogDescription>
+          <DialogDescription>{describeEnrollmentStep(enrollment, state)}</DialogDescription>
         </DialogHeader>
-        {enrollment && !expired && <EnrollmentView enrollment={enrollment} now={now} />}
+        {live && <EnrollmentView enrollment={enrollment} now={now} />}
         {!enrollment && (
           <form
             id={formId}
@@ -121,7 +127,7 @@ function AddDeviceDialog({
           </form>
         )}
         <DialogFooter>
-          {enrollment && !expired && (
+          {live && (
             <>
               <Button
                 variant='secondary'
@@ -133,10 +139,10 @@ function AddDeviceDialog({
               <DialogClose render={<Button />}>Done</DialogClose>
             </>
           )}
-          {expired && (
+          {enrollment && !live && (
             <>
               <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
-              <Button loading={busy} onClick={() => void create()}>
+              <Button loading={busy} disabled={!canEnroll} onClick={() => void create()}>
                 Make new link
               </Button>
             </>
@@ -253,10 +259,12 @@ type RemoteDialog = { kind: 'add' } | { kind: 'remove' } | { kind: 'forget'; dev
 function RemoteDialogs({
   dialog,
   devices,
+  canEnroll,
   actions,
 }: {
   dialog: ReturnType<typeof useDialogState<RemoteDialog>>;
   devices: RemoteDevice[];
+  canEnroll: boolean;
   actions: RemoteAccessActions;
 }) {
   const { value } = dialog;
@@ -265,6 +273,7 @@ function RemoteDialogs({
       <AddDeviceDialog
         control={dialog.control}
         devices={devices}
+        canEnroll={canEnroll}
         onCreate={actions.createEnrollment}
         onAdded={dialog.close}
       />
@@ -308,12 +317,13 @@ export function RemoteAccessGroup({
 }) {
   const dialog = useDialogState<RemoteDialog>();
   const canAdd = snapshot?.paired === true && snapshot.status !== 'revoked';
+  const canEnroll = canEnrollDevices(snapshot);
   return (
     <SettingsGroup
       title={REMOTE_ACCESS_SECTION}
       description={DESCRIPTION}
       action={
-        canAdd ? (
+        canEnroll ? (
           <Button
             variant='secondary'
             size='sm'
@@ -346,7 +356,12 @@ export function RemoteAccessGroup({
           onForget={() => dialog.show({ kind: 'forget', device })}
         />
       ))}
-      <RemoteDialogs dialog={dialog} devices={snapshot?.devices ?? NO_DEVICES} actions={actions} />
+      <RemoteDialogs
+        dialog={dialog}
+        devices={snapshot?.devices ?? NO_DEVICES}
+        canEnroll={canEnroll}
+        actions={actions}
+      />
     </SettingsGroup>
   );
 }

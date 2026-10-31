@@ -2404,13 +2404,16 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used and Forget, and Add device: you name the device, and the one-time link
+  added devices with when each was last used and Forget, and Add device (only while it is on, since pausing drops
+  every link: `canEnrollDevices`): you name the device, and the one-time link
   shows as a QR code to scan with a phone, with Copy and Add this device for the browser in front of you. That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
   wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. The
   dialog closes with a toast ("iPhone is added.") the moment a device with its link's id shows up, and a link that
-  expires while it is open gives way to Make new link. Every change to remote access reaches every open page at once:
+  expires while it is open gives way to Make new link. So does one remote access dropped: once a push says it is
+  paused, removed or removed at app.shinsa.dev, the link is marked stopped for good, since resuming does not bring
+  back the links `Remote.stop` cleared. Every change to remote access reaches every open page at once:
   `Remote` notifies on each one (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a
   pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
