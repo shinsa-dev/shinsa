@@ -122,7 +122,7 @@ function writeSource(decider: Decider, projectId: string, source: WatchSource) {
 function resolveWiderData(known: string, used: string) {
   if (known.toLowerCase().includes(used.toLowerCase())) return known;
   const joined = `${known}; ${used}`;
-  return joined.length <= PROTOCOL_LIMITS.watchdogData ? joined : used;
+  return joined.length <= PROTOCOL_LIMITS.watchdogData ? joined : known;
 }
 
 function recordAgentSource(decider: Decider, task: Task, source: WatchdogSource) {

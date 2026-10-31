@@ -1167,6 +1167,16 @@ describe('hand-overs', () => {
       },
     });
     const { call, dispatched, done, running } = await handOverSetup(undefined, { extensions });
+    const { walkthrough } = watch('apps/marketing serves /updates.');
+    await expect(
+      call('complete_phase', {
+        summary: 'Wrote it.',
+        spots: [],
+        judgement_calls: [],
+        walkthrough: { approach: 'Serve the feed.', flow: 'Request, then Worker.', ...walkthrough },
+      })
+    ).rejects.toThrow('suggests `Cloudflare`, a server you already have.');
+    expect(dispatched.some((command) => command.type === 'agent.complete_phase')).toBe(false);
     const refusal = call('complete_fix', watch('apps/marketing serves /updates.'));
     await expect(refusal).rejects.toThrow(
       'walkthrough.watchdogs[0].source_request suggests `Cloudflare`, a server you already have.'

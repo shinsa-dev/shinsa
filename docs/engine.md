@@ -1443,7 +1443,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   it checks every server that could hold the data with that server's own tools (`mcp_list`, `load_mcp_server`) before
   it asks for one. A `source_request` names the servers it checked and why each falls short in `evidence`: on
   `complete_phase` and `complete_fix` the engine refuses one whose `suggestions` name a server the run already has
-  (loaded or deferred, a whole-word match ignoring case) and whose `evidence` does not (`listHeldSourceRequests`,
+  (loaded or deferred, a whole-word match ignoring case) and whose `evidence` does not say it checked that server (“checked <server>” in one clause; a mere mention of the platform does not count) (`listHeldSourceRequests`,
   `assertHeldSourcesUsed` in `agents/handover.ts`). The handover skill says when one is worth it, a fix revises them like
   `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
 - **Integrations a project uses live on the project.** A project lists the MCP servers from Integrations its agents
@@ -1452,7 +1452,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   covers, none meaning every repository, `addedBy` `you` or `agent`), at most 20. A watchdog whose server the project
   does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
   repository finds it, and one it lists whose `data` does not cover what the watchdog reads is widened: the two joined
-  when they fit in 200 characters, the watchdog's otherwise; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
+  when they fit in 200 characters, left as it is otherwise, so your description is never replaced; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
   them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
   connects one for you. A watch reads one too, filing a task for each new report in it, and a project that starts
   using an integration is offered one (Schedules and webhooks → Suggested watches, below).

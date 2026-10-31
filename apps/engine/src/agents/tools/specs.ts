@@ -230,7 +230,7 @@ const WALKTHROUGH_PARTS = {
               L.watchdogEvidence
             ),
             suggestions: textList(
-              'Servers the human could connect, by name and where they come from (an official MCP server, Composio). Never one you already have, unless evidence says why it falls short.',
+              'Servers the human could connect, by name and where they come from (an official MCP server, Composio). Never one you already have, unless evidence says “checked <server>” and why it falls short.',
               L.watchdogSuggestions,
               L.watchdogSuggestion
             ),

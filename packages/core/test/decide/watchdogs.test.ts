@@ -271,7 +271,7 @@ describe('arming watchdogs', () => {
     ]);
   });
 
-  test('a source the project lists more narrowly is widened to what the watchdog reads there', () => {
+  test('a source the project lists more narrowly is widened to what the watchdog reads there, and kept when that would not fit', () => {
     expect(mergeOverSource('Logs of the billing Worker')).toEqual([
       {
         server: 'maple',
@@ -281,7 +281,7 @@ describe('arming watchdogs', () => {
         addedAt: expect.any(Number),
       },
     ]);
-    expect(mergeOverSource('x'.repeat(180))?.[0]?.data).toBe('OpenTelemetry traces and logs of the API');
+    expect(mergeOverSource('x'.repeat(180))?.[0]?.data).toBe('x'.repeat(180));
   });
 });
 

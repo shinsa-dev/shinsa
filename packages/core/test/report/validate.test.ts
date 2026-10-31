@@ -1454,9 +1454,21 @@ describe('a source request for a server the agent already has', () => {
         'kampala',
       ])
     ).toEqual([
-      'walkthrough.watchdogs[1].source_request suggests `Cloudflare`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, say in `evidence` that you checked `Cloudflare` and why it falls short.',
-      'walkthrough.watchdogs[1].source_request suggests `maple`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, say in `evidence` that you checked `maple` and why it falls short.',
+      'walkthrough.watchdogs[1].source_request suggests `Cloudflare`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked Cloudflare” and why it falls short.',
+      'walkthrough.watchdogs[1].source_request suggests `maple`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked maple” and why it falls short.',
     ]);
+  });
+
+  test('is refused when the evidence only mentions the server without saying it was checked', () => {
+    expect(
+      listHeldSourceRequests(
+        requestFor(
+          ['Cloudflare’s official MCP server'],
+          'serves /updates/* from the site Cloudflare Worker. Checked maple.'
+        ),
+        ['Cloudflare']
+      )
+    ).toHaveLength(1);
   });
 
   test('passes a server named only inside another word, one the evidence explains, and a watchdog with a source', () => {
@@ -1470,7 +1482,7 @@ describe('a source request for a server the agent already has', () => {
       listHeldSourceRequests(
         requestFor(
           ['Cloudflare’s official MCP server'],
-          'apps/marketing logs on Cloudflare; the connected Cloudflare server sees only another account.'
+          'apps/marketing logs on Cloudflare; I checked Cloudflare: it sees only another account.'
         ),
         ['Cloudflare']
       )
