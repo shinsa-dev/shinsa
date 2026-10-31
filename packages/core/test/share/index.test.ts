@@ -278,7 +278,9 @@ describe('what a shared task shows', () => {
           text: 'Asked for changes on the review',
           detail: 'The key is sk-live-123.',
           evidenceId: null,
-          comments: [{ path: 'src/a.ts', line: 3, body: 'Use the staging secret here.' }] as never,
+          comments: [
+            { path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Use the staging secret here.' },
+          ],
         },
       ],
     };
@@ -293,6 +295,23 @@ describe('what a shared task shows', () => {
         runId: null,
       },
     ]);
+  });
+
+  test('a finding keeps your verdict, never the note you wrote with it', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    const base = harness.task(taskId);
+    const task: Task = {
+      ...base,
+      findings: base.findings.map((finding) => ({
+        ...finding,
+        verdict: 'dismiss',
+        verdictNote: 'The key is sk-live-123.',
+      })),
+    };
+    const shared = resolveSharedTask(harness.state, task, CONTEXT).task.findings[0];
+    expect(shared?.verdict).toBe('dismiss');
+    expect(shared).not.toHaveProperty('verdictNote');
   });
 
   test('a task with no repository shows no code', () => {

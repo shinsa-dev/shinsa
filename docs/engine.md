@@ -2547,10 +2547,10 @@ publishing path will serve teams.
   | Merge steps and which are ticked | kept |
   | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed |
   | The diff (Code) | the pull request's, from GitHub, once one is open or merged |
-  | Activity | kept, without messages, gate questions and answers, and account changes |
+  | Activity | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments |
   | Notes | kept |
   | Chats, transcripts, runs, tool calls, sessions, accounts, costs | never |
-  | Messages to agents, gates' questions and answers, plan answers, verdict notes' drafts, the inbox | never |
+  | Messages to agents, gates' questions and answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
   | Worktree, waits, delegations, the task's origin | never |
   | Links to other tasks (`shinsa://task/…`) | their label as plain text |
 

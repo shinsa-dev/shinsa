@@ -98,7 +98,6 @@ function redactFinding(finding: ReviewFinding): ReviewFinding {
     message: finding.message,
     ...(finding.fix ? { fix: finding.fix } : {}),
     ...(finding.verdict ? { verdict: finding.verdict } : {}),
-    verdictNote: finding.verdictNote ?? null,
   };
 }
 
