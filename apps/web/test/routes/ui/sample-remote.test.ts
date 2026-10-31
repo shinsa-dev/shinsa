@@ -5,6 +5,7 @@ import {
   createSampleMachineServices,
   createSampleRemote,
   createSampleRemoteActions,
+  createStaticConnection,
 } from '@/routes/ui/sample-remote.ts';
 
 const NOW = 1_800_000_000_000;
@@ -63,6 +64,11 @@ describe('the /ui remote access samples', () => {
     expect(fleet.selectTerminals()).toBeNull();
     fleet.replaceTerminals(null as never);
     expect(fleet.selectMachine('task')).toBeNull();
+    expect(fleet.listMachines().map((machine) => machine.name)).toEqual(['Studio', 'Laptop']);
+    expect(fleet.listUnreachableMachines()).toEqual([]);
+    const single = createStaticConnection(createState());
+    expect(single.listMachines()).toEqual([]);
+    expect(single.listUnreachableMachines()).toEqual([]);
     await expect(fleet.command({ type: 'focus.clear' } as never)).rejects.toThrow(REFUSED);
     await expect(fleet.fetch(new Request('http://mac/api/tasks'))).rejects.toThrow('Nothing is sent.');
     fleet.close();

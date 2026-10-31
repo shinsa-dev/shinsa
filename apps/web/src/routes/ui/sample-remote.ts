@@ -137,7 +137,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
   };
 }
 
-function createStaticConnection(state: ShinsaState): ShinsaConnection {
+export function createStaticConnection(state: ShinsaState): ShinsaConnection {
   const snapshot = { state: state as unknown as WireState, status: 'open' as const };
   const quiet = () => () => undefined;
   const none = () => null;
