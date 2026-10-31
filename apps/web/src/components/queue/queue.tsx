@@ -43,15 +43,17 @@ export function WideSection({
   count,
   empty,
   persistId,
+  defaultOpen = true,
   children,
 }: {
   title: string;
   count: number;
   empty: string | null;
   persistId: DisclosureId;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const disclosure = useDisclosure(persistId, true);
+  const disclosure = useDisclosure(persistId, defaultOpen);
   return (
     <section className={cn('flex flex-col gap-1', disclosure.open && 'pb-1')}>
       <SectionLabel count={count} disclosure={disclosure} className='px-1'>
@@ -146,6 +148,7 @@ function QueueSectionView({
       count={section.items.length}
       empty={section.empty}
       persistId={resolveHomeSectionId(section.key)}
+      defaultOpen={section.opensOnHome}
     >
       {rows}
     </WideSection>
