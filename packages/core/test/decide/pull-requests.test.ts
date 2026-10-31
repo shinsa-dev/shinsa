@@ -1403,8 +1403,8 @@ describe('cancelling a task with open pull requests', () => {
       harness.send({ type: 'pull_request.record_closed', taskId, closed: [42], failed: [] }).events
     ).toEqual([]);
     harness.send({ type: 'task.cancel', taskId });
-    expect(harness.send({ type: 'pull_request.record_closed', taskId, closed: [], failed: [] }).events).toEqual(
-      []
-    );
+    expect(
+      harness.send({ type: 'pull_request.record_closed', taskId, closed: [], failed: [] }).events
+    ).toEqual([]);
   });
 });
