@@ -45,6 +45,7 @@ import type {
   WorkspaceMode,
 } from '../domain/index.ts';
 import type {
+  PullRequestCloseFailure,
   PullRequestWatch,
   PullRequestWatchChange,
   PushHookFailure,
@@ -263,6 +264,12 @@ type EventBody =
       detail: string;
     }
   | { type: 'pull_request.hook_failed'; taskId: string; failure: PushHookFailure }
+  | {
+      type: 'pull_request.closed';
+      taskId: string;
+      closed: number[];
+      failed: PullRequestCloseFailure[];
+    }
   | {
       type: 'pull_request.watched';
       taskId: string;
