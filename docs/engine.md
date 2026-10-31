@@ -2450,6 +2450,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`/enroll#…`: the fragment is kept in `sessionStorage` through the GitHub sign-in and taken out of the address
   bar at once). Adding a browser makes a P-256 key pair that cannot be exported, kept in IndexedDB (`shinsa-remote`)
   with the machine key pinned from the link, and proves the one-time secret in its first handshake.
+- **The iPhone app** (`shinsa-dev/shinsa-ios`) reaches the same machines without a browser's cookie jar. It signs in
+  through the system sign-in sheet with `/__remote/sign-in?client=native&redirect=shinsa://signed-in&code_challenge=…`;
+  app.shinsa.dev sends it back to `shinsa://signed-in?code=<one-time code>`, which it trades with its PKCE verifier at
+  `POST /__remote/sign-in/token` for a session token, then calls every signed-in route with `Authorization: Bearer`
+  (`apps/cloud/CLAUDE.md` → Sign-in). Nothing changes on the machine: the app sends `Origin: https://app.shinsa.dev` on
+  the channel's socket, and it is added like any device, by scanning Add device's QR code.
 - **One dashboard over every machine** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every machine
   of your account that this browser was added to joins one `Fleet`, each over its own sealed channel (`RemoteLink`,
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
