@@ -11,9 +11,11 @@ import {
   type MachineChoice,
   useMachineAccess,
   useMachines,
+  useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
+import { resolveOutdatedMessage } from '@/lib/remote/fleet.ts';
 import {
   listMachineRows,
   listTaskCapacityItems,
@@ -129,6 +131,9 @@ function MachineItem({
   onRemove: () => void;
 }) {
   const machine = useMachines().find((candidate) => candidate.id === row.instance.id);
+  const outdated = useUnreachableMachines().some(
+    (candidate) => candidate.id === row.instance.id && candidate.outdated
+  );
   const detail = machine ? `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}` : row.access;
   return (
     <div className={SETTING_ROW}>
@@ -139,7 +144,9 @@ function MachineItem({
             {row.status}
           </span>
         </div>
-        <Truncate className='text-2xs text-fg-2'>{detail}</Truncate>
+        <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
+          {outdated ? resolveOutdatedMessage(row.instance.name) : detail}
+        </Truncate>
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}

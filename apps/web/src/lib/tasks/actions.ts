@@ -1,4 +1,10 @@
-import { isTaskSettled, resolveBacklogRefusal, type Task, type TaskPriority } from '@shinsa/core';
+import {
+  type EngineCommand,
+  isTaskSettled,
+  resolveBacklogRefusal,
+  type Task,
+  type TaskPriority,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
@@ -56,7 +62,37 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
 };
 
-export function listTaskActions(task: Task, now = Date.now()): TaskActionKey[][] {
+export const TASK_ACTION_COMMAND: Record<TaskActionKey, EngineCommand | null> = {
+  open: null,
+  pullRequest: null,
+  branch: null,
+  editor: null,
+  terminal: null,
+  finder: null,
+  fork: 'task.create',
+  share: 'task.share',
+  unshare: 'task.unshare',
+  moveToBacklog: 'task.move_to_backlog',
+  removeFromBacklog: 'task.remove_from_backlog',
+  snooze: 'task.snooze',
+  unsnooze: 'task.unsnooze',
+  restart: 'task.retry',
+  complete: 'task.complete',
+  duplicate: 'task.mark_duplicate',
+  notDuplicate: 'task.clear_duplicate',
+  cancel: 'task.cancel',
+};
+
+function isActionSpoken(key: TaskActionKey, commands: ReadonlySet<string>) {
+  const command = TASK_ACTION_COMMAND[key];
+  return command === null || commands.has(command);
+}
+
+export function listTaskActions(
+  task: Task,
+  commands: ReadonlySet<string>,
+  now = Date.now()
+): TaskActionKey[][] {
   const links: TaskActionKey[] = [];
   if (task.pullRequest) links.push('pullRequest');
   if (task.branch) links.push('branch');
@@ -66,9 +102,9 @@ export function listTaskActions(task: Task, now = Date.now()): TaskActionKey[][]
     : ['restart', 'complete', 'duplicate', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   const share = listShareActions(task, now);
-  return [links, worktree, [...fork, ...share], listLaterActions(task), lifecycle].filter(
-    (group) => group.length > 0
-  );
+  return [links, worktree, [...fork, ...share], listLaterActions(task), lifecycle]
+    .map((group) => group.filter((key) => isActionSpoken(key, commands)))
+    .filter((group) => group.length > 0);
 }
 
 function listShareActions(task: Task, now: number): TaskActionKey[] {

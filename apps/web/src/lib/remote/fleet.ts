@@ -1,4 +1,10 @@
-import type { RemoteSnapshot, UserCommand, WireState } from '@shinsa/core';
+import {
+  type EngineInfo,
+  isEngineProtocolMatch,
+  type RemoteSnapshot,
+  type UserCommand,
+  type WireState,
+} from '@shinsa/core';
 import {
   type ConnectionStatus,
   type MachineAccess,
@@ -8,8 +14,10 @@ import {
   NO_MACHINE_ACCESS,
   NO_MACHINES,
   NO_UNREACHABLE_MACHINES,
+  resolveUpdateMessage,
   type ShinsaConnection,
   type Snapshot,
+  selectEngineCommands,
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -135,13 +143,23 @@ const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
 
 const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 
+export function resolveOutdatedMessage(machineName: string) {
+  return `Update Shinsa on ${machineName} to reach it from here.`;
+}
+
+function isReachable(entry: FleetEntry) {
+  return isEngineProtocolMatch(entry.member.connection.selectEngine());
+}
+
 export class Fleet implements ShinsaConnection {
   #entries: FleetEntry[] = [];
   #inputs: Snapshot[] = [];
+  #engines: (EngineInfo | null)[] = [];
   #snapshot: Snapshot = { state: null, status: 'closed' };
   #owners: ReadonlyMap<string, string> = EMPTY_OWNERS;
   #machines: MachineChoice[] = NO_MACHINES;
   #unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
+  #listedUnreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
   #accessInputs: (RemoteSnapshot | null)[] = [];
   #access: MachineAccess[] = NO_MACHINE_ACCESS;
   readonly #state = createSignal();
@@ -154,6 +172,7 @@ export class Fleet implements ShinsaConnection {
   constructor(members: FleetMember[], unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES) {
     for (const member of members) this.#add(member);
     this.#unreachable = unreachable;
+    this.#listedUnreachable = unreachable;
   }
 
   get members() {
@@ -187,7 +206,7 @@ export class Fleet implements ShinsaConnection {
   }
 
   get #home() {
-    return this.#entries[0]?.member.connection ?? null;
+    return this.#entries.find(isReachable)?.member.connection ?? null;
   }
 
   #ownerOf(id: string) {
@@ -196,8 +215,14 @@ export class Fleet implements ShinsaConnection {
   }
 
   #memberOf(machineId: string | null) {
+    const reachable = this.#entries.filter(isReachable);
+    const found = machineId ? reachable.find((entry) => entry.member.id === machineId) : undefined;
+    return found?.member ?? reachable[0]?.member ?? null;
+  }
+
+  #outdatedMember(machineId: string | null | undefined) {
     const found = machineId ? this.#entries.find((entry) => entry.member.id === machineId) : undefined;
-    return found?.member ?? this.#entries[0]?.member ?? null;
+    return found && !isReachable(found) ? found.member : null;
   }
 
   start = () => {
@@ -208,16 +233,24 @@ export class Fleet implements ShinsaConnection {
 
   snapshot = () => {
     const inputs = this.#entries.map((entry) => entry.member.connection.snapshot());
+    const engines = this.#entries.map((entry) => entry.member.connection.selectEngine());
     if (
       inputs.length === this.#inputs.length &&
-      inputs.every((input, index) => input === this.#inputs[index])
+      inputs.every((input, index) => input === this.#inputs[index]) &&
+      engines.every((engine, index) => engine === this.#engines[index])
     )
       return this.#snapshot;
     this.#inputs = inputs;
+    this.#engines = engines;
+    const reachable = engines.map(isEngineProtocolMatch);
     const parts = this.#entries.flatMap((entry, index) => {
       const state = inputs[index]?.state;
-      return state ? [{ id: entry.member.id, state, view: entry.view }] : [];
+      return state && reachable[index] ? [{ id: entry.member.id, state, view: entry.view }] : [];
     });
+    const outdated = this.#entries.flatMap((entry, index) =>
+      reachable[index] ? [] : [{ id: entry.member.id, name: entry.member.name, outdated: true }]
+    );
+    this.#listedUnreachable = outdated.length === 0 ? this.#unreachable : [...this.#unreachable, ...outdated];
     const merged = mergeFleetStates(parts);
     this.#machines =
       parts.length === 0 ? NO_MACHINES : parts.map((part) => ({ ...part.view, state: part.state }));
@@ -225,7 +258,9 @@ export class Fleet implements ShinsaConnection {
     replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {
       state: merged?.state ?? null,
-      status: resolveFleetStatus(inputs.map((input) => input.status)),
+      status: resolveFleetStatus(
+        inputs.filter((_input, index) => reachable[index]).map((input) => input.status)
+      ),
     };
     return this.#snapshot;
   };
@@ -276,7 +311,15 @@ export class Fleet implements ShinsaConnection {
     return this.#machines;
   };
 
-  listUnreachableMachines = () => this.#unreachable;
+  listUnreachableMachines = () => {
+    this.snapshot();
+    return this.#listedUnreachable;
+  };
+
+  selectEngine = (id?: string | null) => {
+    const member = this.#memberOf(id ? this.#ownerOf(id) : null);
+    return member?.connection.selectEngine() ?? null;
+  };
 
   listMachineAccess = () => {
     const remotes = this.#entries.map((entry) => entry.member.connection.selectRemote());
@@ -295,8 +338,12 @@ export class Fleet implements ShinsaConnection {
 
   command = (command: UserCommand, machineId?: string | null) => {
     this.snapshot();
+    const outdated = this.#outdatedMember(machineId);
+    if (outdated) return Promise.reject(new Error(resolveOutdatedMessage(outdated.name)));
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
     if (!member) return Promise.reject(new Error('No machine is connected.'));
+    if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))
+      return Promise.reject(new Error(resolveUpdateMessage(member.name)));
     return member.connection.command(command);
   };
 
