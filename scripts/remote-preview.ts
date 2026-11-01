@@ -473,6 +473,23 @@ function resolveClaimAs(claim: string) {
   return `${ORIGIN}/__preview/as/${GUEST.login}?return=${encodeURIComponent(back)}`;
 }
 
+async function respondFreshHandoff(engine: Engine, handle: string) {
+  const task = Object.values(engine.state.tasks).find((entry) => entry.handle === handle);
+  if (!task) return new Response(`No task ${handle} on Studio.`, { status: 404 });
+  if (task.handoff) await engine.dispatch({ type: 'handoff.remove', taskId: task.id });
+  await engine.dispatch({ type: 'task.hand_off', taskId: task.id });
+  const link = await waitForHandoffLink(engine, task.id);
+  if (!link.startsWith('http')) return new Response(link, { status: 503 });
+  return respondSignInAs(GUEST.login, new URL(resolveClaimAs(link)));
+}
+
+function respondPreviewSignIn(url: URL, engine: Engine) {
+  const fresh = /^\/__preview\/handoff\/([A-Z]+-\d+)$/.exec(url.pathname);
+  if (fresh) return respondFreshHandoff(engine, fresh[1] ?? '');
+  const as = /^\/__preview\/as\/([a-z]+)$/.exec(url.pathname);
+  return as ? respondSignInAs(as[1] ?? '', url) : null;
+}
+
 async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMachine>>) {
   const { engine } = studio;
   const [claimed, waiting] = Object.values(engine.state.tasks).filter(
@@ -498,6 +515,10 @@ async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMach
     [
       `${waiting.handle}'s hand-off link, signed in as @${GUEST.login} (open it in a private window)`,
       resolveClaimAs(claim),
+    ],
+    [
+      `A fresh hand-off link for ${waiting.handle} each time, signed in as @${GUEST.login} (takes it back from whoever holds it first)`,
+      `${ORIGIN}/__preview/handoff/${waiting.handle}`,
     ],
     [`Sign in as @${USER.login} again`, `${ORIGIN}/__preview/as/${USER.login}`],
   ];
@@ -885,8 +906,8 @@ async function main() {
       if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
-      const as = /^\/__preview\/as\/([a-z]+)$/.exec(url.pathname);
-      if (as) return respondSignInAs(as[1] ?? '', url);
+      const signIn = respondPreviewSignIn(url, studio.engine);
+      if (signIn) return signIn;
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return respondEnroll(enrolling, url);

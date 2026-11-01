@@ -74,12 +74,17 @@ export function listShareModeItems(task: Task, handoffSupported: boolean) {
   return handoffSupported && canHandOff(task) ? [...items, HANDOFF_MODE_ITEM] : items;
 }
 
+export type ShareDialogFocus = 'share' | 'handoff';
+
 export function resolveShareModeChoice(
   task: Task,
   settings: Settings | null,
-  handoffSupported: boolean
+  handoffSupported: boolean,
+  focus: ShareDialogFocus | null = null
 ): ShareMode {
-  if (task.handoff && handoffSupported) return 'handoff';
+  const handing = handoffSupported && canHandOff(task);
+  if (focus === 'handoff' && handing) return 'handoff';
+  if (focus === null && !task.share && task.handoff && handing) return 'handoff';
   return resolveSharePresetChoice(task, settings);
 }
 
@@ -111,6 +116,8 @@ const shareSignal = createSignal();
 
 let sharing: string | null = null;
 
+let sharingFocus: ShareDialogFocus | null = null;
+
 let stopping: string | null = null;
 
 export function openUnshareConfirm(taskId: string) {
@@ -127,14 +134,20 @@ export function useUnshareConfirm() {
   return useSyncExternalStore(shareSignal.subscribe, () => stopping);
 }
 
-export function openShareDialog(taskId: string) {
+export function openShareDialog(taskId: string, focus: ShareDialogFocus | null = null) {
   sharing = taskId;
+  sharingFocus = focus;
   shareSignal.publish();
 }
 
 export function closeShareDialog() {
   sharing = null;
+  sharingFocus = null;
   shareSignal.publish();
+}
+
+export function useShareDialogFocus() {
+  return useSyncExternalStore(shareSignal.subscribe, () => sharingFocus);
 }
 
 export function useShareDialog() {

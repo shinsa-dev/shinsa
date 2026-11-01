@@ -62,6 +62,25 @@ export function describeHandoffClaim(guest: TaskGuest) {
   return `${describeUserName(guest)} is working on this task`;
 }
 
+export const HANDOFF_JOINED = 'Joined';
+
+export const HANDOFF_TURN_OFF = 'Turn off link';
+
+export function describeHandoffBanner(view: HandoffView) {
+  switch (view.kind) {
+    case 'off':
+      return null;
+    case 'linking':
+      return 'Making the hand-off link.';
+    case 'failed':
+      return `The hand-off link couldn’t be made. ${view.message}`;
+    case 'ready':
+      return 'The first GitHub account to open the hand-off link can work on this task.';
+    case 'claimed':
+      return `${describeHandoffClaim(view.guest)}. It stays yours.`;
+  }
+}
+
 export function handOffTask(task: Task) {
   return sendCommandWithToast({ type: 'task.hand_off', taskId: task.id });
 }

@@ -20,6 +20,7 @@ import {
   shareTask,
   unshareTask,
   useShareDialog,
+  useShareDialogFocus,
   useUnshareConfirm,
 } from '@/lib/share/dialog.ts';
 import { listTaskActions, runTaskAction } from '@/lib/tasks/actions.ts';
@@ -48,6 +49,14 @@ describe('the share dialog', () => {
     expect(result.current).toBeNull();
     act(() => openShareDialog('other'));
     expect(result.current).toBe('other');
+  });
+
+  it('remembers which part a banner opened it on until it closes', () => {
+    const { result } = renderHook(() => useShareDialogFocus());
+    act(() => openShareDialog('other', 'handoff'));
+    expect(result.current).toBe('handoff');
+    act(() => closeShareDialog());
+    expect(result.current).toBeNull();
   });
 
   it('asks for remote access first, offers sharing once paired, and waits for the link', () => {
@@ -198,5 +207,20 @@ describe('the kinds of share', () => {
       'standard'
     );
     expect(resolveShareModeChoice(createTask({ id: 'a' }), null, true)).toBe('standard');
+  });
+
+  it('opens on what was managed: sharing for a shared task, Hand off when asked for it', () => {
+    const settings = createSettings();
+    const both = createTask({
+      id: 'a',
+      handoff: HANDED,
+      share: { at: 1, limit: 'none', preset: 'status', endsAt: null, url: 'https://x' },
+    });
+    expect(resolveShareModeChoice(both, settings, true)).toBe('status');
+    expect(resolveShareModeChoice(both, settings, true, 'share')).toBe('status');
+    expect(resolveShareModeChoice(both, settings, true, 'handoff')).toBe('handoff');
+    expect(resolveShareModeChoice(createTask({ id: 'a', handoff: HANDED }), settings, true, 'share')).toBe(
+      'standard'
+    );
   });
 });

@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import {
   canHandOff,
   closeHandoffRemoveConfirm,
+  describeHandoffBanner,
   describeHandoffClaim,
   handOffTask,
   openHandoffRemoveConfirm,
@@ -56,6 +57,15 @@ describe('handing a task off', () => {
     });
     expect(describeHandoffClaim(KAI)).toBe('Kai Lane is working on this task');
     expect(describeHandoffClaim({ ...KAI, name: null })).toBe('@kai is working on this task');
+    expect(describeHandoffBanner({ kind: 'off' })).toBeNull();
+    expect(describeHandoffBanner({ kind: 'linking' })).toBe('Making the hand-off link.');
+    expect(describeHandoffBanner({ kind: 'failed', message: 'Remote access is off.' })).toBe(
+      'The hand-off link couldn’t be made. Remote access is off.'
+    );
+    expect(describeHandoffBanner({ kind: 'ready', url: 'https://x' })).toContain('first GitHub account');
+    expect(describeHandoffBanner({ kind: 'claimed', guest: KAI, at: 9 })).toBe(
+      'Kai Lane is working on this task. It stays yours.'
+    );
   });
 
   it('sends the hand-off and its removal, naming who loses the task', async () => {

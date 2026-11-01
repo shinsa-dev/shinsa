@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import type { Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { HandoffRemoveConfirm, ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
-import { SharingBanner } from '@/components/task/sharing-banner.tsx';
+import { HandoffBanner, SharingBanner } from '@/components/task/sharing-banner.tsx';
 import { connection } from '@/lib/connection/socket.ts';
 import { closeShareDialog, closeUnshareConfirm, openShareDialog } from '@/lib/share/dialog.ts';
 import { closeHandoffRemoveConfirm } from '@/lib/share/handoff.ts';
@@ -229,7 +229,7 @@ describe('handing a task off as a kind of share', () => {
     const text = (await screen.findByRole('dialog')).textContent;
     expect(text).toContain('Kai Lane is working on this task. It stays yours');
     expect(text).toContain('@kai');
-    expect(text).toContain('Opened the link just now');
+    expect(text).toContain('Joined just now');
     fireEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     const confirm = await screen.findByRole('alertdialog');
     expect(confirm.textContent).toContain('Remove Kai Lane?');
@@ -292,5 +292,59 @@ describe('the sharing banner', () => {
     const banner = screen.getByRole('status');
     expect(banner.textContent).toContain('Sharing ends in 1h.');
     expect(banner.querySelector('time')?.getAttribute('datetime')).toBe(new Date(endsAt).toISOString());
+  });
+});
+
+describe('the hand-off banner', () => {
+  const claimed = { ...HANDED, guest: KAI, claimedAt: Date.now() };
+
+  it('says who works on a shared task beside the sharing banner, and each Manage opens its own part', async () => {
+    showTask({ share: { ...SHARING, preset: 'status', url: URL }, handoff: claimed });
+    act(() => closeShareDialog());
+    await waitForGone(() => screen.queryByRole('dialog'));
+    const task = createTask({
+      id: 'source',
+      share: { ...SHARING, preset: 'status', url: URL },
+      handoff: claimed,
+    });
+    render(
+      <>
+        <SharingBanner task={task} />
+        <HandoffBanner task={task} />
+      </>
+    );
+    const [sharing, handing] = screen.getAllByRole('status') as [HTMLElement, HTMLElement];
+    expect(handing.textContent).toContain('Kai Lane is working on this task. It stays yours.');
+    fireEvent.click(within(sharing).getByRole('button', { name: 'Manage' }));
+    const shareDialog = await screen.findByRole('dialog');
+    expect(within(shareDialog).getByRole('combobox', { name: 'Share as' }).textContent).toContain('Status');
+    act(() => closeShareDialog());
+    await waitForGone(() => screen.queryByRole('dialog'));
+    fireEvent.click(within(handing).getByRole('button', { name: 'Manage' }));
+    const handDialog = await screen.findByRole('dialog');
+    expect(within(handDialog).getByRole('combobox', { name: 'Share as' }).textContent).toContain('Hand off');
+    act(() => closeShareDialog());
+    await waitForGone(() => screen.queryByRole('dialog'));
+    fireEvent.click(within(handing).getByRole('button', { name: 'Remove' }));
+    expect((await screen.findByRole('alertdialog')).textContent).toContain('Remove Kai Lane?');
+  });
+
+  it('copies a link no one opened yet and turns it off', async () => {
+    const writeText = spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    const ready = { ...HANDED, url: 'https://app.shinsa.dev/claim#x' };
+    showTask({ handoff: ready });
+    act(() => closeShareDialog());
+    render(<HandoffBanner task={createTask({ id: 'source', handoff: ready })} />);
+    const banner = screen.getByRole('status');
+    expect(banner.textContent).toContain('The first GitHub account to open the hand-off link');
+    fireEvent.click(within(banner).getByRole('button', { name: 'Copy hand-off link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://app.shinsa.dev/claim#x'));
+    fireEvent.click(within(banner).getByRole('button', { name: 'Turn off link' }));
+    await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'handoff.remove', taskId: 'source' }]));
+  });
+
+  it('shows nothing on a task not handed off, or to the person it was handed to', () => {
+    render(<HandoffBanner task={createTask({ id: 'source', handoff: claimed })} />);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

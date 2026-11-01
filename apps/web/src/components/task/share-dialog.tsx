@@ -48,6 +48,7 @@ import {
   UNSHARE_TITLE,
   unshareTask,
   useShareDialog,
+  useShareDialogFocus,
   useUnshareConfirm,
 } from '@/lib/share/dialog.ts';
 import {
@@ -56,9 +57,11 @@ import {
   HANDOFF_COPY,
   HANDOFF_DESCRIPTION,
   HANDOFF_HELD_DESCRIPTION,
+  HANDOFF_JOINED,
   HANDOFF_REMOVE,
   HANDOFF_REMOVE_DESCRIPTION,
   HANDOFF_TITLE,
+  HANDOFF_TURN_OFF,
   type HandoffView,
   handOffTask,
   openHandoffRemoveConfirm,
@@ -212,7 +215,7 @@ function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }
           {handle && <span className='shrink-0 text-fg-2'>{handle}</span>}
         </div>
         <span className='text-2xs text-fg-2'>
-          <TimeAgo at={view.at} text={(now) => formatSince('Opened the link', view.at, now)} />
+          <TimeAgo at={view.at} text={(now) => formatSince(HANDOFF_JOINED, view.at, now)} />
         </span>
       </div>
     </div>
@@ -260,7 +263,7 @@ function HandoffActions({ task, view }: { task: Task; view: HandoffView }) {
       return (
         <>
           <Button variant='secondary' onClick={() => void removeHandoff(task)}>
-            Turn off link
+            {HANDOFF_TURN_OFF}
           </Button>
           <CopyLinkButton url={view.url} label={HANDOFF_COPY} />
           <Button onClick={closeShareDialog}>Done</Button>
@@ -298,7 +301,8 @@ function ShareContent({ task }: { task: Task }) {
   const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
   const handoffSupported = useEngineCommand('task.hand_off', task.id);
   const [pickedMode, setPickedMode] = React.useState<ShareMode | null>(null);
-  const mode = pickedMode ?? resolveShareModeChoice(task, settings, handoffSupported);
+  const focus = useShareDialogFocus();
+  const mode = pickedMode ?? resolveShareModeChoice(task, settings, handoffSupported, focus);
   const preset = mode === 'handoff' ? resolveSharePresetChoice(task, settings) : mode;
   const handing = mode === 'handoff' && view.kind !== 'unpaired';
   const handoff = resolveHandoffView(task);
