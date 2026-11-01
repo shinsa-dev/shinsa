@@ -508,6 +508,7 @@ export interface Task {
   slack?: SlackThreadLink | null;
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
+  previews?: PreviewShare[];
   snoozed?: TaskSnooze | null;
   duplicate?: TaskDuplicate | null;
   iterations?: Iteration[];
@@ -544,6 +545,15 @@ export interface TaskShare {
   endsAt: number | null;
   failure?: string | null;
   description?: string | null;
+}
+
+export interface PreviewShare {
+  serviceId: string;
+  at: number;
+  url: string | null;
+  limit: ShareLimit;
+  endsAt: number | null;
+  failure?: string | null;
 }
 
 export type ShareEnd = 'you' | 'done' | 'expired';

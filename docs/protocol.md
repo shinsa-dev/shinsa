@@ -214,6 +214,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
 | `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `status`, `standard`, `full`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
+| `previews?` | `PreviewShare[]` | the task's service runs shared by link, one per `serviceId`: `at`, `url` (`https://<label>.shinsa.page/?key=<key>` once the engine made it, null while `preview.link` runs), `limit` and `endsAt` as on `share`, `failure` the reason the link could not be made (`docs/engine.md` → Sharing a preview) |
 
 **Lifecycle and scheduling**
 
@@ -787,6 +788,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
 | `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` (the `shareLimit` and `sharePreset` settings when left out); again with another `limit` or `preset` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset]` | **human** |
 | `task.unshare` | stops sharing it: every open link ends at once and the link stops working | `tasks unshare` | **human** |
+| `preview.share` | shares the task's run of a service (`serviceId`) by a link on `shinsa.page` (`preview.link` makes it), for `limit` (the `shareLimit` setting when left out); again with another `limit` it changes how long and keeps the link; again on a failed share it asks for the link once more; an automation's home or a finished task is refused (`share_refused`) | `services share <service> --task [--until]` | **human** |
+| `preview.unshare` | stops sharing that run: its open pages and sockets end at once and the link stops working | `services unshare <service> --task` | **human** |
 | `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
 | `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
@@ -915,6 +918,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `share.fail` | `share.link` effect, when it gives up; the engine, when the machine is paired again | the reason (`detail`), kept on `TaskShare.failure` for Share task; opens no gate |
 | `share.expire` | `ShareClock`, at `TaskShare.endsAt` | ends a share whose time ran out (`task.unshared`, `reason: 'expired'`); nothing before it |
 | `share.describe` | `share.describe` effect | the description the writer wrote (`description`, trimmed), kept on `TaskShare.description` (`share.described`); ignored once the task is no longer shared, empty or unchanged |
+| `preview.record` | `preview.link` effect | the link the engine made (`url`, null when it kept the one recorded); clears the last failure |
+| `preview.fail` | `preview.link` effect, when it gives up; the engine, when the machine is paired again (`PREVIEW_LINK_LOST`) | the reason (`detail`), kept on `PreviewShare.failure` for Share preview; opens no gate |
+| `preview.expire` | `ShareClock`, at `PreviewShare.endsAt` | ends a preview whose time ran out (`preview.unshared`, `reason: 'expired'`); nothing before it |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
@@ -973,6 +979,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
 | `share.described` | the writer described a shared task (`description`) |
+| `preview.shared`, `preview.unshared` | you shared a service run by link or changed how long (`serviceId`, `limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when the task settled, whatever its limit, `expired`; each adds an activity entry) |
+| `preview.recorded`, `preview.failed` | the engine made the preview's link (`url`, null when unchanged), or could not (`detail`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |
@@ -1090,6 +1098,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
 | `share.link` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up: makes a share id and a key for this machine's instance, unless a link to it is recorded; not paired fails at once (`SHARE_NOT_PAIRED`) |
 | `share.describe` | replay_safe | `share:<id>` | `share.describe`, or nothing when the writer gave nothing: one writer quick call over the task's title and request, without attachments, when sharing starts (`remote/share-describe.ts`) |
+| `preview.link` | replay_safe | `preview:<id>` | `preview.record`, or `preview.fail` when it gives up: makes a preview id and a key for this machine's instance, unless a link to it is recorded; not paired (`PREVIEW_NOT_PAIRED`) or a service with no preview URL (`PREVIEW_NO_URL`) fails at once |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `feedback.draft` | replay_safe | `feedback:<id>` | `feedback.record_draft`, after one quick call rewrites the note without anything private (`feedback/draft.ts`); `feedback.record_failure` when no usable draft comes back |
 | `feedback.file` | process_bound | `feedback:<id>` | `feedback.record_filed`, after `gh issue create --repo shinsa-dev/shinsa` (`feedback/file.ts`); `feedback.record_failure` with what `gh` said; never retried, and one a restart cut short is failed on start |
@@ -1310,9 +1319,18 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner` or `member`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member only) |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
 | `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
+| any path on `<label>.shinsa.page` | Anyone with a preview link | A shared preview (`previews.ts`): `?key=` set as the `__Host-shinsa_preview` cookie and a 303 to the same path without it; with the cookie, forwarded with `x-shinsa-preview-key` (`PREVIEW_KEY_HEADER`) to the tunnel's `/__preview/<id><path>` (`resolvePreviewTunnelPath`), WebSockets included; `PREVIEW_GONE` (404) or `PREVIEW_OFFLINE` (503) otherwise |
 
 Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
 <token>`; a bearer request needs no `Origin`, since it is not a page.
+
+**Shared previews** (core's `remote/previews.ts`): a link is `PreviewLink` (`instanceId`, `previewId` of
+`PREVIEW_ID_BYTES`, `key` of `PREVIEW_KEY_BYTES`, base64url), written `https://<label>.shinsa.page/?key=<key>`
+(`PREVIEW_ORIGIN`; `serializePreviewUrl`, `parsePreviewUrl`), the label lowercase base32 of the preview id's bytes
+followed by the instance id's (`serializePreviewLabel`, `parsePreviewLabel`, `parsePreviewHost`), one DNS label of 63
+characters at most. The engine's tunnel route is `PREVIEW_TUNNEL_PREFIX` (`/__preview/<id><path>`,
+`parsePreviewTunnelPath`); its pages are `serializePreviewPage('gone' | 'stopped' | 'offline')` (`preview-page.ts`,
+`PREVIEW_PAGES`), one self-contained page each in the app's empty-state look. Nothing is sealed: the key is checked on every request (`docs/engine.md` → Sharing a preview).
 
 **Shared tasks** (`shares.ts` and `share-channel.ts` here, `share/` for the projection): `SharedTask` is `task` (a
 `Task` with every field not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a

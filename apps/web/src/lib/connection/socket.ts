@@ -557,6 +557,10 @@ export function useEngineCommands(id?: string | null) {
   return useSyncExternalStore(connection.subscribe, () => selectEngineCommands(connection.selectEngine(id)));
 }
 
+export function hasEngineCommand(type: EngineCommand, id?: string | null) {
+  return selectEngineCommands(connection.selectEngine(id)).has(type);
+}
+
 export function useEngineCommand(type: EngineCommand, id?: string | null) {
   return useEngineCommands(id).has(type);
 }

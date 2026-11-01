@@ -34,6 +34,7 @@ import {
 } from '@/lib/terminal/services-panel.ts';
 import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
 import { readDocumentVariable, resolveTerminalTheme } from '@/lib/terminal/theme.ts';
+import { PreviewShareSpecimen } from '@/routes/ui/preview-share.tsx';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
 
@@ -123,6 +124,8 @@ const TASK_VIEWS: ServiceView[] = [
   resolveServiceView(API, TASK_RUN, NOW),
   resolveServiceView(service('web'), null, NOW, 'sh-4'),
 ];
+
+export const SAMPLE_TASK_PREVIEW = TASK_VIEWS[0] as ServiceView;
 
 const TASK_RUNS: TaskServiceRun[] = [
   { view: resolveServiceView(API, TASK_RUN, NOW), label: 'SH-4 Fix the cart' },
@@ -255,6 +258,8 @@ const HANDLERS: ServiceHandlers = {
   startAll: acknowledgeSample,
   open: acknowledgeSample,
   preview: acknowledgeSample,
+  share: acknowledgeSample,
+  sharing: (view) => view.taskId === 'sh-4',
 };
 
 const GROUPS: PlaceGroup[] = [
@@ -358,7 +363,7 @@ export function TerminalSpecimens() {
       <Specimen label='The Services popover · three projects, each folding from its header, the play button that starts all where two or more are stopped, and a service’s runs in tasks under it'>
         <PanelSample groups={GROUPS_MANY} start={[]} />
       </Specimen>
-      <Specimen label='A task’s Services popover · one running in its worktree, one it has not started'>
+      <Specimen label='A task’s Services popover · one running in its worktree and shared by link (the live mark opens Share preview), one it has not started'>
         <div className={cn(INSET, SERVICES_PANEL, 'overflow-hidden bg-popover')}>
           <TaskServicesPanel
             task={{ handle: 'SH-4' }}
@@ -368,6 +373,9 @@ export function TerminalSpecimens() {
             handlers={HANDLERS}
           />
         </div>
+      </Specimen>
+      <Specimen label='Share preview · before sharing, with the time limit; shared, with the link, when it ends and Stop sharing; and when making the link failed'>
+        <PreviewShareSpecimen />
       </Specimen>
       <Specimen label='The Services popover · a project with none yet shows what was found, checked with AI; while the check runs; and no project at all'>
         <div className='flex flex-wrap items-start gap-3'>

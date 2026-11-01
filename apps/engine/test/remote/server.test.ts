@@ -28,6 +28,7 @@ import {
   resolveMachineName,
   resolveRequestOrigin,
 } from '../../src/remote/index.ts';
+import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews.ts';
 import type { ShareChannel } from '../../src/remote/share-channel.ts';
 import type { ShareLinks } from '../../src/remote/shares.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -93,6 +94,7 @@ async function start(
     config?: Partial<ServerConfig>;
     openUrl?: (url: string) => Promise<void>;
     shares?: ShareLinks;
+    previews?: PreviewLinks;
   } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
@@ -146,6 +148,7 @@ async function start(
     schedules: createFakeSchedules(),
     remote,
     ...(options.shares ? { shares: options.shares } : {}),
+    ...(options.previews ? { previews: options.previews } : {}),
     slack: createFakeSlack(),
   });
   running.push(async () => {
@@ -353,6 +356,66 @@ describe('the tunnel entry point', () => {
     expect((await ended).code).toBe(1008);
     await until('the share link is closed', () => closed.length === 1);
     expect(received).toEqual(['hi']);
+  });
+
+  test('sends the preview route to the previews: a page they answer, and a socket relayed both ways', async () => {
+    const asked: string[] = [];
+    const relayed: string[] = [];
+    let peer: PreviewPeer | null = null;
+    const previews: PreviewLinks = {
+      answer: (request, url) => {
+        asked.push(`${request.method} ${url.pathname}`);
+        if (request.headers.get('upgrade') !== 'websocket')
+          return Promise.resolve({ kind: 'response', response: new Response('page', { status: 203 }) });
+        const upgrade = {
+          previewId: 'p1',
+          target: 'ws://localhost:1/',
+          headers: {},
+          protocols: ['vite-hmr'],
+        };
+        return Promise.resolve({ kind: 'upgrade', upgrade });
+      },
+      openSocket: (opened) => {
+        peer = opened;
+        opened.send('ready');
+        return {
+          send: (data) => {
+            relayed.push(typeof data === 'string' ? data : `bytes:${data.length}`);
+            if (data === 'bye') opened.close(4000, 'done');
+          },
+          close: () => relayed.push('closed'),
+        };
+      },
+    };
+    const { tunnel, port } = await start({ previews });
+    const page = await tunnel('/__preview/p1/index.html', { method: 'POST', body: 'x' });
+    expect(page.status).toBe(203);
+    expect(await page.text()).toBe('page');
+    expect((await tunnel('/__preview/p1/', { headers: { upgrade: 'websocket' } })).status).toBe(400);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/__preview/p1/`, {
+      headers: { 'cf-connecting-ip': '203.0.113.9' },
+      protocols: ['vite-hmr'],
+    } as unknown as string[]);
+    const first = await new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    expect(first).toBe('ready');
+    expect(socket.protocol).toBe('vite-hmr');
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    socket.send(new Uint8Array([1, 2, 3]));
+    socket.send('bye');
+    expect((await ended).code).toBe(4000);
+    await until('the relay is closed', () => relayed.includes('closed'));
+    expect(relayed).toEqual(['bytes:3', 'bye', 'closed']);
+    expect(peer).not.toBeNull();
+    expect(asked).toEqual(['POST /__preview/p1/index.html', 'GET /__preview/p1/', 'GET /__preview/p1/']);
+  });
+
+  test('has no preview route without the previews', async () => {
+    const { tunnel } = await start();
+    expect((await tunnel('/__preview/p1/')).status).toBe(404);
   });
 
   test('has no share link without the shares', async () => {

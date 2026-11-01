@@ -10,6 +10,7 @@ import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { PREVIEW_SHARE_TITLE, PREVIEW_SHARED_TITLE } from '@/lib/share/previews.ts';
 import {
   describeServicePreview,
   describeServiceState,
@@ -25,6 +26,9 @@ export interface ServiceHandlers {
   startAll: (project: Project) => void;
   open: (view: ServiceView, project: Project) => void;
   preview: (view: ServiceView) => void;
+  share?: (view: ServiceView) => void;
+  canShare?: (view: ServiceView) => boolean;
+  sharing?: (view: ServiceView) => boolean;
 }
 
 const REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
@@ -149,6 +153,25 @@ export function ServiceRow({
   );
 }
 
+function ServiceShareButton({ view, handlers }: { view: ServiceView; handlers: ServiceHandlers }) {
+  const share = handlers.share;
+  if (!(share && view.taskId && selectServicePreview(view))) return null;
+  if (handlers.canShare && !handlers.canShare(view)) return null;
+  const shared = handlers.sharing?.(view) ?? false;
+  return (
+    <span className={cn('flex items-center', !shared && REVEAL)}>
+      <ServiceActionButton
+        label={shared ? PREVIEW_SHARED_TITLE : PREVIEW_SHARE_TITLE}
+        icon={shared ? 'IconLiveFull' : 'IconShareOs'}
+        onClick={(event) => {
+          event.stopPropagation();
+          share(view);
+        }}
+      />
+    </span>
+  );
+}
+
 function RowRunButtons({
   view,
   label = null,
@@ -173,6 +196,7 @@ function RowRunButtons({
         />
         <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
       </span>
+      <ServiceShareButton view={view} handlers={handlers} />
       <ServicePreviewButton view={view} label={label} onPreview={() => handlers.preview(view)} />
     </span>
   );

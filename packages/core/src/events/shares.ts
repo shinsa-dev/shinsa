@@ -6,4 +6,8 @@ export type ShareEventBody =
   | { type: 'task.unshared'; taskId: string; reason: ShareEnd }
   | { type: 'share.recorded'; taskId: string; url: string | null }
   | { type: 'share.failed'; taskId: string; detail: string }
-  | { type: 'share.described'; taskId: string; description: string };
+  | { type: 'share.described'; taskId: string; description: string }
+  | { type: 'preview.shared'; taskId: string; serviceId: string; limit: ShareLimit; endsAt: number | null }
+  | { type: 'preview.unshared'; taskId: string; serviceId: string; reason: ShareEnd }
+  | { type: 'preview.recorded'; taskId: string; serviceId: string; url: string | null }
+  | { type: 'preview.failed'; taskId: string; serviceId: string; detail: string };

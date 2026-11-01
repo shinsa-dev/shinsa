@@ -23,6 +23,7 @@ import {
   respondRequesterFind,
 } from './members.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
+import { isPreviewHost, respondPreview } from './previews.ts';
 import {
   resolveCallbackFailureLocation,
   respondSession,
@@ -273,6 +274,13 @@ async function respondApi(request: Request, url: URL, world: CloudWorld) {
 
 export async function respond(request: Request, world: CloudWorld) {
   const url = new URL(request.url);
+  if (isPreviewHost(url.host, world.config.previewOrigin)) {
+    try {
+      return await respondPreview(request, url, world);
+    } catch (error) {
+      return respondError(describeFailure(error));
+    }
+  }
   if (url.pathname.startsWith(API_PREFIX)) return applySecurityHeaders(await respondApi(request, url, world));
   const slack = SLACK_ROUTES.find(
     (route) => route.method === request.method && route.pattern.test(url.pathname)

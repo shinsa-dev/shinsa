@@ -14,6 +14,7 @@ import { act, renderHook } from '@testing-library/react';
 import {
   Connection,
   connection,
+  hasEngineCommand,
   replaceConnection,
   resolveUpdateMessage,
   selectEngineCommands,
@@ -537,6 +538,8 @@ describe('Connection engine', () => {
     expect(renderHook(() => useEngineCommand('task.share', 'task-1')).result.current).toBe(true);
     expect(renderHook(() => useEngineCommand('task.share', 'task-2')).result.current).toBe(false);
     expect(renderHook(() => useEngineCommand('task.retry')).result.current).toBe(true);
+    expect(hasEngineCommand('task.share', 'task-1')).toBe(true);
+    expect(hasEngineCommand('task.share', 'task-2')).toBe(false);
     expect(renderHook(() => useEngineFeature('task.share', 'task-1')).result.current).toBe(true);
     expect(renderHook(() => useEngineFeature('task.share')).result.current).toBe(false);
     expect(renderHook(() => useEngineCommands('task-1')).result.current).toBe(selectEngineCommands(engine));

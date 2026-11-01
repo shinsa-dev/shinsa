@@ -772,6 +772,17 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     ...('preset' in fields ? { preset: readChoice(fields, 'preset', SHARE_PRESET_SET) } : {}),
   }),
   'task.unshare': (fields) => ({ type: 'task.unshare', taskId: readId(fields, 'taskId') }),
+  'preview.share': (fields) => ({
+    type: 'preview.share',
+    taskId: readId(fields, 'taskId'),
+    serviceId: readId(fields, 'serviceId'),
+    ...('limit' in fields ? { limit: readChoice(fields, 'limit', SHARE_LIMIT_SET) } : {}),
+  }),
+  'preview.unshare': (fields) => ({
+    type: 'preview.unshare',
+    taskId: readId(fields, 'taskId'),
+    serviceId: readId(fields, 'serviceId'),
+  }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

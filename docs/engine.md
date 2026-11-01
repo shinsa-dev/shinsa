@@ -2628,6 +2628,8 @@ beside your run (Runs for a task, below).
   service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
   project has none they need and never for a one-off command, and the last phase's preview instruction to add the
   one that shows the change when none does.
+- **Shared beyond this machine.** A task's run of a service with a preview URL can be shared at its own address on
+  `shinsa.page`, through remote access's tunnel, for a teammate to open without Shinsa (Sharing a preview, below).
 
 ## Agents manage Shinsa
 
@@ -3078,6 +3080,76 @@ projection and channel will serve teams.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
 
+
+## Sharing a preview
+
+A task's run of a service can be shared at an address of its own, `https://<label>.shinsa.page/?key=<key>`, so a
+teammate opens the dev server in a browser as it runs on your machine, hot reload included, with no Shinsa and no
+sign-in. Share preview sits on each running service with a preview URL in a task's Services popover and beside the
+task's `preview` evidence that points at it; it works on any machine with remote access on, the Mac app and a headless
+server alike. Nothing about the preview is stored on app.shinsa.dev.
+
+```
+browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
+                     ?key= → __Host-shinsa_preview cookie, 303 to the same page
+                     cookie → x-shinsa-preview-key header
+          ──https──► t-<instance>.shinsa.dev/__preview/<id>/<path>  (tunnel)
+                     engine: key checked, share live, run running
+          ──http───► localhost:<port>/<path>   (the task's service run)
+```
+
+- **The record.** `Task.previews` holds one `PreviewShare` per shared service (`serviceId`, `at`, `url`, `limit`,
+  `endsAt`, `failure`), next to `Task.share` and on the same rules: `preview.share` (Share preview, `shinsa services
+  share <service> --task <task> [--until]`) adds it or changes its limit and runs `preview.link`; `preview.unshare`
+  (Stop sharing, `shinsa services unshare`) ends it; `preview.record`, `preview.fail` and `preview.expire` come from
+  the engine. Both are human-only, like `task.share`: an agent has no tool for them, and core refuses them on your
+  behalf, since they open a running service to people outside the machine. An automation's home and a finished task
+  are refused (`share_refused`).
+- **The link.** `preview.link` (`Previews.link`, `apps/engine/src/remote/previews.ts`) makes a 10-byte preview id and a
+  32-byte key for this machine's instance and records the URL; not paired, or a service with no preview URL, fails at
+  once with the reason on `PreviewShare.failure`. The host label is lowercase base32 of the preview id followed by the
+  instance id (`serializePreviewLabel` in core's `remote/previews.ts`), one DNS label that names neither the task nor
+  the machine. The key rides in the query once: the Worker swaps it for an `HttpOnly`, `Secure`, `SameSite=Lax`
+  `__Host-shinsa_preview` cookie scoped to that one host and redirects to the same page without it, so it leaves the
+  address bar and history. Pairing the machine again marks every link as lost (`PREVIEW_LINK_LOST`); sharing again
+  makes a new one.
+- **Its own origin, on its own domain.** Every preview is a separate origin under `shinsa.page`, a domain apart from
+  `shinsa.dev`, so a dev server's cookies and scripts cannot reach app.shinsa.dev or the marketing site. Previews are
+  each other's same site until `shinsa.page` is on the Public Suffix List: the Worker drops the `Domain` attribute
+  from every cookie a dev server sets, so its cookies stay on its own host, but a page's script can still set a
+  `Domain=shinsa.page` cookie that other previews' servers receive. The preview's own key is safe from it: a
+  `__Host-` cookie cannot be set or replaced from another host. That is also why the Worker does not add the app's
+  security headers to a preview: the page is the dev server's own.
+- **Not sealed end to end.** A task's link is sealed with its key in the fragment; a preview cannot be, since a
+  browser loads a dev server as plain pages. Traffic is TLS to Cloudflare, then the Worker, then the tunnel, and the
+  Worker reads it in passing. The machine checks the key on every request and every WebSocket, in constant time.
+- **The proxy.** The tunnel route `/__preview/<id>/<path>` (`resolveTunnelRoute` → `preview`) finds the live share by
+  id for this instance, checks `x-shinsa-preview-key`, and sends the request to the task's own run of the service
+  (`selectServiceTerminal`, by service and task) on `localhost:<port>`. It sets `Host` to `localhost:<port>` and
+  points the origin and referrer headers at it, so Vite's and Next's host checks pass; it drops the key header, `cf-*` and
+  hop-by-hop headers, keeps the browser's other cookies (the Worker strips the preview cookie), and turns a
+  `Location` pointing at the local origin back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
+  reload) is upgraded on the engine and relayed both ways with its subprotocol, its close code passed on when it can
+  be sent.
+- **When it stops.** A wrong key, a share that ended and an unknown id all get the same page, "This preview is not
+  shared", so a guess learns nothing. A stopped run gets "The service is not running" (503, or 502 when the dev
+  server refuses the connection), and the link works again the moment the service starts; an offline machine gets the
+  Worker's "The machine is offline". Each is one self-contained page in the app's look, the Shinsa mark and an empty
+  state, light or dark with the device, ending with a line about Shinsa, Download Shinsa (the canary) and Learn more
+  (`serializePreviewPage`, `PREVIEW_PAGES`); the stopped and offline ones reload
+  every `PREVIEW_RETRY_SECONDS` (10), so the preview comes back on its own. The engine marks its own pages with `x-shinsa-preview-page`
+  (`PREVIEW_PAGE_HEADER`), so the Worker tells a stopped service from a tunnel that does not answer.
+  Stop sharing, a time limit running out (`ShareClock`, `preview.expire`) and turning remote access off close every
+  open socket of the preview at once (`Previews.#syncSockets`).
+- **How long.** The same limits as a task's (`until_done`, `hour`, `day`, `week`, `none`), defaulting to the
+  `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
+  `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
+- **Team access** waits for teams; a preview is shared only by link for now.
+- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
+  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
+  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
+  starting the service, and a link that no longer works.
 
 ## Slack
 
