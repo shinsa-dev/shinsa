@@ -5,9 +5,10 @@ import {
   SHARE_CHANNEL_PATH,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_ENGINE_INTERACTIONS_PATH,
+  TEAM_CHANNEL_PATH,
 } from '@shinsa/core';
 
-export type TunnelRoute = 'health' | 'hook' | 'channel' | 'share' | 'slack';
+export type TunnelRoute = 'health' | 'hook' | 'channel' | 'share' | 'team' | 'slack';
 
 const TUNNEL_HEADER = 'cf-connecting-ip';
 
@@ -26,6 +27,7 @@ export function resolveTunnelRoute(request: Request, url: URL): TunnelRoute | nu
   if (url.pathname.startsWith(REMOTE_ENGINE_HOOK_PREFIX)) return 'hook';
   if (url.pathname === REMOTE_CHANNEL_PATH && request.method === 'GET') return 'channel';
   if (url.pathname === SHARE_CHANNEL_PATH && request.method === 'GET') return 'share';
+  if (url.pathname === TEAM_CHANNEL_PATH && request.method === 'GET') return 'team';
   const slack = url.pathname === SLACK_ENGINE_EVENTS_PATH || url.pathname === SLACK_ENGINE_INTERACTIONS_PATH;
   if (slack && request.method === 'POST') return 'slack';
   return null;

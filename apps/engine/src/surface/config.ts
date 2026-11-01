@@ -32,6 +32,7 @@ import {
   selectProject,
 } from './resolve.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
+import { findTeamId } from './teams.ts';
 
 type RepoPatch = Extract<UserCommand, { type: 'repo.update' }>['patch'];
 
@@ -55,7 +56,7 @@ const TEAM_FIELD: FieldSpec = {
   name: 'team',
   kind: 'text',
   required: true,
-  description: 'The team’s id.',
+  description: 'The team’s name or id, from `shinsa teams list`.',
 };
 
 const PATH_FIELD: FieldSpec = {
@@ -318,7 +319,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     build: async (values, client) => ({
       type: 'project.add_to_team',
       projectId: await findProjectId(client, readValue(values, 'project')),
-      teamId: readValue(values, 'team'),
+      teamId: await findTeamId(client, readValue(values, 'team')),
     }),
     done: () => 'The team sees its tasks now.',
   }),
@@ -331,7 +332,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     build: async (values, client) => ({
       type: 'project.remove_from_team',
       projectId: await findProjectId(client, readValue(values, 'project')),
-      teamId: readValue(values, 'team'),
+      teamId: await findTeamId(client, readValue(values, 'team')),
     }),
     done: () => 'The team no longer sees its tasks.',
   }),

@@ -1,8 +1,11 @@
 import { statSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
+  createShareWelcome,
   DomainError,
+  deriveShareSessionKey,
   isShareId,
+  parseShareHello,
   parseShareUrl,
   parseUnifiedDiff,
   type Repo,
@@ -17,8 +20,10 @@ import {
   type ShareFileType,
   type ShareLiveView,
   serializeBase64Url,
+  serializePublicKey,
   serializeShareUrl,
   type Task,
+  verifyShareHello,
 } from '@shinsa/core';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
@@ -27,7 +32,14 @@ import { EffectError } from '../runtime/failures.ts';
 import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence.ts';
 import type { ChannelPeer } from './channel.ts';
 import type { Remote } from './index.ts';
-import { type LiveFile, type LiveShare, SHARE_GONE_REASON, ShareChannel } from './share-channel.ts';
+import {
+  createChannelEphemeral,
+  type HelloAnswer,
+  type LiveFile,
+  type LiveShare,
+  SHARE_GONE_REASON,
+  ShareChannel,
+} from './share-channel.ts';
 
 export const SHARE_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this task. Its link works once this machine is paired.';
@@ -123,7 +135,7 @@ export class Shares implements ShareEffects, ShareLinks {
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #hashes = new Map<string, HashedFile>();
   readonly #code = new Map<string, { key: string; files: LiveFile[] }>();
-  readonly #channels = new Set<ShareChannel>();
+  readonly #channels = new Map<ShareChannel, string>();
   #pairedAs: string | null;
 
   constructor(options: SharesOptions) {
@@ -162,15 +174,16 @@ export class Shares implements ShareEffects, ShareLinks {
 
   #syncChannels() {
     this.#endChannels(
-      (channel) => channel.taskId !== null && this.#resolveShare(channel.shareId)?.taskId !== channel.taskId,
+      (channel, shareId) =>
+        channel.subject !== null && this.#resolveShare(shareId)?.taskId !== channel.subject,
       SHARE_GONE_REASON
     );
-    for (const channel of this.#channels) if (channel.taskId) void channel.push();
+    for (const channel of this.#channels.keys()) if (channel.subject) void channel.push();
   }
 
-  #endChannels(match: (channel: ShareChannel) => boolean, reason: string) {
-    for (const channel of [...this.#channels]) {
-      if (!match(channel)) continue;
+  #endChannels(match: (channel: ShareChannel, shareId: string) => boolean, reason: string) {
+    for (const [channel, shareId] of [...this.#channels]) {
+      if (!match(channel, shareId)) continue;
       this.#channels.delete(channel);
       void channel.end(reason);
     }
@@ -193,12 +206,31 @@ export class Shares implements ShareEffects, ShareLinks {
   }
 
   openChannel(peer: ChannelPeer, shareId: string) {
-    const channel = new ShareChannel(peer, shareId, {
-      resolveShare: (id) => this.#resolveShare(id),
+    const channel = new ShareChannel<string>(peer, {
+      name: 'share link',
+      authorize: (hello) => this.#authorize(hello, shareId),
       resolveLive: (taskId) => this.resolveLive(taskId),
     });
-    this.#channels.add(channel);
+    this.#channels.set(channel, shareId);
     return channel;
+  }
+
+  async #authorize(text: string, shareId: string): Promise<HelloAnswer<string>> {
+    const hello = parseShareHello(text);
+    if (hello?.share !== shareId) return null;
+    const share = this.#resolveShare(shareId);
+    if (!(share && (await verifyShareHello(share.key, hello)))) return { refused: SHARE_GONE_REASON };
+    const ephemeral = await createChannelEphemeral();
+    const keys = {
+      share: shareId,
+      clientEphemeral: hello.ephemeral,
+      serverEphemeral: await serializePublicKey(ephemeral.publicKey),
+    };
+    return {
+      subject: share.taskId,
+      session: await deriveShareSessionKey(share.key, keys, ephemeral.privateKey, hello.ephemeral),
+      welcome: await createShareWelcome(share.key, keys),
+    };
   }
 
   closeChannel(channel: ShareChannel) {
@@ -223,7 +255,7 @@ export class Shares implements ShareEffects, ShareLinks {
     await this.#engine.dispatch({ type: 'share.record', taskId, url }, { id: `${context.key}:share.record` });
   }
 
-  async resolveLive(taskId: string): Promise<LiveShare> {
+  async resolveLive(taskId: string): Promise<LiveShare<ShareLiveView>> {
     const task = this.#findTask(taskId);
     const { shared, repo } = this.#resolveShared(task);
     const files = [

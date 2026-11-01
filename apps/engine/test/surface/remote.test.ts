@@ -24,6 +24,7 @@ const OFF: RemoteSnapshot = {
   access: null,
   link: null,
   requests: [],
+  teams: [],
 };
 
 const ON: RemoteSnapshot = {

@@ -1382,7 +1382,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<project>` | text, required | The project: its key, name or id. |
-| `--team` | text, required | The team’s id. |
+| `--team` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 #### shinsa projects remove-from-team
 
@@ -1397,7 +1397,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<project>` | text, required | The project: its key, name or id. |
-| `--team` | text, required | The team’s id. |
+| `--team` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 #### shinsa projects add-repo
 
@@ -2252,6 +2252,147 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<device>` | text, required | The device’s key, from `shinsa remote status`. |
+
+### teams
+
+#### shinsa teams list
+
+List the teams this machine is in, with their members and who asks to join.
+
+```
+shinsa teams list [--json]
+```
+
+Every task agent's tool: `teams_list` (reads).
+
+#### shinsa teams create
+
+Make a team you own, and show the link that asks to join it.
+
+```
+shinsa teams create <name...> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<name>` | text, required | The team’s name, 60 characters at most. |
+
+#### shinsa teams join
+
+Ask to join a team with its link, or add a team you are in to this machine.
+
+```
+shinsa teams join <url> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<url>` | text, required | The team link, https://app.shinsa.dev/share/team#… |
+
+#### shinsa teams link
+
+Show the link that asks to join a team you own, making a new one if it is off.
+
+```
+shinsa teams link <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa teams link-off
+
+Turn a team’s link off, so nobody can ask to join with it any more.
+
+```
+shinsa teams link-off <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa teams accept
+
+Accept someone who asked to join a team you own.
+
+```
+shinsa teams accept <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams decline
+
+Decline someone who asked to join a team you own.
+
+```
+shinsa teams decline <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams remove-member
+
+Take someone out of a team you own. Their views of its tasks close at once.
+
+```
+shinsa teams remove-member <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams leave
+
+Leave a team. Your projects stop showing their tasks to it.
+
+```
+shinsa teams leave <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa teams remove
+
+Remove a team you own, for every member.
+
+```
+shinsa teams remove <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 ### command
 

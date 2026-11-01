@@ -70,6 +70,7 @@ export function createSampleRemote(now: number) {
         requestedAt: now - 60_000,
       },
     ],
+    teams: [],
   };
   return [
     {

@@ -163,6 +163,8 @@ export type {
   RemoteDevice,
   RemoteLink,
   RemoteSnapshot,
+  RemoteTeamEntry,
+  TeamStatus,
   TunnelStatus,
 } from './status.ts';
 export {

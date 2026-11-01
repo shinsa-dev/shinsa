@@ -208,8 +208,11 @@ describe('projects and focus', () => {
   });
 
   test('puts a project in a team and takes it out, both left to the human', async () => {
-    const fake = createFakeClient({ '/api/projects': PROJECTS });
-    expect((await runSpec(fake, ['projects', 'add-to-team', 'WK', '--team', 'team-1'])).text).toBe(
+    const fake = createFakeClient({
+      '/api/projects': PROJECTS,
+      '/api/remote': { teams: [{ id: 'team-1', name: 'Platform' }] },
+    });
+    expect((await runSpec(fake, ['projects', 'add-to-team', 'WK', '--team', 'Platform'])).text).toBe(
       'The team sees its tasks now.'
     );
     expect((await runSpec(fake, ['projects', 'remove-from-team', 'WK', '--team', 'team-1'])).text).toBe(

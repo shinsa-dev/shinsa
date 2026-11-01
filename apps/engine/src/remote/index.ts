@@ -20,7 +20,7 @@ import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient, ControlError } from './control.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
-import { RemoteStore, type StoredLink } from './store.ts';
+import { listTeamEntries, RemoteStore, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
@@ -121,6 +121,9 @@ export class Remote {
       version: options.version,
       onRevoked: () => this.#forget(),
       onAccess: (access) => this.#recordAccess(access),
+      onTeams: (teams) => {
+        if (this.store.recordTeams(teams)) this.#publish();
+      },
       ...(options.timings ? { timings: options.timings } : {}),
       now: this.#now,
     });
@@ -155,6 +158,7 @@ export class Remote {
       access: file.access,
       link: file.credentials && file.machine && file.link ? this.#serializeLink(file.link) : null,
       requests: file.requests,
+      teams: listTeamEntries(file),
     };
   }
 
@@ -256,6 +260,8 @@ export class Remote {
       access: null,
       link: null,
       requests: [],
+      teams: [],
+      teamKeys: [],
     }));
     this.#settleWaiters(false);
     this.#publish();
@@ -429,6 +435,10 @@ export class Remote {
     return (enrolled.userId ?? owner) === userId;
   }
 
+  publish() {
+    this.#publish();
+  }
+
   subscribe(listener: () => void) {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -451,7 +461,15 @@ export class Remote {
   }
 
   #forget() {
-    this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, access: null }));
+    this.store.update((file) => ({
+      ...file,
+      credentials: null,
+      owner: null,
+      enabled: false,
+      access: null,
+      teams: [],
+      teamKeys: [],
+    }));
     this.#closeChannels(isAnyChannel);
     this.#publish();
   }

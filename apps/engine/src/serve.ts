@@ -47,6 +47,7 @@ import {
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
 import { ShareClock } from './remote/share-clock.ts';
 import { Shares } from './remote/shares.ts';
+import { Teams } from './remote/teams.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -165,6 +166,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const shares = new Shares({ engine, remote, evidence });
+  const teams = new Teams({ engine, remote, shares });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -222,6 +224,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     terminals,
     remote,
     shares,
+    teams,
     slack,
     inbox,
     quick,
@@ -288,6 +291,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     remote: services.remote,
     shares: services.shares,
+    teams: services.teams,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,

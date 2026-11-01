@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from '../../src/log/index.ts';
-import { RemoteStore, readRemoteFile } from '../../src/remote/store.ts';
+import { RemoteStore, readRemoteFile, readTeams } from '../../src/remote/store.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const CREDENTIALS = {
@@ -83,6 +83,8 @@ describe('remote.json', () => {
     );
     expect(readRemoteFile(path)).toEqual({
       version: 1,
+      teams: [],
+      teamKeys: [],
       machine: { publicKey: 'p', privateKey: 'k' },
       credentials: CREDENTIALS,
       owner: 'mona',
@@ -208,5 +210,40 @@ describe('the remote store', () => {
     const store = new RemoteStore(path);
     const key = await store.resolveMachineKey();
     expect(key.publicKey).not.toBe('p');
+  });
+});
+
+describe('readTeams', () => {
+  test('keeps each team machine it can read and drops the rest', () => {
+    const owner = { id: '1', login: 'mona' };
+    const teams = readTeams([
+      {
+        id: 'team-1',
+        name: 'Platform',
+        role: 'owner',
+        owner,
+        createdAt: 1,
+        machines: [
+          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5 },
+          { id: 'm2', name: 'Laptop', userId: '7' },
+          { id: 'm3', name: 4, userId: '7' },
+          'nope',
+        ],
+      },
+      { id: 'team-2', name: 'Design', owner, createdAt: 2, machines: 'none' },
+      { id: 'team-3', name: 'Broken', owner },
+    ]);
+    expect(teams?.map((team) => [team.id, team.role, team.machines])).toEqual([
+      [
+        'team-1',
+        'owner',
+        [
+          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5 },
+          { id: 'm2', name: 'Laptop', userId: '7', online: false, lastSeenAt: null },
+        ],
+      ],
+      ['team-2', 'member', []],
+    ]);
+    expect(readTeams('none')).toBeNull();
   });
 });

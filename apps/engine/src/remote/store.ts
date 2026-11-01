@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { AccessRequest, RemoteDevice } from '@shinsa/core';
+import type { AccessRequest, RemoteDevice, RemoteTeamEntry } from '@shinsa/core';
 import {
+  isTeamKey,
   type MachineCredentials,
   parsePrivateKey,
   REMOTE_KEY_ALGORITHM,
   type RemoteAccess,
   type RemoteMember,
+  type RemoteTeam,
   type RemoteUser,
   serializePrivateKey,
   serializePublicKey,
@@ -32,6 +34,16 @@ export interface RemoteFile {
   access: RemoteAccess | null;
   link: StoredLink | null;
   requests: AccessRequest[];
+  teams: RemoteTeam[];
+  teamKeys: StoredTeamKey[];
+}
+
+export interface StoredTeamKey {
+  teamId: string;
+  name: string;
+  key: string;
+  invite: string | null;
+  addedAt: number;
 }
 
 export interface StoredLink {
@@ -130,6 +142,73 @@ function readRequests(value: unknown): AccessRequest[] {
   });
 }
 
+function readTeamMachines(value: unknown): RemoteTeam['machines'] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isFields(entry)) return [];
+    const { id, name, userId, online } = entry;
+    if (typeof id !== 'string' || typeof name !== 'string' || typeof userId !== 'string') return [];
+    const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
+    return [{ id, name, userId, online: online === true, lastSeenAt }];
+  });
+}
+
+function readTeam(value: unknown): RemoteTeam | null {
+  const owner = isFields(value) ? readUser(value.owner) : null;
+  if (!(owner && isFields(value))) return null;
+  const { id, name, role, createdAt } = value;
+  if (typeof id !== 'string' || typeof name !== 'string' || typeof createdAt !== 'number') return null;
+  return {
+    id,
+    name,
+    owner,
+    role: role === 'owner' ? 'owner' : 'member',
+    members: readMembers(value.members),
+    requests: readMembers(value.requests),
+    machines: readTeamMachines(value.machines),
+    createdAt,
+  };
+}
+
+export function readTeams(value: unknown): RemoteTeam[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.flatMap((entry) => readTeam(entry) ?? []);
+}
+
+function readTeamKeys(value: unknown): StoredTeamKey[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isFields(entry)) return [];
+    const { teamId, name, key, addedAt } = entry;
+    if (typeof teamId !== 'string' || typeof name !== 'string' || typeof addedAt !== 'number') return [];
+    if (typeof key !== 'string' || !isTeamKey(key)) return [];
+    return [{ teamId, name, key, invite: readOptionalText(entry.invite), addedAt }];
+  });
+}
+
+export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
+  const keys = new Map(file.teamKeys.map((stored) => [stored.teamId, stored]));
+  const known = file.teams.map((team) => ({
+    id: team.id,
+    name: team.name,
+    status: 'member' as const,
+    onMachine: keys.has(team.id),
+    invite: team.role === 'owner' && Boolean(keys.get(team.id)?.invite),
+    team,
+  }));
+  const asked = file.teamKeys
+    .filter((stored) => !file.teams.some((team) => team.id === stored.teamId))
+    .map((stored) => ({
+      id: stored.teamId,
+      name: stored.name,
+      status: 'requested' as const,
+      onMachine: true,
+      invite: false,
+      team: null,
+    }));
+  return [...known, ...asked];
+}
+
 export function readAccess(value: unknown): RemoteAccess | null {
   const owner = isFields(value) ? readUser(value.owner) : null;
   if (!(owner && isFields(value))) return null;
@@ -147,6 +226,8 @@ function createRemoteFile(): RemoteFile {
     access: null,
     link: null,
     requests: [],
+    teams: [],
+    teamKeys: [],
   };
 }
 
@@ -171,6 +252,8 @@ export function readRemoteFile(path: string): RemoteFile {
     access: readAccess(fields.access),
     link: readLink(fields.link),
     requests: readRequests(fields.requests),
+    teams: readTeams(fields.teams) ?? [],
+    teamKeys: readTeamKeys(fields.teamKeys),
   };
 }
 
@@ -243,6 +326,43 @@ export class RemoteStore {
       devices: file.devices.filter((device) => device.publicKey !== publicKey),
     }));
     return this.#file.devices.length < before;
+  }
+
+  recordTeams(teams: RemoteTeam[]) {
+    const before = this.#file.teams;
+    const kept = this.#file.teamKeys.flatMap((stored) => {
+      const team = teams.find((entry) => entry.id === stored.teamId);
+      if (team) return [{ ...stored, name: team.name }];
+      return before.some((entry) => entry.id === stored.teamId) ? [] : [stored];
+    });
+    const changed =
+      JSON.stringify(teams) !== JSON.stringify(before) ||
+      JSON.stringify(kept) !== JSON.stringify(this.#file.teamKeys);
+    if (changed) this.update((file) => ({ ...file, teams, teamKeys: kept }));
+    return changed;
+  }
+
+  selectTeamKey(teamId: string) {
+    return this.#file.teamKeys.find((stored) => stored.teamId === teamId) ?? null;
+  }
+
+  selectTeam(teamId: string) {
+    return this.#file.teams.find((team) => team.id === teamId) ?? null;
+  }
+
+  upsertTeamKey(stored: StoredTeamKey) {
+    this.update((file) => ({
+      ...file,
+      teamKeys: [...file.teamKeys.filter((entry) => entry.teamId !== stored.teamId), stored],
+    }));
+  }
+
+  removeTeam(teamId: string) {
+    this.update((file) => ({
+      ...file,
+      teams: file.teams.filter((team) => team.id !== teamId),
+      teamKeys: file.teamKeys.filter((stored) => stored.teamId !== teamId),
+    }));
   }
 
   recordDeviceSeen(publicKey: string, at: number) {

@@ -7,11 +7,14 @@ import {
   type ChannelMessage,
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
+  createTeamHello,
   parseEnrollFragment,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
   type RemoteAccess,
+  type RemoteTeam,
   type RemoteUser,
+  resolveMachineTeamPath,
   serializeBase64Url,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
@@ -30,6 +33,7 @@ import {
 } from '../../src/remote/index.ts';
 import type { ShareChannel } from '../../src/remote/share-channel.ts';
 import type { ShareLinks } from '../../src/remote/shares.ts';
+import { Teams } from '../../src/remote/teams.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
@@ -59,6 +63,19 @@ const OWNER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl
 const KAI: RemoteUser = { id: '7', login: 'kai', name: null, avatarUrl: null };
 
 const ACCESS: RemoteAccess = { owner: OWNER, members: [] };
+
+const BOB: RemoteUser = { id: '9', login: 'bob', name: null, avatarUrl: null };
+
+const TEAM: RemoteTeam = {
+  id: 'team1',
+  name: 'Platform',
+  owner: OWNER,
+  role: 'owner',
+  members: [{ user: KAI, addedAt: 2 }],
+  requests: [{ user: BOB, addedAt: 3 }],
+  machines: [],
+  createdAt: 1,
+};
 
 const running: (() => Promise<void>)[] = [];
 
@@ -93,6 +110,7 @@ async function start(
     config?: Partial<ServerConfig>;
     openUrl?: (url: string) => Promise<void>;
     shares?: ShareLinks;
+    teams?: boolean;
   } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
@@ -136,6 +154,9 @@ async function start(
     pairPollMs: 1,
   });
   const engine = new Engine(new EventLog(config.databasePath));
+  const teams = options.teams
+    ? new Teams({ engine, remote, shares: { resolveLive: () => Promise.reject(new Error('no task')) } })
+    : null;
   const http = startServer({
     engine,
     config,
@@ -146,6 +167,7 @@ async function start(
     schedules: createFakeSchedules(),
     remote,
     ...(options.shares ? { shares: options.shares } : {}),
+    ...(teams ? { teams } : {}),
     slack: createFakeSlack(),
   });
   running.push(async () => {
@@ -353,6 +375,77 @@ describe('the tunnel entry point', () => {
     expect((await ended).code).toBe(1008);
     await until('the share link is closed', () => closed.length === 1);
     expect(received).toEqual(['hi']);
+  });
+
+  test('opens a team view only from app.shinsa.dev, with a connect token, for a member of the team', async () => {
+    const { tunnel, port, plane, remote } = await start({ teams: true });
+    const key = serializeBase64Url(new Uint8Array(32).fill(3));
+    remote.store.recordTeams([TEAM]);
+    remote.store.upsertTeamKey({ teamId: 'team1', name: 'Platform', key, invite: 'invite-1', addedAt: 1 });
+    expect((await tunnel('/team')).status).toBe(403);
+    expect((await tunnel('/team', { headers: { origin: plane.origin } })).status).toBe(401);
+    const token = encodeURIComponent(await createToken(undefined, KAI.id));
+    expect((await tunnel(`/team?token=${token}`, { headers: { origin: plane.origin } })).status).toBe(400);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/team?token=${token}`, {
+      headers: { origin: plane.origin, 'cf-connecting-ip': '203.0.113.9' },
+    } as unknown as string[]);
+    await new Promise((resolve) => socket.addEventListener('open', resolve, { once: true }));
+    const ephemeral = await createKeyPair();
+    const welcome = new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    socket.send(JSON.stringify(await createTeamHello('team1', key, { kind: 'list' }, ephemeral.publicKey)));
+    expect(JSON.parse(await welcome)).toMatchObject({ type: 'welcome' });
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    socket.close();
+    await ended;
+  });
+
+  test('has no team view without teams, or while remote access is paused', async () => {
+    const { tunnel } = await start();
+    expect((await tunnel('/team', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(404);
+  });
+
+  test('changes teams only through their routes on this machine', async () => {
+    const { local, plane, remote } = await start({ teams: true });
+    plane.answers.set(REMOTE_PATHS.machineTeams, () => Response.json({ team: TEAM, invite: 'invite-1' }));
+    plane.answers.set(resolveMachineTeamPath('team1', 'invite'), () => Response.json({ invite: 'invite-2' }));
+    plane.answers.set(resolveMachineTeamPath('team1', 'members/add'), () =>
+      Response.json({ user: BOB, addedAt: 4 })
+    );
+    const created = (await (await local('/api/remote/teams/create', { name: 'Platform' })).json()) as {
+      teamId: string;
+      url: string;
+    };
+    expect(created.teamId).toBe('team1');
+    expect(created.url).toContain('/share/team#team1.invite-1.');
+    const link = (await (await local('/api/remote/teams/link', { teamId: 'team1' })).json()) as {
+      url: string;
+    };
+    expect(link.url).toBe(created.url);
+    const renewed = (await (await local('/api/remote/teams/link/renew', { teamId: 'team1' })).json()) as {
+      url: string;
+    };
+    expect(renewed.url).toContain('.invite-2.');
+    const turnedOff = (await (
+      await local('/api/remote/teams/link/remove', { teamId: 'team1' })
+    ).json()) as RemoteSnapshot;
+    expect(turnedOff.teams[0]?.invite).toBe(false);
+    await local('/api/remote/teams/requests/accept', { teamId: 'team1', userId: BOB.id });
+    await local('/api/remote/teams/requests/decline', { teamId: 'team1', userId: BOB.id });
+    await local('/api/remote/teams/members/remove', { teamId: 'team1', userId: KAI.id });
+    expect(remote.snapshot().teams[0]?.team?.members.map((member) => member.user.id)).toEqual([BOB.id]);
+    expect((await local('/api/remote/teams/leave', { teamId: 'team1' })).status).toBe(400);
+    expect((await local('/api/remote/teams/members/remove', { teamId: 'team1' })).status).toBe(400);
+    await local('/api/remote/teams/remove', { teamId: 'team1' });
+    expect(remote.snapshot().teams).toEqual([]);
+    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
+      Response.json({ teamId: 'team1', name: 'Platform', owner: KAI, status: 'requested' })
+    );
+    const joined = await local('/api/remote/teams/join', { url: created.url });
+    expect(await joined.json()).toEqual({ status: 'requested' });
   });
 
   test('has no share link without the shares', async () => {
@@ -922,6 +1015,22 @@ describe('links, access requests and members', () => {
     expect(remote.snapshot().access).toEqual(ACCESS);
     expect(remote.snapshot().devices).toEqual([]);
     expect(await channel.closed).toBe(1008);
+    release();
+  });
+
+  test('a heartbeat with the account’s teams shows them at once, and a repeat changes nothing', async () => {
+    const { remote, plane } = await start();
+    const pushes: number[] = [];
+    const release = remote.subscribe(() => pushes.push(1));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, teams: [TEAM] }));
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    expect(remote.snapshot().teams).toEqual([
+      { id: 'team1', name: 'Platform', status: 'member', onMachine: false, invite: false, team: TEAM },
+    ]);
+    const settled = pushes.length;
+    await remote.supervisor.requestHeartbeat();
+    expect(pushes.length).toBe(settled);
     release();
   });
 

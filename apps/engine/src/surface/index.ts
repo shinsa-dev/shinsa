@@ -18,6 +18,7 @@ import { SERVICE_SPECS } from './services.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
 import { SYSTEM_SPECS } from './system.ts';
 import { TASK_SPECS } from './tasks.ts';
+import { TEAM_SPECS } from './teams.ts';
 import { WATCHDOG_SPECS } from './watchdogs.ts';
 import { WORK_SPECS } from './work.ts';
 
@@ -61,6 +62,7 @@ export const SURFACE: SurfaceSpec[] = [
   ...EXTENSION_SPECS,
   ...WATCHDOG_SPECS,
   ...REMOTE_SPECS,
+  ...TEAM_SPECS,
   COMMAND_SPEC,
 ];
 
@@ -211,6 +213,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['folders', 'Choose the folders Shinsa searches for repositories.'],
       ['accounts', 'Sign in, import, refresh or remove the Claude accounts agents run on.'],
       ['remote', 'Reach this machine from Shinsa Cloud: pair it, pause it and add or remove devices.'],
+      ['teams', 'Create, join or leave teams, and answer requests to join the ones you own.'],
       ['settings', 'Read or change a setting by its name.'],
       ['setup', 'Show where setup stands, and check the tools Shinsa needs.'],
     ],
