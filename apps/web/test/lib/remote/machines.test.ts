@@ -10,6 +10,7 @@ import {
   listMachineRows,
   listTaskCapacityItems,
   parseTaskCapacity,
+  resolveMachineDetail,
   resolveTaskCapacityValue,
 } from '@/lib/remote/machines.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
@@ -39,6 +40,35 @@ describe('a machine in the dashboard', () => {
       role: 'member',
     };
     expect(describeMachine(shared, null, NOW).access).toBe('Shared by @lee · Not added on this device');
+  });
+
+  it('names who handed you a task on a machine, and the task once it is in this dashboard', async () => {
+    const handed: RemoteInstance = {
+      ...STUDIO,
+      owner: { id: '3', login: 'lee', name: 'Lee Park', avatarUrl: null },
+      role: 'guest',
+    };
+    const row = describeMachine(handed, await createDevice('key'), NOW);
+    expect(row.access).toBe('A task handed to you by Lee Park · In this dashboard');
+    const machine = {
+      id: STUDIO.id,
+      name: 'Studio',
+      current: false,
+      guest: true as const,
+      state: {
+        tasks: { t1: { stage: 'building' as const } },
+        projects: {},
+        settings: { taskCapacity: null, placementPolicies: [] },
+      },
+    };
+    expect(resolveMachineDetail(row, undefined, machine, { t1: { title: 'Fix the tab bar' } })).toBe(
+      'A task handed to you by Lee Park · In this dashboard · Fix the tab bar'
+    );
+    expect(resolveMachineDetail(row, undefined, machine)).toBe(row.access);
+    expect(resolveMachineDetail(row, undefined, undefined)).toBe(row.access);
+    expect(resolveMachineDetail(row, { ...machine, guest: undefined }, undefined)).toBe(
+      'A task handed to you by Lee Park · In this dashboard · 1 open task'
+    );
   });
 
   it('says whether it is online and whether this browser has it in its dashboard', async () => {
@@ -98,6 +128,15 @@ describe('a machine in the dashboard', () => {
       },
     });
     expect(member).toMatchObject({ id: 'k3x9', name: 'Studio' });
+    expect(member.guest).toBeUndefined();
+    const handed = createFleetMember({ ...STUDIO, role: 'guest' }, device, {
+      dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
+      onRefused: () => undefined,
+      createConnection: () =>
+        new Connection({ openSocket: () => new WebSocket('ws://x'), retry: () => undefined }),
+    });
+    expect(handed.member.guest).toBe(true);
+    handed.close();
     const answer = await member.fetch(new Request('https://shinsa.dev/api/health'));
     expect(await answer.text()).toBe('from Studio');
     const socket = sockets[0]?.();

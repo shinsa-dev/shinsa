@@ -202,6 +202,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       removeInstance: refuse,
       leaveInstance: refuse,
       acceptInvite: refuse,
+      acceptHandoff: refuse,
       readPair: refuse,
       approvePair: refuse,
       signOut: refuse,

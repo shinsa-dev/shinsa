@@ -9,17 +9,19 @@ import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/re
 import {
   type MachineAccess,
   type MachineChoice,
+  useConnection,
+  useGuestMachines,
   useMachineAccess,
   useMachines,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeMachineLoad } from '@/lib/new-task.ts';
 import {
   listMachineRows,
   listTaskCapacityItems,
   type MachineRow,
   parseTaskCapacity,
+  resolveMachineDetail,
   resolveTaskCapacityValue,
   TASK_CAPACITY_TITLE,
 } from '@/lib/remote/machines.ts';
@@ -130,10 +132,12 @@ function MachineItem({
   onRemove: () => void;
 }) {
   const machine = useMachines().find((candidate) => candidate.id === row.instance.id);
+  const handed = useGuestMachines().find((candidate) => candidate.id === row.instance.id);
+  const { state } = useConnection();
   const outdated = useUnreachableMachines().some(
     (candidate) => candidate.id === row.instance.id && candidate.outdated
   );
-  const detail = machine ? `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}` : row.access;
+  const detail = resolveMachineDetail(row, machine, handed, state?.tasks);
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
@@ -150,7 +154,7 @@ function MachineItem({
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}
         <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
-          {row.instance.role === 'member' ? 'Leave' : 'Remove'}
+          {row.instance.role === 'owner' ? 'Remove' : 'Leave'}
         </Button>
       </div>
     </div>
@@ -180,9 +184,9 @@ function useMachineRows() {
   const remove = async (row: MachineRow) => {
     if (!services) return;
     const id = row.instance.id;
-    await (row.instance.role === 'member'
-      ? services.dashboard.leaveInstance(id)
-      : services.dashboard.removeInstance(id));
+    await (row.instance.role === 'owner'
+      ? services.dashboard.removeInstance(id)
+      : services.dashboard.leaveInstance(id));
     await services.devices.removeDevice(id);
     setVersion((value) => value + 1);
   };

@@ -7,7 +7,13 @@ import {
   type RemoteChannel,
 } from '@/lib/remote/channel.ts';
 import type { EnrolledDevice } from '@/lib/remote/devices.ts';
-import { type EnrollOptions, requestDeviceAccess, requestWaitingAnswer } from '@/lib/remote/enroll.ts';
+import {
+  claimHandoff,
+  type EnrollOptions,
+  requestDeviceAccess,
+  requestWaitingAnswer,
+  resolveClaimStanding,
+} from '@/lib/remote/enroll.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
 const SECRET = serializeBase64Url(new Uint8Array(32).fill(9));
@@ -191,5 +197,82 @@ describe('a device that left while it waited for an answer', () => {
     );
     expect(await requestWaitingAnswer(offline.device, offline.options)).toBe('waiting');
     expect(offline.removed).toEqual([]);
+  });
+});
+
+describe('taking over a task handed off with a link', () => {
+  const STUDIO = {
+    id: 'k3x9',
+    name: 'Studio',
+    fingerprint: 'f',
+    online: true,
+    lastSeenAt: null,
+    createdAt: 0,
+    owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
+  };
+
+  it('accepts the hand-off, proves the link with a new key under this device name and remembers it', async () => {
+    const mac = await FakeMac.create({ enrollSecret: SECRET });
+    const accepted: string[] = [];
+    const written: EnrolledDevice[] = [];
+    const device = await claimHandoff(createInput(mac, SECRET, false), {
+      dashboard: {
+        acceptHandoff: (token) => {
+          accepted.push(token);
+          return Promise.resolve({
+            instanceId: 'k3x9',
+            name: 'Studio',
+            owner: STUDIO.owner,
+            user: USER,
+            connect: { url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 },
+          });
+        },
+      },
+      devices: {
+        writeDevice: (entry) => {
+          written.push(entry);
+          return Promise.resolve();
+        },
+      },
+      name: 'Kai’s Chrome',
+      now: () => 7,
+      createKeys: createKeyPair,
+      openChannel: (channel) => openRemoteChannel({ ...channel, openSocket: mac.openSocket }),
+    });
+    expect(accepted).toEqual(['tok']);
+    expect(mac.names).toEqual(['Kai’s Chrome']);
+    expect(written).toEqual([device]);
+    expect(device).toEqual({
+      instanceId: 'k3x9',
+      machineKey: mac.machineKey,
+      keys: device.keys,
+      enrolledAt: 7,
+    });
+    expect(mac.last.closedWith?.code).toBe(1000);
+  });
+
+  it('says this device reaches the machine already, works on one of its tasks already, or may take it', async () => {
+    const keys = await createKeyPair();
+    const input = { instanceId: 'k3x9', machineKey: 'mk', secret: SECRET, invite: 'tok', onMachine: false };
+    const device: EnrolledDevice = { instanceId: 'k3x9', machineKey: 'mk', keys, enrolledAt: 1 };
+    expect(resolveClaimStanding(input, [{ ...STUDIO, role: 'owner' }], device)).toEqual({
+      kind: 'added',
+      machine: 'Studio',
+    });
+    expect(resolveClaimStanding(input, [{ ...STUDIO, role: 'guest' }], device)).toEqual({
+      kind: 'busy',
+      machine: 'Studio',
+    });
+    expect(resolveClaimStanding(input, [], device)).toEqual({ kind: 'ready' });
+    expect(resolveClaimStanding(input, [{ ...STUDIO, role: 'member' }], null)).toEqual({ kind: 'ready' });
+    expect(
+      resolveClaimStanding(input, [{ ...STUDIO, role: 'member' }], { ...device, machineKey: 'other' })
+    ).toEqual({ kind: 'ready' });
+    expect(
+      resolveClaimStanding(input, [{ ...STUDIO, role: 'member' }], {
+        ...device,
+        waiting: { machineName: 'Studio' },
+      })
+    ).toEqual({ kind: 'ready' });
   });
 });

@@ -79,6 +79,8 @@ export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(i
     removeInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceRemovePath(instanceId), 'POST'),
     leaveInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceLeavePath(instanceId), 'POST'),
     acceptInvite: (token: string) => call<InviteAcceptResponse>(REMOTE_PATHS.inviteAccept, 'POST', { token }),
+    acceptHandoff: (token: string) =>
+      call<InviteAcceptResponse>(REMOTE_PATHS.handoffAccept, 'POST', { token }),
     readPair: (claimCode: string) => call<PairView>(resolvePairPath(claimCode)),
     approvePair: (claimCode: string) => call<PairApproveResponse>(resolvePairApprovePath(claimCode), 'POST'),
     signOut: () => call<{ ok: true }>(REMOTE_PATHS.signOut, 'POST'),

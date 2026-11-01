@@ -186,6 +186,7 @@ describe('working as the guest', () => {
     expect(
       JSON.stringify(harness.effectsOf('run.steer').at(-1) ?? harness.effectsOf('run.execute').at(-1))
     ).toContain('From @kai, who the human handed this task to:');
+    expect(JSON.stringify(harness.task(taskId))).not.toContain('handed this task to');
     expect(serializeTaskDetail(harness.state, taskId)).toContain('@kai:');
   });
 

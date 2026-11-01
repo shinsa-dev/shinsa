@@ -2,6 +2,7 @@ import {
   type EngineInfo,
   isEngineProtocolMatch,
   type RemoteSnapshot,
+  SCOPE_MESSAGES,
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
@@ -28,6 +29,7 @@ export interface FleetMember {
   id: string;
   name: string;
   current?: boolean;
+  guest?: true;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
 }
@@ -167,7 +169,8 @@ export class Fleet implements ShinsaConnection {
   readonly #remote = createSignal();
 
   constructor(members: FleetMember[], unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES) {
-    for (const member of members) this.#add(member);
+    for (const member of [...members].sort((a, b) => Number(a.guest === true) - Number(b.guest === true)))
+      this.#add(member);
     this.#unreachable = unreachable;
     this.#listedUnreachable = unreachable;
   }
@@ -180,7 +183,12 @@ export class Fleet implements ShinsaConnection {
     const { connection } = member;
     this.#entries.push({
       member,
-      view: { id: member.id, name: member.name, current: member.current === true },
+      view: {
+        id: member.id,
+        name: member.name,
+        current: member.current === true,
+        ...(member.guest ? { guest: true as const } : {}),
+      },
       release: [
         connection.subscribe(() => this.#state.publish()),
         connection.subscribeTranscripts(() => this.#transcripts.publish()),
@@ -345,7 +353,9 @@ export class Fleet implements ShinsaConnection {
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
     if (!member) return Promise.reject(new Error('No machine is connected.'));
     if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))
-      return Promise.reject(new Error(resolveUpdateMessage(member.name)));
+      return Promise.reject(
+        new Error(member.guest ? SCOPE_MESSAGES.command : resolveUpdateMessage(member.name))
+      );
     return member.connection.command(command);
   };
 

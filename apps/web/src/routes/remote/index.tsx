@@ -10,6 +10,7 @@ import {
   stashEnrollFragment,
 } from '@/lib/remote/mode.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
+import { ClaimPage } from './claim.tsx';
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
@@ -27,6 +28,7 @@ export function createRemoteServices(): RemoteServices {
 
 function resolveReturnPath(view: RemoteView) {
   if (view.kind === 'enroll') return REMOTE_PATHS.enrollPage;
+  if (view.kind === 'claim') return REMOTE_PATHS.claimPage;
   const search = new URLSearchParams(location.search);
   search.delete('sign_in_error');
   const query = search.toString();
@@ -36,9 +38,9 @@ function resolveReturnPath(view: RemoteView) {
 export function RemoteRoot({ services, app }: { services: RemoteServices; app: React.ReactNode }) {
   const [view] = React.useState(() => {
     const resolved = resolveRemoteView(location);
-    if (resolved.kind === 'enroll' && location.hash) {
+    if ((resolved.kind === 'enroll' || resolved.kind === 'claim') && location.hash) {
       stashEnrollFragment(sessionStorage, location.hash, location.search);
-      history.replaceState(null, '', REMOTE_PATHS.enrollPage);
+      history.replaceState(null, '', location.pathname);
     }
     return resolved;
   });
@@ -65,6 +67,15 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
       case 'enroll':
         return (
           <EnrollPage
+            link={selectEnrollFragment(sessionStorage, '')}
+            user={session.user}
+            dashboard={services.dashboard}
+            devices={services.devices}
+          />
+        );
+      case 'claim':
+        return (
+          <ClaimPage
             link={selectEnrollFragment(sessionStorage, '')}
             user={session.user}
             dashboard={services.dashboard}

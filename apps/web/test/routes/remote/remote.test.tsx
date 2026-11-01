@@ -1,15 +1,30 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import type { PairView, RemoteInstance, RemoteSession, RemoteSnapshot, RemoteUser } from '@shinsa/core';
+import {
+  createState,
+  type PairView,
+  type RemoteInstance,
+  type RemoteSession,
+  type RemoteSnapshot,
+  type RemoteUser,
+} from '@shinsa/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
-import { Connection, connection } from '@/lib/connection/socket.ts';
+import {
+  Connection,
+  connection,
+  type MachineChoice,
+  replaceConnection,
+  type Snapshot,
+} from '@/lib/connection/socket.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
+import { ClaimPage } from '@/routes/remote/claim.tsx';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
+import { createTask } from '../../support/state.ts';
 
 const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
 
@@ -42,6 +57,14 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     removeInstance: () => Promise.resolve({ ok: true }),
     leaveInstance: () => Promise.resolve({ ok: true }),
     acceptInvite: () =>
+      Promise.resolve({
+        instanceId: 'k3x9',
+        name: 'Studio',
+        owner: USER.user as RemoteUser,
+        user: USER.user as RemoteUser,
+        connect: { url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 },
+      }),
+    acceptHandoff: () =>
       Promise.resolve({
         instanceId: 'k3x9',
         name: 'Studio',
@@ -212,6 +235,18 @@ describe('the remote dashboard', () => {
     renderRoot(`/enroll#k3x9.${MACHINE_KEY}.secret_1.tok`);
     expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
   });
+
+  it('routes to the claim page, keeping its link out of the address bar and the sign-in redirect', async () => {
+    const { unmount } = renderRoot(`/claim#k3x9.${MACHINE_KEY}.secret_1.tok`, {
+      dashboard: createDashboard({ readSession: () => Promise.resolve({ user: null }) }),
+    });
+    const link = (await screen.findByText('Sign in with GitHub')).closest('a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/__remote/sign-in?return=%2Fclaim');
+    expect(location.hash).toBe('');
+    unmount();
+    renderRoot('/claim', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
+    expect(await screen.findByText('Take over a task')).toBeTruthy();
+  });
 });
 
 describe('access requests in Settings → Machines', () => {
@@ -283,6 +318,49 @@ describe('the machines in Settings', () => {
     expect(await screen.findByText(/In this dashboard/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
+  });
+
+  it('names the task handed to you on a machine, and leaves it instead of removing it', async () => {
+    const devices = createDevices(DEVICE);
+    const left: string[] = [];
+    const handed: RemoteInstance = {
+      ...STUDIO,
+      owner: { id: '3', login: 'lee', name: 'Lee Park', avatarUrl: null },
+      role: 'guest',
+    };
+    const task = createTask({ id: 't1', title: 'Fix the tab bar' });
+    const snapshot: Snapshot = { state: { ...createState(), tasks: { t1: task } }, status: 'open' };
+    const machines: MachineChoice[] = [
+      {
+        id: 'k3x9',
+        name: 'Studio',
+        current: false,
+        guest: true,
+        state: { tasks: { t1: task }, projects: {}, settings: createState().settings },
+      },
+    ];
+    replaceConnection(
+      Object.assign(new Connection(), { snapshot: () => snapshot, listMachines: () => machines })
+    );
+    const dashboard = createDashboard({
+      listInstances: () => Promise.resolve([handed]),
+      leaveInstance: (instanceId) => {
+        left.push(instanceId);
+        return Promise.resolve({ ok: true });
+      },
+    });
+    render(
+      <RemoteServicesContext.Provider value={{ dashboard, devices, worker: createWorker() }}>
+        <MachinesSettings />
+      </RemoteServicesContext.Provider>
+    );
+    expect(
+      await screen.findByText('A task handed to you by Lee Park · In this dashboard · Fix the tab bar')
+    ).toBeTruthy();
+    expect(screen.queryByText('Task capacity')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
+    await waitFor(() => expect(left).toEqual(['k3x9']));
+    replaceConnection(null);
   });
 
   it('shows a shared machine with its owner, and leaves it instead of removing it', async () => {
@@ -563,5 +641,87 @@ describe('the enroll page', () => {
       />
     );
     expect(screen.getByText('This link cannot add a device')).toBeTruthy();
+  });
+});
+
+describe('the claim page', () => {
+  const link = {
+    instanceId: 'k3x9',
+    machineKey: MACHINE_KEY,
+    secret: 'secret_1',
+    invite: 'handoff-token',
+    onMachine: false,
+  };
+  const KAI: RemoteUser = { id: '2', login: 'kai', name: null, avatarUrl: null };
+
+  it('takes the task over under this browser’s name, then opens Shinsa', async () => {
+    sessionStorage.setItem('shinsa.remote.enroll', 'x');
+    const named: string[] = [];
+    render(
+      <ClaimPage
+        link={link}
+        user={KAI}
+        dashboard={createDashboard({ listInstances: () => Promise.resolve([]) })}
+        devices={createDevices()}
+        resolveName={(user) => `${user.login}’s Chrome`}
+        claim={(_input, options) => {
+          named.push(options.name);
+          return Promise.resolve({} as EnrolledDevice);
+        }}
+      />
+    );
+    expect(await screen.findByText('Take over a task')).toBeTruthy();
+    expect(screen.getByText('This one task')).toBeTruthy();
+    expect(screen.getByText('As @kai. The first account to open this link takes the task.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Take over this task' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
+    expect(named).toEqual(['kai’s Chrome']);
+    expect(sessionStorage.getItem('shinsa.remote.enroll')).toBeNull();
+  });
+
+  it('says why it could not take the task over', async () => {
+    render(
+      <ClaimPage
+        link={link}
+        user={KAI}
+        dashboard={createDashboard({ listInstances: () => Promise.reject(new Error('Offline.')) })}
+        devices={createDevices()}
+        resolveName={() => 'Chrome'}
+        claim={() =>
+          Promise.reject(new Error('Someone else already took this task over. Ask for a new link.'))
+        }
+      />
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Take over this task' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Someone else already took this task over. Ask for a new link.'
+    );
+  });
+
+  it('leaves the link for someone else on a device that reaches the machine, or already works on one of its tasks', async () => {
+    const device = { instanceId: 'k3x9', machineKey: MACHINE_KEY, enrolledAt: 1 } as EnrolledDevice;
+    const failing = { ...createDevices(device), selectDevice: () => Promise.reject(new Error('Closed.')) };
+    const { unmount } = render(
+      <ClaimPage link={link} user={KAI} dashboard={createDashboard()} devices={createDevices(device)} />
+    );
+    expect(await screen.findByText('This device already reaches Studio')).toBeTruthy();
+    unmount();
+    const second = render(
+      <ClaimPage
+        link={link}
+        user={KAI}
+        dashboard={createDashboard({ listInstances: () => Promise.resolve([{ ...STUDIO, role: 'guest' }]) })}
+        devices={createDevices(device)}
+      />
+    );
+    expect(await screen.findByText('This browser works on a task from there already')).toBeTruthy();
+    second.unmount();
+    render(<ClaimPage link={link} user={KAI} dashboard={createDashboard()} devices={failing} />);
+    expect(await screen.findByText('Take over a task')).toBeTruthy();
+  });
+
+  it('says a link that cannot work is incomplete', () => {
+    render(<ClaimPage link={null} user={KAI} dashboard={createDashboard()} devices={createDevices()} />);
+    expect(screen.getByText('This link cannot hand over a task')).toBeTruthy();
   });
 });
