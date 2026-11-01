@@ -128,7 +128,7 @@ function TurnView({
       )}
       {turn.outcomes.map((item) => (
         <div key={item.key} className={ROW}>
-          <HandoverCard call={item.call} run={run} live={turn.live} task={task} />
+          <HandoverCard call={item.call} run={run} live={turn.live} task={task} at={item.at} />
         </div>
       ))}
       {turn.errors.map((item) => (

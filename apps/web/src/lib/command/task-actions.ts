@@ -2,6 +2,7 @@ import { type ShinsaState, TASK_PRIORITIES, type Task, type TaskPriority } from 
 import { compose } from '@/lib/command/gates.ts';
 import { type Command, RANK } from '@/lib/command/registry.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { connection, selectEngineCommands } from '@/lib/connection/socket.ts';
 import { PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import {
   listTaskActions,
@@ -126,7 +127,7 @@ function createActionCommand(task: Task, key: Exclude<TaskActionKey, 'open'>): C
 }
 
 export function listTaskActionCommands(state: ShinsaState, task: Task): Command[] {
-  const actions = listTaskActions(task)
+  const actions = listTaskActions(task, selectEngineCommands(connection.selectEngine(task.id)))
     .flat()
     .flatMap((key) => (key === 'open' ? [] : [createActionCommand(task, key)]));
   return [createPriorityCommand(task), ...listMessageCommands(state, task), ...actions];

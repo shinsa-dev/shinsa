@@ -21,11 +21,6 @@ function minutes(description: string, maximum: number) {
   return { type: 'integer', minimum: 1, maximum, description };
 }
 
-export const CHANGE_SUMMARY_SPEC = limitedText(
-  'Only when revising a plan: what you changed since the last version and why.',
-  L.changeSummary
-);
-
 export const CHOICES_SPEC = {
   choices: {
     type: 'array',

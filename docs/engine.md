@@ -1299,9 +1299,10 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 ### Plan versions
 
 - Every `plan.proposed` bumps `plan.version`. A revision keeps the previous version in
-  `planHistory` (the last ten), with the Agent's `change_summary` (`propose_plan`, at most 240
-  characters), the feedback that asked for it and a computed list of changes
-  (`resolvePlanChanges`: goal, approach, phases added, dropped, reworked or reordered, files).
+  `planHistory` (the last ten), with a computed list of changes (`resolvePlanChanges`: goal,
+  approach, phases added, dropped, reworked or reordered, files). What you asked for and the Agent's
+  answer to it are not part of the plan: your feedback opens a request and the revision's
+  `propose_plan` answers it with `reply` (Your requests and their replies, below).
 - The plan gate carries `planVersion`. A revision withdraws the open plan gate and opens a new one
   for the new version. Approving sends the version you read: `gate.answer` with an older
   `planVersion`, or on a plan gate the revision withdrew, is refused with `plan_changed` and says
@@ -1360,29 +1361,39 @@ never reaches an earlier round's report. The `walkthrough` schema is static like
 
 ### Your requests and their replies
 
-Once the work is in, you steer it by sending things back: changes at the review gate, line comments, a question, a
-second thought while the Agent fixes. Each answer used to live only in the chat. Now every one is a request with a
-reply you read on the Overview, so the chat is never where you learn what changed.
+You steer an agent by sending things to it: feedback on a plan, changes at the review gate, line comments, a
+question, a follow-up on an answer, a second thought while it works. Whatever the kind of work, every one is a
+request, and the agent answers it the same way, so the chat and the Overview read alike for a plan, a fix, an
+investigation or research.
 
-- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). A message or a
-  gate answer that starts a fix for you opens one before the fix starts; anything you send while that fix runs
-  joins it (a steer of a run with `purpose: fix`), so one reply covers everything said during one fix. A steer of a
-  build phase, a follow-up to an inquiry and a plan revision open none.
-- **The reply is a hand-over field.** While a request is open, `complete_fix` must carry `reply`: a `headline`, each
-  point you raised as `points` (in your words cut short, marked `done`, `answered` or `not_changed`, each with a
-  `note`: where it is now, the answer, or why it was left), `next` (what you do now, with the commands in `bash run`
-  blocks and full links). Core refuses the fix without one (`reply_required`) and refuses one on a fix
-  nobody asked for (`reply_unasked`), so an automatic checks or review fix never invents an answer. The schema stays
-  static and optional (Caching, below); the human fix prompts (`REPLY_INSTRUCTION`, `prompts/fixes.ts`) and the
-  handover skill say what each field holds.
-- **On the Overview** the review and merge cards lead with the latest reply (`ReplyReport`,
+- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). Anything you
+  send that an agent must answer opens one before the agent hears it: a fix you start, plan feedback, a follow-up
+  or a declined proposal on an inquiry, a restarted step, and a message to a running or resting run that can reply
+  (`isReplyingRun`: the Agent planning, building, fixing or operating, an answerer, investigator or researcher).
+  More you send before the hand-over joins it, so one reply covers everything said in between. Delegated runs, the
+  reviewer and watches open none: nobody messages them.
+- **The reply is a hand-over field.** While a request is open, the next hand-over (`propose_plan`, `complete_phase`,
+  `complete_fix`, `answer`, `report_diagnosis`, `submit_report` or `report_outcome`) must carry `reply`
+  (`AgentReply`): a `headline`, each point you raised as `points` (in your words cut short, marked `done`,
+  `answered` or `not_changed`, each with a `note`: where it is now, the answer, or why it was left), `next` (what
+  you do now, with the commands in `bash run` blocks and full links). Core refuses the hand-over without one
+  (`reply_required`) and refuses one nobody asked for (`reply_unasked`), so an automatic checks or review fix, or a
+  first plan, never invents an answer. The schema stays static and optional (Caching, below), one `REPLY_SPEC` on
+  every tool; every prompt that carries your words while a request is open says what each field holds
+  (`describeReplyInstruction`, `prompts/replies.ts`), as does the handover skill.
+- **In the chat** the last words an agent writes before any hand-over stay in view as its reply, never folded into
+  Worked for, and each hand-over card shows `reply` first (`AgentReplyBlock`,
+  `components/overview/agent-reply.tsx`), then the plan, phase, fix, answer, diagnosis, report or outcome.
+- **On the Overview** the plan, review, merge, proposal and result cards lead with the latest reply when the run
+  that wrote it belongs to the card (`selectShownReply`: a planning run for the plan card, the result's run for an
+  answer, diagnosis or report; `ReplyReport`,
   `components/overview/reply-report.tsx`): What you sent, folded above it as a quote of your words, then the
   headline, each point with its outcome and What to do now. Facts the cards add are live links: the pull request at
   the merge gate with its hover card, whether it conflicts and how its checks stand; the agent review's count is
   left out when its findings show right below. While the Agent works on one, the work
-  card shows "Your request". Earlier requests, a panel below, lists every earlier reply and every plan revision you
-  gave feedback on (its change summary as the headline), newest first, each folded to its headline and a count of
-  its outcomes (`listEarlierExchanges`, `lib/overview/exchanges.ts`; `RequestsPanel`). The checks fold to one line on these cards, open by
+  card shows "Your request". Earlier requests, a panel below, lists every earlier reply, plan revisions included, newest
+  first, each folded to its headline and a count of its outcomes (`listEarlierReplies`, `lib/overview/exchanges.ts`;
+  `RequestsPanel`). The checks fold to one line on these cards, open by
   themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`); opened, they show
   the list itself, with a stage's header only when there is more than one stage.
 
@@ -2743,6 +2754,29 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
+- **What each machine speaks** (core's `protocol/engine.ts`, `docs/protocol.md` → The socket). The remote build is
+  app.shinsa.dev's, deployed from `main`; the tunnel carries only data, so a page can be newer than a machine on the
+  stable channel. Every engine sends `engine { version, protocol, commands, features }` when a socket opens, and the
+  page offers only what the engine of the task's machine speaks (capability negotiation, not a version comparison:
+  canary, beta and `0.0.0` builds compare badly, and a fleet mixes versions). `commands` is every command the engine
+  parses (`USER_COMMAND_TYPES`); a command in `ENGINE_BASELINE_COMMANDS` goes to any engine, one that never sent
+  `engine` included, and anything newer only to an engine that listed it. Each `Connection` keeps its engine's
+  `EngineInfo`, and `Fleet.selectEngine(id)` answers for the machine that owns the id, through the same owner lookup
+  commands are routed by. Every task action names the command it sends (`TASK_ACTION_COMMAND`), and the task menu, a
+  row's menu and the command menu leave out an action whose command that machine did not list: Share task and Stop
+  sharing on an engine from before sharing; the Feedback button and Send feedback on Shinsa likewise ask the default
+  machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
+  Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
+  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`, and
+  `feedback` for `GET /api/feedback`, today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
+  here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
+  machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
+  (`Fleet.isEveryMachineOutdated`, `routes/remote/fleet.tsx`). Two tests keep it strict: core's `test/protocol/engine.test.ts` fails on a command in neither the
+  baseline nor `GATED_COMMANDS`, and the engine's `test/http/engine-features.test.ts` builds every `/api` route and
+  fails on one in neither its frozen `BASELINE_ROUTES` nor a feature's routes (`ENGINE_FEATURE_ROUTES`,
+  `src/http/features.ts`), and on a listed route the engine no longer serves. The schedule and Slack routes are built
+  from their route functions there, so a route added to either some other way is not caught.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
   New task shows a Machine picker, Automatic by default (the label says only Automatic, with the arrow-split icon); with one there is none. Every
   machine of the account is in it: one this device was not added to is listed disabled with "Add this device on <name>
@@ -5504,7 +5538,7 @@ run. Codes: `body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`
 Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts, `surfaces`, `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
+accounts, `surfaces`, `engine` (what it speaks, Remote access → What each machine speaks, above), `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
 the terminals and remote access whole, and a transcript only to the sockets following its run. Each terminal has a socket of
 its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)

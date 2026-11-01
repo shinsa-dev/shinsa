@@ -36,6 +36,7 @@ describe('steering', () => {
       [
         '<system-message>',
         'The human wants to tell you something while you keep working. Acknowledge it in one short sentence, then continue your step and take it into account.',
+        'When the hand-over that ends your step takes `reply`, answer this message in it: a `headline`, each point they raised with its outcome and a note, and what they do now.',
         '</system-message>',
         '',
         'Use the blue one.',

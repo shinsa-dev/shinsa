@@ -161,6 +161,19 @@ describe('the shinsa tool server', () => {
     expect(reply.properties.points.items.required).toEqual(['ask', 'outcome', 'note']);
     expect(reply.properties.next.maxLength).toBe(PROTOCOL_LIMITS.replyNext);
     expect('details' in reply.properties).toBe(false);
+    for (const tool of [
+      'propose_plan',
+      'complete_phase',
+      'answer',
+      'report_diagnosis',
+      'submit_report',
+      'report_outcome',
+    ] as const) {
+      const properties: Record<string, unknown> = TOOL_SPECS[tool].inputSchema.properties;
+      expect(properties.reply).toBe(reply);
+      expect(TOOL_SPECS[tool].inputSchema.required).not.toContain('reply');
+    }
+    expect('change_summary' in TOOL_SPECS.propose_plan.inputSchema.properties).toBe(false);
     expect(steps.items.properties.detail.description).toContain('in markdown');
     const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
     expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);

@@ -242,7 +242,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
     const watchdogReads = ['task.created', 'watchdog.armed', 'watchdog.checked'];
-    const later = [...watchdogReads, 'settings.changed'];
+    const later = [...watchdogReads, 'settings.changed', 'plan.proposed'];
     expect(listLegacyEventTypes(2)).toEqual([
       'phase.completed',
       'work.submitted',
@@ -270,9 +270,10 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written', ...later]);
     expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...later]);
     expect(listLegacyEventTypes(8)).toEqual(later);
-    expect(listLegacyEventTypes(9)).toEqual(['settings.changed']);
-    expect(listLegacyEventTypes(10)).toEqual(['settings.changed']);
-    expect(listLegacyEventTypes(11)).toEqual([]);
+    expect(listLegacyEventTypes(9)).toEqual(['settings.changed', 'plan.proposed']);
+    expect(listLegacyEventTypes(10)).toEqual(['settings.changed', 'plan.proposed']);
+    expect(listLegacyEventTypes(11)).toEqual(['plan.proposed']);
+    expect(listLegacyEventTypes(12)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -288,7 +289,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(11);
+    expect(readStoredLog(path).version).toBe(12);
   });
 });
 
@@ -316,7 +317,7 @@ describe('Approve plans saved as a switch', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(11);
+    expect(stored.version).toBe(12);
     expect(stored.rows).toEqual([
       {
         seq: 1,
@@ -324,6 +325,45 @@ describe('Approve plans saved as a switch', () => {
         payload: JSON.stringify({ type: 'settings.changed', settings: { approvePlans: 'large' } }),
       },
     ]);
+  });
+});
+
+describe('a revised plan’s change summary and feedback, which the reply replaced', () => {
+  const document = { goal: 'Ship it.' };
+
+  test('are dropped from every proposed plan; a plan without them is left alone', () => {
+    expect(
+      rewrite(
+        { type: 'plan.proposed', taskId: TASK, body: 'b', document },
+        {
+          type: 'plan.proposed',
+          taskId: TASK,
+          body: 'b',
+          document,
+          changeSummary: 'Split it.',
+          feedback: 'Two phases.',
+        },
+        { type: 'plan.proposed', taskId: TASK, body: 'b', document, changeSummary: null, feedback: null }
+      )
+    ).toEqual([
+      { seq: 2, type: 'plan.proposed', event: { type: 'plan.proposed', taskId: TASK, body: 'b', document } },
+      { seq: 3, type: 'plan.proposed', event: { type: 'plan.proposed', taskId: TASK, body: 'b', document } },
+    ]);
+  });
+
+  test('are dropped on boot in a log of the compaction setting’s version', () => {
+    const event = { type: 'plan.proposed', taskId: TASK, body: 'b', document, changeSummary: 'Split it.' };
+    const path = writeLegacyLog([event]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 11');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    expect(readStoredLog(path)).toMatchObject({
+      version: 12,
+      rows: [{ payload: JSON.stringify({ type: 'plan.proposed', taskId: TASK, body: 'b', document }) }],
+    });
   });
 });
 
@@ -353,7 +393,7 @@ describe('the compaction setting saved under its Eunoe names', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 11,
+      version: 12,
       rows: [{ payload: JSON.stringify({ type: 'settings.changed', settings: { compaction: 'fold' } }) }],
     });
   });
@@ -380,7 +420,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(11);
+    expect(stored.version).toBe(12);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);

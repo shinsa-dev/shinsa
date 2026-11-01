@@ -18,6 +18,7 @@ import {
   type ShinsaState,
   type Task,
 } from '../../src/index.ts';
+import { resolveOwedReply } from '../harness.ts';
 
 type Random = () => number;
 
@@ -85,17 +86,28 @@ function listLaterRoundCommands(state: ShinsaState): ShinsaCommand[] {
           type: 'agent.propose_plan',
           runId: run.id,
           document: builds ? PLAN : { ...PLAN, verification: [] },
+          ...resolveOwedReply(state, run.id),
         },
       ];
     }
     if (run.purpose === 'build') {
       return [
-        { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
+        {
+          type: 'agent.complete_phase',
+          runId: run.id,
+          summary: 'Done.',
+          spots: [],
+          judgementCalls: [],
+          ...resolveOwedReply(state, run.id),
+        },
       ];
     }
     if (run.role === 'reviewer')
       return [{ type: 'agent.report_review', runId: run.id, summary: null, findings: [] }];
-    if (run.purpose === 'fix') return [{ type: 'agent.complete_fix', runId: run.id, summary: 'Done.' }];
+    if (run.purpose === 'fix')
+      return [
+        { type: 'agent.complete_fix', runId: run.id, summary: 'Done.', ...resolveOwedReply(state, run.id) },
+      ];
     return [];
   });
   const gates = listOpenGates(state).flatMap((gate): ShinsaCommand[] => {
@@ -208,7 +220,9 @@ function listLaterComposingCommands(state: ShinsaState, random: Random): ShinsaC
     }
     if (run.role === 'investigator' || run.role === 'researcher') {
       const step = run.role === 'investigator' ? 'investigate' : 'research';
-      return [{ type: 'agent.deliver', runId: run.id, step, body: 'Found it.' }];
+      return [
+        { type: 'agent.deliver', runId: run.id, step, body: 'Found it.', ...resolveOwedReply(state, run.id) },
+      ];
     }
     return [];
   });

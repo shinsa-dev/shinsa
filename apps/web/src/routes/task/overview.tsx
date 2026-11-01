@@ -39,8 +39,9 @@ const FIRST_ACTIVITY = 24;
 const ACTIVITY_PAGE = 100;
 
 function resolveShownReplyId(state: ShinsaState, task: Task, gate: Gate | undefined) {
-  if (resolveNowKind(state, task, gate) !== 'gate') return null;
-  return selectShownReply(task, gate)?.id ?? null;
+  const kind = resolveNowKind(state, task, gate);
+  if (kind !== 'gate' && kind !== 'result') return null;
+  return selectShownReply(state, task, kind === 'gate' ? gate : undefined)?.id ?? null;
 }
 
 function EvidencePlace({

@@ -19,7 +19,7 @@ import { PriorityChoices, TaskActionItems } from '@/components/task/action-items
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { useMachine } from '@/lib/connection/socket.ts';
+import { useEngineCommands, useMachine } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
@@ -43,6 +43,7 @@ export const FILED_COLUMNS =
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
+  const commands = useEngineCommands(task.id);
   return (
     <DropdownMenuContent className='min-w-48'>
       <DropdownMenuItem icon={TASK_ACTION.open.icon} onClick={() => navigate(resolveTaskPath(task))}>
@@ -56,7 +57,7 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
           <DependencyItems state={state} task={task} />
         </>
       )}
-      {listTaskActions(task).length > 0 && <DropdownMenuSeparator />}
+      {listTaskActions(task, commands).length > 0 && <DropdownMenuSeparator />}
       <TaskActionItems task={task} />
     </DropdownMenuContent>
   );

@@ -3,6 +3,8 @@ import {
   type ChatEntry,
   type ClientMessage,
   decide,
+  ENGINE_BASELINE_COMMANDS,
+  resolveEngineInfo,
   resolveStatePatch,
   type ServerMessage,
   type ShinsaState,
@@ -13,11 +15,16 @@ import {
   Connection,
   connection,
   replaceConnection,
+  resolveUpdateMessage,
+  selectEngineCommands,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
   TRANSCRIPT_ENTRY_LIMIT,
   useConnection,
   useDesktopConnected,
+  useEngineCommand,
+  useEngineCommands,
+  useEngineFeature,
   useMachine,
   useMachineAccess,
   useMachines,
@@ -478,6 +485,62 @@ describe('Connection surfaces', () => {
     latest().receive({ type: 'surfaces', desktop: false });
     expect(subject.isDesktopConnected()).toBe(false);
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Connection engine', () => {
+  it('keeps what the engine says it speaks, tells its listeners and forgets it on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribe(listener);
+    subject.start();
+    latest().open();
+    listener.mockClear();
+    expect(subject.selectEngine()).toBeNull();
+    const engine = resolveEngineInfo('1.2.0');
+    latest().receive({ type: 'engine', engine });
+    expect(subject.selectEngine('any-task')).toEqual(engine);
+    expect(listener).toHaveBeenCalledTimes(1);
+    subject.reset();
+    expect(subject.selectEngine()).toBeNull();
+  });
+
+  it('refuses a command the engine did not list before sending it, and sends the baseline without a list', async () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const share: UserCommand = { type: 'task.share', taskId: 't1', limit: 'day' };
+    expect(subject.command(share)).rejects.toThrow('Update Shinsa to use this.');
+    expect(commandIds(latest())).toEqual([]);
+    const retry = subject.command(COMMAND);
+    expect(commandIds(latest())).toHaveLength(1);
+    latest().receive({ type: 'ack', id: commandIds(latest())[0] ?? '', error: null });
+    await retry;
+    latest().receive({ type: 'engine', engine: resolveEngineInfo('1.2.0') });
+    void subject.command(share);
+    expect(commandIds(latest())).toHaveLength(2);
+  });
+
+  it('reads the baseline for an engine with no list, and one set per engine', () => {
+    const engine = resolveEngineInfo('1.2.0');
+    expect([...selectEngineCommands(null)]).toEqual([...ENGINE_BASELINE_COMMANDS]);
+    expect(selectEngineCommands(null)).toBe(selectEngineCommands(null));
+    expect(selectEngineCommands(engine)).toBe(selectEngineCommands(engine));
+    expect(selectEngineCommands(engine).has('task.share')).toBe(true);
+    expect(resolveUpdateMessage('Studio')).toBe('Update Shinsa on Studio to use this.');
+  });
+
+  it('answers the hooks for the engine of the task named', () => {
+    const local = connection;
+    const engine = resolveEngineInfo('1.2.0');
+    replaceConnection({ ...local, selectEngine: (id?: string | null) => (id === 'task-1' ? engine : null) });
+    expect(renderHook(() => useEngineCommand('task.share', 'task-1')).result.current).toBe(true);
+    expect(renderHook(() => useEngineCommand('task.share', 'task-2')).result.current).toBe(false);
+    expect(renderHook(() => useEngineCommand('task.retry')).result.current).toBe(true);
+    expect(renderHook(() => useEngineFeature('task.share', 'task-1')).result.current).toBe(true);
+    expect(renderHook(() => useEngineFeature('task.share')).result.current).toBe(false);
+    expect(renderHook(() => useEngineCommands('task-1')).result.current).toBe(selectEngineCommands(engine));
+    replaceConnection(null);
   });
 });
 

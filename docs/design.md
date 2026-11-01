@@ -158,15 +158,16 @@ Only these, and they win over anything below:
      brief from Shinsa lives inside it. The last thing the agent wrote stays in the chat, outside the
      fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
      outcome or new set of steps: core's `isHandOverTool`) the reply is the text written after the
-     last hand-over, shown directly under the fold and above the card. Text written before the
-     hand-over folds into the work, except before a fix: agents answer a question you ask during
-     review and then hand over the fix with nothing after it, so when no text follows a fix, the
-     last text written before it (since any earlier hand-over) is the reply, once the turn has ended
-     without an error. Claude Code's empty-turn filler, "No response requested.", never shows in the
-     chat and is never the reply. An answer, diagnosis, report or outcome card is the whole reply, so
-     any words after it fold too and the same reply never shows twice, reworded or not (`selectReply`
-     in `lib/chat/timeline.ts`). A question or suggested tasks are not the step's hand-over and keep
-     the reply. A message from you starts a new turn with its own fold.
+     last hand-over, shown directly under the fold and above the card. When no text follows the
+     hand-over, whatever its kind and whichever agent wrote it, the last text written before it
+     (since any earlier hand-over) is the reply, once the turn has ended without an error: a final
+     reply never folds into Worked for. Claude Code's empty-turn filler, "No response requested.",
+     never shows in the chat and is never the reply. After an answer, diagnosis, report or outcome
+     card, words written after it fold, so the same reply never shows twice, reworded or not
+     (`selectReply` in `lib/chat/timeline.ts`). Each hand-over card leads with the agent's `reply` to
+     what you sent, when it carries one (`AgentReplyBlock`), then the plan, phase, fix or result. A
+     question or suggested tasks are not the step's hand-over and keep the reply. A message from you
+     starts a new turn with its own fold.
    - **The detail** is the full log on a hairline rail under the worked-for row's chevron: interim messages,
      then tool calls as chat lines, the chevron on hover; two or more in a row fold into one row ("Ran 3
      commands and read 2 files"), and an opened row hangs its detail off a hairline rail.

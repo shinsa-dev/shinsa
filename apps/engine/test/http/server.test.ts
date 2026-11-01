@@ -563,8 +563,8 @@ describe('the socket', () => {
     };
     const client = connect(base);
     await client.opened;
-    await until('the first state', () => client.messages.length === 2);
-    expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces']);
+    await until('the first state', () => client.messages.length === 3);
+    expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces', 'engine']);
     client.socket.send(
       JSON.stringify({
         type: 'command',
@@ -704,7 +704,7 @@ describe('the socket', () => {
       await until('the failure to be logged', () =>
         error.mock.calls.some(([message]) => message === '[Socket] Message failed')
       );
-      expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces']);
+      expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces', 'engine']);
       client.socket.close();
     } finally {
       error.mockRestore();
