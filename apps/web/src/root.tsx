@@ -31,6 +31,7 @@ import {
 } from '@/lib/kept-views.ts';
 import { resolveOnboardingRedirect } from '@/lib/onboarding.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { type Route, replaceRoute, resolveRouteTaskId, useRoute, useSearchString } from '@/router.ts';
 import { AutomationPage } from '@/routes/automation.tsx';
 import { HomePage } from '@/routes/home.tsx';
@@ -125,7 +126,7 @@ function AttentionSignals({ state, route }: { state: ShinsaState; route: Route }
 function Loading() {
   return (
     <div className='grid h-dvh place-items-center bg-background'>
-      <LoadingSpinner label='Starting Shinsa' />
+      <LoadingSpinner label={isRemoteBuild() ? 'Connecting to your machines' : 'Starting Shinsa'} />
     </div>
   );
 }

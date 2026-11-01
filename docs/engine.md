@@ -2833,7 +2833,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
   (`replaceConnection`). Its state is every machine's state merged (`mergeFleetStates`: tasks, runs, gates, projects,
   repositories, evidence, schedules, memories and usage side by side, keyed by their ids; settings and focus from the
-  first machine), and it remembers which machine owns each id. A command goes to the machine that owns an id it names
+  first machine), and it remembers which machine owns each id. The page keeps its loading spinner ("Connecting to your
+  machines") until every machine has sent its state, closed, turned out outdated or been removed, or until
+  `FLEET_WAIT_MS` (10 s) pass, so Home never first shows one machine's tasks with another machine's focus; a machine
+  that answers later merges in as it connects. A command goes to the machine that owns an id it names
   (`resolveCommandOwner`), a request to the machine that owns an id in its path or query (`resolveRequestOwner`), a
   transcript to the machine of its run; the rest goes to the first machine. With more than one machine in the account (this device need not reach them all), a task shows its machine in
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from

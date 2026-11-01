@@ -162,7 +162,7 @@ src/
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
-    │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
+    │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, held back until every machine answers or FLEET_WAIT_MS passes, which
     │                    machine owns each id, each machine's own state for placement (listMachines), each machine's own remote access for its access requests (listMachineAccess), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
     │                    remote services and their context, for Settings → Machines), resources.ts (how busy a machine and its
