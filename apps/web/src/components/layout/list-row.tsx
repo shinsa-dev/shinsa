@@ -22,7 +22,6 @@ export function ListRow({
   trailing,
   active = false,
   revealWhenActive = false,
-  expanded,
   onClick,
 }: {
   leading?: React.ReactNode;
@@ -33,7 +32,6 @@ export function ListRow({
   trailing?: React.ReactNode;
   active?: boolean;
   revealWhenActive?: boolean;
-  expanded?: boolean;
   onClick: () => void;
 }) {
   const ref = React.useRef<HTMLButtonElement>(null);
@@ -46,7 +44,6 @@ export function ListRow({
       type='button'
       onClick={onClick}
       aria-current={active || undefined}
-      aria-expanded={expanded}
       data-active={active}
       data-highlight-item=''
       className={cn(
