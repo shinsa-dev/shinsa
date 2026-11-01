@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import {
   DEVELOPMENT_VERSION,
+  type MachineResources,
   type RemoteSnapshot,
   resolveEngineInfo,
   type ServerMessage,
+  type TeamFeedSnapshot,
 } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createSocketHub, type SocketData } from '../../src/http/socket.ts';
@@ -144,6 +146,51 @@ describe('the socket hub', () => {
     log.close();
   });
 
+  test('teammates’ task lists reach a socket on connect and again on every change', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const listeners = new Set<() => void>();
+    let teams: TeamFeedSnapshot = { machines: [], tasks: [] };
+    const feeds = {
+      snapshot: () => teams,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const hub = createSocketHub(
+      engine,
+      new Transcripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      undefined,
+      undefined,
+      feeds
+    );
+    const { socket, sent } = createSocket();
+    hub.open(socket);
+    const machine = {
+      teamId: 'team-1',
+      instanceId: 'inst-2',
+      name: 'Studio',
+      userId: '7',
+      status: 'live' as const,
+      reason: null,
+    };
+    teams = { machines: [machine], tasks: [] };
+    for (const listener of listeners) listener();
+    expect(sent.filter((message) => message.type === 'teams')).toEqual([
+      { type: 'teams', teams: { machines: [], tasks: [] } },
+      { type: 'teams', teams: { machines: [machine], tasks: [] } },
+    ]);
+    hub.close(socket);
+    hub.stop();
+    expect(listeners.size).toBe(0);
+    engine.stop();
+    log.close();
+  });
+
   test('tells every socket on connect which build it talks to and what it speaks', () => {
     const dir = createTempDir();
     const log = new EventLog(join(dir, 'shinsa.sqlite'));
@@ -153,6 +200,7 @@ describe('the socket hub', () => {
       new Transcripts(join(dir, 'transcripts')),
       undefined,
       null,
+      undefined,
       undefined,
       undefined,
       '1.4.0'
@@ -165,6 +213,65 @@ describe('the socket hub', () => {
     expect(sent.at(-1)?.type).toBe('engine');
     hub.close(socket);
     hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('samples resources only while a socket is open, and sends the last sample on connect', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const listeners = new Set<(resources: MachineResources) => void>();
+    let latest: MachineResources | null = null;
+    const resources = {
+      snapshot: () => latest,
+      subscribe: (listener: (resources: MachineResources) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const hub = createSocketHub(
+      engine,
+      new Transcripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      '1.4.0',
+      resources
+    );
+    const first = createSocket();
+    const second = createSocket();
+    hub.open(first.socket);
+    expect(first.sent.some((message) => message.type === 'resources')).toBe(false);
+    hub.open(second.socket);
+    expect(listeners.size).toBe(1);
+    latest = {
+      sampledAt: 1,
+      cores: 4,
+      cpuPercent: 20,
+      memoryUsedBytes: 1,
+      memoryTotalBytes: 2,
+      diskFreeBytes: null,
+      diskTotalBytes: null,
+      tasks: [],
+    };
+    for (const listener of listeners) listener(latest);
+    expect(second.sent.filter((message) => message.type === 'resources')).toEqual([
+      { type: 'resources', resources: latest },
+    ]);
+    hub.close(first.socket);
+    expect(listeners.size).toBe(1);
+    hub.close(second.socket);
+    expect(listeners.size).toBe(0);
+    const third = createSocket();
+    hub.open(third.socket);
+    expect(third.sent.filter((message) => message.type === 'resources')).toEqual([
+      { type: 'resources', resources: latest },
+    ]);
+    hub.stop();
+    expect(listeners.size).toBe(0);
     engine.stop();
     log.close();
   });

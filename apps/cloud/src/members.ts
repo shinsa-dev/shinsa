@@ -53,7 +53,8 @@ async function selectAskingUser(row: InstanceRow, userId: string, world: CloudWo
   const asked =
     row.user_id === userId ||
     (await world.store.isMember(row.id, userId)) ||
-    (await world.store.isRequester(row.id, userId));
+    (await world.store.isRequester(row.id, userId)) ||
+    (await world.store.sharesTeam(row.user_id, userId));
   if (!asked) return null;
   return world.store.selectUser(userId);
 }
@@ -128,7 +129,12 @@ async function findRequester(request: Request, world: CloudWorld, select = selec
   const fields = await readJsonFields(request);
   const userId = readText(fields, 'userId', 64);
   const user = await select(row, userId, world);
-  if (!user) throw new CloudError('not_found', 'No one with that account asked to reach this machine.', 404);
+  if (!user)
+    throw new CloudError(
+      'not_found',
+      'No one with that account asked to reach this machine or is in a team with you.',
+      404
+    );
   return { row, user };
 }
 

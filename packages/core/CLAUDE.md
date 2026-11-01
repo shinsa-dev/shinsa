@@ -280,7 +280,7 @@ src/
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), what the guest a task was
 │                    handed to sees and may send (scope.ts: resolveScopedState, resolveScopedRefusal, SCOPED_COMMANDS;
 │                    decide refuses the rest when its context names a guest), and which machine a new task
-│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
+│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and what the router reads, each machine's policies, projects and room: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer), and how busy a machine is (resources.ts: MachineResources, resolveResourceHeadroom, describeResourceSummary, parseResourceSummary). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
@@ -299,7 +299,12 @@ src/
 │                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,
 │                    ShareLiveView, SHARE_FILE_TYPES and the share paths) and
 │                    remote/share-channel.ts (the hello and welcome HMACs with the link's key,
-│                    deriveShareSessionKey, the ShareMessage the machine alone sends)
+│                    deriveShareSessionKey, the ShareMessage the machine alone sends); teams.ts lists a team's
+│                    tasks (listTeamTasks: every open task of its projects and the 50 last finished, each a
+│                    redacted listing with its owner and machine; isTeamTask), decide/teams.ts puts a project in a
+│                    team (project.add_to_team, project.remove_from_team, human-only), and remote/teams.ts is the
+│                    join link with the key in its fragment, the team hello and welcome with the view bound into
+│                    the session key, and the team feed types (docs/engine.md → Teams)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
 │                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as

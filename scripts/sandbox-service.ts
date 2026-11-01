@@ -1,7 +1,10 @@
-const PAGE = `<!doctype html><meta charset="utf-8"><title>Demo dev server</title>
+const SERVICE = Bun.env.SANDBOX_SERVICE ?? 'web';
+const PROJECT = Bun.env.SANDBOX_PROJECT ?? 'Sandbox';
+
+const PAGE = `<!doctype html><meta charset="utf-8"><title>${SERVICE} · ${PROJECT}</title>
 <body style="font:15px system-ui;margin:40px;max-width:560px">
-<h1 style="font-size:18px">Demo dev server</h1>
-<p>This page comes from a service on the Studio machine, through its tunnel.</p>
+<h1 style="font-size:18px">${SERVICE} · ${PROJECT}</h1>
+<p>A seeded dev server: the ${SERVICE} service of the ${PROJECT} project.</p>
 <p>Host it saw: <code id="host"></code></p>
 <p>Live updates: <strong id="ticks">connecting…</strong></p>
 <script>
@@ -33,4 +36,4 @@ setInterval(() => {
   ticks += 1;
   server.publish('ticks', String(ticks));
 }, 1000);
-console.info(`Demo dev server on http://localhost:${server.port}/`);
+console.info(`The ${SERVICE} service of ${PROJECT} on http://localhost:${server.port}/`);

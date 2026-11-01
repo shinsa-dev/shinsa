@@ -7,6 +7,9 @@ describe('local-only routes', () => {
       '/api/remote/pair',
       '/api/remote/links/create',
       '/api/remote/members/remove',
+      '/api/remote/teams/create',
+      '/api/remote/teams/join/extra',
+      '/api/remote/members/grant',
       '/api/slack/disconnect',
       '/api/accounts/login',
       '/api/extensions/mcp/toggle',
@@ -21,7 +24,7 @@ describe('local-only routes', () => {
     }
   });
 
-  test('let remote reads through, but never terminals or services', () => {
+  test('let remote reads, answers to requests and joining a team through, but never terminals or services', () => {
     for (const path of [
       '/api/remote',
       '/api/slack',
@@ -37,5 +40,6 @@ describe('local-only routes', () => {
     expect(resolveLocalOnlyRoute('POST', '/api/remotely')).toBe(false);
     expect(resolveLocalOnlyRoute('POST', '/api/remote/requests/accept')).toBe(false);
     expect(resolveLocalOnlyRoute('POST', '/api/remote/requests/decline')).toBe(false);
+    expect(resolveLocalOnlyRoute('POST', '/api/remote/teams/join')).toBe(false);
   });
 });

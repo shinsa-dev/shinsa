@@ -420,6 +420,7 @@ function readFocusChange(fields: Fields): UserCommand {
   return {
     type: 'focus.change',
     projectId: readNullableId(fields, 'projectId'),
+    ...(fields.teamId === undefined ? {} : { teamId: readNullableId(fields, 'teamId') }),
     until: readTime(fields, 'until'),
   };
 }
@@ -772,6 +773,16 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     ...('preset' in fields ? { preset: readChoice(fields, 'preset', SHARE_PRESET_SET) } : {}),
   }),
   'task.unshare': (fields) => ({ type: 'task.unshare', taskId: readId(fields, 'taskId') }),
+  'project.add_to_team': (fields) => ({
+    type: 'project.add_to_team',
+    projectId: readId(fields, 'projectId'),
+    teamId: readId(fields, 'teamId'),
+  }),
+  'project.remove_from_team': (fields) => ({
+    type: 'project.remove_from_team',
+    projectId: readId(fields, 'projectId'),
+    teamId: readId(fields, 'teamId'),
+  }),
   'preview.share': (fields) => ({
     type: 'preview.share',
     taskId: readId(fields, 'taskId'),

@@ -127,6 +127,8 @@ const GATED_COMMANDS: EngineCommand[] = [
   'feedback.dismiss',
   'task.share',
   'task.unshare',
+  'project.add_to_team',
+  'project.remove_from_team',
   'preview.share',
   'preview.unshare',
   'task.hand_off',

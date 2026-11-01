@@ -156,6 +156,7 @@ function ComposerSpecimen() {
       state: {
         tasks: {},
         projects: {},
+        repos: {},
         settings: { taskCapacity: null, placementPolicies: ['Benchmarks run on the build box.'] },
       },
     },

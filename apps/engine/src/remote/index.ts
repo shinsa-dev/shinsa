@@ -22,8 +22,9 @@ import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient, ControlError } from './control.ts';
+import { isOwnerOnlyRoute } from './local-only.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
-import { RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
+import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
@@ -141,6 +142,9 @@ export class Remote {
       version: options.version,
       onRevoked: () => this.#forget(),
       onAccess: (access, guests) => this.#recordAccess(access, guests),
+      onTeams: (teams) => {
+        if (this.store.recordTeams(teams)) this.#publish();
+      },
       ...(options.timings ? { timings: options.timings } : {}),
       now: this.#now,
     });
@@ -175,6 +179,7 @@ export class Remote {
       access: file.access,
       link: file.credentials && file.machine && file.link ? this.#serializeLink(file.link) : null,
       requests: file.requests,
+      teams: listTeamEntries(file),
     };
   }
 
@@ -278,6 +283,9 @@ export class Remote {
       requests: [],
       guests: [],
       handoffs: [],
+      teams: [],
+      teamKeys: [],
+      grants: [],
     }));
     this.#settleWaiters(false);
     this.#publish();
@@ -417,7 +425,7 @@ export class Remote {
     });
     await this.#retireHandoff(handoff);
     this.#publish();
-    return { kind: 'granted' };
+    return { kind: 'admitted' };
   }
 
   async removeHandoff(taskId: string, guestId: string | null) {
@@ -472,8 +480,10 @@ export class Remote {
   ): Promise<AccessAnswer> {
     const handoff = await this.#matchHandoff(proof, keys);
     if (handoff) return this.#claimHandoff(handoff, keys.device, name, userId);
-    if (!(await this.#matchesLink(proof, keys)))
+    if (!(await this.#matchesLink(proof, keys))) {
+      if (await this.#admitTeammate(proof, keys, name, userId)) return { kind: 'admitted' };
       return { kind: 'refused', reason: 'This link was turned off. Ask for a new one.' };
+    }
     const user = await this.#resolveRequester(userId);
     if (typeof user === 'string') return { kind: 'refused', reason: user };
     const earlier = this.store.file.requests.find((entry) => entry.publicKey === keys.device);
@@ -490,8 +500,56 @@ export class Remote {
         ? file.requests.map((entry) => (entry.id === request.id ? request : entry))
         : [...file.requests, request].slice(-MAX_REQUESTS),
     }));
+    const answer = this.#awaitDecision(request.id);
     this.#publish();
-    return this.#awaitDecision(request.id);
+    return answer;
+  }
+
+  async #admitTeammate(proof: string, keys: ProofKeys, name: string | null, userId: string) {
+    const grant = this.store.selectGrant(userId);
+    if (!(grant && this.store.file.access?.members.some((member) => member.user.id === userId))) return false;
+    const team = this.store.selectTeam(grant.teamId);
+    const inTeam = team?.owner.id === userId || team?.members.some((member) => member.user.id === userId);
+    if (
+      !(
+        inTeam &&
+        this.store.selectTeamKey(grant.teamId) &&
+        (await verifyEnrollProof(grant.secret, proof, keys))
+      )
+    )
+      return false;
+    this.store.upsertDevice({
+      publicKey: keys.device,
+      name: name ?? 'Browser',
+      enrolledAt: this.#now(),
+      lastSeenAt: null,
+      userId,
+    });
+    this.#publish();
+    return true;
+  }
+
+  async grantTeammate(userId: string, teamId: string) {
+    const credentials = this.#assertPaired();
+    const access = this.store.file.access;
+    const team = this.store.selectTeam(teamId);
+    if (!(team && this.store.selectTeamKey(teamId)))
+      throw new DomainError('team_not_found', 'This machine is not in that team.');
+    const teammate = [team.owner, ...team.members.map((member) => member.user)].find(
+      (user) => user.id === userId
+    );
+    if (!(access && teammate) || access.owner.id === userId)
+      throw new DomainError('teammate_not_found', 'No one else in that team has that GitHub account.');
+    if (!access.members.some((member) => member.user.id === userId)) {
+      const member = await this.#requestMemberAddition(credentials.machineToken, userId);
+      this.#recordAccess({ ...access, members: [...access.members, member] });
+    }
+    this.store.writeGrant({
+      userId,
+      teamId,
+      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
+    });
+    this.#publish();
   }
 
   #resumeAccess(device: string, userId: string): AccessAnswer | null {
@@ -597,6 +655,7 @@ export class Remote {
     const left = before.guests.map((guest) => guest.user.id).filter((id) => !listed.has(id));
     if (left.length > 0) this.#leaver?.(left);
     const removed = new Set(this.store.removeDevicesOutside(allowed, listed));
+    this.store.removeGrantsOutside(allowed);
     this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
     if (changed || removed.size > 0) this.#publish();
   }
@@ -606,6 +665,10 @@ export class Remote {
     if (!enrolled) return false;
     const owner = this.store.file.access?.owner.id ?? userId;
     return (enrolled.userId ?? owner) === userId;
+  }
+
+  publish() {
+    this.#publish();
   }
 
   subscribe(listener: () => void) {
@@ -638,6 +701,9 @@ export class Remote {
       access: null,
       guests: [],
       handoffs: [],
+      teams: [],
+      teamKeys: [],
+      grants: [],
     }));
     this.#closeChannels(isAnyChannel);
     this.#publish();
@@ -652,6 +718,7 @@ export class Remote {
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {
     const channel = new RemoteChannel(peer, {
       ...parts,
+      respond: (request, guest) => this.#respondAs(request, guest, parts, userId),
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
       resolveGuest: (device) => this.#resolveGuest(device),
@@ -662,6 +729,18 @@ export class Remote {
     });
     this.#channels.add(channel);
     return channel;
+  }
+
+  #respondAs(request: Request, guest: GuestActor | null, parts: ChannelParts, userId: string) {
+    const path = new URL(request.url).pathname;
+    if (isOwnerOnlyRoute(request.method, path) && this.store.file.access?.owner.id !== userId)
+      return Promise.resolve(
+        Response.json(
+          { error: { code: 'not_owner', message: 'Only this machine’s owner can join a team from it.' } },
+          { status: 403 }
+        )
+      );
+    return parts.respond(request, guest);
   }
 
   closeChannel(channel: RemoteChannel) {

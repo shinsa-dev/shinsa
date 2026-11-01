@@ -9144,7 +9144,7 @@ A time that ticks re-renders once a minute (a shared minute clock), a live durat
 | phase | stage, milestone | Within a plan: "Phase 2 of 3" |
 | step | | A unit of work an agent does, or a setup step, or a pre-/post-merge step |
 | project | workspace, org | The focus filter's unit |
-| focus | filter | "Switch focus project", "All work" |
+| focus | filter | "Switch focus", "Your work" |
 | You | the user | In copy and activity |
 | Shinsa | the app, the system, we | Only where you act in it |
 

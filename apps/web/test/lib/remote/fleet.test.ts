@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import type {
   AccountsSnapshot,
   ChatEntry,
   EngineInfo,
+  MachineResources,
   RemoteSnapshot,
+  TeamFeedSnapshot,
   TerminalsSnapshot,
   UserCommand,
   WireState,
@@ -11,6 +13,7 @@ import type {
 import {
   createState,
   ENGINE_PROTOCOL,
+  NO_TEAM_FEED,
   resolveEngineInfo,
   resolveScopedEngineInfo,
   SCOPE_MESSAGES,
@@ -28,6 +31,7 @@ import {
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
+import { createMachineResources } from '../../support/resources.ts';
 import { createTask } from '../../support/state.ts';
 
 function createWire(seq: number, records: Partial<WireState> = {}): WireState {
@@ -41,7 +45,10 @@ class FakeConnection implements ShinsaConnection {
   readonly calls: string[] = [];
   accounts: AccountsSnapshot | null = null;
   terminals: TerminalsSnapshot | null = null;
+  resources: MachineResources | null = null;
+  readonly resourcesSignal = createSignal();
   remote: RemoteSnapshot | null = null;
+  teams: TeamFeedSnapshot = NO_TEAM_FEED;
   desktop = false;
   engine: EngineInfo | null = null;
   transcript: ChatEntry[] = [];
@@ -75,11 +82,19 @@ class FakeConnection implements ShinsaConnection {
   replaceTerminals = (terminals: TerminalsSnapshot) => {
     this.terminals = terminals;
   };
+  pushResources(resources: MachineResources | null) {
+    this.resources = resources;
+    this.resourcesSignal.publish();
+  }
+  subscribeResources = (listener: () => void) => this.resourcesSignal.subscribe(listener);
+  selectResources = () => this.resources;
   subscribeRemote = (listener: () => void) => this.signal.subscribe(listener);
   selectRemote = () => this.remote;
   replaceRemote = (remote: RemoteSnapshot) => {
     this.remote = remote;
   };
+  subscribeTeams = (listener: () => void) => this.signal.subscribe(listener);
+  selectTeams = () => this.teams;
   selectMachine = () => null;
   listMachines = () => [];
   listUnreachableMachines = () => [];
@@ -339,6 +354,36 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.listMachines()).toEqual([]);
   });
 
+  it('lists each machine with the resources its engine last reported, kept until a machine reports again', () => {
+    const { fleet, studio, laptop } = createFleet();
+    const listener = mock(() => undefined);
+    const resourceListener = mock(() => undefined);
+    fleet.subscribe(listener);
+    fleet.subscribeResources(resourceListener);
+    const before = fleet.listMachines();
+    expect(before.map((machine) => machine.resources)).toEqual([null, null]);
+    const busy = createMachineResources({ cpuPercent: 90 });
+    laptop.connection.pushResources(busy);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(resourceListener).toHaveBeenCalledTimes(1);
+    const after = fleet.listMachines();
+    expect(after).not.toBe(before);
+    expect(after.map((machine) => [machine.id, machine.resources])).toEqual([
+      ['m1', null],
+      ['m2', busy],
+    ]);
+    expect(after[1]?.state).toBe(before[1]?.state);
+    expect(fleet.listMachines()).toBe(after);
+    const idle = createMachineResources({ cpuPercent: 5 });
+    studio.connection.pushResources(idle);
+    expect(fleet.selectResources()).toBe(idle);
+    expect(fleet.listMachines().map((machine) => machine.resources)).toEqual([idle, busy]);
+  });
+
+  it('reports no resources while no machine is reachable', () => {
+    expect(new Fleet([]).selectResources()).toBeNull();
+  });
+
   it('keeps the account’s machines this device cannot reach, to show them disabled', () => {
     const studio = createMember('m1', 'Studio');
     const fleet = new Fleet([studio.member], [{ id: 'm3', name: 'Build box' }]);
@@ -426,6 +471,39 @@ describe('sending to the machine that owns it', () => {
     fleet.replaceAccounts(null);
     fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
     fleet.watchTranscript('run')();
+  });
+
+  it('merges every machine’s teammates’ tasks with the browser’s own, kept until one of them changes', () => {
+    const studio = createMember('m1', 'Studio');
+    const laptop = createMember('m2', 'Laptop');
+    const hosted = { feed: NO_TEAM_FEED as TeamFeedSnapshot, signal: createSignal() };
+    const fleet = new Fleet([studio.member, laptop.member], [], {
+      subscribe: (listener) => hosted.signal.subscribe(listener),
+      snapshot: () => hosted.feed,
+    });
+    let published = 0;
+    fleet.subscribeTeams(() => {
+      published += 1;
+    });
+    expect(fleet.selectTeams()).toBe(NO_TEAM_FEED);
+    const machine = {
+      teamId: 'team1',
+      instanceId: 'p7m2',
+      name: 'Kai’s Mac',
+      userId: '7',
+      status: 'live' as const,
+      reason: null,
+    };
+    studio.connection.teams = { machines: [machine], tasks: [] };
+    studio.connection.signal.publish();
+    const merged = fleet.selectTeams();
+    expect(merged.machines).toEqual([machine]);
+    expect(fleet.selectTeams()).toBe(merged);
+    hosted.feed = { machines: [{ ...machine, instanceId: 'q1' }], tasks: [] };
+    hosted.signal.publish();
+    expect(fleet.selectTeams().machines.map((entry) => entry.instanceId)).toEqual(['p7m2', 'q1']);
+    expect(published).toBe(2);
+    expect(new Fleet([laptop.member]).selectTeams()).toBe(NO_TEAM_FEED);
   });
 });
 

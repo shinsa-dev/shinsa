@@ -136,7 +136,8 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
 }
 
-export function resolveRowStatus(state: ShinsaState, task: Task): Status {
+export function resolveRowStatus(state: ShinsaState, task: Task, gate: Gate | null = null): Status {
+  if (gate?.type === 'post_merge') return { label: describePostMergeStatus(task), tone: 'amber' };
   const status = resolveTaskStatus(state, task);
   if (status !== WAITING_TO_CHECK_IN) return status;
   return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };

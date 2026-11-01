@@ -154,6 +154,7 @@ import {
   triageTask,
   waitOnTasks,
 } from './tasks.ts';
+import { addProjectToTeam, removeProjectFromTeam } from './teams.ts';
 import { dismissWatchSuggestion, recordWatchSuggestion } from './watch-suggestions.ts';
 import {
   connectWatchdog,
@@ -190,6 +191,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeProject(decider, command);
     case 'project.remove':
       return removeProject(decider, command);
+    case 'project.add_to_team':
+      return addProjectToTeam(decider, command);
+    case 'project.remove_from_team':
+      return removeProjectFromTeam(decider, command);
     case 'focus.change':
       return changeFocus(decider, command);
     case 'settings.change':

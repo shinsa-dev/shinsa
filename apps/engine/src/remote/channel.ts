@@ -45,7 +45,7 @@ interface ChannelHub {
 
 export type AccessAnswer =
   | { kind: 'refused'; reason: string }
-  | { kind: 'granted' }
+  | { kind: 'admitted' }
   | { kind: 'waiting'; decided: Promise<boolean> };
 
 export interface ChannelHost {
@@ -183,7 +183,7 @@ export class RemoteChannel {
       this.#refuse(answer.reason);
       return false;
     }
-    if (answer.kind === 'granted') return this.#state.kind !== 'closed';
+    if (answer.kind === 'admitted') return this.#state.kind !== 'closed';
     this.#peer.send(JSON.stringify({ type: 'pending' } satisfies ServerHello));
     const approved = await answer.decided;
     if (this.#state.kind === 'closed') return false;

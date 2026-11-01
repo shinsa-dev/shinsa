@@ -1,4 +1,4 @@
-import { parseRemoteHookPath, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
+import { parseRemoteHookPath, REMOTE_PATHS, SLACK_RELAY_PATHS, type TeamAction } from '@shinsa/core';
 import { createStore, type Database } from './database.ts';
 import { respondHook } from './hooks.ts';
 import { applySecurityHeaders, CloudError, respondError, respondJson } from './http.ts';
@@ -28,7 +28,7 @@ import {
   respondRequesterFind,
 } from './members.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
-import { isPreviewHost, respondPreview } from './previews.ts';
+import { isPreviewHost, respondPreview, respondPreviewOpen } from './previews.ts';
 import {
   resolveCallbackFailureLocation,
   respondSession,
@@ -51,6 +51,15 @@ import {
   respondSlackConnectCallback,
   respondSlackInstallCallback,
 } from './slack-link.ts';
+import {
+  PAGE_TEAM_ACTIONS,
+  respondTeamAction,
+  respondTeamCreate,
+  respondTeamJoin,
+  respondTeamPreview,
+  respondTeams,
+  TEAM_ACTIONS,
+} from './teams.ts';
 import type { CloudConfig, CloudWorld, Fetch } from './world.ts';
 
 type Handler = (
@@ -70,6 +79,10 @@ const SEGMENT = '([A-Za-z0-9_-]{1,64})';
 
 function exact(path: string) {
   return new RegExp(`^${path.replaceAll('/', '\\/')}$`);
+}
+
+function teamActions(prefix: string, actions: readonly TeamAction[]) {
+  return new RegExp(`^${prefix}/${SEGMENT}/(${actions.join('|')})$`);
 }
 
 const ROUTES: Route[] = [
@@ -129,6 +142,11 @@ const ROUTES: Route[] = [
     respond: (request, _url, match, world) => respondConnect(request, match[1] ?? '', world),
   },
   {
+    method: 'GET',
+    pattern: exact(REMOTE_PATHS.previewOpen),
+    respond: (request, url, _match, world) => respondPreviewOpen(request, url, world),
+  },
+  {
     method: 'POST',
     pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}/connect$`),
     respond: (_request, _url, match, world) => respondShareConnect(match[1] ?? '', world),
@@ -172,6 +190,43 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(REMOTE_PATHS.machineMemberRemove),
     respond: (request, _url, _match, world) => respondMachineMemberRemove(request, world),
+  },
+  {
+    method: 'GET',
+    pattern: exact(REMOTE_PATHS.teams),
+    respond: (request, _url, _match, world) => respondTeams(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.teamJoin),
+    respond: (request, _url, _match, world) => respondTeamJoin(request, 'page', world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.teamPreview),
+    respond: (request, _url, _match, world) => respondTeamPreview(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: teamActions(REMOTE_PATHS.teams, PAGE_TEAM_ACTIONS),
+    respond: (request, _url, match, world) =>
+      respondTeamAction(request, 'page', match[1] ?? '', match[2] as TeamAction, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineTeams),
+    respond: (request, _url, _match, world) => respondTeamCreate(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineTeamJoin),
+    respond: (request, _url, _match, world) => respondTeamJoin(request, 'machine', world),
+  },
+  {
+    method: 'POST',
+    pattern: teamActions(REMOTE_PATHS.machineTeams, TEAM_ACTIONS),
+    respond: (request, _url, match, world) =>
+      respondTeamAction(request, 'machine', match[1] ?? '', match[2] as TeamAction, world),
   },
   {
     method: 'POST',
@@ -308,7 +363,9 @@ export async function respond(request: Request, world: CloudWorld) {
     try {
       return await respondPreview(request, url, world);
     } catch (error) {
-      return respondError(describeFailure(error));
+      const failure = respondError(describeFailure(error));
+      failure.headers.set('x-robots-tag', NOINDEX);
+      return failure;
     }
   }
   if (url.pathname.startsWith(API_PREFIX)) return applySecurityHeaders(await respondApi(request, url, world));
@@ -333,7 +390,8 @@ export async function respond(request: Request, world: CloudWorld) {
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return respondJson({ error: { code: 'method_not_allowed', message: 'Only GET is served here.' } }, 405);
   const page = applySecurityHeaders(await world.assets(request));
-  if (url.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`)) page.headers.set('x-robots-tag', NOINDEX);
+  if (url.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`) || url.pathname === REMOTE_PATHS.teamJoinPage)
+    page.headers.set('x-robots-tag', NOINDEX);
   return page;
 }
 

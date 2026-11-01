@@ -97,7 +97,7 @@ export function createState(): ShinsaState {
     seq: 0,
     repos: {},
     projects: {},
-    focus: { projectId: null, until: null },
+    focus: { projectId: null, teamId: null, until: null },
     taskNumbers: {},
     settings: createSettings(),
     tasks: {},

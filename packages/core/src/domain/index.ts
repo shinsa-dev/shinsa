@@ -222,6 +222,7 @@ export {
   compareTasks,
   hasArmedWait,
   isAskTask,
+  isRoundFinished,
   isTaskComplete,
   isTaskSettled,
   PRIORITY_RANK,

@@ -48,6 +48,9 @@ describe('the remote page’s mode', () => {
     expect(resolveRemoteView({ pathname: '/claim', search: '', hash: '#a.b.c.d' })).toEqual({
       kind: 'claim',
     });
+    expect(resolveRemoteView({ pathname: '/share/team', search: '', hash: '#x' })).toEqual({
+      kind: 'team-join',
+    });
     expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '', hash: '' })).toEqual({ kind: 'app' });
     expect(resolveRemoteView({ pathname: '/', search: '', hash: '' })).toEqual({ kind: 'app' });
     const shareId = 'BwcHBwcHBwcHBwcHBwcHBw';

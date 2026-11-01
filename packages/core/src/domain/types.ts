@@ -229,10 +229,12 @@ export interface Project {
   description: string;
   folders: string[];
   watchSources?: WatchSource[];
+  teamIds?: string[];
 }
 
 export interface Focus {
   projectId: string | null;
+  teamId: string | null;
   until: number | null;
 }
 

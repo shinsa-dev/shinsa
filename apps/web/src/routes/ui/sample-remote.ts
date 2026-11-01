@@ -1,5 +1,7 @@
 import {
   DEVELOPMENT_VERSION,
+  type MachineResources,
+  NO_TEAM_FEED,
   type RemoteInstance,
   type RemoteSnapshot,
   resolveEngineInfo,
@@ -77,6 +79,7 @@ export function createSampleRemote(now: number) {
         requestedAt: now - 60_000,
       },
     ],
+    teams: [],
   };
   return [
     {
@@ -203,6 +206,9 @@ export function createSampleMachineServices(now: number): RemoteServices {
       leaveInstance: refuse,
       acceptInvite: refuse,
       acceptHandoff: refuse,
+      listTeams: () => Promise.resolve([]),
+      joinTeam: refuse,
+      previewTeam: refuse,
       readPair: refuse,
       approvePair: refuse,
       signOut: refuse,
@@ -218,13 +224,17 @@ export function createSampleMachineServices(now: number): RemoteServices {
       writeDevice: refuse,
       removeDevice: refuse,
     },
+    teamKeys: { selectTeamKey: () => Promise.resolve(null), writeTeamKey: refuse },
     worker: {} as ServiceWorkerContainer,
   };
 }
 
 const SAMPLE_ENGINE = resolveEngineInfo(DEVELOPMENT_VERSION);
 
-export function createStaticConnection(state: ShinsaState): ShinsaConnection {
+export function createStaticConnection(
+  state: ShinsaState,
+  resources: MachineResources | null = null
+): ShinsaConnection {
   const snapshot = { state: state as unknown as WireState, status: 'open' as const };
   const quiet = () => () => undefined;
   const none = () => null;
@@ -243,9 +253,13 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     subscribeTerminals: quiet,
     selectTerminals: none,
     replaceTerminals: () => undefined,
+    subscribeResources: quiet,
+    selectResources: () => resources,
     subscribeRemote: quiet,
     selectRemote: none,
     replaceRemote: () => undefined,
+    subscribeTeams: quiet,
+    selectTeams: () => NO_TEAM_FEED,
     selectMachine: none,
     listMachines: () => NO_MACHINES,
     listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,
@@ -257,12 +271,14 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
   };
 }
 
-export function createSampleFleet(parts: { name: string; state: ShinsaState }[]) {
+export function createSampleFleet(
+  parts: { id?: string; name: string; state: ShinsaState; resources?: MachineResources }[]
+) {
   return new Fleet(
     parts.map((part, index) => ({
-      id: `mac-${index}`,
+      id: part.id ?? `mac-${index}`,
       name: part.name,
-      connection: createStaticConnection(part.state),
+      connection: createStaticConnection(part.state, part.resources ?? null),
       fetch: () => Promise.reject(new Error('This is a sample. Nothing is sent.')),
     }))
   );

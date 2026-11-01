@@ -1,4 +1,5 @@
 import type { RemoteAccess, RemoteUser } from './contract.ts';
+import type { RemoteTeam } from './teams.ts';
 
 export type TunnelStatus = 'off' | 'starting' | 'connected' | 'reconnecting' | 'revoked';
 
@@ -30,6 +31,17 @@ export interface AccessRequest {
   requestedAt: number;
 }
 
+export type TeamStatus = 'member' | 'requested';
+
+export interface RemoteTeamEntry {
+  id: string;
+  name: string;
+  status: TeamStatus;
+  onMachine: boolean;
+  invite: boolean;
+  team: RemoteTeam | null;
+}
+
 export interface RemoteSnapshot {
   paired: boolean;
   enabled: boolean;
@@ -43,4 +55,5 @@ export interface RemoteSnapshot {
   access: RemoteAccess | null;
   link: RemoteLink | null;
   requests: AccessRequest[];
+  teams: RemoteTeamEntry[];
 }

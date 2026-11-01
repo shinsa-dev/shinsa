@@ -29,6 +29,7 @@ describe('settings tabs', () => {
       'Notifications',
       'Context',
       'Remote access',
+      'Teams',
       'Slack',
       'Setup',
       'Updates',

@@ -118,11 +118,16 @@ describe('the tools each agent gets', () => {
     expect(listToolNames('answerer')).toContain('run_service');
   });
 
-  test('the agent and the investigator add services; the reviewer and the others do not', () => {
-    for (const role of ['agent', 'investigator'] as const)
+  test('the agent and the investigator add and remove services; the reviewer and the others do not', () => {
+    for (const role of ['agent', 'investigator'] as const) {
       expect(listCallableToolNames(role)).toContain('add_service');
-    for (const role of ['reviewer', 'answerer', 'researcher'] as const)
+      expect(listCallableToolNames(role)).toContain('remove_service');
+    }
+    for (const role of ['reviewer', 'answerer', 'researcher'] as const) {
       expect(listCallableToolNames(role)).not.toContain('add_service');
+      expect(listCallableToolNames(role)).not.toContain('remove_service');
+    }
+    expect(listToolNames('answerer')).toContain('remove_service');
   });
 
   test('names every tool the agents can be given, schedules and secrets included', () => {

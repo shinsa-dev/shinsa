@@ -285,7 +285,7 @@ Only these, and they win over anything below:
    Recent conversations start with the task's handle like the queue's (`TaskHandlePrefix`,
    `components/task/handle.tsx`). **The focus filters all of Home**: the guide, every section, every
    count and every row (Recently finished and Recent conversations through `isInFocus` in
-   `lib/focus.ts`, the rest through `resolveQueue`). Picking a project or All work in the Focus menu (the current focus checked)
+   `lib/focus.ts`, the rest through `resolveQueue`). Picking Your work, a project or a team in the Focus menu (the current focus checked)
    redraws the whole page from the next state push. Nothing on Home or in the queue button's list shows
    work from other projects, and ⌘K's decisions across tasks follow the focus too; only Jump to a task, a
    search of every task, reaches past it. **Every Home section folds** from its `SectionLabel` header (a chevron, `aria-expanded`), is
@@ -900,7 +900,7 @@ Only these, and they win over anything below:
       every option, through one renderer, `ProjectOption`: the Focus menu and the Terminal page's picker
       (`ProjectRadioItems`), the new-task composer, any `SelectField` whose items carry a `dot` (the Services popover’s
       Add services, an MCP server's Where agents use it), the MCP menu's Use in a project and ⌘K's choices (an option's
-      `dot`; All work is grey, as in the Focus menu). `test/components/status/project-option.test.tsx` and ⌘K's
+      `dot`; Your work is grey, as in the Focus menu). `test/components/status/project-option.test.tsx` and ⌘K's
       focus choice in `test/components/command/menu.test.tsx` fail when one renders a project without it.
     - **A project and a repository are two things, kept apart.** A project is its dot and its name; a repository is
       its own name after its mark, never the project's name. The mark is tinted in its project's colour so you see

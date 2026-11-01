@@ -5,6 +5,7 @@ import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } f
 import { SLACK_SECTION } from '@/lib/slack.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
 import { USAGE_SECTION } from '@/lib/stats/usage.ts';
+import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
 import { UPDATES_SECTION } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 
@@ -32,7 +33,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
       'Attention',
       'Notifications',
       'Context',
-      ...(isRemoteBuild() ? [MACHINES_SECTION] : [REMOTE_ACCESS_SECTION, SLACK_SECTION]),
+      ...(isRemoteBuild() ? [MACHINES_SECTION] : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SLACK_SECTION]),
       'Setup',
       UPDATES_SECTION,
     ],

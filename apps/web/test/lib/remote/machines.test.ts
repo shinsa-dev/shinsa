@@ -58,6 +58,7 @@ describe('a machine in the dashboard', () => {
       state: {
         tasks: { t1: { stage: 'building' as const } },
         projects: {},
+        repos: {},
         settings: { taskCapacity: null, placementPolicies: [] },
       },
     };

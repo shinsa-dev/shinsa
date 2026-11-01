@@ -262,6 +262,14 @@ function describeShinsaMessage(
       );
     case 'add_service':
       return plain('IconServer', 'Added a service:', readString(args, 'name'));
+    case 'remove_service': {
+      const services = readStrings(args, 'services');
+      return plain(
+        'IconTrashCan',
+        services.length === 1 ? 'Removed a service:' : 'Removed services:',
+        services.join(', ') || null
+      );
+    }
   }
 }
 
@@ -424,6 +432,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
     count === 1 ? 'listed the task’s services' : `listed the task’s services ${count} times`,
   run_service: (count) => `ran ${formatCount(count, 'service', 'services')}`,
   add_service: (count) => `added ${formatCount(count, 'service', 'services')}`,
+  remove_service: (count) => (count === 1 ? 'removed services once' : `removed services ${count} times`),
   note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',

@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from '../../src/log/index.ts';
-import { RemoteStore, readRemoteFile } from '../../src/remote/store.ts';
+import { RemoteStore, readRemoteFile, readTeams } from '../../src/remote/store.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const CREDENTIALS = {
@@ -86,10 +86,14 @@ describe('remote.json', () => {
           },
           'nope',
         ],
+        grants: [{ userId: '7', teamId: 't1', secret: 'g1' }, { userId: '8', teamId: 't1' }, 'nope'],
       })
     );
     expect(readRemoteFile(path)).toEqual({
       version: 1,
+      teams: [],
+      teamKeys: [],
+      grants: [{ userId: '7', teamId: 't1', secret: 'g1' }],
       machine: { publicKey: 'p', privateKey: 'k' },
       credentials: CREDENTIALS,
       owner: 'mona',
@@ -203,6 +207,19 @@ describe('the remote store', () => {
     expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine', 'old']);
   });
 
+  test('keeps one grant per teammate and drops the grants of people no longer in a team', () => {
+    const store = new RemoteStore(createPath());
+    store.writeGrant({ userId: '7', teamId: 't1', secret: 'first' });
+    store.writeGrant({ userId: '8', teamId: 't1', secret: 'other' });
+    store.writeGrant({ userId: '7', teamId: 't2', secret: 'again' });
+    expect(store.selectGrant('7')).toEqual({ userId: '7', teamId: 't2', secret: 'again' });
+    store.removeGrantsOutside(new Set(['7', '8']));
+    expect(store.file.grants).toHaveLength(2);
+    store.removeGrantsOutside(new Set(['8']));
+    expect(store.file.grants.map((grant) => grant.userId)).toEqual(['8']);
+    expect(store.selectGrant('7')).toBeNull();
+  });
+
   test('creates the machine key once and reads it back after a restart', async () => {
     const path = createPath();
     const store = new RemoteStore(path);
@@ -219,5 +236,40 @@ describe('the remote store', () => {
     const store = new RemoteStore(path);
     const key = await store.resolveMachineKey();
     expect(key.publicKey).not.toBe('p');
+  });
+});
+
+describe('readTeams', () => {
+  test('keeps each team machine it can read and drops the rest', () => {
+    const owner = { id: '1', login: 'mona' };
+    const teams = readTeams([
+      {
+        id: 'team-1',
+        name: 'Platform',
+        role: 'owner',
+        owner,
+        createdAt: 1,
+        machines: [
+          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5 },
+          { id: 'm2', name: 'Laptop', userId: '7' },
+          { id: 'm3', name: 4, userId: '7' },
+          'nope',
+        ],
+      },
+      { id: 'team-2', name: 'Design', owner, createdAt: 2, machines: 'none' },
+      { id: 'team-3', name: 'Broken', owner },
+    ]);
+    expect(teams?.map((team) => [team.id, team.role, team.machines])).toEqual([
+      [
+        'team-1',
+        'owner',
+        [
+          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5 },
+          { id: 'm2', name: 'Laptop', userId: '7', online: false, lastSeenAt: null },
+        ],
+      ],
+      ['team-2', 'member', []],
+    ]);
+    expect(readTeams('none')).toBeNull();
   });
 });

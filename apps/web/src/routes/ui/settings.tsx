@@ -24,6 +24,7 @@ import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { SlackGroup } from '@/components/settings/slack.tsx';
+import { TeamsGroup } from '@/components/settings/teams.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
@@ -34,9 +35,11 @@ import { replaceConnection } from '@/lib/connection/socket.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
+import type { Fleet } from '@/lib/remote/fleet.ts';
 import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SlackLinkedPage } from '../remote/slack.tsx';
+import { TeamJoinPage } from '../remote/team-join.tsx';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
 import {
@@ -47,6 +50,14 @@ import {
   SAMPLE_MACS,
 } from './sample-remote.ts';
 import { createSampleSlack } from './sample-slack.ts';
+import {
+  createSampleTeamActions,
+  createSampleTeams,
+  openSampleJoinMachines,
+  requestSampleTeamJoin,
+  SAMPLE_TEAM_JOIN_DASHBOARD,
+  SAMPLE_TEAM_LINK,
+} from './sample-teams.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
@@ -273,6 +284,7 @@ const SAMPLE_POLICY_MACHINES = [
     state: {
       tasks: {},
       projects: {},
+      repos: {},
       settings: {
         placementPolicies: [
           'Run Xcode simulator tests and TestFlight builds here.',
@@ -288,6 +300,7 @@ const SAMPLE_POLICY_MACHINES = [
     state: {
       tasks: {},
       projects: {},
+      repos: {},
       settings: { placementPolicies: ['Benchmarks and load tests always run here.'] },
     },
   },
@@ -347,29 +360,89 @@ function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }
   );
 }
 
-function FleetFactsSpecimen({ now }: { now: number }) {
-  const [fleet] = React.useState(() => {
-    const studio = createSampleTask(now, {
-      id: 'fleet-studio',
-      title: 'Fix the scroll in tab groups',
-      handle: 'WEB-14',
-    });
-    const laptop = createSampleTask(now, {
-      id: 'fleet-laptop',
-      title: 'Add search to the docs',
-      handle: 'DOC-3',
-    });
-    const next = createSampleFleet([
-      { name: 'Studio', state: createSampleState({ tasks: [studio] }) },
-      { name: 'MacBook Air', state: createSampleState({ tasks: [laptop] }) },
-    ]);
-    replaceConnection(next);
-    return next;
+const GIGABYTE = 1024 ** 3;
+
+function createSampleUse(cpuPercent: number, memoryGigabytes: number) {
+  return { cpuPercent, memoryBytes: memoryGigabytes * GIGABYTE };
+}
+
+function createSettingsFleet(now: number) {
+  const studio = createSampleTask(now, {
+    id: 'fleet-studio',
+    title: 'Fix the scroll in tab groups',
+    handle: 'WEB-14',
   });
-  React.useEffect(() => {
-    replaceConnection(fleet);
-    return () => replaceConnection(null);
-  }, [fleet]);
+  const checking = createSampleTask(now, {
+    id: 'fleet-studio-checks',
+    title: 'Move the billing page to the new table',
+    handle: 'WEB-15',
+  });
+  const server = createSampleTask(now, {
+    id: 'fleet-server',
+    title: 'Add search to the docs',
+    handle: 'DOC-3',
+  });
+  return createSampleFleet([
+    {
+      id: 'k3x9',
+      name: 'Studio',
+      state: createSampleState({ tasks: [studio, checking] }),
+      resources: {
+        sampledAt: now,
+        cores: 12,
+        cpuPercent: 64,
+        memoryUsedBytes: 26 * GIGABYTE,
+        memoryTotalBytes: 32 * GIGABYTE,
+        diskFreeBytes: 180 * GIGABYTE,
+        diskTotalBytes: 1000 * GIGABYTE,
+        tasks: [
+          {
+            taskId: studio.id,
+            agent: createSampleUse(6, 0.9),
+            services: createSampleUse(12, 1.4),
+            checks: createSampleUse(0, 0),
+            processes: 9,
+            worktreeBytes: 2.4 * GIGABYTE,
+          },
+          {
+            taskId: checking.id,
+            agent: createSampleUse(3, 0.6),
+            services: createSampleUse(0, 0),
+            checks: createSampleUse(38, 3.2),
+            processes: 14,
+            worktreeBytes: 3.1 * GIGABYTE,
+          },
+        ],
+      },
+    },
+    {
+      id: 'v9q1',
+      name: 'Team server',
+      state: createSampleState({ tasks: [server] }),
+      resources: {
+        sampledAt: now,
+        cores: 16,
+        cpuPercent: 12,
+        memoryUsedBytes: 9 * GIGABYTE,
+        memoryTotalBytes: 64 * GIGABYTE,
+        diskFreeBytes: 410 * GIGABYTE,
+        diskTotalBytes: 500 * GIGABYTE,
+        tasks: [
+          {
+            taskId: server.id,
+            agent: createSampleUse(4, 0.7),
+            services: createSampleUse(0, 0),
+            checks: createSampleUse(0, 0),
+            processes: 3,
+            worktreeBytes: 0.8 * GIGABYTE,
+          },
+        ],
+      },
+    },
+  ]);
+}
+
+function FleetFactsSpecimen({ fleet }: { fleet: Fleet }) {
   const state = fleet.snapshot().state as unknown as ShinsaState;
   return (
     <Card>
@@ -391,7 +464,18 @@ export function SettingsSpecimens() {
   const [remote] = React.useState(() => createSampleRemote(now));
   const [remoteActions] = React.useState(() => createSampleRemoteActions());
   const [machines] = React.useState(() => createSampleMachineServices(now));
+  const [fleet] = React.useState(() => {
+    const next = createSettingsFleet(now);
+    replaceConnection(next);
+    return next;
+  });
+  React.useEffect(() => {
+    replaceConnection(fleet);
+    return () => replaceConnection(null);
+  }, [fleet]);
   const [slack] = React.useState(() => createSampleSlack(now));
+  const [teams] = React.useState(() => createSampleTeams(now));
+  const [teamActions] = React.useState(createSampleTeamActions);
   const settings = createSettings();
   return (
     <>
@@ -419,7 +503,25 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
-      <Specimen label='MachinesSettings · in Shinsa Cloud: your machines and one shared with you, three in this dashboard'>
+      {teams.scenes.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <TeamsGroup state={teams.state} snapshot={scene.snapshot} failure={null} actions={teamActions} />
+          </div>
+        </Specimen>
+      ))}
+      <Specimen label='TeamJoinPage · on app.shinsa.dev, a team link opened after sign-in'>
+        <div className='w-full max-w-sm'>
+          <TeamJoinPage
+            link={SAMPLE_TEAM_LINK}
+            dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
+            teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
+            openMachines={openSampleJoinMachines}
+            request={requestSampleTeamJoin}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='MachinesSettings · in Shinsa Cloud: your machines and one shared with you, three in this dashboard, Studio and Team server reporting what they use'>
         <div className='w-full max-w-xl'>
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
@@ -440,7 +542,7 @@ export function SettingsSpecimens() {
         </div>
       </Specimen>
       <Specimen label='TaskFacts · in Shinsa Cloud with several machines, each task shows the machine it runs on'>
-        <FleetFactsSpecimen now={now} />
+        <FleetFactsSpecimen fleet={fleet} />
       </Specimen>
       <Specimen label='MemorySettings · a rule an agent proposed, rules for every project and for one project'>
         <div className='w-full max-w-xl'>

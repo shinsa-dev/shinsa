@@ -20,11 +20,13 @@ import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
+import type { TeamKeyStore } from '@/lib/teams/join.ts';
 import { ClaimPage } from '@/routes/remote/claim.tsx';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
-import { createTask } from '../../support/state.ts';
+import { createMachineResources, createTaskResources } from '../../support/resources.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 
 const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
 
@@ -56,6 +58,7 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
     removeInstance: () => Promise.resolve({ ok: true }),
     leaveInstance: () => Promise.resolve({ ok: true }),
+    listTeams: () => Promise.resolve([]),
     acceptInvite: () =>
       Promise.resolve({
         instanceId: 'k3x9',
@@ -71,6 +74,14 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
         owner: USER.user as RemoteUser,
         user: USER.user as RemoteUser,
         connect: { url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 },
+      }),
+    previewTeam: () => Promise.resolve({ name: 'Platform', owner: USER.user as RemoteUser }),
+    joinTeam: () =>
+      Promise.resolve({
+        teamId: 'team1',
+        name: 'Platform',
+        owner: USER.user as RemoteUser,
+        status: 'requested',
       }),
     readPair: () => Promise.resolve(PAIR),
     approvePair: () => Promise.resolve({ instanceId: 'k3x9', name: 'Studio' }),
@@ -96,6 +107,10 @@ function createDevices(
   };
 }
 
+function createTeamKeys(): TeamKeyStore {
+  return { selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() };
+}
+
 function createWorker(controlled = true) {
   const target = new EventTarget();
   return {
@@ -114,6 +129,7 @@ function renderRoot(path: string, services: Partial<RemoteServices> = {}) {
       services={{
         dashboard: createDashboard(),
         devices: createDevices(),
+        teamKeys: createTeamKeys(),
         worker: createWorker(),
         ...services,
       }}
@@ -228,12 +244,26 @@ describe('the remote dashboard', () => {
     expect(location.pathname).toBe('/enroll');
   });
 
+  it('keeps a team link out of the address bar through sign-in, then shows the join page', async () => {
+    const fragment = `team1.invite-1.${'A'.repeat(43)}`;
+    const { unmount } = renderRoot(`/share/team#${fragment}`, {
+      dashboard: createDashboard({ readSession: () => Promise.resolve({ user: null }) }),
+    });
+    const link = (await screen.findByText('Sign in with GitHub')).closest('a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(`/__remote/sign-in?return=${encodeURIComponent('/share/team')}`);
+    expect(location.hash).toBe('');
+    unmount();
+    renderRoot('/share/team');
+    expect(await screen.findByText('Join a team')).toBeTruthy();
+    sessionStorage.clear();
+  });
+
   it('routes to the pair page and the enroll page', async () => {
     const { unmount } = renderRoot('/pair?code=K7PQ');
     expect(await screen.findByText('Pair Studio with your account')).toBeTruthy();
     unmount();
     renderRoot(`/enroll#k3x9.${MACHINE_KEY}.secret_1.tok`);
-    expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
+    expect(await screen.findByText('Add this device')).toBeTruthy();
   });
 
   it('routes to the claim page, keeping its link out of the address bar and the sign-in redirect', async () => {
@@ -313,7 +343,7 @@ describe('the machines in Settings', () => {
     const devices = createDevices(DEVICE);
     render(
       <RemoteServicesContext.Provider
-        value={{ dashboard: createDashboard(), devices, worker: createWorker() }}
+        value={{ dashboard: createDashboard(), devices, teamKeys: createTeamKeys(), worker: createWorker() }}
       >
         <MachinesSettings />
       </RemoteServicesContext.Provider>
@@ -339,7 +369,7 @@ describe('the machines in Settings', () => {
         name: 'Studio',
         current: false,
         guest: true,
-        state: { tasks: { t1: task }, projects: {}, settings: createState().settings },
+        state: { tasks: { t1: task }, projects: {}, repos: {}, settings: createState().settings },
       },
     ];
     replaceConnection(
@@ -353,7 +383,7 @@ describe('the machines in Settings', () => {
       },
     });
     render(
-      <RemoteServicesContext.Provider value={{ dashboard, devices, worker: createWorker() }}>
+      <RemoteServicesContext.Provider value={{ dashboard, devices, teamKeys: createTeamKeys(), worker: createWorker() }}>
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
@@ -387,7 +417,9 @@ describe('the machines in Settings', () => {
       },
     });
     render(
-      <RemoteServicesContext.Provider value={{ dashboard, devices, worker: createWorker() }}>
+      <RemoteServicesContext.Provider
+        value={{ dashboard, devices, teamKeys: createTeamKeys(), worker: createWorker() }}
+      >
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
@@ -399,12 +431,100 @@ describe('the machines in Settings', () => {
     expect(removed).toEqual([]);
   });
 
+  it('shows each machine’s CPU, memory and disk, and opens to the open tasks using it', async () => {
+    const local = connection;
+    const task = createTask({ id: 'export', title: 'Retry exports' });
+    const state = createShinsaState({ tasks: [task] });
+    const machine: MachineChoice = {
+      id: 'k3x9',
+      name: 'Studio',
+      current: true,
+      state,
+      resources: createMachineResources({ tasks: [createTaskResources({ taskId: 'export' })] }),
+    };
+    const machines = [machine];
+    replaceConnection({
+      ...local,
+      snapshot: () => ({ state, status: 'open' }),
+      listMachines: () => machines,
+    });
+    try {
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      const meters = await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' });
+      expect(meters.textContent).toContain('CPU20%');
+      expect(screen.queryByText('Retry exports')).toBeNull();
+      expect(screen.queryByRole('button', { name: /open tasks on Studio/ })).toBeNull();
+    } finally {
+      replaceConnection(null);
+    }
+  });
+
+  it('says a machine has no reading yet, then shows its meters', async () => {
+    const local = connection;
+    const state = createShinsaState({});
+    const reading: MachineChoice = { id: 'k3x9', name: 'Studio', current: true, state, resources: null };
+    const idle = { ...reading, resources: createMachineResources() };
+    let machines = [reading];
+    replaceConnection({
+      ...local,
+      snapshot: () => ({ state, status: 'open' }),
+      listMachines: () => machines,
+    });
+    try {
+      const { unmount } = render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      expect(await screen.findByText('No reading yet.')).toBeTruthy();
+      unmount();
+      machines = [idle];
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      expect(
+        await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' })
+      ).toBeTruthy();
+      expect(screen.queryByText('No reading yet.')).toBeNull();
+    } finally {
+      replaceConnection(null);
+    }
+  });
+
   it('says when the machines cannot be read, and waits without the remote services', async () => {
     const { unmount } = render(
       <RemoteServicesContext.Provider
         value={{
           dashboard: createDashboard({ listInstances: () => Promise.reject(new Error('Signed out.')) }),
           devices: createDevices(),
+          teamKeys: createTeamKeys(),
           worker: createWorker(),
         }}
       >
@@ -418,6 +538,7 @@ describe('the machines in Settings', () => {
         value={{
           dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }),
           devices: createDevices(),
+          teamKeys: createTeamKeys(),
           worker: createWorker(),
         }}
       >
@@ -500,7 +621,7 @@ describe('the enroll page', () => {
     );
     const field = (await screen.findByLabelText('Device name')) as HTMLInputElement;
     expect(field.value).toBe('Chrome on Mac');
-    expect(screen.getByText('Add this device to your machine')).toBeTruthy();
+    expect(screen.getByText('Add this device')).toBeTruthy();
     fireEvent.change(field, { target: { value: ' Work Mac ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
     expect(await screen.findByText('Request sent. Accept it on the machine.')).toBeTruthy();

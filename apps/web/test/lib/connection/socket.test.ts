@@ -4,6 +4,7 @@ import {
   type ClientMessage,
   decide,
   ENGINE_BASELINE_COMMANDS,
+  NO_TEAM_FEED,
   resolveEngineInfo,
   resolveStatePatch,
   type ServerMessage,
@@ -34,6 +35,7 @@ import {
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
+import { createMachineResources } from '../../support/resources.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -563,6 +565,26 @@ describe('Connection terminals', () => {
   });
 });
 
+describe('Connection resources', () => {
+  it('keeps the latest resources the engine pushes, tells its listeners and forgets them on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeResources(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectResources()).toBeNull();
+    const first = createMachineResources({ cpuPercent: 10 });
+    const second = createMachineResources({ cpuPercent: 60 });
+    latest().receive({ type: 'resources', resources: first });
+    latest().receive({ type: 'resources', resources: second });
+    expect(subject.selectResources()).toEqual(second);
+    expect(listener).toHaveBeenCalledTimes(2);
+    subject.reset();
+    expect(subject.selectResources()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('Connection remote access', () => {
   it('keeps the remote access the server pushes, tells its listeners and forgets it on reset', () => {
     const { subject, latest } = setup();
@@ -577,6 +599,24 @@ describe('Connection remote access', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     subject.reset();
     expect(subject.selectRemote()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Connection team feeds', () => {
+  it('keeps the teammates’ task lists the engine pushes, tells its listeners and forgets them on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeTeams(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectTeams()).toBe(NO_TEAM_FEED);
+    const teams = { machines: [], tasks: [] };
+    latest().receive({ type: 'teams', teams });
+    expect(subject.selectTeams()).toEqual(teams);
+    expect(listener).toHaveBeenCalledTimes(1);
+    subject.reset();
+    expect(subject.selectTeams()).toBe(NO_TEAM_FEED);
     expect(listener).toHaveBeenCalledTimes(2);
   });
 });
@@ -810,7 +850,7 @@ describe('the shared connection', () => {
       id: 'm2',
       name: 'Laptop',
       current: false,
-      state: { tasks: {}, projects: {}, settings: {} },
+      state: { tasks: {}, projects: {}, repos: {}, settings: {} },
     };
     const handed = { ...laptop, id: 'm4', name: 'Mona’s Studio', guest: true as const };
     const machines = [laptop, handed];

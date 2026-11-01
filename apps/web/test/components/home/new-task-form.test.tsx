@@ -56,7 +56,7 @@ function pushProjects(focus: string | null) {
         createTask({ id: 'paywall', title: 'Redo the paywall', stage: 'building', projectId: 'p1' }),
         createTask({ id: 'basket', title: 'Count the baskets', stage: 'building', projectId: 'p2' }),
       ],
-      patch: { focus: { projectId: focus, until: null } },
+      patch: { focus: { projectId: focus, teamId: null, until: null } },
     })
   );
 }
@@ -71,7 +71,7 @@ afterEach(() => {
   stopFakeServer();
 });
 
-function connectTwoMachines() {
+function connectTwoMachines(studioCapacity = 4) {
   const local = connection;
   const sent: [string, string | null | undefined][] = [];
   const studio = { id: 'studio', name: 'Studio', current: false };
@@ -80,8 +80,9 @@ function connectTwoMachines() {
       ...studio,
       state: {
         tasks: { a: { stage: 'building' as const } },
-        projects: { p1: {}, p2: {} },
-        settings: { taskCapacity: 4 },
+        projects: { p1: { name: 'Superwall', description: '' }, p2: { name: 'Paywalls', description: '' } },
+        repos: {},
+        settings: { taskCapacity: studioCapacity },
       },
     },
     {
@@ -91,6 +92,7 @@ function connectTwoMachines() {
       state: {
         tasks: {},
         projects: {},
+        repos: {},
         settings: { taskCapacity: null, placementPolicies: ['Benchmarks run on the build box.'] },
       },
     },
@@ -111,7 +113,12 @@ describe('NewTaskForm with several machines', () => {
   it('shows a machine this device cannot reach in the picker, disabled with what to do', async () => {
     const local = connection;
     const machines: MachineChoice[] = [
-      { id: 'studio', name: 'Studio', current: true, state: { tasks: {}, projects: {}, settings: {} } },
+      {
+        id: 'studio',
+        name: 'Studio',
+        current: true,
+        state: { tasks: {}, projects: {}, repos: {}, settings: {} },
+      },
     ];
     const unreachable = [{ id: 'laptop', name: 'Laptop' }];
     replaceConnection({
@@ -132,7 +139,7 @@ describe('NewTaskForm with several machines', () => {
     expect(screen.queryByRole('combobox', { name: 'Machine' })).toBeNull();
   });
 
-  it('lets the policies place a task, and on the machine you pick with only that machine’s projects', async () => {
+  it('lets the router place a task, and on the machine you pick with only that machine’s projects', async () => {
     const sent = connectTwoMachines();
     const realFetch = globalThis.fetch;
     const asked: unknown[] = [];
@@ -156,7 +163,20 @@ describe('NewTaskForm with several machines', () => {
     expect(await listOptions('Project')).toEqual(['No project']);
   });
 
-  it('warns when the policies could not be read, and still places the task', async () => {
+  it('sends the task where there is room when the router names a full machine', async () => {
+    const sent = connectTwoMachines(1);
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(Response.json({ answer: { machineId: 'studio', reason: 'Studio runs reviews.' } }))
+    ) as unknown as typeof globalThis.fetch;
+    renderForm();
+    fireEvent.change(field(), { target: { value: 'Review the build' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(sent).toEqual([['task.create', 'box']]));
+    globalThis.fetch = realFetch;
+  });
+
+  it('warns when the router could not be asked, and still places the task', async () => {
     const sent = connectTwoMachines();
     const warned = spyOn(toast, 'warning').mockReturnValue('id');
     const realFetch = globalThis.fetch;
@@ -168,7 +188,7 @@ describe('NewTaskForm with several machines', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     globalThis.fetch = realFetch;
-    expect(warned).toHaveBeenCalledWith('Your routing policies weren’t read.');
+    expect(warned).toHaveBeenCalledWith('Couldn’t ask the router. Placed by room.');
     warned.mockRestore();
   });
 });

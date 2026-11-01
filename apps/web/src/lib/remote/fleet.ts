@@ -1,9 +1,12 @@
 import {
   type EngineInfo,
   isEngineProtocolMatch,
+  type MachineResources,
+  NO_TEAM_FEED,
   type RemoteSnapshot,
   type RemoteUser,
   SCOPE_MESSAGES,
+  type TeamFeedSnapshot,
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
@@ -24,6 +27,7 @@ import {
 } from '@/lib/connection/socket.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { mergeTeamFeeds, type TeamFeedSource } from '@/lib/teams/feeds.ts';
 import { replaceSharedHandles } from '@/router.ts';
 
 export interface FleetMember {
@@ -158,6 +162,9 @@ export class Fleet implements ShinsaConnection {
   #engines: (EngineInfo | null)[] = [];
   #snapshot: Snapshot = { state: null, status: 'closed' };
   #owners: ReadonlyMap<string, string> = EMPTY_OWNERS;
+  #parts: (FleetPart & { view: MachineView })[] = [];
+  #partResources: (MachineResources | null)[] = [];
+  #machinesFrom: FleetPart[] | null = null;
   #machines: MachineChoice[] = NO_MACHINES;
   #unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
   #listedUnreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
@@ -168,12 +175,23 @@ export class Fleet implements ShinsaConnection {
   readonly #accounts = createSignal();
   readonly #surfaces = createSignal();
   readonly #terminals = createSignal();
+  readonly #resources = createSignal();
   readonly #remote = createSignal();
+  readonly #teams = createSignal();
+  readonly #hostedTeams: TeamFeedSource | null;
+  #teamInputs: TeamFeedSnapshot[] = [];
+  #teamFeed: TeamFeedSnapshot = NO_TEAM_FEED;
 
-  constructor(members: FleetMember[], unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES) {
+  constructor(
+    members: FleetMember[],
+    unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES,
+    hostedTeams: TeamFeedSource | null = null
+  ) {
     for (const member of [...members].sort((a, b) => Number(a.guest === true) - Number(b.guest === true)))
       this.#add(member);
     this.#unreachable = unreachable;
+    this.#hostedTeams = hostedTeams;
+    hostedTeams?.subscribe(() => this.#teams.publish());
     this.#listedUnreachable = unreachable;
   }
 
@@ -198,7 +216,12 @@ export class Fleet implements ShinsaConnection {
         connection.subscribeAccounts(() => this.#accounts.publish()),
         connection.subscribeSurfaces(() => this.#surfaces.publish()),
         connection.subscribeTerminals(() => this.#terminals.publish()),
+        connection.subscribeResources(() => {
+          this.#resources.publish();
+          this.#state.publish();
+        }),
         connection.subscribeRemote(() => this.#remote.publish()),
+        connection.subscribeTeams(() => this.#teams.publish()),
       ],
     });
   }
@@ -260,8 +283,7 @@ export class Fleet implements ShinsaConnection {
     );
     this.#listedUnreachable = outdated.length === 0 ? this.#unreachable : [...this.#unreachable, ...outdated];
     const merged = mergeFleetStates(parts);
-    this.#machines =
-      parts.length === 0 ? NO_MACHINES : parts.map((part) => ({ ...part.view, state: part.state }));
+    this.#parts = parts;
     this.#owners = merged?.owners ?? EMPTY_OWNERS;
     replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {
@@ -301,12 +323,32 @@ export class Fleet implements ShinsaConnection {
   replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) =>
     this.#home?.replaceTerminals(terminals);
 
+  subscribeResources = (listener: () => void) => this.#resources.subscribe(listener);
+
+  selectResources = () => this.#home?.selectResources() ?? null;
+
   subscribeRemote = (listener: () => void) => this.#remote.subscribe(listener);
 
   selectRemote = () => this.#home?.selectRemote() ?? null;
 
   replaceRemote = (remote: Parameters<ShinsaConnection['replaceRemote']>[0]) =>
     this.#home?.replaceRemote(remote);
+
+  subscribeTeams = (listener: () => void) => this.#teams.subscribe(listener);
+
+  selectTeams = () => {
+    const inputs = [
+      ...this.#entries.map((entry) => entry.member.connection.selectTeams()),
+      ...(this.#hostedTeams ? [this.#hostedTeams.snapshot()] : []),
+    ];
+    const same =
+      inputs.length === this.#teamInputs.length &&
+      inputs.every((input, index) => input === this.#teamInputs[index]);
+    if (same) return this.#teamFeed;
+    this.#teamInputs = inputs;
+    this.#teamFeed = mergeTeamFeeds(inputs);
+    return this.#teamFeed;
+  };
 
   selectMachine = (id: string) => {
     const owner = this.#ownerOf(id);
@@ -317,6 +359,22 @@ export class Fleet implements ShinsaConnection {
 
   listMachines = () => {
     this.snapshot();
+    const parts = this.#parts;
+    const resources = parts.map((part) => this.#memberOf(part.id)?.connection.selectResources() ?? null);
+    const same =
+      this.#machinesFrom === parts &&
+      resources.every((reported, index) => reported === this.#partResources[index]);
+    if (same) return this.#machines;
+    this.#machinesFrom = parts;
+    this.#partResources = resources;
+    this.#machines =
+      parts.length === 0
+        ? NO_MACHINES
+        : parts.map((part, index) => ({
+            ...part.view,
+            state: part.state,
+            resources: resources[index] ?? null,
+          }));
     return this.#machines;
   };
 

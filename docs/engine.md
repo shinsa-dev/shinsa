@@ -737,7 +737,9 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
   `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
   with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
-  resting task still starts the next round.
+  resting task still starts the next round. The classifier is shown the post-merge steps still waiting on you
+  (`describeOpenSteps`), so a question about one, even one that quotes it ("what is this for? <the step>"), is
+  `feedback` answered in place, never a round that does the step, which is yours.
 - **A new round is shaped like a new task.** The same call answers, for new work, the kind of work from triage's shape
   question (`SHAPE_QUESTION`), read as the request of a new task with the earlier rounds as its context, and the round
   takes that preset's steps: "how many ended up in Archive?" is an answer round, "open a pull request for it" a change,
@@ -1546,7 +1548,11 @@ steps takes its step out again.
   `Task.carriedMergeSteps` with their round: every open post-merge step, and every open pre-merge step of a
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
-  steps while the later round works. Steps ticked before a round starts are dropped.
+  steps while the later round works. Steps ticked before a round starts are dropped. While the later round works the
+  gate never leads the task (`selectLeadGate` picks `post_merge` only once the round is finished (answered, merged, done or watching, `isRoundFinished`; unlike `isTaskResting` it ignores `closedAt`)): the task
+  shows twice on Home, its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate)
+  and its row in In progress with the round's stage and the agent's latest action, and All tasks, its glyph and its page
+  follow the round. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
 - **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
   your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
   names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.
@@ -2549,7 +2555,8 @@ beside your run (Runs for a task, below).
   most servers read `PORT`, Vite needs `--port $PORT` in the command. A run that cannot bind fails like any other.
 - **A live preview.** `resolveServiceUrl` (core) puts the run's port in the preview URL, `ServiceView.url`; a run
   without a port has none. Wherever an active run has one, an Open button opens it (`docs/design.md`, 37),
-  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Before the
+  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Through remote
+  access, Open goes to the run's private address instead (Private service addresses, below). Before the
   review, the last phase asks the Agent to start the services that show the change and attach each URL, with the path
   to the screen to check, as `preview` evidence, which How to test links (`resolvePhaseInstruction`, the evidence
   skill); Evidence's Preview group also links each active run of the task the agent did not attach
@@ -2624,10 +2631,18 @@ beside your run (Runs for a task, below).
   worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
   path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
   `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
-  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
-  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
-  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
-  one that shows the change when none does.
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes a service in
+  place (remove it and add it again), and none starts your own run: that stays yours. The house rules tell those
+  roles to add a service when the project has none they need and never for a one-off command, and the last phase's
+  preview instruction to add the one that shows the change when none does.
+- **Agents remove services.** The same two roles have `remove_service`: `services`, a list of names or ids of any
+  service in the task's project, its folder in this task's repository or not, since a cleanup comes in a batch.
+  `list_services` also names the project's services that cannot run for the task, so the agent can name them. Every
+  name is resolved before anything changes, so an unknown one is refused with a pointer to `list_services` and
+  nothing is removed. A service that runs for you or for another task is refused the same way, naming who runs it,
+  so an agent never stops your dev server; the task's own run of it is stopped with it. The rest goes through
+  `Terminals.removeServices`, as `POST /api/services/remove` does for Manage. The house rules ask an agent to remove
+  a service it added that no longer serves, or one you ask it to remove, and never one you use unless you asked.
 - **Shared beyond this machine.** A task's run of a service with a preview URL can be shared at its own address on
   `shinsa.page`, through remote access's tunnel, for a teammate to open without Shinsa (Sharing a preview, below).
 
@@ -2768,7 +2783,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
   else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
   link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
-  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you. Every toast here is
+  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out through remote
+  access, which this browser reaches only with its key (on the machine's own page the key, kept for app.shinsa.dev,
+  cannot be read, and a device's name does not tell two browsers apart). Every toast here is
   a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
@@ -2839,7 +2856,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
-  tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  tasks and their task capacity, and, once its engine reports them (How busy each machine is, below), a line of meters
+  for CPU, memory and disk ("CPU 42%", "Memory 12 of 32 GB", "Disk 120 GB free", each with a bar toned as it fills,
+  `listResourceGauges` in `lib/remote/resources.ts`), or "No reading yet." until then. What one task uses is on the
+  task itself: its machine in the task's facts row opens a card like Branch's and Checks' (`FactPopover`), headed by
+  the machine's name with its CPU, memory and free disk (`describeMachineResources`; "The machine this task runs on"
+  before its first reading), then "What this task uses": its agent, services and checks (CPU and memory each, or Idle)
+  and its worktree's size (`listTaskUseLines`). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
@@ -2859,8 +2882,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   sharing on an engine from before sharing; the Feedback button and Send feedback on Shinsa likewise ask the default
   machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
-  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`, and
-  `feedback` for `GET /api/feedback`, today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
+  `feedback` for `GET /api/feedback`, and `teams` for the team routes and `GET /api/teams/tasks`, today; Settings →
+  Teams shows only on an engine that has it). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -2875,23 +2899,50 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   first" (`listUnreachableMachines`, from the account's machines without a key here, and any that refused it since). A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
-  disk; `resolveProjectMachine`); then, when any machine has a routing policy, the routing policies: each is a sentence in plain
-  English (`placementPolicies`, such as "Run Xcode simulator tests here."), and when you start the task the page sends
-  the request with every machine's policies and load to `POST /api/placement` on the first machine of the dashboard
-  (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
-  prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
-  none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
-  Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
-  focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
-  passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  disk; `resolveProjectMachine`); otherwise the router decides: when you start the task the page sends the request
+  with every machine's routing policies, projects (each project's name, description and repositories, and the
+  repositories outside a project, `listPlacementCandidates`), open tasks against capacity and CPU, memory and free
+  disk to `POST /api/placement` on the first machine of the dashboard (`apps/engine/src/remote/placement.ts`), whose
+  classifier, the model triage uses, reads them under a fixed system prompt (core's `PLACEMENT_SYSTEM`,
+  `serializePlacementPrompt`) and names a machine with a one-sentence reason, or none. The prompt decides in order:
+  a routing policy that speaks to the request (each a sentence in plain English, `placementPolicies`, such as "Run
+  Xcode simulator tests here."); then where the work lives, the machine holding the project or repository the request
+  is about, since a task cannot run where its repository is not; then room, passing over a machine at its task
+  capacity and preferring the most free CPU and memory and enough disk; `none` only when nothing sets one machine
+  apart (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says). It costs one
+  quick call per task started on Automatic with two machines or more. Automatic reads "Chooses by your policies,
+  projects and room when you start it", and the toast says where the task went ("Task started. Runs on Studio."),
+  without the reason, to stay one line; when every provider fails (no Claude account, a timeout) the route refuses
+  with `placement_unavailable`, and an answer naming no machine of yours with `placement_unreadable`, so a warning
+  toast says "Couldn’t ask the router. Placed by room." (`requestRoutedPlacement`). With
+  no answer the task goes to the focus project's machine; then the machine with the most room (`resolvePlacement`: a machine at its task capacity
+  passed over while another has room; among the rest, when every machine reports its resources, the most headroom first,
+  the smaller of its free CPU and free memory in steps of 5 % (`resolveResourceHeadroom`), so a busy machine is passed
+  over for a quiet one and two near-equal ones are not told apart by noise; then, or when any machine reports none (an older engine), open
+  tasks over its task capacity, ties to the one with fewer open tasks). Capacity holds over the router too: an answer
+  naming a machine at its task capacity while another has room is set aside for that same fallback
+  (`resolveRoutedPlacement`). The router reads each machine's CPU, memory and
+  free disk as `describeResourceSummary` words them, so a policy such as "Heavy builds go to the machine with the most
+  memory free." can be followed too. Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
   steers placement: a machine still runs a task you send it when full. Routing policies are each machine's own setting
   too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
+- **How busy each machine is** (`apps/engine/src/resources/`, core's `remote/resources.ts`). While a page has a socket
+  open, each engine samples its machine every 5 s and pushes `resources` (`docs/protocol.md` → The socket); with no
+  page, it samples nothing. One `ps` table gives each process's parent, group, memory and cumulative CPU time; CPU
+  is the change in that time between two samples (Linux's `%cpu` is a lifetime average), and the machine's CPU the
+  change in `os.cpus()` times, so the first reading comes about a second after a page connects. Memory used is total
+  minus available (`MemAvailable` on Linux, free, inactive and speculative pages from `vm_stat` on macOS,
+  since Node's free memory there leaves reclaimable pages out). A `ProcessLedger` counts processes toward their task:
+  each agent's process (the session reports it through `onProcess`), each check's (`runCommand`'s `onSpawn`) and
+  each service terminal's, with every process below it and every process in its group, so a child moved to
+  init still counts. Disk free (`df` on the data folder) and each open task's worktree size (`du`) are read every 10
+  minutes, being slow, beside the samples and never before them: the first reading has no worktree sizes yet, and
+  each lands in the next sample once `du` has read it. Settings → Machines shows them (Remote access, above). A machine that runs out of memory is not marked full:
+  task capacity stays the only limit, and resources only order the machines with room.
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
@@ -2904,7 +2955,7 @@ read-only remote access to that one task, live: the browser opens a channel thro
 access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
 Overview, Review, Code and Chat, for a public or a private repository alike, with the agents' live output and tool
 calls, when shared as Standard (the default); shared as Status it is an anonymous status card (the preset, below). Your messages to agents, their prompts and your answers never leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
-projection and channel will serve teams.
+projection and channel serve teams, always at Standard (Teams, below).
 
 - **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
   (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The path is
@@ -3080,6 +3131,142 @@ projection and channel will serve teams.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
 
+## Teams
+
+A team is people who watch each other's work. You put your own projects in a team, and every member then sees every
+task in them, live and read-only, next to their own tasks, on the hosted dashboard and in the local app. It is a share
+link for a whole project, on the same projection and the same one-way channel, with membership in place of the link:
+nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
+online. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+
+- **What app.shinsa.dev keeps** (`apps/cloud/src/teams.ts`, `migrations/0005_teams.sql`): who is in which team. A
+  team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
+  up to 20 members (`MAX_TEAM_MEMBERS`), who asked to join, and one reusable invite kept as its SHA-256. An account
+  owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key. Each machine's
+  heartbeat answers its owner's teams (`HeartbeatResponse.teams`, `RemoteTeam`: owner, your role, members, the owner's
+  requests, and every member's machines with whether each is online), which the machine keeps in `remote.json`.
+- **The team key.** Making a team (Settings → Teams → New team, `shinsa teams create`) asks app.shinsa.dev for the
+  team and its invite, and makes a 32-byte key on the machine (`TEAM_KEY_BYTES`), kept only in `remote.json`
+  (`teamKeys`, never the event log) and in a member's browser (IndexedDB, `createTeamKeyStore`). The join link is
+  `https://app.shinsa.dev/share/team#<team>.<invite>.<key>` (`resolveTeamJoinUrl`, `parseTeamJoinUrl`): the key sits in
+  the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
+  invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
+  one, and a member already in keeps their key.
+- **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
+  and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
+  and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
+  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads their
+  projects over the sealed channel (`lib/teams/join-machines.ts`) and asks which to share, one or more being required;
+  Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
+  dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
+  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and `project.add_to_team` for each pick, so the key
+  and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
+  on each of your machines; one without the key asks for the link right in the team's card, with the projects to
+  share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+  `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
+  your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
+  way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
+  your projects to share, and each team's card picks them after.
+- **Giving a teammate this machine.** A teammate is a step from full remote access: Give machine access beside them
+  in Settings → Teams (`shinsa teams grant <team> --login`, `POST /api/remote/members/grant { teamId, userId }`,
+  `Remote.grantTeammate`) makes them a member of this machine at once, with no invite and no request
+  (`/__remote/machine/members/add`, which app.shinsa.dev allows for an account that shares a team with the machine's
+  owner, `sharesTeam`), and records the grant in `remote.json` (`grants: { userId, teamId, secret }`, a fresh 32-byte
+  secret per grant). Their browser then adds itself: the hosted dashboard, finding a machine shared with them that
+  this browser has no key for (`admitTeamMachines`, `lib/teams/admit.ts`), reads the machine's public key and the
+  grant's secret from that team's channel (`TeamListView.machineKey` and `grant`, sealed with the team key, so
+  app.shinsa.dev cannot swap or read them; `grant` goes only to the channel of the account it was given to, in that
+  team), checks the key against the fingerprint app.shinsa.dev lists, and opens the sealed channel with an enroll
+  proof made with the grant's secret in place of an invite secret. The team key alone, which every member and anyone
+  removed since still holds, adds no device. The machine admits the device without asking (`AccessAnswer`
+  `admitted`) only while the account is a member here, holds a grant, is still in that team and the proof checks
+  against the grant's secret; any other proof falls back to the invite link. Removing the member under Remote access, or their leaving the
+  machine's members, drops the grant and their devices.
+- **Which projects a team sees is yours alone.** `Project.teamIds` lists the teams a project is in, written by
+  `project.add_to_team` and `project.remove_from_team` (`decide/teams.ts`; the project's team picker in Settings →
+  Teams, `shinsa projects add-to-team|remove-from-team`). Both are human-only: their surface specs are `humanOnly`
+  and core refuses them on your behalf (`human_only`), since they open tasks to other people. A task is in a team when
+  its project is (`isTeamTask`, through `resolveTaskProject`), except an automation's home. A task without a project
+  is never shown to a team.
+- **The team channel** (`TEAM_CHANNEL_PATH`, `/team` on the tunnel; core's `remote/teams.ts`, the engine's
+  `remote/teams.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
+  (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`
+  with the machine token, from your engine), which it answers only for a member or the owner and a machine of the
+  team, signed with that machine's connect key for the viewer's GitHub id (60 seconds), as `wss://t-<machine>.shinsa.dev/team?token=…`.
+  The machine upgrades it only while remote access is on and the token checks out (`verifyConnect`; 404 or 401
+  otherwise). The viewer's first and only message is a team hello: the team, the view it asks for (the team's task
+  list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key
+  over all three. The machine opens it only when it holds that team's key, the token's account is the team's owner or
+  one of its members in the machine's own copy (`isTeamViewer`), a task asked for is in one of the team's projects,
+  and the HMAC checks in constant time; else `refused` ("This task is no longer shown to the team, or you are no
+  longer in it."). The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
+  view and both fresh keys), so the view asked for is bound into the key: a hello for the list cannot be replayed to
+  read a task. The share channel's code serves both (`ShareChannel`, with a host that authorizes the hello).
+- **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
+  recently finished (`TEAM_SETTLED_LIMIT`), each a `TeamTask` (`listTeamTasks`): `resolveSharedListing`, the task,
+  its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
+  the machine's public key (`machineKey`, for a teammate given this machine). A task
+  view is exactly a share link's `ShareLiveView` and files at Standard (`Shares.resolveLive` with `TEAM_SHARE_PRESET`,
+  whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
+  transcript (`Teams.#pushTranscript`): the table in Sharing a task is what a teammate can and cannot see, the same for
+  every repository. In short, a teammate sees the title, status, request text, plan, phase reports, review report,
+  findings, checks, branches, the pull request and its diff and code from GitHub, evidence, gates without your answers,
+  runs without their prompts or sessions, activity without messages, and the agents' live output and tool calls in
+  Chat; never a message you sent an agent, an agent's prompt, a gate answer, a verdict note, a request attachment,
+  the worktree or a path on your disk. They can change nothing: no command, no message, no answer, no file.
+- **The channel only listens, and ends the moment access does.** After the hello the machine reads nothing; any
+  message closes the channel (1008, "A team view only listens."). It is never connected to the hub, the API or the
+  dispatcher. Every open view is checked again on every state change and every change to remote access
+  (`Teams.#syncChannels`): a member removed or who left, a project taken out of the team, a task moved out of it,
+  the team removed or its key gone ends it with "This task is no longer shown to the team, or you are no longer in
+  it.", and remote access paused or removed ends every view ("Remote access on the machine that shows these tasks was
+  turned off."). Otherwise the machine pushes a new view on each change, as a share does.
+- **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
+  holds, every machine of that team but itself (your other machines too, so the local app shows your team work
+  everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows no
+  tasks; a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
+  then every 5 minutes (at once when the key changes), since a teammate's machine learns a new member only at its next
+  heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
+  answers the welcome with the team key. The cache is in memory, never in the log. It serves:
+  - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
+    uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
+    team and machine). It only reads; your own devices reach it over the sealed channel like any API route, and the
+    tunnel has no route to it.
+  - the socket message `teams` (`TeamFeedSnapshot`), sent on connect and on every change, so a page never polls.
+  - `/api/teams/view?team=&machine=&task=` (`TEAM_VIEW_PATH`, local only), a socket that relays one teammate task:
+    the engine opens the task channel itself and forwards each decrypted message, so in the local app the team key
+    never reaches the page. Anything the page sends closes it.
+- **Focus on a team** (`focus.change` with `teamId`, `Focus.teamId`; `resolveFocusTeam`). A focus names a project or a
+  team, never both (`focus_refused`). A team focus keeps your own tasks in the team's projects in the queue, Home and
+  every list built on it (`isInFocus` through `isTeamTask`), and the page adds the team's tasks from your teammates:
+  the focus menu (`components/focus/menu.tsx`) reads Your work, then your projects, then Teams (each team you are in,
+  not one you only asked to join); All tasks gets a Teammates in <team> group and Home a section of their open
+  tasks (`components/teams/tasks.tsx`), each row marked with its owner's GitHub login (`@kai`), neither shown while a
+  status filter is on. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
+  guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
+  task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
+  a team channel the browser opens with its own key; a browser without the key says "Add the team to this browser"
+  until you open the join link there once.
+- **Machines you already reach.** A teammate who also made you a member of a machine (Remote access → members) shows
+  that machine's tasks as your own, with full control, through the dashboard's sealed channel; team rows from a
+  machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
+  merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
+  which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
+  copy of each task.
+- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
+  change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
+  your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
+  New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
+  member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
+  local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  and `POST /api/remote/members/grant`,
+  and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
+  page at once.
+- **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
+  command and both project team commands are human-only.
+
 
 ## Handing off a task
 
@@ -3215,7 +3402,13 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   from every cookie a dev server sets, so its cookies stay on its own host, but a page's script can still set a
   `Domain=shinsa.page` cookie that other previews' servers receive. The preview's own key is safe from it: a
   `__Host-` cookie cannot be set or replaced from another host. That is also why the Worker does not add the app's
-  security headers to a preview: the page is the dev server's own.
+  security headers to a preview: the page is the dev server's own. Listing `shinsa.page` on the Public Suffix List
+  (its owner's pull request on the Public Suffix List adding it to the private section, and a `_psl.shinsa.page` TXT
+  record whose value is that pull request's URL, which the list checks) makes each label
+  its own site, which ends both the shared cookie and the same-site trust between previews.
+- **Never indexed.** Every host under `shinsa.page` answers `/robots.txt` with `Disallow: /` before any key is
+  checked, so crawlers never fetch a preview, and every answer there, the Worker's errors and a dev server's pages
+  alike, carries `X-Robots-Tag: noindex, nofollow, noarchive`, so a link that leaks is still never listed.
 - **Not sealed end to end.** A task's link is sealed with its key in the fragment; a preview cannot be, since a
   browser loads a dev server as plain pages. Traffic is TLS to Cloudflare, then the Worker, then the tunnel, and the
   Worker reads it in passing. The machine checks the key on every request and every WebSocket, in constant time.
@@ -3241,11 +3434,63 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
-  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
-  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
-  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
-  starting the service, and a link that no longer works.
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
+  own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
+  preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
+  longer works.
+
+## Private service addresses
+
+While remote access is on, every running service with a preview URL, a task's run and your own, has a private
+address on `shinsa.page` as well, so Open works from any device on remote access: a laptop looking at a headless
+server, or a phone looking at the Mac. Nothing to click and nothing to share: only the machine's owner and its members
+get in, gated by their app.shinsa.dev sign-in and the machine's connect key, never by a link key. Public Share preview
+links (Sharing a preview, above) stay separate and human-only.
+
+```
+Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
+                          signed in, owner or member of the machine?
+                          303 with ?access=<60 s token, connect key>
+          ──https──► <label>.shinsa.page   (the Worker)
+                          token checked → __Host-shinsa_preview_access
+                          (12 h, that host), 303 without it
+                          cookie → x-shinsa-preview-access
+          ──https──► t-<instance>.shinsa.dev/__preview/<id>/<path>
+                          engine: token, id, owner or member, run
+          ──http───► localhost:<port>/<path>
+```
+
+- **The address.** A run's private preview id is an HMAC of the machine's connect key over its service and task
+  (`resolvePrivatePreviewId` in core's `remote/previews.ts`), so the same run keeps the same address across restarts
+  of the service and the engine, and pairing the machine again (a new connect key) changes every one.
+  `Previews.resolveRemoteUrl` puts it on each running service terminal as `TerminalInfo.remoteUrl`
+  (`resolvePrivatePreviewUrl`: the preview URL's path on `https://<label>.shinsa.page`), which
+  `ServiceView.remoteUrl` carries to the page; it is null while remote access is off, the machine is not paired or
+  the run is not running. The label is LOC-97's (`serializePreviewLabel`), so the Worker route and the engine's
+  `/__preview/<id>` proxy serve both kinds.
+- **Who gets in.** The access token (`createPreviewAccessToken`, `verifyPreviewAccessToken`) names the instance, the
+  preview id, the account and an expiry, signed with the connect key under its own context, so it is never a connect
+  token. The Worker's open route mints one valid 60 seconds (`PREVIEW_OPEN_TTL_MS`) for an owner or member; the
+  Worker trades it on `shinsa.page` for one valid 12 hours (`PREVIEW_ACCESS_TTL_MS`) in an `HttpOnly`, `Secure`,
+  `SameSite=Lax` `__Host-shinsa_preview_access` cookie for that one host. On every request and WebSocket the engine
+  checks the signature, the expiry, the preview id against the run it derives, and that the account is still the
+  owner or a member of the machine (the heartbeat's list). The Worker strips any `x-shinsa-preview-access` a browser
+  sends, so a page cannot forge it. Anything else gets "This preview is not shared". Access goes per account: a
+  `shinsa.page` page holds no enrolled device key.
+- **When it goes down.** A stopped service gets the stopped page, and the address comes back when it starts again.
+  Turning remote access off, removing a member and pairing again cut access on the next request, and close the
+  open sockets of everyone who lost it.
+- **Open in the app.** In the remote build, every Open on a running service (the Services popovers, a task's
+  Services fact, the Terminal toolbar, and `preview` evidence that points at a task's own running service) goes to
+  `/__remote/previews/open?url=<the private address with the preview URL's path>` and shows the `shinsa.page`
+  address (`resolveServiceLink` in `apps/web/src/lib/terminal/services.ts`). Opened on the machine, or with an engine
+  that sends no `remoteUrl`, Open keeps `localhost:<port>`.
+- **To try it without a deploy**, `bun run sandbox` gives Studio's running web service its private
+  address: its start page, `/sandbox`, links the task through remote access, where Open goes there, the open route itself, and the
+  address without a cookie, which shows the not-shared page. The stand-in accepts every access request at once, so
+  Add this device lets the browser in without a trip to the machine's own app.
 
 ## Slack
 
@@ -3518,10 +3763,10 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
   outside the project (`resolveProjectContext`, appended in `Decider.startRun`), so you never have to say which
   repository "the server" is.
-- **The focus is a project** (`focus.change` `projectId`, or none for all work). It filters: `resolveQueue` keeps only
-  the focus project's decisions and tasks, and every list built on it (Home, the queue button, the guide, ⌘K's
-  decisions, the tab count and notifications) shows nothing from other projects. To see other work, you switch the
-  focus.
+- **The focus is a project or a team** (`focus.change` `projectId` or `teamId`, or neither for your work). It filters:
+  `resolveQueue` keeps only the focus project's decisions and tasks, or those of the team's projects, and every list
+  built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing from
+  other projects. To see other work, you switch the focus. A team focus also shows your teammates' tasks (Teams).
 
 **Task identity.** Every id Shinsa makes for the log (tasks, runs, gates, schedules, projects) is a UUIDv7 from the
 engine (`Bun.randomUUIDv7()` behind `DecideContext.newId`); accounts use 8 hex characters and webhook deliveries
@@ -3750,7 +3995,9 @@ truth, and a snapshot only saves replaying it.
   `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
   Logs from before share presets (log version 13, `SHARE_PRESET_LOG_VERSION`) have `task.shared` events without
   `preset`, which become Standard shares (`preset: 'standard'`).
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 13) marks the log so
+  Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
+  which gain `teamId: null`.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 14) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
@@ -5392,7 +5639,10 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
-  that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
+  that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
+  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

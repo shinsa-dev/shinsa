@@ -1,5 +1,6 @@
 import {
   isTaskResting,
+  listDuePostMergeSteps,
   type MessageKind,
   type MessageRoute,
   needsMessageKind,
@@ -84,9 +85,9 @@ const RESTING_KIND_QUESTION: ChoiceQuestion = {
   criteria: {
     acknowledge: ACKNOWLEDGE,
     feedback:
-      'a question about what the last round did, found or decided ("why did you pick X?", "where did Y go?"), answered from the work already done; nothing new is done',
+      'a question about what the last round did, found or decided ("why did you pick X?", "where did Y go?"), or about one of the steps left for the human after the merge, even one that quotes the step ("what is this for? <the step>"), answered from the work already done; nothing new is done',
     new_round:
-      'asks for something to be done in this task: more work, the next step (such as opening a pull request), or a change to what the last round did, even a small correction ("actually do Z instead")',
+      'asks for something to be done in this task: more work, the next step (such as opening a pull request), or a change to what the last round did, even a small correction ("actually do Z instead"); a step left for the human after the merge, quoted or asked about, is not this, since the human does it',
     separate_task: SEPARATE_TASK,
   },
 };
@@ -167,6 +168,8 @@ const ROUND_STATE: Record<RoundStatus, string> = {
 
 const RESULT_EXCERPT = 400;
 
+const STEP_EXCERPT = 200;
+
 function resolveKindQuestion(task: Task) {
   if (isTaskResting(task)) return RESTING_KIND_QUESTION;
   const decision = GATE_STAGES[task.stage];
@@ -183,12 +186,24 @@ function resolveMessageSchema(kind: ChoiceQuestion): JsonSchema {
   return { type: 'object', properties, required: Object.keys(properties), additionalProperties: false };
 }
 
+function excerptText(text: string, limit: number) {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
+}
+
 function describeOutcome(round: Round) {
   const text = round.outcome?.result ?? round.outcome?.headline ?? round.outcome?.goal ?? null;
   if (!text) return '';
-  const flat = text.replace(/\s+/g, ' ').trim();
-  const excerpt = flat.length > RESULT_EXCERPT ? `${flat.slice(0, RESULT_EXCERPT)}…` : flat;
-  return ` What it did: ${excerpt}`;
+  return ` What it did: ${excerptText(text, RESULT_EXCERPT)}`;
+}
+
+function describeOpenSteps(task: Task) {
+  const steps = listDuePostMergeSteps(task);
+  if (steps.length === 0) return [];
+  return [
+    'Steps left for the human after the merge (the human does these, not an agent):',
+    ...steps.map((step) => `- ${step.title}: ${excerptText(step.detail, STEP_EXCERPT)}`),
+  ];
 }
 
 function describeRound(task: Task, round: Round) {
@@ -211,6 +226,7 @@ function describeTask(task: Task) {
     'Its rounds:',
     ...resolveTaskRounds(task).map((round) => describeRound(task, round)),
     describeNow(task),
+    ...describeOpenSteps(task),
   ];
 }
 
