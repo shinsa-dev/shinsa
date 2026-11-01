@@ -411,6 +411,37 @@ describe('the Review tab', () => {
     }
   });
 
+  it('scrolls to the stop you pick in its own tab while another task’s Review tab stays mounted and hidden', async () => {
+    const hidden = reviewing();
+    const { task } = reviewing();
+    const both = createShinsaState({ tasks: [hidden.task, task] });
+    navigate(`/tasks/${task.id}?tab=review`);
+    pushState(both);
+    render(
+      <>
+        <div hidden>
+          <ReviewTree state={both} task={hidden.task} />
+        </div>
+        <ReviewTree state={both} task={task} />
+      </>
+    );
+    await waitFor(() => expect(document.querySelectorAll('[data-review-item="approach"]')).toHaveLength(2));
+    const [, shown] = [...document.querySelectorAll<HTMLElement>('[data-review-item="approach"]')];
+    const scrolled: HTMLElement[] = [];
+    const realScroll = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function scroll(this: HTMLElement) {
+      scrolled.push(this);
+    };
+    try {
+      const [, index] = screen.getAllByRole('button', { name: 'Every point', hidden: true });
+      fireEvent.click(index as HTMLElement);
+      fireEvent.click(await screen.findByText('Approach', { selector: 'button *' }));
+      await waitFor(() => expect(scrolled).toContain(shown as HTMLElement));
+    } finally {
+      HTMLElement.prototype.scrollIntoView = realScroll;
+    }
+  });
+
   it('steps through every stop in reading order with J and K, and keeps the place in the URL', async () => {
     const { task, state } = reviewing();
     renderReview(state, task);
