@@ -157,7 +157,7 @@ export function resolveForwardHeaders(source: Headers, port: number) {
   return headers;
 }
 
-export function resolveReturnHeaders(source: Headers, port: number) {
+function resolveReturnHeaders(source: Headers, port: number) {
   const headers = new Headers();
   for (const [name, value] of source) {
     if (DROPPED_HEADERS.has(name)) continue;

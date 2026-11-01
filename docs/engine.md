@@ -2833,9 +2833,12 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   address bar and history. Pairing the machine again marks every link as lost (`PREVIEW_LINK_LOST`); sharing again
   makes a new one.
 - **Its own origin, on its own domain.** Every preview is a separate origin under `shinsa.page`, a domain apart from
-  `shinsa.dev`, so a dev server's cookies and scripts cannot reach app.shinsa.dev, the marketing site or another
-  preview. That is also why the Worker does not add the app's security headers to a preview: the page is the dev
-  server's own.
+  `shinsa.dev`, so a dev server's cookies and scripts cannot reach app.shinsa.dev or the marketing site. Previews are
+  each other's same site until `shinsa.page` is on the Public Suffix List: the Worker drops the `Domain` attribute
+  from every cookie a dev server sets, so its cookies stay on its own host, but a page's script can still set a
+  `Domain=shinsa.page` cookie that other previews' servers receive. The preview's own key is safe from it: a
+  `__Host-` cookie cannot be set or replaced from another host. That is also why the Worker does not add the app's
+  security headers to a preview: the page is the dev server's own.
 - **Not sealed end to end.** A task's link is sealed with its key in the fragment; a preview cannot be, since a
   browser loads a dev server as plain pages. Traffic is TLS to Cloudflare, then the Worker, then the tunnel, and the
   Worker reads it in passing. The machine checks the key on every request and every WebSocket, in constant time.

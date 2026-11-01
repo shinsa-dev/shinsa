@@ -110,18 +110,22 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/t/…` page carry
   `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Previews on `shinsa.page`.** A shared preview (`docs/engine.md` → Sharing a preview) lives at
-  `https://<label>.shinsa.page/`, a domain apart from `shinsa.dev` so the dev server's cookies and scripts can reach
-  neither app.shinsa.dev nor another preview. `respond` matches a preview host (`isPreviewHost`, the zone from
+  `https://<label>.shinsa.page/`, a domain apart from `shinsa.dev` so the dev server's cookies and scripts cannot reach
+  app.shinsa.dev. Until `shinsa.page` is on the Public Suffix List previews are each other's same site, so the Worker
+  drops the `Domain` attribute from every `Set-Cookie` a dev server sends (a page's script can still set one).
+  `respond` matches a preview host (`isPreviewHost`, the zone from
   `PREVIEW_ZONE`) before any other route, so nothing of the app is ever served there, and skips the app's security
   headers, which would break most dev servers. `respondPreview` reads the instance and the preview id from the label
   (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
-  days, that host only) and answered with a 303 to the same path without it. With the cookie, a request to an
+  days, that host only) and answered with a 303 to the same address without it, written in full so a path starting `//` stays on the host. With the cookie, a request to an
   instance that is online is forwarded to `https://t-<instance>.shinsa.dev/__preview/<id><path>` with its method,
   query, body and headers, minus the preview cookie, Cloudflare's and proxies' own, and with the key in
   `x-shinsa-preview-key`; a WebSocket upgrade passes through as Cloudflare's 101. The machine checks the key. No
   cookie, a malformed key or an unknown instance is "This preview is no longer shared." (404); an instance offline or
   a tunnel that does not answer (a network error, 502, 503, 504, 530 without the machine's
-  `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`); the machine's own
+  `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a tunnel
+  that fails for an online instance is logged as `[Preview] Could not reach the tunnel` or `[Preview] The tunnel did
+  not answer`; the machine's own
   pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag`.
   Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`

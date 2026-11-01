@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   PREVIEW_GONE,
   PREVIEW_ID_BYTES,
@@ -44,12 +44,21 @@ describe('a preview link', () => {
     const { link } = await shareMachine(harness);
     const answer = await visit(harness, link.replace('/?', '/docs/start?tab=2&'));
     expect(answer.status).toBe(303);
-    expect(answer.headers.get('location')).toBe('/docs/start?tab=2');
+    expect(answer.headers.get('location')).toBe(`${new URL(link).origin}/docs/start?tab=2`);
     expect(answer.headers.get('set-cookie')).toBe(
       `${PREVIEW_COOKIE}=${KEY}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`
     );
     expect(answer.headers.get('referrer-policy')).toBe('no-referrer');
     expect(harness.calls.filter((call) => call.url.includes('/__preview/'))).toEqual([]);
+  });
+
+  test('redirects on the same host even when the path starts with two slashes', async () => {
+    const harness = createHarness();
+    const { link } = await shareMachine(harness);
+    const answer = await visit(harness, link.replace('/?', '//evil.example/?'));
+    const location = new URL(answer.headers.get('location') ?? '', 'https://elsewhere.test');
+    expect(location.origin).toBe(new URL(link).origin);
+    expect(location.pathname).toBe('//evil.example/');
   });
 
   test('forwards a page to the machine’s tunnel with the key in a header and without its own cookie', async () => {
@@ -59,7 +68,11 @@ describe('a preview link', () => {
       upstream.url.includes('/__preview/')
         ? new Response('<p>hello</p>', {
             status: 200,
-            headers: { 'content-type': 'text/html', 'set-cookie': 'a=1' },
+            headers: [
+              ['content-type', 'text/html'],
+              ['set-cookie', 'a=1'],
+              ['set-cookie', 'b=2; Path=/; Domain=shinsa.page; Secure'],
+            ],
           })
         : new Response(null, { status: 599 })
     );
@@ -73,7 +86,7 @@ describe('a preview link', () => {
     );
     expect(answer.status).toBe(200);
     expect(await answer.text()).toBe('<p>hello</p>');
-    expect(answer.headers.get('set-cookie')).toBe('a=1');
+    expect(answer.headers.getSetCookie()).toEqual(['a=1', 'b=2; Path=/; Secure']);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     const call = harness.calls.at(-1);
     expect(call?.url).toBe(`https://${credentials.tunnelHost}/__preview/${PREVIEW_ID}/app/page?x=1`);
@@ -123,6 +136,7 @@ describe('a preview link', () => {
   test('says the machine is offline when it stopped beating, the tunnel fails or does not answer', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
+    const logged = spyOn(console, 'error').mockImplementation(() => undefined);
     harness.handlers.push((call) => {
       if (call.url.endsWith('/down')) return new Response('bad gateway', { status: 530 });
       if (call.url.endsWith('/throw')) throw new Error('no route');
@@ -133,10 +147,16 @@ describe('a preview link', () => {
     expect(down.headers.get('retry-after')).toBe('30');
     expect(await down.text()).toContain('offline');
     expect((await visit(harness, `${origin}/throw`, withKey())).status).toBe(503);
+    expect(logged.mock.calls.map(([message]) => message)).toEqual([
+      '[Preview] The tunnel did not answer',
+      '[Preview] Could not reach the tunnel',
+    ]);
     harness.clock.now += 10 * 60 * 1000;
     const stale = await visit(harness, `${origin}/`, withKey());
     expect(stale.status).toBe(503);
     expect(await stale.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
+    expect(logged).toHaveBeenCalledTimes(2);
+    logged.mockRestore();
   });
 
   test('passes on the machine’s own page for a stopped service, not the offline page', async () => {

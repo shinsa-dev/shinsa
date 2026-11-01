@@ -15,7 +15,7 @@ export const PREVIEW_SHARE_DESCRIPTION =
 export const PREVIEW_NEEDS_REMOTE =
   'A preview link reaches this service through remote access. Turn it on in Settings, then share the preview.';
 
-export const PREVIEW_UNSHARE_DONE = 'Stopped sharing the preview.';
+const PREVIEW_UNSHARE_DONE = 'Stopped sharing the preview.';
 
 export { UNSHARE_TITLE };
 

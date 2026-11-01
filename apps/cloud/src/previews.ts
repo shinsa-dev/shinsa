@@ -14,6 +14,7 @@ import {
 import { TUNNEL_OFFLINE_STATUSES } from './hooks.ts';
 import { readCookie } from './http.ts';
 import { isInstanceOnline, NOINDEX } from './instances.ts';
+import { recordFailure } from './log.ts';
 import type { CloudWorld } from './world.ts';
 
 export const PREVIEW_COOKIE = '__Host-shinsa_preview';
@@ -48,7 +49,7 @@ function respondKeyRedirect(url: URL, key: string) {
   return new Response(null, {
     status: 303,
     headers: {
-      location: `${clean.pathname}${clean.search}`,
+      location: clean.href,
       'set-cookie': `${PREVIEW_COOKIE}=${key}; Path=/; Max-Age=${PREVIEW_COOKIE_SECONDS}; HttpOnly; Secure; SameSite=Lax`,
       'cache-control': 'no-store',
       'referrer-policy': 'no-referrer',
@@ -78,6 +79,23 @@ function resolveForwardHeaders(request: Request, key: string) {
   return headers;
 }
 
+function resolveHostOnlyCookie(header: string) {
+  return header
+    .split(';')
+    .filter((part) => !/^\s*domain\s*(=|$)/i.test(part))
+    .join(';');
+}
+
+function resolveProxiedHeaders(answer: Response) {
+  const headers = new Headers(answer.headers);
+  headers.delete(PREVIEW_PAGE_HEADER);
+  headers.delete('set-cookie');
+  for (const cookie of answer.headers.getSetCookie())
+    headers.append('set-cookie', resolveHostOnlyCookie(cookie));
+  headers.set('x-robots-tag', NOINDEX);
+  return headers;
+}
+
 function readBody(request: Request) {
   return request.method === 'GET' || request.method === 'HEAD' ? null : request.body;
 }
@@ -92,16 +110,26 @@ async function forward(request: Request, url: URL, address: PreviewAddress, key:
       body: readBody(request),
       redirect: 'manual',
     });
-  } catch {
+  } catch (error) {
+    recordFailure('[Preview] Could not reach the tunnel', {
+      instanceId: address.instanceId,
+      error: String(error),
+    });
     return respondPage(PREVIEW_OFFLINE, 503);
   }
   if (answer.status === 101) return answer;
-  const fromMachine = answer.headers.has(PREVIEW_PAGE_HEADER);
-  if (TUNNEL_OFFLINE_STATUSES.has(answer.status) && !fromMachine) return respondPage(PREVIEW_OFFLINE, 503);
-  const proxied = new Response(answer.body, answer);
-  proxied.headers.delete(PREVIEW_PAGE_HEADER);
-  proxied.headers.set('x-robots-tag', NOINDEX);
-  return proxied;
+  if (TUNNEL_OFFLINE_STATUSES.has(answer.status) && !answer.headers.has(PREVIEW_PAGE_HEADER)) {
+    recordFailure('[Preview] The tunnel did not answer', {
+      instanceId: address.instanceId,
+      status: answer.status,
+    });
+    return respondPage(PREVIEW_OFFLINE, 503);
+  }
+  return new Response(answer.body, {
+    status: answer.status,
+    statusText: answer.statusText,
+    headers: resolveProxiedHeaders(answer),
+  });
 }
 
 export async function respondPreview(request: Request, url: URL, world: CloudWorld) {
