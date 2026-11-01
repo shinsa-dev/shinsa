@@ -3,6 +3,7 @@ import {
   type BacklogCause,
   createSettings,
   type Evidence,
+  type Feedback,
   type Focus,
   formatTaskHandle,
   type Gate,
@@ -45,6 +46,7 @@ import {
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
+import { applyFeedbackEvent } from './feedback.ts';
 import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
@@ -57,6 +59,7 @@ import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged
 import { applyRunEvent } from './runs.ts';
 import { applyScheduledTask, applyScheduleEvent, describeSchedule } from './schedules.ts';
 import { applyShapeEvent, describeShape } from './shapes.ts';
+import { applyShareEvent } from './shares.ts';
 import { applySlackEvent } from './slack.ts';
 import { applySuggested, applySuggestionSettled } from './suggestions.ts';
 import { applyWaitEvent } from './waits.ts';
@@ -78,6 +81,7 @@ export interface ShinsaState {
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
   memories: Record<string, MemoryEntry>;
+  feedback: Record<string, Feedback>;
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
   onBehalfActions: OnBehalfAction[];
@@ -102,6 +106,7 @@ export function createState(): ShinsaState {
     briefings: {},
     schedules: {},
     memories: {},
+    feedback: {},
     watchSuggestions: {},
     sessionUsage: {},
     onBehalfActions: [],
@@ -369,14 +374,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
   const previous = task?.plan ?? null;
   const version = (previous?.version ?? 0) + 1;
   const document = event.document;
-  const revision =
-    previous === null
-      ? {}
-      : {
-          changeSummary: event.changeSummary ?? null,
-          changes: resolvePlanChanges(previous.document, document),
-          feedback: event.feedback ?? null,
-        };
+  const revision = previous === null ? {} : { changes: resolvePlanChanges(previous.document, document) };
   const checks = (document?.verification ?? []).map((check, index) => ({
     id: `c${index + 1}`,
     ...check,
@@ -393,7 +391,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
     actor: 'agent',
     kind: 'plan',
     text: version === 1 ? 'Proposed a plan' : `Revised the plan (version ${version})`,
-    detail: (version > 1 ? event.changeSummary : null) ?? document?.goal ?? null,
+    detail: document?.goal ?? null,
   });
 }
 
@@ -1050,6 +1048,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'watch_source.removed':
       applyWatchdogEvent(state, event);
       break;
+    case 'task.shared':
+    case 'task.unshared':
+    case 'share.recorded':
+    case 'share.failed':
+      applyShareEvent(state, event);
+      break;
     case 'slack.thread_linked':
     case 'slack.status_posted':
       applySlackEvent(state, event);
@@ -1058,6 +1062,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'memory.proposed':
     case 'memory.removed':
       applyMemoryEvent(state, event);
+      break;
+    case 'feedback.recorded':
+    case 'feedback.removed':
+      applyFeedbackEvent(state, event);
       break;
     case 'watch_suggestion.recorded':
     case 'watch_suggestion.accepted':

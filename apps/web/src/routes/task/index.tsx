@@ -145,6 +145,12 @@ function CardsTaskPage({ state, task, view }: { state: ShinsaState; task: Task; 
   );
 }
 
+export function TaskFrame({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
+  const layout = useLayoutPreference();
+  const Frame = layout === 'cards' ? CardsTaskPage : SidebarTaskPage;
+  return <Frame state={state} task={task} view={view} />;
+}
+
 function useCanonicalPath(state: ShinsaState, task: Task | null, segment: string) {
   const watch = task ? selectWatchOfHome(state, task.id) : null;
   const canonical = task ? resolveCanonicalTaskPath(task, segment, location.search) : null;
@@ -164,7 +170,6 @@ function useCarryEndsWithPage(taskId: string | null) {
 export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string }) {
   const resolved = selectTaskByReference(state, taskId);
   const view = useTaskView(state, resolved?.id ?? taskId);
-  const layout = useLayoutPreference();
   const { task } = view;
   useCanonicalPath(state, task, taskId);
   usePrefetchCode(task, view.tabs, view.tab);
@@ -174,11 +179,10 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }
   if (task.watchHome) return null;
-  const Frame = layout === 'cards' ? CardsTaskPage : SidebarTaskPage;
   return (
     <ReviewDraftProvider enabled={view.reviewing} draftKey={view.draftKey}>
       <TaskCommandRunner state={state} task={task}>
-        <Frame state={state} task={task} view={view} />
+        <TaskFrame state={state} task={task} view={view} />
       </TaskCommandRunner>
     </ReviewDraftProvider>
   );

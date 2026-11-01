@@ -285,6 +285,18 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
+- **Feedback.** A Feedback button beside Settings in the header (Desk), the rail (Shelf) and Shelf’s bar in a narrow window, and Send feedback on
+  Shinsa in ⌘K, open the feedback popover: the note field, with Draft issue inside it, and one row per entry, its title and who it is from;
+  clicking one opens it in a dialog to read in full, edit, dismiss or open. You write a note in your own words; your agent rewrites it as a public
+  GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and
+  you read it before it opens under your GitHub account. Every issue follows one detailed template (summary, where in
+  Shinsa, what happened, what should happen, steps, why it matters, a suggested change, acceptance criteria) and ends
+  with an Environment section Shinsa adds itself (version, system, runtime, agent model, and for an agent's report the
+  kind of task and its stage), so an automation reading the issues can act on them. A check in core refuses an issue that still holds an email, a folder path, a token
+  or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
+  Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
+  from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); an opened
+  issue's row shows who sent it and, once it is closed on GitHub, Closed. The button's count is what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
   steps you pass like gates: the folders that hold your repositories (found on this machine, with their
   repository counts), the projects for them, the default model, the merge method and plan approval, signing in
@@ -376,13 +388,26 @@ The Mac app (`apps/desktop`) is how you run Shinsa: the engine is compiled into 
 app registers, so it keeps working when the window is closed or the app quit, and the app adds the Dock badge,
 notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
+On an always-on Linux server the same engine runs headless as a systemd user service that `shinsa start` sets up,
+set up over SSH and reached through remote access (`docs/engine.md` → Run on a server); on a Mac mini without the
+app, `shinsa start` runs it as its own launchd job. Every release publishes that engine on its own for Linux x64,
+arm64 and Apple Silicon: `curl -fsSL https://shinsa.dev/install | sh` or `npm i -g shinsa` (`docs/release.md` → The
+engine on its own).
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
 Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
 the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashboard over every machine a device was added to, each
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
-`docs/plans/remote-plan.md`).
+`docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
+`app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
+access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
+owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
+Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads
+nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
+a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
+cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
+(`docs/engine.md` → Sharing a task).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
@@ -424,8 +449,8 @@ own machine in Settings → General → Slack (`docs/engine.md` → Slack).
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
   opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state
-  (`docs/plans/remote-plan.md`).
+  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
+  tasks you share by link, as a read-only projection without their chat (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
 
@@ -1123,6 +1148,16 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   repository. Agents get the same rule in `create_task`.
 - **Not yet.** Bundles that branch, GitHub's own stack API (chained bases already show as a stack), triage inferring
   a bundle and `split_task` splitting into one.
+
+### Feedback (2026-11-01)
+
+- **Why.** Feedback on Shinsa had no way in but a chat with the person who builds it, and agents, who meet its
+  rough edges first, had no way to say so. Every issue is public, so the first rule is that nothing private leaves.
+- **Two passes.** A quick call rewrites the note as a generic issue, told your private words; then a pure check in
+  core (`listFeedbackLeaks`) refuses what still names you, again at the moment you open it, after your edits.
+- **Your click.** Agents propose with `report_feedback`, like memory rules; nothing opens an issue but you, with no
+  setting to change that. Feedback is an entry, not a task: no worktree, no pipeline. Issue-scoped tasks,
+  automations over the issues and shared task views are later work.
 
 ## 11. Open questions
 

@@ -20,7 +20,8 @@
         "test/**/*.test.ts",
         "test/e2e/soak/child.ts",
         "test/helpers/mcp/stdio-server.ts",
-        "scripts/*.ts"
+        "scripts/*.ts",
+        "npm/shinsa.js"
       ]
     },
     "apps/cloud": {

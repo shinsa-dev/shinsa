@@ -1,19 +1,25 @@
 import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
+import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveConfig, resolveServerAddress } from '../config/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
 import {
   BUNDLE,
+  createSystemdService,
   describeVersion,
+  type EngineService,
   isStartedByService,
   SERVICE_MARKER,
   ServerRunningError,
+  type ServiceRunner,
   type ShinsaBundle,
   stopWithin,
 } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type Shinsa, startShinsa } from '../serve.ts';
+import { resolveBrowserCommand } from '../shell/browser.ts';
 import { describeFailure, runCommand } from '../shell/index.ts';
 import {
   applyLoginEnv,
@@ -30,7 +36,7 @@ import {
   type Terminal,
 } from '../terminal/index.ts';
 import { createApiClient } from './api.ts';
-import { APP_BUNDLE_ID, isPathArgument, ownsEngineJob, resolveEngineTarget, resolveLinkPage } from './app.ts';
+import { APP_BUNDLE_ID, isInsideApp, isPathArgument, ownsEngineJob, resolveLinkPage } from './app.ts';
 import { type CommandIo, createTask, importSession, openApp, parseArgs, printStatus } from './commands.ts';
 import {
   type EngineControl,
@@ -42,6 +48,7 @@ import {
   stopEngine,
 } from './engine.ts';
 import { CLI_COMMANDS, describeCliUsage, describeHelp, describeHelpAll, selectCliCommand } from './help.ts';
+import { createLaunchdService } from './launchd.ts';
 import { ENGINE_LOG, printLogs } from './logs.ts';
 import { isSurfaceGroup, runSurface } from './surface.ts';
 
@@ -66,7 +73,9 @@ const WAKE_WAIT_MS = 20_000;
 
 const WAKE_POLL_MS = 250;
 
-const IS_BUNDLED = Boolean(BUNDLE) && process.platform === 'darwin';
+const MANAGED_PLATFORMS: string[] = ['darwin', 'linux'];
+
+const IS_BUNDLED = Boolean(BUNDLE) && MANAGED_PLATFORMS.includes(process.platform);
 
 const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
@@ -76,10 +85,25 @@ async function runOrThrow(command: string[]) {
   return result.stdout;
 }
 
-function createOpenApp(base: string) {
+export interface OpenAppOptions {
+  write: (line: string) => void;
+  inApp?: boolean;
+  platform?: string;
+  env?: Record<string, string | undefined>;
+}
+
+export function createOpenApp(base: string, options: OpenAppOptions) {
+  const platform = options.platform ?? process.platform;
+  const inApp = (options.inApp ?? (Boolean(BUNDLE) && isInsideApp())) && platform === 'darwin';
   return async (link: string) => {
-    if (BUNDLE) await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
-    else await runOrThrow(['open', `${base}${resolveLinkPage(link)}`]);
+    if (inApp) {
+      await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
+      return;
+    }
+    const url = `${base}${resolveLinkPage(link)}`;
+    const command = resolveBrowserCommand(url, platform, options.env ?? Bun.env);
+    if (command) await runOrThrow(command);
+    else options.write(`No display here, so open ${url} in a browser that reaches this machine.`);
   };
 }
 
@@ -88,22 +112,38 @@ async function readRepoRoot(dir: string) {
   return result.ok ? result.stdout.trim() || null : null;
 }
 
-async function runLaunchctl(args: string[]) {
-  const result = await runCommand(['launchctl', ...args], process.cwd());
-  return { ok: result.ok, output: `${result.stdout}${result.stderr}` };
+function createServiceRunner(tool: string[]): ServiceRunner {
+  return async (args) => {
+    const result = await runCommand([...tool, ...args], process.cwd());
+    return { ok: result.ok, output: `${result.stdout}${result.stderr}` };
+  };
 }
 
-const UID = process.getuid?.() ?? 0;
-
-export async function kickEngine(
-  launchctl = runLaunchctl,
-  ownsJob: (printed: string) => boolean = ownsEngineJob
-) {
-  const target = resolveEngineTarget(UID);
-  const printed = await launchctl(['print', target]);
-  if (!printed.ok || !ownsJob(printed.output)) return false;
-  return (await launchctl(['kickstart', target])).ok;
+export function createPlatformService(
+  platform: string = process.platform,
+  env: Record<string, string | undefined> = Bun.env
+): EngineService {
+  if (platform === 'linux') {
+    return createSystemdService({
+      env,
+      program: process.execPath,
+      user: resolveKeychainAccount(env),
+      systemctl: createServiceRunner(['systemctl', '--user']),
+      loginctl: createServiceRunner(['loginctl']),
+    });
+  }
+  return createLaunchdService({
+    uid: process.getuid?.() ?? 0,
+    launchctl: createServiceRunner(['launchctl']),
+    ownsJob: ownsEngineJob,
+    inApp: isInsideApp(),
+    program: process.execPath,
+    home: env.HOME || homedir(),
+    env,
+  });
 }
+
+const PLATFORM_SERVICE = createPlatformService();
 
 export interface WakeOptions {
   bundled: boolean;
@@ -113,7 +153,7 @@ export interface WakeOptions {
 
 export function createWakeEngine(
   base: string,
-  options: WakeOptions = { bundled: IS_BUNDLED, kick: kickEngine }
+  options: WakeOptions = { bundled: IS_BUNDLED, kick: PLATFORM_SERVICE.kick }
 ) {
   return async () => {
     if (!options.bundled || !(await options.kick())) return false;
@@ -207,10 +247,10 @@ export function createProcessIo(options: ProcessOptions = {}): CliIo {
     cwd: process.cwd(),
     write: (line = '') => process.stdout.write(`${line}\n`),
     writeError: (line) => process.stderr.write(`${line}\n`),
-    openApp: createOpenApp(base),
+    openApp: createOpenApp(base, { write: (line) => process.stdout.write(`${line}\n`) }),
     readRepoRoot,
     wakeEngine: createWakeEngine(base),
-    engine: { bundled: IS_BUNDLED, uid: UID, launchctl: runLaunchctl, ownsJob: ownsEngineJob },
+    engine: { bundled: IS_BUNDLED, service: PLATFORM_SERVICE },
     runEngine: (env) => runEngineWithLoginEnv(env, isTerminal, bundle),
     onShutdown: stopOnSignal,
     terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),

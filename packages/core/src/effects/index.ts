@@ -30,9 +30,12 @@ export type ShinsaEffect =
   | { kind: 'run.wake'; runId: string; generation: number }
   | { kind: 'delegation.steer'; runId: string; generation: number }
   | { kind: 'delegation.reply'; runId: string; questionId: string }
+  | { kind: 'share.link'; taskId: string }
   | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
-  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost };
+  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
+  | { kind: 'feedback.draft'; feedbackId: string }
+  | { kind: 'feedback.file'; feedbackId: string };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
@@ -59,9 +62,12 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'run.wake': 'process_bound',
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
+  'share.link': 'replay_safe',
   'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
+  'feedback.draft': 'replay_safe',
+  'feedback.file': 'process_bound',
 };
 
 function listEffectKinds(recovery: EffectRecovery) {
@@ -106,6 +112,9 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.projectId ?? '*'}:${seq}`;
     case 'watch.suggest':
       return `${effect.kind}:${effect.projectId}:${effect.server}:${seq}`;
+    case 'feedback.draft':
+    case 'feedback.file':
+      return `${effect.kind}:${effect.feedbackId}:${seq}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
@@ -116,6 +125,7 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'pull_request.merge':
     case 'pull_request.watch':
     case 'pull_request.close':
+    case 'share.link':
       return `${effect.kind}:${effect.taskId}:${seq}`;
   }
 }
@@ -126,6 +136,9 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return 'briefing';
     case 'watch.suggest':
       return `suggest:${effect.projectId}`;
+    case 'feedback.draft':
+    case 'feedback.file':
+      return `feedback:${effect.feedbackId}`;
     case 'run.execute':
     case 'run.wake':
       return `run:${effect.runId}`;
@@ -140,6 +153,8 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `reply:${effect.runId}`;
     case 'pull_request.watch':
       return `side:${effect.taskId}`;
+    case 'share.link':
+      return `share:${effect.taskId}`;
     case 'slack.evaluate':
       return `slack:${resolveSlackThreadKey(effect.mention)}`;
     case 'slack.post':

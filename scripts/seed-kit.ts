@@ -1,11 +1,11 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
+  AgentReply,
   ChatEvent,
   ChatTool,
   CiRun,
   FixReason,
-  FixReply,
   Gate,
   GateType,
   PipelineStep,
@@ -143,7 +143,7 @@ export type SeedCheckResult = Partial<Pick<ReportCheck, 'outcome' | 'detail' | '
 export interface SeedExchange {
   text: string;
   comments?: number;
-  reply: FixReply;
+  reply: AgentReply;
 }
 
 export function listSeedIterations(

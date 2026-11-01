@@ -54,8 +54,23 @@ export {
   resolveEvidenceKey,
   selectEvidenceItem,
 } from './evidence.ts';
+export {
+  FEEDBACK_LIMITS,
+  FEEDBACK_REPOSITORY,
+  type Feedback,
+  type FeedbackIssue,
+  type FeedbackLeak,
+  type FeedbackLeakKind,
+  type FeedbackSource,
+  type FeedbackStatus,
+  isFeedbackFileable,
+  isFeedbackWaiting,
+  isPrivateWord,
+  listFeedbackLeaks,
+  resolveFeedbackText,
+} from './feedback.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
-export { selectOpenIteration } from './iterations.ts';
+export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {
   isMemoryOf,
   MEMORY_LIMITS,
@@ -147,9 +162,13 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveShareEnd,
+  resolveShareLimit,
   resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
+  SHARE_LIMITS,
+  type ShareLimit,
   WATCHDOG_DEFAULTS,
   WATCHDOG_SETTING_LIMITS,
 } from './settings.ts';

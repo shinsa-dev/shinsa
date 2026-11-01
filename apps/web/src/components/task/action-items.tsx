@@ -9,6 +9,7 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import * as React from 'react';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
+import { useEngineCommands } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { listTaskActions, runTaskAction, TASK_ACTION, updatePriority } from '@/lib/tasks/actions.ts';
 
@@ -30,7 +31,8 @@ export function PriorityChoices({ task }: { task: Task }) {
 }
 
 export function TaskActionItems({ task }: { task: Task }) {
-  return listTaskActions(task).map((group, index) => (
+  const commands = useEngineCommands(task.id);
+  return listTaskActions(task, commands).map((group, index) => (
     <React.Fragment key={group.join()}>
       {index > 0 && <DropdownMenuSeparator />}
       <DropdownMenuGroup>

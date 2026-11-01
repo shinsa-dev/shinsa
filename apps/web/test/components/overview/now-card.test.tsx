@@ -506,7 +506,7 @@ describe('NowCard on the Overview', () => {
     ]);
   });
 
-  function createRevisedPlan(revision: { changeSummary?: string; feedback?: string }) {
+  function createRevisedPlan() {
     return createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
@@ -520,7 +520,6 @@ describe('NowCard on the Overview', () => {
           { kind: 'phase_changed', title: 'Show errors' },
           { kind: 'phase_removed', title: 'Style the form' },
         ],
-        ...revision,
         document: {
           goal: 'Ship a login form.',
           phases: [
@@ -539,32 +538,93 @@ describe('NowCard on the Overview', () => {
     });
   }
 
-  it('names a revised plan’s version, keeps your words apart and marks the new and reworked phases', () => {
-    const task = createRevisedPlan({
-      changeSummary: 'Split validation into its own phase.',
-      feedback: 'Validate on the server too.',
-    });
+  it('names a revised plan’s version and marks the new and reworked phases', () => {
+    const task = createRevisedPlan();
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     expect(view.getByText(/Version 2 · 3 phases/)).toBeTruthy();
-    const asked = view.getByText('You asked').parentElement;
-    expect(asked?.textContent).toBe('You askedValidate on the server too.');
-    const summary = view.getByText('What changed').parentElement;
-    expect(summary?.textContent).toBe('What changedSplit validation into its own phase.');
-    expect(summary?.nextElementSibling?.textContent).toBe('Ship a login form.');
+    expect(view.getAllByText('Ship a login form.').length).toBeGreaterThan(0);
     expect(view.getByText('Validate input').parentElement?.textContent).toBe('Validate inputNew');
     expect(view.getByText('Show errors').parentElement?.textContent).toBe('Show errorsChanged');
     expect(view.getByText('Build the form').parentElement?.textContent).toBe('Build the form');
-    expect(view.queryByText(/Style the form|Changed the goal|Added the phase/)).toBeNull();
+    expect(
+      view.queryByText(/Style the form|Changed the goal|Added the phase|You asked|What changed/)
+    ).toBeNull();
   });
 
-  it('shows neither your words nor what changed when a revision has none', () => {
-    const task = createRevisedPlan({});
+  it('answers your plan feedback above the revised plan, with what you sent folded', () => {
+    const task = {
+      ...createRevisedPlan(),
+      iterations: [
+        {
+          id: 'it-1',
+          round: 1,
+          requests: [{ text: 'Validate the input too.', comments: 0, at: 1 }],
+          reply: {
+            headline: 'Added a validation phase.',
+            points: [{ ask: 'Validate the input', outcome: 'done' as const, note: 'Phase 2 now.' }],
+            next: null,
+          },
+          runId: 'run-plan',
+          repliedAt: 2,
+        },
+      ],
+    };
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
-    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    expect(view.queryByText('You asked')).toBeNull();
-    expect(view.queryByText('What changed')).toBeNull();
-    expect(view.getByText('New')).toBeTruthy();
+    const run = createRun({ id: 'run-plan', taskId: 'task-1', purpose: 'plan' });
+    const { view } = renderOverview(
+      createShinsaState({ tasks: [task], gates: [gate], runs: [run] }),
+      task,
+      gate
+    );
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Added a validation phase.')).toBeTruthy();
+    expect(card.getByText('Phase 2 now.')).toBeTruthy();
+    expect(card.queryByText('Validate the input too.')).toBeNull();
+    fireEvent.click(card.getByRole('button', { name: /what you sent/i }));
+    expect(card.getByText('Validate the input too.')).toBeTruthy();
+    expect(card.getByText('Validate input')).toBeTruthy();
+    expect(view.queryByText('Earlier requests')).toBeNull();
+    expect(view.queryByText('Your requests')).toBeNull();
+  });
+
+  it('answers a follow-up above the answer it wrote', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'done',
+      mode: 'ask',
+      pipeline: ['answer'],
+      result: { step: 'answer', body: 'It retries **three** times.', runId: 'run-answer', at: 3 },
+      iterations: [
+        {
+          id: 'it-1',
+          round: 1,
+          requests: [{ text: 'And how long does it wait?', comments: 0, at: 1 }],
+          reply: {
+            headline: 'Added the wait.',
+            points: [
+              { ask: 'How long it waits', outcome: 'answered' as const, note: 'Two seconds, doubling.' },
+            ],
+            next: null,
+          },
+          runId: 'run-answer',
+          repliedAt: 3,
+        },
+      ],
+    });
+    const run = createRun({
+      id: 'run-answer',
+      taskId: 'task-1',
+      role: 'answerer',
+      endedAt: 2,
+      outcome: 'completed',
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], runs: [run] }), task, undefined);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Added the wait.')).toBeTruthy();
+    expect(card.getByText('Two seconds, doubling.')).toBeTruthy();
+    expect(card.getByText('three')).toBeTruthy();
+    expect(view.queryByText('Your requests')).toBeNull();
   });
 
   it('answers a question with one of its choices in one click', async () => {

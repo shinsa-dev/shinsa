@@ -33,6 +33,7 @@ import { createProjectRoutes } from '../projects/routes.ts';
 import { type Remote, resolveRequestOrigin } from '../remote/index.ts';
 import { createPlacementRoutes, type PlacementAsker } from '../remote/placement.ts';
 import { createRemoteRoutes } from '../remote/routes.ts';
+import type { ShareLinks } from '../remote/shares.ts';
 import { createLoginResolver, type LoginResolver, type RootSource } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
@@ -60,6 +61,7 @@ export type Launcher = (command: string[], cwd: string) => Promise<CommandResult
 export interface ApiContext {
   engine: Engine;
   remote?: Remote;
+  shares?: ShareLinks;
   slack?: Slack;
   config: ServerConfig;
   instance?: ServerInstance;
@@ -354,8 +356,8 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
   ];
 }
 
-export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
-  const routes: ApiRoute[] = [
+export function listApiRoutes(context: ApiContext, extra: ApiRoute[] = []): ApiRoute[] {
+  return [
     ...extra,
     ...createTaskRoutes(context),
     ...createServerRoutes(context),
@@ -377,7 +379,10 @@ export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
         })
       : []),
   ];
+}
 
+export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
+  const routes = listApiRoutes(context, extra);
   return function handleApi(request: Request, url: URL): Promise<Response> {
     for (const route of routes) {
       const match = route.pattern.exec(url.pathname);

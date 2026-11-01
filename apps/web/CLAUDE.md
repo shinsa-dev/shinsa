@@ -36,7 +36,8 @@ src/
 │   │                    pair.tsx, enroll.tsx, slack.tsx (SlackLinkedPage: /slack/linked after connecting Slack,
 │   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
-│   │                    device, the benefits card and Check again)
+│   │                    device, the benefits card and Check again), share.tsx (/share/t/<token>#<key>: a
+│   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -128,12 +129,25 @@ src/
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
-│                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
+│                        (use-transcript-window, trimmed back to its newest blocks when hidden through use-on-hide, which the Overview's activity cap shares), the rows in view of a list (use-row-window) and a long list's rows a
 │                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
+    ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, how long a task is shared, share,
+    │                    Stop sharing and its confirmation, the banner's words),
+    │                    live.ts (openShareStream: the link's live channel to the machine, the hello and welcome
+    │                    checked with the key, the views and files it pushes as blob addresses, reconnecting),
+    │                    sources.ts (a shared file's text, who is looking), view.ts (the read-only state and task the tab components render),
+    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the streamed diff and
+    │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
+    │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
+    │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides; useReadOnlyNote: the line
+    │                    the header shows above the title), and
+    │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
+    │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
+    │                    components/task/sharing-banner.tsx the banner a shared task's page shows
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
@@ -240,7 +254,7 @@ src/
     │                    report, the line-comment draft (sides, ranges, kept in localStorage per gate, and your
     │                    Fix / Dismiss verdicts; serializeComments is what `gate.answer` sends as `comments`),
     │                    finding places
-    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL; the round's
+    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL, a shared page's blob address by its kind; the round's
     │                    evidence), runs.ts (a test or check run's commands, outcomes and counts), layout.ts (the round's items grouped by kind, comparisons as one item, a check's pieces as one item, the viewer's images
     │                    numbered item by item with their parts, the count of items by kind, the folder on disk), texts.ts (the bounded text cache; /ui records its samples in it), prefetch.ts (images and texts
     │                    read ahead with the task)
@@ -323,6 +337,13 @@ sets up what it reads. Module state a test can change is reset after every test 
 state, transcripts, accounts and terminals (`connection.reset()`), toasts, the highlight and evidence text caches, the
 agent providers, disclosures, `localStorage` and the URL. A new module-level cache or store gets a reset function
 called there.
+
+**Settle React before the next event.** A `findBy*` or `waitFor` returns once the DOM has the element, but when a real
+request settled outside `act`, React runs that render's effects later, on its scheduler: a window `blur`/`focus`, a
+key or a click sent straight after can reach the page before `useWindowReturn`, an autofocus or a reset `pending`.
+Flush first with `await act(async () => {})` (`settle()` and `comeBackToWindow()` in `test/routes/onboarding.test.tsx`)
+and check focus with a plain `expect` after it, never a `waitFor` on `document.activeElement`, whose failed tries
+print the whole document.
 
 ## Rules
 

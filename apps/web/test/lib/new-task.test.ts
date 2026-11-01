@@ -404,6 +404,9 @@ describe('the machine a new task runs on', () => {
         disabled: 'Add this device on Laptop first',
       },
     ]);
+    expect(listNewTaskMachines([box], null, [{ ...laptop, outdated: true }])[2]?.disabled).toBe(
+      'Update Shinsa on Laptop to reach it from here.'
+    );
     expect(describeMachineLoad({ open: 4, capacity: 4, full: true })).toBe('4 of 4 open tasks, full');
   });
 

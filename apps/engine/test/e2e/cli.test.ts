@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
@@ -46,9 +47,11 @@ async function shinsa(port: string, ...args: string[]) {
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
-      uid: 0,
-      ownsJob: () => true,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      service: createLaunchdService({
+        uid: 0,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      }),
     },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
@@ -131,7 +134,12 @@ describe('the command line drives the whole lifecycle of a task', () => {
     const revised = await shinsa(port, 'plans', 'revise', taskId, 'Keep', 'it', 'to', 'one', 'phase');
     expect(revised.text).toContain('Asked for changes.');
     await w.untilGate(taskId, 'plan');
-    expect(w.task(taskId).plan?.feedback).toBe('Keep it to one phase');
+    expect(
+      w
+        .task(taskId)
+        .iterations?.at(-1)
+        ?.requests.map((request) => request.text)
+    ).toEqual(['Keep it to one phase']);
 
     const refused = await shinsa(port, 'reviews', 'approve', taskId, '--json');
     expect(refused.code).toBe(1);

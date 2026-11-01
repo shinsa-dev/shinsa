@@ -8,14 +8,16 @@ import { ENGINE_STOPPED } from '../../src/cli/engine.ts';
 import { describeHelp, describeHelpAll } from '../../src/cli/help.ts';
 import {
   type CliIo,
+  createOpenApp,
+  createPlatformService,
   createProcessIo,
   createWakeEngine,
-  kickEngine,
   runCli,
   stopForSignal,
   trimEngineLog,
   writeOutputTo,
 } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import {
   createServerInstance,
@@ -82,9 +84,11 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
-      uid: 501,
-      ownsJob: () => true,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      service: createLaunchdService({
+        uid: 501,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      }),
     },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
@@ -171,15 +175,17 @@ describe('the engine commands', () => {
     const { io, out, errors } = createIo(startHealth(state), {
       engine: {
         bundled: true,
-        uid: 501,
-        ownsJob: () => true,
         waitMs: 2000,
-        launchctl: (args) => {
-          calls.push(args);
-          if (args[1] === '-k') state.pid = 8;
-          if (args[0] === 'kill') state.pid = null;
-          return Promise.resolve({ ok: true, output: '' });
-        },
+        service: createLaunchdService({
+          uid: 501,
+          ownsJob: () => true,
+          launchctl: (args) => {
+            calls.push(args);
+            if (args[1] === '-k') state.pid = 8;
+            if (args[0] === 'kill') state.pid = null;
+            return Promise.resolve({ ok: true, output: '' });
+          },
+        }),
       },
     });
     expect(await runCli(['start'], io)).toBe(0);
@@ -206,9 +212,11 @@ describe('the engine commands', () => {
     const { io, errors } = createIo('1', {
       engine: {
         bundled: true,
-        uid: 501,
-        ownsJob: () => true,
-        launchctl: () => Promise.resolve({ ok: true, output: '' }),
+        service: createLaunchdService({
+          uid: 501,
+          ownsJob: () => true,
+          launchctl: () => Promise.resolve({ ok: true, output: '' }),
+        }),
       },
     });
     expect(await runCli(['restart', '--when-idle'], io)).toBe(1);
@@ -335,8 +343,9 @@ describe('shinsa do', () => {
     expect(errors[0]).toBe(
       'Error: Say what should be done, such as `shinsa do "fix the scroll in tab groups"`.'
     );
-    expect(errors[1]).toBe(`Error: ${NOT_RUNNING}`);
-    expect(errors[2]).toContain('SHINSA_PORT must be a whole number');
+    expect(errors[1]).toBe('Error: Shinsa is not running.');
+    expect(errors[2]).toBe('Start it with `shinsa start`, or open the Shinsa app on a Mac.');
+    expect(errors[3]).toContain('SHINSA_PORT must be a whole number');
   });
 
   test('a server error and an answer without JSON are reported', async () => {
@@ -573,6 +582,42 @@ describe('shinsa status and open', () => {
   });
 });
 
+describe('opening the app', () => {
+  test('the Mac app opens the link, a checkout opens the page in the browser, and a headless box prints it', async () => {
+    const openLog = join(createTempDir(), 'opened');
+    const restore = overrideEnv({ FAKE_OPEN_LOG: openLog });
+    const printed: string[] = [];
+    const write = (line: string) => printed.push(line);
+    try {
+      await createOpenApp('http://127.0.0.1:7446', { write, inApp: true, platform: 'darwin' })(
+        'shinsa://home'
+      );
+      await createOpenApp('http://127.0.0.1:7446', { write, inApp: false, platform: 'darwin', env: {} })(
+        'shinsa://task/SW-1'
+      );
+      await createOpenApp('http://127.0.0.1:7446', {
+        write,
+        inApp: true,
+        platform: 'linux',
+        env: { DISPLAY: ':0' },
+      })('shinsa://home');
+      await createOpenApp('http://127.0.0.1:7446', { write, inApp: true, platform: 'linux', env: {} })(
+        'shinsa://task/SW-1'
+      );
+      expect(readFileSync(openLog, 'utf8').trim().split('\n')).toEqual([
+        expect.stringMatching(/^-b \S+ shinsa:\/\/home$/),
+        'http://127.0.0.1:7446/tasks/SW-1',
+        'http://127.0.0.1:7446/',
+      ]);
+      expect(printed).toEqual([
+        'No display here, so open http://127.0.0.1:7446/tasks/SW-1 in a browser that reaches this machine.',
+      ]);
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe('the process io', () => {
   test('writes to stdout and stderr, opens the page in a checkout and finds a repository root', async () => {
     const stdout = spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -695,16 +740,13 @@ describe('waking the engine', () => {
     expect(await createWakeEngine('http://127.0.0.1:1', { bundled: true, kick: kicked, waitMs: 300 })()).toBe(
       false
     );
-    expect(await kickEngine()).toBe(false);
-    const calls: string[] = [];
-    const launchctl = (args: string[]) => {
-      calls.push(args[0] ?? '');
-      return Promise.resolve({ ok: true, output: 'program = /Applications/Shinsa.app/x' });
-    };
-    expect(await kickEngine(launchctl, () => false)).toBe(false);
-    expect(calls).toEqual(['print']);
-    expect(await kickEngine(launchctl, () => true)).toBe(true);
-    expect(calls).toEqual(['print', 'print', 'kickstart']);
+  });
+
+  test('the platform picks systemd on Linux and launchd elsewhere, which leaves a job it does not own alone', async () => {
+    expect(createPlatformService('linux', { HOME: '/home/dev' }).manager).toBe('systemd');
+    const launchd = createPlatformService('darwin');
+    expect(launchd.manager).toBe('launchd');
+    expect(await launchd.kick()).toBe(false);
   });
 
   test('the engine the app starts writes to its log file and finds the shinsa command on its PATH', async () => {

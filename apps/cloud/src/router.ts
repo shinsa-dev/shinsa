@@ -3,12 +3,14 @@ import { createStore, type Database } from './database.ts';
 import { respondHook } from './hooks.ts';
 import { applySecurityHeaders, CloudError, respondError, respondJson } from './http.ts';
 import {
+  NOINDEX,
   respondConnect,
   respondHeartbeat,
   respondInstanceRemove,
   respondInstances,
   respondMachineRemove,
   respondOffline,
+  respondShareConnect,
 } from './instances.ts';
 import { recordFailure } from './log.ts';
 import {
@@ -119,6 +121,11 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: new RegExp(`^${REMOTE_PATHS.instances}/${SEGMENT}/connect$`),
     respond: (request, _url, match, world) => respondConnect(request, match[1] ?? '', world),
+  },
+  {
+    method: 'POST',
+    pattern: new RegExp(`^${REMOTE_PATHS.shares}/${SEGMENT}/connect$`),
+    respond: (_request, _url, match, world) => respondShareConnect(match[1] ?? '', world),
   },
   {
     method: 'POST',
@@ -287,7 +294,9 @@ export async function respond(request: Request, world: CloudWorld) {
   }
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return respondJson({ error: { code: 'method_not_allowed', message: 'Only GET is served here.' } }, 405);
-  return applySecurityHeaders(await world.assets(request));
+  const page = applySecurityHeaders(await world.assets(request));
+  if (url.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`)) page.headers.set('x-robots-tag', NOINDEX);
+  return page;
 }
 
 export interface CloudBindings {

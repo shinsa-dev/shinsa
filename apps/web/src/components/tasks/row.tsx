@@ -12,13 +12,14 @@ import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { RepoIcon } from '@/components/links/repo.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { PriorityChoices, TaskActionItems } from '@/components/task/action-items.tsx';
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { useMachine } from '@/lib/connection/socket.ts';
+import { useEngineCommands, useMachine } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
@@ -42,6 +43,7 @@ export const FILED_COLUMNS =
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
+  const commands = useEngineCommands(task.id);
   return (
     <DropdownMenuContent className='min-w-48'>
       <DropdownMenuItem icon={TASK_ACTION.open.icon} onClick={() => navigate(resolveTaskPath(task))}>
@@ -55,7 +57,7 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
           <DependencyItems state={state} task={task} />
         </>
       )}
-      {listTaskActions(task).length > 0 && <DropdownMenuSeparator />}
+      {listTaskActions(task, commands).length > 0 && <DropdownMenuSeparator />}
       <TaskActionItems task={task} />
     </DropdownMenuContent>
   );
@@ -154,6 +156,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           </Hint>
           <TaskHandle task={task} />
           <Truncate className='text-fg-4'>{task.title}</Truncate>
+          <SharedMark task={task} />
         </span>
         {columns === TASK_LIST_COLUMNS && (
           <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>

@@ -28,27 +28,31 @@ function call(
   };
 }
 
-function renderCard(toolCall: ToolCall, task: Task | null = null) {
+function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
   return render(
     <TooltipProvider>
-      <HandoverCard call={toolCall} run={createRun({ id: 'r', taskId: 't' })} live={false} task={task} />
+      <HandoverCard
+        call={toolCall}
+        run={createRun({ id: 'r', taskId: 't' })}
+        live={false}
+        task={task}
+        at={at}
+      />
     </TooltipProvider>
   );
 }
 
 describe('HandoverCard for the process tools', () => {
-  it('shows a revised plan with what changed', () => {
+  it('shows a plan it finds no revision of as proposed, with its goal', () => {
     const view = renderCard(
       call('propose_plan', {
         goal: 'Ship it.',
         phases: [{ title: 'One', detail: 'First.' }],
-        change_summary: 'Split the work in two.',
       })
     );
-    expect(view.getByText('Revised the plan')).toBeTruthy();
-    const summary = view.getByText('What changed').parentElement;
-    expect(summary?.textContent).toBe('What changedSplit the work in two.');
-    expect(summary?.nextElementSibling?.textContent).toBe('Ship it.');
+    expect(view.getByText('Proposed the plan')).toBeTruthy();
+    expect(view.getByText('Ship it.')).toBeTruthy();
+    expect(view.queryByText('What changed')).toBeNull();
     expect(view.queryByText('New')).toBeNull();
   });
 
@@ -70,7 +74,6 @@ describe('HandoverCard for the process tools', () => {
         body: '',
         document,
         proposedAt: 1,
-        changeSummary: 'Split the work in two.',
         changes: [
           { kind: 'phase_added', title: 'Two' },
           { kind: 'phase_changed', title: 'One' },
@@ -82,14 +85,46 @@ describe('HandoverCard for the process tools', () => {
       call('propose_plan', {
         goal: 'Ship it.',
         phases: [{ title: 'One', detail: 'First.' }, { title: 'Two', detail: 'Second.' }, { title: 'Three' }],
-        change_summary: 'Split the work in two.',
       }),
       task
     );
+    expect(view.getByText('Revised the plan')).toBeTruthy();
     expect(view.getByText('One').parentElement?.textContent).toBe('OneChanged');
     expect(view.getByText('Two').parentElement?.textContent).toBe('TwoNew');
     expect(view.getByText('Three').parentElement?.textContent).toBe('Three');
     expect(view.queryByText('Zero')).toBeNull();
+  });
+
+  it('keeps the first plan proposed when a later revision kept its goal', () => {
+    const document = {
+      goal: 'Ship it.',
+      phases: [],
+      behaviour: [],
+      approach: '',
+      files: [],
+      outOfScope: [],
+      verification: [],
+      questions: [],
+    };
+    const task = createTask({
+      id: 't',
+      planHistory: [{ version: 1, body: '', document, proposedAt: 1_000 }],
+      plan: {
+        version: 2,
+        body: '',
+        document,
+        proposedAt: 60_000,
+        changes: [{ kind: 'phase_added', title: 'Two' }],
+      },
+    });
+    const proposal = call('propose_plan', { goal: 'Ship it.', phases: [{ title: 'One' }, { title: 'Two' }] });
+    const first = renderCard(proposal, task, 990);
+    expect(first.getByText('Proposed the plan')).toBeTruthy();
+    expect(first.queryByText('New')).toBeNull();
+    first.unmount();
+    const revised = renderCard(proposal, task, 59_990);
+    expect(revised.getByText('Revised the plan')).toBeTruthy();
+    expect(revised.getByText('Two').parentElement?.textContent).toBe('TwoNew');
   });
 
   it('shows the plan’s evidence, checks, impact and that it asked for your approval', () => {
@@ -226,6 +261,35 @@ describe('HandoverCard for the process tools', () => {
     const diagnosed = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs **dry**.' }));
     expect(diagnosed.getByText('Reported the diagnosis')).toBeTruthy();
     expect(diagnosed.getByText('dry')).toBeTruthy();
+  });
+
+  it('shows the reply to your message first, then the plan, the summary or the report below it', () => {
+    const reply = {
+      headline: 'Split the work as you asked.',
+      points: [{ ask: 'Two phases', outcome: 'not_changed', note: 'One phase is enough.' }],
+      next: 'Approve the plan.',
+    };
+    for (const [name, args, below] of [
+      ['propose_plan', { goal: 'Ship it.', phases: [] }, 'Ship it.'],
+      ['complete_phase', { summary: 'The form validates.' }, 'The form validates.'],
+      ['complete_fix', { summary: 'Fixed the form.' }, 'Fixed the form.'],
+      ['answer', { answer: 'It is cached.' }, 'It is cached.'],
+      ['report_diagnosis', { diagnosis: 'The pool runs dry.' }, 'The pool runs dry.'],
+      ['submit_report', { report: 'Use a workspace host.' }, 'Use a workspace host.'],
+      ['report_outcome', { outcome: 'Backfilled 12 rows.' }, 'Backfilled 12 rows.'],
+    ] as const) {
+      const view = renderCard(call(name, { ...args, reply }));
+      const headline = view.getByText('Split the work as you asked.');
+      expect(view.getByText('Two phases')).toBeTruthy();
+      expect(view.getByText('Not changed')).toBeTruthy();
+      expect(view.getByText('What to do now')).toBeTruthy();
+      expect(
+        headline.compareDocumentPosition(view.getByText(below)) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      view.unmount();
+    }
+    const plain = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs dry.' }));
+    expect(plain.queryByText('What to do now')).toBeNull();
   });
 });
 

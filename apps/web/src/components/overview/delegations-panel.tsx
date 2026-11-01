@@ -10,6 +10,7 @@ import {
 } from '@/components/chat/delegation-card.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { type DelegationView, describeDelegations, listRoundDelegationTree } from '@/lib/chat/delegations.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { stopDelegation } from '@/lib/tasks/process.ts';
@@ -27,6 +28,7 @@ function DelegationRow({
   onOpen: (runId: string) => void;
   onStop: DelegationStopper;
 }) {
+  const readOnly = useReadOnly();
   return (
     <li className={cn('flex min-w-0 flex-col gap-1 py-2 first:pt-0 last:pb-0', DEPTH_INDENT[depth - 1])}>
       <div className='flex min-w-0 items-center gap-2 text-2xs'>
@@ -38,16 +40,20 @@ function DelegationRow({
         <DelegationSummary
           view={view}
           title={
-            <button
-              type='button'
-              onClick={() => onOpen(view.run.id)}
-              className='flex min-w-0 flex-1 cursor-pointer text-left font-medium text-fg-4 text-xs hover:text-primary-text active:text-primary-text'
-            >
-              <Truncate>{view.title}</Truncate>
-            </button>
+            readOnly ? (
+              <Truncate className='min-w-0 flex-1 font-medium text-fg-4 text-xs'>{view.title}</Truncate>
+            ) : (
+              <button
+                type='button'
+                onClick={() => onOpen(view.run.id)}
+                className='flex min-w-0 flex-1 cursor-pointer text-left font-medium text-fg-4 text-xs hover:text-primary-text active:text-primary-text'
+              >
+                <Truncate>{view.title}</Truncate>
+              </button>
+            )
           }
         />
-        {view.live && <StopDelegation view={view} onStop={onStop} />}
+        {view.live && !readOnly && <StopDelegation view={view} onStop={onStop} />}
       </div>
       {view.question && <DelegationQuestion question={view.question} />}
     </li>

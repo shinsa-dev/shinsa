@@ -17,7 +17,8 @@ export type DisclosureScope =
   | 'tasks'
   | 'settings'
   | 'automation'
-  | 'ui';
+  | 'ui'
+  | 'feedback';
 
 declare const PERSISTED: unique symbol;
 

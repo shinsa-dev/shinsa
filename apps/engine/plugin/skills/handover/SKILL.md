@@ -104,18 +104,25 @@ Evidence must show the work as it is after the fix: attach what the fix changed 
 replaces the old item), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` each earlier
 item the fix touched that still holds.
 
-When the fix answers something the human sent (a request at review, a question, line comments, or a message while
-you fix), `reply` is required, and it is refused on a fix nobody asked for. The human reads it on the overview
-instead of the chat, so it must stand alone:
+When the fix answers something the human sent, it carries `reply` (Replying to the human, below).
+
+Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing, the steps or the watchdogs. Each part you
+send replaces that part whole, so send the full new list, not just the new item.
+
+## Replying to the human (`reply`)
+
+`propose_plan`, `complete_phase`, `complete_fix`, `answer`, `report_diagnosis`, `submit_report` and `report_outcome`
+take `reply`. When the hand-over follows something the human sent (feedback on a plan, a request at review, a
+question, line comments, a follow-up, or a message while you work), `reply` is required; on a hand-over nobody asked
+for, such as a first plan, it is refused. The human reads it above the plan, phase, fix or result, in the chat and on
+the overview, so it must stand alone, and the rest of the hand-over stays the full plan or result, never a quote of
+their request:
 
 - `headline`: one sentence, what you did about their request.
 - `points`: each thing they raised, in their order and their words cut short, marked `done`, `answered` (a question,
   and the note is the answer) or `not_changed` (the note says why). Never mark a point done that you did not change.
 - `next`: what they do now to see or try it, as numbered steps with exact commands in ```bash run blocks and full
   links. Leave it out when there is nothing to do.
-
-Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing, the steps or the watchdogs. Each part you
-send replaces that part whole, so send the full new list, not just the new item.
 
 ## Review findings (`report_review`)
 

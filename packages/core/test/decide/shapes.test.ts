@@ -27,7 +27,9 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
   registerRepo,
+  resolveReply,
   shipAndMerge,
   verifySetup,
 } from '../harness.ts';
@@ -83,11 +85,13 @@ function deliver(
   step: 'investigate' | 'research' | 'operate',
   proposal: { request: string; why: string } | null = null
 ) {
+  const runId = harness.activeRun(taskId).id;
   harness.send({
     type: 'agent.deliver',
-    runId: harness.activeRun(taskId).id,
+    runId,
     step,
     body: `The ${step} result.`,
+    ...resolveReply(harness, runId),
     ...(proposal ? { proposal } : {}),
   });
 }
@@ -513,6 +517,7 @@ describe('an operation', () => {
     harness.send({ type: 'message.deliver', taskId, text: 'Use bun 1.3 everywhere.' });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human:\nUse bun 1.3 everywhere.');
     deliver(harness, taskId, 'operate');
+    expect(harness.task(taskId).iterations?.map((iteration) => iteration.reply)).toEqual([REPLY]);
     expect(harness.task(taskId)).toMatchObject({ stage: 'done', stageReason: 'the operation finished' });
     expect(acceptsFollowUp(harness.task(taskId))).toBe(false);
     harness.send({
@@ -843,7 +848,19 @@ describe('the agent composes the steps', () => {
     harness.send({ type: 'message.deliver', taskId, text: 'Check the staging pool too.' });
     expect(harness.activeRun(taskId).role).toBe('investigator');
     expect(harness.task(taskId).proposal?.status).toBe('declined');
+    expect(() =>
+      harness.send({
+        type: 'agent.deliver',
+        runId: harness.activeRun(taskId).id,
+        step: 'investigate',
+        body: 'The pool.',
+      })
+    ).toThrow('This `report_diagnosis` answers a message the human sent');
     deliver(harness, taskId, 'investigate');
+    expect(harness.task(taskId).iterations?.[0]).toMatchObject({
+      requests: [expect.objectContaining({ text: 'Check the staging pool too.' })],
+      reply: REPLY,
+    });
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_proposal', proposal: { status: 'open' } });
     expect(resolveNextStep(harness.task(taskId))).toBe('your_ok');
   });

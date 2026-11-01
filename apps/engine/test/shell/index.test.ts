@@ -247,7 +247,7 @@ describe('killProcessTree', () => {
     } finally {
       kill.mockRestore();
       warn.mockRestore();
-      real(child, 'SIGKILL');
+      Bun.spawnSync(['kill', '-9', String(child)]);
       await leader.exited;
     }
     await killProcessTree(leader.pid);

@@ -41,11 +41,13 @@ describe('placement policies', () => {
         [
           { id: 'studio', name: 'Studio' },
           { id: 'laptop', name: 'Laptop' },
+          { id: 'box', name: 'Build box', outdated: true },
         ]
       )
     ).toEqual([
       { value: 'studio', label: 'This machine' },
       { value: 'laptop', label: 'Laptop', disabled: 'Add this device on Laptop first' },
+      { value: 'box', label: 'Build box', disabled: 'Update Shinsa on Build box to reach it from here.' },
     ]);
     expect(describePolicyCount(2)).toBe('2 of 20');
     expect(describePolicyLength(' iOS ')).toBe('3 / 240');

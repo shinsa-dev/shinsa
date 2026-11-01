@@ -2,6 +2,7 @@ import type { MergeStepTiming, MergeStepView, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { ChecklistBlock, type ChecklistProps, ItemChecklist } from '@/components/controls/checklist.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { DisclosurePersistId } from '@/lib/preferences/disclosure.ts';
 import {
@@ -36,30 +37,39 @@ function StepKind({ item }: { item: PreMergeItem }) {
   );
 }
 
-function resolveChecklist({
-  task,
-  when,
-  waits = [],
-  onTick = (step, done) =>
-    sendCommandWithToast({ type: 'merge_step.tick', taskId: task.id, key: step.key, done }),
-}: MergeStepsProps): ChecklistProps<PreMergeItem> {
+function resolveChecklist(
+  {
+    task,
+    when,
+    waits = [],
+    onTick = (step, done) =>
+      sendCommandWithToast({ type: 'merge_step.tick', taskId: task.id, key: step.key, done }),
+  }: MergeStepsProps,
+  readOnly: boolean
+): ChecklistProps<PreMergeItem> {
   return {
     items: [...listTimedSteps(task, when), ...(when === 'pre_merge' ? waits : [])],
-    onTick: (item, done) => (isMergeWait(item) ? undefined : onTick(item, done)),
+    ...(readOnly
+      ? {}
+      : {
+          onTick: (item: PreMergeItem, done: boolean) => (isMergeWait(item) ? undefined : onTick(item, done)),
+        }),
     describeBlock: (item) => (isMergeWait(item) ? resolveWaitBlock(item) : resolveTickBlock(task, item)),
     meta: (item) => <StepKind item={item} />,
   };
 }
 
 export function MergeStepsBlock(props: MergeStepsProps) {
-  return <ChecklistBlock title={MERGE_STEP_TITLE[props.when]} {...resolveChecklist(props)} />;
+  const readOnly = useReadOnly();
+  return <ChecklistBlock title={MERGE_STEP_TITLE[props.when]} {...resolveChecklist(props, readOnly)} />;
 }
 
 export function MergeStepsPanel({
   persistId,
   ...props
 }: MergeStepsProps & { persistId: DisclosurePersistId }) {
-  const checklist = resolveChecklist(props);
+  const readOnly = useReadOnly();
+  const checklist = resolveChecklist(props, readOnly);
   return (
     <Panel
       persistId={persistId}

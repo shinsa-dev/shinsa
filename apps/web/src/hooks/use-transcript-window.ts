@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useOnHide } from '@/hooks/use-on-hide.ts';
 import {
   hasScrollAnchoring,
   resolveGrownStart,
@@ -33,6 +34,12 @@ export function useTranscriptWindow({
   const shown = resolveShownStart(start, count, focusIndex);
   const anchor = React.useRef<Anchor | null>(null);
   const growing = React.useRef(false);
+
+  useOnHide(() => {
+    anchor.current = null;
+    growing.current = false;
+    setStart(resolveInitialStart(count));
+  });
 
   const grow = React.useCallback(() => {
     const inner = content.current;

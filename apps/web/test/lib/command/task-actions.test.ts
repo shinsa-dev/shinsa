@@ -1,16 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
+let engine: ReturnType<typeof spyOnEngine>;
 
 beforeEach(() => {
   spies = spyOnCommands();
+  engine = spyOnEngine();
 });
 
 afterEach(() => {
   spies.restore();
+  engine.mockRestore();
 });
 
 describe('task action commands', () => {
@@ -33,6 +37,7 @@ describe('task action commands', () => {
       ['run', 'Open a terminal', undefined],
       ['run', 'Show in Finder', undefined],
       ['run', 'Fork into a new task', undefined],
+      ['run', 'Share task', undefined],
       ['run', 'Snooze', undefined],
       ['run', 'Restart the current step', undefined],
       ['run', 'Mark as done', undefined],
@@ -42,6 +47,14 @@ describe('task action commands', () => {
   });
 
   it('keeps only the priority for a closed task without links', () => {
+    const task = createTask({ id: 't', stage: 'done', closedAt: 1 });
+    expect(
+      listTaskActionCommands(createShinsaState({ tasks: [task] }), task).map((command) => command.label)
+    ).toEqual(['Set priority', 'Fork into a new task', 'Share task']);
+  });
+
+  it('leaves out Share task when the task’s engine does not speak it', () => {
+    engine.mockReturnValue(null);
     const task = createTask({ id: 't', stage: 'done', closedAt: 1 });
     expect(
       listTaskActionCommands(createShinsaState({ tasks: [task] }), task).map((command) => command.label)

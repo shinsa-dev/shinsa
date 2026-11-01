@@ -11,6 +11,7 @@ import {
   createTempDir,
   createTestConfig,
   git,
+  NO_SHARES,
   overrideEnv,
   writeFiles,
 } from '../helpers/index.ts';
@@ -39,6 +40,7 @@ function setup(tasks: Partial<Task>[], repo: Partial<Repo>) {
     for (const task of tasks) state.tasks[task.id ?? 'task-1'] = createTask(task);
   });
   const runner = new EffectRunner(stub.engine, createTestConfig(createTempDir()), RUNS, BRIEFINGS, {
+    shares: NO_SHARES,
     resolveLogin: () => Promise.resolve(null),
     triage: () => Promise.resolve(null),
   });

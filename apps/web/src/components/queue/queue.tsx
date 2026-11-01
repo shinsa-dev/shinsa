@@ -1,4 +1,4 @@
-import { resolveQueue, type ShinsaState } from '@shinsa/core';
+import { resolveQueue, type ShinsaState, type Task } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -8,6 +8,7 @@ import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
+import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -22,12 +23,25 @@ import {
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
+import { isTaskShared } from '@/lib/share/dialog.ts';
 import { listBundleRows } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
 
 const FIRST_ROWS = 24;
+
+function renderMarks(state: ShinsaState, task: Task) {
+  const shared = isTaskShared(task);
+  const bundled = listBundleRows(state, task).length > 0;
+  if (!shared && !bundled) return undefined;
+  return (
+    <>
+      {shared && <SharedMark task={task} />}
+      {bundled && <BundleMark state={state} task={task} />}
+    </>
+  );
+}
 
 function QueueItemGlyph({ state, item }: { state: ShinsaState; item: QueueItem }) {
   switch (item.kind) {
@@ -129,11 +143,7 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
-      mark={
-        listBundleRows(state, item.task).length > 0 ? (
-          <BundleMark state={state} task={item.task} />
-        ) : undefined
-      }
+      mark={renderMarks(state, item.task)}
       summary={<RowSummary state={state} task={item.task} detail={variant === 'wide'} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {

@@ -14,6 +14,7 @@ import {
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts';
+import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
@@ -22,11 +23,13 @@ import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtim
 import type { Slack } from '../../src/slack/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
+import type { Workspaces } from '../../src/workspaces/index.ts';
 import {
   createGitRepo,
   createTempDir,
   createTestConfig,
   git,
+  NO_SHARES,
   overrideEnv,
   type TestRepo,
   until,
@@ -182,6 +185,7 @@ function setup(
   const { runs, calls } = createRuns();
   const briefings = createBriefings();
   const runner = new EffectRunner(stub.engine, config, runs, briefings.briefings, {
+    shares: NO_SHARES,
     resolveLogin: () => Promise.resolve(null),
     triage: (state, task, local) => resolveTriage(state, task, local, () => Promise.resolve(null)),
     ...options,
@@ -257,6 +261,24 @@ describe('routing effects', () => {
       { type: 'effect.fail', taskId: 't1', title: 'Could not push the fixes', detail: 'push rejected' },
     ]);
     expect(commandIds).toEqual(['push-key:effect.fail']);
+  });
+
+  test('a share link is made by the shares, and one that could not be made is kept on its task', async () => {
+    const shared: string[] = [];
+    const { runner, dispatched, commandIds } = setup(undefined, {
+      shares: {
+        link: (taskId, effectContext) => {
+          shared.push(`link:${taskId}:${effectContext.key}`);
+          return Promise.resolve();
+        },
+      },
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'share.link', taskId: 't1' }, context);
+    expect(shared).toEqual([`link:t1:${context.key}`]);
+    await runner.reportExhausted({ kind: 'share.link', taskId: 't1' }, 'Turn on remote access.', 'share-key');
+    expect(dispatched).toEqual([{ type: 'share.fail', taskId: 't1', detail: 'Turn on remote access.' }]);
+    expect(commandIds).toEqual(['share-key:share.fail']);
   });
 });
 
@@ -358,6 +380,43 @@ describe('suggesting a watch', () => {
   });
 });
 
+describe('the feedback effects', () => {
+  const ENTRY = {
+    source: 'human' as const,
+    note: 'The plan tab hides changes.',
+    title: 'Plan tab hides changes',
+    body: 'It hides them.',
+    failure: null,
+    issue: null,
+    taskId: null,
+    runId: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  test('drafting, filing, a failure for good and recovery each report back on the entry', async () => {
+    const { runner, dispatched, commandIds } = setup((state) => {
+      state.feedback.f1 = { ...ENTRY, id: 'f1', status: 'drafting', title: null, body: null };
+      state.feedback.f2 = { ...ENTRY, id: 'f2', status: 'filing' };
+      state.feedback.f3 = { ...ENTRY, id: 'f3', status: 'draft' };
+    });
+    const draft = createContext();
+    await runner.apply({ kind: 'feedback.draft', feedbackId: 'f1' }, draft);
+    await runner.apply({ kind: 'feedback.file', feedbackId: 'f3' }, createContext());
+    await runner.reportExhausted({ kind: 'feedback.file', feedbackId: 'f3' }, 'gh is missing', 'file-key');
+    await runner.recover();
+    expect(dispatched).toEqual([
+      { type: 'feedback.record_failure', feedbackId: 'f1', detail: NO_DRAFT },
+      { type: 'feedback.record_failure', feedbackId: 'f3', detail: 'gh is missing' },
+      { type: 'feedback.record_failure', feedbackId: 'f2', detail: STOPPED_WHILE_FILING },
+    ]);
+    expect(commandIds.slice(0, 2)).toEqual([
+      `${draft.key}:feedback.record_failure`,
+      'file-key:feedback.record_failure',
+    ]);
+  });
+});
+
 describe('triage', () => {
   test('a settled, unknown or already triaged task is left alone', async () => {
     const { runner, dispatched } = setup((state) => {
@@ -388,6 +447,7 @@ describe('triage', () => {
     await engine.dispatch({ type: 'task.create', request: 'Hey', repoId: null, mode: 'ask' });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
+      shares: NO_SHARES,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -418,6 +478,7 @@ describe('triage', () => {
     const [dependency, task] = Object.values(engine.state.tasks);
     const { runs } = createRuns();
     const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
+      shares: NO_SHARES,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -457,6 +518,7 @@ describe('triage', () => {
     await engine.dispatch({ type: 'task.create', request: 'Fix the button in app', repoId: null, projectId });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
+      shares: NO_SHARES,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -479,6 +541,7 @@ describe('triage', () => {
     await engine.dispatch({ type: 'task.create', request: 'Why is the export slow?', repoId: null });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
+      shares: NO_SHARES,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -695,10 +758,52 @@ describe('worktrees', () => {
     expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
   });
 
+  test('removing a worktree stops what still runs in it, but not your own terminals there', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const server = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: worktree,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const shell = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: worktree,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const services = { closeTaskServices: () => undefined, listTerminalPids: () => [shell.pid] };
+    const { runner, dispatched } = setup(withTask({ worktreePath: worktree }, repo), { services });
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(await server.exited).not.toBe(0);
+    expect(shell.exitCode).toBeNull();
+    expect(existsSync(worktree)).toBe(false);
+    expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
+    shell.kill('SIGKILL');
+    await shell.exited;
+  });
+
+  test('removing a worktree prunes the shared build caches, and a failure there is only logged', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const { runner, config } = setup(withTask({ worktreePath: worktree }, repo));
+    mkdirSync(join(config.dataDir, 'caches', 'removed-repo'), { recursive: true });
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(existsSync(join(config.dataDir, 'caches', 'removed-repo'))).toBe(false);
+    const broken = setup(withTask({ worktreePath: createTempDir() }, repo));
+    writeFileSync(join(broken.config.dataDir, 'caches'), '');
+    const warn = spyOn(log, 'warn');
+    await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not prune the shared build caches', {
+      error: expect.stringContaining('ENOTDIR'),
+    });
+    warn.mockRestore();
+  });
+
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];
-    const services = { closeTaskServices: (taskId: string) => closed.push(taskId) };
+    const services = {
+      closeTaskServices: (taskId: string) => closed.push(taskId),
+      listTerminalPids: () => [],
+    };
     const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
       services,
     });
@@ -707,8 +812,16 @@ describe('worktrees', () => {
     expect(existsSync(worktree)).toBe(false);
     expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
-    const broken = setup(withTask({ worktreePath: createTempDir() }, { ...repo, path: createTempDir() }));
+    const failing = { mode: 'worktrees', remove: () => Promise.reject(new Error('Device busy')) };
+    const workspaces = { resolve: () => failing } as unknown as Workspaces;
+    const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });
+    const warn = spyOn(log, 'warn');
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove a worktree', {
+      taskId: 'task-1',
+      error: expect.stringContaining('Device busy'),
+    });
+    warn.mockRestore();
     const none = setup(withTask({ worktreePath: null }));
     await none.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect([...dispatched, ...broken.dispatched, ...none.dispatched]).toEqual([
@@ -761,6 +874,7 @@ describe('scratch folders', () => {
       },
     } as unknown as RunSupervisor;
     const runner = new EffectRunner(stub.engine, config, runs, createBriefings().briefings, {
+      shares: NO_SHARES,
       triage: () => Promise.resolve(null),
     });
     await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
@@ -815,6 +929,17 @@ describe('checks', () => {
       readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8');
     expect(read(record.outputs?.[0]?.uri ?? '')).toBe('$ echo 4 pass\nPassed.\n4 pass');
     expect(read(record.outputs?.[1]?.uri ?? '')).toBe('$ grep -q b a.txt\nFailed.\nexit 1');
+  });
+
+  test('checks in a Turbo repository share one Turbo cache per repository', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    writeFileSync(join(worktree, 'turbo.json'), '{}');
+    const { runner, dispatched, config } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, repo)
+    );
+    const shared = join(config.dataDir, 'caches', repo.id, 'turbo');
+    await runner.apply(checksEffect([`test "$TURBO_CACHE_DIR" = '${shared}'`]), createContext());
+    expect(dispatched[0]).toMatchObject({ results: [{ outcome: 'pass' }] });
   });
 
   test('a failure whose errors all fail on the base commit too is noted and does not block; others do', async () => {

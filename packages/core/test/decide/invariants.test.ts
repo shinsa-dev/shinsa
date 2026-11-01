@@ -47,7 +47,7 @@ import {
   type WireState,
 } from '../../src/index.ts';
 import type { CheckChangeHandOver } from '../../src/report/types.ts';
-import { IMPACT, PLAN } from '../harness.ts';
+import { IMPACT, PLAN, resolveOwedReply } from '../harness.ts';
 import { assertAgentInvariants, assertOneSessionPerTask } from './agent-invariants.ts';
 import { assertCheckInvariants } from './check-invariants.ts';
 import {
@@ -259,6 +259,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           type: 'agent.propose_plan',
           runId,
           document: resolvePlanDocument(state, run.taskId),
+          ...resolveOwedReply(state, runId),
         });
         break;
       case 'build':
@@ -270,6 +271,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           judgementCalls: [],
           checkChanges: listCheckChanges(state, run.taskId, random),
           ...resolvePhaseWalkthrough(runId),
+          ...resolveOwedReply(state, runId),
         });
         if (needsEvidence(state, run.taskId) && chance(random, 0.5)) {
           commands.push({
@@ -292,7 +294,13 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         });
         break;
       case 'operate':
-        commands.push({ type: 'agent.deliver', runId, step: 'operate', body: 'Ran it.' });
+        commands.push({
+          type: 'agent.deliver',
+          runId,
+          step: 'operate',
+          body: 'Ran it.',
+          ...resolveOwedReply(state, runId),
+        });
         break;
       default:
         commands.push({
@@ -300,6 +308,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           runId,
           summary: 'Fixed.',
           ...resolveFixWalkthrough(runId),
+          ...resolveOwedReply(state, runId),
         });
     }
     if (chance(random, 0.3)) {
@@ -650,7 +659,13 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       { type: 'run.silence', runId, since: chance(random, 0.7) ? state.seq : null },
     ];
     if (run.role === 'answerer')
-      commands.push({ type: 'agent.deliver', runId, step: 'answer', body: 'It works like this.' });
+      commands.push({
+        type: 'agent.deliver',
+        runId,
+        step: 'answer',
+        body: 'It works like this.',
+        ...resolveOwedReply(state, runId),
+      });
     if (run.purpose === 'fix') {
       const fix: ShinsaCommand = {
         type: 'agent.complete_fix',
@@ -659,6 +674,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         treeHash: `t-${state.seq % 3}`,
         checks: listNamedChecks(state, run.taskId, random),
         checkChanges: listCheckChanges(state, run.taskId, random),
+        ...resolveOwedReply(state, runId),
       };
       commands.push(fix, fix, fix);
     }
@@ -676,7 +692,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         type: 'agent.propose_plan',
         runId,
         document: resolvePlanDocument(state, run.taskId),
-        changeSummary: 'Tightened it.',
+        ...resolveOwedReply(state, runId),
       });
     }
     return commands;
@@ -1676,7 +1692,7 @@ describe('decide under random command sequences', () => {
         for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
           if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'rounds', collect);
+      for (let seed = 1; seed <= RARE_SEEDS + 20; seed += 1) simulate(seed, STEPS, 'rounds', collect);
       expect([...reached].sort()).toEqual([
         'carried merge step',
         'closed task',

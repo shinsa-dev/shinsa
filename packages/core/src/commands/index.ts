@@ -37,9 +37,9 @@ import type {
   ShippingStepKind,
 } from '../domain/pull-requests.ts';
 import type {
+  AgentReply,
   CheckChangeHandOver,
   CodeSpot,
-  FixReply,
   JudgementCall,
   LinkedEvidenceKind,
   PlanDocument,
@@ -55,9 +55,11 @@ import type {
   DelegationSystemCommand,
   DelegationUserCommand,
 } from './delegations.ts';
+import type { FeedbackAgentCommand, FeedbackSystemCommand, FeedbackUserCommand } from './feedback.ts';
 import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+import type { ShareSystemCommand, ShareUserCommand } from './shares.ts';
 import type { SlackSystemCommand } from './slack.ts';
 import type { WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
@@ -152,16 +154,24 @@ export type UserCommand =
   | DelegationUserCommand
   | ScheduleUserCommand
   | WatchdogUserCommand
-  | MemoryUserCommand;
+  | MemoryUserCommand
+  | FeedbackUserCommand
+  | ShareUserCommand;
 
 type AgentCommand =
-  | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
+  | {
+      type: 'agent.propose_plan';
+      runId: string;
+      document: PlanDocument;
+      reply?: AgentReply | null;
+    }
   | {
       type: 'agent.complete_phase';
       runId: string;
       summary: string;
       spots: CodeSpot[];
       judgementCalls: JudgementCall[];
+      reply?: AgentReply | null;
       walkthrough?: ReportWalkthrough | null;
       checkChanges?: CheckChangeHandOver[];
       treeHash?: string | null;
@@ -171,7 +181,7 @@ type AgentCommand =
       type: 'agent.complete_fix';
       runId: string;
       summary: string;
-      reply?: FixReply | null;
+      reply?: AgentReply | null;
       walkthrough?: ReportWalkthroughRevision | null;
       checks?: string[];
       checkChanges?: CheckChangeHandOver[];
@@ -243,6 +253,7 @@ type AgentCommand =
       runId: string;
       step: DeliveringStep;
       body: string;
+      reply?: AgentReply | null;
       proposal?: ChangeProposalInput | null;
     }
   | ({ type: 'agent.reshape'; runId: string; reason: string } & (
@@ -252,7 +263,8 @@ type AgentCommand =
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
   | ScheduleAgentCommand
-  | MemoryAgentCommand;
+  | MemoryAgentCommand
+  | FeedbackAgentCommand;
 
 type SystemCommand =
   | {
@@ -370,7 +382,9 @@ type SystemCommand =
   | DelegationSystemCommand
   | ScheduleSystemCommand
   | SlackSystemCommand
-  | WatchdogSystemCommand;
+  | WatchdogSystemCommand
+  | FeedbackSystemCommand
+  | ShareSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };
 

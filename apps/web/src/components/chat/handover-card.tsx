@@ -17,13 +17,15 @@ import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
+import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
-import { PlanChangeSummary, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
+import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import {
   hasHandOverWalkthrough,
+  readHandOverReply,
   readHandOverSpots,
   readPlanParameters,
   readProposedChange,
@@ -35,7 +37,7 @@ import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { formatCount } from '@/lib/format/count.ts';
-import { listRevisionChanges } from '@/lib/overview/plan-version.ts';
+import { selectPlanRevision } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
@@ -66,41 +68,53 @@ function Card({
   );
 }
 
-function PlanCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
+function ReplyFirst({ args, children }: { args: ChatToolArgs; children: React.ReactNode }) {
+  const reply = readHandOverReply(args);
+  if (!reply) return children;
+  return (
+    <>
+      <AgentReplyBlock reply={reply} />
+      <div className='flex min-w-0 flex-col gap-3 border-border border-t pt-3'>{children}</div>
+    </>
+  );
+}
+
+function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; at: number | null }) {
   const goal = readString(args, 'goal');
   const phases = readList(args, 'phases');
-  const changed = readString(args, 'change_summary');
-  const changes = listRevisionChanges(task, changed);
+  const revision = selectPlanRevision(task, goal, at);
+  const changes = revision?.changes ?? [];
   return (
     <Card
       icon='IconMap'
-      title={changed ? 'Revised the plan' : 'Proposed the plan'}
+      title={revision && revision.version > 1 ? 'Revised the plan' : 'Proposed the plan'}
       meta={phases.length > 0 ? formatCount(phases.length, 'phase', 'phases') : null}
     >
-      <PlanChangeSummary summary={changed} />
-      {goal && <Markdown text={goal} />}
-      {phases.length > 0 && (
-        <ol className='flex flex-col gap-2'>
-          {phases.map((phase, index) => {
-            const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
-            return (
-              // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
-              <li key={index} className='flex gap-2.5'>
-                <StepNumber index={index} />
-                <div className='flex min-w-0 flex-col gap-px'>
-                  <PlanPhaseTitle title={title} change={resolvePhaseChange(changes, title)} />
-                  {readString(phase, 'detail') && (
-                    <span className='selectable text-fg-3 text-xs'>
-                      <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
-                    </span>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      <PlanParameterList document={readPlanParameters(args)} headingClassName='text-2xs text-fg-2' />
+      <ReplyFirst args={args}>
+        {goal && <Markdown text={goal} />}
+        {phases.length > 0 && (
+          <ol className='flex flex-col gap-2'>
+            {phases.map((phase, index) => {
+              const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
+              return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
+                <li key={index} className='flex gap-2.5'>
+                  <StepNumber index={index} />
+                  <div className='flex min-w-0 flex-col gap-px'>
+                    <PlanPhaseTitle title={title} change={resolvePhaseChange(changes, title)} />
+                    {readString(phase, 'detail') && (
+                      <span className='selectable text-fg-3 text-xs'>
+                        <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        <PlanParameterList document={readPlanParameters(args)} headingClassName='text-2xs text-fg-2' />
+      </ReplyFirst>
     </Card>
   );
 }
@@ -143,47 +157,49 @@ function SummaryCard({
   const calls = readList(args, 'judgement_calls');
   return (
     <Card icon={icon} title={title} meta={meta}>
-      {summary && <Markdown text={summary} />}
-      {calls.length > 0 && (
-        <div className='flex flex-col gap-1.5'>
-          <span className='text-2xs text-fg-2'>Judgement calls</span>
-          <ul className='flex flex-col gap-1.5'>
-            {calls.map((call, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: judgement calls are positional
-              <li key={index} className='flex gap-1.25 text-xs leading-5'>
-                <IconSlot>
-                  <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
-                </IconSlot>
-                <span className='selectable min-w-0'>
-                  {readString(call, 'title') && (
-                    <span className='font-medium text-fg-4'>
-                      <InlineMarkdown text={readString(call, 'title') ?? ''} />
-                      {': '}
-                    </span>
-                  )}
-                  <span className='text-fg-4'>
-                    <InlineMarkdown text={readString(call, 'call') ?? ''} />
-                  </span>{' '}
-                  {readString(call, 'reason') && (
-                    <span className='text-fg-3'>
-                      <InlineMarkdown text={readString(call, 'reason') ?? ''} />
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <SpotList task={task} args={args} />
-      {task && hasHandOverWalkthrough(args) && (
-        <InAppLink
-          path={resolveReviewPath(task)}
-          className='w-fit font-medium text-primary-text text-xs hover:opacity-80 active:opacity-80'
-        >
-          Read the walkthrough
-        </InAppLink>
-      )}
+      <ReplyFirst args={args}>
+        {summary && <Markdown text={summary} />}
+        {calls.length > 0 && (
+          <div className='flex flex-col gap-1.5'>
+            <span className='text-2xs text-fg-2'>Judgement calls</span>
+            <ul className='flex flex-col gap-1.5'>
+              {calls.map((call, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: judgement calls are positional
+                <li key={index} className='flex gap-1.25 text-xs leading-5'>
+                  <IconSlot>
+                    <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
+                  </IconSlot>
+                  <span className='selectable min-w-0'>
+                    {readString(call, 'title') && (
+                      <span className='font-medium text-fg-4'>
+                        <InlineMarkdown text={readString(call, 'title') ?? ''} />
+                        {': '}
+                      </span>
+                    )}
+                    <span className='text-fg-4'>
+                      <InlineMarkdown text={readString(call, 'call') ?? ''} />
+                    </span>{' '}
+                    {readString(call, 'reason') && (
+                      <span className='text-fg-3'>
+                        <InlineMarkdown text={readString(call, 'reason') ?? ''} />
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <SpotList task={task} args={args} />
+        {task && hasHandOverWalkthrough(args) && (
+          <InAppLink
+            path={resolveReviewPath(task)}
+            className='w-fit font-medium text-primary-text text-xs hover:opacity-80 active:opacity-80'
+          >
+            Read the walkthrough
+          </InAppLink>
+        )}
+      </ReplyFirst>
     </Card>
   );
 }
@@ -310,13 +326,15 @@ function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArg
   const proposal = readProposedChange(args);
   return (
     <Card icon='IconSend' title={title}>
-      <Markdown text={readString(args, field) ?? ''} />
-      {proposal && (
-        <div className='flex flex-col gap-px border-border border-t pt-2.5 text-xs'>
-          <span className='text-2xs text-fg-2'>Proposed a change</span>
-          <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
-        </div>
-      )}
+      <ReplyFirst args={args}>
+        <Markdown text={readString(args, field) ?? ''} />
+        {proposal && (
+          <div className='flex flex-col gap-px border-border border-t pt-2.5 text-xs'>
+            <span className='text-2xs text-fg-2'>Proposed a change</span>
+            <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
+          </div>
+        )}
+      </ReplyFirst>
     </Card>
   );
 }
@@ -349,11 +367,13 @@ export function HandoverCard({
   run,
   live,
   task = null,
+  at = null,
 }: {
   call: ToolCall;
   run: Run;
   live: boolean;
   task?: Task | null;
+  at?: number | null;
 }) {
   const { tool } = call;
   if (tool.kind !== 'shinsa') return <InsetToolRow call={call} live={live} />;
@@ -369,7 +389,7 @@ export function HandoverCard({
   }
   switch (tool.name) {
     case 'propose_plan':
-      return <PlanCard args={tool.args} task={task} />;
+      return <PlanCard args={tool.args} task={task} at={at} />;
     case 'complete_phase':
       return (
         <SummaryCard

@@ -175,18 +175,20 @@ describe('running a failing check on the base commit', () => {
     expect(readCount(counter)).toBe(2);
   });
 
-  test('only the most recent checkouts are kept, and folders left from before are removed', async () => {
+  test('only the most recent checkouts are kept, and folders left from before are removed, but not the folder’s own markers', async () => {
     const setup = await createBase({ 'v.txt': '1' });
     const first = setup.base;
     writeFileSync(join(setup.path, 'v.txt'), '2');
     const second = await commitAll(setup.path, 'chore: two');
     const dir = join(createTempDir(), 'bases');
     mkdirSync(join(dir, 'left-over'), { recursive: true });
+    writeFileSync(join(dir, '.metadata_never_index'), '');
     const bases = new BaseCheckouts(dir, 1);
     const one = runOf(failing('grep -q 1 v.txt || exit 0'));
     const two = runOf(failing('grep -q 2 v.txt || exit 0'));
     expect(await bases.compareWithBase(requestOf(setup, one, first))).not.toBeNull();
     expect(existsSync(join(dir, 'left-over'))).toBe(false);
+    expect(existsSync(join(dir, '.metadata_never_index'))).toBe(true);
     expect(await bases.compareWithBase(requestOf(setup, two, second))).not.toBeNull();
     expect(existsSync(join(dir, `repo-1-${first.slice(0, 12)}`))).toBe(false);
     expect(existsSync(join(dir, `repo-1-${second.slice(0, 12)}`))).toBe(true);

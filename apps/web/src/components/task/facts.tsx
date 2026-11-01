@@ -36,6 +36,7 @@ import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { BundleFact } from '@/components/task/bundle.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
@@ -141,6 +142,7 @@ function RoundFact({ task }: { task: Task }) {
 const AGENT_INDENT = ['ps-2', 'ps-6', 'ps-10', 'ps-14'];
 
 function AgentsFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const readOnly = useReadOnly();
   const agents = listTaskAgents(state, task);
   if (agents.length === 0) return null;
   return (
@@ -160,6 +162,7 @@ function AgentsFact({ state, task }: { state: ShinsaState; task: Task }) {
               <button
                 type='button'
                 data-highlight-item=''
+                disabled={readOnly}
                 onClick={() => navigate(resolveTaskPath(task, { tab: 'chat', run: agent.runId }))}
                 className={cn(
                   'corner-superellipse/1.125 flex h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-item pe-2 text-start text-xs',
@@ -315,7 +318,17 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
 }
 
 function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const readOnly = useReadOnly();
   const why = resolveTriageWhy(state, task, 'priority');
+  if (readOnly) {
+    const fact = (
+      <span className={FACT}>
+        <PriorityIcon priority={task.priority} />
+        {PRIORITY_LABEL[task.priority]}
+      </span>
+    );
+    return why ? <Hint label={why}>{fact}</Hint> : fact;
+  }
   const trigger = (
     <DropdownMenuTrigger render={<button type='button' className={cn(FACT, FACT_INTERACTIVE)} />}>
       <PriorityIcon priority={task.priority} />
@@ -537,6 +550,7 @@ export function TaskFacts({
   task: Task;
   className?: string;
 }) {
+  const readOnly = useReadOnly();
   const checks = resolveChecksView(state, task);
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
@@ -551,7 +565,7 @@ export function TaskFacts({
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
       <MachineFact task={task} />
-      <TaskServicesFact state={state} task={task} />
+      {!readOnly && <TaskServicesFact state={state} task={task} />}
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />
       <CostFact state={state} task={task} />

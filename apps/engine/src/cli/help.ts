@@ -101,7 +101,7 @@ const ENGINE_COMMANDS: CliCommand[] = [
     usage: 'shinsa start',
     summary: 'Start the engine in the background and wait until it answers.',
     detail:
-      'Asks launchd to start the engine the Shinsa app set up, and waits until it answers. Any other command that needs the engine starts it the same way.',
+      'On a Mac with the Shinsa app, asks launchd to start the engine the app set up. On a Mac without it, sets the engine up as its own launchd agent the first time (it starts at login and again after a crash) and starts it; it never starts a second engine beside the app’s. On Linux, sets the engine up as a systemd user service the first time (it starts at boot once lingering is on, and again after a crash) and starts it. Then waits until it answers. Any other command that needs the engine starts it the same way.',
     options: [],
     examples: ['shinsa start'],
   },
@@ -110,7 +110,7 @@ const ENGINE_COMMANDS: CliCommand[] = [
     usage: 'shinsa stop',
     summary: 'Stop the engine cleanly. Runs resume when it starts again.',
     detail:
-      'Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in. An engine still running after 40 seconds is killed, and launchd starts a fresh one.',
+      'Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in. An engine still running after 40 seconds is killed; on a Mac, launchd then starts a fresh one.',
     options: [],
     examples: ['shinsa stop'],
     humanOnly: true,

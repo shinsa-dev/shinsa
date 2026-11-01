@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type BundleConflict,
   type CheckEvidence,
@@ -33,10 +32,14 @@ import {
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
 import { BaseCheckouts } from '../checks/base.ts';
+import { pruneSharedCaches, resolveSharedCacheEnv } from '../checks/caches.ts';
 import { serializeCheckOutput } from '../checks/evidence.ts';
 import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
+import type { FeedbackDrafter } from '../feedback/draft.ts';
+import { listFeedbackEnvironment, resolveFeedbackMachine } from '../feedback/environment.ts';
+import { FeedbackEffects } from '../feedback/index.ts';
 import {
   type BundleBranch,
   checkBundleMerge,
@@ -46,6 +49,7 @@ import {
   resolveOutputTail,
   syncRemoteBranch,
 } from '../git/index.ts';
+import { stopProcessesIn } from '../git/processes.ts';
 import { resolveTaskRefs } from '../git/task-refs.ts';
 import { RepoCiCache } from '../github/ci.ts';
 import { PullRequestDescriptions } from '../github/description.ts';
@@ -59,7 +63,10 @@ import {
   retargetPullRequest,
   writePullRequestBlock,
 } from '../github/index.ts';
+import { BUNDLE } from '../instance/bundle.ts';
+import { createServerInstance, type ServerInstance } from '../instance/install.ts';
 import { describeError, log } from '../log/index.ts';
+import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
   type LoginResolver,
@@ -82,6 +89,8 @@ import { resolveShippingError } from './failures.ts';
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
+  draftFeedback?: FeedbackDrafter;
+  instance?: Pick<ServerInstance, 'version' | 'commit'>;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
@@ -89,11 +98,13 @@ export interface EffectRunnerOptions {
   watchIntervalMs?: number;
   workspaces?: Workspaces;
   services?: TaskServices;
+  shares: ShareEffects;
   slack?: Slack;
 }
 
 export interface TaskServices {
   closeTaskServices(taskId: string): void;
+  listTerminalPids(): number[];
 }
 
 const WATCH_INTERVAL_MS = 45_000;
@@ -166,7 +177,9 @@ export class EffectRunner {
   readonly #watchIntervalMs: number;
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
+  readonly #shares: ShareEffects;
   readonly #slack: Slack | null;
+  readonly #feedback: FeedbackEffects;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
@@ -197,10 +210,23 @@ export class EffectRunner {
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
+    this.#shares = options.shares;
     this.#slack = options.slack ?? null;
+    this.#feedback = new FeedbackEffects(
+      engine,
+      config.dataDir,
+      options.draftFeedback ?? (() => Promise.resolve(null)),
+      (state, entry) =>
+        listFeedbackEnvironment(
+          state,
+          entry,
+          options.instance ?? createServerInstance(),
+          resolveFeedbackMachine(Boolean(BUNDLE))
+        )
+    );
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
-    this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
+    this.#bases = new BaseCheckouts(config.checkBasesDir);
     this.#workspaces = options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir });
   }
 
@@ -247,12 +273,18 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
+      case 'share.link':
+        return this.#shares.link(effect.taskId, context);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
         return this.#withSlack((slack) => slack.status(effect, context));
       case 'slack.post':
         return this.#withSlack((slack) => slack.post(effect));
+      case 'feedback.draft':
+        return this.#feedback.draft(effect.feedbackId, context);
+      case 'feedback.file':
+        return this.#feedback.file(effect.feedbackId, context);
     }
   }
 
@@ -315,6 +347,17 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
+    if (effect.kind === 'feedback.draft' || effect.kind === 'feedback.file') {
+      await this.#feedback.reportExhausted(effect.feedbackId, error, key);
+      return;
+    }
+    if (effect.kind === 'share.link') {
+      await this.#engine.dispatch(
+        { type: 'share.fail', taskId: effect.taskId, detail: error },
+        { id: `${key}:share.fail` }
+      );
+      return;
+    }
     const title = FAILURE_TITLE[effect.kind];
     if (!title || !('taskId' in effect) || effect.taskId === null) return;
     await this.#engine.dispatch(
@@ -324,6 +367,7 @@ export class EffectRunner {
   }
 
   async recover() {
+    await this.#feedback.recover();
     await this.syncAll();
   }
 
@@ -340,6 +384,8 @@ export class EffectRunner {
         (task.stage === 'shipping' || task.stage === 'awaiting_merge') && !task.pullRequestWatch?.stopped
     );
     for (const task of watched) await this.syncPullRequest(task.id);
+    const failure = await this.#feedback.syncIssues(this.#stopping.signal);
+    if (failure) log.warn('[Feedback] Could not read the state of opened issues', { error: failure });
   }
 
   syncPullRequest(taskId: string, force = false, signal = this.#stopping.signal) {
@@ -592,10 +638,12 @@ export class EffectRunner {
     await this.#runs.quiesce(task.id);
     if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
     const worktree = task.worktreePath;
+    const env = resolveSharedCacheEnv(worktree, this.#config.dataDir, repo.id);
     const runs = await runChecks(effect.checks, worktree, {
       timeoutMs: CHECK_TIMEOUT_MS,
       signal: context.signal,
-      compare: this.#createBaseComparison(task, repo, worktree, context.signal),
+      env,
+      compare: this.#createBaseComparison(task, repo, worktree, env, context.signal),
     });
     let coverage: Coverage | null = null;
     if (effect.coverage && !runs.some((run) => isBlockingCheck(run.check))) {
@@ -626,7 +674,13 @@ export class EffectRunner {
     );
   }
 
-  #createBaseComparison(task: Task, repo: Repo, cwd: string, signal: AbortSignal): BaseComparison {
+  #createBaseComparison(
+    task: Task,
+    repo: Repo,
+    cwd: string,
+    env: Record<string, string>,
+    signal: AbortSignal
+  ): BaseComparison {
     let base: Promise<string | null> | null = null;
     const resolveBase = () => {
       base ??= resolveTaskRefs(repo, task, resolveRoundBase(task), signal).then((refs) => refs.base);
@@ -640,6 +694,7 @@ export class EffectRunner {
         run,
         timeoutMs: CHECK_TIMEOUT_MS,
         signal,
+        env,
       });
   }
 
@@ -931,9 +986,17 @@ export class EffectRunner {
     if (!task?.worktreePath || !repo) return;
     this.#services?.closeTaskServices(taskId);
     try {
-      await this.#workspaces.resolve(task).remove(repo, task);
+      const workspace = this.#workspaces.resolve(task);
+      if (workspace.mode === 'worktrees')
+        await stopProcessesIn(task.worktreePath, { spare: this.#services?.listTerminalPids() ?? [] });
+      await workspace.remove(repo, task);
     } catch (error) {
       log.warn('[Effects] Could not remove a worktree', { taskId, error: describeError(error) });
+    }
+    try {
+      pruneSharedCaches(this.#config.dataDir, Object.keys(this.#engine.state.repos), Date.now());
+    } catch (error) {
+      log.warn('[Effects] Could not prune the shared build caches', { error: describeError(error) });
     }
     await this.#engine.dispatch({ type: 'worktree.gone', taskId }, { id: `${context.key}:worktree.gone` });
   }

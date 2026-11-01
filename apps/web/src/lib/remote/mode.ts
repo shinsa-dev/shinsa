@@ -1,4 +1,10 @@
-import { parseEnrollFragment, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
+import {
+  parseEnrollFragment,
+  parseShareLocation,
+  REMOTE_PATHS,
+  type ShareLink,
+  SLACK_RELAY_PATHS,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 
 export const SERVICE_WORKER_PATH = `${REMOTE_PATHS.app}sw.js`;
@@ -39,16 +45,19 @@ export type RemoteView =
   | { kind: 'app' }
   | { kind: 'pair'; claimCode: string | null }
   | { kind: 'enroll' }
+  | { kind: 'share'; link: ShareLink | null }
   | { kind: 'slack' };
 
 export function isRemoteBuild(env: Record<string, unknown> = import.meta.env) {
   return env.VITE_SHINSA_REMOTE === '1';
 }
 
-export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'>): RemoteView {
+export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search' | 'hash'>): RemoteView {
   if (location.pathname === REMOTE_PATHS.pairPage)
     return { kind: 'pair', claimCode: new URLSearchParams(location.search).get('code') };
   if (location.pathname === REMOTE_PATHS.enrollPage) return { kind: 'enroll' };
+  if (location.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`))
+    return { kind: 'share', link: parseShareLocation(location.pathname, location.hash) };
   if (location.pathname === SLACK_RELAY_PATHS.linkedPage) return { kind: 'slack' };
   return { kind: 'app' };
 }
@@ -71,6 +80,12 @@ export function clearEnrollFragment(storage: Storage) {
   storage.removeItem(ENROLL_ON_MACHINE_KEY);
 }
 
-export function describeUnreachableMachine(name: string) {
-  return `Add this device on ${name} first`;
+export function describeOutdatedMachine(name: string) {
+  return `Update Shinsa on ${name} to reach it from here.`;
+}
+
+export function describeUnreachableMachine(machine: { name: string; outdated?: boolean }) {
+  return machine.outdated
+    ? describeOutdatedMachine(machine.name)
+    : `Add this device on ${machine.name} first`;
 }

@@ -1,0 +1,298 @@
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { act, renderHook } from '@testing-library/react';
+import {
+  canOpenFeedback,
+  closeFeedbackEntry,
+  countFeedbackWaiting,
+  describeFeedbackCount,
+  describeFeedbackFiled,
+  describeFeedbackIssue,
+  describeFeedbackPreview,
+  describeFeedbackRowMeta,
+  describeFeedbackSender,
+  describeFeedbackSource,
+  describeFeedbackStatus,
+  FEEDBACK_ACTIONS,
+  isFeedbackClosed,
+  isFeedbackOpen,
+  listFeedbackGroups,
+  needsRedraft,
+  openFeedback,
+  openFeedbackEntry,
+  registerFeedbackOpener,
+  resolveFeedbackFiledAt,
+  resolveFeedbackLeaks,
+  resolveFeedbackRowIcon,
+  resolveFeedbackSectionId,
+  selectOpenFeedbackEntryId,
+  updateFeedbackOpen,
+  useFeedbackOpen,
+  useOpenFeedbackEntryId,
+  validateFeedbackIssue,
+  validateFeedbackNote,
+} from '@/lib/feedback.ts';
+import { spyOnCommands } from '../support/commands.ts';
+import { createFeedback } from '../support/feedback.ts';
+import { createProject, createShinsaState, createTask } from '../support/state.ts';
+
+let spies: ReturnType<typeof spyOnCommands>;
+
+beforeEach(() => {
+  spies = spyOnCommands();
+});
+
+afterEach(() => {
+  spies.restore();
+});
+
+const DRAFT = createFeedback({ id: 'f1', createdAt: 3 });
+const DRAFTING = createFeedback({ id: 'f2', status: 'drafting', title: null, body: null, createdAt: 2 });
+const FILED = createFeedback({
+  id: 'f3',
+  status: 'filed',
+  issue: { number: 42, url: 'https://github.com/shinsa-dev/shinsa/issues/42', openedAt: 10, closedAt: null },
+  createdAt: 1,
+});
+const CLOSED = createFeedback({
+  id: 'f5',
+  status: 'filed',
+  issue: { number: 40, url: 'https://github.com/shinsa-dev/shinsa/issues/40', openedAt: 5, closedAt: 20 },
+  createdAt: 5,
+});
+const FAILED = createFeedback({ id: 'f4', status: 'failed', failure: 'gh is not signed in.', createdAt: 4 });
+
+function stateWith(entries: ReturnType<typeof createFeedback>[], parts = {}) {
+  return createShinsaState({
+    ...parts,
+    patch: { feedback: Object.fromEntries(entries.map((entry) => [entry.id, entry])) },
+  });
+}
+
+describe('listFeedbackGroups', () => {
+  it('puts everything not yet opened first, newest first, and the opened issues apart', () => {
+    const groups = listFeedbackGroups(stateWith([DRAFT, CLOSED, DRAFTING, FILED, FAILED]));
+    expect(groups.waiting.map((entry) => entry.id)).toEqual(['f4', 'f1', 'f2']);
+    expect(groups.filed.map((entry) => entry.id)).toEqual(['f3', 'f5']);
+  });
+});
+
+describe('the waiting count', () => {
+  it('counts drafts and failures, never what is still being drafted or already opened', () => {
+    expect(countFeedbackWaiting(stateWith([DRAFT, DRAFTING, FILED, FAILED]))).toBe(2);
+    expect([describeFeedbackCount(0), describeFeedbackCount(3)]).toEqual([null, '3']);
+  });
+});
+
+describe('describeFeedbackSource', () => {
+  it('names you, the agent with its task, or an agent whose task is gone', () => {
+    const task = createTask({ id: 't1' });
+    const state = stateWith([], { tasks: [task] });
+    expect(describeFeedbackSource(state, DRAFT)).toEqual({ label: 'From you', task: null });
+    expect(describeFeedbackSource(state, { ...DRAFT, source: 'agent', taskId: 't1' })).toEqual({
+      label: 'From the agent on',
+      task,
+    });
+    expect(describeFeedbackSource(state, { ...DRAFT, source: 'agent', taskId: 'gone' })).toEqual({
+      label: 'From an agent',
+      task: null,
+    });
+    expect(describeFeedbackSource(state, { ...DRAFT, source: 'agent', taskId: null }).label).toBe(
+      'From an agent'
+    );
+  });
+});
+
+describe('describeFeedbackStatus', () => {
+  it('says what is happening, or the failure, and nothing for a draft or an opened issue', () => {
+    expect(describeFeedbackStatus(DRAFTING)).toBe('Your agent is drafting the issue.');
+    expect(describeFeedbackStatus({ ...DRAFT, status: 'filing' })).toBe('Opening the issue on GitHub.');
+    expect(describeFeedbackStatus(FAILED)).toBe('gh is not signed in.');
+    expect(describeFeedbackStatus({ ...FAILED, failure: null })).toBe('Something went wrong. Try again.');
+    expect(describeFeedbackStatus(DRAFT)).toBeNull();
+    expect(describeFeedbackStatus(FILED)).toBeNull();
+  });
+
+  it('names an opened issue by its number', () => {
+    expect([describeFeedbackIssue(FILED), describeFeedbackIssue(DRAFT)]).toEqual(['#42', null]);
+  });
+
+  it('says when an issue opened, or when GitHub closed it, and who sent it', () => {
+    const hours = 2 * 60 * 60 * 1000;
+    expect(describeFeedbackFiled(FILED, 10 + hours)).toBe('Opened 2h ago');
+    expect(describeFeedbackFiled(CLOSED, 20 + hours)).toBe('Closed 2h ago');
+    expect([isFeedbackClosed(FILED), isFeedbackClosed(CLOSED), isFeedbackClosed(DRAFT)]).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    expect([
+      resolveFeedbackFiledAt(FILED),
+      resolveFeedbackFiledAt(CLOSED),
+      resolveFeedbackFiledAt(DRAFT),
+    ]).toEqual([10, 20, DRAFT.updatedAt]);
+    expect([describeFeedbackSender(FILED), describeFeedbackSender({ ...FILED, source: 'agent' })]).toEqual([
+      'From you',
+      'From an agent',
+    ]);
+  });
+});
+
+describe('resolveFeedbackLeaks', () => {
+  it('says which private details a draft still has, and nothing for a clean one', () => {
+    const state = stateWith([], { projects: [createProject({ id: 'p1', name: 'Basket', key: 'BK' })] });
+    expect(resolveFeedbackLeaks(state, DRAFT)).toBeNull();
+    expect(resolveFeedbackLeaks(state, { title: 'Basket plans fail', body: null })).toBeNull();
+    expect(resolveFeedbackLeaks(state, { title: 'Basket plans fail', body: 'Mail me@example.com' })).toBe(
+      'This issue still has a name from your projects (“Basket”), an email address (“me@example.com”). Take it out before you open the issue.'
+    );
+  });
+});
+
+describe('what you can do with an entry', () => {
+  it('opens a draft or a failure with its text, and drafts again a failure without one', () => {
+    expect([
+      canOpenFeedback(DRAFT),
+      canOpenFeedback(FAILED),
+      canOpenFeedback(DRAFTING),
+      canOpenFeedback(FILED),
+    ]).toEqual([true, true, false, false]);
+    expect(needsRedraft({ ...FAILED, title: null, body: null })).toBe(true);
+    expect(needsRedraft(FAILED)).toBe(false);
+    expect(needsRedraft(DRAFT)).toBe(false);
+  });
+});
+
+describe('validation', () => {
+  it('asks for a note, and keeps it within the limit', () => {
+    expect(validateFeedbackNote('  ')).toBe('Write what you want to tell Shinsa.');
+    expect(validateFeedbackNote('x'.repeat(4_001))).toBe('Keep it to 4000 characters. It has 4001.');
+    expect(validateFeedbackNote('Plans fail.')).toBeNull();
+  });
+
+  it('asks for a title and a description within their limits', () => {
+    expect(validateFeedbackIssue('', 'Body')).toBe('The issue needs a title and a description.');
+    expect(validateFeedbackIssue('Title', ' ')).toBe('The issue needs a title and a description.');
+    expect(validateFeedbackIssue('x'.repeat(121), 'Body')).toBe('Keep the title to 120 characters.');
+    expect(validateFeedbackIssue('Title', 'x'.repeat(12_001))).toBe(
+      'Keep the description to 12000 characters.'
+    );
+    expect(validateFeedbackIssue('Title', 'Body')).toBeNull();
+  });
+});
+
+describe('the popover’s open state', () => {
+  it('opens only the button that was clicked, and closes only its own', () => {
+    const first = renderHook(() => useFeedbackOpen('a'));
+    const second = renderHook(() => useFeedbackOpen('b'));
+    act(() => updateFeedbackOpen('a', true));
+    expect([first.result.current, second.result.current]).toEqual([true, false]);
+    act(() => updateFeedbackOpen('b', false));
+    expect(isFeedbackOpen()).toBe(true);
+    act(() => updateFeedbackOpen('b', true));
+    expect([first.result.current, second.result.current]).toEqual([false, true]);
+    act(() => updateFeedbackOpen('b', false));
+    expect(isFeedbackOpen()).toBe(false);
+  });
+
+  it('opens from the command menu on the first button that is shown, and on none when none is', () => {
+    const shown = { a: false, b: false };
+    const removeA = registerFeedbackOpener('a', () => shown.a);
+    registerFeedbackOpener('b', () => shown.b);
+    act(() => openFeedback());
+    expect(isFeedbackOpen()).toBe(false);
+    shown.b = true;
+    act(() => openFeedback());
+    const { result } = renderHook(() => useFeedbackOpen('b'));
+    expect(result.current).toBe(true);
+    act(() => updateFeedbackOpen('a', true));
+    act(() => removeA());
+    expect(isFeedbackOpen()).toBe(false);
+  });
+
+  it('opens one entry in its dialog and closes the popover, then closes it again', () => {
+    const { result } = renderHook(() => useOpenFeedbackEntryId());
+    act(() => updateFeedbackOpen('a', true));
+    act(() => openFeedbackEntry('f1'));
+    expect(result.current).toBe('f1');
+    expect(isFeedbackOpen()).toBe(false);
+    act(() => closeFeedbackEntry());
+    expect(selectOpenFeedbackEntryId()).toBeNull();
+  });
+});
+
+describe('the popover’s rows', () => {
+  const state = createShinsaState({
+    tasks: [createTask({ id: 't1', title: 'Fix the login page' })],
+    projects: [createProject({ id: 'p1', name: 'Basket', key: 'BK' })],
+  });
+
+  it('previews the title, or the note until there is one', () => {
+    expect(describeFeedbackPreview(DRAFT)).toBe('Plans with two phases are refused');
+    expect(describeFeedbackPreview(DRAFTING)).toBe('The plan tool refused a plan with two phases.');
+  });
+
+  it('says who it is from, or what is happening to it', () => {
+    expect(describeFeedbackRowMeta(state, DRAFT)).toBe('From you');
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, source: 'agent', taskId: 't1' })).toBe(
+      'From the agent on Fix the login page'
+    );
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, source: 'agent', taskId: 'gone' })).toBe(
+      'From an agent'
+    );
+    expect(describeFeedbackRowMeta(state, DRAFTING)).toBe('Your agent is drafting it');
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, status: 'filing' })).toBe('Opening on GitHub');
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, status: 'failed' })).toBe('Failed. Open it to see why');
+  });
+
+  it('marks each row by who sent it, its trouble or its progress', () => {
+    expect(resolveFeedbackRowIcon(state, DRAFT)).toEqual({ kind: 'icon', icon: 'IconUser', tone: 'neutral' });
+    expect(resolveFeedbackRowIcon(state, { ...DRAFT, source: 'agent' })).toEqual({
+      kind: 'icon',
+      icon: 'IconRobot',
+      tone: 'neutral',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...DRAFT, title: 'Basket plans fail' })).toEqual({
+      kind: 'icon',
+      icon: 'IconExclamationTriangle',
+      tone: 'amber',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...DRAFT, status: 'failed' })).toEqual({
+      kind: 'icon',
+      icon: 'IconExclamationTriangle',
+      tone: 'red',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...FILED, title: 'Basket plans fail' })).toEqual({
+      kind: 'icon',
+      icon: 'IconUser',
+      tone: 'neutral',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...CLOSED, source: 'agent' })).toEqual({
+      kind: 'icon',
+      icon: 'IconRobot',
+      tone: 'neutral',
+    });
+    expect(resolveFeedbackRowIcon(state, DRAFTING)).toEqual({ kind: 'busy' });
+  });
+
+  it('keeps each section’s fold apart', () => {
+    expect(resolveFeedbackSectionId('waiting')).not.toBe(resolveFeedbackSectionId('filed'));
+  });
+});
+
+describe('FEEDBACK_ACTIONS', () => {
+  it('sends each command with its toast', async () => {
+    await FEEDBACK_ACTIONS.write(null, 'Plans fail.');
+    await FEEDBACK_ACTIONS.update(DRAFT, 'Title', 'Body');
+    await FEEDBACK_ACTIONS.file(DRAFT);
+    await FEEDBACK_ACTIONS.dismiss(DRAFT);
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'feedback.write', feedbackId: null, note: 'Plans fail.' },
+        'Your agent is drafting the issue.',
+      ],
+      [{ type: 'feedback.update', feedbackId: 'f1', title: 'Title', body: 'Body' }, 'Issue changed.'],
+      [{ type: 'feedback.file', feedbackId: 'f1' }, 'Opening the issue on GitHub.'],
+      [{ type: 'feedback.dismiss', feedbackId: 'f1' }, 'Dismissed.'],
+    ]);
+  });
+});

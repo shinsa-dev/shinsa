@@ -11,6 +11,7 @@ export const STATE_RECORDS = [
   'briefings',
   'schedules',
   'memories',
+  'feedback',
   'watchSuggestions',
   'sessionUsage',
 ] as const;

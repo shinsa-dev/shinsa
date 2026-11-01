@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveShimmerTiming, SHIMMER_STEP } from '../../src/lib/shimmer';
+import { resolveShimmerDuration, SHIMMER_LONGEST, SHIMMER_STEP, SHIMMER_SWEEP } from '../../src/lib/shimmer';
 
-describe('resolveShimmerTiming', () => {
-  it('crosses a short line in one duration, as it always has', () => {
-    expect(resolveShimmerTiming(10, 1)).toEqual({ stagger: 0.1, rest: 10 * SHIMMER_STEP });
+describe('resolveShimmerDuration', () => {
+  it('crosses a short line in one duration and rests a third of the cycle', () => {
+    expect(resolveShimmerDuration(10, 1)).toBeCloseTo(1 / SHIMMER_SWEEP, 3);
   });
 
-  it('keeps the band moving across a long line instead of crossing it in one duration and resting', () => {
-    const { stagger, rest } = resolveShimmerTiming(80, 1);
-    expect(stagger).toBe(SHIMMER_STEP);
-    expect(80 * stagger).toBe(rest);
+  it('crosses a long line at a steady pace per character', () => {
+    expect(resolveShimmerDuration(60, 1)).toBeCloseTo((60 * SHIMMER_STEP) / SHIMMER_SWEEP, 3);
   });
 
-  it('times a line with nothing visible as still', () => {
-    expect(resolveShimmerTiming(0, 1)).toEqual({ stagger: 0, rest: 0 });
+  it('times a line longer than one screen line as the longest, since the ellipsis hides the rest', () => {
+    expect(resolveShimmerDuration(500, 1)).toBe(resolveShimmerDuration(SHIMMER_LONGEST, 1));
+  });
+
+  it('times an empty line as a short one', () => {
+    expect(resolveShimmerDuration(0, 1)).toBeCloseTo(1 / SHIMMER_SWEEP, 3);
   });
 });

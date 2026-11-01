@@ -319,7 +319,6 @@ a Tailwind v4 utility, a custom utility defined in the Tokens section, or an arb
 | `@base-ui/react` | ^1.4.0 | The headless primitives: dialog, alert dialog, popover, preview card, menu, context menu, select, tabs, tooltip, checkbox, switch, scroll area, separator, field |
 | `cmdk` | 1.1.1 | The command menu's filtering and keyboard model |
 | `sonner` | ^2.0.7 | Toasts |
-| `motion` | ^12.43.0 | `SizeAnimator`, `ShimmeringText` and reduced-motion reads |
 | `class-variance-authority` | ^0.7.1 | Variant tables (`buttonVariants`, `badgeVariants`) |
 | `clsx`, `tailwind-merge` | ^2.1.1, ^3.5.0 | `cn()` |
 | `tw-animate-css` | ^1.4.0 | `animate-in`, `animate-out`, `fade-*`, `zoom-*`, `slide-in-from-*` |
@@ -626,7 +625,6 @@ Leading and tracking utilities in use:
 | `leading-relaxed` | 1.625 | Code fences, Home's guide copy |
 | `leading-3.5` | 14px | A text diagram inside a code fence (`data-diagram`) |
 | `leading-normal` | 1.5 | A shimmering live line (`SHIMMER_LINE`) |
-| `leading-none` | 1 | `ShimmeringText`'s inline box |
 | `leading-[1.35]` | 1.35 | Tooltip text (kit-internal) |
 | `tracking-tight` | -0.0175em | Large titles (catalog only) |
 | `tracking-widest` | 0.1em | A menu item's shortcut (`DropdownMenuShortcut`) |
@@ -1394,7 +1392,7 @@ Every click and hover lands in the frame it happens, as in a Mac app. A hover, p
 | Image viewer | 240ms open and close; swaps 200ms slide 10px or 150ms fade | `cubic-bezier(0.22, 1, 0.36, 1)`; swaps `cubic-bezier(0.23, 1, 0.32, 1)` | The flight from a thumbnail, backdrop and chrome fades; `SHRUNK` 0.96 |
 | Toast | shake 350ms `cubic-bezier(0.36, 0.07, 0.19, 0.97)`; bump 300ms `ease-out`; loader out 200ms; result icon in 240ms `cubic-bezier(0.22, 1, 0.36, 1)` | | Sonner (stacking keeps Sonner's own 500ms) |
 | Update button | 200ms | | Scales in: `animate-in fade-in-0 zoom-in-95 duration-200` |
-| Shimmering text | 1s per cycle, characters staggered across it, a rest of 50ms per character between cycles, `easeInOut`; stops over 0.5s `easeOut` | | A running agent's line (`ShimmeringText`, `muted-foreground` to `foreground`) |
+| Shimmering text | A 6em band crosses the line in 1s, or at 50ms a character on a line longer than 20 (up to 80), `linear`, then rests for half as long; `transform` only, so it runs on the compositor | | A running agent's line (`ShimmeringText`, `muted-foreground` to `foreground`) |
 | Pulse | `animate-ping` at 60% opacity | | A status dot for work in progress (`motion-reduce:animate-none`) |
 | Spinner | `animate-spin` (1s linear) | | Loading |
 
@@ -1505,7 +1503,7 @@ Global and unlayered, so it beats Sonner's injected stylesheet and inline styles
 ```
 
 - Exempt: `.animate-spin` (a spinner that stops stops saying "working"), and dialogs and their scrims (`data-reduced-motion="fade"`), which drop their scale (`motion-reduce:…:scale-100`) and keep their fade.
-- Looping movement opts out explicitly too: `motion-reduce:animate-none` on the pulse, `motion-reduce:transition-none` on the tab line. `ShimmeringText` stops (reads `useReducedMotion`). The image viewer only fades: it animates through the Web Animations API, which the global reset does not reach, so it drops the flight from the thumbnail for a 240ms fade and swaps with a 150ms fade and no slide. An onboarding step's own rule (`--onboarding-shift: 0`, 160ms) loses to the global reset's `!important`, so under reduced motion a step appears at once.
+- Looping movement opts out explicitly too: `motion-reduce:animate-none` on the pulse, `motion-reduce:transition-none` on the tab line. `ShimmeringText` drops its sweep (`motion-reduce:hidden`). The image viewer only fades: it animates through the Web Animations API, which the global reset does not reach, so it drops the flight from the thumbnail for a 240ms fade and swaps with a 150ms fade and no slide. An onboarding step's own rule (`--onboarding-shift: 0`, 160ms) loses to the global reset's `!important`, so under reduced motion a step appears at once.
 
 ### What never animates
 
@@ -3530,28 +3528,28 @@ Sections are 12px apart (`gap-3`); header and footer have 12px padding; the head
 
 **Not for:** a loading state of a read (that is a spinner after a 300ms wait); static labels; anything that is paused (render the plain text instead).
 
-**Wraps:** `motion` (`motion.span`, `useReducedMotion`).
+**Wraps:** nothing: a `span` and two CSS utilities in `globals.css` (`shimmer-window`, `shimmer-copy`).
 
 **Props:**
 
 | Prop | Default | Notes |
 | --- | --- | --- |
-| `text` | required | A string; each character animates on its own. |
-| `duration` | `1` (s) | One shimmer cycle. |
+| `text` | required | A string, rendered once, with a hidden copy for the band. |
+| `duration` | `1` (s) | The time the band takes to cross a short line; a longer one is crossed at 50ms a character (`resolveShimmerDuration`). |
 | `paused` | `false` | Stop the shimmer (for example when off screen). |
-| `className` and `motion.span` props | | |
+| `className` and `span` props | | |
 
 **Markup and classes:**
 
-- Outer `motion.span`: `inline-flex select-none items-center leading-none [--color:var(--muted-foreground)] [--shimmering-color:var(--foreground)]` + `className`.
-- One `motion.span` per character: `inline-block whitespace-pre leading-none`, `aria-hidden`.
-- A trailing `<span className='sr-only'>{text}</span>` so assistive tech reads the whole string once.
+- Outer `span`, `data-slot="shimmering-text"`: `relative inline-block select-none whitespace-nowrap [--color:var(--muted-foreground)] [--shimmering-color:var(--foreground)] [color:var(--color)]` + `className`, the text, and `--shimmer-duration` set inline.
+- Unless `paused`, after the text: a clip `span` (`pointer-events-none absolute inset-0 overflow-clip motion-reduce:hidden`, `aria-hidden`), holding the window (`shimmer-window block size-full overflow-hidden`), holding the copy (`shimmer-copy block truncate [color:var(--shimmering-color)]`) with the same text.
 
-**Animation per character** (state `running`):
+**Animation:**
 
-- `color` keyframes: `var(--color)` → `var(--shimmering-color)` → `var(--color)` (`muted-foreground` = `fg-2` → `foreground` = `fg-4` → `fg-2`).
-- duration `duration` s, `easeInOut`, repeat forever (`loop`), `repeatDelay` = `text.length × 0.05` s, `delay` = `charIndex × duration / text.length` s. With the defaults the bright band sweeps the whole string left to right in 1s, then the line rests for 50ms per character.
-- `stopped` (when `paused` or the user prefers reduced motion): `color: var(--color)` over `duration × 0.5` s `easeOut`. Initial state is `stopped`.
+- The window is masked to a 6em band at its right edge (`transparent` → black at its middle → `transparent`) and moves from `translateX(-100%)` to `translateX(6em)`; the copy inside moves the opposite way, `translateX(100%)` to `translateX(-6em)`, so it stays over the text and only the band shows it (`muted-foreground` = `fg-2` → `foreground` = `fg-4` → `fg-2`).
+- One cycle is `--shimmer-duration`: the crossing is the first 66%, `linear`; the rest is still with the band past the line's end. `resolveShimmerDuration(text.length, duration)` sets it: `max(duration, min(length, 80) × 0.05) / 0.66` s.
+- The band crosses the nearest positioned box, so a line cut off by its own box (`SHIMMER_LINE`) ends its sweep at the ellipsis. A parent that truncates (`Truncate` around the queue row's line) takes `relative` and the text `static`: the band crosses the parent's visible width. The clip `span` keeps the moving window out of every ancestor's scroll width.
+- Nothing runs on the main thread while it loops: no per-character spans, no measuring, no JavaScript. A paused line has no window and is plain text.
 
 **In Shinsa** the line class is `SHIMMER_LINE` = `block truncate leading-normal`, and a changed step remounts the component (`key={step}`) so the sweep restarts. Override the two colour variables to shimmer on another surface.
 
@@ -6826,7 +6824,8 @@ Example: a card reading "I'll add a guard to the login route…" over "(pulse) R
 
 - When a run ends, its work folds into one line: the chevron, "Worked for 3m", meta "14 steps". The final reply sits under it as the main content (the last interim text when there is none).
 - Hand-over cards and errors stay outside the fold; the system's brief lives inside it.
-- A turn that ends in a hand-over shows that card as its reply and nothing under it: text the agent wrote around it ("Done.") folds into the work, so the same reply never shows twice. A question or suggested tasks keep the reply under them.
+- A turn that ends in a hand-over keeps the agent's last words in view above the card, never folded into the work: the text after the hand-over, or when there is none, the text just before it. After a result card (an answer, a report) words written after it fold, so the same reply never shows twice. A question or suggested tasks keep the reply under them.
+- A hand-over card that answers something you sent leads with that reply: its headline, each point you raised with its outcome, and what to do now, then the plan, report or summary below.
 - A message from you starts a new turn with its own fold.
 - The detail is the full log on a hairline rail: interim messages, then tool calls as chat lines; two or more in a row fold into one row ("Ran 3 commands and read 2 files").
 - A hand-over the system rejected and the agent retried folds quietly as an ordinary row with meta "Retried" ("Retrying" while pending), its own icon; opened, the reasons show under "Handed back" in normal ink. Only a failure nobody recovered from is red: the icon, "Failed" and the reasons. A question is never folded.
@@ -9222,6 +9221,7 @@ with `:line` or `:start-end` (`src/a.ts:12-20`).
 | --- | --- | --- |
 | `propose_plan` | `goal` · `phases` (each `title` · `detail`) · `behaviour` items · `approach` · `files` (each change) · `questions` (options each, option) · `checks` (command) | 300 · 2 to 8 (60 · 160) · 8 of 200 · 700 · 20 (140) · 4 of 200 (up to 4 options of 100) · 6 (200) |
 | `complete_phase` | `summary` · `spots` (`why`, `title`, `explain`) · `judgement_calls` (`title`, `call`, `reason`, `alternatives` with `option` and `rejected`) | 240 · 8 (180, 80, 400) · 5 (60, 120, 240, 3 of 100 and 200) |
+| `reply` (every hand-over that answers the human) | `headline` · `points` (`ask`, `note`) · `next` | 240 · 1 to 8 (160, 280) · 1,200 |
 | `walkthrough` | `approach` · `flow` · `risks` (`title`, `risk`) · `testing.automated` · `testing.manual` (`action`, `expect`, target) · `steps` (`title`, `detail`, `command`) | 1,200 · 2,400 · 8 (60, 280) · 4 of 240 · 10 (240, 240, 400) · 8 (80, 400, 400) |
 | `report_review` | `findings` (`title`, `message`, `fix`) · `summary` · `disagreements` (`reason`) | 12 (80, 280, 600) · 400 · 8 (280) |
 | `attach_evidence` | `title` · `detail` · comparison `parts` (`label`) · `width` | 80 · 280 · 2 to 6 (40) · up to 7,680px |
@@ -9244,7 +9244,7 @@ to undo it), `operation` (its steps in order, each with how to check it worked),
 before review: `screenshot`, `recording`, `test`, `note`, `preview`; a change the user sees asks for a screenshot,
 and Shinsa refuses the last phase until each kind is attached), `checks` (commands Shinsa runs after the
 repository's own, when those do not prove the change), `approval` (a risky change, so the human approves the plan
-first), `change_summary` (only when revising a plan: what changed and why). When the steps Shinsa chose do not fit
+first). When the steps Shinsa chose do not fit
 the request, the agent calls `reshape_task` with a one-sentence `reason` instead of a plan.
 
 #### A phase
@@ -9319,6 +9319,15 @@ API in production"), a `detail` (where and how, where a value comes from, what h
 find it. No step for what happens anyway (CI, the merge). The merge waits until every pre-merge step is ticked; a
 post-merge step keeps the task open until the human ticks it, across rounds. A step keeps its tick only while it is
 sent unchanged.
+
+#### Replying to what the human sent
+
+Every hand-over that follows a message from the human (plan feedback, changes at review, a question, a follow-up, a
+message while the agent works) carries `reply`, and only then: a `headline` (one sentence, what the agent did about
+it), `points` (each thing raised, in the human's words cut short, marked `done`, `answered` or `not_changed`, each
+with a `note`: where it is now, the answer, or why it was left) and `next` (what the human does now, with commands
+in ```` ```bash run ```` blocks). The same reply sits above the plan, the phase, the fix or the report, for every kind of
+agent, so a plan revision never quotes the request back and never adds a separate What changed line.
 
 #### A fix
 

@@ -2,6 +2,7 @@ import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/index.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { AccountsSnapshot } from './accounts.ts';
+import type { EngineInfo } from './engine.ts';
 import type { StatePatch } from './patch.ts';
 import type { WireState } from './runs.ts';
 import type { TerminalsSnapshot } from './terminals.ts';
@@ -24,6 +25,7 @@ export type ServerMessage =
   | { type: 'transcript'; runId: string; entries: ChatEntry[]; start: number }
   | { type: 'accounts'; accounts: AccountsSnapshot }
   | { type: 'surfaces'; desktop: boolean }
+  | { type: 'engine'; engine: EngineInfo }
   | { type: 'terminals'; terminals: TerminalsSnapshot }
   | { type: 'remote'; remote: RemoteSnapshot };
 

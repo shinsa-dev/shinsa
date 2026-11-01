@@ -1,7 +1,10 @@
 # Releasing Shinsa
 
-Shinsa ships as one Mac app (`apps/desktop`) that carries its engine, interface and `shinsa` command, all under one
-version (`docs/plans/app-plan.md` → Versions and updates). A release is a GitHub release of `shinsa-dev/shinsa`
+Shinsa ships as two products under one version (`docs/plans/app-plan.md` → Versions and updates): **the apps**, today
+the Mac app (`apps/desktop`), which carries the engine, interface and `shinsa` command and updates itself; and **the
+engine on its own**, the same compiled engine with its interface inside, for Linux (x64, arm64) and Apple Silicon Macs
+without the app (The engine on its own, below). Both come from the same GitHub release; npm and shinsa.dev only point
+at it. A release is a GitHub release of `shinsa-dev/shinsa`
 made by the Release workflow (`.github/workflows/release.yml`); nothing is bumped by hand, since the version lives
 in the tag. There are three channels: **Stable** and **Beta**, cut by hand, and **Canary**, built from every merge to
 `main` that passes the tests. All three are builds of the same app, Shinsa (`studio.overclock.shinsa`), so you switch
@@ -49,19 +52,25 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
 4. Checks that the app (`CFBundleShortVersionString`) and the engine inside it (`shinsa version --json`) both say the
    release's version, prerelease suffix included, that the bundle id is `studio.overclock.shinsa` on every channel, that the app has `Contents/Resources/app-update.yml`, and verifies the signature (`codesign --verify --deep --strict`;
    `spctl` and `stapler validate` too when signed).
-5. Writes the update files for the channels (below) and publishes the release with GitHub's generated notes under a
-   one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s and the update files. A beta or a canary
+5. Packs the signed app's engine folder as `shinsa-darwin-arm64.tar.gz` with its `.sha256` (`scripts/release-engine.ts`),
+   writes the update files for the channels (below) and publishes the release with GitHub's generated notes under a
+   one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s, the update files and the Mac engine
+   archive. A beta or a canary
    is a pre-release titled `Shinsa <version> (beta)` or `(canary)`, never marked latest.
-6. In a second job (`downloads`, on Ubuntu, after the release is published), copies the release's disk image to the
+6. A `linux` job (Ubuntu, a matrix over `bun-linux-x64` and `bun-linux-arm64`) builds each Linux engine at the
+   release's version, checks that `shinsa version --json` reports it (the arm64 one on an arm64 runner), packs it the
+   same way and adds `shinsa-linux-<cpu>.tar.gz` and its `.sha256` to the release.
+7. Once those are in, an `npm` job publishes the engine to npm (The engine on its own, below), and in another job (`downloads`, on Ubuntu, after the release is published), copies the release's disk image to the
    site's R2 bucket and points the download channels at it (`scripts/release-upload.ts`, below). It is its own job
    so that a failure there (a token without R2 access, an R2 outage) leaves the published release alone, and
    Re-run failed jobs retries only the copy. Nothing is ever deleted: every GitHub release and tag and every build in
    R2 stays (How many are kept, below).
-7. Reports the release on the commit it built, as a commit status named `Release` linked to the run, so it shows
+8. Reports the release on the commit it built, as a commit status named `Release` linked to the run, so it shows
    beside lint and test on GitHub and turns the commit red when it fails. Check runs of a `workflow_run` workflow
    never count in the commit's status, so the jobs post it through the statuses API (`statuses: write`): the `mac`
-   job sets `pending` as it starts, and a closing `status` job (`if: always()`) sets `success` once the downloads are
-   updated, `failure` when the decision, the build or the downloads failed, or `error` when the run was cancelled,
+   job sets `pending` as it starts, and a closing `status` job (`if: always()`) sets `success` once the Linux engines,
+   the downloads and npm are all done, `failure` when the decision, the build, the Linux engines, the downloads or npm
+   failed (its description names which), or `error` when the run was cancelled,
    such as a canary a newer merge replaced. A run that decides not to build posts nothing.
 
 ## Canary builds
@@ -181,7 +190,9 @@ and never run out.
   update already handed to macOS's installer (Squirrel.Mac stages it for the next quit) is removed, its ShipIt job
   (`launchctl remove <bundle id>.ShipIt`) and its folder (`~/Library/Caches/<bundle id>.ShipIt`), before the new
   channel's check runs.
-- The update files: electron-builder writes `latest-mac.yml` only, so the workflow derives the channel's own: a
+- The update files: electron-builder writes `latest-mac.yml` only (`detectUpdateChannel: false` in
+  `electron-builder.shared.yml`; with the `generic` provider it would otherwise name the file after the version's
+  pre-release word, `canary-mac.yml` for a canary, and the workflow would not find it), so the workflow derives the channel's own: a
   stable release uploads `latest-mac.yml` and a copy as `beta-mac.yml`, a beta uploads it as `beta-mac.yml` only and
   a canary as `canary-mac.yml` only, each naming the zip by its plain name (`Shinsa-mac-arm64.zip`). A build from
   before the move to shinsa.dev still reads them from GitHub; `scripts/release-upload.ts` copies them to R2 with the
@@ -228,6 +239,48 @@ there is none.
 Apple Silicon only. A universal or an extra x64 build would need an x64 engine (`SHINSA_ENGINE_TARGET=bun-darwin-x64`)
 per architecture in `extraResources`, roughly doubles the build and the download, and needs the updater files to name
 both zips; not worth it until someone asks for Intel.
+
+## The engine on its own
+
+Every release, on every channel, carries the engine three times, each a `.tar.gz` with a `.sha256` beside it (one line,
+`<sha256>  <archive>`): `shinsa-darwin-arm64` (packed from the signed, notarized app, so the binary keeps its
+Developer ID signature), `shinsa-linux-x64` and `shinsa-linux-arm64`. Each unpacks to one folder holding `bin/shinsa`,
+`plugin/` (the plugin agents load) and `web/` (the built interface, served on the engine's port and through remote
+access). `scripts/release-engine.ts` packs them (`packEngine`: the folder must hold all three, the binary must report
+the release's version, and macOS's `._` files are kept out) and refuses any other target. Intel Macs, Windows and
+musl (Alpine) have none.
+
+Two ways in, both reading those archives:
+
+- **npm.** `npm i -g shinsa` (or `bunx shinsa`) installs `shinsa`, a small Node launcher
+  (`apps/engine/npm/shinsa.js`), and through its `optionalDependencies` the one engine package for the machine:
+  `@shinsa/darwin-arm64`, `@shinsa/linux-x64` or `@shinsa/linux-arm64` (each names its `os` and `cpu`, and glibc on Linux, so
+  npm skips the others). The launcher runs that package's `bin/shinsa` with the same arguments, passing on its exit
+  code and signals, and on an Intel Mac, another system or a missing engine package says why instead. The `npm` job
+  downloads the release's archives, checks each against its `.sha256`, unpacks them into packages at the release's
+  version (`scripts/release-npm.ts`) and publishes the engine packages first, the launcher last, all under the
+  channel's dist-tag: `latest` for stable, `beta` and `canary` otherwise. So `npm i -g shinsa@beta` or `@canary`
+  picks a channel, and plain `shinsa` stays on the 0.0.1 placeholder until the first stable release. A version npm
+  already has is skipped, so Re-run failed jobs is safe.
+- **The install script.** `curl -fsSL https://shinsa.dev/install | sh` (`apps/marketing/public/install`, served as
+  text) picks the archive for the machine, asks `shinsa.dev/download/version` (`/beta`, `/canary`) for the channel's
+  version, downloads the archive and its `.sha256` from that GitHub release, checks the sum, runs the engine once,
+  and only then replaces `~/.local/share/shinsa` and links `~/.local/bin/shinsa`. `SHINSA_CHANNEL` picks the channel
+  (canary by default, like the site's download buttons, until a stable release exists) and `SHINSA_VERSION` a version.
+  A failed run leaves an earlier install as it was. It is the site's (`apps/marketing/CLAUDE.md` → The install
+  script), so it changes with a site deploy, not a release.
+
+Neither updates itself: run the script again, or `npm i -g shinsa@<tag>`. Then `shinsa start` sets the engine up as a
+background service, systemd on Linux and launchd on a Mac without the app (`docs/engine.md` → Run on a server).
+
+**npm publishes through trusted publishing, with no token.** The `npm` job asks GitHub for an OIDC token
+(`id-token: write`) and npm 11.5.1 or later trades it for a short-lived publish right, so there is no secret to set
+or renew, and every version carries provenance. Each of the four packages (`shinsa`, `@shinsa/darwin-arm64`,
+`@shinsa/linux-x64`, `@shinsa/linux-arm64`) names this workflow as its trusted publisher on npm (the package page →
+Settings → Trusted publisher → GitHub Actions): organization `shinsa-dev`, repository `shinsa`, workflow
+`release.yml`, no environment. npm sets a trusted publisher only on a package that exists, so each `@shinsa/*`
+package was first published once by hand as a `0.0.0` placeholder, which no release depends on. A package without a
+trusted publisher fails the `npm` job, and the release's status says npm was not updated.
 
 ## Moving off GitHub's feed
 

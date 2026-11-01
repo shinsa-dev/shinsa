@@ -80,7 +80,7 @@ builds never reviews its own work.
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), see the
 other open work in its repository (`list_repository_work`, Other work in the repository, below), suggest
-tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
+tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), report what in Shinsa got in its way (`report_feedback`, Feedback, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
 and the Agent and the investigator can wait (`wait_for`). So every task agent can read across every task, file a
 task, schedule work and suggest tasks, while its hand-over stays its own. Which role may call which tool is one
 table, `listCallableToolNames` in `packages/core/src/domain/tools.ts`: `decide` refuses a call the run's role does not
@@ -184,7 +184,8 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   run this time keeps its last result.
 - **Who runs them.** Shinsa, in the task's checkout, each command through `sh -c` at low priority (`nice -n 10`
   where the machine has `nice`) with `CHECK_ENV` (`CI=1`, no colour), and stops one after 15 minutes
-  (`CHECK_TIMEOUT_MS`). The checks of one run run in parallel, and a command that appears twice runs once. There is
+  (`CHECK_TIMEOUT_MS`), with the shared Turbo cache in a Turbo repository (Where agents work → Turbo's cache is
+  shared per repository). The checks of one run run in parallel, and a command that appears twice runs once. There is
   no machine-wide limit or queue: tasks check at once, as they build at once (Scheduling, below).
 - **Load is not a failure.** When a failing check's output names its failing test files (Bun, Vitest or Jest), those
   files run again alone, once (`checks/reruns.ts`). When each of them passes, so does the check, with the note
@@ -524,6 +525,30 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
 - **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
   itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
   checkout. Checks run in the same checkout.
+- **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
+  (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
+  agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
+  linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
+  too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
+- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs, then stops
+  every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
+  process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
+  That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
+  writing into the deleted folder. Only a process the engine started (its descendants) or one that lost its parent
+  (now a child of launchd, as such a server is once the agent's run ends) is stopped (`resolveStopTargets`), so what
+  you opened yourself, a shell from Open in Terminal or an editor and the language servers it started, keeps running.
+  The engine and your own Shinsa terminals, with every process they started, are spared too
+  (`Terminals.listTerminalPids`). Then `removeWorktree` runs `git worktree remove --force`, deletes whatever
+  is left of the folder and prunes, so a folder git could not remove never stays behind. A main checkout is never
+  reaped: it is your repository.
+- **Turbo's cache is shared per repository.** In a repository with a `turbo.json`, checks (and their run on the base
+  commit) and a task's service runs get `TURBO_CACHE_DIR` set to `data/caches/<repo id>/turbo`
+  (`resolveSharedCacheEnv` in `checks/caches.ts`), so a task reuses what another task's checkout already built
+  instead of filling a cache inside its own worktree. Turbo keys its cache by a hash of each task's inputs, so sharing
+  it changes no result. A service's own `TURBO_CACHE_DIR` wins, and your own runs and agents' shells keep Turbo's
+  default. A worktree's own `.turbo` went with it; the shared one is pruned instead, each time a worktree is removed
+  (`pruneSharedCaches`): an entry not written for 14 days goes (Turbo does not touch an entry it reads, so a build
+  used for longer is made once more), and so does the cache of a repository Shinsa no longer knows.
 - **Conflicts go to the agent in every mode.** A pull request that conflicts with its base is merged with the fetched
   base by the Agent in its own session (The pull request watch → Conflicts), and an update onto the base that
   conflicts before a push is resolved the same way (Pushing the branch).
@@ -1363,9 +1388,10 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 ### Plan versions
 
 - Every `plan.proposed` bumps `plan.version`. A revision keeps the previous version in
-  `planHistory` (the last ten), with the Agent's `change_summary` (`propose_plan`, at most 240
-  characters), the feedback that asked for it and a computed list of changes
-  (`resolvePlanChanges`: goal, approach, phases added, dropped, reworked or reordered, files).
+  `planHistory` (the last ten), with a computed list of changes (`resolvePlanChanges`: goal,
+  approach, phases added, dropped, reworked or reordered, files). What you asked for and the Agent's
+  answer to it are not part of the plan: your feedback opens a request and the revision's
+  `propose_plan` answers it with `reply` (Your requests and their replies, below).
 - The plan gate carries `planVersion`. A revision withdraws the open plan gate and opens a new one
   for the new version. Approving sends the version you read: `gate.answer` with an older
   `planVersion`, or on a plan gate the revision withdrew, is refused with `plan_changed` and says
@@ -1424,29 +1450,39 @@ never reaches an earlier round's report. The `walkthrough` schema is static like
 
 ### Your requests and their replies
 
-Once the work is in, you steer it by sending things back: changes at the review gate, line comments, a question, a
-second thought while the Agent fixes. Each answer used to live only in the chat. Now every one is a request with a
-reply you read on the Overview, so the chat is never where you learn what changed.
+You steer an agent by sending things to it: feedback on a plan, changes at the review gate, line comments, a
+question, a follow-up on an answer, a second thought while it works. Whatever the kind of work, every one is a
+request, and the agent answers it the same way, so the chat and the Overview read alike for a plan, a fix, an
+investigation or research.
 
-- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). A message or a
-  gate answer that starts a fix for you opens one before the fix starts; anything you send while that fix runs
-  joins it (a steer of a run with `purpose: fix`), so one reply covers everything said during one fix. A steer of a
-  build phase, a follow-up to an inquiry and a plan revision open none.
-- **The reply is a hand-over field.** While a request is open, `complete_fix` must carry `reply`: a `headline`, each
-  point you raised as `points` (in your words cut short, marked `done`, `answered` or `not_changed`, each with a
-  `note`: where it is now, the answer, or why it was left), `next` (what you do now, with the commands in `bash run`
-  blocks and full links). Core refuses the fix without one (`reply_required`) and refuses one on a fix
-  nobody asked for (`reply_unasked`), so an automatic checks or review fix never invents an answer. The schema stays
-  static and optional (Caching, below); the human fix prompts (`REPLY_INSTRUCTION`, `prompts/fixes.ts`) and the
-  handover skill say what each field holds.
-- **On the Overview** the review and merge cards lead with the latest reply (`ReplyReport`,
+- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). Anything you
+  send that an agent must answer opens one before the agent hears it: a fix you start, plan feedback, a follow-up
+  or a declined proposal on an inquiry, a restarted step, and a message to a running or resting run that can reply
+  (`isReplyingRun`: the Agent planning, building, fixing or operating, an answerer, investigator or researcher).
+  More you send before the hand-over joins it, so one reply covers everything said in between. Delegated runs, the
+  reviewer and watches open none: nobody messages them.
+- **The reply is a hand-over field.** While a request is open, the next hand-over (`propose_plan`, `complete_phase`,
+  `complete_fix`, `answer`, `report_diagnosis`, `submit_report` or `report_outcome`) must carry `reply`
+  (`AgentReply`): a `headline`, each point you raised as `points` (in your words cut short, marked `done`,
+  `answered` or `not_changed`, each with a `note`: where it is now, the answer, or why it was left), `next` (what
+  you do now, with the commands in `bash run` blocks and full links). Core refuses the hand-over without one
+  (`reply_required`) and refuses one nobody asked for (`reply_unasked`), so an automatic checks or review fix, or a
+  first plan, never invents an answer. The schema stays static and optional (Caching, below), one `REPLY_SPEC` on
+  every tool; every prompt that carries your words while a request is open says what each field holds
+  (`describeReplyInstruction`, `prompts/replies.ts`), as does the handover skill.
+- **In the chat** the last words an agent writes before any hand-over stay in view as its reply, never folded into
+  Worked for, and each hand-over card shows `reply` first (`AgentReplyBlock`,
+  `components/overview/agent-reply.tsx`), then the plan, phase, fix, answer, diagnosis, report or outcome.
+- **On the Overview** the plan, review, merge, proposal and result cards lead with the latest reply when the run
+  that wrote it belongs to the card (`selectShownReply`: a planning run for the plan card, the result's run for an
+  answer, diagnosis or report; `ReplyReport`,
   `components/overview/reply-report.tsx`): What you sent, folded above it as a quote of your words, then the
   headline, each point with its outcome and What to do now. Facts the cards add are live links: the pull request at
   the merge gate with its hover card, whether it conflicts and how its checks stand; the agent review's count is
   left out when its findings show right below. While the Agent works on one, the work
-  card shows "Your request". Earlier requests, a panel below, lists every earlier reply and every plan revision you
-  gave feedback on (its change summary as the headline), newest first, each folded to its headline and a count of
-  its outcomes (`listEarlierExchanges`, `lib/overview/exchanges.ts`; `RequestsPanel`). The checks fold to one line on these cards, open by
+  card shows "Your request". Earlier requests, a panel below, lists every earlier reply, plan revisions included, newest
+  first, each folded to its headline and a count of its outcomes (`listEarlierReplies`, `lib/overview/exchanges.ts`;
+  `RequestsPanel`). The checks fold to one line on these cards, open by
   themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`); opened, they show
   the list itself, with a stage's header only when there is more than one stage.
 
@@ -1938,6 +1974,85 @@ itself do not).
   compacted, handed off or never had these house rules; `resolveRunBrief`) carries every rule again, for any briefed
   role: the agent's round brief, a planning turn, the reviewer and the inquiry roles. Proposals are never told, and delegated agents and the quick calls get no memory.
 
+### Feedback
+
+Feedback on Shinsa itself, from you or from an agent, opened as a public issue on `shinsa-dev/shinsa`
+(`FEEDBACK_REPOSITORY`) only when you click: `domain/feedback.ts`, `decide/feedback.ts`, `state/feedback.ts`;
+`apps/engine/src/feedback/`; `apps/web/src/lib/feedback.ts`, `components/feedback/`. Everything it opens is public,
+so keeping you private comes before everything else: two passes, a rewrite and a check, stand between your note and
+GitHub. Feedback is not a task: no worktree, no pipeline, no agent session.
+
+```
+note (you, or report_feedback) ──► drafting ── quick call ──► draft
+                                       │                       │ you edit, then Open issue
+                                       ▼                       ▼
+                                    failed ◄── gh fails ──── filing ── gh issue create ──► filed
+```
+
+- **An entry** is a `Feedback` in `state.feedback`: the note (at most 4,000 characters, `FEEDBACK_LIMITS`), the
+  drafted `title` (120) and `body` (12,000), its `source` (`human` or `agent`, with the agent's task and run), its
+  `status` (`drafting`, `draft`, `filing`, `filed` or `failed`, with the `failure` shown to you) and, once filed, the
+  `issue` (number and link). `feedback.recorded` carries the whole entry, `feedback.removed` forgets it.
+- **Writing.** `feedback.write` (the feedback popover, `shinsa feedback write`) records a note as `drafting` and runs
+  `feedback.draft`; with `feedbackId` it rewrites an entry that is not busy or filed and drafts it again. The
+  `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`, `feedback/draft.ts`):
+  its fixed system prompt says the issue is public, to describe only what Shinsa did and what should change, and to
+  replace every project, repository, file, branch, task, person, account, link, code and number with a generic word. It
+  asks for an issue a maintainer, or an automation that turns issues into tasks, can act on without asking anything: a
+  specific title, and a body under one fixed template, every heading always there (Summary, Where in Shinsa, What
+  happened, What should happen, Steps to reproduce, Why it matters, Suggested change, and Acceptance criteria as a task
+  list; "Not given in the feedback." under one the note gives nothing for), naming the exact screen, command, step, gate
+  or tool. The user prompt carries the note, the private words below (at most 200) and the environment lines, never the
+  system prompt (Caching, below). The engine then appends an `### Environment` section the model never writes
+  (`listFeedbackEnvironment`, `feedback/environment.ts`): the Shinsa version and commit and whether it is the Mac app,
+  the system and architecture, the Bun version, the default agent's provider and model, who sent it and, for an
+  agent's report, the kind of task, its stage, the agent's role and step and its provider and model; never a task's
+  title or anything else the privacy check refuses. You read it in the draft with the rest. The answer is
+  `feedback.record_draft` (the model's body at most 10,000 characters, `FEEDBACK_LIMITS.draft`); no answer, an error or
+  a title or body it cannot use (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your
+  note itself is never posted.
+- **The privacy check** (`listFeedbackLeaks`, pure, in core) refuses an email, a folder path (under `/Users`, `/home`,
+  `/root`, `/Volumes`, `/private`, `/var`, `/tmp`, `/opt`, `/mnt`, `/srv`, `/data`, `/workspace` or `/Library`, or on
+  a drive such as `C:\`; `~/` names no one), a known token or key shape (private key blocks, `sk-`, `ghp_`,
+  `github_pat_`, `xox…`, AWS access keys, JWTs, `token=`, a `Bearer` or `Basic` credential) or a long run of letters and
+  digits, a link outside `shinsa.dev`, `localhost` and the repository itself, with or without `https://` (a bare host
+  such as `www.example.com` or `github.com/owner/repo`; `github.com` alone is allowed), and every private word: `listPrivateWords` reads them from the
+  state, the names and keys of your projects and their folders, each repository's name, path and remote owner and name,
+  every task's handle, branch and worktree, the account emails tasks and runs used, and the user names in those paths.
+  Words match whole from two letters, case-insensitively except a key of up to four capitals (`SW`, `PER`), which
+  matches only in capitals so it never blocks an ordinary word; "Shinsa" and `shinsa-dev` are allowed. The dialog shows
+  what it finds on each draft (`describeFeedbackLeaks`) and keeps Open issue off until you edit it out.
+- **Editing** (`feedback.update`) changes the title and body of an entry that waits for you (a draft, or one that
+  failed with a draft). **Dismissing** (`feedback.dismiss`) forgets an entry, refused while it is being opened.
+- **Opening** (`feedback.file`) is yours alone: core refuses it on your behalf (`human_only`; Who can change Shinsa,
+  below), so no agent and no command sent for you opens an issue. It runs the privacy check again on the title and
+  body as they are, after your edits, and refuses a leak (`feedback_private`, naming each one). Then the entry is
+  `filing` and the `feedback.file` effect runs `gh issue create --repo shinsa-dev/shinsa` with your GitHub login, the
+  body ending in one line that says whether it came from the feedback button or an agent; the link `gh` prints is
+  `feedback.record_filed`. The effect is process-bound and never retried, so an issue is never posted twice: one a
+  restart left `filing` is failed on start (`FeedbackEffects.recover`) with a note to check GitHub before opening it
+  again, and a `gh` failure shows its message on the entry.
+- **Closed issues.** With the pull request sync (`EffectRunner.syncAll`), at most every 10 minutes
+  (`FEEDBACK_SYNC_MS`) and only while an issue is open in the log, `FeedbackEffects.syncIssues` reads your issues on
+  `shinsa-dev/shinsa` in one `gh issue list --author @me --state all` and records each change with
+  `feedback.record_issue_state` (the issue's `closedAt`, or null when it opened again). A `gh` failure is logged and
+  changes nothing.
+- **Agents report** with `report_feedback` (`feedback`; every task-session role, the reviewer included, never a
+  delegated agent), when Shinsa itself got in their way: a tool that refused what it should take, a limit or a rule
+  that blocked sound work, a step that made no sense, a missing tool; never the task or its code. Its description says the human reads each report before anything is public. A note already known,
+  whatever its case, is dropped; a task reports at most 3 and at most 10 agent reports wait at once
+  (`feedback_full`). New feedback an agent writes for you (`feedback.write` on your behalf, from its tools or its
+  shell) is an agent's too: marked as from an agent with the task it came from, under the same limits. The report is recorded in its task's activity and drafted like yours; it waits in the dialog,
+  marked as from an agent with a link to its task. There is no setting to open one without you.
+- **Where you see it.** A Feedback button right of Settings in the Desk header and a Feedback row under Settings in
+  the Shelf rail, with a count of the drafts and failures waiting for you, open the feedback popover: what happens to a
+  note, the note field, then Waiting for you and Opened on GitHub as one row each, its title (the note while it drafts)
+  and who it is from or what is happening to it. A waiting row opens its dialog (`FeedbackDialog`, kept by
+  `openFeedbackEntry`): the whole draft, the privacy check's findings, Dismiss, Edit and Open issue; an opened issue's
+  row links to GitHub, its icon who sent it (you or an agent), its line the number and when it opened or closed, and a
+  closed one shows Closed after the open ones. ⌘K has Send feedback on Shinsa; `shinsa feedback
+  list|write|edit|file|dismiss` is the same from the command line (`GET /api/feedback`).
+
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
@@ -2247,9 +2362,11 @@ line and every task agent's management tools are generated from it, so neither c
   `config.json`'s `port`. `--help`, `--json` and the refusal shape are `docs/cli.md`. Commands carry an idempotency
   key per invocation (Command receipts, below).
 - **Yours alone** (`humanOnly`): the specs listed in Who can change Shinsa, below.
-- **When the engine is down**: in the Mac app's bundle, a command the engine does not answer asks launchd to start it
-  (`launchctl kickstart`) and waits up to 20 s for it, then tries once more; otherwise it says to open the Shinsa app
-  (`apps/engine/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background).
+- **When the engine is down**: from a compiled engine, a command the engine does not answer asks the platform's
+  service to start it (`launchctl kickstart` on a Mac, `systemctl --user start shinsa` on Linux once `shinsa start`
+  has set the unit up) and waits up to 20 s for it, then tries once more; otherwise it says how to start it
+  (`apps/engine/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background, Run on a
+  server).
   `shinsa status` and `shinsa version` only report, and never start it.
 - **Around the surface** (`apps/engine/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
   `status`) and the engine's controls (`start`, `stop`, `restart`, `logs`, `version`) are the top level, one table in
@@ -2300,7 +2417,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   path lists, folders and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
   read by commit, so a task event (a chat line, a new priority) reads nothing again; it reads the refs again only when
   what pins the code changes (the stage, the branch, the worktree, a push, a phase or a fix), and the working copy
-  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), shows
+  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), only the newest
+  version of each once it answers, and at most 16 MB of answers (`CODE_READ_BUDGET`); it shows
   a read's last answer while a newer version of it loads, and reads most of them before they are asked for
   (`docs/design.md`, 36).
 
@@ -2438,8 +2556,13 @@ beside your run (Runs for a task, below).
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
 - **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), so no dev server keeps running in a
-  deleted folder; your own shells opened in that worktree are left as they are.
+  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process Shinsa or a
+  finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
+  worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
+  in that worktree, and what runs in them, are left as they are.
+- **A task run's own variables.** `resolveServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
+  repository (`ServiceRun.env`, Where agents work → Turbo's cache is shared per repository), kept for the run's
+  restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
   engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; a
   task's run starts again only while the task is open and still holds the folder. Plain
@@ -2721,6 +2844,29 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
   Terminal page says terminals stay on the machine.
+- **What each machine speaks** (core's `protocol/engine.ts`, `docs/protocol.md` → The socket). The remote build is
+  app.shinsa.dev's, deployed from `main`; the tunnel carries only data, so a page can be newer than a machine on the
+  stable channel. Every engine sends `engine { version, protocol, commands, features }` when a socket opens, and the
+  page offers only what the engine of the task's machine speaks (capability negotiation, not a version comparison:
+  canary, beta and `0.0.0` builds compare badly, and a fleet mixes versions). `commands` is every command the engine
+  parses (`USER_COMMAND_TYPES`); a command in `ENGINE_BASELINE_COMMANDS` goes to any engine, one that never sent
+  `engine` included, and anything newer only to an engine that listed it. Each `Connection` keeps its engine's
+  `EngineInfo`, and `Fleet.selectEngine(id)` answers for the machine that owns the id, through the same owner lookup
+  commands are routed by. Every task action names the command it sends (`TASK_ACTION_COMMAND`), and the task menu, a
+  row's menu and the command menu leave out an action whose command that machine did not list: Share task and Stop
+  sharing on an engine from before sharing; the Feedback button and Send feedback on Shinsa likewise ask the default
+  machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
+  Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
+  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`, and
+  `feedback` for `GET /api/feedback`, today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
+  here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
+  machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
+  (`Fleet.isEveryMachineOutdated`, `routes/remote/fleet.tsx`). Two tests keep it strict: core's `test/protocol/engine.test.ts` fails on a command in neither the
+  baseline nor `GATED_COMMANDS`, and the engine's `test/http/engine-features.test.ts` builds every `/api` route and
+  fails on one in neither its frozen `BASELINE_ROUTES` nor a feature's routes (`ENGINE_FEATURE_ROUTES`,
+  `src/http/features.ts`), and on a listed route the engine no longer serves. The schedule and Slack routes are built
+  from their route functions there, so a route added to either some other way is not caught.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
   New task shows a Machine picker, Automatic by default (the label says only Automatic, with the arrow-split icon); with one there is none. Every
   machine of the account is in it: one this device was not added to is listed disabled with "Add this device on <name>
@@ -2747,6 +2893,143 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
+
+## Sharing a task
+
+A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/t/<token>#<key>`, without signing
+in and without a device key. A link is
+read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
+access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
+Overview, Review and Code, for a public or a private repository alike, but its chat; chats and the agent sessions never
+leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
+projection and channel will serve teams.
+
+- **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
+  (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The path is
+  one opaque token, the share id followed by the machine's instance id, as base64url (`resolveSharePagePath`,
+  `parseShareLocation`), so the address names neither the machine nor the task. The key sits in
+  the URL's fragment, which a browser never sends to a server, so neither app.shinsa.dev nor Cloudflare ever sees it.
+  The channel is sealed with it end to end: Cloudflare carries ciphertext, and a stand-in for the machine cannot
+  answer the handshake. The page and the connect answer carry `X-Robots-Tag: noindex, nofollow, noarchive` and every
+  page `Referrer-Policy: no-referrer`, so no search engine keeps it and no page it links to learns it. Stop sharing
+  ends every open link at once, and that link never works again: sharing the task again makes a new link with a new
+  id and key.
+- **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
+  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → General → Sharing, human-only,
+  so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
+  cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
+  a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock.ts`, a `StateClock`) with `share.expire`
+  (`reason: 'expired'`), and the engine refuses a link whose time has passed even before the clock fires. The page
+  treats such a share as ended too (`selectLiveShare` in `apps/web/src/lib/share/dialog.ts`): the banner, Stop sharing
+  and the dialog's link go the moment `endsAt` passes, and sharing it again ends the old share first, so it makes a new
+  link rather than bringing the old one back (`shareTask` in core). A finished
+  task cannot be shared `until_done` (`share_refused`), so Share task offers only the time limits for one. The dialog
+  picks the limit before the link is made (or before Try again); on a running share only `shinsa tasks share --until`
+  changes it, keeping its link (`task.share` with another `limit`).
+- **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
+  the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
+  core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
+  refused (`share_refused`). The remote dashboard may share, as it may close a gate.
+- **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository })`) builds a
+  `SharedTask`: a redacted `Task`, its gates and runs, its current evidence, its repository and project records
+  (without their paths, folders or description), the owner's GitHub login and the machine's name from `remote.json`,
+  the repository's name and whether it shares code, which is everything the owner's task page reads, so the shared
+  page renders that same page. It copies fields by name: a field added to `Task` later stays empty until it is added here
+  on purpose. What it keeps and drops, the same for every repository:
+
+  | Part | Shared |
+  | --- | --- |
+  | Title, handle, status and its reason, priority, kind of task, request text, summary, result, proposal | kept |
+  | Request attachments (pasted images, files) | dropped |
+  | The plan whole: goal, phases, behaviour, approach, files, checks, its changes and approval | kept |
+  | Phase reports, walkthrough (watchdogs and steps with their commands), review report, findings, decisions, with their files and lines | kept |
+  | Checks, their commands, results, output and coverage | kept |
+  | Branches, base, the pull request whole: address, head, merge commit, checks and check runs, changes | kept |
+  | Merge steps and which are ticked | kept |
+  | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed |
+  | The diff (Code) | the pull request's, from GitHub, once one is open or merged |
+  | Gates | kept with their title, body, choices and decision; never your answer, verdicts, notes, a secret or an account |
+  | Runs (who worked, when, which model, delegations, cost) | kept; never their prompt, session, final message, feedback or account |
+  | Suggestions, watchdogs, a monitor, a usage wait (without its account) | kept |
+  | Activity | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments |
+  | Notes | kept |
+  | Chats, transcripts, tool calls, live agent output, a delegated agent's brief and the question it asked and its answer (its title, depth and state stay) | never |
+  | Messages to agents (a chat reply that stood in for a gate answer included), gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
+  | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never |
+  | Links to other tasks (`shinsa://task/…`) | their label as plain text |
+
+  A task without a repository has no Code. Check output and text an agent wrote (a summary, a finding, a testing
+  step) are kept as written; open the link yourself to read what it shows.
+- **Making the link.** `task.share` emits `task.shared` and queues `share.link` (`replay_safe`, lane `share:<task>`).
+  The engine (`apps/engine/src/remote/shares.ts`, `Shares.link`) makes a share id and a key for this machine's
+  instance and records the URL with `share.record`; a link already made for this instance is kept (`share.record`
+  with `url: null` only clears a failure). `task.unshare` cancels a queued `share.link` and emits `task.unshared`.
+  Nothing is queued when the task changes: an open link reads it live.
+- **The live channel** (`SHARE_CHANNEL_PATH`, `/share?id=<share id>` on the tunnel; core's `remote/share-channel.ts`,
+  the engine's `remote/share-channel.ts`). The page asks app.shinsa.dev where the machine is
+  (`POST /__remote/shares/<machine>/connect`, no session, answering `{ url, online }`), then opens
+  `wss://t-<machine>.shinsa.dev/share?id=<share id>`. The engine upgrades it only from app.shinsa.dev's origin, while
+  remote access is on and the id is well formed (404 otherwise), so a stopped or unknown link learns it is gone from
+  the handshake rather than looking offline. The page's first and only message is a hello: a fresh P-256 key and an HMAC over it with the link's key. The machine checks it against the
+  task's key in constant time (else `refused`, "This task is no longer shared, or the link is wrong."), answers with
+  its own fresh key and an HMAC over both, which the page checks, and both derive one AES-GCM key from the ECDH of
+  the two fresh keys and the link's key (HKDF over the transcript), so only a holder of the link reads the stream,
+  and a recorded stream cannot be read later from the link alone. Frames are sealed in order (core's `frames.ts`).
+- **What the machine pushes.** A `ShareLiveView` (the projection below, the version and type of each file it shows,
+  when it was read) the moment the channel opens and again on every state change that alters it (compared as text,
+  so a message to an agent sends nothing), then each file the page does not have at that version: evidence stored
+  on the machine (`/api/evidence/…`) when it is a PNG, JPEG, WebP, GIF, MP4, WebM, text or Markdown of 50 MB at most,
+  versioned by its hash (each hashed once per size and modification time), and for a task with an open or merged
+  pull request the diff, `gh pr diff <n>` (with the owner's own GitHub access, so a private repository's diff too),
+  and the `code` file holding every modified or renamed file of that diff whole at the pushed head
+  (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), both versioned by the pull
+  request and its head and read from GitHub once per head. Code opens each change in the editor as its owner sees it:
+  an added or removed file comes whole from the diff, and a changed file's base is rebuilt from its head and its hunks
+  (`resolveBaseContent`). Anything else is left out of the view rather than shown broken. The page keeps each file
+  as a `blob:` address while it is open.
+- **The channel only listens.** After the hello the machine reads nothing from a link: any message closes the
+  channel (1008, "A share link only listens."). It carries no HTTP requests, no app socket and no commands, and it is
+  never connected to the hub, the API or the dispatcher, so no write can travel from a link to the engine, whatever
+  the page sends. Stop sharing sends `closed` and ends it; pausing or removing remote access ends every link
+  ("Remote access on the machine that shares this task was turned off."). A machine that is offline, asleep or
+  paused shows nothing new: the page says the machine is offline and opens the channel again on its own (1, 2, 5,
+  then every 10 seconds), keeping what it already showed.
+- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → General to share this
+  task…" (`SHARE_NOT_PAIRED`) and `share.fail` keeps it on `TaskShare.failure` for Share task to show with Try again
+  (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
+  machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
+  remote access again…" (`SHARE_LINK_LOST`), and Try again makes a new link.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one short dialog over the task's
+  `TaskShare` and the remote snapshot, in four views: remote access needed (Open Settings), ready (Share, with Share
+  for), making the link (Share loading) and failed (the reason, Stop sharing and Try again). It closes by itself the
+  moment the link is made: the banner holds the link from then on. While a task is shared its menu shows Stop sharing
+  instead of Share task (both while a link failed, to try again); Stop sharing asks first (`UnshareConfirm`) and is the
+  only way a share ends early.
+- **While it is shared** (`components/task/sharing-banner.tsx`): the task's page shows a banner under its header that
+  cannot be dismissed, saying anyone with the link can watch the task and when sharing ends, with Copy link and Stop
+  sharing, until the share ends. Everywhere else the task appears (the task list, Home's lists and the Needs you
+  queue) its title carries a share mark, "Shared by link" on hover (`components/share/shared-mark.tsx`,
+  `isTaskShared`), while its link works.
+- **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
+  the remote build's `/share/t/<token>` reads the key from the fragment (a link without one says the task
+  is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives
+  (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
+  and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one
+  header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
+  app.shinsa.dev is its owner) and when the machine last read it. Read-only takes away
+  only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
+  answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
+  priority menu, services and every way into a chat; the live agent output is never shown. Its tabs are the owner's
+  without Chat, Code only once a pull request is open or merged, in its Changes view, from the streamed `diff` and
+  `code` files, never from a worktree. A link that stopped working says so at once.
+- **Nothing writes through a link.** The channel above only listens, and hiding controls is a second layer. On the
+  page itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
+  rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
+  can be changed from here." before anything is sent, so a control added later without a `useReadOnly` check still
+  changes nothing.
+- **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
+  the link is missing; an agent has no tool to share or stop sharing.
+
 
 ## Slack
 
@@ -2942,15 +3225,17 @@ plainly what protects what.
     a failure, setup or Sign in gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `questions
     answer`, `gates answer`, `command`, which can send any gate answer);
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
-  - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
+  - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's own check commands,
+    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
     `memory.remove` on your behalf): an agent proposes with `remember` instead (Memory, above);
+  - opening feedback as a public GitHub issue (`feedback file`; core refuses `feedback.file` on your behalf): an
+    agent reports with `report_feedback`, and the draft waits for you (Feedback, above);
   - accepting a suggested watch (`schedules accept`; core refuses `watch_suggestion.accept` on your behalf): an
     agent's new watch is a suggestion instead (Schedules and webhooks → Suggested watches, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
@@ -4826,6 +5111,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  delegations (`delegations/<task>/<run>`)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
+    ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
+    ├── caches/        Build caches a repository's checkouts share (`<repo id>/turbo`; Where agents work, above)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
@@ -4852,6 +5139,14 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
 
 One folder instead of XDG's config and data split on purpose: it is one thing to back up, move or delete, a seeded or
 scratch copy is one directory, and the event log, worktrees and config.json only make sense together.
+
+- **What is not backed up.** `worktrees/`, `check-bases/`, `scratch/` and `caches/` hold what can be made again
+  (checkouts, installed dependencies, build output): on APFS they cost a fraction of their size, but a backup copies
+  every cloned file in full. `prepareDataDir` marks each with `.metadata_never_index` for Spotlight and with Time
+  Machine's exclusion, the `com.apple.metadata:com_apple_backup_excludeItem` attribute `tmutil addexclusion` writes,
+  set with `xattr` directly because `tmutil` takes seconds per folder. The marker says the folder is done, so a later
+  start does nothing (clearing out `check-bases/` leaves the markers, as every dot entry, in place); one Time Machine could not exclude is logged, and deleting its marker tries again. The event
+  log, evidence, transcripts and settings are backed up as before.
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
@@ -5026,6 +5321,63 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
   the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.
+
+### Run on a server
+
+The same engine runs headless on a Linux machine that is always on, a VPS or a box under a desk, or on a Mac mini
+without the app, with no window: you reach it from your other devices through remote access, and set it up over SSH.
+
+- **Installing it.** `curl -fsSL https://shinsa.dev/install | sh` installs the release's engine under
+  `~/.local/share/shinsa` and links `~/.local/bin/shinsa`, after checking its SHA-256; `npm i -g shinsa` (or
+  `bunx shinsa`) installs the same engine through `@shinsa/<os>-<cpu>`. Either way it is the one folder every release
+  carries (`docs/release.md` → The engine on its own): `bin/shinsa` with `plugin/` and `web/` beside it, so the
+  interface comes with it and is served on the engine's port as in the app. Linux x64 and arm64 (glibc) and Apple
+  Silicon Macs only.
+
+- **The bundle.** `SHINSA_ENGINE_TARGET=bun-linux-x64` (or `bun-linux-arm64`) makes `build-engine.ts` compile the
+  same bundle, `bin/shinsa` with `plugin/` and `web/` beside it, into `apps/engine/dist/engine-linux-x64` (each
+  target its own folder; the Mac app's stays `dist/engine`). An unknown target fails with the list
+  (`resolveBuildTarget`, `instance/targets.ts`). It needs git, the GitHub CLI and Claude Code on the login shell's
+  `PATH`, as on a Mac. The release packs these folders (`docs/release.md` → The engine on its own).
+- **The service** (`instance/systemd.ts`, `createSystemdService`). On Linux, `shinsa start` sets the engine up as a
+  systemd user service, `~/.config/systemd/user/shinsa.service`: `ExecStart` is this `shinsa` with `engine`,
+  `SHINSA_SERVICE=1`, the `SHINSA_HOME`, `SHINSA_DATA_DIR`, `XDG_CONFIG_HOME`, `SHINSA_PORT` and `SHINSA_HOST` the
+  command was run with, `Restart=on-failure` (a crash or the restart exit, 75, brings it back; a clean stop stays
+  stopped) and a `TimeoutStopSec` past the engine's own stop deadline. Every start writes the unit when it is missing
+  or differs (then `daemon-reload`), `enable`s it and starts it, so running `shinsa start` again after moving the
+  program or changing those variables is how the unit is updated. With no user manager to talk to (`systemctl --user
+  show-environment` fails, as under `su`) it refuses with `engine_no_systemd`. A user service stops when the user's
+  last session ends unless lingering is on, so when `loginctl` reports `Linger=no` the start says to run
+  `sudo loginctl enable-linger <user>`, which also starts it at boot.
+- **By hand.** `shinsa stop` is `systemctl --user stop --no-block shinsa` (then `kill --signal=SIGKILL` after 40 s,
+  which systemd does not answer with a fresh engine), `shinsa restart` is `systemctl --user restart shinsa`, and the
+  wake before a command that needs the engine is `systemctl --user start shinsa`, only once the unit exists. Both
+  managers sit behind one `EngineService` (`instance/service.ts`; launchd's is `cli/launchd.ts`), and both refuse
+  with `engine_not_installed` before the service exists. A bundled engine under systemd writes `data/engine.log` like
+  one under launchd, so `shinsa logs` reads the same file. To take the service away:
+  `systemctl --user disable --now shinsa`, then delete the unit file.
+- **No browser.** `shinsa open` and every link the command opens use `open` on a Mac, `xdg-open` where `DISPLAY` or
+  `WAYLAND_DISPLAY` is set, and otherwise print the address to open from a browser that reaches the machine
+  (`resolveBrowserCommand`, `shell/browser.ts`). Remote pairing does not try to open the GitHub sign-in either:
+  `shinsa remote pair` prints its address and code. Off the Mac, a missing `SHELL` means `/bin/sh`, not zsh.
+- **On a Mac without the app** (`cli/launchd.ts`, `createLaunchdService` with `inApp: false`). A `shinsa` from npm or
+  the install script is a bundled build outside an app, so `shinsa start` sets up launchd itself: it writes
+  `~/Library/LaunchAgents/studio.overclock.shinsa.engine.plist`, the app's label, running this `shinsa` with `engine`,
+  `SHINSA_SERVICE=1` and the same carried variables as the systemd unit, with `RunAtLoad`, `KeepAlive` on a failed
+  exit, `ThrottleInterval` 5 s and `ProcessType` `Interactive`, and `bootstrap`s it; a later start leaves a current
+  job alone, and replaces a stale one (`bootout`, write, `bootstrap`). Sharing the app's label means only one engine
+  job is ever loaded, so two engines never meet on 7446: with the app's job loaded (`isAppJob`: a bundle id or a
+  program inside an `.app`) the start refuses with `engine_beside_app`, and installing the app later replaces the
+  agent with its own: on its first launch it boots out an agent at that path whose program is not its own engine
+  (`isStandaloneAgent`) and deletes the plist, before it checks the engine's health or registers its job, so the
+  label is free when it does. `shinsa stop` and `shinsa restart` act only on a job this `shinsa` wrote, refusing the app's
+  with `engine_not_this_app` and another standalone copy's with `engine_not_this_install`, which `shinsa start` from
+  this copy takes over. `shinsa open` uses the browser there, since there is no app to open. To take it away:
+  `launchctl bootout gui/$(id -u)/studio.overclock.shinsa.engine`, then delete the plist.
+- **Setting it up over SSH**, in order: `shinsa start`; `shinsa accounts sign-in`, whose address you open anywhere,
+  then `shinsa accounts sign-in-code` with the code it shows; `gh auth login`; `shinsa folders add ~/code`; and
+  `shinsa remote pair`, finished from any device, after which the machine is on app.shinsa.dev with the rest. The
+  engine's port is not for the internet: it listens on loopback, and remote access is the way in.
 
 Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies. Its
 `dev` and `start` scripts (`apps/engine/package.json`) pass `SHINSA_PORT=5180` unless one is exported, so a checkout
@@ -5276,7 +5628,7 @@ run. Codes: `body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`
 Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts, `surfaces`, `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
+accounts, `surfaces`, `engine` (what it speaks, Remote access → What each machine speaks, above), `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
 the terminals and remote access whole, and a transcript only to the sockets following its run. Each terminal has a socket of
 its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)
@@ -5328,7 +5680,8 @@ says hello counts as no desktop.
   entry follows with its own. The page appends an entry at its position, skips one it has, starts over at position 0
   and asks again from what it holds when a page would leave a gap (for a run it no longer follows it drops the page
   instead). The page keeps every run it follows and the 24 others read or let go of last
-  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out), so a run dropped is read again from 0. The server keeps the entries of every followed run
+  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out) while they hold 10,000 entries in all
+  (`TRANSCRIPT_ENTRY_LIMIT`), so a run dropped is read again from 0. The server keeps the entries of every followed run
   and of the eight runs read last in memory (`Transcripts`) and reads only the bytes appended since, so a long
   transcript is parsed once, not on every line, and every `listEntries` caller gets its own copy.
 - **Selectors.** `useShinsaSelector(select)` (`lib/connection/selectors.ts`) gives a component the part of the state it
@@ -5366,7 +5719,7 @@ between turns; a held run does not count as busy. Shutdown marks each held run a
 command id `run.interrupt:<run>:0:<continuations>`), so the next engine starts it as a free shutdown continuation. After
 `RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
 restart that fails releases the held runs; it refuses with `restart_unsupported`
-unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
+unless launchd or systemd started this process (`createServiceRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live

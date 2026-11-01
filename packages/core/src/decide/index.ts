@@ -33,6 +33,17 @@ import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting, stackOnTask } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
+import {
+  dismissFeedback,
+  fileFeedback,
+  recordFeedbackDraft,
+  recordFeedbackFailure,
+  recordFeedbackFiled,
+  recordFeedbackIssueState,
+  reportFeedback,
+  updateFeedback,
+  writeFeedback,
+} from './feedback.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
@@ -97,6 +108,7 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
+import { expireShare, failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import {
   answerSlackQuestion,
@@ -130,6 +142,7 @@ import {
 } from './watchdogs.ts';
 
 export type { DecideContext, Decision } from './decider.ts';
+export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { assertRunTool } from './runs.ts';
@@ -245,6 +258,34 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return acceptMemory(decider, command);
     case 'memory.remove':
       return removeMemory(decider, command);
+    case 'feedback.write':
+      return writeFeedback(decider, command);
+    case 'feedback.update':
+      return updateFeedback(decider, command);
+    case 'feedback.file':
+      return fileFeedback(decider, command);
+    case 'feedback.dismiss':
+      return dismissFeedback(decider, command);
+    case 'feedback.record_draft':
+      return recordFeedbackDraft(decider, command);
+    case 'feedback.record_filed':
+      return recordFeedbackFiled(decider, command);
+    case 'feedback.record_issue_state':
+      return recordFeedbackIssueState(decider, command);
+    case 'feedback.record_failure':
+      return recordFeedbackFailure(decider, command);
+    case 'agent.report_feedback':
+      return reportFeedback(decider, command);
+    case 'task.share':
+      return shareTask(decider, command);
+    case 'task.unshare':
+      return unshareTask(decider, command);
+    case 'share.record':
+      return recordShare(decider, command);
+    case 'share.fail':
+      return failShare(decider, command);
+    case 'share.expire':
+      return expireShare(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -404,6 +445,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   }
   apply(decider, command);
   releaseWaiting(decider);
+  syncShares(decider);
   syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);

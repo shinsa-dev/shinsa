@@ -77,6 +77,7 @@ describe('the row context menu', () => {
       'Open a terminal',
       'Show in Finder',
       'Fork into a new task',
+      'Share task',
       'Move to the backlog',
       'Snooze',
       'Restart the current step',
@@ -118,10 +119,10 @@ describe('the row context menu', () => {
     await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'task.cancel', taskId: 'docs' }]));
   });
 
-  it('offers only Open task and forking on a settled task without a branch', async () => {
+  it('offers only Open task, forking and sharing on a settled task without a branch', async () => {
     renderRow(findTask('shipped'));
     await openContextMenu();
-    expect(menuItems()).toEqual(['Open task', 'Fork into a new task']);
+    expect(menuItems()).toEqual(['Open task', 'Fork into a new task', 'Share task']);
   });
 });
 
@@ -204,5 +205,21 @@ describe('the kind of task', () => {
     expect(await findTooltipText(screen.getByRole('img', { name: 'Investigation' }))).toBe(
       'Investigation: find the repository, then investigate.'
     );
+  });
+});
+
+describe('a shared task in the list', () => {
+  it('shows a shared mark beside its title, and none when it is not shared', () => {
+    const shared = createTask({
+      id: 'shared',
+      title: 'Share the search page',
+      stage: 'building',
+      share: { at: 1, limit: 'until_done', endsAt: null, url: 'https://app.shinsa.dev/share/t/abc' },
+    });
+    const { unmount } = renderRow(shared);
+    expect(screen.getByRole('img', { name: 'Shared by link' })).toBeTruthy();
+    unmount();
+    renderRow(createTask({ id: 'plain', stage: 'building' }));
+    expect(screen.queryByRole('img', { name: 'Shared by link' })).toBeNull();
   });
 });

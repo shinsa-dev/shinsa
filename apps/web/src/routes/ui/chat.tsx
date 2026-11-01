@@ -26,7 +26,7 @@ import {
   useDisclosure,
   useDisclosureScope,
 } from '@/lib/preferences/disclosure.ts';
-import { createSampleChatCalls, createSampleRevisionCall } from './sample-chat.ts';
+import { createSampleChatCalls, createSampleReportCall, createSampleRevisionCall } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
 import { createOverviewScene } from './sample-overview.ts';
 import {
@@ -310,9 +310,14 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
           <HandoverCard call={calls.failed} run={run} live={false} />
         </div>
       </Specimen>
-      <Specimen label='Hand-over cards · a revised plan: what changed above the goal, its new and reworked phases tagged, the same as the plan gate'>
+      <Specimen label='Hand-over cards · a revised plan: the reply to what you sent first, then the goal and its new and reworked phases tagged, the same as the plan gate'>
         <div className='flex w-full max-w-xl flex-col gap-4'>
           <HandoverCard call={revised.call} run={run} live={false} task={revised.task} />
+        </div>
+      </Specimen>
+      <Specimen label='Hand-over cards · a research report after a follow-up: the reply first, then the full report'>
+        <div className='flex w-full max-w-xl flex-col gap-4'>
+          <HandoverCard call={createSampleReportCall()} run={run} live={false} />
         </div>
       </Specimen>
     </>

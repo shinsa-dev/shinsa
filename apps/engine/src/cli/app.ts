@@ -75,6 +75,10 @@ export function readAppBundleId(app: string, plutil = '/usr/bin/plutil') {
   return result.exitCode === 0 ? result.stdout.toString().trim() || null : null;
 }
 
+export function isInsideApp(program = process.execPath) {
+  return resolveRealPath(program).includes('.app/Contents/');
+}
+
 export function ownsEngineJob(printed: string, program = process.execPath) {
   return isJobProgram(parseEngineJob(printed), {
     program: resolveRealPath(program),
