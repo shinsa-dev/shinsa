@@ -417,9 +417,9 @@ describe('the machines in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(
-      await screen.findByText('A task handed to you by Lee · In this dashboard · Fix the tab bar')
-    ).toBeTruthy();
+    const handedLine = await screen.findByText(/^A task handed to you by/);
+    expect(handedLine.textContent).toBe('A task handed to you by LLee · In this dashboard · Fix the tab bar');
+    expect(handedLine.querySelector('a')?.getAttribute('href')).toBe('https://github.com/lee');
     expect(screen.queryByText('Task capacity')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     await waitFor(() => expect(left).toEqual(['k3x9']));
@@ -453,7 +453,9 @@ describe('the machines in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(await screen.findByText('Shared by Lee · In this dashboard')).toBeTruthy();
+    const sharedLine = await screen.findByText(/^Shared by/);
+    expect(sharedLine.textContent).toBe('Shared by Lee · In this dashboard');
+    expect(sharedLine.querySelector('a')?.getAttribute('href')).toBe('https://github.com/lee');
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));

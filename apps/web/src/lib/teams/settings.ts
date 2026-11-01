@@ -11,7 +11,7 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
-import { resolveFirstName } from '@/lib/remote/users.ts';
+import type { Mention } from '@/lib/remote/users.ts';
 
 export const TEAMS_SECTION = 'Teams';
 
@@ -37,11 +37,11 @@ export function describeTeamsUnavailable(snapshot: RemoteSnapshot | null) {
   return 'Teams reach your teammates through remote access. Turn it on above first.';
 }
 
-export function describeTeamEntry(entry: RemoteTeamEntry, now = Date.now()) {
+export function describeTeamEntry(entry: RemoteTeamEntry, now = Date.now()): Mention {
   const { team } = entry;
-  if (!team) return 'You asked to join. The team’s owner has not answered yet.';
-  const role = team.role === 'owner' ? 'You own it' : `Owned by ${resolveFirstName(team.owner)}`;
-  return `${role} · ${describeTeamFacts(team, now)}`;
+  if (!team) return ['You asked to join. The team’s owner has not answered yet.'];
+  const facts = ` · ${describeTeamFacts(team, now)}`;
+  return team.role === 'owner' ? [`You own it${facts}`] : ['Owned by ', { user: team.owner }, facts];
 }
 
 export function describeTeamFacts(team: NonNullable<RemoteTeamEntry['team']>, now = Date.now()) {

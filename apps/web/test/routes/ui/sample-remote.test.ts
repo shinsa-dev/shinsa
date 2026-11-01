@@ -33,7 +33,7 @@ describe('the /ui remote access samples', () => {
     await expect(actions.declineRequest('request-1')).rejects.toThrow(REFUSED);
   });
 
-  it('list four machines, one shared, two of them added in this browser, and refuse every change', async () => {
+  it('list five machines, one shared, one handed over, and refuse every change', async () => {
     const { dashboard, devices, teamKeys } = createSampleMachineServices(NOW);
     const macs = await dashboard.listInstances();
     expect(macs.map((mac) => [mac.name, mac.online, mac.lastSeenAt])).toEqual([
@@ -41,6 +41,7 @@ describe('the /ui remote access samples', () => {
       ['MacBook Air', false, NOW - 26 * 3_600_000],
       ['Office mini', true, NOW],
       ['Team server', true, NOW],
+      ['Kai’s MacBook', true, NOW],
     ]);
     expect(await devices.selectDevice('k3x9')).toMatchObject({ instanceId: 'k3x9' });
     expect(await devices.selectDevice('w4t8')).toBeNull();

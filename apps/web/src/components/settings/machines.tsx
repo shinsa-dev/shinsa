@@ -11,6 +11,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
@@ -181,7 +182,7 @@ function MachineItem({
             </span>
           </div>
           <Truncate className={cn('text-2xs leading-4', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
-            {outdated ? describeOutdatedMachine(row.instance.name) : detail}
+            {outdated ? describeOutdatedMachine(row.instance.name) : <MentionText mention={detail} />}
           </Truncate>
         </div>
         {resources ? (

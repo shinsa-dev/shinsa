@@ -1,4 +1,4 @@
-import { DEVICE_NAME_LIMIT, type RemoteUser } from '@shinsa/core';
+import { DEVICE_NAME_LIMIT, type RemoteUser, resolveFirstName } from '@shinsa/core';
 
 const DEVICES: { pattern: RegExp; name: string }[] = [
   { pattern: /iPad/, name: 'iPad' },
@@ -33,11 +33,6 @@ function resolveDevice(userAgent: string, touch: boolean) {
 
 function resolveBrowser(userAgent: string) {
   return BROWSERS.find((entry) => entry.pattern.test(userAgent))?.name ?? null;
-}
-
-function resolveFirstName(user: RemoteUser) {
-  const [first] = (user.name ?? '').trim().split(/\s+/);
-  return first ? first : user.login;
 }
 
 const MOBILE = /iPhone|iPad|Android/;

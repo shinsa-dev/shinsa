@@ -143,10 +143,10 @@ describe('Settings → Teams', () => {
     const actions = renderOwnedTeam();
     fireEvent.click(screen.getByRole('button', { name: 'Give machine access' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText('Give Kai Lane access to Studio?')).toBeTruthy();
+    expect(within(dialog).getByText('Give Kai access to Studio?')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Give access' }));
     await waitFor(() => expect(actions.grantAccess).toHaveBeenCalledWith('team1', KAI.id));
-    expect(toasts.success).toHaveBeenCalledWith('Kai Lane can reach Studio now.');
+    expect(toasts.success).toHaveBeenCalledWith('Kai can reach Studio now.');
   });
 
   it('says who can reach this machine already, with no grant offered to them', () => {
@@ -191,6 +191,9 @@ describe('Settings → Teams', () => {
     expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
     expect(screen.queryByText('Asking to join')).toBeNull();
     expect(screen.getByText('You')).toBeTruthy();
+    const owned = screen.getByText(/^Owned by/);
+    expect(owned.textContent).toStartWith('Owned by KKai · 2 people');
+    expect(owned.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Give machine access' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
