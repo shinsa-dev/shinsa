@@ -1,0 +1,213 @@
+import { type PreviewShare, resolveShareLimit, type ShareLimit, type Task } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@shinsa/ui/components/dialog';
+import { Field, FieldLabel } from '@shinsa/ui/components/field';
+import { Truncate } from '@shinsa/ui/components/truncate';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
+import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { SelectField } from '@/components/controls/select-field.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
+import { TimeAgo } from '@/components/text/time-ago.tsx';
+import { useNow } from '@/hooks/use-now.ts';
+import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
+import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
+import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
+import { listShareLimitItems, SHARE_LIMIT_TITLE, type ShareView } from '@/lib/share/dialog.ts';
+import {
+  closePreviewShareDialog,
+  describePreviewEnd,
+  PREVIEW_NEEDS_REMOTE,
+  PREVIEW_SHARE_DESCRIPTION,
+  PREVIEW_SHARE_TITLE,
+  type PreviewTarget,
+  resolvePreviewShareView,
+  selectLivePreview,
+  sharePreview,
+  UNSHARE_TITLE,
+  unsharePreview,
+  usePreviewShareDialog,
+} from '@/lib/share/previews.ts';
+import { navigate } from '@/router.ts';
+
+function PreviewLink({ preview, url }: { preview: PreviewShare; url: string }) {
+  return (
+    <div className='flex w-full min-w-0 flex-col gap-1.5'>
+      <div className={cn(INSET, 'flex min-w-0 items-center gap-2 py-1.5 ps-2.5 pe-1.5')}>
+        <Truncate className='selectable min-w-0 flex-1 font-mono text-2xs text-fg-4'>{url}</Truncate>
+        <CopyButton text={url} className='shrink-0' />
+      </div>
+      <p className='text-2xs text-fg-2'>
+        {preview.endsAt === null ? (
+          describePreviewEnd(preview)
+        ) : (
+          <TimeAgo at={preview.endsAt} text={(now) => describePreviewEnd(preview, now)} />
+        )}
+        .
+      </p>
+    </div>
+  );
+}
+
+function PreviewBody({ view, preview }: { view: ShareView; preview: PreviewShare | null }) {
+  switch (view.kind) {
+    case 'unpaired':
+      return <p className='text-fg-3 text-xs'>{PREVIEW_NEEDS_REMOTE}</p>;
+    case 'shared':
+      return preview && <PreviewLink preview={preview} url={view.url} />;
+    case 'failed':
+      return (
+        <p role='alert' className='selectable text-destructive text-xs'>
+          {view.message}
+        </p>
+      );
+    case 'off':
+    case 'linking':
+      return null;
+  }
+}
+
+export interface PreviewShareActions {
+  share: (limit: ShareLimit) => Promise<unknown>;
+  stop: () => void;
+  close: () => void;
+  openSettings: () => void;
+}
+
+function PreviewActions({
+  view,
+  limit,
+  actions,
+}: {
+  view: ShareView;
+  limit: ShareLimit;
+  actions: PreviewShareActions;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const share = async () => {
+    setBusy(true);
+    await actions.share(limit);
+    setBusy(false);
+  };
+  const stop = (
+    <Button variant='secondary' onClick={actions.stop}>
+      {UNSHARE_TITLE}
+    </Button>
+  );
+  switch (view.kind) {
+    case 'unpaired':
+      return <Button onClick={actions.openSettings}>Open Settings</Button>;
+    case 'shared':
+      return (
+        <>
+          {stop}
+          <Button onClick={actions.close}>Done</Button>
+        </>
+      );
+    case 'failed':
+      return (
+        <>
+          {stop}
+          <Button loading={busy} onClick={() => void share()}>
+            Try again
+          </Button>
+        </>
+      );
+    case 'off':
+    case 'linking':
+      return (
+        <Button loading={busy || view.kind === 'linking'} onClick={() => void share()}>
+          Share
+        </Button>
+      );
+  }
+}
+
+export function PreviewShareView({
+  task,
+  view,
+  preview,
+  defaultLimit,
+  actions,
+}: {
+  task: Task;
+  view: ShareView;
+  preview: PreviewShare | null;
+  defaultLimit: ShareLimit;
+  actions: PreviewShareActions;
+}) {
+  const [picked, setPicked] = React.useState<ShareLimit | null>(null);
+  const limit = picked ?? preview?.limit ?? defaultLimit;
+  const choosing = view.kind === 'off' || view.kind === 'linking' || view.kind === 'failed';
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{PREVIEW_SHARE_TITLE}</DialogTitle>
+        <DialogDescription>{PREVIEW_SHARE_DESCRIPTION}</DialogDescription>
+      </DialogHeader>
+      <PreviewBody view={view} preview={preview} />
+      {choosing && (
+        <Field className='w-full'>
+          <FieldLabel>{SHARE_LIMIT_TITLE}</FieldLabel>
+          <SelectField
+            label={SHARE_LIMIT_TITLE}
+            align='start'
+            className='w-full'
+            items={listShareLimitItems(task)}
+            value={limit}
+            onValueChange={setPicked}
+          />
+        </Field>
+      )}
+      <DialogFooter>
+        <PreviewActions view={view} limit={limit} actions={actions} />
+      </DialogFooter>
+    </>
+  );
+}
+
+function PreviewShareContent({ task, target }: { task: Task; target: PreviewTarget }) {
+  const { snapshot } = useRemoteAccess();
+  const settings = useShinsaSelector((state) => state.settings);
+  const now = useNow();
+  const actions: PreviewShareActions = {
+    share: (limit) => sharePreview(target, limit),
+    stop: () => void unsharePreview(target),
+    close: closePreviewShareDialog,
+    openSettings: () => {
+      closePreviewShareDialog();
+      navigate(resolveSettingsPath('general', 'Remote access'));
+    },
+  };
+  return (
+    <PreviewShareView
+      task={task}
+      view={resolvePreviewShareView(task, target.serviceId, snapshot, now)}
+      preview={selectLivePreview(task, target.serviceId, now)}
+      defaultLimit={settings ? resolveShareLimit(settings) : 'until_done'}
+      actions={actions}
+    />
+  );
+}
+
+export function PreviewShareDialog() {
+  const target = usePreviewShareDialog();
+  const task = useTask(target?.taskId ?? null);
+  return (
+    <Dialog
+      open={Boolean(target && task)}
+      onOpenChange={(next) => {
+        if (!next) closePreviewShareDialog();
+      }}
+    >
+      <DialogContent>{target && task && <PreviewShareContent task={task} target={target} />}</DialogContent>
+    </Dialog>
+  );
+}

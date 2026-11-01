@@ -16,6 +16,7 @@ import {
   stopService,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
+import { isPreviewShared, openPreviewShareDialog, resolvePreviewTarget } from '@/lib/share/previews.ts';
 import {
   describeServicesAdded,
   describeServicesRemove,
@@ -38,6 +39,14 @@ export function useServiceActions({ state, onNavigate }: { state: ShinsaState; o
       onNavigate?.();
     },
     preview: openServicePreview,
+    share: (view) => {
+      const target = resolvePreviewTarget(view);
+      if (target) openPreviewShareDialog(target);
+    },
+    sharing: (view) => {
+      const task = view.taskId ? state.tasks[view.taskId] : undefined;
+      return task ? isPreviewShared(task, view.service.id) : false;
+    },
   };
 
   const actions: ServicesPanelActions = {

@@ -69,4 +69,46 @@ describe('TaskServicesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open web' }));
     expect(calls).toEqual(['preview http://localhost:4123/tasks/SH-4']);
   });
+
+  it('shares the preview of a task’s running service, and marks one already shared', () => {
+    const calls: string[] = [];
+    const noop = () => undefined;
+    const service = createService({ id: 'web', previewUrl: 'http://localhost:{port}/' });
+    const running = createTerminal({
+      id: 't-web',
+      serviceId: 'web',
+      taskId: 'fix',
+      port: 4123,
+      startedAt: 0,
+    });
+    const views = [resolveServiceView(service, running, NOW)];
+    function show(shared: boolean) {
+      return render(
+        <TooltipProvider>
+          <TaskServicesPanel
+            task={{ handle: 'SH-4' }}
+            views={views}
+            project={createProject({ id: 'shop', name: 'Shop' })}
+            now={NOW}
+            handlers={{
+              start: noop,
+              stop: noop,
+              restart: noop,
+              startAll: noop,
+              open: noop,
+              preview: noop,
+              share: (view) => calls.push(`share ${view.service.id} ${view.taskId}`),
+              sharing: () => shared,
+            }}
+          />
+        </TooltipProvider>
+      );
+    }
+    const first = show(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Share preview' }));
+    expect(calls).toEqual(['share web fix']);
+    first.unmount();
+    show(true);
+    expect(screen.getByRole('button', { name: 'Sharing preview' })).toBeTruthy();
+  });
 });
