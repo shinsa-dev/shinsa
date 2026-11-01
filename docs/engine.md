@@ -2738,7 +2738,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   left and came back, `resumeAccess`): the engine answers `pending` and holds the channel until the request is
   accepted (it then finishes the handshake with `welcome`) or declined (`refused`). Both sides derive one AES-GCM key per
   direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
-  fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
+  fails to open closes the channel (1008). The hello offers `deflate-raw` and the welcome accepts it, so a frame of
+  16 KB or more (the first state above all, which compresses about five times) crosses the tunnel deflated; a page or
+  engine that does not know the field keeps plain frames (`docs/protocol.md` → Remote access, Frames). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
   routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
   handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
@@ -2852,7 +2854,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
-  its connection's retry opens a fresh channel with a new token. A machine that refuses this device's key is forgotten
+  its connection's retry opens a fresh channel, with the connect token it already holds while that token has more than
+  20 seconds left (`CONNECT_TOKEN_MARGIN_MS`; a token is good for 60), else a new one, and a channel that fails to
+  open drops the token it used. The page builds the hello's keys while Shinsa Cloud's connect call runs
+  (`openRemoteChannel` takes the URL as a promise). `bun scripts/perf/remote.ts` times each leg (Shinsa Cloud's
+  connect call, cloudflared, the handshake, the first state, `/api` requests through the channel) on a copy of your
+  log in a scratch home with a test device of its own, over loopback and Cloudflare quick tunnels on QUIC and HTTP/2
+  (`--offline` skips Shinsa Cloud and the tunnels, `--json` writes the samples). A machine that refuses this device's key is forgotten
   here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
