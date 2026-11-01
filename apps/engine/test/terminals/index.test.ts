@@ -392,16 +392,20 @@ describe('Terminals services', () => {
     const asked: string[] = [];
     const published: TerminalsSnapshot[] = [];
     terminals.subscribe((snapshot) => published.push(snapshot));
-    terminals.applyRemoteUrls((info, each) => {
-      asked.push(`${info.id} ${each.id}`);
-      return address;
+    const changed = new Set<() => void>();
+    terminals.applyRemoteUrls({
+      resolveRemoteUrl: (info, each) => {
+        asked.push(`${info.id} ${each.id}`);
+        return address;
+      },
+      subscribe: (listener) => changed.add(listener),
     });
     await until('the snapshot goes out again', () => published.length === 1);
     expect(published[0]?.terminals.find((each) => each.id === terminal.id)?.remoteUrl).toBe(address);
     expect(published[0]?.terminals.find((each) => each.id !== terminal.id)?.remoteUrl).toBeUndefined();
     expect(asked).toContain(`${terminal.id} ${service.id}`);
     address = 'https://two.shinsa.page/';
-    terminals.syncRemoteUrls();
+    for (const listener of changed) listener();
     await until('the new address goes out', () => published.length === 2);
     expect(published[1]?.terminals.find((each) => each.id === terminal.id)?.remoteUrl).toBe(address);
     const saved = JSON.parse(readFileSync(join(dataDir, 'terminals/terminals.json'), 'utf8'));

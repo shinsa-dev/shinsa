@@ -370,8 +370,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     services: terminals,
     origin: config.previewOrigin,
   });
-  terminals.applyRemoteUrls((info, service) => previews.resolveRemoteUrl(info, service));
-  previews.subscribe(() => terminals.syncRemoteUrls());
+  terminals.applyRemoteUrls(previews);
   const http = startServer({
     engine,
     config,
