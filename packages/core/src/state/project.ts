@@ -1052,6 +1052,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.unshared':
     case 'share.recorded':
     case 'share.failed':
+    case 'share.described':
     case 'preview.shared':
     case 'preview.unshared':
     case 'preview.recorded':

@@ -5,6 +5,7 @@ import {
   type PreviewShare,
   resolveShareEnd,
   resolveShareLimit,
+  resolveSharePreset,
   type ShareEnd,
   type ShareLimit,
   type Task,
@@ -29,7 +30,7 @@ function assertShareLimit(task: Task, limit: ShareLimit) {
 }
 
 function endShare(decider: Decider, task: Task, reason: ShareEnd) {
-  decider.cancelEffects(task.id, ['share.link'], 'The task is no longer shared.');
+  decider.cancelEffects(task.id, ['share.link', 'share.describe'], 'The task is no longer shared.');
   decider.emit({ type: 'task.unshared', taskId: task.id, reason });
 }
 
@@ -45,14 +46,17 @@ export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   const task = decider.task(command.taskId);
   if (task.watchHome) throw new DomainError('share_refused', 'An automation has nothing to share.');
   const limit = command.limit ?? task.share?.limit ?? resolveShareLimit(decider.state.settings);
+  const preset = command.preset ?? task.share?.preset ?? resolveSharePreset(decider.state.settings);
   assertShareLimit(task, limit);
-  if (task.share && task.share.limit === limit) {
+  if (task.share && task.share.limit === limit && task.share.preset === preset) {
     if (task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
     return;
   }
-  const endsAt = resolveShareEnd(limit, decider.context.now);
-  decider.emit({ type: 'task.shared', taskId: task.id, limit, endsAt });
+  const endsAt =
+    task.share?.limit === limit ? task.share.endsAt : resolveShareEnd(limit, decider.context.now);
+  decider.emit({ type: 'task.shared', taskId: task.id, limit, preset, endsAt });
   if (!task.share || task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
+  if (!task.share) decider.run({ kind: 'share.describe', taskId: task.id });
 }
 
 export function unshareTask(decider: Decider, command: CommandOf<'task.unshare'>) {
@@ -89,6 +93,13 @@ export function failShare(decider: Decider, command: CommandOf<'share.fail'>) {
   const share = decider.state.tasks[command.taskId]?.share;
   if (!share || share.failure === command.detail) return;
   decider.emit({ type: 'share.failed', taskId: command.taskId, detail: command.detail });
+}
+
+export function describeShare(decider: Decider, command: CommandOf<'share.describe'>) {
+  const share = decider.state.tasks[command.taskId]?.share;
+  const description = command.description.trim();
+  if (!share || !description || share.description === description) return;
+  decider.emit({ type: 'share.described', taskId: command.taskId, description });
 }
 
 function selectPreview(task: Task | undefined, serviceId: string) {

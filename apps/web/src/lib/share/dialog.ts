@@ -2,8 +2,10 @@ import {
   isTaskSettled,
   type RemoteSnapshot,
   resolveShareLimit,
+  resolveSharePreset,
   type Settings,
   type ShareLimit,
+  type SharePreset,
   type Task,
   type TaskShare,
 } from '@shinsa/core';
@@ -17,10 +19,12 @@ export const SHARE_TITLE = 'Share task';
 
 export const UNSHARE_TITLE = 'Stop sharing';
 
+export const SHARE_MANAGE_TITLE = 'Manage';
+
 export const SHARING_NOTE = 'Anyone with the link can watch this task.';
 
 export const SHARE_DESCRIPTION =
-  'Anyone with the link can watch this task live and read-only while this machine is online. Its chat never leaves it.';
+  'Anyone with the link can watch it live, read-only, while this machine is online.';
 
 export const UNSHARE_DESCRIPTION = 'The link stops working at once, for everyone who has it.';
 
@@ -31,9 +35,33 @@ export const SHARED_MARK_LABEL = 'Shared by link';
 export const SHARING_SECTION = 'Sharing';
 
 export const SHARING_SECTION_DESCRIPTION =
-  'How long a task you share by link stays shared, unless you pick another time when you share it.';
+  'What a shared task shows and for how long, unless you pick otherwise.';
 
 export const SHARE_LIMIT_SETTING = 'Share tasks for';
+
+export const SHARE_PRESET_TITLE = 'Share as';
+
+export const SHARE_PRESET_SETTING = 'Share tasks as';
+
+export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: string; icon: IconName }[] = [
+  {
+    value: 'status',
+    label: 'Status',
+    hint: 'Progress for customers, no names or code',
+    icon: 'IconProgress75',
+  },
+  {
+    value: 'standard',
+    label: 'Standard',
+    hint: 'The task and its agents’ live work',
+    icon: 'IconListBullets',
+  },
+  { value: 'full', label: 'Full access', hint: 'Standard and your messages', icon: 'IconEyeOpen' },
+];
+
+export function describeSharePreset(preset: SharePreset) {
+  return SHARE_PRESET_ITEMS.find((item) => item.value === preset)?.label ?? preset;
+}
 
 export const SHARE_LIMIT_ITEMS: { value: ShareLimit; label: string; icon: IconName }[] = [
   { value: 'until_done', label: 'Until the task is done', icon: 'IconCheckCircle2' },
@@ -119,14 +147,38 @@ export function resolveShareLimitChoice(task: Task, settings: Settings): ShareLi
   return limit === 'until_done' && isTaskSettled(task) ? FINISHED_TASK_LIMIT : limit;
 }
 
+export function resolveSharePresetChoice(task: Task, settings: Settings | null): SharePreset {
+  if (task.share) return task.share.preset;
+  return settings ? resolveSharePreset(settings) : 'standard';
+}
+
 export function describeShareEnd(share: TaskShare, now = Date.now()) {
   if (share.endsAt !== null) return formatUntil('Sharing ends', share.endsAt, now);
   if (share.limit === 'until_done') return 'Sharing ends when the task is done';
   return 'Shared until you stop it';
 }
 
-export function shareTask(task: Task, limit: ShareLimit) {
-  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit });
+export function shareTask(task: Task, limit: ShareLimit, preset: SharePreset) {
+  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit, preset });
+}
+
+export function changeSharePreset(task: Task, preset: SharePreset) {
+  return sendCommandWithToast(
+    { type: 'task.share', taskId: task.id, preset },
+    `Sharing as ${describeSharePreset(preset).toLowerCase()}.`
+  );
+}
+
+const SHARE_LIMIT_TOAST: Record<ShareLimit, string> = {
+  until_done: 'Sharing until the task is done.',
+  hour: 'Sharing for 1 hour.',
+  day: 'Sharing for 24 hours.',
+  week: 'Sharing for 7 days.',
+  none: 'Sharing until you stop it.',
+};
+
+export function changeShareLimit(task: Task, limit: ShareLimit) {
+  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit }, SHARE_LIMIT_TOAST[limit]);
 }
 
 export function unshareTask(task: Task) {

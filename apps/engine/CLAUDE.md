@@ -185,6 +185,8 @@ src/
 │                        files whole; every open link, pushed on each state change and ended when sharing stops or
 │                        remote access goes off, and a link whose time ran out refused),
 │                        share-clock.ts (ShareClock: share.expire when a share's time runs out),
+│                        share-describe.ts (the writer quick call that describes a shared task for the
+│                        share.describe effect),
 │                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
 │                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and

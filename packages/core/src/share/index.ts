@@ -2,6 +2,8 @@ import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { RunDelegation } from '../domain/delegations.ts';
 import { isCurrentEvidence } from '../domain/evidence.ts';
 import type { Round } from '../domain/rounds.ts';
+import type { SharePreset } from '../domain/settings.ts';
+import type { ChangeProposal, TaskResult } from '../domain/shapes.ts';
 import type {
   Activity,
   ActivityKind,
@@ -16,17 +18,21 @@ import type {
   Task,
 } from '../domain/types.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
-import type { ReviewFinding } from '../report/types.ts';
+import type { PlanDocument, ReviewFinding, WorkReport } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
+import { hasShareGroup, SHARE_PRESET_GROUPS, type ShareGroup } from './presets.ts';
+import { resolveShareUpdate, type ShareUpdate } from './update.ts';
 
 export interface SharedTaskContext {
+  preset: SharePreset;
   owner: string | null;
   machine: string | null;
   repository: string | null;
 }
 
 export interface SharedTask {
+  preset: SharePreset;
   task: Task;
   gates: Gate[];
   runs: Run[];
@@ -36,6 +42,8 @@ export interface SharedTask {
   owner: string | null;
   machine: string | null;
   repository: string | null;
+  description: string | null;
+  update: ShareUpdate | null;
   code: boolean;
 }
 
@@ -55,18 +63,20 @@ const CODE_STATES: ReadonlySet<PullRequest['state']> = new Set(['open', 'merged'
 
 const PRIVATE_ACTIVITY: ReadonlySet<ActivityKind> = new Set(['message', 'question', 'answer', 'account']);
 
-function scrubText(text: string) {
+function scrubText(text: string, kept: ReadonlySet<string>) {
   return text
-    .replace(SHINSA_LINK, (link, label: string, kind: string) => (SHARED_LINK_KINDS.has(kind) ? link : label))
-    .replace(SHINSA_URI, (uri, kind: string) => (SHARED_LINK_KINDS.has(kind) ? uri : ''));
+    .replace(SHINSA_LINK, (link, label: string, kind: string) => (kept.has(kind) ? link : label))
+    .replace(SHINSA_URI, (uri, kind: string) => (kept.has(kind) ? uri : ''));
 }
 
-function scrubValue<T>(value: T): T {
-  if (typeof value === 'string') return scrubText(value) as T;
-  if (Array.isArray(value)) return value.map((item) => scrubValue(item)) as T;
+function scrubValue<T>(value: T, kept: ReadonlySet<string>): T {
+  if (typeof value === 'string') return scrubText(value, kept) as T;
+  if (Array.isArray(value)) return value.map((item) => scrubValue(item, kept)) as T;
   if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubValue(item)])) as T;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubValue(item, kept)])) as T;
 }
+
+type Grants = (group: ShareGroup) => boolean;
 
 function redactPhaseReport(report: PhaseReport): PhaseReport {
   return {
@@ -92,6 +102,51 @@ function redactPlan(plan: Plan): Plan {
   };
 }
 
+function redactPlanPhases(document: PlanDocument): PlanDocument {
+  return {
+    goal: '',
+    phases: document.phases.map((phase) => ({ title: phase.title, detail: '' })),
+    behaviour: [],
+    approach: '',
+    files: [],
+    outOfScope: [],
+    verification: [],
+    questions: [],
+  };
+}
+
+function redactProgressPlan(plan: Plan): Plan {
+  return {
+    version: plan.version,
+    body: '',
+    document: plan.document ? redactPlanPhases(plan.document) : null,
+    proposedAt: plan.proposedAt,
+    changes: [],
+    approvedAt: plan.approvedAt ?? null,
+  };
+}
+
+function resolveSharedPlan(plan: Plan | null, grants: Grants) {
+  if (!plan) return null;
+  if (grants('plan')) return redactPlan(plan);
+  return grants('progress') ? redactProgressPlan(plan) : null;
+}
+
+function resolveSharedReport(report: WorkReport | null, grants: Grants): WorkReport | null {
+  return report && grants('reports') ? report : null;
+}
+
+function resolveSharedResult(result: TaskResult | null | undefined, grants: Grants): TaskResult | null {
+  if (!result || !(grants('progress') || grants('summary'))) return null;
+  return { step: result.step, body: grants('summary') ? result.body : '', runId: null, at: result.at };
+}
+
+function resolveSharedProposal(proposal: ChangeProposal | null | undefined, grants: Grants) {
+  if (!proposal) return null;
+  if (grants('plan')) return { ...proposal, runId: null };
+  return grants('progress') ? { ...proposal, request: '', why: '', runId: null } : null;
+}
+
 function redactFinding(finding: ReviewFinding): ReviewFinding {
   return {
     severity: finding.severity,
@@ -109,19 +164,51 @@ function redactPullRequest(pullRequest: PullRequest): PullRequest {
   return { ...pullRequest, unresolvedThreads: [] };
 }
 
-function redactRound(round: Round): Round {
-  return { ...round, request: splitMessageAttachments(round.request).text };
+function redactRound(round: Round, grants: Grants): Round {
+  const outcome = round.outcome;
+  return {
+    number: round.number,
+    title: grants('identity') ? round.title : '',
+    request: grants('requests') ? splitMessageAttachments(round.request).text : '',
+    why: grants('requests') ? round.why : null,
+    shipping: round.shipping,
+    status: round.status,
+    pipeline: round.pipeline,
+    branch: grants('people') ? round.branch : null,
+    base: grants('people') ? round.base : null,
+    pullRequest: grants('pull_request') ? round.pullRequest : null,
+    queuedAt: round.queuedAt,
+    startedAt: round.startedAt,
+    endedAt: round.endedAt,
+    outcome: outcome
+      ? {
+          goal: grants('plan') ? outcome.goal : null,
+          phases: outcome.phases,
+          headline: grants('summary') ? outcome.headline : null,
+          result: grants('summary') ? outcome.result : null,
+        }
+      : null,
+  };
 }
 
-function redactActivity(activity: readonly Activity[]): Activity[] {
+function isSharedActivity(entry: Activity, grants: Grants) {
+  return !PRIVATE_ACTIVITY.has(entry.kind) || (entry.kind === 'message' && grants('messages'));
+}
+
+function resolveSharedDetail(entry: Activity) {
+  if (entry.kind === 'decision' || entry.detail === null) return null;
+  return splitMessageAttachments(entry.detail).text;
+}
+
+function redactActivity(activity: readonly Activity[], grants: Grants): Activity[] {
   return activity
-    .filter((entry) => !PRIVATE_ACTIVITY.has(entry.kind))
+    .filter((entry) => isSharedActivity(entry, grants))
     .map((entry) => ({
       at: entry.at,
       actor: entry.actor,
       kind: entry.kind,
       text: entry.text,
-      detail: entry.kind === 'decision' ? null : entry.detail,
+      detail: resolveSharedDetail(entry),
       evidenceId: entry.evidenceId,
       runId: null,
       ...(entry.gateType ? { gateType: entry.gateType } : {}),
@@ -130,65 +217,113 @@ function redactActivity(activity: readonly Activity[]): Activity[] {
     }));
 }
 
-function redactTask(task: Task): Task {
+function createBlankTask(task: Task, grants: Grants): Task {
   return {
     id: task.id,
-    handle: task.handle ?? null,
-    projectId: task.projectId ?? null,
-    request: splitMessageAttachments(task.request).text,
-    title: task.title,
-    repoId: task.repoId,
-    size: task.size,
+    handle: null,
+    projectId: null,
+    request: '',
+    title: '',
+    repoId: null,
+    size: null,
     planFirst: task.planFirst,
     stage: task.stage,
-    stageReason: task.stageReason,
-    cancelledFrom: task.cancelledFrom ?? null,
+    stageReason: '',
+    cancelledFrom: null,
     priority: task.priority,
-    branch: task.branch,
+    branch: null,
     worktreePath: null,
-    plan: task.plan ? redactPlan(task.plan) : null,
-    phases: task.phases,
+    plan: resolveSharedPlan(task.plan, grants),
+    phases: [],
     planAnswers: null,
-    summary: task.summary,
-    report: task.report,
-    reviewSummary: task.reviewSummary,
-    findings: task.findings.map(redactFinding),
-    fixRounds: task.fixRounds,
+    summary: null,
+    report: resolveSharedReport(task.report, grants),
+    reviewSummary: null,
+    findings: [],
+    fixRounds: 0,
     fixFor: null,
     fixSignature: null,
     stalledFixes: 0,
-    pushedSha: task.pushedSha ?? null,
-    pushedAt: task.pushedAt ?? null,
+    pushedSha: null,
+    pushedAt: null,
     recoveries: 0,
-    phaseReports: task.phaseReports.map(redactPhaseReport),
-    checks: task.checks ?? [],
-    runningChecks: task.runningChecks ?? [],
-    checkResults: task.checkResults ?? null,
-    coverage: task.coverage ?? null,
-    pullRequest: task.pullRequest ? redactPullRequest(task.pullRequest) : null,
+    phaseReports: [],
+    checks: [],
+    runningChecks: [],
+    checkResults: null,
+    coverage: null,
+    pullRequest: null,
     waitsOn: [],
     note: null,
     origin: null,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     stageChangedAt: task.stageChangedAt,
-    activity: redactActivity(task.activity),
+    activity: [],
     ...(task.mode ? { mode: task.mode } : {}),
-    reviewDisagreements: task.reviewDisagreements ?? [],
-    monitor: task.monitor ? { ...task.monitor } : null,
-    suggestions: (task.suggestions ?? []).map((suggestion) => ({ ...suggestion })),
-    usageWait: task.usageWait ? { ...task.usageWait, account: null } : null,
-    triageDecisions: task.triageDecisions ?? null,
-    ...(task.pipeline ? { pipeline: task.pipeline } : {}),
+    reviewDisagreements: [],
+    monitor: null,
+    suggestions: [],
+    usageWait: null,
+    triageDecisions: null,
     auto: task.auto,
-    result: task.result ? { ...task.result, runId: null } : null,
-    proposal: task.proposal ? { ...task.proposal, runId: null } : null,
-    rounds: (task.rounds ?? []).map(redactRound),
+    result: resolveSharedResult(task.result, grants),
+    proposal: resolveSharedProposal(task.proposal, grants),
+    rounds: (task.rounds ?? []).map((round) => redactRound(round, grants)),
     closedAt: task.closedAt ?? null,
+    mergeStepsDone: [],
+    carriedMergeSteps: [],
+    watchdogs: [],
+  };
+}
+
+const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants) => Partial<Task>>> = {
+  identity: (task) => ({ handle: task.handle ?? null, title: task.title, size: task.size }),
+  requests: (task) => ({ request: splitMessageAttachments(task.request).text }),
+  progress: (task) => ({
+    cancelledFrom: task.cancelledFrom ?? null,
+    phases: task.phases,
+    ...(task.pipeline ? { pipeline: task.pipeline } : {}),
+  }),
+  summary: (task) => ({ summary: task.summary }),
+  people: (task) => ({
+    projectId: task.projectId ?? null,
+    repoId: task.repoId,
+    branch: task.branch,
+    stageReason: task.stageReason,
+  }),
+  plan: (task) => ({ triageDecisions: task.triageDecisions ?? null }),
+  reports: (task) => ({ phaseReports: task.phaseReports.map(redactPhaseReport), fixRounds: task.fixRounds }),
+  review: (task) => ({
+    reviewSummary: task.reviewSummary,
+    findings: task.findings.map(redactFinding),
+    reviewDisagreements: task.reviewDisagreements ?? [],
+  }),
+  checks: (task) => ({
+    checks: task.checks ?? [],
+    runningChecks: task.runningChecks ?? [],
+    checkResults: task.checkResults ?? null,
+    coverage: task.coverage ?? null,
+  }),
+  pull_request: (task) => ({
+    pullRequest: task.pullRequest ? redactPullRequest(task.pullRequest) : null,
+    pushedSha: task.pushedSha ?? null,
+    pushedAt: task.pushedAt ?? null,
     mergeStepsDone: task.mergeStepsDone ?? [],
     carriedMergeSteps: task.carriedMergeSteps ?? [],
     watchdogs: (task.watchdogs ?? []).map((watchdog) => ({ ...watchdog })),
-  };
+  }),
+  activity: (task, grants) => ({
+    activity: redactActivity(task.activity, grants),
+    monitor: task.monitor ? { ...task.monitor } : null,
+    suggestions: (task.suggestions ?? []).map((suggestion) => ({ ...suggestion })),
+    usageWait: task.usageWait ? { ...task.usageWait, account: null } : null,
+  }),
+};
+
+function redactTask(task: Task, preset: SharePreset, grants: Grants): Task {
+  const parts = SHARE_PRESET_GROUPS[preset].map((group) => TASK_GROUP_FIELDS[group]?.(task, grants) ?? {});
+  return Object.assign(createBlankTask(task, grants), ...parts);
 }
 
 function redactGate(gate: Gate): Gate {
@@ -291,16 +426,16 @@ function redactEvidence(evidence: Evidence): Evidence | null {
     taskId: evidence.taskId,
     runId: null,
     kind: evidence.kind,
-    title: scrubText(evidence.title),
+    title: scrubText(evidence.title, SHARED_LINK_KINDS),
     uri,
     attachedAt: evidence.attachedAt,
     ...(evidence.round ? { round: evidence.round } : {}),
-    ...(evidence.detail ? { detail: scrubText(evidence.detail) } : {}),
+    ...(evidence.detail ? { detail: scrubText(evidence.detail, SHARED_LINK_KINDS) } : {}),
     ...(evidence.width ? { width: evidence.width } : {}),
     ...(evidence.theme ? { theme: evidence.theme } : {}),
     ...(evidence.stage ? { stage: evidence.stage } : {}),
     ...(evidence.itemId ? { itemId: evidence.itemId } : {}),
-    ...(evidence.label ? { label: scrubText(evidence.label) } : {}),
+    ...(evidence.label ? { label: scrubText(evidence.label, SHARED_LINK_KINDS) } : {}),
     ...(evidence.checkId ? { checkId: evidence.checkId } : {}),
     ...(evidence.key ? { key: evidence.key } : {}),
     ...(evidence.fixFor ? { fixFor: evidence.fixFor } : {}),
@@ -316,27 +451,38 @@ function listSharedEvidence(state: ShinsaState, task: Task) {
 
 export function hasSharedCode(task: Task, repository: string | null) {
   if (repository === null) return false;
-  return task.pullRequest !== null && CODE_STATES.has(task.pullRequest.state);
+  if (task.pullRequest !== null && CODE_STATES.has(task.pullRequest.state)) return true;
+  return Boolean(task.worktreePath);
 }
 
 export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {
+  const grants: Grants = (group) => hasShareGroup(context.preset, group);
+  const people = grants('people');
   const projectId = resolveTaskProject(state, task);
-  const project = projectId ? state.projects[projectId] : undefined;
-  const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  const project = people && projectId ? state.projects[projectId] : undefined;
+  const repo = people && task.repoId ? state.repos[task.repoId] : undefined;
+  const links = people ? SHARED_LINK_KINDS : new Set<string>();
   return {
-    task: scrubValue(redactTask(task)),
-    gates: Object.values(state.gates)
-      .filter((gate) => gate.taskId === task.id)
-      .map((gate) => scrubValue(redactGate(gate))),
-    runs: Object.values(state.runs)
-      .filter((run) => run.taskId === task.id)
-      .map(redactRun),
-    evidence: listSharedEvidence(state, task),
+    preset: context.preset,
+    task: scrubValue(redactTask(task, context.preset, grants), links),
+    gates: grants('activity')
+      ? Object.values(state.gates)
+          .filter((gate) => gate.taskId === task.id)
+          .map((gate) => scrubValue(redactGate(gate), links))
+      : [],
+    runs: grants('runs')
+      ? Object.values(state.runs)
+          .filter((run) => run.taskId === task.id)
+          .map(redactRun)
+      : [],
+    evidence: grants('evidence') ? listSharedEvidence(state, task) : [],
     repo: repo ? redactRepo(repo) : null,
     project: project ? redactProject(project) : null,
-    owner: context.owner,
-    machine: context.machine,
-    repository: context.repository,
-    code: hasSharedCode(task, context.repository),
+    owner: people ? context.owner : null,
+    machine: people ? context.machine : null,
+    repository: people ? context.repository : null,
+    description: grants('description') ? scrubText(task.share?.description ?? '', links) || null : null,
+    update: grants('progress') ? resolveShareUpdate(task) : null,
+    code: grants('code') && hasSharedCode(task, context.repository),
   };
 }

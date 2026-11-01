@@ -15,17 +15,19 @@ import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
 export function RemoteShell({
   session,
   dashboard,
-  wide = false,
+  fill = false,
   children,
 }: {
   session: RemoteSession | null;
   dashboard: Pick<DashboardClient, 'signOut'>;
-  wide?: boolean;
+  fill?: boolean;
   children: React.ReactNode;
 }) {
   const user = session?.user ?? null;
   return (
-    <div className='flex min-h-dvh flex-col bg-background text-fg-3'>
+    <div
+      className={cn('flex flex-col bg-background text-fg-3', fill ? 'h-dvh overflow-hidden' : 'min-h-dvh')}
+    >
       <header className='flex h-11 shrink-0 items-center gap-2 px-3.5 sm:px-5'>
         <a href={REMOTE_PATHS.app} className='flex items-center gap-1.5 font-medium text-fg-4 text-sm'>
           <span className='grid size-5 shrink-0 place-items-center'>
@@ -46,7 +48,12 @@ export function RemoteShell({
           </Button>
         )}
       </header>
-      <main className={cn('flex w-full flex-1 flex-col', !wide && 'mx-auto max-w-lg gap-6 px-4 pt-10 pb-16')}>
+      <main
+        className={cn(
+          'flex w-full flex-1 flex-col',
+          fill ? 'min-h-0 overflow-hidden' : 'mx-auto max-w-lg gap-6 px-4 pt-10 pb-16'
+        )}
+      >
         {children}
       </main>
     </div>
