@@ -51,13 +51,14 @@ import {
   serializeShareUrl,
   type Task,
 } from '../packages/core/src/index.ts';
+import { SANDBOX_PATH, type SandboxSection, serializeSandboxPage } from './sandbox-page.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PORT = Number(Bun.env.PORT ?? 5195);
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
 const PREVIEW_ZONE = `http://localhost:${PORT}`;
-const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
+const SANDBOX_DIR = Bun.env.SHINSA_SANDBOX_DIR ?? join('/tmp', `shinsa-sandbox-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
@@ -107,13 +108,12 @@ interface ServicePreview {
   port: number;
 }
 
-interface DemoService {
+interface SharedService {
   terminals: Terminals;
   serviceId: string;
   taskId: string;
+  cwd: string;
 }
-
-const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/sandbox-service.ts')}`;
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -123,7 +123,7 @@ function createShareLink(instanceId: string): ShareLink {
 }
 
 function seedStudio() {
-  const seedDir = join(PREVIEW_DIR, 'studio');
+  const seedDir = join(SANDBOX_DIR, 'studio');
   const seeded = Bun.spawnSync(['bun', join(ROOT, 'scripts/seed.ts')], {
     env: { ...Bun.env, SHINSA_SEED_DIR: seedDir },
     stdout: 'inherit',
@@ -134,7 +134,7 @@ function seedStudio() {
 }
 
 function prepareLaptop() {
-  const dataDir = join(PREVIEW_DIR, 'laptop', 'data');
+  const dataDir = join(SANDBOX_DIR, 'laptop', 'data');
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(
     join(dataDir, 'config.json'),
@@ -443,39 +443,40 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
 
 async function createServicePreview(
   studio: Awaited<ReturnType<typeof startMachine>>
-): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
+): Promise<{ preview: ServicePreview; shared: SharedService }> {
   const { engine, terminals } = studio;
+  const { services } = terminals.snapshot();
   const task = Object.values(engine.state.tasks).find(
-    (entry) => entry.repoId && entry.projectId && entry.worktreePath && !isTaskSettled(entry)
+    (entry) =>
+      entry.repoId &&
+      entry.worktreePath &&
+      !isTaskSettled(entry) &&
+      services.some((each) => each.projectId === entry.projectId && each.name === 'web')
   );
-  const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
-  if (!(task?.projectId && repo)) return null;
-  const service = terminals.addService(task.projectId, {
-    name: 'web',
-    cwd: repo.path,
-    command: DEMO_COMMAND,
-    env: {},
-    previewUrl: 'http://localhost:{port}/',
-    portVariable: 'PORT',
-  });
-  const demo: DemoService = { terminals, serviceId: service.id, taskId: task.id };
-  startDemoService(demo);
+  const service = services.find((entry) => entry.projectId === task?.projectId && entry.name === 'web');
+  if (!(task && service)) throw new Error('No seeded task has a web service to share.');
+  const shared: SharedService = { terminals, serviceId: service.id, taskId: task.id, cwd: service.cwd };
+  startSharedService(shared);
   await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === service.id);
     if (preview?.url)
       return {
         preview: { url: preview.url, handle: task.handle ?? task.id, port: studio.machine.port },
-        demo,
+        shared,
       };
-    if (preview?.failure) throw new Error(`Sharing the demo preview failed: ${preview.failure}`);
+    if (preview?.failure) throw new Error(`Sharing the web service failed: ${preview.failure}`);
     await Bun.sleep(100);
   }
-  throw new Error('Sharing the demo preview did not finish.');
+  throw new Error('Sharing the web service did not finish.');
 }
 
-function startDemoService(demo: DemoService) {
-  demo.terminals.startService(demo.serviceId, { cwd: ROOT, place: 'worktree', taskId: demo.taskId });
+function startSharedService(shared: SharedService) {
+  shared.terminals.startService(shared.serviceId, {
+    cwd: shared.cwd,
+    place: 'worktree',
+    taskId: shared.taskId,
+  });
 }
 
 function createPreviewWorld(machines: Machine[]): CloudWorld {
@@ -523,12 +524,16 @@ async function respondEnroll(machine: Machine, url: URL) {
   return Response.redirect(url.searchParams.has('on') ? target.replace('#', '?on=machine#') : target, 302);
 }
 
-const DEMO_TOGGLE = /^\/__preview\/demo\/(start|stop)$/;
+const SERVICE_TOGGLE = new RegExp(`^${SANDBOX_PATH}/service/(start|stop)$`);
 
-async function toggleDemoService(demo: DemoService | null, url: URL) {
-  if (demo && url.pathname.endsWith('/start')) startDemoService(demo);
-  if (demo && url.pathname.endsWith('/stop')) await demo.terminals.stopService(demo.serviceId, demo.taskId);
-  return new Response(`The web service ${url.pathname.endsWith('/stop') ? 'stopped' : 'started'}.`);
+const ENROLL = new RegExp(`^${SANDBOX_PATH}/enroll/([a-z]+)$`);
+
+const TUNNEL = new RegExp(`^${SANDBOX_PATH}/tunnel/([a-z]+)(/share)?$`);
+
+async function toggleSharedService(shared: SharedService, url: URL) {
+  if (url.pathname.endsWith('/start')) startSharedService(shared);
+  if (url.pathname.endsWith('/stop')) await shared.terminals.stopService(shared.serviceId, shared.taskId);
+  return Response.redirect(`${ORIGIN}${SANDBOX_PATH}`, 303);
 }
 
 function respondPreviewHost(
@@ -559,7 +564,7 @@ function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
       { status: 404 }
     );
   const answer: ShareConnectResponse = {
-    url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}`,
+    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${machine.id}`,
     online: true,
   };
   return Response.json(answer);
@@ -575,48 +580,85 @@ function respondStatic(pathname: string) {
   });
 }
 
-function listPreviewLinks(machines: Machine[], shares: PreviewShare[], preview: ServicePreview | null) {
+function listSandboxSections(
+  machines: Machine[],
+  shares: PreviewShare[],
+  preview: ServicePreview
+): SandboxSection[] {
   return [
-    ['The merged dashboard (always signed in)', `${ORIGIN}${REMOTE_PATHS.app}`],
-    ...(preview
-      ? [
-          [
-            `${preview.handle} on Studio's own app, no sign-in: its Services, Share preview and Stop sharing`,
-            `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
-          ],
-          [
-            `The shared preview of ${preview.handle}'s web service, with live updates over a WebSocket`,
-            preview.url,
-          ],
-          ['Stop the web service (the preview then says it is not running)', `${ORIGIN}/__preview/demo/stop`],
-          ['Start the web service again', `${ORIGIN}/__preview/demo/start`],
-          ['A preview link that no longer works', `http://${'a'.repeat(32)}.localhost:${PORT}/`],
-        ]
-      : []),
-    [
-      'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
-      `${ORIGIN}${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
-    ],
-    ...machines.map((machine) => [
-      `Add this device to ${machine.name}`,
-      `${ORIGIN}/__preview/enroll/${machine.id}`,
-    ]),
-    ...machines.map((machine) => [
-      `Add this device to ${machine.name} as the machine it sits on`,
-      `${ORIGIN}/__preview/enroll/${machine.id}?on=machine`,
-    ]),
-    ['All tasks, each with its machine', `${ORIGIN}/tasks`],
-    ['Settings, with Machines', `${ORIGIN}/settings`],
-    ['Approving a pairing (code K7PQ)', `${ORIGIN}${REMOTE_PATHS.pairPage}?code=K7PQ`],
-    ...shares.flatMap((share) => [
-      [`${share.label} (a live link, no sign-in)`, share.url],
-      [`The same task, ${share.handle}, on Studio`, `http://${HOST}:${share.port}/tasks/${share.handle}`],
-    ]),
-    ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
-    ...machines.map((machine) => [
-      `${machine.name}'s own app: Settings`,
-      `http://${HOST}:${machine.port}/settings`,
-    ]),
+    {
+      title: 'Each machine’s own app',
+      links: machines.flatMap((machine) => [
+        { label: `${machine.name}: Home`, url: `http://${HOST}:${machine.port}/` },
+        { label: `${machine.name}: Settings`, url: `http://${HOST}:${machine.port}/settings` },
+      ]),
+    },
+    {
+      title: 'The remote dashboard, always signed in',
+      links: [
+        { label: 'The merged dashboard', url: `${ORIGIN}${REMOTE_PATHS.app}` },
+        { label: 'All tasks, each with its machine', url: `${ORIGIN}/tasks` },
+        { label: 'Settings, with Machines', url: `${ORIGIN}/settings` },
+      ],
+    },
+    {
+      title: 'Adding a device and pairing',
+      links: [
+        ...machines.flatMap((machine) => [
+          {
+            label: `Add this device to ${machine.name}`,
+            url: `${ORIGIN}${SANDBOX_PATH}/enroll/${machine.id}`,
+          },
+          {
+            label: `Add this device to ${machine.name} as the machine it sits on`,
+            url: `${ORIGIN}${SANDBOX_PATH}/enroll/${machine.id}?on=machine`,
+          },
+        ]),
+        { label: 'Approve a pairing (code K7PQ)', url: `${ORIGIN}${REMOTE_PATHS.pairPage}?code=K7PQ` },
+        {
+          label: 'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview)',
+          url: `${ORIGIN}${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
+        },
+      ],
+    },
+    {
+      title: 'Shared tasks, live links with no sign-in',
+      links: [
+        ...shares.flatMap((share) => [
+          { label: share.label, url: share.url },
+          {
+            label: `The same task, ${share.handle}, on Studio`,
+            url: `http://${HOST}:${share.port}/tasks/${share.handle}`,
+          },
+        ]),
+        {
+          label: 'A share link that no longer works',
+          url: serializeShareUrl(ORIGIN, createShareLink('studio')),
+        },
+      ],
+    },
+    {
+      title: 'The shared web service',
+      links: [
+        {
+          label: `${preview.handle} on Studio, with its Services, Share preview and Stop sharing`,
+          url: `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
+        },
+        {
+          label: `The shared preview of ${preview.handle}’s web service, with live updates`,
+          url: preview.url,
+        },
+        {
+          label: 'Stop the web service (the preview then says it is not running)',
+          url: `${ORIGIN}${SANDBOX_PATH}/service/stop`,
+        },
+        { label: 'Start the web service again', url: `${ORIGIN}${SANDBOX_PATH}/service/start` },
+        {
+          label: 'A preview link that no longer works',
+          url: `http://${'a'.repeat(32)}.localhost:${PORT}/`,
+        },
+      ],
+    },
   ];
 }
 
@@ -628,7 +670,7 @@ async function createConnect(machine: Machine): Promise<ConnectResponse> {
     expiresAt,
   });
   return {
-    url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
+    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
     expiresAt,
   };
 }
@@ -749,7 +791,7 @@ async function main() {
     throw new Error(
       'Build the web app first: bun run --cwd apps/web build && bun run --cwd apps/web build:remote'
     );
-  rmSync(PREVIEW_DIR, { recursive: true, force: true });
+  rmSync(SANDBOX_DIR, { recursive: true, force: true });
   const studioData = seedStudio();
   const laptopData = prepareLaptop();
   const studio = await startMachine('studio', 'Studio', studioData);
@@ -757,9 +799,8 @@ async function main() {
   await seedLaptop(laptop.engine, laptopData);
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
-  const shared = await createServicePreview(studio);
-  const preview = shared?.preview ?? null;
-  const demo = shared?.demo ?? null;
+  const { preview, shared } = await createServicePreview(studio);
+  const page = serializeSandboxPage(listSandboxSections(machines, shares, preview));
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,
@@ -768,13 +809,15 @@ async function main() {
       const url = new URL(request.url);
       if (isPreviewHost(url.host, PREVIEW_ZONE))
         return respondPreviewHost(request, url, machines, world, server);
-      if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
+      if (url.pathname === SANDBOX_PATH)
+        return new Response(page, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+      if (SERVICE_TOGGLE.test(url.pathname)) return toggleSharedService(shared, url);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
-      const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
+      const enroll = ENROLL.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return respondEnroll(enrolling, url);
-      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share)?$/.exec(url.pathname);
+      const tunnel = TUNNEL.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {
         const path = tunnel?.[2]
@@ -800,7 +843,7 @@ async function main() {
       },
     },
   });
-  for (const [label, url] of listPreviewLinks(machines, shares, preview)) console.info(`${label}: ${url}`);
+  console.info(`The sandbox: ${ORIGIN}${SANDBOX_PATH}`);
 }
 
 await main();
