@@ -101,11 +101,16 @@ const IN_VIEW_LINE = 48;
 
 const LETTING_GO = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
 
-function useHoldPointInView(selection: ReviewSelection, selected: string | null, request: number) {
+function useHoldPointInView(
+  viewport: React.RefObject<HTMLDivElement | null>,
+  selection: ReviewSelection,
+  selected: string | null,
+  request: number
+) {
   React.useEffect(() => {
     if (!selected) return;
     void request;
-    const find = () => document.querySelector(`[data-review-item="${CSS.escape(selected)}"]`);
+    const find = () => viewport.current?.querySelector(`[data-review-item="${CSS.escape(selected)}"]`);
     let held = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const letGo = () => {
@@ -125,10 +130,16 @@ function useHoldPointInView(selection: ReviewSelection, selected: string | null,
       letGo();
       for (const name of LETTING_GO) window.removeEventListener(name, letGo);
     };
-  }, [selection, selected, request]);
+  }, [viewport, selection, selected, request]);
 }
 
-function FollowSpot({ selection }: { selection: ReviewSelection }) {
+function FollowSpot({
+  viewport,
+  selection,
+}: {
+  viewport: React.RefObject<HTMLDivElement | null>;
+  selection: ReviewSelection;
+}) {
   const spot = useSearchParam('spot');
   const request = useSelectionRequest(selection);
   React.useEffect(() => {
@@ -138,7 +149,7 @@ function FollowSpot({ selection }: { selection: ReviewSelection }) {
     void request;
     selection.light(spot);
   }, [selection, spot, request]);
-  useHoldPointInView(selection, spot, request);
+  useHoldPointInView(viewport, selection, spot, request);
   return null;
 }
 
@@ -702,7 +713,7 @@ export function ReviewTab({
   }
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <FollowSpot selection={selection} />
+      <FollowSpot viewport={viewport} selection={selection} />
       {stops.length > 0 && (
         <div className={cn(PAGE_COLUMN, 'shrink-0 pt-5 pb-1')}>
           <PointIndex chapters={chapters} stops={stops} selection={selection} onSelect={select} />
