@@ -2542,8 +2542,9 @@ projection and channel will serve teams.
   treats such a share as ended too (`selectLiveShare` in `apps/web/src/lib/share/dialog.ts`): the banner, Stop sharing
   and the dialog's link go the moment `endsAt` passes, and sharing it again ends the old share first, so it makes a new
   link rather than bringing the old one back (`shareTask` in core). A finished
-  task cannot be shared `until_done` (`share_refused`), so Share task offers only the time limits for one. Changing
-  the limit of a shared task keeps its link (`task.share` with another `limit`).
+  task cannot be shared `until_done` (`share_refused`), so Share task offers only the time limits for one. The dialog
+  picks the limit before the link is made (or before Try again); on a running share only `shinsa tasks share --until`
+  changes it, keeping its link (`task.share` with another `limit`).
 - **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
   core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is

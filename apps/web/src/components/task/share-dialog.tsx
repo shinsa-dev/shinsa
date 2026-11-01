@@ -128,11 +128,7 @@ function ShareContent({ task }: { task: Task }) {
     if (shared) closeShareDialog();
   }, [shared]);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
-  const limit = live?.limit ?? picked ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
-  const changeLimit = (next: ShareLimit) => {
-    setPicked(next);
-    if (live) void shareTask(task, next);
-  };
+  const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
   return (
     <>
       <DialogHeader>
@@ -140,7 +136,7 @@ function ShareContent({ task }: { task: Task }) {
         <DialogDescription>{SHARE_DESCRIPTION}</DialogDescription>
       </DialogHeader>
       <ShareBody view={view} />
-      {view.kind !== 'unpaired' && <ShareLimitRow task={task} limit={limit} onChange={changeLimit} />}
+      {view.kind !== 'unpaired' && <ShareLimitRow task={task} limit={limit} onChange={setPicked} />}
       <DialogFooter>
         <ShareActions task={task} view={view} limit={limit} />
       </DialogFooter>
