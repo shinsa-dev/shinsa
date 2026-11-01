@@ -113,7 +113,7 @@ interface DemoService {
   taskId: string;
 }
 
-const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/remote-preview-demo.ts')}`;
+const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/sandbox-service.ts')}`;
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
