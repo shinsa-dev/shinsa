@@ -17,8 +17,8 @@ export const FEEDBACK_ICON = 'IconMegaphone';
 export const FEEDBACK_ACTIVE_ICON = 'IconMegaphoneFilled';
 
 export const FEEDBACK_INTRO = {
-  before: 'Your agent turns your note into a public issue on',
-  after: ', without anything private. You read it before it opens.',
+  before: 'Your agent turns your note into a public GitHub issue on',
+  after: ', without anything private. You read it before it opens under your GitHub account.',
 };
 
 export const FEEDBACK_HINT = 'Your agent turns it into a public GitHub issue that you read before it opens';

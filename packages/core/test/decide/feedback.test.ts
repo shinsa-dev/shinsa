@@ -187,7 +187,7 @@ describe('opening an issue', () => {
     createTask(harness);
     const entry = drafted(harness, 'Superwall plans fail', 'Mail jane@acme.io about /Users/jane/app.');
     expect(() => harness.send({ type: 'feedback.file', feedbackId: entry.id })).toThrow(
-      'This issue still has a name from your projects (“Superwall”), an email address (“jane@acme.io”), a home folder path (“/Users/jane/app.”). Take it out before you open the issue.'
+      'This issue still has a name from your projects (“Superwall”), an email address (“jane@acme.io”), a folder path (“/Users/jane/app.”). Take it out before you open the issue.'
     );
     expect(only(harness).status).toBe('draft');
   });
@@ -301,6 +301,30 @@ describe('an agent reports feedback', () => {
     expect(() => report(harness, createTask(harness), 'One more.')).toThrow(
       'The human already has 10 reports to read.'
     );
+  });
+
+  test('feedback an agent writes for you is an agent’s, with its task and the same limits', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const send = (note: string) =>
+      harness.send({ type: 'feedback.write', feedbackId: null, note }, { onBehalf: true, byTask: taskId });
+    send('The plan tool refused my phase.');
+    expect(only(harness)).toMatchObject({ source: 'agent', taskId, runId: null });
+    send('the plan tool refused my phase.');
+    expect(listFeedback(harness.state)).toHaveLength(1);
+    report(harness, taskId, 'Report 1.');
+    report(harness, taskId, 'Report 2.');
+    expect(() => send('One more.')).toThrow('This task already reported 3 things about Shinsa.');
+  });
+
+  test('feedback written for you outside a task still counts as an agent’s', () => {
+    const harness = createHarness();
+    for (let index = 0; index < FEEDBACK_LIMITS.agentWaiting; index += 1) {
+      report(harness, createTask(harness), `Report ${index}.`);
+    }
+    expect(() =>
+      harness.send({ type: 'feedback.write', feedbackId: null, note: 'One more.' }, { onBehalf: true })
+    ).toThrow('The human already has 10 reports to read.');
   });
 
   test('an empty report is refused', () => {

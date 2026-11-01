@@ -50,10 +50,18 @@ const PUBLIC_HOSTS: ReadonlySet<string> = new Set(['shinsa.dev', 'localhost', '1
 
 const PUBLIC_URL_PREFIXES = [`https://github.com/${FEEDBACK_REPOSITORY}`];
 
+const PUBLIC_BARE_HOSTS: ReadonlySet<string> = new Set([...PUBLIC_HOSTS, 'github.com']);
+
+const BEARER_WORDS: ReadonlySet<string> = new Set(['authentication', 'authorization', 'tokens']);
+
 const PATTERNS: readonly { kind: FeedbackLeakKind; pattern: RegExp }[] = [
   { kind: 'email', pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
-  { kind: 'path', pattern: /(?:\/Users|\/home|\/root)\/[^\s'"`)\]>]+/g },
-  { kind: 'path', pattern: /[A-Za-z]:\\Users\\[^\s'"`)\]>]+/g },
+  {
+    kind: 'path',
+    pattern:
+      /(?<![\w.:/-])\/(?:Users|home|root|Volumes|private|var|tmp|opt|mnt|srv|data|workspaces?|Library)\/[^\s'"`)\]>]+/g,
+  },
+  { kind: 'path', pattern: /\b[A-Za-z]:\\[^\s'"`)\]>]+/g },
   { kind: 'secret', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
   { kind: 'secret', pattern: /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}/g },
   { kind: 'secret', pattern: /\bgh[pousr]_[A-Za-z0-9]{20,}/g },
@@ -63,6 +71,11 @@ const PATTERNS: readonly { kind: FeedbackLeakKind; pattern: RegExp }[] = [
   { kind: 'secret', pattern: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g },
   { kind: 'secret', pattern: /\b(?:api[_-]?key|token|secret|password|passwd)\s*[:=]\s*[^\s'"`]+/gi },
 ];
+
+const BEARER = /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{11,}[A-Za-z0-9_~+/=-]/g;
+
+const BARE_HOST =
+  /(?<![\w@./:-])(?:[A-Za-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|co|cloud|tech|xyz|me|us|uk|de|eu|biz|info|internal|local|corp|lan)(?![\w-])(?:\/[^\s'"`)\]>]*[^\s'"`)\]>.,;:!?])?/gi;
 
 const LONG_RUN = /[A-Za-z0-9+_=-]{32,}/g;
 
@@ -80,6 +93,18 @@ function isPublicUrl(url: string) {
       .split(/[/:?#]/, 1)[0]
       ?.toLowerCase() ?? '';
   return PUBLIC_HOSTS.has(host);
+}
+
+function isPublicBareHost(text: string) {
+  const [host = '', ...path] = text.toLowerCase().split('/');
+  const bare = host.replace(/^www\./, '');
+  if (path.length === 0) return PUBLIC_BARE_HOSTS.has(bare);
+  return isPublicUrl(`https://${bare}/${path.join('/')}`);
+}
+
+function isBearerToken(match: string) {
+  const value = match.split(/\s+/)[1] ?? '';
+  return !BEARER_WORDS.has(value.toLowerCase());
 }
 
 function escapePattern(word: string) {
@@ -140,7 +165,9 @@ export function listFeedbackLeaks(text: string, privateWords: readonly string[])
   const matches = [
     ...PATTERNS.flatMap(({ kind, pattern }) => listMatches(text, kind, pattern)),
     ...listMatches(text, 'secret', LONG_RUN, isOpaque),
+    ...listMatches(text, 'secret', BEARER, isBearerToken),
     ...listMatches(text, 'url', URL_PATTERN, (url) => !isPublicUrl(url)),
+    ...listMatches(text, 'url', BARE_HOST, (host) => !isPublicBareHost(host)),
   ];
   matches.push(...listWordMatches(text, privateWords));
   const seen = new Set<string>();

@@ -287,7 +287,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Feedback.** A Feedback button beside Settings in the header (Desk) and the rail (Shelf), and Send feedback on
   Shinsa in ⌘K, open the feedback dialog. You write a note in your own words; your agent rewrites it as a public
   GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and
-  you read it before it opens. A check in core refuses an issue that still holds an email, a home folder path, a token
+  you read it before it opens under your GitHub account. A check in core refuses an issue that still holds an email, a folder path, a token
   or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
   Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same dialog, marked as
   from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); the button's

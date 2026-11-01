@@ -83,6 +83,27 @@ describe('listFeedbackLeaks', () => {
     ]);
   });
 
+  test('finds bare hosts, folders outside home, any drive path and bearer tokens', () => {
+    const text = [
+      'It called www.acme-internal.com and github.com/acme/app.',
+      'It wrote to /Volumes/Work/acme and D:\\code\\app.',
+      'It sent Bearer abcdefghijklmnop.',
+    ].join('\n');
+    expect(listFeedbackLeaks(text, [])).toEqual([
+      { kind: 'url', text: 'www.acme-internal.com' },
+      { kind: 'url', text: 'github.com/acme/app' },
+      { kind: 'path', text: '/Volumes/Work/acme' },
+      { kind: 'path', text: 'D:\\code\\app.' },
+      { kind: 'secret', text: 'Bearer abcdefghijklmnop' },
+    ]);
+  });
+
+  test('allows Shinsa’s hosts, file names, routes and the words around a bearer token', () => {
+    const text =
+      'Open github.com, shinsa.dev or github.com/shinsa-dev/shinsa/issues/3. The config.json file, /api/tasks and Bearer authentication.';
+    expect(listFeedbackLeaks(text, [])).toEqual([]);
+  });
+
   test('finds private words as whole words, whatever their case', () => {
     expect(
       listFeedbackLeaks('Superwall broke in SW-142 on feat/paywalls, not in superwallet.', [

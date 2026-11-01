@@ -13,7 +13,7 @@ import { findCurrentRun } from './runs.ts';
 
 const LEAK_NAMES: Record<FeedbackLeak['kind'], string> = {
   email: 'an email address',
-  path: 'a home folder path',
+  path: 'a folder path',
   secret: 'what looks like a token or a key',
   url: 'a link outside Shinsa',
   private_word: 'a name from your projects',
@@ -92,6 +92,10 @@ export function writeFeedback(decider: Decider, command: CommandOf<'feedback.wri
   const note = resolveFeedbackText(command.note);
   assertNote(note);
   if (!command.feedbackId) {
+    if (decider.context.onBehalf) {
+      writeAgentFeedback(decider, note, decider.context.byTask ?? null, null);
+      return;
+    }
     draft(decider, createEntry(decider, { source: 'human', note, taskId: null, runId: null }));
     return;
   }
@@ -214,12 +218,9 @@ function countTaskReports(decider: Decider, taskId: string) {
   return listFeedback(decider.state).filter((entry) => entry.taskId === taskId).length;
 }
 
-export function reportFeedback(decider: Decider, command: CommandOf<'agent.report_feedback'>) {
-  const { run, task } = findCurrentRun(decider, command.runId, 'report_feedback');
-  const note = resolveFeedbackText(command.note);
-  assertNote(note);
+function writeAgentFeedback(decider: Decider, note: string, taskId: string | null, runId: string | null) {
   if (isKnownNote(decider, note)) return;
-  if (countTaskReports(decider, task.id) >= FEEDBACK_LIMITS.perTask) {
+  if (taskId && countTaskReports(decider, taskId) >= FEEDBACK_LIMITS.perTask) {
     throw new DomainError(
       'feedback_full',
       `This task already reported ${FEEDBACK_LIMITS.perTask} things about Shinsa. Leave this one and carry on with your step.`
@@ -231,5 +232,12 @@ export function reportFeedback(decider: Decider, command: CommandOf<'agent.repor
       `The human already has ${FEEDBACK_LIMITS.agentWaiting} reports to read. Leave this one and carry on with your step.`
     );
   }
-  draft(decider, createEntry(decider, { source: 'agent', note, taskId: task.id, runId: run.id }));
+  draft(decider, createEntry(decider, { source: 'agent', note, taskId, runId }));
+}
+
+export function reportFeedback(decider: Decider, command: CommandOf<'agent.report_feedback'>) {
+  const { run, task } = findCurrentRun(decider, command.runId, 'report_feedback');
+  const note = resolveFeedbackText(command.note);
+  assertNote(note);
+  writeAgentFeedback(decider, note, task.id, run.id);
 }

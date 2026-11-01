@@ -1873,10 +1873,12 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   never the system prompt (Caching, below). The answer is `feedback.record_draft`; no answer, an error or a title or
   body it cannot use (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your note itself
   is never posted.
-- **The privacy check** (`listFeedbackLeaks`, pure, in core) refuses an email, a home folder path (`/Users/…`,
-  `/home/…`, `C:\Users\…`; `~/` names no one), a known token or key shape (private key blocks, `sk-`, `ghp_`,
-  `github_pat_`, `xox…`, AWS access keys, JWTs, `token=`) or a long run of letters and digits, a link outside
-  `shinsa.dev`, `localhost` and the repository itself, and every private word: `listPrivateWords` reads them from the
+- **The privacy check** (`listFeedbackLeaks`, pure, in core) refuses an email, a folder path (under `/Users`, `/home`,
+  `/root`, `/Volumes`, `/private`, `/var`, `/tmp`, `/opt`, `/mnt`, `/srv`, `/data`, `/workspace` or `/Library`, or on
+  a drive such as `C:\`; `~/` names no one), a known token or key shape (private key blocks, `sk-`, `ghp_`,
+  `github_pat_`, `xox…`, AWS access keys, JWTs, `token=`, a `Bearer` or `Basic` credential) or a long run of letters and
+  digits, a link outside `shinsa.dev`, `localhost` and the repository itself, with or without `https://` (a bare host
+  such as `www.example.com` or `github.com/owner/repo`; `github.com` alone is allowed), and every private word: `listPrivateWords` reads them from the
   state, the names and keys of your projects and their folders, each repository's name, path and remote owner and name,
   every task's handle, branch and worktree, the account emails tasks and runs used, and the user names in those paths.
   Words match whole from two letters, case-insensitively except a key of up to four capitals (`SW`, `PER`), which
@@ -1896,7 +1898,8 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   delegated agent), when Shinsa itself got in their way: a tool that refused what it should take, a limit or a rule
   that blocked sound work, a step that made no sense, a missing tool; never the task or its code. Its description says the human reads each report before anything is public. A note already known,
   whatever its case, is dropped; a task reports at most 3 and at most 10 agent reports wait at once
-  (`feedback_full`). The report is recorded in its task's activity and drafted like yours; it waits in the dialog,
+  (`feedback_full`). New feedback an agent writes for you (`feedback.write` on your behalf, from its tools or its
+  shell) is an agent's too: marked as from an agent with the task it came from, under the same limits. The report is recorded in its task's activity and drafted like yours; it waits in the dialog,
   marked as from an agent with a link to its task. There is no setting to open one without you.
 - **Where you see it.** A Feedback button right of Settings in the Desk header and a Feedback row under Settings in
   the Shelf rail, with a count of the drafts and failures waiting for you, open the feedback dialog: what happens to a
