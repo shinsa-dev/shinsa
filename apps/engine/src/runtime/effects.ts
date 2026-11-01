@@ -66,6 +66,7 @@ import {
 import { BUNDLE } from '../instance/bundle.ts';
 import { createServerInstance, type ServerInstance } from '../instance/install.ts';
 import { describeError, log } from '../log/index.ts';
+import type { HandoffEffects } from '../remote/handoffs.ts';
 import type { PreviewEffects } from '../remote/previews.ts';
 import type { ShareDescriber } from '../remote/share-describe.ts';
 import type { ShareEffects } from '../remote/shares.ts';
@@ -103,6 +104,7 @@ export interface EffectRunnerOptions {
   services?: TaskServices;
   shares: ShareEffects;
   previews: PreviewEffects;
+  handoffs: HandoffEffects;
   slack?: Slack;
 }
 
@@ -184,6 +186,7 @@ export class EffectRunner {
   readonly #services: TaskServices | null;
   readonly #shares: ShareEffects;
   readonly #previews: PreviewEffects;
+  readonly #handoffs: HandoffEffects;
   readonly #slack: Slack | null;
   readonly #feedback: FeedbackEffects;
   readonly #evidence: EvidenceStore;
@@ -219,6 +222,7 @@ export class EffectRunner {
     this.#services = options.services ?? null;
     this.#shares = options.shares;
     this.#previews = options.previews;
+    this.#handoffs = options.handoffs;
     this.#slack = options.slack ?? null;
     this.#feedback = new FeedbackEffects(
       engine,
@@ -288,8 +292,9 @@ export class EffectRunner {
       case 'preview.link':
         return this.#previews.link(effect.taskId, effect.serviceId, context);
       case 'handoff.link':
+        return this.#handoffs.link(effect.taskId, context);
       case 'handoff.revoke':
-        return Promise.resolve();
+        return this.#handoffs.revoke(effect.taskId, effect.guestId);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
@@ -381,6 +386,13 @@ export class EffectRunner {
       await this.#engine.dispatch(
         { type: 'share.fail', taskId: effect.taskId, detail: error },
         { id: `${key}:share.fail` }
+      );
+      return;
+    }
+    if (effect.kind === 'handoff.link') {
+      await this.#engine.dispatch(
+        { type: 'handoff.fail', taskId: effect.taskId, detail: error },
+        { id: `${key}:handoff.fail` }
       );
       return;
     }

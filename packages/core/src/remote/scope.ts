@@ -1,5 +1,8 @@
 import type { UserCommand } from '../commands/index.ts';
 import type { Gate, GateType, Run, RunAccount, Task } from '../domain/index.ts';
+import { resolveEngineInfo } from '../protocol/engine.ts';
+import { resolveStatePatch, type StatePatch } from '../protocol/patch.ts';
+import type { StateChanges } from '../state/draft.ts';
 import { createState, type ShinsaState } from '../state/project.ts';
 import { LOCAL_ONLY_MESSAGE } from './local-only.ts';
 
@@ -116,4 +119,23 @@ export function resolveScopedState(state: ShinsaState, taskId: string): ShinsaSt
     repos: repo ? { [repo.id]: repo } : {},
     projects: project ? { [project.id]: project } : {},
   };
+}
+
+export function resolveScopedPatch(
+  previous: ShinsaState,
+  next: ShinsaState,
+  changes: StateChanges,
+  taskId: string
+): StatePatch {
+  const scoped = resolveStatePatch(
+    resolveScopedState(previous, taskId),
+    resolveScopedState(next, taskId),
+    changes
+  );
+  return { ...scoped, fields: {} };
+}
+
+export function resolveScopedEngineInfo(version: string) {
+  const info = resolveEngineInfo(version);
+  return { ...info, commands: info.commands.filter((command) => SCOPED_COMMAND_SET.has(command)) };
 }

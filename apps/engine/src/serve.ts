@@ -36,6 +36,7 @@ import {
 import { describeError, log } from './log/index.ts';
 import { type AccountSource, type CommandRunner, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
+import { Handoffs } from './remote/handoffs.ts';
 import {
   ControlClient,
   createInstalledConnector,
@@ -168,6 +169,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const shares = new Shares({ engine, remote, evidence, transcripts });
+  const handoffs = new Handoffs({ engine, remote });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -248,6 +250,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       workspaces: runs.workspaces,
       shares,
       previews,
+      handoffs,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),

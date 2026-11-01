@@ -16,7 +16,13 @@ import { createTempDir } from '../helpers/index.ts';
 function createSocket() {
   const sent: ServerMessage[] = [];
   const socket = {
-    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+    data: {
+      kind: 'hub',
+      transcripts: new Map(),
+      surface: null,
+      origin: 'local',
+      guest: null,
+    } satisfies SocketData,
     send: (payload: string) => sent.push(JSON.parse(payload) as ServerMessage),
   } as unknown as Parameters<ReturnType<typeof createSocketHub>['open']>[0];
   return { socket, sent };

@@ -14,6 +14,7 @@ export interface RemoteDevice {
   enrolledAt: number;
   lastSeenAt: number | null;
   userId: string | null;
+  taskId?: string | null;
 }
 
 export interface RemoteLink {

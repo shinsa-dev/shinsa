@@ -1,9 +1,18 @@
-import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM, SHARE_CHANNEL_PARAM } from '@shinsa/core';
+import {
+  type GuestActor,
+  LOCAL_ONLY_CODE,
+  LOCAL_ONLY_MESSAGE,
+  REMOTE_CONNECT_PARAM,
+  SCOPE_MESSAGES,
+  SCOPE_REFUSAL_CODE,
+  SHARE_CHANNEL_PARAM,
+} from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
 import { createServerInstance, INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
+import { isGuestRoute } from '../remote/guest-routes.ts';
 import {
   isTunnelRequest,
   markRemoteRequest,
@@ -210,10 +219,12 @@ export function startServer(context: HttpContext) {
     }
   }
 
-  function respondInsideChannel(request: Request) {
+  function respondInsideChannel(request: Request, guest: GuestActor | null) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/'))
       return Promise.resolve(respondError('not_found', 'No such endpoint.', 404));
+    if (guest && !isGuestRoute(context.engine.state, guest.taskId, request.method, url.pathname))
+      return Promise.resolve(respondError(SCOPE_REFUSAL_CODE, SCOPE_MESSAGES.task, 403));
     if (resolveLocalOnlyRoute(request.method, url.pathname))
       return Promise.resolve(respondError(LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, 403));
     return respondApi(markRemoteRequest(request), url);
@@ -367,6 +378,7 @@ export function startServer(context: HttpContext) {
             transcripts: new Map(),
             surface: null,
             origin: 'local',
+            guest: null,
           });
         const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
         if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });

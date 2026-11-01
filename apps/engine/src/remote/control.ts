@@ -96,6 +96,22 @@ export class ControlClient {
     await this.#post(REMOTE_PATHS.machineMemberRemove, { userId }, machineToken);
   }
 
+  requestHandoff(machineToken: string) {
+    return this.#post<InviteCreateResponse>(REMOTE_PATHS.machineHandoffs, {}, machineToken);
+  }
+
+  async requestHandoffRemoval(machineToken: string, token: string) {
+    await this.#post(REMOTE_PATHS.machineHandoffRemove, { token }, machineToken);
+  }
+
+  requestGuestAddition(machineToken: string, userId: string) {
+    return this.#post<RemoteMember>(REMOTE_PATHS.machineGuestAdd, { userId }, machineToken);
+  }
+
+  async requestGuestRemoval(machineToken: string, userId: string) {
+    await this.#post(REMOTE_PATHS.machineGuestRemove, { userId }, machineToken);
+  }
+
   async recordOffline(machineToken: string) {
     await this.#post(REMOTE_PATHS.offline, {}, machineToken, OFFLINE_TIMEOUT_MS);
   }

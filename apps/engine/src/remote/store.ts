@@ -32,6 +32,12 @@ export interface RemoteFile {
   access: RemoteAccess | null;
   link: StoredLink | null;
   requests: AccessRequest[];
+  guests: RemoteMember[];
+  handoffs: StoredHandoff[];
+}
+
+export interface StoredHandoff extends StoredLink {
+  taskId: string;
 }
 
 export interface StoredLink {
@@ -77,6 +83,7 @@ function readDevices(value: unknown): RemoteDevice[] {
     if (typeof entry.enrolledAt !== 'number') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
     const userId = typeof entry.userId === 'string' ? entry.userId : null;
+    const taskId = typeof entry.taskId === 'string' ? { taskId: entry.taskId } : {};
     return [
       {
         publicKey: entry.publicKey,
@@ -84,6 +91,7 @@ function readDevices(value: unknown): RemoteDevice[] {
         enrolledAt: entry.enrolledAt,
         lastSeenAt,
         userId,
+        ...taskId,
       },
     ];
   });
@@ -118,6 +126,19 @@ function readLink(value: unknown): StoredLink | null {
   return { secret: value.secret, invite: value.invite, createdAt: value.createdAt };
 }
 
+function readHandoffs(value: unknown): StoredHandoff[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const link = readLink(entry);
+    if (!(link && isFields(entry) && typeof entry.taskId === 'string')) return [];
+    return [{ ...link, taskId: entry.taskId }];
+  });
+}
+
+export function readGuests(value: unknown) {
+  return isFields(value) ? readMembers(value.guests) : [];
+}
+
 function readRequests(value: unknown): AccessRequest[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
@@ -147,6 +168,8 @@ function createRemoteFile(): RemoteFile {
     access: null,
     link: null,
     requests: [],
+    guests: [],
+    handoffs: [],
   };
 }
 
@@ -171,6 +194,8 @@ export function readRemoteFile(path: string): RemoteFile {
     access: readAccess(fields.access),
     link: readLink(fields.link),
     requests: readRequests(fields.requests),
+    guests: readGuests(fields),
+    handoffs: readHandoffs(fields.handoffs),
   };
 }
 
@@ -224,10 +249,11 @@ export class RemoteStore {
     }));
   }
 
-  removeDevicesOutside(userIds: ReadonlySet<string>) {
-    const removed = this.#file.devices.filter(
-      (device) => device.userId !== null && !userIds.has(device.userId)
-    );
+  removeDevicesOutside(userIds: ReadonlySet<string>, guestIds: ReadonlySet<string>) {
+    const removed = this.#file.devices.filter((device) => {
+      if (device.userId === null) return false;
+      return !(device.taskId ? guestIds : userIds).has(device.userId);
+    });
     if (removed.length === 0) return [];
     this.update((file) => ({
       ...file,

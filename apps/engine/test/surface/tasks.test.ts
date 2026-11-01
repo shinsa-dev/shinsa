@@ -366,6 +366,12 @@ describe('the task commands', () => {
     ],
     [['tasks', 'unshare', 'fix'], { type: 'task.unshare', taskId: 'task-123' }, 'No longer shared.'],
     [
+      ['tasks', 'hand-off', 'fix'],
+      { type: 'task.hand_off', taskId: 'task-123' },
+      'Handed off. Its link shows on the task in a moment.',
+    ],
+    [['tasks', 'hand-off-remove', 'fix'], { type: 'handoff.remove', taskId: 'task-123' }, 'Taken back.'],
+    [
       ['tasks', 'prioritize', 'fix', 'urgent'],
       { type: 'task.prioritize', taskId: 'task-123', priority: 'urgent' },
       'Priority set to urgent.',

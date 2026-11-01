@@ -155,6 +155,8 @@ export {
   serializePreviewUrl,
 } from './previews.ts';
 export {
+  resolveScopedEngineInfo,
+  resolveScopedPatch,
   resolveScopedRefusal,
   resolveScopedState,
   SCOPE_MESSAGES,

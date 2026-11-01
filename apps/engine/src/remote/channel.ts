@@ -10,6 +10,7 @@ import {
   decodeText,
   deriveServerSession,
   encodeText,
+  type GuestActor,
   type HandshakeKeys,
   parseBodyChunk,
   parseChannelMessage,
@@ -44,11 +45,13 @@ interface ChannelHub {
 
 export type AccessAnswer =
   | { kind: 'refused'; reason: string }
+  | { kind: 'granted' }
   | { kind: 'waiting'; decided: Promise<boolean> };
 
 export interface ChannelHost {
   resolveMachineKey: () => Promise<{ publicKey: string; privateKey: CryptoKey }>;
   isEnrolled: (device: string) => boolean;
+  resolveGuest: (device: string) => GuestActor | null;
   requestAccess: (
     proof: string,
     keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>,
@@ -57,7 +60,7 @@ export interface ChannelHost {
   resumeAccess: (device: string) => AccessAnswer | null;
   recordSeen: (device: string) => void;
   hub: ChannelHub;
-  respond: (request: Request) => Promise<Response>;
+  respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
   maxBodyBytes: number;
 }
 
@@ -69,6 +72,7 @@ interface OpenRequest {
   size: number;
   controller: AbortController;
   sent: boolean;
+  guest: GuestActor | null;
 }
 
 type ChannelState =
@@ -76,6 +80,7 @@ type ChannelState =
   | {
       kind: 'open';
       device: string;
+      guest: GuestActor | null;
       seal: (plain: Bytes) => Promise<Bytes>;
       open: (frame: Bytes) => Promise<Bytes>;
       socket: HubSocket | null;
@@ -178,6 +183,7 @@ export class RemoteChannel {
       this.#refuse(answer.reason);
       return false;
     }
+    if (answer.kind === 'granted') return this.#state.kind !== 'closed';
     this.#peer.send(JSON.stringify({ type: 'pending' } satisfies ServerHello));
     const approved = await answer.decided;
     if (this.#state.kind === 'closed') return false;
@@ -202,6 +208,7 @@ export class RemoteChannel {
     this.#state = {
       kind: 'open',
       device: hello.device,
+      guest: this.#host.resolveGuest(hello.device),
       seal: createFrameSealer(session.send),
       open: createFrameOpener(session.receive),
       socket: null,
@@ -225,14 +232,14 @@ export class RemoteChannel {
     switch (message.t) {
       case 'ready':
         if (state.socket) return;
-        state.socket = this.#createSocket();
+        state.socket = this.#createSocket(state.guest);
         this.#host.hub.open(state.socket);
         return;
       case 'socket':
         if (state.socket) this.#host.hub.message(state.socket, message.data);
         return;
       case 'request':
-        this.#startRequest(message);
+        this.#startRequest(message, state.guest);
         return;
       case 'body':
         this.#appendBody(message.id, message.chunk);
@@ -250,14 +257,14 @@ export class RemoteChannel {
     }
   }
 
-  #createSocket(): HubSocket {
+  #createSocket(guest: GuestActor | null): HubSocket {
     return {
-      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'remote' },
+      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'remote', guest },
       send: (payload: string) => this.#send({ t: 'socket', data: payload }),
     };
   }
 
-  #startRequest(message: Extract<ChannelMessage, { t: 'request' }>) {
+  #startRequest(message: Extract<ChannelMessage, { t: 'request' }>, guest: GuestActor | null) {
     if (this.#requests.has(message.id) || !isSafePath(message.path)) {
       this.fail('A request was not valid.');
       return;
@@ -274,6 +281,7 @@ export class RemoteChannel {
       size: 0,
       controller: new AbortController(),
       sent: false,
+      guest,
     });
   }
 
@@ -310,7 +318,7 @@ export class RemoteChannel {
       signal: open.controller.signal,
     });
     try {
-      const response = await this.#host.respond(request);
+      const response = await this.#host.respond(request, open.guest);
       await this.#streamResponse(id, open, response);
     } catch (error) {
       if (!open.controller.signal.aborted) {

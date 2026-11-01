@@ -3,9 +3,13 @@ import {
   type ClientMessage,
   DEVELOPMENT_VERSION,
   DomainError,
+  type GuestActor,
   isSurface,
   type RequestOrigin,
   resolveEngineInfo,
+  resolveScopedEngineInfo,
+  resolveScopedPatch,
+  resolveScopedState,
   resolveStatePatch,
   type ServerMessage,
   type Surface,
@@ -26,6 +30,7 @@ export interface SocketData {
   transcripts: Map<string, () => void>;
   surface: Surface | null;
   origin: RequestOrigin;
+  guest: GuestActor | null;
 }
 
 export interface HubSocket {
@@ -96,11 +101,22 @@ export function createSocketHub(
 ) {
   const sockets = new Set<Socket>();
   const engineInfo = resolveEngineInfo(version);
+  const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
-    for (const socket of sockets) socket.send(payload);
+    for (const socket of sockets) if (!socket.data.guest) socket.send(payload);
+  }
+
+  function resolveSocketState(socket: Socket) {
+    const { guest } = socket.data;
+    return serializeState(guest ? resolveScopedState(engine.state, guest.taskId) : engine.state);
+  }
+
+  function isVisibleRun(socket: Socket, runId: string) {
+    const { guest } = socket.data;
+    return !guest || engine.state.runs[runId]?.taskId === guest.taskId;
   }
 
   function syncSurfaces() {
@@ -123,6 +139,14 @@ export function createSocketHub(
   const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
     if (sockets.size === 0) return;
     broadcast({ type: 'state.patch', patch: resolveStatePatch(previous, state, changes) });
+    for (const socket of sockets) {
+      const { guest } = socket.data;
+      if (guest)
+        send(socket, {
+          type: 'state.patch',
+          patch: resolveScopedPatch(previous, state, changes, guest.taskId),
+        });
+    }
   });
 
   const unsubscribeTranscripts = transcripts.subscribe((runId, entries, start) => {
@@ -147,12 +171,20 @@ export function createSocketHub(
   async function handleMessage(socket: Socket, message: ClientMessage) {
     switch (message.type) {
       case 'hello':
+        if (socket.data.guest) return;
         socket.data.surface = message.surface;
         syncSurfaces();
         return;
       case 'command': {
         try {
-          await dispatchUserCommand(engine, message.command, message.id, classify, socket.data.origin);
+          await dispatchUserCommand(
+            engine,
+            message.command,
+            message.id,
+            classify,
+            socket.data.origin,
+            socket.data.guest
+          );
           send(socket, { type: 'ack', id: message.id, error: null });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'command_failed';
@@ -161,9 +193,10 @@ export function createSocketHub(
         return;
       }
       case 'state.sync':
-        send(socket, { type: 'state', state: serializeState(engine.state) });
+        send(socket, { type: 'state', state: resolveSocketState(socket) });
         return;
       case 'transcript.subscribe': {
+        if (!isVisibleRun(socket, message.runId)) return;
         if (!socket.data.transcripts.has(message.runId)) {
           socket.data.transcripts.set(message.runId, transcripts.follow(message.runId));
         }
@@ -181,7 +214,12 @@ export function createSocketHub(
   return {
     open(socket: Socket) {
       sockets.add(socket);
-      send(socket, { type: 'state', state: serializeState(engine.state) });
+      send(socket, { type: 'state', state: resolveSocketState(socket) });
+      if (socket.data.guest) {
+        send(socket, { type: 'surfaces', desktop: desktopConnected });
+        send(socket, { type: 'engine', engine: scopedEngineInfo });
+        return;
+      }
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
       if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });

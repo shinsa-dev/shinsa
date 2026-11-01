@@ -1,13 +1,16 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import type { AccessRequest, RemoteSnapshot, RemoteUser } from '@shinsa/core';
+import type { AccessRequest, RemoteMember, RemoteSnapshot, RemoteUser, TaskGuest } from '@shinsa/core';
 import {
   type ConnectClaim,
   DomainError,
+  type GuestActor,
   type HandshakeKeys,
+  MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
   type RequestOrigin,
+  resolveClaimUrl,
   resolveEnrollUrl,
   resolveRemoteHookUrl,
   serializeBase64Url,
@@ -20,7 +23,7 @@ import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient, ControlError } from './control.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
-import { RemoteStore, type StoredLink } from './store.ts';
+import { RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
@@ -71,6 +74,15 @@ export interface RemoteOptions {
 
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
 
+export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
+
+export const HANDOFF_NOT_ENABLED =
+  'Turn on remote access in Settings → General to hand off this task. Its link works once this machine is reachable.';
+
+const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try again in a moment.';
+
+const GUEST_FALLBACK_LOGIN = 'guest';
+
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
   if (!bare) return 'Machine';
@@ -107,6 +119,7 @@ export class Remote {
   readonly #listeners = new Set<() => void>();
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
   #pairing: Pairing | null = null;
+  #claimer: HandoffClaimer | null = null;
 
   constructor(options: RemoteOptions) {
     this.#options = options;
@@ -120,7 +133,7 @@ export class Remote {
       localUrl: options.localUrl,
       version: options.version,
       onRevoked: () => this.#forget(),
-      onAccess: (access) => this.#recordAccess(access),
+      onAccess: (access, guests) => this.#recordAccess(access, guests),
       ...(options.timings ? { timings: options.timings } : {}),
       now: this.#now,
     });
@@ -256,6 +269,8 @@ export class Remote {
       access: null,
       link: null,
       requests: [],
+      guests: [],
+      handoffs: [],
     }));
     this.#settleWaiters(false);
     this.#publish();
@@ -287,6 +302,137 @@ export class Remote {
     return link !== null && (await verifyEnrollProof(link.secret, proof, keys));
   }
 
+  async #matchHandoff(proof: string, keys: ProofKeys) {
+    for (const handoff of this.store.file.handoffs) {
+      if (await verifyEnrollProof(handoff.secret, proof, keys)) return handoff;
+    }
+    return null;
+  }
+
+  handleClaims(claimer: HandoffClaimer) {
+    this.#claimer = claimer;
+  }
+
+  #resolveHandoffUrl(handoff: StoredHandoff) {
+    const { credentials, machine } = this.store.file;
+    const fragment = {
+      instanceId: credentials?.instanceId ?? '',
+      machineKey: machine?.publicKey ?? '',
+      secret: handoff.secret,
+      invite: handoff.invite,
+    };
+    return resolveClaimUrl(fragment, this.appOrigin);
+  }
+
+  async createHandoff(taskId: string) {
+    const { credentials } = this.store.file;
+    if (!(credentials && this.isEnabled)) throw new DomainError('remote_not_enabled', HANDOFF_NOT_ENABLED);
+    const existing = this.store.file.handoffs.find((entry) => entry.taskId === taskId);
+    if (existing) return this.#resolveHandoffUrl(existing);
+    await this.store.resolveMachineKey();
+    const { token } = await this.control.requestHandoff(credentials.machineToken);
+    const handoff: StoredHandoff = {
+      taskId,
+      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
+      invite: token,
+      createdAt: this.#now(),
+    };
+    this.store.update((file) => ({ ...file, handoffs: [...file.handoffs, handoff] }));
+    return this.#resolveHandoffUrl(handoff);
+  }
+
+  async #retireHandoff(handoff: StoredHandoff) {
+    this.store.update((file) => ({
+      ...file,
+      handoffs: file.handoffs.filter((entry) => entry.invite !== handoff.invite),
+    }));
+    const { credentials } = this.store.file;
+    if (!credentials) return;
+    try {
+      await this.control.requestHandoffRemoval(credentials.machineToken, handoff.invite);
+    } catch (error) {
+      log.warn('[Remote] Shinsa Cloud did not turn off a hand-off link', { error: describeError(error) });
+    }
+  }
+
+  async #addGuest(userId: string): Promise<RemoteMember | string> {
+    const { credentials } = this.store.file;
+    if (!credentials) return HANDOFF_UNAVAILABLE;
+    try {
+      return await this.control.requestGuestAddition(credentials.machineToken, userId);
+    } catch (error) {
+      if (error instanceof ControlError && error.status === 409)
+        return `This machine already has ${MAX_INSTANCE_GUESTS} people working on its tasks. Ask its owner to remove one.`;
+      log.warn('[Remote] Could not add the guest a task was handed to', { error: describeError(error) });
+      return HANDOFF_UNAVAILABLE;
+    }
+  }
+
+  async #claimHandoff(
+    handoff: StoredHandoff,
+    device: string,
+    name: string | null,
+    userId: string
+  ): Promise<AccessAnswer> {
+    const user = await this.#resolveRequester(userId);
+    if (typeof user === 'string') return { kind: 'refused', reason: user };
+    if (!this.#claimer) return { kind: 'refused', reason: HANDOFF_UNAVAILABLE };
+    const refusal = await this.#claimer(handoff.taskId, user);
+    if (refusal) return { kind: 'refused', reason: refusal };
+    const guest = await this.#addGuest(user.id);
+    if (typeof guest === 'string') return { kind: 'refused', reason: guest };
+    this.store.update((file) => ({
+      ...file,
+      guests: [...file.guests.filter((entry) => entry.user.id !== user.id), guest],
+    }));
+    this.store.upsertDevice({
+      publicKey: device,
+      name: name ?? 'Browser',
+      enrolledAt: this.#now(),
+      lastSeenAt: null,
+      userId: user.id,
+      taskId: handoff.taskId,
+    });
+    await this.#retireHandoff(handoff);
+    this.#publish();
+    return { kind: 'granted' };
+  }
+
+  async removeHandoff(taskId: string, guestId: string | null) {
+    const handoff = this.store.file.handoffs.find((entry) => entry.taskId === taskId);
+    if (handoff) await this.#retireHandoff(handoff);
+    const removed = this.store.file.devices.filter((device) => device.taskId === taskId);
+    for (const device of removed) this.store.removeDevice(device.publicKey);
+    const keys = new Set(removed.map((device) => device.publicKey));
+    this.#closeChannels((channel) => channel.device !== null && keys.has(channel.device));
+    if (guestId) await this.#removeGuest(guestId);
+    this.#publish();
+  }
+
+  async #removeGuest(guestId: string) {
+    const { credentials, devices, guests } = this.store.file;
+    const handedMore = devices.some((device) => device.userId === guestId && device.taskId);
+    if (handedMore || !guests.some((guest) => guest.user.id === guestId)) return;
+    if (credentials) await this.control.requestGuestRemoval(credentials.machineToken, guestId);
+    this.store.update((file) => ({
+      ...file,
+      guests: file.guests.filter((guest) => guest.user.id !== guestId),
+    }));
+  }
+
+  #selectLogin(userId: string | null) {
+    const { access, guests } = this.store.file;
+    const users = [access?.owner, ...(access?.members ?? []).map((member) => member.user)];
+    const known = [...users, ...guests.map((guest) => guest.user)].find((user) => user?.id === userId);
+    return known?.login ?? GUEST_FALLBACK_LOGIN;
+  }
+
+  #resolveGuest(device: string): GuestActor | null {
+    const enrolled = this.store.selectDevice(device);
+    if (!enrolled?.taskId) return null;
+    return { taskId: enrolled.taskId, login: this.#selectLogin(enrolled.userId) };
+  }
+
   async #resolveRequester(userId: string): Promise<RemoteUser | string> {
     const { access, credentials } = this.store.file;
     if (!(access && credentials)) return 'This machine is still connecting. Try again in a moment.';
@@ -305,6 +451,8 @@ export class Remote {
     name: string | null,
     userId: string
   ): Promise<AccessAnswer> {
+    const handoff = await this.#matchHandoff(proof, keys);
+    if (handoff) return this.#claimHandoff(handoff, keys.device, name, userId);
     if (!(await this.#matchesLink(proof, keys)))
       return { kind: 'refused', reason: 'This link was turned off. Ask for a new one.' };
     const user = await this.#resolveRequester(userId);
@@ -413,11 +561,15 @@ export class Remote {
     });
   }
 
-  #recordAccess(access: RemoteAccess) {
-    const changed = JSON.stringify(access) !== JSON.stringify(this.store.file.access);
-    if (changed) this.store.update((file) => ({ ...file, access }));
+  #recordAccess(access: RemoteAccess, guests: RemoteMember[] = this.store.file.guests) {
+    const before = this.store.file;
+    const changed =
+      JSON.stringify(access) !== JSON.stringify(before.access) ||
+      JSON.stringify(guests) !== JSON.stringify(before.guests);
+    if (changed) this.store.update((file) => ({ ...file, access, guests }));
     const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
-    const removed = new Set(this.store.removeDevicesOutside(allowed));
+    const handed = new Set([...allowed, ...guests.map((guest) => guest.user.id)]);
+    const removed = new Set(this.store.removeDevicesOutside(allowed, handed));
     this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
     if (changed || removed.size > 0) this.#publish();
   }
@@ -451,7 +603,15 @@ export class Remote {
   }
 
   #forget() {
-    this.store.update((file) => ({ ...file, credentials: null, owner: null, enabled: false, access: null }));
+    this.store.update((file) => ({
+      ...file,
+      credentials: null,
+      owner: null,
+      enabled: false,
+      access: null,
+      guests: [],
+      handoffs: [],
+    }));
     this.#closeChannels(isAnyChannel);
     this.#publish();
   }
@@ -467,6 +627,7 @@ export class Remote {
       ...parts,
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
+      resolveGuest: (device) => this.#resolveGuest(device),
       requestAccess: (proof, keys, name) => this.#requestAccess(proof, keys, name, userId),
       resumeAccess: (device) => this.#resumeAccess(device, userId),
       recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),

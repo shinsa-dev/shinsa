@@ -3,6 +3,8 @@ import {
   LOCAL_ONLY_MESSAGE,
   REMOTE_APP_ORIGIN,
   resolveClaimUrl,
+  resolveScopedEngineInfo,
+  resolveScopedPatch,
   resolveScopedRefusal,
   resolveScopedState,
   SCOPE_MESSAGES,
@@ -176,4 +178,34 @@ describe('resolveScopedState', () => {
 test('resolveClaimUrl puts the link’s parts after the claim page', () => {
   const fragment = { instanceId: 'inst', machineKey: 'key', secret: 'secret', invite: 'invite' };
   expect(resolveClaimUrl(fragment)).toBe(`${REMOTE_APP_ORIGIN}/claim#inst.key.secret.invite`);
+});
+
+describe('resolveScopedPatch', () => {
+  test('carries only the task handed off and none of the machine’s fields', () => {
+    const { harness, taskId, other } = createHandedTask();
+    const previous = harness.state;
+    const next = {
+      ...previous,
+      seq: previous.seq + 1,
+      tasks: {
+        ...previous.tasks,
+        [taskId]: { ...harness.task(taskId), priority: 'urgent' as const },
+        [other]: { ...harness.task(other), priority: 'urgent' as const },
+      },
+    };
+    const patch = resolveScopedPatch(previous, next, { tasks: [taskId, other] }, taskId);
+    expect(Object.keys(patch.records.tasks ?? {})).toEqual([taskId]);
+    expect(patch.fields).toEqual({});
+    expect(patch.to).toBe(next.seq);
+  });
+});
+
+test('resolveScopedEngineInfo lists only the commands a guest may send', () => {
+  const info = resolveScopedEngineInfo('1.2.3');
+  expect(info.version).toBe('1.2.3');
+  expect(info.commands.length).toBeGreaterThan(0);
+  expect(info.commands.every((command) => (SCOPED_COMMANDS as readonly string[]).includes(command))).toBe(
+    true
+  );
+  expect(info.commands).not.toContain('task.hand_off');
 });

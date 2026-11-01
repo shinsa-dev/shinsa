@@ -29,6 +29,7 @@ import {
   createTempDir,
   createTestConfig,
   git,
+  NO_HANDOFFS,
   NO_PREVIEWS,
   NO_SHARES,
   overrideEnv,
@@ -188,6 +189,7 @@ function setup(
   const runner = new EffectRunner(stub.engine, config, runs, briefings.briefings, {
     shares: NO_SHARES,
     previews: NO_PREVIEWS,
+    handoffs: NO_HANDOFFS,
     resolveLogin: () => Promise.resolve(null),
     triage: (state, task, local) => resolveTriage(state, task, local, () => Promise.resolve(null)),
     ...options,
@@ -263,6 +265,33 @@ describe('routing effects', () => {
       { type: 'effect.fail', taskId: 't1', title: 'Could not push the fixes', detail: 'push rejected' },
     ]);
     expect(commandIds).toEqual(['push-key:effect.fail']);
+  });
+
+  test('a hand-off link is made and taken back by the hand-offs, and one that could not be made is kept on its task', async () => {
+    const handed: string[] = [];
+    const { runner, dispatched, commandIds } = setup(undefined, {
+      handoffs: {
+        link: (taskId, effectContext) => {
+          handed.push(`link:${taskId}:${effectContext.key}`);
+          return Promise.resolve();
+        },
+        revoke: (taskId, guestId) => {
+          handed.push(`revoke:${taskId}:${guestId}`);
+          return Promise.resolve();
+        },
+      },
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'handoff.link', taskId: 't1' }, context);
+    await runner.apply({ kind: 'handoff.revoke', taskId: 't1', guestId: '7' }, context);
+    expect(handed).toEqual([`link:t1:${context.key}`, 'revoke:t1:7']);
+    await runner.reportExhausted(
+      { kind: 'handoff.link', taskId: 't1' },
+      'Turn on remote access.',
+      'handoff-key'
+    );
+    expect(dispatched).toEqual([{ type: 'handoff.fail', taskId: 't1', detail: 'Turn on remote access.' }]);
+    expect(commandIds).toEqual(['handoff-key:handoff.fail']);
   });
 
   test('a share link is made by the shares, and one that could not be made is kept on its task', async () => {
@@ -507,6 +536,7 @@ describe('triage', () => {
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -539,6 +569,7 @@ describe('triage', () => {
     const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -580,6 +611,7 @@ describe('triage', () => {
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -604,6 +636,7 @@ describe('triage', () => {
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -938,6 +971,7 @@ describe('scratch folders', () => {
     const runner = new EffectRunner(stub.engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
       triage: () => Promise.resolve(null),
     });
     await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());

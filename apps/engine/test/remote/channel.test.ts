@@ -47,6 +47,7 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
   const host: ChannelHost = {
     resolveMachineKey: () => Promise.resolve({ publicKey: machineKey, privateKey: machine.privateKey }),
     isEnrolled: (device) => harness.enrolled.has(device),
+    resolveGuest: () => null,
     requestAccess: (_proof, _keys, name) => {
       harness.access.asked.push(name);
       return Promise.resolve(harness.access.answer);

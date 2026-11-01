@@ -47,6 +47,7 @@ describe('remote.json', () => {
             userId: '7',
           },
           { publicKey: 'd2', name: 'Laptop', enrolledAt: 3 },
+          { publicKey: 'd4', name: 'Guest', enrolledAt: 4, userId: '9', taskId: 't1' },
           { publicKey: 'd3', name: 'Broken' },
           'nope',
         ],
@@ -60,6 +61,12 @@ describe('remote.json', () => {
           ],
         },
         link: { secret: 's2', invite: 'tok', createdAt: 2 },
+        guests: [{ user: { id: '9', login: 'lee' }, addedAt: 7 }, 'nope'],
+        handoffs: [
+          { taskId: 't1', secret: 's3', invite: 'tok2', createdAt: 3 },
+          { secret: 's4', invite: 'tok3', createdAt: 3 },
+          'nope',
+        ],
         requests: [
           {
             id: 'r1',
@@ -96,6 +103,7 @@ describe('remote.json', () => {
           lastSeenAt: null,
           userId: null,
         },
+        { publicKey: 'd4', name: 'Guest', enrolledAt: 4, lastSeenAt: null, userId: '9', taskId: 't1' },
       ],
       access: {
         owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
@@ -111,6 +119,8 @@ describe('remote.json', () => {
           requestedAt: 9,
         },
       ],
+      guests: [{ user: { id: '9', login: 'lee', name: null, avatarUrl: null }, addedAt: 7 }],
+      handoffs: [{ taskId: 't1', secret: 's3', invite: 'tok2', createdAt: 3 }],
     });
   });
 
@@ -187,8 +197,9 @@ describe('the remote store', () => {
     store.upsertDevice({ ...device, publicKey: 'mine', userId: '1' });
     store.upsertDevice({ ...device, publicKey: 'kai', userId: '7' });
     store.upsertDevice({ ...device, publicKey: 'old', userId: null });
-    expect(store.removeDevicesOutside(new Set(['1', '7']))).toEqual([]);
-    expect(store.removeDevicesOutside(new Set(['1']))).toEqual(['kai']);
+    store.upsertDevice({ ...device, publicKey: 'guest', userId: '9', taskId: 't1' });
+    expect(store.removeDevicesOutside(new Set(['1', '7']), new Set(['9']))).toEqual([]);
+    expect(store.removeDevicesOutside(new Set(['1', '9']), new Set(['1']))).toEqual(['kai', 'guest']);
     expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine', 'old']);
   });
 
