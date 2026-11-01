@@ -283,9 +283,10 @@ describe('a walkthrough’s testing as a plain list', () => {
       'focus.changed',
     ]);
     expect(listLegacyEventTypes(11)).toEqual(['plan.proposed', 'task.shared', 'focus.changed']);
-    expect(listLegacyEventTypes(12)).toEqual(['task.shared', 'focus.changed']);
-    expect(listLegacyEventTypes(13)).toEqual(['focus.changed']);
-    expect(listLegacyEventTypes(14)).toEqual([]);
+    expect(listLegacyEventTypes(12)).toEqual(['task.shared', 'focus.changed', 'plan.proposed']);
+    expect(listLegacyEventTypes(13)).toEqual(['focus.changed', 'plan.proposed']);
+    expect(listLegacyEventTypes(14)).toEqual(['plan.proposed']);
+    expect(listLegacyEventTypes(15)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -301,7 +302,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(14);
+    expect(readStoredLog(path).version).toBe(15);
   });
 });
 
@@ -325,7 +326,7 @@ describe('A focus saved before teams', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 14,
+      version: 15,
       rows: [
         {
           payload: JSON.stringify({
@@ -362,7 +363,7 @@ describe('Approve plans saved as a switch', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(14);
+    expect(stored.version).toBe(15);
     expect(stored.rows).toEqual([
       {
         seq: 1,
@@ -406,7 +407,7 @@ describe('a revised plan’s change summary and feedback, which the reply replac
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 14,
+      version: 15,
       rows: [{ payload: JSON.stringify({ type: 'plan.proposed', taskId: TASK, body: 'b', document }) }],
     });
   });
@@ -438,7 +439,7 @@ describe('the compaction setting saved under its Eunoe names', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 14,
+      version: 15,
       rows: [{ payload: JSON.stringify({ type: 'settings.changed', settings: { compaction: 'fold' } }) }],
     });
   });
@@ -465,7 +466,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(14);
+    expect(stored.version).toBe(15);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);
@@ -905,7 +906,7 @@ describe('shares made before presets', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 14,
+      version: 15,
       rows: [
         { payload: JSON.stringify({ ...shared, preset: 'standard' }) },
         { payload: JSON.stringify(status) },

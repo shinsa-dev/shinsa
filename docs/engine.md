@@ -3911,7 +3911,10 @@ truth, and a snapshot only saves replaying it.
   `preset`, which become Standard shares (`preset: 'standard'`).
   Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
   which gain `teamId: null`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 14) marks the log so
+  Logs from before agent-chosen checks (log version 15, `PLAN_CHECKS_LOG_VERSION`) can have `plan.proposed` events
+  whose `document.verification` is a list of prose strings; they carry no command, so they are dropped and only
+  `PlanCheck` records stay (the prose remains in the plan's `body`).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 15) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
