@@ -41,7 +41,7 @@ export type SharePreset = 'full' | 'status' | 'everything';
 
 export const SHARE_PRESETS: readonly SharePreset[] = ['full', 'status', 'everything'];
 
-const DEFAULT_SHARE_PRESET: SharePreset = 'full';
+const DEFAULT_SHARE_PRESET: SharePreset = 'everything';
 
 export function resolveSharePreset(settings: Settings): SharePreset {
   return settings.sharePreset ?? DEFAULT_SHARE_PRESET;

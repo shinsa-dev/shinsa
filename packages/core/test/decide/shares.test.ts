@@ -17,7 +17,7 @@ describe('sharing a task', () => {
       at: harness.now,
       url: null,
       limit: 'until_done',
-      preset: 'full',
+      preset: 'everything',
       endsAt: null,
     });
     expect(links(harness, taskId)).toBe(1);

@@ -65,20 +65,20 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'full' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'everything' },
       ])
     );
   });
 
-  it('shares it as the preset you pick, Full by default', async () => {
+  it('shares it as the preset you pick, Everything by default', async () => {
     showTask();
     const picker = await screen.findByRole('combobox', { name: 'Share as' });
-    expect(picker.textContent).toBe('Full task');
-    await choose('Share as', /^Everything/);
+    expect(picker.textContent).toBe('Everything');
+    await choose('Share as', /^Status/);
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'everything' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'status' },
       ])
     );
   });

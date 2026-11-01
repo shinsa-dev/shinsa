@@ -2698,7 +2698,7 @@ projection and channel will serve teams.
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
   core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
   refused (`share_refused`). The remote dashboard may share, as it may close a gate.
-- **What it shows: the preset.** `TaskShare.preset` is `full` (the default), `status` or `everything`, picked with
+- **What it shows: the preset.** `TaskShare.preset` is `full`, `status` or `everything` (the default), picked with
   Share as in Share task and defaulting to the `sharePreset` setting (Settings → General → Sharing, human-only). Each
   preset is a list of field groups in core (`SHARE_PRESET_GROUPS` in `share/presets.ts`: identity, requests,
   progress, summary, people, plan, reports, review, evidence, checks, pull_request, activity, code, runs, live), and

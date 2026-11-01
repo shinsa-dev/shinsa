@@ -52,7 +52,7 @@ export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: stri
     value: 'status',
     label: 'Status',
     hint: 'Title, request and progress, with no names or code',
-    icon: 'IconGauge',
+    icon: 'IconProgress75',
   },
   {
     value: 'everything',

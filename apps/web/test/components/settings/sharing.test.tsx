@@ -34,13 +34,13 @@ async function choose(label: string, option: string | RegExp) {
 }
 
 describe('Settings → General → Sharing', () => {
-  it('shares the full task by default, and saves the preset you pick', async () => {
+  it('shares everything by default, and saves the preset you pick', async () => {
     render(
       <TooltipProvider>
         <SharingSettings settings={createSettings()} />
       </TooltipProvider>
     );
-    expect(screen.getByRole('combobox', { name: 'Share tasks as' }).textContent).toBe('Full task');
+    expect(screen.getByRole('combobox', { name: 'Share tasks as' }).textContent).toBe('Everything');
     await choose('Share tasks as', /^Status/);
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { sharePreset: 'status' } }]);
   });
