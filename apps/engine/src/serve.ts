@@ -59,6 +59,7 @@ import {
   type LoginResolver,
   Roots,
 } from './repos/index.ts';
+import { ProcessLedger, ResourceMonitor } from './resources/index.ts';
 import {
   EffectRunner,
   Engine,
@@ -170,8 +171,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const shares = new Shares({ engine, remote, evidence, transcripts });
-  const teams = new Teams({ engine, remote, shares, transcripts });
   const teamFeeds = new TeamFeeds({ remote });
+  const teams = new Teams({ engine, remote, shares, transcripts, held: teamFeeds });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -187,9 +188,13 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     ...options.terminals,
   });
   const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });
+  terminals.applyRemoteUrls(previews);
+  const ledger = new ProcessLedger(terminals.listServiceProcesses);
+  const resources = new ResourceMonitor({ ledger, state: () => engine.state, dataDir: config.dataDir });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
     services: terminals,
+    trackProcess: ledger.track,
     extensions,
     ...(options.idle ? { idle: options.idle } : {}),
     ...(options.compaction ? { compaction: options.compaction } : {}),
@@ -228,6 +233,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     runs,
     briefings,
     terminals,
+    resources,
     remote,
     shares,
     teams,
@@ -271,6 +277,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       roots,
       services: terminals,
       slack,
+      trackProcess: ledger.track,
     }),
   };
 }
@@ -283,6 +290,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     instance,
     transcripts: services.transcripts,
     terminals: services.terminals,
+    resources: services.resources,
     refiner: new ServiceRefiner(services.quick.classify),
     evidence: services.evidence,
     models,
@@ -383,6 +391,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       services.accounts.stop();
       services.versions.stop();
       services.teamFeeds.stop();
+      services.resources.stop();
       await services.remote.stop();
       await services.terminals.stop();
       for (const clock of services.clocks) clock.stop();

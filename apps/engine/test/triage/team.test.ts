@@ -5,7 +5,11 @@ import { createTask } from '../helpers/state.ts';
 
 const MONA = { id: '1', login: 'mona', name: null, avatarUrl: null };
 
-const KAI = { id: '7', login: 'kai', name: null, avatarUrl: null };
+const KAI = { id: '7', login: 'kai', name: 'Kai Tanaka', avatarUrl: 'https://avatars.example/kai.png' };
+
+const MONA_PROFILE = { login: 'mona', name: null, avatarUrl: null };
+
+const KAI_PROFILE = { login: 'kai', name: 'Kai Tanaka', avatarUrl: 'https://avatars.example/kai.png' };
 
 const PROJECT = {
   id: 'p1',
@@ -56,6 +60,7 @@ function listing(
     }),
     gates: [],
     project: null,
+    repo: null,
     owner: 'mona',
     machine: 'Studio',
     teamId: 'team1',
@@ -93,7 +98,7 @@ describe('resolveTeammateCheck', () => {
           taskId: 'kt1',
           handle: 'MON-12',
           title: 'Add dark mode',
-          owner: 'mona',
+          owner: MONA_PROFILE,
         },
         stage: 'building',
         request: 'Add a dark theme',
@@ -134,11 +139,36 @@ describe('resolveTeammateCheck', () => {
       ],
     };
     const [task] = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null })?.tasks ?? [];
-    expect(task?.original.owner).toBe('kai');
+    expect(task?.original.owner).toEqual(KAI_PROFILE);
     expect(task?.goal).toBe('Ship the theme');
     expect(task?.request.startsWith('Line one word word')).toBe(true);
     expect(task?.request.endsWith('…')).toBe(true);
     expect(task?.request.length).toBeLessThanOrEqual(TEAMMATE_TEXT_LIMIT + 1);
+  });
+
+  test('a listing’s own owner profile names them, ahead of what the team knows', () => {
+    const feed = {
+      machines: [machine({ userId: KAI.id })],
+      tasks: [listing({ owner: 'kai', ownerProfile: { name: 'Kai T', avatarUrl: null } })],
+    };
+    const [task] = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null })?.tasks ?? [];
+    expect(task?.original.owner).toEqual({ login: 'kai', name: 'Kai T', avatarUrl: KAI.avatarUrl });
+  });
+
+  test('a machine whose kept copy is compared is not unreached, though it is offline', () => {
+    const feed = {
+      machines: [machine({ status: 'offline', updatedAt: 5 })],
+      tasks: [listing()],
+    };
+    const check = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null });
+    expect(check?.tasks).toHaveLength(1);
+    expect(check?.unreached).toEqual([]);
+  });
+
+  test('an owner the team does not know by that login is named by the login alone', () => {
+    const feed = { machines: [machine({ userId: KAI.id })], tasks: [listing({ owner: 'lee' })] };
+    const [task] = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null })?.tasks ?? [];
+    expect(task?.original.owner).toEqual({ login: 'lee', name: null, avatarUrl: null });
   });
 
   test('every machine not live is unreached once, with its owner when the team knows them', () => {
@@ -156,9 +186,9 @@ describe('resolveTeammateCheck', () => {
     };
     const project = { ...PROJECT, teamIds: ['team1', 'team2', 'team4'] };
     expect(resolveTeammateCheck(project, { feed, teams: TEAMS, self: null })?.unreached).toEqual([
-      { teamId: 'team1', machineId: 'laptop', name: 'Laptop', owner: 'kai' },
+      { teamId: 'team1', machineId: 'laptop', name: 'Laptop', owner: KAI_PROFILE },
       { teamId: 'team1', machineId: 'box', name: 'Box', owner: null },
-      { teamId: 'team1', machineId: 'new', name: 'New', owner: 'mona' },
+      { teamId: 'team1', machineId: 'new', name: 'New', owner: MONA_PROFILE },
       { teamId: 'team4', machineId: 'lost', name: 'Lost', owner: null },
     ]);
   });
@@ -177,7 +207,7 @@ describe('resolveTeammateCheck', () => {
     );
     expect(check).toEqual({
       tasks: [],
-      unreached: [{ teamId: 'core', machineId: 'laptop', name: 'Laptop', owner: 'kai' }],
+      unreached: [{ teamId: 'core', machineId: 'laptop', name: 'Laptop', owner: KAI_PROFILE }],
     });
   });
 

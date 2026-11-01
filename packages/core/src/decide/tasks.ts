@@ -1,5 +1,6 @@
 import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
+  copyUnreachedTeammate,
   DomainError,
   isTaskResting,
   isTaskSettled,
@@ -132,9 +133,7 @@ function resolveDecisions(
     priority: task.auto.priority
       ? { value: command.priority ?? task.priority, why: reasons.priority ?? '' }
       : null,
-    ...(command.unreached
-      ? { duplicate: { unreached: command.unreached.map((machine) => ({ ...machine })) } }
-      : {}),
+    ...(command.unreached ? { duplicate: { unreached: command.unreached.map(copyUnreachedTeammate) } } : {}),
   };
 }
 

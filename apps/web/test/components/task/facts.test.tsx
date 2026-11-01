@@ -3,17 +3,20 @@ import type { Task, TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
+import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 import { createRound } from '../../support/rounds.ts';
 import {
   listSentCommands,
   pushAccounts,
   pushState,
+  pushTeams,
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
@@ -228,6 +231,55 @@ describe('the Account fact', () => {
   });
 });
 
+describe('the machine in the facts row', () => {
+  function renderOnMachine(resources: MachineChoice['resources']) {
+    const local = connection;
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const state = createShinsaState({ tasks: [task] });
+    const machine: MachineChoice = { id: 'k3x9', name: 'Studio', current: false, state, resources };
+    const view = { id: machine.id, name: machine.name, current: false };
+    const machines = [machine];
+    replaceConnection({ ...local, selectMachine: () => view, listMachines: () => machines });
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    return screen.getByRole('button', { name: 'Studio' });
+  }
+
+  async function openCard(trigger: HTMLElement) {
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    return waitFor(() => {
+      const card = document.querySelector('[data-slot="preview-card-content"]');
+      if (!card?.textContent) throw new Error('No card is open.');
+      return card.textContent;
+    });
+  }
+
+  afterEach(() => replaceConnection(null));
+
+  it('opens a card with the machine’s numbers and what the task uses there', async () => {
+    const fact = renderOnMachine(
+      createMachineResources({
+        tasks: [createTaskResources({ taskId: 't', checks: { cpuPercent: 30, memoryBytes: 1024 ** 3 } })],
+      })
+    );
+    expect(await openCard(fact)).toBe(
+      'StudioCPU 20% · Memory 8 of 32 GB · 120 GB freeWhat this task usesAgent4% · 0.5 GBServicesIdleChecks30% · 1 GBWorktree2 GB'
+    );
+  });
+
+  it('only names the machine while it has sent no reading', async () => {
+    expect(await openCard(renderOnMachine(null))).toBe('StudioThe machine this task runs on');
+  });
+});
+
 describe('the round and the agents in the facts row', () => {
   it('names the current round with one icon and, on hover, its title, how it stands and when it started', async () => {
     const task = createTask({
@@ -419,7 +471,7 @@ describe('a duplicate', () => {
     expect(window.location.pathname).toBe('/tasks/SW-1');
   });
 
-  it('names a teammate’s original with its owner and opens its read-only team view', () => {
+  it('names a teammate’s original by first name with their user card and opens its read-only team view', async () => {
     const copy = createTask({
       id: 'c',
       handle: 'SW-3',
@@ -434,13 +486,66 @@ describe('a duplicate', () => {
           taskId: 'kai-task',
           handle: 'KAI-12',
           title: 'Add dark mode',
-          owner: 'kai',
+          owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
         },
       },
     });
     renderFacts(copy);
-    fireEvent.click(screen.getByRole('button', { name: /Duplicate of @kai’s KAI-12 Add dark mode/ }));
+    expect(screen.getByText('Duplicate of')).toBeTruthy();
+    const owner = screen.getByRole('link', { name: /Kai’s/ });
+    expect(owner.getAttribute('href')).toBe('https://github.com/kai');
+    expect(screen.queryByText(/@kai/)).toBeNull();
+    const link = screen.getByRole('button', { name: 'KAI-12 Add dark mode' });
+    expect(await findTooltipText(link)).toBe(
+      'Shinsa closed this as a duplicate of a teammate’s task, which you can only view.'
+    );
+    fireEvent.click(link);
     expect(window.location.pathname).toBe('/teams/core/kai/kai-task');
+  });
+
+  it('shows on a teammate’s original which of your tasks was closed in favour of it', async () => {
+    const original = createTask({ id: 'kai-task', handle: 'KAI-12', title: 'Add dark mode' });
+    const copy = createTask({
+      id: 'c',
+      handle: 'SW-3',
+      title: 'Dark theme please',
+      stage: 'cancelled',
+      duplicate: {
+        of: 'kai-task',
+        by: 'shinsa',
+        why: null,
+        teammate: {
+          teamId: 'core',
+          machineId: 'kai',
+          taskId: 'kai-task',
+          handle: 'KAI-12',
+          title: 'Add dark mode',
+          owner: null,
+        },
+      },
+    });
+    renderFacts(original);
+    pushTeams({
+      machines: [],
+      tasks: [
+        {
+          task: copy,
+          gates: [],
+          project: null,
+          repo: null,
+          owner: 'christo',
+          ownerProfile: { name: 'Christo Todorov', avatarUrl: null },
+          machine: 'Studio',
+          teamId: 'core',
+          instanceId: 'studio',
+        },
+      ],
+    });
+    const link = await screen.findByRole('button', { name: 'SW-3 Dark theme please' });
+    expect(screen.getByText('Kept over')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Christo’s/ })).toBeTruthy();
+    fireEvent.click(link);
+    expect(window.location.pathname).toBe('/teams/core/studio/c');
   });
 
   it('shows on the task it duplicates which task was closed in favour of it', () => {

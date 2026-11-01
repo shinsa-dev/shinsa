@@ -141,11 +141,13 @@ src/
     │                    live.ts (openShareStream: the link's live channel to the machine, the hello and welcome
     │                    checked with the key, the views and files it pushes as blob addresses, reconnecting),
     │                    sources.ts (a shared file's text, who is looking), view.ts (the read-only state and task the tab components render),
-    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the streamed diff and
+    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner; resolveOwnerName: the owner's
+    │                    first name and profile, Kai with no `@`, in place of "You" for anyone else), code.ts (the streamed diff and
     │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
     │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
     │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides; useReadOnlyNote: the line
-    │                    the header shows above the title), and
+    │                    the header shows above the title; useReadOnlyOwner: the owner's name for activity, fact hints,
+    │                    the now card, the requests and the hand-over card, null on your own page), and
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
@@ -156,19 +158,20 @@ src/
     │                    machines, and joining and sharing them there), channel.ts (a team channel from the browser with its own
     │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
     │                    merged from the machines and the browser, without machines the dashboard reaches);
-    │                    components/teams/ (the new team dialog, the shared projects dropdown, the team rows on All tasks and Home),
+    │                    components/teams/ (the new team dialog, the shared projects dropdown, a teammate's row on All tasks, among your own),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
     │                    machine owns each id, each machine's own state for placement (listMachines), each machine's own remote access for its access requests (listMachineAccess), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
-    │                    remote services and their context, for Settings → Machines),
+    │                    remote services and their context, for Settings → Machines), resources.ts (how busy a machine and its
+    │                    open tasks are in words, and the meters of a machine in Settings → Machines),
     │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, login and initial, the member who added a device), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, first name, login, initial and profile address, the member who added a device; components/people/user-tag.tsx: UserTag, a person's name with a small avatar in front, as a task chip has its tile, that opens the one user card on hover, UserAvatar, and UserIdentity, the avatar beside "Name login" on one line (no `@`) over a description, View on GitHub in the card and the row's detail in every settings UserRow), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)
@@ -314,7 +317,7 @@ src/
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, automations.ts (a watch's page: its facts,
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
-        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
+        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the router's answer from POST /api/placement, each machine's load),
         slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
         reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
         disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of

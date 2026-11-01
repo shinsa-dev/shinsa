@@ -210,7 +210,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
 | `pipeline?` | `PipelineStep[]` | the steps; absent means change (or answer for `mode: 'ask'`) |
 | `auto` | `{ shape, start, priority }` booleans | which parts you left to Shinsa; `shape` is true unless `mode` was given |
-| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`) whose tasks the team-wide duplicate check could not read |
+| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
@@ -225,7 +225,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
 | `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
-| `duplicate?` | `{ of, by, why, teammate? }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate. `teammate` (`TeammateOriginal`: `{ teamId, machineId, taskId, handle, title, owner }`) when the original is a teammate's task, `of` then holding its id on their machine |
+| `duplicate?` | `{ of, by, why, teammate? }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate. `teammate` (`TeammateOriginal`: `{ teamId, machineId, taskId, handle, title, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) when the original is a teammate's task, `of` then holding its id on their machine. A shared task and a team listing carry `duplicate` with the status fields, so the original's owner sees what was kept over it |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `stacksOn?` | string \| null | the task it stacks on as a bundle (Bundles in `docs/engine.md`) |
@@ -902,7 +902,8 @@ The delegation tools name a delegation by `delegation_id`. Reads with no command
 `list_schedules`, `list_services`, `run_service` (which acts on the task's own service runs, in the terminals
 beside the log, not through a command; `docs/engine.md` → Services → Runs for a task) and `add_service` (which adds a
 service definition beside the log, no command either; `docs/engine.md` → Services → Agents add the services they
-need), and `delegation_status` for a delegation still working.
+need), `remove_service` (which removes service definitions the same way; `docs/engine.md` → Services → Agents remove
+services), and `delegation_status` for a delegation still working.
 
 ### System commands
 
@@ -1149,7 +1150,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `list_services`, `run_service` | ✓ | ✓ | | ✓ | | | |
-| `add_service` | ✓ | | | ✓ | | | |
+| `add_service`, `remove_service` | ✓ | | | ✓ | | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
@@ -1235,14 +1236,15 @@ or `browser` (a tab, Floaty).
 
 | Server → page (`ServerMessage`) | When |
 | --- | --- |
-| `state { state }` | On connect, and on `state.sync`: the state as the page holds it (`WireState`, below) |
+| `state { state }` | On connect, after every other connect message, and on `state.sync`: the state as the page holds it (`WireState`, below) |
 | `state.patch { patch }` | After every change: a `StatePatch` from log position `from` to `to` |
 | `ack { id, error }` | After a command, after its patch; `error` is `{ code, message }` or null |
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
-| `engine { engine }` | On connect, right after `surfaces`: what this engine speaks, an `EngineInfo` (below) |
+| `engine { engine }` | On connect, right after `surfaces` and before every other message: what this engine speaks, an `EngineInfo` (below) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
+| `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
 | `teams { teams }` | On connect and after every change to what the machine watches of its teammates: `TeamFeedSnapshot` (Teams, below) |
 
@@ -1252,7 +1254,10 @@ Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/
 server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project, at a place (`TerminalPlace`:
 `repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`; a service's
 terminal keeps the port its run was given (`port`), which `resolveServiceUrl` puts in the service's `previewUrl`
-for `ServiceView.url`.
+for `ServiceView.url`, and while remote access is on a running service terminal carries its private address
+(`remoteUrl`, `https://<label>.shinsa.page/…`, null otherwise), which `ServiceView.remoteUrl` carries on. Opening it
+takes an access token (`createPreviewAccessToken`: instance, preview id, account and expiry, an HMAC with the connect
+key) that the Worker passes on as `x-shinsa-preview-access` (`docs/engine.md` → Private service addresses).
 
 **What an engine speaks** (`packages/core/src/protocol/engine.ts`). The hosted web app is built from `main` and can
 be newer than the engine it reaches, so every engine tells each page what it speaks (`resolveEngineInfo`) and the page
@@ -1316,7 +1321,7 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
 | `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
-| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members }` (`HeartbeatResponse`, a `RemoteAccess`), which the engine reads leniently; a 401 means revoked |
+| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version, signingKey? }` (`HeartbeatRequest`; `signingKey` the machine's ECDSA P-256 public key, raw and base64url, kept when left out, else 400 `body_invalid`) keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members }` (`HeartbeatResponse`, a `RemoteAccess`), which the engine reads leniently; a 401 means revoked |
 | `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
 | `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member, the owner or someone in a team with the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request or give a teammate this machine (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
 | `POST /__remote/invites/accept` | The enroll page | `{ token }` (`InviteAcceptRequest`) records that the signed-in account asked and answers the machine's `instanceId`, `name`, `owner`, the account's `user` and a `connect` (`ConnectResponse`) to ask the machine with (`InviteAcceptResponse`); it makes no member |
@@ -1336,7 +1341,7 @@ A **team connect token** (`connect`, `{ instanceId }`) is answered only for the 
 machine of one of them, as `ConnectResponse` with `url` `wss://t-<instance>.shinsa.dev/team?token=…`
 (`resolveTeamChannelUrl`), the token signed with that machine's connect key for the GitHub account that asked. The
 heartbeat's answer also carries `teams` (`RemoteTeam[]`: `id`, `name`, `owner`, your `role`, `members`, `requests`
-(the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, every member's), and
+(the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, `signingKey` when the machine sent one, every member's), and
 `createdAt`).
 
 Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
@@ -1349,14 +1354,21 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 `proof`, an HMAC with the team key over the team, the view and the key), answered by a welcome with the machine's
 fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
 (`deriveTeamSessionKey`, `TeamKeys`), then the machine sends `ShareMessage`s as a share does. A list view is a
-`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`): each a `SharedListing` (the redacted task, its gates, its project)
+`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
+signed, and `held`: the signed lists it keeps of the team's offline machines): each a `SharedListing` (the redacted task, its gates, its project, its repository)
 with `owner` (GitHub login) and `machine` (its name), every open task of the team's projects and the
 `TEAM_SETTLED_LIMIT` (50) most recently finished. A task view is a `ShareLiveView`. What a machine watches is a
 `TeamFeedSnapshot`: `machines` (`TeamFeedMachine`: `teamId`, `instanceId`, `name`, `userId`, `status`, one of
-`connecting`, `live`, `offline`, `refused`, and `reason`) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`
+`connecting`, `live`, `offline`, `refused`, `reason`, and `updatedAt`, when the owner's machine made the list it shows; the page marks a machine that is not `live` but has one as Offline) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`
 and `instanceId`); `GET /api/teams/tasks` (`TEAM_TASKS_PATH`, `?team=`, `?open=true`) answers the same shape. The
 local relay of one task is the socket `TEAM_VIEW_PATH` (`/api/teams/view?team=&machine=&task=`, `resolveTeamViewPath`,
-`parseTeamViewTarget`), which carries the task's `ShareMessage`s as text and closes on anything the page sends.
+`parseTeamViewTarget`), which carries the task's `ShareMessage`s as text and closes on anything the page sends. A
+`TeamSnapshot` is `{ body, signature }`: `body` the JSON of `TeamSnapshotBody` (`teamId`, `instanceId`, `tasks`,
+`updatedAt`), `signature` an ECDSA P-256 SHA-256 signature (`SIGNING_KEY_ALGORITHM`) over `shinsa-team-snapshot-v1`, a
+newline and `body`, as base64url (`signTeamSnapshot`, `verifyTeamSnapshot` with the signer's `TeamMachine.signingKey`,
+`selectTeamSnapshotSigner`); a copy lasts `TEAM_SNAPSHOT_TTL_MS` (30 days) from its `updatedAt`
+(`isTeamSnapshotExpired`). The engine keeps them in `data/team-snapshots.json` (`{ version: 1, lists }`, each
+`teamId`, `instanceId`, `keyDigest`, the team key's SHA-256 in hex, `tasks`, `updatedAt` and `snapshot` or null).
 
 **Shared previews** (core's `remote/previews.ts`): a link is `PreviewLink` (`instanceId`, `previewId` of
 `PREVIEW_ID_BYTES`, `key` of `PREVIEW_KEY_BYTES`, base64url), written `https://<label>.shinsa.page/?key=<key>`

@@ -8,6 +8,7 @@ import {
   listDuplicates,
   listForkSources,
   listForks,
+  listTeammateDuplicates,
   resolveReportFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
@@ -15,6 +16,8 @@ import { createSchedule } from '../../support/schedules.ts';
 import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 type PullRequest = NonNullable<Task['pullRequest']>;
+
+const KAI = { login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
 
 function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
   return {
@@ -110,12 +113,12 @@ describe('duplicates', () => {
       taskId: 't 1',
       handle: 'KAI-12',
       title: 'Add dark mode',
-      owner: 'kai',
+      owner: KAI,
     };
     const copy = createTask({ id: 'c', duplicate: { of: 't 1', by: 'shinsa', why: null, teammate } });
     const state = createShinsaState({ tasks: [copy] });
     expect(selectDuplicateOriginal(state, copy)).toEqual({
-      owner: '@kai’s',
+      owner: KAI,
       handle: 'KAI-12',
       title: 'Add dark mode',
       path: '/teams/core/kai/t%201',
@@ -147,6 +150,42 @@ describe('duplicates', () => {
     expect(listDuplicates(createShinsaState({ tasks: [local, copy] }), local)).toEqual([]);
   });
 
+  it('lists a teammate’s tasks closed as duplicates of this one, from the team feed, oldest first', () => {
+    const original = createTask({ id: 'mine' });
+    const teammate = {
+      teamId: 'core',
+      machineId: 'me',
+      taskId: 'mine',
+      handle: 'MON-3',
+      title: 'X',
+      owner: null,
+    };
+    const entry = (id: string, createdAt: number, taskId = 'mine') => ({
+      task: createTask({
+        id,
+        createdAt,
+        duplicate: { of: taskId, by: 'shinsa' as const, why: null, teammate: { ...teammate, taskId } },
+      }),
+      gates: [],
+      project: null,
+      repo: null,
+      owner: 'kai',
+      machine: 'Laptop',
+      teamId: 'core',
+      instanceId: 'kai',
+    });
+    const feed = {
+      machines: [],
+      tasks: [
+        entry('late', NOW - 1),
+        entry('early', NOW - 2),
+        entry('other', NOW, 'someone-else'),
+        { ...entry('plain', NOW), task: createTask({ id: 'plain' }) },
+      ],
+    };
+    expect(listTeammateDuplicates(feed, original).map((item) => item.task.id)).toEqual(['early', 'late']);
+  });
+
   it('lists the tasks closed as duplicates of a task, oldest first', () => {
     const original = createTask({ id: 'o' });
     const later = createTask({ id: 'b', duplicate: { of: 'o', by: 'you', why: null }, createdAt: NOW - 1 });
@@ -163,6 +202,12 @@ describe('duplicates', () => {
 
   it('says who closed it, and why when Shinsa did', () => {
     expect(describeDuplicateHint({ of: 'o', by: 'you', why: null })).toBe('You closed this as a duplicate.');
+    expect(describeDuplicateHint({ of: 'o', by: 'you', why: null }, 'Kai')).toBe(
+      'Kai closed this as a duplicate.'
+    );
+    expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: null }, 'Kai')).toBe(
+      'Shinsa closed this as a duplicate.'
+    );
     expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: null })).toBe(
       'Shinsa closed this as a duplicate.'
     );
@@ -175,7 +220,7 @@ describe('duplicates', () => {
       taskId: 't',
       handle: null,
       title: 'X',
-      owner: 'kai',
+      owner: KAI,
     };
     expect(describeDuplicateHint({ of: 't', by: 'shinsa', why: null, teammate })).toBe(
       'Shinsa closed this as a duplicate of a teammate’s task, which you can only view.'

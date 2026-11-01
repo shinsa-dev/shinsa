@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type ShinsaState, type Task, type TeamFeedSnapshot } from '@shinsa/core';
+import {
+  createState,
+  type RemoteTeam,
+  type ShinsaState,
+  type Task,
+  type TeamFeedSnapshot,
+} from '@shinsa/core';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import type { LocalRepo } from '../../src/repos/index.ts';
@@ -847,6 +853,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
         }),
         gates: [],
         project: null,
+        repo: null,
         owner: 'kai',
         machine: 'Studio',
         teamId: 'team1',
@@ -854,7 +861,20 @@ describe('resolveTriage for teammates’ duplicates', () => {
       },
     ],
   };
-  const team: TeamReader = () => ({ feed, teams: [], self: null });
+  const kai = { id: '7', login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
+  const teams: RemoteTeam[] = [
+    {
+      id: 'team1',
+      name: 'Platform',
+      owner: kai,
+      role: 'member',
+      members: [],
+      requests: [],
+      machines: [],
+      createdAt: 1,
+    },
+  ];
+  const team: TeamReader = () => ({ feed, teams, self: null });
   const base = { title: 'Add dark mode', repo: 'api', size: 'small', branch: 'feat/dark' };
   const task = newTask({ projectId: 'p1' });
 
@@ -877,12 +897,19 @@ describe('resolveTriage for teammates’ duplicates', () => {
       enum: ['none', 'same', 'teammate-1'],
     });
     expect(prompts[0]).toContain(
-      'Teammates’ open tasks, on their own machines, each with its owner, stage, request and plan:\n- teammate-1: @kai’s KAI-12 “Add dark mode” (building). Request: Add a dark theme to the app'
+      'Teammates’ open tasks, on their own machines, each with its owner, stage, request and plan:\n- teammate-1: Kai’s KAI-12 “Add dark mode” (building). Request: Add a dark theme to the app'
     );
-    expect(prompts[0]).toContain('"teammate-1": @kai’s KAI-12 “Add dark mode”');
+    expect(prompts[0]).toContain('"teammate-1": Kai’s KAI-12 “Add dark mode”');
     expect(triage.duplicateOf).toBeUndefined();
     expect(triage.duplicateOfTeammate).toBeUndefined();
-    expect(triage.unreached).toEqual([{ teamId: 'team1', machineId: 'laptop', name: 'Laptop', owner: null }]);
+    expect(triage.unreached).toEqual([
+      {
+        teamId: 'team1',
+        machineId: 'laptop',
+        name: 'Laptop',
+        owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
+      },
+    ]);
   });
 
   test('a teammate’s task named as the duplicate is recorded as the original, with a reason', async () => {
@@ -900,9 +927,9 @@ describe('resolveTriage for teammates’ duplicates', () => {
       taskId: 'same',
       handle: 'KAI-12',
       title: 'Add dark mode',
-      owner: 'kai',
+      owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
     });
-    expect(triage.reasons?.duplicate).toBe('It asks for the same work as @kai’s KAI-12 “Add dark mode”.');
+    expect(triage.reasons?.duplicate).toBe('It asks for the same work as Kai’s KAI-12 “Add dark mode”.');
   });
 
   test('a local task keeps its own id though a teammate’s task shares it', async () => {

@@ -118,6 +118,7 @@ export class ToolCalls {
       case 'list_services':
       case 'run_service':
       case 'add_service':
+      case 'remove_service':
         return this.#runServiceTool(name, call);
       default:
         if (isSurfaceTool(name)) return this.#manage(name, call);

@@ -1,6 +1,7 @@
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type BacklogCause,
+  copyTeammateOriginal,
   createSettings,
   type Evidence,
   type Feedback,
@@ -308,7 +309,7 @@ function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>
 function applyDuplicated(state: ShinsaState, event: EventOf<'task.duplicated'>) {
   const teammate = event.duplicate.teammate;
   updateTask(state, event.taskId, event.at, {
-    duplicate: { ...event.duplicate, ...(teammate ? { teammate: { ...teammate } } : {}) },
+    duplicate: { ...event.duplicate, ...(teammate ? { teammate: copyTeammateOriginal(teammate) } : {}) },
   });
   record(state, event.taskId, event.at, {
     actor: event.duplicate.by,

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import {
   DEVELOPMENT_VERSION,
+  type MachineResources,
   type RemoteSnapshot,
   resolveEngineInfo,
   type ServerMessage,
@@ -203,8 +204,94 @@ describe('the socket hub', () => {
     expect(sent.filter((message) => message.type === 'engine')).toEqual([
       { type: 'engine', engine: resolveEngineInfo('1.4.0') },
     ]);
-    expect(sent.at(-1)?.type).toBe('engine');
+    expect(sent.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
     hub.close(socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('samples resources only while a socket is open, and sends the last sample on connect', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const listeners = new Set<(resources: MachineResources) => void>();
+    let latest: MachineResources | null = null;
+    const resources = {
+      snapshot: () => latest,
+      subscribe: (listener: (resources: MachineResources) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const hub = createSocketHub(
+      engine,
+      new Transcripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      '1.4.0',
+      resources
+    );
+    const first = createSocket();
+    const second = createSocket();
+    hub.open(first.socket);
+    expect(first.sent.some((message) => message.type === 'resources')).toBe(false);
+    hub.open(second.socket);
+    expect(listeners.size).toBe(1);
+    latest = {
+      sampledAt: 1,
+      cores: 4,
+      cpuPercent: 20,
+      memoryUsedBytes: 1,
+      memoryTotalBytes: 2,
+      diskFreeBytes: null,
+      diskTotalBytes: null,
+      tasks: [],
+    };
+    for (const listener of listeners) listener(latest);
+    expect(second.sent.filter((message) => message.type === 'resources')).toEqual([
+      { type: 'resources', resources: latest },
+    ]);
+    hub.close(first.socket);
+    expect(listeners.size).toBe(1);
+    hub.close(second.socket);
+    expect(listeners.size).toBe(0);
+    const third = createSocket();
+    hub.open(third.socket);
+    expect(third.sent.filter((message) => message.type === 'resources')).toEqual([
+      { type: 'resources', resources: latest },
+    ]);
+    hub.stop();
+    expect(listeners.size).toBe(0);
+    engine.stop();
+    log.close();
+  });
+
+  test('closes a socket whose message was dropped, and keeps the others', async () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    let closed = 0;
+    const full = {
+      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+      send: () => 0,
+      close: () => {
+        closed += 1;
+      },
+    };
+    const healthy = createSocket();
+    hub.open(full);
+    expect(closed).toBe(3);
+    hub.open(healthy.socket);
+    await startPlanning(engine);
+    expect(closed).toBeGreaterThan(3);
+    expect(healthy.sent.some((message) => message.type === 'state.patch')).toBe(true);
+    hub.close(full);
+    hub.close(healthy.socket);
     hub.stop();
     engine.stop();
     log.close();

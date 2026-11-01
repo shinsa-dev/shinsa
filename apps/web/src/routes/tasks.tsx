@@ -9,30 +9,29 @@ import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
-import { TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
-import { TeamTasksGroup, useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
+import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
+import { useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeTaskCounts, listTaskGroupSections, selectTaskGroup } from '@/lib/tasks/groups.ts';
-import { matchesTeamTaskSearch } from '@/lib/teams/feeds.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
   const search = useSearchParam('q') ?? '';
   const status = selectTaskGroup(useSearchParam('status'));
-  const sections = listTaskGroupSections(state, search, status?.key ?? null);
   const team = useFocusedTeamTasks(state);
-  const teammates = status === null ? team : null;
+  const sections = listTaskGroupSections(state, search, status?.key ?? null, team?.entries);
+  const columns = team ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
   const filtered = search.trim() !== '' || status !== null;
-  const empty =
-    sections.every((section) => section.entries.length === 0) &&
-    !teammates?.tasks.some((entry) => matchesTeamTaskSearch(entry, search));
+  const empty = sections.every((section) => section.entries.length === 0);
   useRegisterCommands(listTaskListSections(search, status?.key ?? null));
 
   return (
-    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6')}>
+    <div
+      className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6', team && 'max-w-4xl')}
+    >
       <div className='flex items-end gap-3'>
         <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
         {status && (
@@ -61,11 +60,12 @@ export function TasksPage({ state }: { state: ShinsaState }) {
         <div
           className={cn(
             'grid h-7 shrink-0 items-center gap-4 border-border border-b px-3 font-medium text-2xs text-fg-2',
-            TASK_LIST_COLUMNS
+            columns
           )}
         >
           <span>Task</span>
           <span className='max-md:hidden'>Repository</span>
+          {team && <span className='max-md:hidden'>Owner</span>}
           <span className='max-md:hidden'>Status</span>
           <span className='max-md:hidden'>Pull request</span>
           <span className='text-right'>Updated</span>
@@ -95,10 +95,10 @@ export function TasksPage({ state }: { state: ShinsaState }) {
                 entries={entries}
                 state={state}
                 defaultOpen={group.defaultOpen || status !== null}
+                columns={columns}
               />
             ))
           )}
-          {!empty && teammates && <TeamTasksGroup focused={teammates} search={search} />}
         </div>
       </div>
     </div>

@@ -17,6 +17,7 @@ import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { TeamFeeds } from '../remote/team-feeds.ts';
+import type { ResourceMonitor } from '../resources/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { Classifier } from '../triage/message.ts';
@@ -32,12 +33,21 @@ export interface SocketData {
 export interface HubSocket {
   data: SocketData;
   send: (payload: string) => unknown;
+  close?: () => void;
 }
 
 type Socket = HubSocket;
 
+const DROPPED = 0;
+
+function deliver(socket: Socket, payload: string) {
+  if (socket.send(payload) !== DROPPED) return;
+  log.warn('[Socket] Dropped a message, closing the socket', { bytes: Buffer.byteLength(payload) });
+  socket.close?.();
+}
+
 function send(socket: Socket, message: ServerMessage) {
-  socket.send(JSON.stringify(message));
+  deliver(socket, JSON.stringify(message));
 }
 
 const MAX_ID = 200;
@@ -94,15 +104,17 @@ export function createSocketHub(
   terminals?: Terminals,
   remote?: Remote,
   teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
-  version = DEVELOPMENT_VERSION
+  version = DEVELOPMENT_VERSION,
+  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>
 ) {
   const sockets = new Set<Socket>();
   const engineInfo = resolveEngineInfo(version);
   let desktopConnected = false;
+  let unsubscribeResources: (() => void) | null = null;
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
-    for (const socket of sockets) socket.send(payload);
+    for (const socket of sockets) deliver(socket, payload);
   }
 
   function syncSurfaces() {
@@ -120,6 +132,19 @@ export function createSocketHub(
     broadcast({ type: 'terminals', terminals: snapshot })
   );
 
+  function syncResources() {
+    if (!resources) return;
+    if (sockets.size > 0 && !unsubscribeResources) {
+      unsubscribeResources = resources.subscribe((snapshot) =>
+        broadcast({ type: 'resources', resources: snapshot })
+      );
+    }
+    if (sockets.size === 0 && unsubscribeResources) {
+      unsubscribeResources();
+      unsubscribeResources = null;
+    }
+  }
+
   const unsubscribeRemote = remote?.subscribe(() => broadcast({ type: 'remote', remote: remote.snapshot() }));
 
   const unsubscribeTeams = teamFeeds?.subscribe(() =>
@@ -135,7 +160,7 @@ export function createSocketHub(
     if (start === null) return;
     const payload = JSON.stringify({ type: 'transcript', runId, entries, start } satisfies ServerMessage);
     for (const socket of sockets) {
-      if (socket.data.transcripts.has(runId)) socket.send(payload);
+      if (socket.data.transcripts.has(runId)) deliver(socket, payload);
     }
   });
 
@@ -187,17 +212,21 @@ export function createSocketHub(
   return {
     open(socket: Socket) {
       sockets.add(socket);
-      send(socket, { type: 'state', state: serializeState(engine.state) });
+      send(socket, { type: 'surfaces', desktop: desktopConnected });
+      send(socket, { type: 'engine', engine: engineInfo });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
       if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });
       if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
-      send(socket, { type: 'surfaces', desktop: desktopConnected });
-      send(socket, { type: 'engine', engine: engineInfo });
+      const sampled = resources?.snapshot();
+      if (sampled) send(socket, { type: 'resources', resources: sampled });
+      send(socket, { type: 'state', state: serializeState(engine.state) });
+      syncResources();
     },
     close(socket: Socket) {
       sockets.delete(socket);
       syncSurfaces();
+      syncResources();
       for (const unfollow of socket.data.transcripts.values()) unfollow();
       socket.data.transcripts.clear();
     },
@@ -218,6 +247,8 @@ export function createSocketHub(
       unsubscribeTerminals?.();
       unsubscribeRemote?.();
       unsubscribeTeams?.();
+      unsubscribeResources?.();
+      unsubscribeResources = null;
     },
   };
 }

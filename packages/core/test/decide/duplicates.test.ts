@@ -222,7 +222,7 @@ const KAI_TASK: TeammateOriginal = {
   taskId: 'kai-task',
   handle: 'KAI-12',
   title: 'Add dark mode',
-  owner: 'kai',
+  owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: 'https://avatars.example/kai.png' },
 };
 
 function triageWith(harness: Harness, request: string, extra: Partial<CommandOf<'task.triage'>>) {
@@ -250,7 +250,7 @@ describe('teammate duplicates', () => {
 
     const task = harness.task(copy);
     expect(task.stage).toBe('cancelled');
-    expect(task.stageReason).toBe('duplicate of @kai’s KAI-12 “Add dark mode”');
+    expect(task.stageReason).toBe('duplicate of Kai’s KAI-12 “Add dark mode”');
     expect(task.duplicate).toEqual({
       of: 'kai-task',
       by: 'shinsa',
@@ -258,10 +258,28 @@ describe('teammate duplicates', () => {
       teammate: KAI_TASK,
     });
     expect(task.activity.map((entry) => entry.text)).toContain(
-      'Closed as a duplicate of @kai’s KAI-12 “Add dark mode”'
+      'Closed as a duplicate of Kai’s KAI-12 “Add dark mode”'
     );
     expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).not.toContain(copy);
     expect(listActiveRuns(harness.state, copy)).toHaveLength(0);
+  });
+
+  test("the recorded teammate's task is a copy, never the command's own object", () => {
+    const harness = createHarness();
+    const owner = { login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
+    const copy = triageWith(harness, 'Dark theme please', { duplicateOfTeammate: { ...KAI_TASK, owner } });
+    owner.name = 'Someone else';
+
+    expect(harness.task(copy).duplicate?.teammate?.owner?.name).toBe('Kai Tanaka');
+  });
+
+  test('a teammate is named by the first word of their name, or by their login when they have none', () => {
+    const harness = createHarness();
+    const blank = triageWith(harness, 'Dark theme please', {
+      duplicateOfTeammate: { ...KAI_TASK, owner: { login: 'kai', name: '  ', avatarUrl: null } },
+    });
+
+    expect(harness.task(blank).stageReason).toBe('duplicate of kai’s KAI-12 “Add dark mode”');
   });
 
   test("a teammate's task without a handle or an owner is quoted by its title", () => {
@@ -302,7 +320,12 @@ describe('teammate duplicates', () => {
   test('triage records the team machines it could not compare with and says whose', () => {
     const harness = createHarness();
     const unreached = [
-      { teamId: 'team-1', machineId: 'machine-kai', name: 'Studio', owner: 'kai' },
+      {
+        teamId: 'team-1',
+        machineId: 'machine-kai',
+        name: 'Studio',
+        owner: { login: 'kai', name: null, avatarUrl: null },
+      },
       { teamId: 'team-1', machineId: 'machine-box', name: 'Build box', owner: null },
     ];
     const taskId = triageWith(harness, 'Add a settings page', { unreached });
@@ -310,7 +333,7 @@ describe('teammate duplicates', () => {
     const task = harness.task(taskId);
     expect(task.triageDecisions?.duplicate).toEqual({ unreached });
     expect(task.activity.map((entry) => entry.text)).toContain(
-      'Could not check @kai’s Studio and Build box for duplicates'
+      'Could not check kai’s Studio and Build box for duplicates'
     );
     expect(task.stage).toBe('triage');
   });

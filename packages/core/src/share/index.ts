@@ -1,5 +1,6 @@
 import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { RunDelegation } from '../domain/delegations.ts';
+import { copyTeammateOriginal } from '../domain/duplicates.ts';
 import { isCurrentEvidence } from '../domain/evidence.ts';
 import type { Round } from '../domain/rounds.ts';
 import type { SharePreset } from '../domain/settings.ts';
@@ -16,6 +17,7 @@ import type {
   Repo,
   Run,
   Task,
+  TaskDuplicate,
 } from '../domain/types.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument, ReviewFinding, WorkReport } from '../report/types.ts';
@@ -24,9 +26,15 @@ import { resolveTaskProject } from '../state/queries.ts';
 import { hasShareGroup, SHARE_PRESET_GROUPS, type ShareGroup } from './presets.ts';
 import { resolveShareUpdate, type ShareUpdate } from './update.ts';
 
+export interface SharedPerson {
+  name: string | null;
+  avatarUrl: string | null;
+}
+
 export interface SharedTaskContext {
   preset: SharePreset;
   owner: string | null;
+  ownerProfile: SharedPerson | null;
   machine: string | null;
   repository: string | null;
 }
@@ -40,6 +48,7 @@ export interface SharedTask {
   repo: Repo | null;
   project: Project | null;
   owner: string | null;
+  ownerProfile?: SharedPerson | null;
   machine: string | null;
   repository: string | null;
   description: string | null;
@@ -277,6 +286,15 @@ function createBlankTask(task: Task, grants: Grants): Task {
   };
 }
 
+function redactDuplicate(duplicate: TaskDuplicate): TaskDuplicate {
+  return {
+    of: duplicate.of,
+    by: duplicate.by,
+    why: duplicate.why,
+    ...(duplicate.teammate ? { teammate: copyTeammateOriginal(duplicate.teammate) } : {}),
+  };
+}
+
 const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants) => Partial<Task>>> = {
   identity: (task) => ({ handle: task.handle ?? null, title: task.title, size: task.size }),
   requests: (task) => ({ request: splitMessageAttachments(task.request).text }),
@@ -291,6 +309,7 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants)
     repoId: task.repoId,
     branch: task.branch,
     stageReason: task.stageReason,
+    duplicate: task.duplicate ? redactDuplicate(task.duplicate) : null,
   }),
   plan: (task) => ({ triageDecisions: task.triageDecisions ?? null }),
   reports: (task) => ({ phaseReports: task.phaseReports.map(redactPhaseReport), fixRounds: task.fixRounds }),
@@ -459,6 +478,7 @@ export interface SharedListing {
   task: Task;
   gates: Gate[];
   project: Project | null;
+  repo: Repo | null;
 }
 
 export function resolveSharedListing(
@@ -470,11 +490,13 @@ export function resolveSharedListing(
   const grants: Grants = (group) => hasShareGroup(preset, group);
   const projectId = resolveTaskProject(state, task);
   const project = grants('people') && projectId ? state.projects[projectId] : undefined;
+  const repo = grants('people') && task.repoId ? state.repos[task.repoId] : undefined;
   const links = grants('people') ? SHARED_LINK_KINDS : new Set<string>();
   return {
     task: scrubValue(redactTask(task, preset, grants), links),
     gates: grants('activity') ? gates.map((gate) => scrubValue(redactGate(gate), links)) : [],
     project: project ? redactProject(project) : null,
+    repo: repo ? redactRepo(repo) : null,
   };
 }
 
@@ -502,6 +524,7 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
     repo: repo ? redactRepo(repo) : null,
     project: project ? redactProject(project) : null,
     owner: people ? context.owner : null,
+    ownerProfile: people ? context.ownerProfile : null,
     machine: people ? context.machine : null,
     repository: people ? context.repository : null,
     description: grants('description') ? scrubText(task.share?.description ?? '', links) || null : null,

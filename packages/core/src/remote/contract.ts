@@ -35,6 +35,7 @@ export const REMOTE_PATHS = {
   machineMemberAdd: '/__remote/machine/members/add',
   machineMemberRemove: '/__remote/machine/members/remove',
   inviteAccept: '/__remote/invites/accept',
+  previewOpen: '/__remote/previews/open',
   teams: '/__remote/teams',
   teamJoin: '/__remote/teams/join',
   teamJoinPage: '/share/team',
@@ -83,6 +84,7 @@ export type PairPollResponse =
 export interface HeartbeatRequest {
   localUrl: string;
   version: string;
+  signingKey?: string;
 }
 
 export interface RemoteUser {

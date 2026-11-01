@@ -4,7 +4,9 @@ import {
   type RemoteTeam,
   type TaskStage,
   type TeamFeedSnapshot,
+  type TeamFeedTask,
   type TeammateOriginal,
+  type TeammateOwner,
   type UnreachedTeammate,
 } from '@shinsa/core';
 
@@ -29,7 +31,7 @@ export interface TeammateCheck {
   unreached: UnreachedTeammate[];
 }
 
-export const TEAMMATE_KEY_PREFIX = 'teammate-';
+const TEAMMATE_KEY_PREFIX = 'teammate-';
 
 export const TEAMMATE_TEXT_LIMIT = 280;
 
@@ -38,11 +40,26 @@ function clipText(text: string) {
   return flat.length > TEAMMATE_TEXT_LIMIT ? `${flat.slice(0, TEAMMATE_TEXT_LIMIT).trimEnd()}…` : flat;
 }
 
-function resolveMemberLogin(teams: readonly RemoteTeam[], teamId: string, userId: string) {
+function selectMember(teams: readonly RemoteTeam[], teamId: string, userId: string): TeammateOwner | null {
   const team = teams.find((candidate) => candidate.id === teamId);
   if (!team) return null;
-  if (team.owner.id === userId) return team.owner.login;
-  return team.members.find((member) => member.user.id === userId)?.user.login ?? null;
+  const user =
+    team.owner.id === userId ? team.owner : team.members.find((member) => member.user.id === userId)?.user;
+  return user ? { login: user.login, name: user.name, avatarUrl: user.avatarUrl } : null;
+}
+
+function resolveListingOwner(
+  listing: Pick<TeamFeedTask, 'owner' | 'ownerProfile'>,
+  member: TeammateOwner | null
+): TeammateOwner | null {
+  const login = listing.owner ?? null;
+  if (!login) return member;
+  const known = member?.login === login ? member : null;
+  return {
+    login,
+    name: listing.ownerProfile?.name ?? known?.name ?? null,
+    avatarUrl: listing.ownerProfile?.avatarUrl ?? known?.avatarUrl ?? null,
+  };
 }
 
 export function resolveTeammateCheck(project: Project | null, reading: TeamReading): TeammateCheck | null {
@@ -51,7 +68,7 @@ export function resolveTeammateCheck(project: Project | null, reading: TeamReadi
   const { feed, teams } = reading;
   const machines = feed.machines.filter((machine) => teamIds.has(machine.teamId));
   const owners = new Map(
-    machines.map((machine) => [machine.instanceId, resolveMemberLogin(teams, machine.teamId, machine.userId)])
+    machines.map((machine) => [machine.instanceId, selectMember(teams, machine.teamId, machine.userId)])
   );
   const seen = new Set<string>();
   const tasks: TeammateTask[] = [];
@@ -67,15 +84,17 @@ export function resolveTeammateCheck(project: Project | null, reading: TeamReadi
         taskId: listing.task.id,
         handle: listing.task.handle ?? null,
         title: listing.task.title,
-        owner: listing.owner ?? owners.get(listing.instanceId) ?? null,
+        owner: resolveListingOwner(listing, owners.get(listing.instanceId) ?? null),
       },
       stage: listing.task.stage,
       request: clipText(listing.task.request),
       goal: listing.task.plan?.document?.goal ? clipText(listing.task.plan.document.goal) : null,
     });
   }
-  const live = new Set(
-    machines.filter((machine) => machine.status === 'live').map((machine) => machine.instanceId)
+  const compared = new Set(
+    machines
+      .filter((machine) => machine.status === 'live' || machine.updatedAt !== undefined)
+      .map((machine) => machine.instanceId)
   );
   const listed = new Set<string>();
   const unreached: UnreachedTeammate[] = [];
@@ -87,7 +106,7 @@ export function resolveTeammateCheck(project: Project | null, reading: TeamReadi
           teamId: team.id,
           machineId: machine.id,
           name: machine.name,
-          owner: resolveMemberLogin(teams, team.id, machine.userId),
+          owner: selectMember(teams, team.id, machine.userId),
         }))
       ),
     ...machines.map((machine) => ({
@@ -100,7 +119,7 @@ export function resolveTeammateCheck(project: Project | null, reading: TeamReadi
   for (const candidate of candidates) {
     if (
       candidate.machineId === reading.self ||
-      live.has(candidate.machineId) ||
+      compared.has(candidate.machineId) ||
       listed.has(candidate.machineId)
     ) {
       continue;

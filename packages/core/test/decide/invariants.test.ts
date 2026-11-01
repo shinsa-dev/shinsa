@@ -1072,9 +1072,16 @@ function selectDuplicateCommand(state: ShinsaState, random: Random): ShinsaComma
           taskId: `teammate-${task.id}`,
           handle: null,
           title: 'Their task',
-          owner: 'kai',
+          owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
         },
-        unreached: [{ teamId: 'team', machineId: 'offline', name: 'Laptop', owner: 'lee' }],
+        unreached: [
+          {
+            teamId: 'team',
+            machineId: 'offline',
+            name: 'Laptop',
+            owner: { login: 'lee', name: null, avatarUrl: null },
+          },
+        ],
       })),
     ...open.map((task) => ({
       type: 'task.mark_duplicate' as const,

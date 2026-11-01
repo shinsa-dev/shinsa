@@ -40,7 +40,13 @@ export {
   type TaskCreatorKind,
   type TaskSplit,
 } from './delegations.ts';
-export { quoteDuplicateOriginal, resolveTeammateMachineLabel } from './duplicates.ts';
+export {
+  copyTeammateOriginal,
+  copyUnreachedTeammate,
+  quoteDuplicateOriginal,
+  resolveFirstName,
+  resolveTeammateMachineLabel,
+} from './duplicates.ts';
 export { DomainError } from './errors.ts';
 export {
   type CurrentEvidenceItem,

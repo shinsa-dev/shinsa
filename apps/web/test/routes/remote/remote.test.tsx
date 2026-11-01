@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { PairView, RemoteInstance, RemoteSession, RemoteSnapshot, RemoteUser } from '@shinsa/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
-import { Connection, connection } from '@/lib/connection/socket.ts';
+import { Connection, connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
@@ -11,6 +11,8 @@ import type { TeamKeyStore } from '@/lib/teams/join.ts';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
+import { createMachineResources, createTaskResources } from '../../support/resources.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 
 const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
 
@@ -270,7 +272,7 @@ describe('access requests in Settings → Machines', () => {
     expect(screen.queryByText('Waiting on Air')).toBeNull();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getAllByText('Safari on iPad')).toHaveLength(1);
-    expect(screen.getByText('@mona')).toBeTruthy();
+    expect(screen.getByText('mona')).toBeTruthy();
     unmount();
     render(
       <MachineAccessRequests machines={[{ id: 'w4t8', name: 'Laptop', remote: null }]} instances={[]} />
@@ -341,12 +343,99 @@ describe('the machines in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(await screen.findByText('Shared by Lee Park · In this dashboard')).toBeTruthy();
+    expect(await screen.findByText('Shared by Lee · In this dashboard')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
     expect(left).toEqual(['k3x9']);
     expect(removed).toEqual([]);
+  });
+
+  it('shows each machine’s CPU, memory and disk, and opens to the open tasks using it', async () => {
+    const local = connection;
+    const task = createTask({ id: 'export', title: 'Retry exports' });
+    const state = createShinsaState({ tasks: [task] });
+    const machine: MachineChoice = {
+      id: 'k3x9',
+      name: 'Studio',
+      current: true,
+      state,
+      resources: createMachineResources({ tasks: [createTaskResources({ taskId: 'export' })] }),
+    };
+    const machines = [machine];
+    replaceConnection({
+      ...local,
+      snapshot: () => ({ state, status: 'open' }),
+      listMachines: () => machines,
+    });
+    try {
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      const meters = await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' });
+      expect(meters.textContent).toContain('CPU20%');
+      expect(screen.queryByText('Retry exports')).toBeNull();
+      expect(screen.queryByRole('button', { name: /open tasks on Studio/ })).toBeNull();
+    } finally {
+      replaceConnection(null);
+    }
+  });
+
+  it('says a machine has no reading yet, then shows its meters', async () => {
+    const local = connection;
+    const state = createShinsaState({});
+    const reading: MachineChoice = { id: 'k3x9', name: 'Studio', current: true, state, resources: null };
+    const idle = { ...reading, resources: createMachineResources() };
+    let machines = [reading];
+    replaceConnection({
+      ...local,
+      snapshot: () => ({ state, status: 'open' }),
+      listMachines: () => machines,
+    });
+    try {
+      const { unmount } = render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      expect(await screen.findByText('No reading yet.')).toBeTruthy();
+      unmount();
+      machines = [idle];
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      expect(
+        await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' })
+      ).toBeTruthy();
+      expect(screen.queryByText('No reading yet.')).toBeNull();
+    } finally {
+      replaceConnection(null);
+    }
   });
 
   it('says when the machines cannot be read, and waits without the remote services', async () => {

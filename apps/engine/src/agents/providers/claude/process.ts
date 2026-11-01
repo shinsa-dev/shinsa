@@ -10,7 +10,7 @@ export interface ClaudeProcess {
 
 const STDERR_TAIL_CHARS = 8_000;
 
-export function createClaudeProcess(): ClaudeProcess {
+export function createClaudeProcess(onSpawn?: (pid: number) => void): ClaudeProcess {
   let child: ChildProcess | null = null;
   let stderr = '';
   return {
@@ -28,6 +28,7 @@ export function createClaudeProcess(): ClaudeProcess {
         stderr = `${stderr}${chunk}`.slice(-STDERR_TAIL_CHARS);
       });
       child = started;
+      if (started.pid) onSpawn?.(started.pid);
       return started as unknown as SpawnedProcess;
     },
     readStderr: () => stderr.trim(),

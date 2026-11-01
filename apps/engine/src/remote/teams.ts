@@ -13,11 +13,14 @@ import {
   resolveTeamJoinUrl,
   serializeBase64Url,
   serializePublicKey,
+  signTeamSnapshot,
   TEAM_KEY_BYTES,
   TEAM_SHARE_PRESET,
   type TeamAction,
   type TeamInviteResponse,
   type TeamJoinStatus,
+  type TeamListView,
+  type TeamTask,
   type TeamView,
   verifyTeamHello,
 } from '@shinsa/core';
@@ -28,6 +31,8 @@ import { ControlError } from './control.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral, type HelloAnswer, type LiveShare, ShareChannel } from './share-channel.ts';
 import type { Shares, ShareTranscripts } from './shares.ts';
+import { resolveOwnerProfile } from './store.ts';
+import type { TeamFeeds } from './team-feeds.ts';
 
 export const TEAM_GONE_REASON = 'This task is no longer shown to the team, or you are no longer in it.';
 
@@ -50,6 +55,7 @@ export interface TeamsOptions {
   remote: Remote;
   shares: Pick<Shares, 'resolveLive'>;
   transcripts: Pick<ShareTranscripts, 'subscribe'>;
+  held?: Pick<TeamFeeds, 'listHeld' | 'subscribeHeld'>;
   now?: () => number;
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
@@ -76,6 +82,7 @@ export class Teams implements TeamLinks {
   readonly #engine: TeamsOptions['engine'];
   readonly #remote: Remote;
   readonly #shares: TeamsOptions['shares'];
+  readonly #held: TeamsOptions['held'];
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #channels = new Set<ShareChannel<TeamSubject>>();
@@ -84,11 +91,19 @@ export class Teams implements TeamLinks {
     this.#engine = options.engine;
     this.#remote = options.remote;
     this.#shares = options.shares;
+    this.#held = options.held;
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? createRandom;
     options.remote.subscribe(() => this.#syncChannels());
     options.engine.subscribe(() => this.#syncChannels());
     options.transcripts.subscribe((runId) => this.#pushTranscript(runId));
+    options.held?.subscribeHeld(() => this.#pushLists());
+  }
+
+  #pushLists() {
+    for (const channel of this.#channels) {
+      if (channel.subject?.view.kind === 'list') void channel.push();
+    }
   }
 
   #pushTranscript(runId: string) {
@@ -343,17 +358,30 @@ export class Teams implements TeamLinks {
     if (subject.view.kind === 'task') return this.#shares.resolveLive(subject.view.taskId, TEAM_SHARE_PRESET);
     const tasks = listTeamTasks(this.#engine.state, subject.teamId, {
       owner: this.#store.file.owner,
+      ownerProfile: resolveOwnerProfile(this.#store.file),
       machine: this.#remote.snapshot().machineName,
     });
     const { publicKey } = await this.#store.resolveMachineKey();
     const grant = this.#store.selectGrant(subject.userId);
-    const view = {
+    const updatedAt = this.#now();
+    const snapshot = await this.#signList(subject.teamId, tasks, updatedAt);
+    const held = this.#held?.listHeld(subject.teamId) ?? [];
+    const view: TeamListView = {
       tasks,
       machineKey: publicKey,
       ...(grant?.teamId === subject.teamId ? { grant: grant.secret } : {}),
-      updatedAt: this.#now(),
+      updatedAt,
+      ...(snapshot ? { snapshot } : {}),
+      ...(held.length > 0 ? { held } : {}),
     };
     return { view, files: [] };
+  }
+
+  async #signList(teamId: string, tasks: TeamTask[], updatedAt: number) {
+    const instanceId = this.#store.file.credentials?.instanceId;
+    if (!instanceId) return null;
+    const { privateKey } = await this.#store.resolveSigningKey();
+    return signTeamSnapshot(privateKey, { teamId, instanceId, tasks, updatedAt });
   }
 
   #syncChannels() {

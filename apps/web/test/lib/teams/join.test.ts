@@ -58,7 +58,7 @@ describe('a team link opened on app.shinsa.dev', () => {
     const store = createMemoryStore();
     const teamKeys = createTeamKeyStore(store);
     const result = await requestTeamJoin(FRAGMENT, { dashboard: answer(), teamKeys, now: () => 5 });
-    expect(result).toEqual({ name: 'Platform', owner: 'Kai Lane', status: 'requested' });
+    expect(result).toEqual({ name: 'Platform', owner: 'Kai', status: 'requested' });
     expect(await teamKeys.selectTeamKey('team1')).toEqual({
       teamId: 'team1',
       name: 'Platform',

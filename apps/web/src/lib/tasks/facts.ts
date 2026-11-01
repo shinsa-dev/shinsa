@@ -1,4 +1,4 @@
-import type { ShinsaState, SourceReport, Task } from '@shinsa/core';
+import type { ShinsaState, SourceReport, Task, TeamFeedSnapshot, TeammateOwner } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
 import { resolveTeamTaskPath } from '@/lib/teams/feeds.ts';
@@ -25,7 +25,7 @@ export function listForkSources(state: ShinsaState, task: Task) {
 }
 
 export interface DuplicateOriginalLink {
-  owner: string | null;
+  owner: TeammateOwner | null;
   handle: string | null;
   title: string;
   path: string;
@@ -37,7 +37,7 @@ export function selectDuplicateOriginal(state: ShinsaState, task: Task): Duplica
   const { teammate } = duplicate;
   if (teammate) {
     return {
-      owner: teammate.owner ? `@${teammate.owner}’s` : null,
+      owner: teammate.owner,
       handle: teammate.handle,
       title: teammate.title,
       path: resolveTeamTaskPath({
@@ -63,8 +63,17 @@ export function listDuplicates(state: ShinsaState, task: Task) {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export function describeDuplicateHint(duplicate: NonNullable<Task['duplicate']>) {
-  if (duplicate.by === 'you') return 'You closed this as a duplicate.';
+export function listTeammateDuplicates(feed: TeamFeedSnapshot, task: Task) {
+  return feed.tasks
+    .filter((entry) => entry.task.duplicate?.teammate?.taskId === task.id)
+    .sort((a, b) => a.task.createdAt - b.task.createdAt);
+}
+
+export function describeDuplicateHint(
+  duplicate: NonNullable<Task['duplicate']>,
+  owner: string | null = null
+) {
+  if (duplicate.by === 'you') return `${owner ?? 'You'} closed this as a duplicate.`;
   if (duplicate.teammate) {
     const reason = duplicate.why ? ` ${duplicate.why}` : '';
     return `Shinsa closed this as a duplicate of a teammate’s task, which you can only view.${reason}`;

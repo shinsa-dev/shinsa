@@ -469,6 +469,7 @@ export function startCodexSession(
         env: runtime.env,
       });
       client = active;
+      input.onProcess?.(active.pid);
       active.onNotification(observe);
       active.onRequest(answer);
       active.onExit((message) => exit.resolve(message));

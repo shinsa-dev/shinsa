@@ -7,6 +7,7 @@ import {
   createSampleRemoteActions,
   createStaticConnection,
 } from '@/routes/ui/sample-remote.ts';
+import { createMachineResources } from '../../support/resources.ts';
 
 const NOW = 1_800_000_000_000;
 
@@ -52,6 +53,18 @@ describe('the /ui remote access samples', () => {
     await expect(teamKeys.writeTeamKey({ teamId: 'tm', key: 'k' } as never)).rejects.toThrow(REFUSED);
   });
 
+  it('give a sample machine its own id and what it uses', () => {
+    const resources = createMachineResources({ cpuPercent: 64 });
+    const fleet = createSampleFleet([
+      { id: 'k3x9', name: 'Studio', state: createState(), resources },
+      { name: 'Laptop', state: createState() },
+    ]);
+    expect(fleet.listMachines().map((machine) => [machine.id, machine.resources ?? null])).toEqual([
+      ['k3x9', resources],
+      ['mac-1', null],
+    ]);
+  });
+
   it('merge two machines that never connect, send nothing, and keep every call quiet', async () => {
     const fleet = createSampleFleet([
       { name: 'Studio', state: createState() },
@@ -76,6 +89,7 @@ describe('the /ui remote access samples', () => {
     expect(fleet.listMachines().map((machine) => machine.name)).toEqual(['Studio', 'Laptop']);
     expect(fleet.listUnreachableMachines()).toEqual([]);
     const single = createStaticConnection(createState());
+    expect(single.selectResources()).toBeNull();
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
     expect(single.listMachineAccess()).toEqual([]);

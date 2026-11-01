@@ -29,6 +29,7 @@ import {
   InfoRow,
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { TaskServicesFact } from '@/components/services/task-menu.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
@@ -36,17 +37,19 @@ import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { BundleFact } from '@/components/task/bundle.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
-import { useReadOnly } from '@/components/task/read-only.tsx';
+import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
-import { useMachine } from '@/lib/connection/socket.ts';
+import { useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
+import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
+import { resolveFirstName, resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
@@ -56,6 +59,7 @@ import {
   listDuplicates,
   listForkSources,
   listForks,
+  listTeammateDuplicates,
   resolveReportFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
@@ -63,6 +67,7 @@ import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
+import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
 function FactPopover({
@@ -103,14 +108,30 @@ function HandleFact({ task }: { task: Task }) {
 
 function MachineFact({ task }: { task: Task }) {
   const machine = useMachine(task.id);
+  const resources = useMachines().find((candidate) => candidate.id === machine?.id)?.resources;
   if (!machine) return null;
+  const use = listTaskUseLines(resources, task.id);
   return (
-    <Hint label='The machine this task runs on'>
-      <span className={FACT}>
-        <Icon size='sm' name={MACHINE_ICON} />
-        <span className='truncate'>{resolveMachineLabel(machine)}</span>
-      </span>
-    </Hint>
+    <FactPopover
+      trigger={
+        <>
+          <Icon size='sm' name={MACHINE_ICON} />
+          <span className='truncate'>{resolveMachineLabel(machine)}</span>
+        </>
+      }
+    >
+      <InfoHeader
+        title={resolveMachineLabel(machine)}
+        description={resources ? describeMachineResources(resources) : 'The machine this task runs on'}
+      />
+      {use && (
+        <InfoSection title='What this task uses'>
+          {use.map((line) => (
+            <InfoRow key={line.label} label={line.label} value={line.value} valueClassName='tabular-nums' />
+          ))}
+        </InfoSection>
+      )}
+    </FactPopover>
   );
 }
 
@@ -319,7 +340,7 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
   const readOnly = useReadOnly();
-  const why = resolveTriageWhy(state, task, 'priority');
+  const why = resolveTriageWhy(state, task, 'priority', useReadOnlyOwnerName());
   if (readOnly) {
     const fact = (
       <span className={FACT}>
@@ -347,7 +368,8 @@ function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function StartedFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waiting = listPendingDependencies(state, task).length > 0;
-  const why = waiting ? null : resolveTriageWhy(state, task, 'start');
+  const owner = useReadOnlyOwnerName();
+  const why = waiting ? null : resolveTriageWhy(state, task, 'start', owner);
   return (
     <span className={FACT}>
       <Icon size='sm' name='IconClock' />
@@ -381,11 +403,69 @@ function AccountFact({ task }: { task: Task }) {
   );
 }
 
+function TeammateTaskFact({
+  icon,
+  verb,
+  owner,
+  handle,
+  title,
+  path,
+  hint,
+}: {
+  icon: IconName;
+  verb: string;
+  owner: UserProfile | null;
+  handle: string | null;
+  title: string;
+  path: string;
+  hint: string | null;
+}) {
+  const task = (
+    <button
+      type='button'
+      onClick={() => navigate(path)}
+      className='flex min-w-0 cursor-pointer outline-none hover:text-fg-4 active:text-fg-4'
+    >
+      {handle && <span className='shrink-0 whitespace-pre tabular-nums'>{handle} </span>}
+      <Truncate>{title}</Truncate>
+    </button>
+  );
+  return (
+    <span className={cn(FACT, 'max-w-80')}>
+      <Icon size='sm' name={icon} />
+      <span className='flex min-w-0'>
+        <span className='shrink-0 whitespace-pre'>{verb} </span>
+        {owner && (
+          <span className='shrink-0 whitespace-pre'>
+            <UserTag user={owner} label={`${resolveFirstName(owner)}’s`} />{' '}
+          </span>
+        )}
+        {hint ? <Hint label={hint}>{task}</Hint> : task}
+      </span>
+    </span>
+  );
+}
+
 function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
   const original = selectDuplicateOriginal(state, task);
+  const owner = useReadOnlyOwnerName();
   if (!original || !task.duplicate) return null;
+  const hint = describeDuplicateHint(task.duplicate, owner);
+  if (original.owner) {
+    return (
+      <TeammateTaskFact
+        icon='IconSquareBehindSquare2'
+        verb='Duplicate of'
+        owner={original.owner}
+        handle={original.handle}
+        title={original.title}
+        path={original.path}
+        hint={hint}
+      />
+    );
+  }
   return (
-    <Hint label={describeDuplicateHint(task.duplicate)}>
+    <Hint label={hint}>
       <button
         type='button'
         onClick={() => navigate(original.path)}
@@ -394,7 +474,6 @@ function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
         <Icon size='sm' name='IconSquareBehindSquare2' />
         <span className='flex min-w-0'>
           <span className='shrink-0 whitespace-pre'>Duplicate of </span>
-          {original.owner && <span className='shrink-0 whitespace-pre'>{original.owner} </span>}
           {original.handle && (
             <span className='shrink-0 whitespace-pre tabular-nums'>{original.handle} </span>
           )}
@@ -403,6 +482,22 @@ function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
       </button>
     </Hint>
   );
+}
+
+function TeammateKeptOverFacts({ task }: { task: Task }) {
+  const feed = useTeamFeed();
+  return listTeammateDuplicates(feed, task).map((entry) => (
+    <TeammateTaskFact
+      key={`${entry.instanceId} ${entry.task.id}`}
+      icon='IconSquareBehindSquare2'
+      verb='Kept over'
+      owner={entry.owner ? resolveSharedProfile(entry.owner, entry.ownerProfile) : null}
+      handle={entry.task.handle ?? null}
+      title={entry.task.title}
+      path={resolveTeamTaskPath(resolveTeamTaskTarget(entry))}
+      hint={null}
+    />
+  ));
 }
 
 function RelatedFact({
@@ -496,9 +591,10 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waitsOn = listPendingDependencies(state, task);
+  const owner = useReadOnlyOwnerName();
   if (waitsOn.length === 0) return null;
   const cancelled = waitsOn.some((blocker) => blocker.stage === 'cancelled');
-  const why = resolveTriageWhy(state, task, 'start');
+  const why = resolveTriageWhy(state, task, 'start', owner);
   const trigger = (
     <DropdownMenuTrigger render={<button type='button' className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')} />}>
       <Icon size='sm' name='IconHourglass' className={cn(cancelled && 'text-orange-text')} />
@@ -588,6 +684,7 @@ export function TaskFacts({
         verb='Kept over'
         tasks={listDuplicates(state, task)}
       />
+      <TeammateKeptOverFacts task={task} />
     </div>
   );
 }

@@ -398,7 +398,7 @@ simulator previews per worktree.
 Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
 the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashboard over every machine a device was added to, each
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
-where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
+where a router reads your plain-English policies, each machine's projects and how busy it is, and sends it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
 `app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
 access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
@@ -418,12 +418,17 @@ member then sees every task in them, live and read-only, next to their own, on a
 marked with whose it is. The focus menu reads Your work, your projects, then Teams; focusing a team shows your tasks
 in it and your teammates'. A teammate's task opens on the same read-only page a Standard share link shows: the agents'
 live output but never your messages to them, and no controls, read live from its owner's machine, and app.shinsa.dev keeps only who is in which team
-(`docs/engine.md` → Teams).
+and each machine's public signing key. While a teammate's machine is offline its tasks stay listed, marked Offline with
+when they were last updated, from the copy each teammate's machine keeps and passes on, signed by the owner's machine
+(`docs/engine.md` → Teams → Offline teammates).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
 `<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
 task, says when the service is stopped or the machine offline, and is only yours to share; unlike a task's link it is
 not sealed end to end, since a browser loads it as plain pages (`docs/engine.md` → Sharing a preview).
+Through remote access, every running service also has a private `shinsa.page` address with nothing to click: Open
+on app.shinsa.dev goes there, and only the machine's owner and members get in, so a headless server's dev servers
+can be tested from a laptop (`docs/engine.md` → Private service addresses).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
@@ -980,6 +985,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Agents add services (2026-10-29).** The task's agent adds a service the project lacks (`add_service`), such as
   the dev server that shows its change, so it can run it and attach the preview (`docs/engine.md` → Services →
   Agents add the services they need).
+- **Agents remove services (2026-11-01).** The task's agent removes the project's services it no longer needs, or
+  the ones you ask it to (`remove_service`), several at once; one that runs for you or another task is refused
+  (`docs/engine.md` → Services → Agents remove services).
 - **Local previews (2026-10-29).** A service's preview URL and port variable, a free port per task run, Open in
   the Services popovers, a task's Services fact and the Terminal toolbar, and the agent's `preview` evidence before
   the review (`docs/engine.md` → Services → A live preview).
@@ -1120,9 +1128,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
   task's menu or ⌘K, and agents with `tasks_duplicate`.
 - **Across a team.** When the project is in a team, triage also compares the request with teammates' open tasks,
-  using only what they share (title, request and plan goal). A duplicate of one reads "Duplicate of @kai’s KAI-12 …"
-  and opens that task's read-only team view. A teammate's machine that is offline is not compared, and the task's
-  activity says whose. Not a duplicate works the same.
+  using only what they share (title, request and plan goal). A duplicate of one reads "Duplicate of Kai’s KAI-12 …",
+  Kai by first name with their user card on hover, and opens that task's read-only team view; on Kai's machine their
+  task shows Kept over with yours. A teammate's machine that cannot be read is not compared, and the task's activity
+  says whose. Not a duplicate works the same.
 
 ### Replies on the Overview, not in the chat (2026-10-31)
 
@@ -1157,11 +1166,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   time they open Shinsa Cloud. You take it back under Remote access, like any member.
 - **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
   task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
-  members' machines and browsers, carried in the join link's fragment, which no server receives. A teammate's
-  machine that is offline shows nothing until it is back.
+  members' machines and browsers, carried in the join link's fragment, which no server receives.
+- **Offline teammates stay listed.** Each machine keeps the last list it got from every teammate's machine, beside
+  `remote.json`, and shows it marked Offline with when it was last updated; the live list replaces it once the
+  machine is back. A teammate who never saw it gets it from any online teammate, and takes it only when the owner
+  machine's own signing key verifies it, since the team key alone would let any member forge one. A copy goes after
+  30 days, or when the team, the member, the machine or the key does. Each machine also keeps the full page of every
+  teammate task it lists, so an offline task opens whole, marked as a copy; a teammate machine that never fetched it
+  shows the title and status.
 - **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
-  team's Home and All tasks add your teammates' tasks, each marked with its owner; they never count towards Needs
-  you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
+  team's All tasks lists your teammates' tasks among yours, in the same groups, with an Owner column; Home stays
+  yours alone. They never count towards Needs you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
   full control, never twice.
 - **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
   check will read. Agents can list teams (`teams_list`) and change nothing about them.

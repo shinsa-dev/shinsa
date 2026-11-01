@@ -1,5 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
+  copyTeammateOriginal,
   DomainError,
   type DuplicateActor,
   isTaskSettled,
@@ -63,7 +64,12 @@ export function closeTeammateDuplicate(
   teammate: TeammateOriginal,
   why: string | null
 ) {
-  const duplicate = { of: teammate.taskId, by: 'shinsa' as const, why, teammate: { ...teammate } };
+  const duplicate = {
+    of: teammate.taskId,
+    by: 'shinsa' as const,
+    why,
+    teammate: copyTeammateOriginal(teammate),
+  };
   closeAsDuplicate(decider, task, duplicate, quoteDuplicateOriginal(teammate));
 }
 
