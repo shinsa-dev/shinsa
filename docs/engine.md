@@ -2631,10 +2631,18 @@ beside your run (Runs for a task, below).
   worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
   path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
   `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
-  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
-  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
-  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
-  one that shows the change when none does.
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes a service in
+  place (remove it and add it again), and none starts your own run: that stays yours. The house rules tell those
+  roles to add a service when the project has none they need and never for a one-off command, and the last phase's
+  preview instruction to add the one that shows the change when none does.
+- **Agents remove services.** The same two roles have `remove_service`: `services`, a list of names or ids of any
+  service in the task's project, its folder in this task's repository or not, since a cleanup comes in a batch.
+  `list_services` also names the project's services that cannot run for the task, so the agent can name them. Every
+  name is resolved before anything changes, so an unknown one is refused with a pointer to `list_services` and
+  nothing is removed. A service that runs for you or for another task is refused the same way, naming who runs it,
+  so an agent never stops your dev server; the task's own run of it is stopped with it. The rest goes through
+  `Terminals.removeServices`, as `POST /api/services/remove` does for Manage. The house rules ask an agent to remove
+  a service it added that no longer serves, or one you ask it to remove, and never one you use unless you asked.
 - **Shared beyond this machine.** A task's run of a service with a preview URL can be shared at its own address on
   `shinsa.page`, through remote access's tunnel, for a teammate to open without Shinsa (Sharing a preview, below).
 
@@ -3330,11 +3338,12 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
-  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
-  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
-  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
-  starting the service, and a link that no longer works.
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
+  own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
+  preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
+  longer works.
 
 ## Private service addresses
 
@@ -3382,8 +3391,8 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
   `/__remote/previews/open?url=<the private address with the preview URL's path>` and shows the `shinsa.page`
   address (`resolveServiceLink` in `apps/web/src/lib/terminal/services.ts`). Opened on the machine, or with an engine
   that sends no `remoteUrl`, Open keeps `localhost:<port>`.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` gives Studio's running web service its private
-  address: its start page links the task through remote access, where Open goes there, the open route itself, and the
+- **To try it without a deploy**, `bun run sandbox` gives Studio's running web service its private
+  address: its start page, `/sandbox`, links the task through remote access, where Open goes there, the open route itself, and the
   address without a cookie, which shows the not-shared page. The stand-in accepts every access request at once, so
   Add this device lets the browser in without a trip to the machine's own app.
 
@@ -5534,7 +5543,10 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
-  that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
+  that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
+  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

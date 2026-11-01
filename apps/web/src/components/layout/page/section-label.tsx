@@ -1,10 +1,9 @@
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { SECTION_LABEL } from '@/components/layout/page/heading.tsx';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import type { Disclosure } from '@/lib/preferences/disclosure.ts';
-
-const SECTION_LABEL = 'flex shrink-0 items-center gap-1.5 font-medium text-2xs text-fg-2 leading-4';
 
 const ACTIONS = 'flex shrink-0 items-center gap-0.5';
 
