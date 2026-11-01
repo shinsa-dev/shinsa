@@ -15,7 +15,7 @@ import {
   startFakeOnboarding,
 } from '../support/onboarding.ts';
 import { pushAccounts, pushState, startFakeServer, stopFakeServer } from '../support/server.ts';
-import { createShinsaState, createTask } from '../support/state.ts';
+import { createGate, createShinsaState, createTask } from '../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../support/terminals.ts';
 
 class QuietSocket {
@@ -598,6 +598,22 @@ describe('the setup page', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Ask an agent for help/ }));
     expect(await screen.findByText('An agent is looking into the failing checks')).toBeTruthy();
     expect(sentReplies()).toEqual([{ type: 'help', stepId: 'prerequisites' }]);
+    pushState(
+      createShinsaState({
+        tasks: [createTask({ id: 'help-1', result: null })],
+        gates: [
+          createGate({
+            id: 'q-1',
+            taskId: 'help-1',
+            type: 'question',
+            title: 'Which shell do you use?',
+          }),
+        ],
+      })
+    );
+    expect(await screen.findByText('Which shell do you use?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Send answer' })).toBeTruthy();
+    expect(screen.queryByText('An agent is looking into the failing checks')).toBeNull();
     pushState(
       createShinsaState({
         tasks: [

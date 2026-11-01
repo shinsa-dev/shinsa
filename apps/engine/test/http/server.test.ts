@@ -204,7 +204,7 @@ describe('the engine restart endpoint', () => {
 });
 
 describe('the onboarding endpoints', () => {
-  test('report the status, suggest folders, save the setup, check the tools and complete', async () => {
+  test('report the status, suggest folders, save the setup, check the tools, and finish only through the steps', async () => {
     const { call, post, config, engine } = await start({ config: { roots: [] } });
     expect(await (await call('/api/onboarding')).json()).toMatchObject({
       completed: false,
@@ -214,7 +214,7 @@ describe('the onboarding endpoints', () => {
       suggestions: [],
       truncated: false,
     });
-    expect((await post('/api/onboarding/complete', {})).status).toBe(400);
+    expect((await post('/api/onboarding/complete', {})).status).toBe(404);
     const saved = await post('/api/onboarding/setup', { roots: [config.home], mergeMethod: 'merge' });
     expect(await saved.json()).toMatchObject({ roots: { source: 'configured', configured: [config.home] } });
     expect(engine.state.settings.mergeMethod).toBe('merge');
@@ -235,7 +235,6 @@ describe('the onboarding endpoints', () => {
     });
     const install = await post('/api/onboarding/install', { id: 'gh' }, { origin: 'http://localhost:5181' });
     expect(((await install.json()) as { error: { code: string } }).error.code).toBe('terminals_off');
-    expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
   });
 
   test('run the setup: the first step, an answer, going back, a refused answer and a stale one', async () => {

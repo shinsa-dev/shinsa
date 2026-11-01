@@ -1,6 +1,7 @@
 import {
   type AccountSummary,
   describeList,
+  type Gate,
   type OnboardingCheck,
   type OnboardingChoiceGroup,
   type OnboardingFlow,
@@ -12,6 +13,9 @@ import {
   type RootSuggestion,
   resolveDisplayPath,
   resolvePlanLabel,
+  type ShinsaState,
+  selectLeadGate,
+  type Task,
   type TerminalInfo,
 } from '@shinsa/core';
 import { describeProviderLogin } from '@/lib/accounts/providers.ts';
@@ -200,6 +204,22 @@ export function describeInstallEnd(terminal: TerminalInfo) {
   if (terminal.exitCode === 0) return null;
   const code = terminal.exitCode === null ? 'without an exit code' : `with code ${terminal.exitCode}`;
   return `The install ended ${code}. Install it again, or ask an agent for help.`;
+}
+
+const STOPPED_STAGES: ReadonlySet<Task['stage']> = new Set(['answered', 'done', 'cancelled']);
+
+export type HelpView =
+  | { kind: 'loading' }
+  | { kind: 'result'; body: string }
+  | { kind: 'gate'; gate: Gate }
+  | { kind: 'stopped' };
+
+export function resolveHelpView(state: ShinsaState | null, task: Task | null): HelpView {
+  if (!(state && task)) return { kind: 'loading' };
+  const gate = selectLeadGate(state, task);
+  if (gate && gate.type !== 'result') return { kind: 'gate', gate };
+  if (task.result) return { kind: 'result', body: task.result.body };
+  return STOPPED_STAGES.has(task.stage) ? { kind: 'stopped' } : { kind: 'loading' };
 }
 
 export function resolveSetupEndPath(flow: OnboardingFlow) {

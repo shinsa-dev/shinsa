@@ -5028,9 +5028,9 @@ Terminal page does not list it, and an earlier setup terminal of the same name i
 followed by `exit`, so the terminal ends when it does, with its exit code, and the web checks again then. Other codes:
 `body_invalid`, `terminals_off` (Shinsa runs with no terminals).
 
-**`POST /api/onboarding/complete`** with `{}`: marks onboarding done (`onboardedAt`), once, and records the
-welcome task (below) when there is none; answers like `GET /api/onboarding`. Refused with `roots_required` until
-folders are saved.
+Setup has no endpoint that finishes it: only answering the last step of the flow below does, and that step refuses
+while a required tool is missing or no Claude account is signed in. Finishing marks onboarding done
+(`onboardedAt`), once, and records the welcome task (below) when there is none.
 
 ### The setup steps
 

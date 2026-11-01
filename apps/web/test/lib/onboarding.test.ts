@@ -17,6 +17,7 @@ import {
   listReadableRoots,
   resolveCheckOutcome,
   resolveFolderOptions,
+  resolveHelpView,
   resolveNextHighlight,
   resolveOnboardingRedirect,
   resolvePickedChoices,
@@ -35,6 +36,7 @@ import {
   createStep,
   createSuggestions,
 } from '../support/onboarding.ts';
+import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
 describe('the setup lock', () => {
   it('sends every page but setup to /onboarding until setup is complete, and nothing once it is', () => {
@@ -284,5 +286,38 @@ describe('folders macOS keeps private', () => {
         '/Users/me'
       )
     ).toEqual(['/Users/me/Developer', '~/oss']);
+  });
+});
+
+describe('resolveHelpView', () => {
+  const RESULT = { step: 'answer' as const, body: 'Run brew install gh.', runId: null, at: 1 };
+
+  it('waits while there is no task yet or the agent is still working', () => {
+    expect(resolveHelpView(null, null)).toEqual({ kind: 'loading' });
+    const task = createTask({ id: 'h', stage: 'answering', result: null });
+    expect(resolveHelpView(createShinsaState({ tasks: [task] }), task)).toEqual({ kind: 'loading' });
+  });
+
+  it('shows a gate the agent opened, a question or a pause, before anything else', () => {
+    const task = createTask({ id: 'h', stage: 'answering', result: RESULT });
+    const gate = createGate({ id: 'g', taskId: 'h', type: 'question' });
+    expect(resolveHelpView(createShinsaState({ tasks: [task], gates: [gate] }), task)).toEqual({
+      kind: 'gate',
+      gate,
+    });
+  });
+
+  it('shows the reply, also beside its result gate', () => {
+    const task = createTask({ id: 'h', stage: 'answered', result: RESULT });
+    const gate = createGate({ id: 'g', taskId: 'h', type: 'result' });
+    expect(resolveHelpView(createShinsaState({ tasks: [task], gates: [gate] }), task)).toEqual({
+      kind: 'result',
+      body: 'Run brew install gh.',
+    });
+  });
+
+  it('says the agent stopped when the task ended without a reply', () => {
+    const task = createTask({ id: 'h', stage: 'cancelled', result: null });
+    expect(resolveHelpView(createShinsaState({ tasks: [task] }), task)).toEqual({ kind: 'stopped' });
   });
 });

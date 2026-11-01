@@ -341,11 +341,6 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
       },
     },
     {
-      method: 'POST',
-      pattern: /^\/api\/onboarding\/complete$/,
-      respond: async () => respondJson(await onboarding.complete()),
-    },
-    {
       method: 'GET',
       pattern: /^\/api\/onboarding\/flow$/,
       respond: async () => respondJson(await onboarding.setup.resolve()),
