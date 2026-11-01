@@ -154,6 +154,7 @@ function TeamTaskHomeRow({ entry }: { entry: TeamFeedTask }) {
         </>
       }
       trailing={<TimeAgo at={entry.task.updatedAt} compact />}
+      holdsLinks
       onClick={() => openTeamTask(entry)}
     />
   );
