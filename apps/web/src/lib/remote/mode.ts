@@ -46,6 +46,7 @@ export type RemoteView =
   | { kind: 'pair'; claimCode: string | null }
   | { kind: 'enroll' }
   | { kind: 'share'; link: ShareLink | null }
+  | { kind: 'team-join' }
   | { kind: 'slack' };
 
 export function isRemoteBuild(env: Record<string, unknown> = import.meta.env) {
@@ -56,6 +57,7 @@ export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'
   if (location.pathname === REMOTE_PATHS.pairPage)
     return { kind: 'pair', claimCode: new URLSearchParams(location.search).get('code') };
   if (location.pathname === REMOTE_PATHS.enrollPage) return { kind: 'enroll' };
+  if (location.pathname === REMOTE_PATHS.teamJoinPage) return { kind: 'team-join' };
   if (location.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`))
     return { kind: 'share', link: parseShareLocation(location.pathname, location.hash) };
   if (location.pathname === SLACK_RELAY_PATHS.linkedPage) return { kind: 'slack' };

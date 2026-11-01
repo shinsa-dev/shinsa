@@ -334,7 +334,7 @@ describe('making and joining teams', () => {
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: KAI, status: 'requested' })
     );
-    expect(await teams.join(url)).toBe('requested');
+    expect(await teams.join(url)).toEqual({ status: 'requested', teamId: 'team1' });
     expect(plane.calls.at(-1)?.body).toEqual({ invite: 'invite-1' });
     expect(remote.snapshot().teams).toEqual([
       { id: 'team1', name: 'Platform', status: 'requested', onMachine: true, invite: false, team: null },
@@ -343,7 +343,7 @@ describe('making and joining teams', () => {
       Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
     );
     const heartbeat = spyOn(remote.supervisor, 'requestHeartbeat').mockResolvedValue();
-    expect(await teams.join(url)).toBe('member');
+    expect(await teams.join(url)).toEqual({ status: 'member', teamId: 'team1' });
     expect(heartbeat).toHaveBeenCalled();
     expect(remote.store.selectTeamKey('team1')).toMatchObject({ invite: 'invite-1', key: TEAM_KEY });
   });

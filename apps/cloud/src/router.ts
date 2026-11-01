@@ -339,7 +339,8 @@ export async function respond(request: Request, world: CloudWorld) {
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return respondJson({ error: { code: 'method_not_allowed', message: 'Only GET is served here.' } }, 405);
   const page = applySecurityHeaders(await world.assets(request));
-  if (url.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`)) page.headers.set('x-robots-tag', NOINDEX);
+  if (url.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`) || url.pathname === REMOTE_PATHS.teamJoinPage)
+    page.headers.set('x-robots-tag', NOINDEX);
   return page;
 }
 

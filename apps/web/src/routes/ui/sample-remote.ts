@@ -196,6 +196,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       removeInstance: refuse,
       leaveInstance: refuse,
       acceptInvite: refuse,
+      joinTeam: refuse,
       readPair: refuse,
       approvePair: refuse,
       signOut: refuse,
@@ -211,6 +212,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       writeDevice: refuse,
       removeDevice: refuse,
     },
+    teamKeys: { selectTeamKey: () => Promise.resolve(null), writeTeamKey: refuse },
     worker: {} as ServiceWorkerContainer,
   };
 }

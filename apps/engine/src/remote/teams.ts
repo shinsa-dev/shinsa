@@ -157,7 +157,7 @@ export class Teams implements TeamLinks {
     return answer.team.id;
   }
 
-  async join(url: string): Promise<TeamJoinStatus> {
+  async join(url: string): Promise<{ status: TeamJoinStatus; teamId: string }> {
     const fragment = parseTeamJoinUrl(url);
     if (!fragment)
       throw new DomainError(
@@ -187,7 +187,7 @@ export class Teams implements TeamLinks {
     });
     this.#remote.publish();
     if (answer.status === 'member') await this.#remote.supervisor.requestHeartbeat();
-    return answer.status;
+    return { status: answer.status, teamId: answer.teamId };
   }
 
   async resolveJoinUrl(teamId: string) {

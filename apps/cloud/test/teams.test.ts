@@ -102,6 +102,11 @@ describe('creating a team', () => {
 });
 
 describe('joining a team', () => {
+  test('opens a join page that search engines are told not to keep', async () => {
+    const page = await createHarness().call(REMOTE_PATHS.teamJoinPage);
+    expect(page.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
+  });
+
   test('opening the link asks to join, and the owner sees the request', async () => {
     const { harness, mona, kai, studio, team, invite } = await startTeam();
     const answer = await readJson<TeamJoinResponse>(await joinTeam(harness, kai, invite));

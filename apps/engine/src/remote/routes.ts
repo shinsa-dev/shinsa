@@ -36,9 +36,7 @@ export function createTeamRoutes(remote: Remote, teams: Teams): ApiRoute[] {
       const teamId = await teams.create(readText(fields, 'name', 'Give the team a name.'));
       return { teamId, url: await teams.resolveJoinUrl(teamId) };
     }),
-    post('/teams/join', async (fields) => ({
-      status: await teams.join(readText(fields, 'url', 'Paste the team link.')),
-    })),
+    post('/teams/join', (fields) => teams.join(readText(fields, 'url', 'Paste the team link.'))),
     post('/teams/link', async (fields) => ({ url: await teams.resolveJoinUrl(team(fields)) })),
     post('/teams/link/renew', async (fields) => {
       await teams.renewInvite(team(fields));

@@ -486,7 +486,7 @@ describe('the tunnel entry point', () => {
       Response.json({ teamId: 'team1', name: 'Platform', owner: KAI, status: 'requested' })
     );
     const joined = await local('/api/remote/teams/join', { url: created.url });
-    expect(await joined.json()).toEqual({ status: 'requested' });
+    expect(await joined.json()).toEqual({ status: 'requested', teamId: 'team1' });
   });
 
   test('has no share link without the shares', async () => {
