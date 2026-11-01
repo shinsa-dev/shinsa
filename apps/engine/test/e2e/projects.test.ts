@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';

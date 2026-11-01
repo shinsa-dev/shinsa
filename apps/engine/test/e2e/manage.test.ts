@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MessageKind, resolveTaskRounds, type TaskShape } from '@shinsa/core';
@@ -8,6 +7,7 @@ import { Transcripts } from '../../src/agents/index.ts';
 import { resolveCommandVerdict } from '../../src/agents/providers/claude/guard.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import { createProjectChanges } from '../../src/projects/routes.ts';
 import { EvidenceStore } from '../../src/store/index.ts';

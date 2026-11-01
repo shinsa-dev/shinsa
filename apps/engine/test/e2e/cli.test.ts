@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { createLaunchdService } from '../../src/cli/launchd.ts';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
