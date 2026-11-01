@@ -89,7 +89,7 @@ export const PROTOCOL_LIMITS = {
   watchdogCheck: 600,
   watchdogServer: 128,
   watchdogData: 200,
-  watchdogEvidence: 300,
+  watchdogEvidence: 600,
   watchdogSuggestions: 4,
   watchdogSuggestion: 160,
   watchdogFirstCheckMinutes: WATCHDOG_SETTING_LIMITS.firstCheckMinutes,
@@ -98,6 +98,7 @@ export const PROTOCOL_LIMITS = {
   watchdogProductionCheck: 400,
   disagreements: 8,
   disagreement: 280,
+  taskTitle: 60,
   goal: 300,
   minPlanPhases: 2,
   planPhases: 8,
@@ -474,6 +475,35 @@ function readSourceRequest(reader: Reader, value: unknown, path: string): Watchd
   };
 }
 
+function isNamedIn(text: string, server: string) {
+  const escaped = server.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, 'i').test(text);
+}
+
+function isCheckedIn(evidence: string, server: string) {
+  return (evidence.match(/\bchecked\b[^.;\n]*/gi) ?? []).some((clause) => isNamedIn(clause, server));
+}
+
+export function listHeldSourceRequests(
+  watchdogs: readonly WatchdogSpec[],
+  serverNames: readonly string[],
+  path = 'walkthrough.watchdogs'
+) {
+  return watchdogs.flatMap((watchdog, index) => {
+    const request = watchdog.sourceRequest;
+    if (!request) return [];
+    const held = serverNames.filter(
+      (server) =>
+        request.suggestions.some((suggestion) => isNamedIn(suggestion, server)) &&
+        !isCheckedIn(request.evidence, server)
+    );
+    return held.map(
+      (server) =>
+        `${path}[${index}].source_request suggests \`${server}\`, a server you already have. Check with its tools whether it reaches the data and give it as the \`source\`; only when it cannot, write in \`evidence\` “checked ${server}” and why it falls short.`
+    );
+  });
+}
+
 function readWatchdog(reader: Reader, raw: unknown, path: string): WatchdogSpec {
   const record = reader.record(raw, path);
   const source = readWatchdogSource(reader, record.source, `${path}.source`);
@@ -775,7 +805,9 @@ function validatePlanDocument(input: Record<string, unknown>): Validation<PlanDo
   const questions = readPlanQuestions(reader, input.questions);
   const phases = readPlanPhases(reader, input.phases);
   const { listItems, listItem } = PROTOCOL_LIMITS;
+  const title = reader.optionalText(input.title, 'title', PROTOCOL_LIMITS.taskTitle);
   return reader.result({
+    ...(title === null ? {} : { title }),
     goal: reader.text(input.goal, 'goal', PROTOCOL_LIMITS.goal),
     phases,
     behaviour: readTextList(

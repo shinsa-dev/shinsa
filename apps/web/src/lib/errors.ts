@@ -46,7 +46,6 @@ export function resolveResetKey(view: { route: unknown; search: string }, visit 
 export function recordCommandMenuError(error: RenderError) {
   writeCommandMenuOpen(false);
   toast.error(ERROR_COPY.commandMenu, {
-    description: error.message,
     action: { label: ERROR_COPY.copy, onClick: () => void copyText(error.details) },
   });
 }

@@ -20,6 +20,7 @@ import {
 import { resolveAgentPrompt, resolveWatchPrompt } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
 import type { WatchdogSource, WatchdogSpec } from '../report/types.ts';
+import { PROTOCOL_LIMITS } from '../report/validate.ts';
 import { listChangedIds } from '../state/draft.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
@@ -34,7 +35,7 @@ function selectWatchdog(task: Task, watchdogId: string) {
 function findWatchdog(task: Task, watchdogId: string) {
   const watchdog = selectWatchdog(task, watchdogId);
   if (watchdog) return watchdog;
-  throw new DomainError('watchdog_not_found', 'This task has no such watchdog. Read the task again.');
+  throw new DomainError('watchdog_not_found', 'That watchdog is no longer there.');
 }
 
 function isArmedForRound(task: Task, round: number) {
@@ -107,7 +108,7 @@ function writeSource(decider: Decider, projectId: string, source: WatchSource) {
   if (!known && sources.length >= WATCHDOG_LIMITS.projectSources) {
     throw new DomainError(
       'too_many_sources',
-      `A project keeps at most ${WATCHDOG_LIMITS.projectSources} data sources. Remove one first.`
+      `A project keeps ${WATCHDOG_LIMITS.projectSources} data sources at most.`
     );
   }
   const repoIds = known ? [...new Set([...known.repoIds, ...source.repoIds])] : source.repoIds;
@@ -118,15 +119,20 @@ function writeSource(decider: Decider, projectId: string, source: WatchSource) {
   decider.run({ kind: 'watch.suggest', projectId, server: written.server, data: written.data });
 }
 
+function resolveWiderData(known: string, used: string) {
+  if (known.toLowerCase().includes(used.toLowerCase())) return known;
+  const joined = `${known}; ${used}`;
+  return joined.length <= PROTOCOL_LIMITS.watchdogData ? joined : known;
+}
+
 function recordAgentSource(decider: Decider, task: Task, source: WatchdogSource) {
   const project = decider.projectOf(task);
   if (!project) return;
   const known = (project.watchSources ?? []).find((candidate) => candidate.server === source.server);
-  if (known && (known.repoIds.length === 0 || (task.repoId && known.repoIds.includes(task.repoId)))) return;
   if (!known && (project.watchSources ?? []).length >= WATCHDOG_LIMITS.projectSources) return;
   writeSource(decider, project.id, {
     server: source.server,
-    data: known?.data ?? source.data,
+    data: known ? resolveWiderData(known.data, source.data) : source.data,
     repoIds: task.repoId ? [task.repoId] : [],
     addedBy: known?.addedBy ?? 'agent',
     addedAt: known?.addedAt ?? decider.context.now,
@@ -409,7 +415,7 @@ export function assertNoWatchdogsLeft(task: Task) {
   if (active.length === 0) return;
   throw new DomainError(
     'task_open',
-    `${describeCount(active.length, 'watchdog still watches', 'watchdogs still watch')} this task's change. Leave it open until they finish, or tell the human.`
+    `${describeCount(active.length, 'watchdog still watches', 'watchdogs still watch')} it.`
   );
 }
 
@@ -417,7 +423,7 @@ export function connectWatchdog(decider: Decider, command: CommandOf<'watchdog.c
   const task = decider.task(command.taskId);
   const watchdog = findWatchdog(task, command.watchdogId);
   if (watchdog.status !== 'needs_source') {
-    throw new DomainError('watchdog_has_source', 'This watchdog already has its data source.');
+    throw new DomainError('watchdog_has_source', 'It already has a data source.');
   }
   const source = { server: command.server.trim(), data: command.data.trim() };
   const project = decider.projectOf(task);

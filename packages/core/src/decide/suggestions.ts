@@ -98,7 +98,7 @@ export function findOpenSuggestion(decider: Decider, taskId: string, suggestionI
   const suggestion = decider.task(taskId).suggestions?.find((candidate) => candidate.id === suggestionId);
   if (!suggestion) throw new DomainError('suggestion_not_found', `No suggestion ${suggestionId}`);
   if (suggestion.status !== 'open') {
-    throw new DomainError('suggestion_closed', 'This suggestion has already been added or dismissed.');
+    throw new DomainError('suggestion_closed', 'It was already added or dismissed.');
   }
   return suggestion;
 }

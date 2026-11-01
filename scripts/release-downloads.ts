@@ -6,8 +6,8 @@ import {
   resolveChannelKey,
   resolveReleaseKey,
 } from '../apps/marketing/src/worker/download.ts';
+import { resolveUpdateKey, UPDATE_CHANNEL_FILES, ZIP_NAME } from '../apps/marketing/src/worker/updates.ts';
 import { resolveReleaseChannel, resolveVersionOrder } from '../packages/core/src/protocol/engine.ts';
-import { listStaleCanaries } from './release-version.ts';
 
 export interface DownloadRelease {
   tag: string;
@@ -16,6 +16,13 @@ export interface DownloadRelease {
 }
 
 export type ChannelPointers = Record<Channel, DownloadPointer | null>;
+
+export interface UpdateZip {
+  version: string;
+  size: number;
+  sha512: string;
+  releaseDate: string;
+}
 
 export const DOWNLOADS_BUCKET = 'shinsa-releases';
 
@@ -26,8 +33,6 @@ export const R2_ACCOUNT_ID = 'e8563b02f2bf2b6a136f2781445a486f';
 export const R2_ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
 
 export const TOKEN_VERIFY_URL = `https://api.cloudflare.com/client/v4/accounts/${R2_ACCOUNT_ID}/tokens/verify`;
-
-export const RELEASES_PREFIX = 'releases/';
 
 const REACHED_CHANNELS: Record<Channel, Channel[]> = {
   stable: ['stable', 'beta'],
@@ -40,6 +45,8 @@ const DESCRIBED_CHANNELS: Record<Channel, Channel[]> = {
   beta: ['stable', 'beta'],
   canary: ['canary'],
 };
+
+const UPDATE_LABELS: Record<Channel, string> = { stable: 'Stable', beta: 'Beta', canary: 'Canary' };
 
 const DOWNLOAD_PATHS: Record<Channel, string> = {
   stable: 'shinsa.dev/download',
@@ -150,10 +157,71 @@ export function describeDownloadUpload(
   return [file, ...lines].join(' ');
 }
 
-export function listStaleCanaryKeys(keys: readonly string[]) {
-  const versions = keys.flatMap((key) => {
-    const version = key.slice(RELEASES_PREFIX.length).split('/')[0] ?? '';
-    return resolveReleaseKey(version) === key ? [version] : [];
-  });
-  return listStaleCanaries(versions).map(resolveReleaseKey);
+export function parseUpdateFile(release: DownloadRelease, text: string): UpdateZip {
+  const name = UPDATE_CHANNEL_FILES[release.channel];
+  const failure = new Error(
+    `The ${name} of ${release.tag} does not describe its ${ZIP_NAME} as ${release.pointer.version}.`
+  );
+  let parsed: unknown;
+  try {
+    parsed = Bun.YAML.parse(text);
+  } catch {
+    throw failure;
+  }
+  if (!isRecord(parsed) || parsed.version !== release.pointer.version || !Array.isArray(parsed.files))
+    throw failure;
+  const zip = parsed.files.find((file) => isRecord(file) && file.url === ZIP_NAME);
+  const releaseDate = parsed.releaseDate;
+  if (
+    !isRecord(zip) ||
+    typeof zip.sha512 !== 'string' ||
+    !Number.isSafeInteger(zip.size) ||
+    (zip.size as number) <= 0 ||
+    typeof releaseDate !== 'string'
+  )
+    throw failure;
+  return { version: parsed.version, size: zip.size as number, sha512: zip.sha512, releaseDate };
+}
+
+export function assertUpdateZip(
+  release: DownloadRelease,
+  zip: UpdateZip,
+  file: { size: number; sha512: string }
+) {
+  if (file.size !== zip.size || file.sha512 !== zip.sha512)
+    throw new Error(
+      `The downloaded ${ZIP_NAME} of ${release.tag} is not the file its ${UPDATE_CHANNEL_FILES[release.channel]} describes.`
+    );
+}
+
+export function serializeUpdateFile(zip: UpdateZip) {
+  const url = JSON.stringify(`${zip.version}/${ZIP_NAME}`);
+  const sha512 = JSON.stringify(zip.sha512);
+  return [
+    `version: ${JSON.stringify(zip.version)}`,
+    'files:',
+    `  - url: ${url}`,
+    `    sha512: ${sha512}`,
+    `    size: ${zip.size}`,
+    `path: ${url}`,
+    `sha512: ${sha512}`,
+    `releaseDate: ${JSON.stringify(zip.releaseDate)}`,
+    '',
+  ].join('\n');
+}
+
+export function listUpdateUploads(zip: UpdateZip, channels: Channel[]) {
+  return channels.map((channel) => ({
+    key: resolveUpdateKey(UPDATE_CHANNEL_FILES[channel]),
+    body: serializeUpdateFile(zip),
+  }));
+}
+
+export function describeUpdateUpload(release: DownloadRelease, channels: Channel[]) {
+  const { version } = release.pointer;
+  if (channels.length === 0)
+    return `No update channel moves to ${version}: each already offers a newer version.`;
+  const names = channels.map((channel) => UPDATE_LABELS[channel]).join(' and ');
+  const offer = channels.length === 1 ? 'channel offers' : 'channels offer';
+  return `The ${names} update ${offer} ${version} from shinsa.dev/updates.`;
 }

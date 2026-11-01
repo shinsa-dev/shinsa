@@ -28,6 +28,7 @@ import {
   pullRequest,
   pushed,
   registerRepo,
+  shipAndMerge,
   verifySetup,
 } from '../harness.ts';
 
@@ -373,7 +374,7 @@ describe('an investigation', () => {
         decision: 'revise',
         response: 'x',
       })
-    ).toThrow('Approve the proposal or keep the task as it is.');
+    ).toThrow('Approve the proposal or keep the task.');
   });
 });
 
@@ -1134,7 +1135,7 @@ describe('the operation after the merge waits for your OK', () => {
         decision: 'revise',
         response: 'x',
       })
-    ).toThrow('Run the operation or finish the task without it.');
+    ).toThrow('Run the operation or finish without it.');
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,
@@ -1202,5 +1203,78 @@ describe('the operation after the merge waits for your OK', () => {
     });
     expect(ran.events.map((event) => event.type)).not.toContain('gate.noted');
     expect(bare.activeRun(other).prompt).not.toContain('Guidance from the human');
+  });
+});
+
+describe('the plan names the work', () => {
+  const RETITLED = { ...PLAN, title: 'Fix the tab group scroll and its overflow' };
+
+  function retitledEvents(harness: Harness) {
+    return harness.events.filter((event) => event.type === 'task.retitled');
+  }
+
+  test('a plan accepted with no gate renames the task and its first round', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId, RETITLED);
+    const task = harness.task(taskId);
+    expect(task.title).toBe(RETITLED.title);
+    expect(resolveTaskRounds(task)[0]?.title).toBe(RETITLED.title);
+    expect(task.activity.map((entry) => entry.text)).toContain(`Renamed to “${RETITLED.title}”`);
+  });
+
+  test('a plan at the gate renames the task only once you approve it', () => {
+    const harness = createHarness();
+    registerRepo(harness);
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const taskId = createTask(harness, { size: 'large' });
+    proposePlan(harness, taskId, RETITLED);
+    expect(harness.task(taskId).title).toBe('Fix tab group scroll');
+    approve(harness, taskId);
+    expect(harness.task(taskId).title).toBe(RETITLED.title);
+  });
+
+  test('a plan without a title, or with the title the round has, keeps it and records nothing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId, { ...PLAN, title: 'Fix tab group scroll' });
+    expect(harness.task(taskId).title).toBe('Fix tab group scroll');
+    expect(retitledEvents(harness)).toHaveLength(0);
+    const other = createTask(harness);
+    proposePlan(harness, other);
+    expect(harness.task(other).title).toBe('Fix tab group scroll');
+    expect(retitledEvents(harness)).toHaveLength(0);
+  });
+
+  test('a revised plan accepted later renames the task again', () => {
+    const harness = createHarness();
+    registerRepo(harness);
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const taskId = createTask(harness, { size: 'large' });
+    proposePlan(harness, taskId, RETITLED);
+    harness.send({ type: 'task.message', taskId, text: 'Make it a settings page instead.' });
+    proposePlan(harness, taskId, { ...PLAN, title: 'Add the scroll settings page' });
+    approve(harness, taskId);
+    expect(harness.task(taskId).title).toBe('Add the scroll settings page');
+    expect(retitledEvents(harness)).toHaveLength(1);
+  });
+
+  test('a later round renames only itself, never the task', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    shipAndMerge(harness, taskId);
+    harness.send({ type: 'task.message', taskId, text: 'Now add the settings page', kind: 'new_round' });
+    harness.send({ type: 'config.record', taskId, problems: [] });
+    const task = harness.task(taskId);
+    if (task.stage === 'triage' && task.branch) {
+      harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: task.branch });
+    }
+    proposePlan(harness, taskId, { ...PLAN, title: 'Add the scroll settings page' });
+    const renamed = harness.task(taskId);
+    expect(renamed.title).toBe('Fix tab group scroll');
+    expect(resolveTaskRounds(renamed).map((round) => round.title)).toEqual([
+      'Fix tab group scroll',
+      'Add the scroll settings page',
+    ]);
   });
 });

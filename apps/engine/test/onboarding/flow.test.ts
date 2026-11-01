@@ -221,7 +221,7 @@ describe('the setup steps', () => {
     const refused = await answer(onboarding, 'roots', '/no/such/folder');
     expect(refused.step).toMatchObject({
       id: 'roots',
-      problem: '/no/such/folder is not a folder on this machine.',
+      problem: 'That is not a folder on this machine.',
     });
     await answerFolders(onboarding, developer);
     for (const values of [

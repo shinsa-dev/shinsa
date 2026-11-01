@@ -224,7 +224,7 @@ describe('where a server is used', () => {
       'Agents use linear everywhere.'
     );
     expect(describeScopeChanged('linear', { kind: 'project', project: 'sw' }, PLACES)).toBe(
-      'Agents use linear only in the Superwall project.'
+      'Agents use linear in the Superwall project.'
     );
   });
 
@@ -307,10 +307,8 @@ describe('skill groups', () => {
 
 describe('toasts', () => {
   it('says what just happened, in the past tense', () => {
-    expect(describeServerToggled('linear', true)).toBe('Turned on linear for Shinsa’s agents.');
-    expect(describeServerToggled('linear', false)).toBe(
-      'Turned off linear for Shinsa’s agents. Claude Code and Codex keep their own settings.'
-    );
+    expect(describeServerToggled('linear', true)).toBe('Turned on linear.');
+    expect(describeServerToggled('linear', false)).toBe('Turned off linear.');
     expect(describeSkillToggled('review', true)).toBe('Turned on the review skill.');
     expect(describeSkillToggled('review', false)).toBe('Turned off the review skill.');
     expect(describePluginToggled('stripe', false)).toBe('Turned off the stripe plugin.');
@@ -319,7 +317,7 @@ describe('toasts', () => {
     expect(describeChecked(null)).toBe('Checked every MCP that is on.');
     expect(describeSignedIn('linear')).toBe('Signed in to linear.');
     expect(describeAlreadySignedIn('linear')).toBe('linear is already signed in.');
-    expect(describeSignInFailed('linear')).toBe('Couldn’t sign in to linear. Try again.');
+    expect(describeSignInFailed('linear')).toBe('Couldn’t sign in to linear.');
     expect(describeSignedOut('linear')).toBe('Signed out of linear.');
     expect(describeServerRemoval(createServer({ id: 'linear' }))).toEqual({
       title: 'Remove linear?',
@@ -745,16 +743,10 @@ describe('what agents have not used lately', () => {
 
   it('says what a change to the optimizer means for agents', () => {
     const optimizer = { enabled: false, days: 14, skills: false };
-    expect(describeOptimizerChanged(optimizer, { enabled: true })).toBe(
-      'Agents now leave out MCPs unused for 14 days.'
-    );
-    expect(describeOptimizerChanged(optimizer, { enabled: false })).toBe(
-      'Agents load every MCP that is turned on.'
-    );
-    expect(describeOptimizerChanged(optimizer, { skills: true })).toBe('Agents leave out unused skills too.');
-    expect(describeOptimizerChanged(optimizer, { skills: false })).toBe(
-      'Agents load every skill that is turned on.'
-    );
+    expect(describeOptimizerChanged(optimizer, { enabled: true })).toBe('Unused MCPs left out.');
+    expect(describeOptimizerChanged(optimizer, { enabled: false })).toBe('Agents load every MCP.');
+    expect(describeOptimizerChanged(optimizer, { skills: true })).toBe('Unused skills left out too.');
+    expect(describeOptimizerChanged(optimizer, { skills: false })).toBe('Agents load every skill.');
     expect(describeOptimizerChanged(optimizer, { days: 7 })).toBe('Unused means not used for 7 days.');
     expect(describeOptimizerChanged(optimizer, {})).toBe('Unused means not used for 14 days.');
   });

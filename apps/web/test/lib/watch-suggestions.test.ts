@@ -73,10 +73,7 @@ describe('suggested watches', () => {
     await WATCH_SUGGESTION_ACTIONS.accept(OPEN);
     await WATCH_SUGGESTION_ACTIONS.dismiss(OPEN);
     expect(spies.sent.mock.calls).toEqual([
-      [
-        { type: 'watch_suggestion.accept', suggestionId: 's1' },
-        'Added the watch “Bugs in #feedback”. It reads slack from now on.',
-      ],
+      [{ type: 'watch_suggestion.accept', suggestionId: 's1' }, 'Added the watch “Bugs in #feedback”.'],
       [{ type: 'watch_suggestion.dismiss', suggestionId: 's1' }, 'Dismissed.'],
     ]);
   });

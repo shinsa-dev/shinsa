@@ -248,11 +248,9 @@ describe('updating a program', () => {
 
   test('refuses an unknown program, inspect mode, a second update, a missing program and an override', async () => {
     const machine = createMachine();
-    expect(() => createVersions(machine).startUpdate('gh')).toThrow(
-      'Name the program to update: claude or codex.'
-    );
+    expect(() => createVersions(machine).startUpdate('gh')).toThrow('Update claude or codex.');
     expect(() => createVersions(machine, { inspect: true }).startUpdate('claude')).toThrow(
-      'Start it without SHINSA_INSPECT to update Claude Code.'
+      'Inspect mode is read-only.'
     );
     const finished = Promise.withResolvers<CommandResult>();
     const versions = createVersions(machine, { run: () => finished.promise });
@@ -263,9 +261,7 @@ describe('updating a program', () => {
     machine.paths.codex = null;
     expect(() => versions.startUpdate('codex')).toThrow('Codex is not installed.');
     machine.overrides.claude = '/opt/wrappers/claude';
-    expect(() => versions.startUpdate('claude')).toThrow(
-      'Shinsa runs /opt/wrappers/claude for Claude Code (CLAUDE_EXECUTABLE), so update that program yourself.'
-    );
+    expect(() => versions.startUpdate('claude')).toThrow('Update Claude Code yourself (CLAUDE_EXECUTABLE).');
   });
 
   test('a failure inside the update still frees the program', async () => {

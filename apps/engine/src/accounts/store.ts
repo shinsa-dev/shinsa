@@ -185,7 +185,7 @@ export class AccountStore {
 
   find(id: string) {
     const account = this.select(id);
-    if (!account) throw new DomainError('account_not_found', 'That account is no longer in your accounts.');
+    if (!account) throw new DomainError('account_not_found', 'That account was removed.');
     return account;
   }
 
@@ -328,7 +328,7 @@ export class AccountStore {
   move(id: string, position: number) {
     const accounts = this.#registry.accounts;
     const from = accounts.findIndex((candidate) => candidate.id === id);
-    if (from < 0) throw new DomainError('account_not_found', 'That account is no longer in your accounts.');
+    if (from < 0) throw new DomainError('account_not_found', 'That account was removed.');
     const to = Math.max(0, Math.min(accounts.length - 1, Math.round(position)));
     if (from === to) return;
     const [account] = accounts.splice(from, 1) as [StoredAccount];

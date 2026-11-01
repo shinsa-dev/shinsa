@@ -370,6 +370,20 @@ function applyRoundUpdated(state: ShinsaState, event: EventOf<'round.updated'>) 
   });
 }
 
+function applyTaskRetitled(state: ShinsaState, event: EventOf<'task.retitled'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const rounds = resolveTaskRounds(task).map((round) =>
+    round.number === event.round ? { ...round, title: event.title } : round
+  );
+  writeRounds(state, task, event.at, rounds, event.round === 1 ? { title: event.title } : {});
+  record(state, task.id, event.at, {
+    actor: 'agent',
+    kind: 'round',
+    text: `Renamed to “${event.title}”`,
+  });
+}
+
 function applyRoundRemoved(state: ShinsaState, event: EventOf<'round.removed'>) {
   const task = state.tasks[event.taskId];
   const removed = task && resolveTaskRounds(task).find((round) => round.number === event.number);
@@ -400,7 +414,8 @@ type RoundEvent = Extract<
       | 'round.shipping_changed'
       | 'round.pull_request_merged'
       | 'round.updated'
-      | 'round.removed';
+      | 'round.removed'
+      | 'task.retitled';
   }
 >;
 
@@ -423,6 +438,9 @@ export function applyRoundEvent(state: ShinsaState, event: RoundEvent) {
       return;
     case 'round.removed':
       applyRoundRemoved(state, event);
+      return;
+    case 'task.retitled':
+      applyTaskRetitled(state, event);
       return;
   }
 }

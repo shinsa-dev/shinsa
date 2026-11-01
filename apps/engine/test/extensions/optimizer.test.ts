@@ -281,8 +281,8 @@ describe('the context optimizer', () => {
     expect(() => extensions.updateOptimizer('on')).toThrow('Say what to change.');
     expect(() => extensions.updateOptimizer({ enabled: 'yes' })).toThrow('Turn the optimizer on or off.');
     expect(() => extensions.updateOptimizer({ skills: 1 })).toThrow('also leaves out skills');
-    expect(() => extensions.updateOptimizer({ days: 0 })).toThrow('from 1 to 365');
-    expect(() => extensions.updateOptimizer({ days: 2.5 })).toThrow('from 1 to 365');
+    expect(() => extensions.updateOptimizer({ days: 0 })).toThrow('Pick 1 to 365 days.');
+    expect(() => extensions.updateOptimizer({ days: 2.5 })).toThrow('Pick 1 to 365 days.');
     expect(extensions.updateOptimizer({}).optimizer).toEqual({ enabled: true, days: 14, skills: true });
   });
 });

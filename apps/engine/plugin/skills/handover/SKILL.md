@@ -78,8 +78,12 @@ disagrees. You built it and know why it is the way it is, so you write the expla
 - **watchdogs** watch the change after it merges, through data the tests never see (traces, logs, errors, analytics,
   support messages); add one where the change sends something the world reads or writes, never for a refactor. Read
   how the repository ships first: when the merge is not the release, set `starts: production` with a
-  `production_check`. Pick a `source` from the data sources the last phase's prompt lists; ask with `source_request`
-  (the data, the code that sends it, servers to connect) only when none holds it. The schedule fields are optional
+  `production_check`. Any MCP server you have can be the `source`, not only the data sources the last phase's prompt
+  lists, whose descriptions are hints: list them with `mcp_list` and check each that could hold the data with its own
+  tools (list its Workers or services, query the logs of the one the change touches) before you decide none does. Ask
+  with `source_request` (the data, the code that sends it and the servers you checked and why each falls short,
+  servers to connect) only when none reaches it; Shinsa refuses a suggestion of a server you already have unless the
+  evidence says “checked <server>” and why it falls short. The schedule fields are optional
   and the settings fill the rest. An issue a check finds becomes a task forked from this one.
 
 - **check_changes**: keep the checks current as you build. When a phase adds a file, a test or a package the checks

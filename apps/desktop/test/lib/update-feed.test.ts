@@ -2,100 +2,105 @@ import { describe, expect, it } from 'bun:test';
 import { resolveVersionOrder } from '@shinsa/core';
 import type { AppUpdater } from 'electron-updater';
 import type { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor.js';
-import { GitHubProvider } from 'electron-updater/out/providers/GitHubProvider.js';
+import { GenericProvider } from 'electron-updater/out/providers/GenericProvider.js';
 import type { UpdateChannel } from '../../src/lib/bridge.ts';
 import { resolveDowngradeOffer, resolveUpdaterOptions, UPDATE_FEED } from '../../src/lib/update-channel.ts';
 
-const REPO = '/shinsa-dev/shinsa/releases';
+const ZIP_NAME = 'Shinsa-mac-arm64.zip';
 
-interface Release {
-  tag: string;
-  prerelease: boolean;
-}
+type ChannelFiles = Partial<Record<'latest' | 'beta' | 'canary', string>>;
 
-function writeFeed(releases: readonly Release[]) {
-  const entries = releases.map(
-    ({ tag }) =>
-      `<entry><id>${tag}</id><link rel="alternate" type="text/html" href="https://github.com${REPO}/tag/${tag}"/><title>${tag}</title><content type="html">Notes</content></entry>`
-  );
-  return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">${entries.join('')}</feed>`;
-}
-
-function writeUpdateFile(tag: string) {
-  const version = tag.slice(1);
+function writeUpdateFile(version: string) {
+  const url = JSON.stringify(`${version}/${ZIP_NAME}`);
   return [
-    `version: ${version}`,
+    `version: ${JSON.stringify(version)}`,
     'files:',
-    '  - url: Shinsa-mac-arm64.zip',
-    '    sha512: c2hpbnNh',
+    `  - url: ${url}`,
+    '    sha512: "c2hpbnNh"',
     '    size: 1',
-    'path: Shinsa-mac-arm64.zip',
-    'sha512: c2hpbnNh',
-    "releaseDate: '2026-10-01T00:00:00.000Z'",
+    `path: ${url}`,
+    'sha512: "c2hpbnNh"',
+    'releaseDate: "2026-10-01T00:00:00.000Z"',
+    '',
   ].join('\n');
 }
 
-async function resolveFeedUpdate(channel: UpdateChannel, current: string, releases: readonly Release[]) {
+async function resolveFeedUpdate(channel: UpdateChannel, current: string, files: ChannelFiles) {
   const requested: string[] = [];
-  const latest = releases.find((release) => !release.prerelease);
   const executor = {
-    request: async (request: { path: string }) => {
-      requested.push(request.path);
-      if (request.path === `${REPO}.atom`) return writeFeed(releases);
-      if (request.path === `${REPO}/latest`) return JSON.stringify({ tag_name: latest?.tag });
-      const [tag, file] = request.path.replace(`${REPO}/download/`, '').split('/');
-      const release = releases.find((entry) => entry.tag === tag);
-      const files = !release?.prerelease
-        ? ['latest-mac.yml', 'beta-mac.yml']
-        : [tag?.includes('-canary.') ? 'canary-mac.yml' : 'beta-mac.yml'];
-      if (!tag || !file || !files.includes(file)) throw new Error(`No ${request.path}`);
-      return writeUpdateFile(tag);
+    request: async (request: { hostname: string; path: string }) => {
+      requested.push(`${request.hostname}${request.path}`);
+      const name = /^\/updates\/(latest|beta|canary)-mac\.yml$/.exec(request.path)?.[1] as
+        | keyof ChannelFiles
+        | undefined;
+      const version = name ? files[name] : undefined;
+      if (!version) throw new Error(`No ${request.path}`);
+      return writeUpdateFile(version);
     },
   } as unknown as ElectronHttpExecutor;
   const options = resolveUpdaterOptions(channel);
-  const updater = { ...options, currentVersion: current, fullChangelog: false } as unknown as AppUpdater;
+  const updater = { ...options, currentVersion: current, isAddNoCacheQuery: false } as unknown as AppUpdater;
   const runtime = { isUseMultipleRangeRequest: false, platform: 'darwin' as const, executor };
-  const provider = new GitHubProvider(UPDATE_FEED, updater, runtime);
+  const provider = new GenericProvider({ ...UPDATE_FEED }, updater, runtime);
   const info = await provider.getLatestVersion();
-  const file = requested.at(-1)?.split('/').slice(-2).join('/');
-  const order = resolveVersionOrder(info.version, current);
-  return { version: info.version, file, offered: order === 1 };
+  const [zip] = provider.resolveFiles(info);
+  return {
+    version: info.version,
+    file: requested.at(-1),
+    zip: zip?.url.href,
+    offered: resolveVersionOrder(info.version, current) === 1,
+  };
 }
 
-const STABLE_3 = { tag: 'v3.0.0', prerelease: false };
-const BETA_3_0_1 = { tag: 'v3.0.1-beta.1', prerelease: true };
-
-describe('the release feed, read by electron-updater as each channel sets it up', () => {
-  it('offers a newer stable release to a beta on Beta', async () => {
-    const releases = [{ tag: 'v4.0.0', prerelease: false }, BETA_3_0_1, STABLE_3];
-    expect(await resolveFeedUpdate('beta', '3.0.1-beta.1', releases)).toEqual({
-      version: '4.0.0',
-      file: 'v4.0.0/beta-mac.yml',
-      offered: true,
-    });
-  });
-
-  it('offers the newest pre-release on Beta, from a stable version too', async () => {
-    const releases = [{ tag: 'v3.1.0-beta.2', prerelease: true }, STABLE_3];
-    expect(await resolveFeedUpdate('beta', '3.0.0', releases)).toEqual({
-      version: '3.1.0-beta.2',
-      file: 'v3.1.0-beta.2/beta-mac.yml',
-      offered: true,
-    });
-  });
-
-  it('offers only the latest stable release on Stable, never a pre-release', async () => {
-    const releases = [{ tag: 'v3.1.0-beta.1', prerelease: true }, STABLE_3];
-    expect(await resolveFeedUpdate('stable', '2.9.0', releases)).toEqual({
+describe('the shinsa.dev update feed, read by electron-updater as each channel sets it up', () => {
+  it('reads one file per channel from shinsa.dev and downloads that version’s own zip', async () => {
+    const files = { latest: '3.0.0', beta: '3.1.0-beta.2', canary: '3.1.1-canary.4' };
+    expect(await resolveFeedUpdate('stable', '2.9.0', files)).toEqual({
       version: '3.0.0',
-      file: 'v3.0.0/latest-mac.yml',
+      file: 'shinsa.dev/updates/latest-mac.yml',
+      zip: `https://shinsa.dev/updates/3.0.0/${ZIP_NAME}`,
       offered: true,
     });
+    expect(await resolveFeedUpdate('beta', '3.0.0', files)).toEqual({
+      version: '3.1.0-beta.2',
+      file: 'shinsa.dev/updates/beta-mac.yml',
+      zip: `https://shinsa.dev/updates/3.1.0-beta.2/${ZIP_NAME}`,
+      offered: true,
+    });
+    expect(await resolveFeedUpdate('canary', '3.0.0', files)).toEqual({
+      version: '3.1.1-canary.4',
+      file: 'shinsa.dev/updates/canary-mac.yml',
+      zip: `https://shinsa.dev/updates/3.1.1-canary.4/${ZIP_NAME}`,
+      offered: true,
+    });
+  });
+
+  it('downloads updates one range at a time, since R2 serves a single range per request', () => {
+    expect(UPDATE_FEED).toEqual({
+      provider: 'generic',
+      url: 'https://shinsa.dev/updates',
+      useMultipleRangeRequest: false,
+    });
+  });
+
+  it('offers a newer stable release to a beta on Beta, as a stable release also moves beta-mac.yml', async () => {
+    const files = { latest: '4.0.0', beta: '4.0.0' };
+    expect((await resolveFeedUpdate('beta', '3.0.1-beta.1', files)).offered).toBe(true);
+  });
+
+  it('offers nothing on the version a channel already runs', async () => {
+    const files = { latest: '3.0.0', beta: '3.1.0-beta.1', canary: '3.1.1-canary.2' };
+    expect((await resolveFeedUpdate('stable', '3.0.0', files)).offered).toBe(false);
+    expect((await resolveFeedUpdate('beta', '3.1.0-beta.1', files)).offered).toBe(false);
+    expect((await resolveFeedUpdate('canary', '3.1.1-canary.2', files)).offered).toBe(false);
   });
 
   it('finds a lower stable release for a beta on Stable, which the app offers as going back', async () => {
-    const update = await resolveFeedUpdate('stable', '3.0.1-beta.1', [BETA_3_0_1, STABLE_3]);
-    expect(update).toEqual({ version: '3.0.0', file: 'v3.0.0/latest-mac.yml', offered: false });
+    const update = await resolveFeedUpdate('stable', '3.0.1-beta.1', {
+      latest: '3.0.0',
+      beta: '3.0.1-beta.1',
+    });
+    expect(update).toMatchObject({ version: '3.0.0', offered: false });
     expect(
       resolveDowngradeOffer({
         channel: 'stable',
@@ -106,65 +111,16 @@ describe('the release feed, read by electron-updater as each channel sets it up'
     ).toBe('3.0.0');
   });
 
-  it('takes the release published last on Beta, so a stable hotfix after a beta leads it', async () => {
-    const releases = [
-      { tag: 'v4.0.1', prerelease: false },
-      { tag: 'v4.1.0-beta.1', prerelease: true },
-    ];
-    expect(await resolveFeedUpdate('beta', '4.0.0', releases)).toEqual({
-      version: '4.0.1',
-      file: 'v4.0.1/beta-mac.yml',
-      offered: true,
-    });
-    expect((await resolveFeedUpdate('beta', '4.1.0-beta.1', releases)).offered).toBe(false);
-  });
-
-  it('never offers a canary on Beta or Stable, even when it was published last', async () => {
-    const releases = [
-      { tag: 'v3.1.1-canary.2', prerelease: true },
-      { tag: 'v3.1.0-beta.1', prerelease: true },
-      STABLE_3,
-    ];
-    expect(await resolveFeedUpdate('beta', '3.0.0', releases)).toEqual({
-      version: '3.1.0-beta.1',
-      file: 'v3.1.0-beta.1/beta-mac.yml',
-      offered: true,
-    });
-    expect(await resolveFeedUpdate('stable', '2.9.0', releases)).toEqual({
-      version: '3.0.0',
-      file: 'v3.0.0/latest-mac.yml',
-      offered: true,
-    });
-  });
-
-  it('offers the newest canary on Canary, even when a beta or stable release came after it', async () => {
-    const releases = [
-      { tag: 'v3.1.0-beta.1', prerelease: true },
-      { tag: 'v3.0.1', prerelease: false },
-      { tag: 'v3.1.1-canary.2', prerelease: true },
-      { tag: 'v3.1.1-canary.1', prerelease: true },
-      STABLE_3,
-    ];
-    expect(await resolveFeedUpdate('canary', '3.1.1-canary.1', releases)).toEqual({
-      version: '3.1.1-canary.2',
-      file: 'v3.1.1-canary.2/canary-mac.yml',
-      offered: true,
-    });
-    expect((await resolveFeedUpdate('canary', '3.1.1-canary.2', releases)).offered).toBe(false);
-  });
-
-  it('offers the newest canary to a stable or beta build switched to Canary', async () => {
-    const releases = [{ tag: 'v3.0.1-canary.3', prerelease: true }, STABLE_3];
-    expect(await resolveFeedUpdate('canary', '3.0.0', releases)).toEqual({
-      version: '3.0.1-canary.3',
-      file: 'v3.0.1-canary.3/canary-mac.yml',
-      offered: true,
-    });
-    const afterBeta = [{ tag: 'v3.0.2-canary.1', prerelease: true }, BETA_3_0_1, STABLE_3];
-    expect(await resolveFeedUpdate('canary', '3.0.1-beta.1', afterBeta)).toEqual({
-      version: '3.0.2-canary.1',
-      file: 'v3.0.2-canary.1/canary-mac.yml',
-      offered: true,
-    });
+  it('finds a lower beta for a canary on Beta, which the app offers as going back', async () => {
+    const update = await resolveFeedUpdate('beta', '3.1.1-canary.2', { beta: '3.1.0-beta.1' });
+    expect(update).toMatchObject({ version: '3.1.0-beta.1', offered: false });
+    expect(
+      resolveDowngradeOffer({
+        channel: 'beta',
+        current: '3.1.1-canary.2',
+        latest: update.version,
+        kept: null,
+      })
+    ).toBe('3.1.0-beta.1');
   });
 });

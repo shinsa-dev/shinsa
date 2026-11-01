@@ -29,17 +29,11 @@ function closeAsDuplicate(
 
 function assertCanDuplicate(task: Task, original: Task) {
   if (original.id === task.id) {
-    throw new DomainError(
-      'duplicate_of_itself',
-      'A task cannot be a duplicate of itself. Pick another task.'
-    );
+    throw new DomainError('duplicate_of_itself', 'A task cannot duplicate itself.');
   }
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
   if (original.duplicate) {
-    throw new DomainError(
-      'duplicate_of_duplicate',
-      `${quoteOriginal(original)} is itself a duplicate. Mark this task a duplicate of the task it duplicates.`
-    );
+    throw new DomainError('duplicate_of_duplicate', 'That task is itself a duplicate.');
   }
 }
 

@@ -44,9 +44,7 @@ describe('where agents work', () => {
 
   it('saves a new mode with a toast that says what changes, and does nothing for the current one', async () => {
     const web = createRepo({ id: 'web' });
-    expect(describeWorkspaceChange(web, 'main_checkout')).toBe(
-      'New tasks in web work in its checkout, one at a time. Tasks already working keep where they are.'
-    );
+    expect(describeWorkspaceChange(web, 'main_checkout')).toBe('One task at a time in web.');
     expect(await changeWorkspace(web, 'worktrees')).toBe(true);
     expect(spies.sent).not.toHaveBeenCalled();
     await changeWorkspace(web, 'main_checkout');
@@ -54,7 +52,7 @@ describe('where agents work', () => {
       { type: 'repo.update', repoId: 'web', patch: { workspace: 'main_checkout' } },
       describeWorkspaceChange(web, 'main_checkout')
     );
-    expect(describeWorkspaceChange(web, 'worktrees')).toContain('get a worktree each');
+    expect(describeWorkspaceChange(web, 'worktrees')).toBe('A worktree per task in web.');
   });
 
   it('keys the repositories so what they report is read again only when they change', () => {

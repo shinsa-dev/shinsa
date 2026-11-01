@@ -84,20 +84,20 @@ export function describeNewTask(start: NewTaskStart): NewTaskCopy {
     return {
       placeholder: PLACEHOLDER,
       submit: 'Add',
-      done: 'Added. It starts when the tasks it waits on are finished.',
+      done: 'Task added.',
     };
   }
   if (start === 'backlog') {
     return {
       placeholder: PLACEHOLDER,
       submit: 'Add',
-      done: 'Added to the backlog. It plans now and builds when you start it.',
+      done: 'Added to the backlog.',
     };
   }
   return {
     placeholder: PLACEHOLDER,
     submit: 'Start',
-    done: 'Started. It comes back when it needs a decision.',
+    done: 'Task started.',
   };
 }
 
@@ -261,26 +261,21 @@ export async function requestPolicyPlacement(
 ): Promise<PolicyPlacement> {
   try {
     const { answer } = await ask({ request, machines: listPlacementCandidates(machines) });
-    return { answer, reason: answer?.reason ?? '' };
-  } catch (error) {
-    return { answer: null, reason: describePolicyFailure(error) };
+    return { answer, failed: false };
+  } catch {
+    return { answer: null, failed: true };
   }
 }
 
 export interface PolicyPlacement {
   answer: PlacementAnswer | null;
-  reason: string;
+  failed: boolean;
 }
 
-export function describePolicyFailure(error: unknown) {
-  const why = error instanceof Error ? error.message.replace(/\.$/, '') : String(error);
-  return `Your routing policies were not read (${why}), so it went to the machine with the most room.`;
-}
+export const POLICY_FAILURE = 'Your routing policies weren’t read.';
 
-export function describePlacementDone(done: string, machine: MachineChoice | undefined, reason: string) {
-  if (!machine) return done;
-  const runs = `It runs on ${resolveMachineLabel(machine)}.`;
-  return reason ? `${done} ${runs} ${reason}` : `${done} ${runs}`;
+export function describePlacementDone(done: string, machine: MachineChoice | undefined) {
+  return machine ? `${done} Runs on ${resolveMachineLabel(machine)}.` : done;
 }
 
 export function hasMachineChoice(machines: MachineChoice[], unreachable: UnreachableMachine[]) {

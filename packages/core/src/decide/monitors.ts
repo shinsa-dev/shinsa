@@ -98,7 +98,7 @@ export function checkInNow(decider: Decider, command: CommandOf<'monitor.check_i
   const task = decider.task(command.taskId);
   const monitor = task.monitor;
   if (monitor?.status !== 'armed') {
-    throw new DomainError('monitor_not_armed', 'Nothing on this task is waiting to be checked.');
+    throw new DomainError('monitor_not_armed', 'Nothing here waits for a check.');
   }
   wake(decider, task, monitor);
 }

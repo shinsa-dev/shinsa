@@ -19,7 +19,7 @@ export const WATCH_SUGGESTION_ACTIONS: WatchSuggestionActions = {
   accept: (suggestion) =>
     sendCommandWithToast(
       { type: 'watch_suggestion.accept', suggestionId: suggestion.id },
-      `Added the watch “${suggestion.name}”. It reads ${suggestion.server} from now on.`
+      `Added the watch “${suggestion.name}”.`
     ),
   dismiss: (suggestion) =>
     sendCommandWithToast({ type: 'watch_suggestion.dismiss', suggestionId: suggestion.id }, 'Dismissed.'),

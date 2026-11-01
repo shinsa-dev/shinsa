@@ -4,7 +4,8 @@ export const site = {
   title: 'Shinsa: Hand Over the Work, Keep the Decisions',
   description:
     'Shinsa runs Claude Code and Codex from your request to a merged pull request. Agents research, build and check their own work, and bring you only your calls.',
-  downloadUrl: 'https://shinsa.dev/download',
+  canaryUrl: 'https://shinsa.dev/download/canary',
   betaUrl: 'https://shinsa.dev/download/beta',
+  cloudUrl: 'https://app.shinsa.dev',
   githubUrl: 'https://github.com/shinsa-dev/shinsa',
 };

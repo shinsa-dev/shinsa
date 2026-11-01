@@ -1,4 +1,4 @@
-import { describeCount, describeList } from '../chat/text.ts';
+import { describeCount } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -22,16 +22,12 @@ import { listChangedIds } from '../state/draft.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
-function quoteSteps(steps: readonly MergeStepView[]) {
-  return describeList(steps.map((step) => `“${step.title}”`));
-}
-
 function describeEarly(task: Task, step: MergeStepView) {
   if (step.when === 'pre_merge') {
-    return `“${step.title}” is a pre-merge step, and the merge is done.`;
+    return 'This step was due before the merge.';
   }
-  const number = task.pullRequest ? ` #${task.pullRequest.number}` : '';
-  return `“${step.title}” is a post-merge step. Tick it once the pull request${number} merged.`;
+  if (!task.pullRequest) return 'Tick this once the pull request merges.';
+  return `Tick this once pull request #${task.pullRequest.number} merges.`;
 }
 
 function assertCanTick(task: Task, step: MergeStepView) {
@@ -50,10 +46,7 @@ export function tickMergeStep(decider: Decider, command: CommandOf<'merge_step.t
   const task = decider.task(command.taskId);
   const step = listMergeSteps(task).find((candidate) => candidate.key === command.key);
   if (!step) {
-    throw new DomainError(
-      'merge_step_not_found',
-      'This task has no such step. Its steps around the merge may have changed; read them again.'
-    );
+    throw new DomainError('merge_step_not_found', 'This step is no longer there.');
   }
   assertCanTick(task, step);
   if (step.done === command.done) return;
@@ -72,7 +65,7 @@ export function assertMergeStepsDone(decider: Decider, gate: Gate, decision: Gat
   if (open.length === 0) return;
   throw new DomainError(
     'merge_steps_open',
-    `Do the ${describeCount(open.length, 'pre-merge step')} first, and tick each: ${quoteSteps(open)}.`
+    `Tick the ${describeCount(open.length, 'pre-merge step')} first.`
   );
 }
 
@@ -81,7 +74,7 @@ export function assertNoMergeStepsLeft(task: Task) {
   if (open.length === 0) return;
   throw new DomainError(
     'task_open',
-    `${describeCount(open.length, 'post-merge step is', 'post-merge steps are')} left: ${quoteSteps(open)}. The task is done once each is ticked.`
+    `${describeCount(open.length, 'post-merge step is', 'post-merge steps are')} left.`
   );
 }
 

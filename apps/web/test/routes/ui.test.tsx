@@ -4,7 +4,7 @@ import { Root } from '@/root.tsx';
 import { navigate } from '@/router.ts';
 import { listSentCommands, startFakeServer, stopFakeServer } from '../support/server.ts';
 
-const NOTHING_SENT = 'Nothing was sent. This page only shows samples.';
+const NOTHING_SENT = 'Samples only. Nothing was sent.';
 
 setDefaultTimeout(30_000);
 

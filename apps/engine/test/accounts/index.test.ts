@@ -392,7 +392,7 @@ describe('signing in an account', () => {
     world.statuses.set(twin?.configDir as string, { loggedIn: true, email: 'WORK@example.com' });
     world.processes.at(-1)?.exit(0);
     await until('the duplicate to fail', () => world.accounts.logins.current()?.phase === 'failed');
-    expect(world.accounts.snapshot().login?.message).toBe('WORK@example.com is already in your accounts.');
+    expect(world.accounts.snapshot().login?.message).toBe('WORK@example.com is already added.');
     await until('the duplicate to be removed', () => world.accounts.store.list().length === 1);
   });
 
@@ -417,7 +417,7 @@ describe('signing in an account', () => {
       'Paste the code the sign-in page showed.'
     );
     expect(() => world.accounts.submitLoginCode(loginId, 'abc')).toThrow(
-      'That sign-in is no longer waiting for a code. Start it again.'
+      'That sign-in ended. Start it again.'
     );
     world.processes[0]?.emit('Visit https://claude.com/cai/oauth/authorize?code=true to sign in');
     expect(world.accounts.snapshot().login).toMatchObject({ phase: 'waiting' });
@@ -452,9 +452,7 @@ describe('inspect mode', () => {
     expect(world.accounts.snapshot().accounts.map((listed) => listed.email)).toEqual(['seen@example.com']);
     const refused = { code: 'inspect_read_only' };
     await expect(world.accounts.refresh()).rejects.toMatchObject(refused);
-    expect(() => world.accounts.update(account.id, { paused: true })).toThrow(
-      'Start it without SHINSA_INSPECT to sign in, refresh or change accounts.'
-    );
+    expect(() => world.accounts.update(account.id, { paused: true })).toThrow('Inspect mode is read-only.');
     world.accounts.stop();
     expect(world.calls).toEqual([]);
     expect(world.secretReads).toEqual([]);
@@ -491,7 +489,7 @@ describe('importing logins', () => {
     expect(world.accounts.snapshot().imports).toEqual([]);
     expect(world.calls.some((call) => call.command[1] === 'export')).toBe(false);
     await expect(world.accounts.importAccount('cswap', 'swap@example.com')).rejects.toThrow(
-      'swap@example.com is already in your accounts.'
+      'swap@example.com is already added.'
     );
   });
 
@@ -537,7 +535,7 @@ describe('one login, one account', () => {
     await world.accounts.refresh();
     expect(world.accounts.snapshot().imports).toEqual([]);
     await expect(world.accounts.importAccount('cswap', 'ME@example.com')).rejects.toThrow(
-      'ME@example.com is already in your accounts.'
+      'ME@example.com is already added.'
     );
     expect(world.accounts.store.list()).toHaveLength(1);
   });
@@ -569,7 +567,7 @@ describe('one login, one account', () => {
     });
     world.processes.at(-1)?.exit(0);
     await until('the duplicate to fail', () => world.accounts.logins.current()?.phase === 'failed');
-    expect(world.accounts.snapshot().login?.message).toBe('me@example.com is already in your accounts.');
+    expect(world.accounts.snapshot().login?.message).toBe('me@example.com is already added.');
     await until('the duplicate to be removed', () => world.accounts.store.list().length === 2);
   });
 });
@@ -1318,17 +1316,17 @@ describe('changing and removing accounts', () => {
     for (const [patch, message] of [
       [null, 'Say what to change about the account.'],
       [[], 'Say what to change about the account.'],
-      [{ color: 'red' }, 'An account has no setting called color.'],
-      [{ isDefault: false }, 'Choose the default account by making one the default.'],
-      [{ paused: 'yes' }, 'Say whether the account is paused with true or false.'],
-      [{ switchAt: 0 }, 'Switch accounts at a whole percentage from 1 to 100.'],
-      [{ switchAt: 50.5 }, 'Switch accounts at a whole percentage from 1 to 100.'],
-      [{ position: 1.5 }, 'Give the account’s position as a whole number.'],
+      [{ color: 'red' }, 'No account setting color.'],
+      [{ isDefault: false }, 'Make an account the default instead.'],
+      [{ paused: 'yes' }, 'Say paused with true or false.'],
+      [{ switchAt: 0 }, 'Switch accounts at 1 to 100%.'],
+      [{ switchAt: 50.5 }, 'Switch accounts at 1 to 100%.'],
+      [{ position: 1.5 }, 'Give the position as a whole number.'],
     ] as [unknown, string][]) {
       expect(() => world.accounts.update(a.id, patch)).toThrow(message);
     }
     expect(() => world.accounts.update(42, {})).toThrow('Name the account to change.');
-    expect(() => world.accounts.update('missing', {})).toThrow('That account is no longer in your accounts.');
+    expect(() => world.accounts.update('missing', {})).toThrow('That account was removed.');
   });
 
   test('removing an account signs it out, deletes its folder and releases the tasks bound to it', async () => {

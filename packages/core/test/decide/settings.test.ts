@@ -181,7 +181,7 @@ describe('projects', () => {
         type: 'project.write',
         project: { name: 'x'.repeat(PROJECT_LIMITS.name + 1), color: 'pink' },
       })
-    ).toThrow(`A project name is at most ${PROJECT_LIMITS.name} characters.`);
+    ).toThrow(`Keep the name to ${PROJECT_LIMITS.name} characters.`);
   });
 
   test('a key is derived from the name, and renaming a project keeps its key', () => {
@@ -202,7 +202,7 @@ describe('projects', () => {
     const harness = createHarness();
     for (const key of ['B', '9AB', 'TOOLONGX', 'B-K']) {
       expect(() => writeProject(harness, { name: 'Basket', key })).toThrow(
-        'A project key is 2 to 6 letters or digits and starts with a letter, like SW.'
+        'A key is 2 to 6 letters, like SW.'
       );
     }
     expect(harness.state.projects).toEqual({});
@@ -211,9 +211,7 @@ describe('projects', () => {
   test('a key another project uses is refused, but a project may keep its own', () => {
     const harness = createHarness();
     const id = writeProject(harness, { name: 'Superwall', key: 'SW' })?.id ?? '';
-    expect(() => writeProject(harness, { name: 'Switch', key: 'sw' })).toThrow(
-      'Another project already uses the key SW.'
-    );
+    expect(() => writeProject(harness, { name: 'Switch', key: 'sw' })).toThrow('Another project uses SW.');
     writeProject(harness, { id, name: 'Superwall', key: 'SW', description: 'Paywalls.' });
     expect(harness.state.projects[id]).toMatchObject({ key: 'SW', description: 'Paywalls.' });
   });
@@ -222,7 +220,7 @@ describe('projects', () => {
     const harness = createHarness();
     expect(() =>
       writeProject(harness, { name: 'Basket', description: 'x'.repeat(PROJECT_LIMITS.description + 1) })
-    ).toThrow(`A project description is at most ${PROJECT_LIMITS.description} characters.`);
+    ).toThrow(`Keep the description to ${PROJECT_LIMITS.description} characters.`);
   });
 
   test('folders are trimmed, lose a trailing slash, and are kept once', () => {
@@ -239,18 +237,18 @@ describe('projects', () => {
   test('a folder must be a full path', () => {
     const harness = createHarness();
     expect(() => writeProject(harness, { name: 'Basket', folders: ['~/code/basket'] })).toThrow(
-      '“~/code/basket” is not a full folder path.'
+      'Give a full folder path.'
     );
     expect(() =>
       writeProject(harness, { name: 'Basket', folders: [`/${'x'.repeat(PROJECT_LIMITS.folder)}`] })
-    ).toThrow('is not a full folder path.');
+    ).toThrow('Give a full folder path.');
   });
 
   test('a folder another project has is refused', () => {
     const harness = createHarness();
     writeProject(harness, { name: 'Superwall', folders: ['/code/superwall'] });
     expect(() => writeProject(harness, { name: 'Basket', folders: ['/code/superwall/'] })).toThrow(
-      '“/code/superwall” already belongs to the project Superwall.'
+      'That folder is in another project.'
     );
   });
 
@@ -352,7 +350,7 @@ describe('settings', () => {
   test('counts must be whole numbers of one or more', () => {
     const harness = createHarness();
     for (const patch of [{ maxFixRounds: 0 }, { maxFixRounds: 1.5 }, { attentionLimit: 0 }]) {
-      expect(() => harness.send({ type: 'settings.change', patch })).toThrow('must be a whole number');
+      expect(() => harness.send({ type: 'settings.change', patch })).toThrow('must be 1 or more');
     }
     expect(harness.state.seq).toBe(0);
   });
@@ -365,7 +363,7 @@ describe('settings', () => {
     expect(harness.state.settings.delegationLimit).toBeNull();
     for (const delegationLimit of [0, 2.5, -1]) {
       expect(() => harness.send({ type: 'settings.change', patch: { delegationLimit } })).toThrow(
-        'Delegations at once must be a whole number of 1 or more, or no limit.'
+        'Delegations at once must be 1 or more.'
       );
     }
   });
@@ -378,7 +376,7 @@ describe('settings', () => {
     expect(harness.state.settings.taskCapacity).toBeNull();
     for (const taskCapacity of [0, 2.5]) {
       expect(() => harness.send({ type: 'settings.change', patch: { taskCapacity } })).toThrow(
-        'Task capacity must be a whole number of 1 or more, or no limit.'
+        'Task capacity must be 1 or more.'
       );
     }
   });
@@ -393,7 +391,7 @@ describe('settings', () => {
       Array.from({ length: 21 }, (_, index) => `w${index}`),
     ]) {
       expect(() => harness.send({ type: 'settings.change', patch: { placementPolicies } })).toThrow(
-        'A machine has up to 20 policies of 1 to 240 characters each.'
+        'Keep to 20 policies of 240 characters.'
       );
     }
   });
@@ -404,7 +402,7 @@ describe('settings', () => {
     expect(harness.state.settings.accountSwitchAt).toBe(95);
     for (const accountSwitchAt of [0, 101, 90.5]) {
       expect(() => harness.send({ type: 'settings.change', patch: { accountSwitchAt } })).toThrow(
-        'Switch accounts at a whole percentage from 1 to 100.'
+        'Switch accounts at 1 to 100%.'
       );
     }
   });
@@ -415,7 +413,7 @@ describe('settings', () => {
     expect(harness.state.settings).toMatchObject({ idleCompaction: false, compactionLeadMinutes: 5 });
     for (const lead of [0, 31, 2.5]) {
       expect(() => harness.send({ type: 'settings.change', patch: { compactionLeadMinutes: lead } })).toThrow(
-        'Compact from 1 to 30 minutes before the cache expires.'
+        'Compact 1 to 30 minutes ahead.'
       );
     }
   });

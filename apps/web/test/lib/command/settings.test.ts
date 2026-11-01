@@ -473,7 +473,7 @@ describe('Where agents work', () => {
     pick(sections, 'settings.workspace.web', 'main_checkout');
     expect(spies.sent).toHaveBeenCalledWith(
       { type: 'repo.update', repoId: 'web', patch: { workspace: 'main_checkout' } },
-      'New tasks in web work in its checkout, one at a time. Tasks already working keep where they are.'
+      'One task at a time in web.'
     );
     expect(
       listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES).flatMap((section) =>

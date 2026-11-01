@@ -35,9 +35,9 @@ interface AnswerOptions {
 function describePlanChange(decider: Decider, gate: Gate) {
   const current = decider.task(gate.taskId).plan?.version ?? 0;
   if (current > (gate.planVersion ?? current)) {
-    return `The plan changed to version ${current} after you opened it. Read the new version and approve that one.`;
+    return 'The plan changed. Approve the new one.';
   }
-  return 'The planner is revising this plan. Approve the new version when it arrives.';
+  return 'The plan is being revised.';
 }
 
 function findOpenGate(decider: Decider, gateId: string) {
@@ -98,10 +98,7 @@ function assertCurrentPlan(decider: Decider, gate: Gate, decision: GateDecision,
   if (gate.type !== 'plan' || decision !== 'approve') return;
   const current = decider.task(gate.taskId).plan?.version ?? null;
   if (planVersion === undefined || planVersion === current) return;
-  throw new DomainError(
-    'plan_changed',
-    `The plan changed to version ${current} after you opened it. Read the new version and approve that one.`
-  );
+  throw new DomainError('plan_changed', 'The plan changed. Approve the new one.');
 }
 
 function assertVerdicts(decider: Decider, gate: Gate, decision: GateDecision, verdicts?: FindingVerdict[]) {
@@ -112,21 +109,18 @@ function assertVerdicts(decider: Decider, gate: Gate, decision: GateDecision, ve
   const count = decider.task(gate.taskId).findings.length;
   const indexes = verdicts.map((verdict) => verdict.index);
   if (indexes.some((index) => index >= count) || new Set(indexes).size !== indexes.length) {
-    throw new DomainError('verdicts_invalid', 'Each verdict must name a different finding of this review.');
+    throw new DomainError('verdicts_invalid', 'Each verdict needs its own finding.');
   }
   if (decision === 'approve' && verdicts.some((verdict) => verdict.verdict === 'fix')) {
-    throw new DomainError(
-      'verdicts_conflict',
-      'Approving ships the work as it is. Ask for changes to have findings fixed.'
-    );
+    throw new DomainError('verdicts_conflict', 'To fix findings, ask for changes.');
   }
 }
 
 function describeCommentProblem(comment: ReviewComment) {
   if (comment.endLine !== null && comment.endLine <= comment.line) {
-    return `The comment on ${comment.path} must end on a line after line ${comment.line}.`;
+    return 'A comment must end after its first line.';
   }
-  return comment.text.trim() ? null : `The comment on ${comment.path} has no words.`;
+  return comment.text.trim() ? null : 'A line comment has no words.';
 }
 
 function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewComment[]) {
@@ -135,10 +129,7 @@ function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewCom
     throw new DomainError('comments_invalid', 'Only a review takes line comments.');
   }
   if (decision !== 'revise') {
-    throw new DomainError(
-      'comments_conflict',
-      'Line comments go to the agent when you request changes. Request changes, or clear them first.'
-    );
+    throw new DomainError('comments_conflict', 'Request changes to send line comments.');
   }
   const problem = comments.map(describeCommentProblem).find((found) => found !== null);
   if (problem) throw new DomainError('comments_invalid', problem);

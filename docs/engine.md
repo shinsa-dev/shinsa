@@ -570,8 +570,7 @@ every commit.
   - On a pipeline without the checks step, or a task with no checks at all, there is nothing to run, so approving the
     review with them pushes straight away, as approving without edits does: the push effect commits them first.
   - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
-    Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
-    passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
+    Committing your edits.", "Approved. Merging once CI passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
     request is open) or "Approved. Merging the pull request." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
   - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
@@ -1110,7 +1109,7 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 - **Chains and diamonds.** MCP v2 → embedded chat → paywall editing in the chat: each link waits for
   the one before it, so they start one after another as each merges. A diamond (B and C wait on
   A, D waits on B and C) starts B and C together when A merges, and D only after both. Cycles
-  are refused (`task.wait_on` throws "‹task› already waits on this task."; a new task cannot close one).
+  are refused (`task.wait_on` throws "That task already waits on this one."; a new task cannot close one).
 - **Cancelling a parent.** The work a dependent needed will never exist, so it is not started
   blind: each waiting dependent gets a failure gate, "“‹parent›” was cancelled", and shows as
   Paused. With other parents still pending, the gate says Retry keeps waiting on those only.
@@ -1286,6 +1285,12 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 - Approving records `plan.approved` (`approvedAt`), and your words with it `plan.answered` (`planAnswers`). The
   first phase's instruction says the plan was approved and carries your words; the round brief a fresh session gets
   names the approved version and says to follow it exactly.
+- A plan may carry a new `title` when the work moved away from the task's, such as an "Explain…" question that
+  became a change; the Agent leaves it out while the title still fits. The plan gate shows it in place of the task's
+  title. Once the plan is accepted (at the gate, with no gate, or started from the backlog: `startAfterPlan`), a
+  title that differs from the round's records `task.retitled`: the round takes it, and the task too when it is round
+  1, so a later round never renames the task. A revised plan accepted later renames it again. The handle and the
+  branch stay; pull requests opened after it carry the new title.
 
 ### The review report
 
@@ -1440,14 +1445,20 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   `{server, data}`, an MCP server that holds the data, or a `source_request` `{data, evidence, suggestions}` when no
   server it has does; `validatePhaseHandOver` refuses both or neither, a repeated title, and a check slower than its
   window, and a production start with no `production_check`). The last phase's instruction lists the project's data sources for the repository
-  (`describeWatchdogGuide`, in the user turn), the handover skill says when one is worth it, a fix revises them like
+  (`describeWatchdogGuide`, in the user turn) as hints, not limits: any MCP server the agent has can be the source, and
+  it checks every server that could hold the data with that server's own tools (`mcp_list`, `load_mcp_server`) before
+  it asks for one. A `source_request` names the servers it checked and why each falls short in `evidence`: on
+  `complete_phase` and `complete_fix` the engine refuses one whose `suggestions` name a server the run already has
+  (loaded or deferred, a whole-word match ignoring case) and whose `evidence` does not say it checked that server (“checked <server>” in one clause; a mere mention of the platform does not count) (`listHeldSourceRequests`,
+  `assertHeldSourcesUsed` in `agents/handover.ts`). The handover skill says when one is worth it, a fix revises them like
   `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
 - **Integrations a project uses live on the project.** A project lists the MCP servers from Integrations its agents
   read, each with what it holds there; on screen and in the command line it is an integration, in code a
   `WatchSource`. `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
   covers, none meaning every repository, `addedBy` `you` or `agent`), at most 20. A watchdog whose server the project
   does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
-  repository finds it; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
+  repository finds it, and one it lists whose `data` does not cover what the watchdog reads is widened: the two joined
+  when they fit in 200 characters, left as it is otherwise, so your description is never replaced; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
   them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
   connects one for you. A watch reads one too, filing a task for each new report in it, and a project that starts
   using an integration is offered one (Schedules and webhooks → Suggested watches, below).
@@ -2559,8 +2570,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
   `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
   `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
-  Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
+- **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
+  on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
   repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
   takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
   plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
@@ -2632,9 +2643,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
   prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
   none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went and why; when every provider fails (no
+  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
   Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so the toast says the policies were not read and why (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
+  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
   focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
@@ -4769,8 +4780,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   through setup as that person.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
   effect runs (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered, and every command
-  is refused with `inspect_read_only` ("Shinsa is in inspect mode and only shows this data. Start it without
-  SHINSA_INSPECT to change anything."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
+  is refused with `inspect_read_only` ("Inspect mode is read-only."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
   `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,

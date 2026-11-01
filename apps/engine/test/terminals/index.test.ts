@@ -117,7 +117,7 @@ describe('Terminals', () => {
     fake.spawned[0]?.emit('output');
     fake.spawned[0]?.exit(0);
     await until('the shell ends', () => terminals.find(terminal.id).info.status === 'exited');
-    expect(() => terminals.run(terminal.id, 'ls')).toThrow('That terminal has ended. Start it again first.');
+    expect(() => terminals.run(terminal.id, 'ls')).toThrow('That terminal has ended.');
     expect(terminals.restart(terminal.id).status).toBe('running');
     expect(fake.spawned).toHaveLength(2);
     await until(
@@ -181,7 +181,7 @@ describe('Terminals', () => {
   it('refuses more terminals than the limit, and any change while Shinsa only shows saved state', () => {
     const { terminals } = createTerminals();
     for (let index = 0; index < TERMINAL_LIMITS.terminals; index++) terminals.create(START);
-    expect(() => terminals.create(START)).toThrow('Close one to open another.');
+    expect(() => terminals.create(START)).toThrow('terminals at most.');
     const readOnly = createTerminals({ readOnly: true }).terminals;
     expect(() => readOnly.create(START)).toThrow('Terminals are off');
   });
@@ -431,7 +431,7 @@ describe('Terminals services', () => {
   it('refuses more services than the limit', () => {
     const { terminals } = createTerminals();
     for (let index = 0; index < SERVICE_LIMITS.services; index++) terminals.addService('p1', SERVICE);
-    expect(() => terminals.addService('p1', SERVICE)).toThrow('Remove one to add another.');
+    expect(() => terminals.addService('p1', SERVICE)).toThrow('services at most.');
     expect(() => createTerminals({ readOnly: true }).terminals.addService('p1', SERVICE)).toThrow(
       'Terminals are off'
     );

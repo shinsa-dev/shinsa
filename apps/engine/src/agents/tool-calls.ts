@@ -4,6 +4,7 @@ import {
   type CommandOf,
   isDelegatedRun,
   isTaskSettled,
+  type Run,
   resolveCurrentRound,
   type ShinsaCommand,
   type ShinsaEvent,
@@ -13,6 +14,7 @@ import {
   validatePhaseHandOver,
   validatePlanHandOver,
   validateReview,
+  type WatchdogSpec,
 } from '@shinsa/core';
 import { resolveHead } from '../git/index.ts';
 import { upsertProjectFolderRepo } from '../repos/index.ts';
@@ -21,7 +23,14 @@ import type { ScheduleToolCall } from '../schedules/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
 import type { Workspaces } from '../workspaces/index.ts';
 import { awaitDelegation } from './delegations.ts';
-import { assertProtocol, HANDED_OVER, readString, resolveCommitMessage, storeEvidence } from './handover.ts';
+import {
+  assertHeldSourcesUsed,
+  assertProtocol,
+  HANDED_OVER,
+  readString,
+  resolveCommitMessage,
+  storeEvidence,
+} from './handover.ts';
 import { createManageClient, isSurfaceTool, type ManageAccess, readSurfaceToolCall } from './manage/index.ts';
 import type { ProviderRegistry } from './providers/index.ts';
 import type { Questions } from './questions.ts';
@@ -51,6 +60,7 @@ interface ToolCallsOptions {
   manage: ManageAccess | null;
   workspaces: Workspaces;
   services: TaskServiceRunner | null;
+  listServerNames: (run: Run) => Promise<string[]>;
 }
 
 interface ToolCall {
@@ -156,6 +166,12 @@ export class ToolCalls {
     }
   }
 
+  async #assertHeldSourcesUsed(call: ToolCall, watchdogs: readonly WatchdogSpec[] = []) {
+    if (!watchdogs.some((watchdog) => watchdog.sourceRequest)) return;
+    const { run } = this.#findCurrent(call.runId, call.attemptId);
+    assertHeldSourcesUsed(watchdogs, await this.#options.listServerNames(run));
+  }
+
   async #handOver(name: HandOverTool, call: ToolCall, dispatch: CallDispatch) {
     const { runId, attemptId, input } = call;
     switch (name) {
@@ -172,6 +188,7 @@ export class ToolCalls {
       }
       case 'complete_phase': {
         const handOver = assertProtocol(validatePhaseHandOver(input));
+        await this.#assertHeldSourcesUsed(call, handOver.walkthrough?.watchdogs);
         await this.#commitThenDispatch(
           call,
           { type: 'agent.complete_phase', runId, attemptId, ...handOver },
@@ -181,6 +198,7 @@ export class ToolCalls {
       }
       case 'complete_fix': {
         const handOver = assertProtocol(validateFixHandOver(input));
+        await this.#assertHeldSourcesUsed(call, handOver.walkthrough?.watchdogs);
         await this.#commitThenDispatch(
           call,
           { type: 'agent.complete_fix', runId, attemptId, ...handOver },

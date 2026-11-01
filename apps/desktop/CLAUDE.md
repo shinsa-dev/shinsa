@@ -142,8 +142,8 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
 
-**Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads the GitHub releases of
-`shinsa-dev/shinsa` (`publish` in `electron-builder.shared.yml`; the same feed in `UPDATE_FEED` and in `resources/app-update.yml`, which
+**Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads the update files at
+`https://shinsa.dev/updates`, its `generic` provider (`publish` in `electron-builder.shared.yml`; the same feed in `UPDATE_FEED` and in `resources/app-update.yml`, which
 electron-updater reads from `Contents/Resources` before every download and `test/release/build.test.ts` keeps equal), downloads a new version in the background and installs it
 when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server, so an update never
 interrupts an agent. Everything that waits happens before Restart is offered, so the click only quits and the swap
@@ -160,16 +160,18 @@ go to `~/Library/Logs/Shinsa/updater.log`, started afresh past 1 MB, beside
 ShipIt's own `~/Library/Caches/<bundle id>.ShipIt/ShipIt_stderr.log`. Squirrel.Mac installs only an update signed by the same Developer ID, so ad hoc builds download
 but do not install. Squirrel.Mac also installs an update only into the same bundle id, so every channel builds the
 one app (`studio.overclock.shinsa`) and you switch between them (`lib/update-channel.ts`): Stable, Beta and Canary. Stable
-reads `latest-mac.yml` from the release marked latest, Beta reads `beta-mac.yml` from the newest beta or stable
-release (`allowPrerelease`; a canary is skipped), and Canary reads `canary-mac.yml` from the newest canary only
-(electron-updater's GitHub provider treats any pre-release word but `alpha` and `beta` as a channel of its own); every
-canary is built above the newest beta and stable release, so Canary never misses what they shipped. All three read the `github` feed (`UPDATE_FEED`, set with `setFeedURL`). `allowDowngrade` stays false (electron-updater turns it on when `channel` is set) except for one accepted
+reads `latest-mac.yml`, the newest stable release; Beta reads `beta-mac.yml`, the newest beta or stable release by
+semver; and Canary reads `canary-mac.yml`, the newest canary only. The release workflow writes them to the site's R2
+bucket, each naming its version's own zip, and every version stays there forever (`docs/release.md` → Channels and
+updates); every canary is built above the newest beta and stable release, so Canary never misses what they shipped.
+All three read the one feed (`UPDATE_FEED`, set with `setFeedURL`), with `useMultipleRangeRequest` off, since R2
+serves one byte range per request. `allowDowngrade` stays false (electron-updater turns it on when `channel` is set) except for one accepted
 go-back: on Stable or Beta, a beta or canary newer than the latest there is offered that version ("Go back to 1.2.0
 (stable)?",
 update status `downgrade`, `answerDowngrade` over the bridge, a dialog once after the switch), and accepting
 downloads it with `allowDowngrade` on for that check only. Switching to a channel below a beta or canary that is
 downloading or staged discards it (the download is cancelled; Squirrel.Mac's ShipIt job and folder are removed).
-`test/lib/update-feed.test.ts` runs electron-updater's GitHub provider over fake feeds to pin what each channel
+`test/lib/update-feed.test.ts` runs electron-updater's generic provider over fake channel files to pin what each channel
 offers. The channel is the app's, not the engine's: it lives in `userData/prefs.json` (`updateChannel`), since the
 updater runs before any page loads and while the engine is down, and a browser tab has no updater; a new install
 starts on the channel of its own version, and a stored channel the app does not offer is ignored. The page shows and

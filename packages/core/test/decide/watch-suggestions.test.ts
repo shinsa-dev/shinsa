@@ -186,7 +186,7 @@ describe('a watch suggested for a new integration', () => {
     const decided = refusal(() => harness.send({ type: 'watch_suggestion.accept', suggestionId }));
     expect(decided).toEqual({
       code: 'suggestion_decided',
-      message: 'The suggested watch “Feedback bugs” was already dismissed.',
+      message: 'That watch was already dismissed.',
     });
     expect(refusal(() => harness.send({ type: 'watch_suggestion.dismiss', suggestionId: 'nope' })).code).toBe(
       'suggestion_not_found'

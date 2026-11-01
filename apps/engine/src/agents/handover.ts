@@ -3,10 +3,12 @@ import { isAbsolute, resolve } from 'node:path';
 import {
   type ComparisonHandOver,
   type EvidencePart,
+  listHeldSourceRequests,
   type PieceHandOver,
   type Run,
   type Task,
   validateEvidence,
+  type WatchdogSpec,
 } from '@shinsa/core';
 import { resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
 import type { EvidenceFolder } from '../store/evidence.ts';
@@ -35,6 +37,11 @@ export function assertProtocol<T>(result: { ok: true; value: T } | { ok: false; 
   throw new Error(
     `Shinsa rejected this hand-over. Fix these and call the tool again:\n${result.errors.map((error) => `- ${error}`).join('\n')}`
   );
+}
+
+export function assertHeldSourcesUsed(watchdogs: readonly WatchdogSpec[], serverNames: readonly string[]) {
+  const errors = listHeldSourceRequests(watchdogs, serverNames);
+  if (errors.length > 0) assertProtocol({ ok: false, errors });
 }
 
 export function resolveCommitMessage(task: Task, run: Run) {
