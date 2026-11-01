@@ -22,7 +22,7 @@ function Field() {
   return (
     <>
       <textarea ref={field} data-testid='field' />
-      <ScrollFade targetRef={field} />
+      <ScrollFade field targetRef={field} />
     </>
   );
 }
@@ -69,9 +69,19 @@ describe('ScrollFade', () => {
     expect(target.classList.contains('scroll-fade')).toBe(true);
     expect(target.hasAttribute('data-fade-scope')).toBe(false);
     expect(target.style.getPropertyValue('--fade-size')).toBe('16px');
+    expect(target.hasAttribute('data-fade-static')).toBe(false);
     unmount();
     expect(target.classList.contains('scroll-fade')).toBe(false);
     expect(target.hasAttribute('data-fade-orientation')).toBe(false);
+  });
+
+  it('keeps a clipping target exact, fading on a single hidden pixel', () => {
+    const seen: string[] = [];
+    const { getByTestId } = render(<Decorated seen={seen} />);
+    const target = getByTestId('target');
+    place(target, { scrollWidth: 201, clientWidth: 200 });
+    fireEvent.scroll(target);
+    expect(target.hasAttribute('data-overflow-x-end')).toBe(true);
   });
 
   it('fades a field from its measured edges alone, with a shorter fade', () => {

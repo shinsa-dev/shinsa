@@ -320,7 +320,7 @@ export function NewTaskForm() {
         placeholder={copy.placeholder}
         className={cn(COMPOSER_FIELD, 'max-h-72 min-h-20')}
       />
-      <ScrollFade targetRef={field} />
+      <ScrollFade field targetRef={field} />
       <div className={cn(COMPOSER_FOOTER, 'flex-wrap')}>
         <AttachButton attachments={attachments} />
         <NewTaskFields

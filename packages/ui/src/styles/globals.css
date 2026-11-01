@@ -860,7 +860,7 @@
       timeline-scope: var(--fade-timeline-y), var(--fade-timeline-x);
     }
 
-    /* A text field (ScrollFade's `targetRef`) fades from the attributes
+    /* A text field (ScrollFade's `field` target) fades from the attributes
        alone: a timeline on the field goes inactive once its text stops
        overflowing but keeps its last value, which would leave a fade over
        text that no longer scrolls. */

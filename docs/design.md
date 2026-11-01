@@ -86,7 +86,8 @@ Only these, and they win over anything below:
    own element's timelines, which is right for a clipping element that does not scroll (`CardAction`). A browser
    without scroll timelines, and that clipping element, fall back to the `data-overflow-*` attributes `ScrollArea`
    and `ScrollFade` set on the masked box. **A composer's text box fades only where a line is cut off.** A
-   `targetRef` is a text field: `ScrollFade` marks it `data-fade-static`, so its fades come from those attributes
+   `targetRef` passed with `field` is a text field (the three composers; `CardAction` is not one and stays exact):
+   `ScrollFade` marks it `data-fade-static`, so its fades come from those attributes
    alone and never from a scroll timeline, which on the field itself keeps its last fade once the text stops
    overflowing. It measures again on `input`, ignores up to 8px of hidden content (the field's bottom padding,
    which the browser leaves out of view when it scrolls the caret line in) and fades 16px, not 24px.
