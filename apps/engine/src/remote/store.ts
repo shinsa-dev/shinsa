@@ -4,11 +4,13 @@ import {
   isTeamKey,
   type MachineCredentials,
   parsePrivateKey,
+  parseSigningPrivateKey,
   REMOTE_KEY_ALGORITHM,
   type RemoteAccess,
   type RemoteMember,
   type RemoteTeam,
   type RemoteUser,
+  SIGNING_KEY_ALGORITHM,
   serializePrivateKey,
   serializePublicKey,
 } from '@shinsa/core';
@@ -27,6 +29,7 @@ interface MachineKey {
 export interface RemoteFile {
   version: 1;
   machine: MachineKey | null;
+  signing: MachineKey | null;
   credentials: MachineCredentials | null;
   owner: string | null;
   enabled: boolean;
@@ -156,7 +159,8 @@ function readTeamMachines(value: unknown): RemoteTeam['machines'] {
     const { id, name, userId, online } = entry;
     if (typeof id !== 'string' || typeof name !== 'string' || typeof userId !== 'string') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
-    return [{ id, name, userId, online: online === true, lastSeenAt }];
+    const signing = typeof entry.signingKey === 'string' ? { signingKey: entry.signingKey } : {};
+    return [{ id, name, userId, online: online === true, lastSeenAt, ...signing }];
   });
 }
 
@@ -241,6 +245,7 @@ function createRemoteFile(): RemoteFile {
   return {
     version: 1,
     machine: null,
+    signing: null,
     credentials: null,
     owner: null,
     enabled: false,
@@ -268,6 +273,7 @@ export function readRemoteFile(path: string): RemoteFile {
   return {
     version: 1,
     machine: readMachine(fields.machine),
+    signing: readMachine(fields.signing),
     credentials,
     owner: typeof fields.owner === 'string' ? fields.owner : null,
     enabled: credentials !== null && fields.enabled === true,
@@ -285,6 +291,7 @@ export class RemoteStore {
   readonly path: string;
   #file: RemoteFile;
   #machineKey: CryptoKey | null = null;
+  #signingKey: CryptoKey | null = null;
 
   constructor(path: string) {
     this.path = path;
@@ -318,6 +325,26 @@ export class RemoteStore {
     this.update((file) => ({ ...file, machine }));
     this.#machineKey = (await parsePrivateKey(machine.privateKey)) as CryptoKey;
     return { publicKey: machine.publicKey, privateKey: this.#machineKey };
+  }
+
+  async resolveSigningKey() {
+    const stored = this.#file.signing;
+    const parsed = stored && (this.#signingKey ?? (await parseSigningPrivateKey(stored.privateKey)));
+    if (stored && parsed) {
+      this.#signingKey = parsed;
+      return { publicKey: stored.publicKey, privateKey: parsed };
+    }
+    const pair = (await crypto.subtle.generateKey(SIGNING_KEY_ALGORITHM, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair;
+    const signing = {
+      publicKey: await serializePublicKey(pair.publicKey),
+      privateKey: await serializePrivateKey(pair.privateKey),
+    };
+    this.update((file) => ({ ...file, signing }));
+    this.#signingKey = (await parseSigningPrivateKey(signing.privateKey)) as CryptoKey;
+    return { publicKey: signing.publicKey, privateKey: this.#signingKey };
   }
 
   selectDevice(publicKey: string) {

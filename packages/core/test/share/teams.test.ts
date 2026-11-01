@@ -22,7 +22,7 @@ function teamRepo(harness: Harness, name: string, projectName: string) {
 }
 
 describe('the team task list', () => {
-  test('lists the tasks of team projects, redacted, with their owner and machine', () => {
+  test('lists the tasks of team projects, redacted, with their owner, machine and repository', () => {
     const harness = createHarness();
     const shared = teamRepo(harness, 'paywall-next', 'Superwall');
     const own = teamRepo(harness, 'shinsa', 'Personal');
@@ -45,6 +45,7 @@ describe('the team task list', () => {
     expect(listed?.task).not.toHaveProperty('share');
     expect(listed?.project).toMatchObject({ description: '', folders: [] });
     expect(listed?.project).not.toHaveProperty('teamIds');
+    expect(listed?.repo).toMatchObject({ id: shared.repoId, name: 'paywall-next', path: '' });
     expect(listed?.gates.every((gate) => gate.taskId === inTeam && gate.response === null)).toBe(true);
   });
 

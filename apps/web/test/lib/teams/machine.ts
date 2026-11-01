@@ -127,6 +127,7 @@ export function createTeamFeedTask(overrides: Partial<TeamFeedTask> = {}): TeamF
     task: createTask({ id: 'kai-task', title: 'Add the billing page', handle: 'PL-3', updatedAt: 10 }),
     gates: [],
     project: null,
+    repo: null,
     owner: 'kai',
     machine: 'Studio',
     teamId: 'team1',
