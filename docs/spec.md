@@ -428,7 +428,7 @@ task, says when the service is stopped or the machine offline, and is only yours
 not sealed end to end, since a browser loads it as plain pages (`docs/engine.md` → Sharing a preview).
 Hand off, in Share task, gives a task to someone else by a link: the first GitHub account to open it works on
 that one task on your machine from its own dashboard on app.shinsa.dev, over the same sealed channel,
-with no request to accept. The task stays yours, it reaches nothing else on the machine, what it does shows as @login, and Remove takes the
+with no request to accept. The task stays yours, it reaches nothing else on the machine, what it does shows under their first name, and Remove takes the
 task back at once (`docs/engine.md` → Handing off a task).
 Through remote access, every running service also has a private `shinsa.page` address with nothing to click: Open
 on app.shinsa.dev goes there, and only the machine's owner and members get in, so a headless server's dev servers
