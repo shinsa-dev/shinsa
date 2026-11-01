@@ -79,10 +79,8 @@ function resolveForwardHeaders(request: Request, key: string) {
 }
 
 function resolveHostOnlyCookie(header: string) {
-  return header
-    .split(';')
-    .filter((part) => !/^\s*domain\s*(=|$)/i.test(part))
-    .join(';');
+  const [pair = '', ...attributes] = header.split(';');
+  return [pair, ...attributes.filter((part) => !/^\s*domain\s*(=|$)/i.test(part))].join(';');
 }
 
 function resolveProxiedHeaders(answer: Response) {

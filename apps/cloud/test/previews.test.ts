@@ -72,6 +72,7 @@ describe('a preview link', () => {
               ['content-type', 'text/html'],
               ['set-cookie', 'a=1'],
               ['set-cookie', 'b=2; Path=/; Domain=shinsa.page; Secure'],
+              ['set-cookie', 'domain=foo; Path=/'],
             ],
           })
         : new Response(null, { status: 599 })
@@ -86,7 +87,7 @@ describe('a preview link', () => {
     );
     expect(answer.status).toBe(200);
     expect(await answer.text()).toBe('<p>hello</p>');
-    expect(answer.headers.getSetCookie()).toEqual(['a=1', 'b=2; Path=/; Secure']);
+    expect(answer.headers.getSetCookie()).toEqual(['a=1', 'b=2; Path=/; Secure', 'domain=foo; Path=/']);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     const call = harness.calls.at(-1);
     expect(call?.url).toBe(`https://${credentials.tunnelHost}/__preview/${PREVIEW_ID}/app/page?x=1`);

@@ -11,7 +11,8 @@ export const PREVIEW_SHARED_TITLE = 'Sharing preview';
 
 export const PREVIEW_LINK_TITLE = 'Preview link';
 
-export const PREVIEW_SHARE_DESCRIPTION = 'Anyone with the link can open this service from any browser while it runs on this machine.';
+export const PREVIEW_SHARE_DESCRIPTION =
+  'Anyone with the link can open this service from any browser while it runs on this machine.';
 
 export const PREVIEW_NEEDS_REMOTE =
   'A preview link reaches this service through remote access. Turn it on in Settings, then share the preview.';

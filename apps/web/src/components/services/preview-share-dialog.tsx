@@ -40,7 +40,12 @@ import { navigate } from '@/router.ts';
 function PreviewLink({ url }: { url: string }) {
   return (
     <div className='relative w-full'>
-      <Input readOnly value={url} aria-label={PREVIEW_LINK_TITLE} className='selectable pr-8 read-only:border-0' />
+      <Input
+        readOnly
+        value={url}
+        aria-label={PREVIEW_LINK_TITLE}
+        className='selectable pr-8 read-only:border-0'
+      />
       <CopyButton text={url} className='absolute top-1/2 right-0.5 -translate-y-1/2' />
     </div>
   );

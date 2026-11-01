@@ -78,7 +78,9 @@ describe('Share preview', () => {
     const link = (await screen.findByRole('textbox', { name: 'Preview link' })) as HTMLInputElement;
     expect(link.value).toBe(URL);
     expect(link.readOnly).toBe(true);
-    expect(screen.getByText(/while it runs on this machine\. Sharing ends when the task is done\./)).toBeTruthy();
+    expect(
+      screen.getByText(/while it runs on this machine\. Sharing ends when the task is done\./)
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(URL));
     fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
