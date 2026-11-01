@@ -32,7 +32,7 @@ function describeModel(provider: string, model: string | null) {
   return model ? `${provider}, ${model}` : `${provider}, its default model`;
 }
 
-export function listFeedbackContext(state: ShinsaState, entry: Feedback): string[] {
+function listFeedbackContext(state: ShinsaState, entry: Feedback): string[] {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
   const task = entry.taskId ? state.tasks[entry.taskId] : undefined;
   if (entry.source !== 'agent' || !task) return [];

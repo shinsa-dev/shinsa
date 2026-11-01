@@ -9,7 +9,7 @@ export const NO_DRAFT = 'Your agent could not draft this issue. Write the note a
 export const STOPPED_WHILE_FILING =
   'Shinsa stopped while it was opening this issue on GitHub. Check the issues on GitHub before you open it again.';
 
-export const FEEDBACK_SYNC_MS = 10 * 60 * 1000;
+const FEEDBACK_SYNC_MS = 10 * 60 * 1000;
 
 export type FeedbackEnvironment = (state: ShinsaState, entry: Feedback) => string[];
 
