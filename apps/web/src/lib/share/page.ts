@@ -1,10 +1,11 @@
-import type { SharedTask, Task } from '@shinsa/core';
+import { hasShareGroup, type SharedTask, type Task } from '@shinsa/core';
 import { listTaskTabs, type TaskTab } from '@/lib/tasks/tabs.ts';
 
 export const SHARED_READ_ONLY_NOTE = 'Read-only';
 
 export function listSharedTabs(task: Task, shared: SharedTask): TaskTab[] {
-  return listTaskTabs(task).filter((tab) => tab !== 'chat' && (tab !== 'code' || shared.code));
+  const chat = hasShareGroup(shared.preset, 'live');
+  return listTaskTabs(task).filter((tab) => (tab !== 'chat' || chat) && (tab !== 'code' || shared.code));
 }
 
 export function describeSharedBy(shared: SharedTask, viewer: string | null) {

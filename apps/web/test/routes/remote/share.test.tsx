@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ShareLiveView, Task } from '@shinsa/core';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
 import { SharePage } from '@/routes/remote/share.tsx';
 import { createSharedTask, DIFF } from '../../lib/share/fixtures.ts';
 import { createFakeShareMachine, type FakeShareMachine, SHARE_LINK } from '../../lib/share/machine.ts';
+import { createAgentEntry } from '../../support/chat.ts';
 import { createTask } from '../../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
@@ -51,9 +52,12 @@ function liveView(overrides: Partial<ShareLiveView['shared']> = {}): ShareLiveVi
 
 function connect(session: Response | null = null) {
   const machine = createFakeShareMachine();
-  globalThis.WebSocket = function createFakeSocket(url: string) {
-    return machine.options.createSocket(url);
-  } as unknown as typeof WebSocket;
+  globalThis.WebSocket = Object.assign(
+    function createFakeSocket(url: string) {
+      return machine.options.createSocket(url);
+    },
+    { OPEN: ORIGINAL_SOCKET.OPEN }
+  ) as unknown as typeof WebSocket;
   spyOn(URL, 'createObjectURL').mockImplementation(((blob: Blob) => {
     const url = `blob:test-${crypto.randomUUID()}`;
     blobs.set(url, blob.text());
@@ -104,7 +108,7 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(screen.getAllByText('Summary').length).toBeGreaterThan(0);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
     expect((await screen.findAllByText(/keys\.ts/, undefined, CODE_TAB_LOADED)).length).toBeGreaterThan(0);
   });
@@ -120,6 +124,54 @@ describe('the shared page on app.shinsa.dev', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
     fireEvent.click((await screen.findAllByText(/keys\.ts/, undefined, CODE_TAB_LOADED))[0] as HTMLElement);
     expect((await screen.findAllByText(/const ttl = 24/)).length).toBeGreaterThan(0);
+  });
+
+  it('a Status link shows a small status card with its written description, and no request, plan, names, tabs or code', async () => {
+    const machine = connect();
+    const view = liveView({
+      preset: 'status',
+      owner: null,
+      machine: null,
+      repository: null,
+      repo: null,
+      project: null,
+      code: false,
+      runs: [],
+      gates: [],
+    });
+    const task = view.shared.task;
+    const plan = { version: 1, body: '', document: { goal: 'Keys rotate every week.', phases: [] } } as never;
+    view.shared = {
+      ...view.shared,
+      description: 'Keys now rotate every week.',
+      update: 'deploying',
+      task: { ...task, request: 'Rotate the API keys weekly.', plan },
+    };
+    view.files = {};
+    await open(machine, view);
+    expect(screen.getByText('Status')).toBeTruthy();
+    expect(screen.getAllByText('Deploying')).toHaveLength(2);
+    expect(within(screen.getByRole('list', { name: 'Progress' })).getByText('Live')).toBeTruthy();
+    expect(screen.getByText(/isn’t live yet/)).toBeTruthy();
+    expect(screen.queryByText('Rotating a key keeps the old one for a day.')).toBeNull();
+    expect(screen.getByText('Keys now rotate every week.')).toBeTruthy();
+    expect(screen.queryByText('Keys rotate every week.')).toBeNull();
+    expect(screen.queryByText('Rotate the API keys weekly.')).toBeNull();
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByText(/Shared by/)).toBeNull();
+  });
+
+  it('a Default link has a Chat tab with the agents’ streamed output and nothing to type in', async () => {
+    const machine = connect();
+    const view = liveView({ preset: 'standard' });
+    view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-everything' } };
+    view.files = { ...view.files, 'transcript-run-1-0': { version: '1', type: 'text/plain' } };
+    await open(machine, view);
+    const entry = { ...createAgentEntry('Rotating the keys now.', 'final', 2, 'e1') };
+    await machine.sendFile('transcript-run-1-0', '1', 'text/plain', JSON.stringify([entry]));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    expect(await screen.findByText('Rotating the keys now.')).toBeTruthy();
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 
   it('a task with no repository has no Code tab', async () => {
