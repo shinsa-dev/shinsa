@@ -3072,7 +3072,8 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `Domain=shinsa.page` cookie that other previews' servers receive. The preview's own key is safe from it: a
   `__Host-` cookie cannot be set or replaced from another host. That is also why the Worker does not add the app's
   security headers to a preview: the page is the dev server's own. Listing `shinsa.page` on the Public Suffix List
-  (a pull request by its owner, with the `_psl` TXT record the list asks for) makes each label
+  (its owner's pull request on the Public Suffix List adding it to the private section, and a `_psl.shinsa.page` TXT
+  record whose value is that pull request's URL, which the list checks) makes each label
   its own site, which ends both the shared cookie and the same-site trust between previews.
 - **Never indexed.** Every host under `shinsa.page` answers `/robots.txt` with `Disallow: /` before any key is
   checked, so crawlers never fetch a preview, and every answer there, the Worker's errors and a dev server's pages
