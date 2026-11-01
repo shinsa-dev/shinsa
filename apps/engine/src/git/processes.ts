@@ -36,7 +36,7 @@ export async function listProcessesIn(path: string) {
   return listWorkingFolderPids(listed.stdout, root);
 }
 
-export function listParents(table: string) {
+function listParents(table: string) {
   const parents = new Map<number, number>();
   for (const line of table.split('\n')) {
     const [pid, ppid] = line.trim().split(/\s+/).map(Number);
