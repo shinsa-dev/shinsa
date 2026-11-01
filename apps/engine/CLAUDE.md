@@ -50,7 +50,7 @@ src/
 │                        accepts, and each one's dist folder), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1`
 │                        the launchd job and the systemd unit set; EngineService, what start, stop, restart and
 │                        waking need from either), systemd.ts (createSystemdService: the `shinsa.service` user
-│                        unit with Restart=always, written or refreshed on Linux by the start command and driven
+│                        unit with Restart=on-failure, written or refreshed on Linux by the start command and driven
 │                        through `systemctl --user`), restart.ts (EngineRestarter, createServiceRestarter: stop
 │                        cleanly and exit 75 for the service to start it again, now or after draining: new runs
 │                        held until the working ones hand over, 15 minutes at most)
