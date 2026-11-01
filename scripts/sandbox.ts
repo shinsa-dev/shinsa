@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import {
@@ -27,6 +27,7 @@ import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import { Terminals } from '../apps/engine/src/terminals/index.ts';
+import { resolveServiceRunIn } from '../apps/engine/src/terminals/routes.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
@@ -75,7 +76,7 @@ const PORT = Number(Bun.env.PORT ?? 5195);
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
 const PREVIEW_ZONE = `http://localhost:${PORT}`;
-const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
+const SANDBOX_DIR = Bun.env.SHINSA_SANDBOX_DIR ?? join('/tmp', `shinsa-sandbox-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
@@ -250,13 +251,12 @@ interface ServicePreview {
   port: number;
 }
 
-interface DemoService {
+interface SharedService {
+  engine: Engine;
   terminals: Terminals;
   serviceId: string;
   taskId: string;
 }
-
-const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/remote-preview-demo.ts')}`;
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -266,7 +266,7 @@ function createShareLink(instanceId: string): ShareLink {
 }
 
 function seedStudio() {
-  const seedDir = join(PREVIEW_DIR, 'studio');
+  const seedDir = join(SANDBOX_DIR, 'studio');
   const seeded = Bun.spawnSync(['bun', join(ROOT, 'scripts/seed.ts')], {
     env: { ...Bun.env, SHINSA_SEED_DIR: seedDir },
     stdout: 'inherit',
@@ -277,7 +277,7 @@ function seedStudio() {
 }
 
 function prepareMachine(id: string) {
-  const dataDir = join(PREVIEW_DIR, id, 'data');
+  const dataDir = join(SANDBOX_DIR, id, 'data');
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(
     join(dataDir, 'config.json'),
@@ -630,23 +630,20 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
 
 async function createServicePreview(
   studio: Awaited<ReturnType<typeof startMachine>>
-): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
+): Promise<{ preview: ServicePreview; shared: SharedService }> {
   const { engine, terminals } = studio;
+  const { services } = terminals.snapshot();
   const task = Object.values(engine.state.tasks).find(
-    (entry) => entry.repoId && entry.projectId && entry.worktreePath && !isTaskSettled(entry)
+    (entry) =>
+      entry.repoId &&
+      entry.worktreePath &&
+      !isTaskSettled(entry) &&
+      services.some((each) => each.projectId === entry.projectId && each.name === 'web')
   );
-  const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
-  if (!(task?.projectId && repo)) return null;
-  const service = terminals.addService(task.projectId, {
-    name: 'web',
-    cwd: repo.path,
-    command: DEMO_COMMAND,
-    env: {},
-    previewUrl: 'http://localhost:{port}/',
-    portVariable: 'PORT',
-  });
-  const demo: DemoService = { terminals, serviceId: service.id, taskId: task.id };
-  startDemoService(demo);
+  const service = services.find((entry) => entry.projectId === task?.projectId && entry.name === 'web');
+  if (!(task && service)) throw new Error('No seeded task has a web service to share.');
+  const shared: SharedService = { engine, terminals, serviceId: service.id, taskId: task.id };
+  startSharedService(shared);
   await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === service.id);
@@ -661,16 +658,19 @@ async function createServicePreview(
           handle: task.handle ?? task.id,
           port: studio.machine.port,
         },
-        demo,
+        shared,
       };
-    if (preview?.failure) throw new Error(`Sharing the demo preview failed: ${preview.failure}`);
+    if (preview?.failure) throw new Error(`Sharing the web service failed: ${preview.failure}`);
     await Bun.sleep(100);
   }
-  throw new Error('Sharing the demo preview did not finish.');
+  throw new Error('Sharing the web service did not finish.');
 }
 
-function startDemoService(demo: DemoService) {
-  demo.terminals.startService(demo.serviceId, { cwd: ROOT, place: 'worktree', taskId: demo.taskId });
+function startSharedService(shared: SharedService) {
+  const { engine, terminals, serviceId, taskId } = shared;
+  const run = resolveServiceRunIn(engine.state, terminals.findService(serviceId), taskId, terminals);
+  if (!run) throw new Error('The shared web service cannot run in its task.');
+  terminals.startService(serviceId, run);
 }
 
 function createPreviewWorld(machines: Machine[]): CloudWorld {
@@ -724,12 +724,27 @@ async function respondEnroll(machine: Machine, url: URL) {
   return Response.redirect(url.searchParams.has('on') ? target.replace('#', '?on=machine#') : target, 302);
 }
 
-const DEMO_TOGGLE = /^\/__preview\/demo\/(start|stop)$/;
+interface SandboxSection {
+  title: string;
+  links: { label: string; url: string }[];
+}
 
-async function toggleDemoService(demo: DemoService | null, url: URL) {
-  if (demo && url.pathname.endsWith('/start')) startDemoService(demo);
-  if (demo && url.pathname.endsWith('/stop')) await demo.terminals.stopService(demo.serviceId, demo.taskId);
-  return new Response(`The web service ${url.pathname.endsWith('/stop') ? 'stopped' : 'started'}.`);
+interface SandboxPageModule {
+  serializeSandboxPage: (sections: SandboxSection[], stylesheet: string) => string;
+}
+
+const SANDBOX_PATH = '/sandbox';
+
+const SERVICE_TOGGLE = new RegExp(`^${SANDBOX_PATH}/service/(start|stop)$`);
+
+const ENROLL = new RegExp(`^${SANDBOX_PATH}/enroll/([a-z]+)$`);
+
+const TUNNEL = new RegExp(`^${SANDBOX_PATH}/tunnel/([a-z]+)(/share|/team)?$`);
+
+async function toggleSharedService(shared: SharedService, url: URL) {
+  if (url.pathname.endsWith('/start')) startSharedService(shared);
+  if (url.pathname.endsWith('/stop')) await shared.terminals.stopService(shared.serviceId, shared.taskId);
+  return Response.redirect(`${ORIGIN}${SANDBOX_PATH}`, 303);
 }
 
 function respondPreviewHost(
@@ -774,10 +789,17 @@ function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
       { status: 404 }
     );
   const answer: ShareConnectResponse = {
-    url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}`,
+    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${machine.id}`,
     online: true,
   };
   return Response.json(answer);
+}
+
+function findRemoteStylesheet() {
+  const html = readFileSync(join(REMOTE_WEB, 'index.html'), 'utf8');
+  const href = /<link rel="stylesheet"[^>]*href="([^"]+\.css)"/.exec(html)?.[1];
+  if (!href) throw new Error('The remote build has no stylesheet.');
+  return href;
 }
 
 function respondStatic(pathname: string) {
@@ -790,91 +812,134 @@ function respondStatic(pathname: string) {
   });
 }
 
-function listPreviewLinks(
+function listSandboxSections(
   machines: Machine[],
   teammate: Machine,
   shares: PreviewShare[],
   teamTask: string | null,
-  preview: ServicePreview | null
-) {
+  preview: ServicePreview
+): SandboxSection[] {
+  const studioPort = machines[0]?.port;
   return [
-    ['The merged dashboard (always signed in)', `${ORIGIN}${REMOTE_PATHS.app}`],
-    ...(preview
-      ? [
-          [
-            `${preview.handle} on Studio's own app, no sign-in: its Services, Share preview and Stop sharing`,
-            `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
-          ],
-          [
-            `The shared preview of ${preview.handle}'s web service, with live updates over a WebSocket`,
-            preview.url,
-          ],
-          ...(preview.privateUrl
-            ? [
-                [
-                  `${preview.handle} through remote access: Open on its web service goes to the private address`,
-                  `${ORIGIN}/tasks/${preview.handle}`,
-                ],
-                [
-                  `${preview.handle}'s web service at its private address, as Open goes there`,
-                  `${ORIGIN}${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: preview.privateUrl })}`,
-                ],
-                ['The private address without signing in through Open (not shared)', preview.privateUrl],
-              ]
-            : []),
-          ['Stop the web service (the preview then says it is not running)', `${ORIGIN}/__preview/demo/stop`],
-          ['Start the web service again', `${ORIGIN}/__preview/demo/start`],
-          ['A preview link that no longer works', `http://${'a'.repeat(32)}.localhost:${PORT}/`],
-        ]
-      : []),
-    [
-      'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
-      `${ORIGIN}${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
-    ],
-    ...machines.map((machine) => [
-      `Add this device to ${machine.name} (it is let in at once: the stand-in accepts every request)`,
-      `${ORIGIN}/__preview/enroll/${machine.id}`,
-    ]),
-    ...machines.map((machine) => [
-      `Add this device to ${machine.name} as the machine it sits on`,
-      `${ORIGIN}/__preview/enroll/${machine.id}?on=machine`,
-    ]),
-    ['All tasks, each with its machine', `${ORIGIN}/tasks`],
-    ['Settings, with Machines', `${ORIGIN}/settings`],
-    ['Approving a pairing (code K7PQ)', `${ORIGIN}${REMOTE_PATHS.pairPage}?code=K7PQ`],
-    ...shares.flatMap((share) => [
-      [`${share.label} (a live link, no sign-in)`, share.url],
-      [`The same task, ${share.handle}, on Studio`, `http://${HOST}:${share.port}/tasks/${share.handle}`],
-    ]),
-    ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
-    [
-      `Studio's own app: the focus menu's Teams section, then ${TEAM.name}, shows Kai's tasks beside yours`,
-      `http://${HOST}:${machines[0]?.port}/tasks`,
-    ],
-    [
-      `Studio's own app: Settings, Teams, with Inês asking to join`,
-      `http://${HOST}:${machines[0]?.port}/settings`,
-    ],
-    ...(teamTask
-      ? [
-          [
-            `One of Kai's tasks on Studio's own app, read-only`,
-            `http://${HOST}:${machines[0]?.port}${teamTask}`,
-          ],
-        ]
-      : []),
-    [
-      `${teammate.name}'s own app: Settings, Teams. Take Paywalls out of ${TEAM.name}, and Kai's tasks leave Studio's list at once`,
-      `http://${HOST}:${teammate.port}/settings`,
-    ],
-    [
-      `The team's join link, which gives this browser the team key so the dashboard opens Kai's tasks too`,
-      resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
-    ],
-    ...machines.map((machine) => [
-      `${machine.name}'s own app: Settings`,
-      `http://${HOST}:${machine.port}/settings`,
-    ]),
+    {
+      title: 'Each machine’s own app',
+      links: machines.flatMap((machine) => [
+        { label: `${machine.name}: Home`, url: `http://${HOST}:${machine.port}/` },
+        { label: `${machine.name}: Settings`, url: `http://${HOST}:${machine.port}/settings` },
+      ]),
+    },
+    {
+      title: 'The remote dashboard, always signed in',
+      links: [
+        { label: 'The merged dashboard', url: `${ORIGIN}${REMOTE_PATHS.app}` },
+        { label: 'All tasks, each with its machine', url: `${ORIGIN}/tasks` },
+        { label: 'Settings, with Machines', url: `${ORIGIN}/settings` },
+      ],
+    },
+    {
+      title: 'Adding a device and pairing',
+      links: [
+        ...machines.flatMap((machine) => [
+          {
+            label: `Add this device to ${machine.name}`,
+            url: `${ORIGIN}${SANDBOX_PATH}/enroll/${machine.id}`,
+          },
+          {
+            label: `Add this device to ${machine.name} as the machine it sits on`,
+            url: `${ORIGIN}${SANDBOX_PATH}/enroll/${machine.id}?on=machine`,
+          },
+        ]),
+        { label: 'Approve a pairing (code K7PQ)', url: `${ORIGIN}${REMOTE_PATHS.pairPage}?code=K7PQ` },
+        {
+          label: 'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview)',
+          url: `${ORIGIN}${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
+        },
+      ],
+    },
+    {
+      title: 'Shared tasks, live links with no sign-in',
+      links: [
+        ...shares.flatMap((share) => [
+          { label: share.label, url: share.url },
+          {
+            label: `The same task, ${share.handle}, on Studio`,
+            url: `http://${HOST}:${share.port}/tasks/${share.handle}`,
+          },
+        ]),
+        {
+          label: 'A share link that no longer works',
+          url: serializeShareUrl(ORIGIN, createShareLink('studio')),
+        },
+      ],
+    },
+    {
+      title: 'The shared web service',
+      links: [
+        {
+          label: `${preview.handle} on Studio, with its Services, Share preview and Stop sharing`,
+          url: `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
+        },
+        {
+          label: `The shared preview of ${preview.handle}’s web service, with live updates`,
+          url: preview.url,
+        },
+        {
+          label: 'Stop the web service (the preview then says it is not running)',
+          url: `${ORIGIN}${SANDBOX_PATH}/service/stop`,
+        },
+        { label: 'Start the web service again', url: `${ORIGIN}${SANDBOX_PATH}/service/start` },
+        ...(preview.privateUrl
+          ? [
+              {
+                label: `${preview.handle} through remote access: Open on its web service goes to the private address`,
+                url: `${ORIGIN}/tasks/${preview.handle}`,
+              },
+              {
+                label: `${preview.handle}’s web service at its private address, as Open goes there`,
+                url: `${ORIGIN}${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: preview.privateUrl })}`,
+              },
+              {
+                label: 'The private address without signing in through Open (not shared)',
+                url: preview.privateUrl,
+              },
+            ]
+          : []),
+        {
+          label: 'A preview link that no longer works',
+          url: `http://${'a'.repeat(32)}.localhost:${PORT}/`,
+        },
+      ],
+    },
+    {
+      title: 'Teams',
+      links: [
+        {
+          label: `Studio: the focus menu’s Teams section, then ${TEAM.name}, shows Kai’s tasks beside yours`,
+          url: `http://${HOST}:${studioPort}/tasks`,
+        },
+        {
+          label: 'Studio: Settings, Teams, with Inês asking to join',
+          url: `http://${HOST}:${studioPort}/settings`,
+        },
+        ...(teamTask
+          ? [
+              {
+                label: 'One of Kai’s tasks on Studio, read-only',
+                url: `http://${HOST}:${studioPort}${teamTask}`,
+              },
+            ]
+          : []),
+        {
+          label: `${teammate.name}: Settings, Teams. Take Paywalls out of ${TEAM.name}, and Kai’s tasks leave Studio’s list at once`,
+          url: `http://${HOST}:${teammate.port}/settings`,
+        },
+        {
+          label:
+            'The team’s join link, which gives this browser the team key so the dashboard opens Kai’s tasks too',
+          url: resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
+        },
+      ],
+    },
   ];
 }
 
@@ -886,7 +951,7 @@ async function createConnect(machine: Machine): Promise<ConnectResponse> {
     expiresAt,
   });
   return {
-    url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
+    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
     expiresAt,
   };
 }
@@ -958,7 +1023,7 @@ async function respondTeamConnect(request: Request, viewer: RemoteUser, teammate
     expiresAt,
   });
   const answer: ConnectResponse = {
-    url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}/__preview/tunnel/${target.id}`, token),
+    url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${target.id}`, token),
     expiresAt,
   };
   return Response.json(answer);
@@ -1068,7 +1133,7 @@ async function main() {
     throw new Error(
       'Build the web app first: bun run --cwd apps/web build && bun run --cwd apps/web build:remote'
     );
-  rmSync(PREVIEW_DIR, { recursive: true, force: true });
+  rmSync(SANDBOX_DIR, { recursive: true, force: true });
   const studioData = seedStudio();
   const laptopData = prepareMachine('laptop');
   const studio = await startMachine('studio', 'Studio', studioData);
@@ -1088,9 +1153,14 @@ async function main() {
   const shares = await createPreviewShares(studio);
   const [teamTask] = Object.values(teammate.engine.state.tasks);
   const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
-  const shared = await createServicePreview(studio);
-  const preview = shared?.preview ?? null;
-  const demo = shared?.demo ?? null;
+  const { preview, shared } = await createServicePreview(studio);
+  const { serializeSandboxPage }: SandboxPageModule = await import(
+    join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')
+  );
+  const page = serializeSandboxPage(
+    listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview),
+    findRemoteStylesheet()
+  );
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,
@@ -1099,13 +1169,15 @@ async function main() {
       const url = new URL(request.url);
       if (isPreviewHost(url.host, PREVIEW_ZONE))
         return respondPreviewHost(request, url, machines, world, server);
-      if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
+      if (url.pathname === SANDBOX_PATH)
+        return new Response(page, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+      if (SERVICE_TOGGLE.test(url.pathname)) return toggleSharedService(shared, url);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
-      const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
+      const enroll = ENROLL.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return respondEnroll(enrolling, url);
-      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share|\/team)?$/.exec(url.pathname);
+      const tunnel = TUNNEL.exec(url.pathname);
       const machine = teammates.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {
         const token = encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '');
@@ -1134,8 +1206,7 @@ async function main() {
       },
     },
   });
-  for (const [label, url] of listPreviewLinks(machines, teammate.machine, shares, teamTaskPath, preview))
-    console.info(`${label}: ${url}`);
+  console.info(`The sandbox: ${ORIGIN}${SANDBOX_PATH}`);
 }
 
 await main();

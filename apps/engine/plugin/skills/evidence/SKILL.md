@@ -157,7 +157,9 @@ When the project has services (`list_services`), the human can look at the chang
 the last hand-over, start each service that shows the change with `run_service` and leave it running: each run of a
 task gets a port of its own, and the start reports the run's preview URL. Add the path to the screen to check and
 attach it: `{ "kind": "preview", "url": "http://localhost:4123/tasks/SW-17", "title": "Task page, Services fact" }`.
-Name that link as the first step of How to test. The preview stays up while the task waits for review and stops when
+Attach one preview per screen that shows the change, each the direct URL of that screen (its task, tab and state in
+the path and query), never a start page or an index the human has to click through. Name those links in How to
+test. The preview stays up while the task waits for review and stops when
 the task is finished, so never stop it yourself. No preview URL in the start's reply means the service has none set:
 say so and attach the screenshots alone. When no service shows the change, add the one that would with
 `add_service` (with its `preview_url`) and then start it.
