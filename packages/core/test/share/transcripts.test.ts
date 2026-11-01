@@ -3,8 +3,11 @@ import {
   CHAT_PROTOCOL_VERSION,
   type ChatEntry,
   type ChatEvent,
+  countShareTranscriptPages,
   redactTranscript,
+  redactTranscriptPage,
   resolveShareTranscriptFile,
+  SHARE_TRANSCRIPT_PAGE,
 } from '../../src/index.ts';
 
 let next = 0;
@@ -97,7 +100,30 @@ describe('a shared transcript', () => {
     expect(JSON.stringify(shared)).not.toContain(SECRET);
   });
 
-  test('names a run transcript file after the run', () => {
-    expect(resolveShareTranscriptFile('run-1')).toBe('transcript-run-1');
+  test('names each page of a run transcript after the run', () => {
+    expect(resolveShareTranscriptFile('run-1', 0)).toBe('transcript-run-1-0');
+    expect(countShareTranscriptPages(0)).toBe(0);
+    expect(countShareTranscriptPages(SHARE_TRANSCRIPT_PAGE)).toBe(1);
+    expect(countShareTranscriptPages(SHARE_TRANSCRIPT_PAGE + 1)).toBe(2);
+  });
+
+  test('pages a transcript, and keeps a private call’s result out of a later page', () => {
+    const filler = Array.from({ length: SHARE_TRANSCRIPT_PAGE - 1 }, (_, index) =>
+      entry({ type: 'agent', phase: 'interim', text: `Step ${index}` })
+    );
+    const entries = [
+      ...filler,
+      entry({
+        type: 'tool_call',
+        callId: 'a',
+        tool: { kind: 'shinsa', name: 'ask', args: { question: 'Which?' } },
+      }),
+      entry({ type: 'tool_result', callId: 'a', status: 'ok', output: SECRET, images: [] }),
+      entry({ type: 'agent', phase: 'final', text: 'Done.' }),
+    ];
+    expect(redactTranscriptPage(entries, 0)).toHaveLength(SHARE_TRANSCRIPT_PAGE - 1);
+    const second = redactTranscriptPage(entries, 1);
+    expect(second.map((item) => item.type)).toEqual(['agent']);
+    expect(JSON.stringify(second)).not.toContain(SECRET);
   });
 });

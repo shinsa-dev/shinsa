@@ -26,7 +26,7 @@ export interface SharedView {
   updatedAt: number;
   diffUrl: string | null;
   codeUrl: string | null;
-  transcripts: Record<string, string>;
+  transcripts: Record<string, string[]>;
 }
 
 export function resolveSharedTaskId(taskId: string) {
@@ -43,8 +43,13 @@ function listTranscriptUrls(source: SharedSource) {
   if (!hasShareGroup(source.shared.preset, 'live')) return {};
   return Object.fromEntries(
     source.shared.runs.flatMap((run) => {
-      const url = source.resolveFileUrl(resolveShareTranscriptFile(run.id));
-      return url ? [[run.id, url]] : [];
+      const urls: string[] = [];
+      for (let page = 0; ; page += 1) {
+        const url = source.resolveFileUrl(resolveShareTranscriptFile(run.id, page));
+        if (!url) break;
+        urls.push(url);
+      }
+      return urls.length > 0 ? [[run.id, urls]] : [];
     })
   );
 }

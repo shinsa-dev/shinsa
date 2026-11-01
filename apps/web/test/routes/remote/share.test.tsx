@@ -145,10 +145,10 @@ describe('the shared page on app.shinsa.dev', () => {
     const machine = connect();
     const view = liveView({ preset: 'everything' });
     view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-everything' } };
-    view.files = { ...view.files, 'transcript-run-1': { version: '1', type: 'text/plain' } };
+    view.files = { ...view.files, 'transcript-run-1-0': { version: '1', type: 'text/plain' } };
     await open(machine, view);
     const entry = { ...createAgentEntry('Rotating the keys now.', 'final', 2, 'e1') };
-    await machine.sendFile('transcript-run-1', '1', 'text/plain', JSON.stringify([entry]));
+    await machine.sendFile('transcript-run-1-0', '1', 'text/plain', JSON.stringify([entry]));
     fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
     expect(await screen.findByText('Rotating the keys now.')).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();

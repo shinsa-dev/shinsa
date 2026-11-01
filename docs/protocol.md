@@ -1280,8 +1280,8 @@ sends, sealed frames of `ShareMessage`: `view` (a `ShareLiveView`: `shared`, `fi
 `{ version, type }`, `updatedAt`), `file`, `body` and `end` (a file in 256 KB chunks, one of `SHARE_FILE_TYPES`,
 `SHARE_FILE_BYTES` at most) and `closed` (the link ended, with the reason). A file's id is its evidence id, `diff`
 (`SHARE_DIFF_FILE`), `code` (`SHARE_CODE_FILE`, `{ files: { <path>: <content at the head> } }`) or, for an
-Everything share, `transcript-<run id>` (`resolveShareTranscriptFile`: the run's `ChatEntry[]` after
-`redactTranscript`, versioned by its entry count).
+Everything share, `transcript-<run id>-<page>` (`resolveShareTranscriptFile`: one page of 200 of the run's
+`ChatEntry[]` after `redactTranscriptPage`, versioned by its entry count, so a full page is sent once).
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine

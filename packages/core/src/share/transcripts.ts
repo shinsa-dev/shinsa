@@ -3,6 +3,8 @@ import type { ShinsaToolName } from '../domain/tools.ts';
 
 export const SHARE_TRANSCRIPT_PREFIX = 'transcript-';
 
+export const SHARE_TRANSCRIPT_PAGE = 200;
+
 const PRIVATE_SHINSA_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
   'ask',
   'request_secret',
@@ -17,8 +19,12 @@ const SHARED_NOTICES: ReadonlySet<ChatNotice['kind']> = new Set<ChatNotice['kind
   'delegation',
 ]);
 
-export function resolveShareTranscriptFile(runId: string) {
-  return `${SHARE_TRANSCRIPT_PREFIX}${runId}`;
+export function resolveShareTranscriptFile(runId: string, page: number) {
+  return `${SHARE_TRANSCRIPT_PREFIX}${runId}-${page}`;
+}
+
+export function countShareTranscriptPages(entries: number) {
+  return Math.ceil(entries / SHARE_TRANSCRIPT_PAGE);
 }
 
 function isPrivateTool(tool: ChatTool) {
@@ -52,7 +58,15 @@ function redactEntry(entry: ChatEntry, privateCalls: Set<string>): ChatEntry | n
   }
 }
 
-export function redactTranscript(entries: readonly ChatEntry[]): ChatEntry[] {
+export function redactTranscript(entries: readonly ChatEntry[], from = 0): ChatEntry[] {
   const privateCalls = new Set<string>();
-  return entries.flatMap((entry) => redactEntry(entry, privateCalls) ?? []);
+  return entries.flatMap((entry, index) => {
+    const redacted = redactEntry(entry, privateCalls);
+    return redacted && index >= from ? [redacted] : [];
+  });
+}
+
+export function redactTranscriptPage(entries: readonly ChatEntry[], page: number) {
+  const end = (page + 1) * SHARE_TRANSCRIPT_PAGE;
+  return redactTranscript(entries.slice(0, end), page * SHARE_TRANSCRIPT_PAGE);
 }

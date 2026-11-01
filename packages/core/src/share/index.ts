@@ -60,17 +60,17 @@ const CODE_STATES: ReadonlySet<PullRequest['state']> = new Set(['open', 'merged'
 
 const PRIVATE_ACTIVITY: ReadonlySet<ActivityKind> = new Set(['message', 'question', 'answer', 'account']);
 
-function scrubText(text: string) {
+function scrubText(text: string, kept: ReadonlySet<string>) {
   return text
-    .replace(SHINSA_LINK, (link, label: string, kind: string) => (SHARED_LINK_KINDS.has(kind) ? link : label))
-    .replace(SHINSA_URI, (uri, kind: string) => (SHARED_LINK_KINDS.has(kind) ? uri : ''));
+    .replace(SHINSA_LINK, (link, label: string, kind: string) => (kept.has(kind) ? link : label))
+    .replace(SHINSA_URI, (uri, kind: string) => (kept.has(kind) ? uri : ''));
 }
 
-function scrubValue<T>(value: T): T {
-  if (typeof value === 'string') return scrubText(value) as T;
-  if (Array.isArray(value)) return value.map((item) => scrubValue(item)) as T;
+function scrubValue<T>(value: T, kept: ReadonlySet<string>): T {
+  if (typeof value === 'string') return scrubText(value, kept) as T;
+  if (Array.isArray(value)) return value.map((item) => scrubValue(item, kept)) as T;
   if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubValue(item)])) as T;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubValue(item, kept)])) as T;
 }
 
 type Grants = (group: ShareGroup) => boolean;
@@ -276,13 +276,17 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task) => Partial<Task
   identity: (task) => ({ handle: task.handle ?? null, title: task.title, size: task.size }),
   requests: (task) => ({ request: splitMessageAttachments(task.request).text }),
   progress: (task) => ({
-    stageReason: task.stageReason,
     cancelledFrom: task.cancelledFrom ?? null,
     phases: task.phases,
     ...(task.pipeline ? { pipeline: task.pipeline } : {}),
   }),
   summary: (task) => ({ summary: task.summary }),
-  people: (task) => ({ projectId: task.projectId ?? null, repoId: task.repoId, branch: task.branch }),
+  people: (task) => ({
+    projectId: task.projectId ?? null,
+    repoId: task.repoId,
+    branch: task.branch,
+    stageReason: task.stageReason,
+  }),
   plan: (task) => ({ triageDecisions: task.triageDecisions ?? null }),
   reports: (task) => ({ phaseReports: task.phaseReports.map(redactPhaseReport), fixRounds: task.fixRounds }),
   review: (task) => ({
@@ -417,16 +421,16 @@ function redactEvidence(evidence: Evidence): Evidence | null {
     taskId: evidence.taskId,
     runId: null,
     kind: evidence.kind,
-    title: scrubText(evidence.title),
+    title: scrubText(evidence.title, SHARED_LINK_KINDS),
     uri,
     attachedAt: evidence.attachedAt,
     ...(evidence.round ? { round: evidence.round } : {}),
-    ...(evidence.detail ? { detail: scrubText(evidence.detail) } : {}),
+    ...(evidence.detail ? { detail: scrubText(evidence.detail, SHARED_LINK_KINDS) } : {}),
     ...(evidence.width ? { width: evidence.width } : {}),
     ...(evidence.theme ? { theme: evidence.theme } : {}),
     ...(evidence.stage ? { stage: evidence.stage } : {}),
     ...(evidence.itemId ? { itemId: evidence.itemId } : {}),
-    ...(evidence.label ? { label: scrubText(evidence.label) } : {}),
+    ...(evidence.label ? { label: scrubText(evidence.label, SHARED_LINK_KINDS) } : {}),
     ...(evidence.checkId ? { checkId: evidence.checkId } : {}),
     ...(evidence.key ? { key: evidence.key } : {}),
     ...(evidence.fixFor ? { fixFor: evidence.fixFor } : {}),
@@ -451,13 +455,14 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
   const projectId = resolveTaskProject(state, task);
   const project = people && projectId ? state.projects[projectId] : undefined;
   const repo = people && task.repoId ? state.repos[task.repoId] : undefined;
+  const links = people ? SHARED_LINK_KINDS : new Set<string>();
   return {
     preset: context.preset,
-    task: scrubValue(redactTask(task, context.preset, grants)),
+    task: scrubValue(redactTask(task, context.preset, grants), links),
     gates: grants('activity')
       ? Object.values(state.gates)
           .filter((gate) => gate.taskId === task.id)
-          .map((gate) => scrubValue(redactGate(gate)))
+          .map((gate) => scrubValue(redactGate(gate), links))
       : [],
     runs: grants('runs')
       ? Object.values(state.runs)

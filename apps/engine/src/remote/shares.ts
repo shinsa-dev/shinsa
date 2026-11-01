@@ -2,13 +2,14 @@ import { statSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
   type ChatEntry,
+  countShareTranscriptPages,
   DomainError,
   hasShareGroup,
   isShareId,
   parseShareUrl,
   parseUnifiedDiff,
   type Repo,
-  redactTranscript,
+  redactTranscriptPage,
   resolveSharedTask,
   resolveSharePreset,
   resolveShareTranscriptFile,
@@ -17,6 +18,7 @@ import {
   SHARE_FILE_BYTES,
   SHARE_ID_BYTES,
   SHARE_KEY_BYTES,
+  SHARE_TRANSCRIPT_PAGE,
   SHARED_EVIDENCE_PREFIX,
   type SharedTask,
   type ShareFileType,
@@ -165,7 +167,8 @@ export class Shares implements ShareEffects, ShareLinks {
 
   #pushTranscript(runId: string) {
     const taskId = this.#engine.state.runs[runId]?.taskId;
-    if (!taskId) return;
+    const preset = taskId ? this.#engine.state.tasks[taskId]?.share?.preset : undefined;
+    if (!(taskId && preset && hasShareGroup(preset, 'live'))) return;
     for (const channel of this.#channels) if (channel.taskId === taskId) void channel.push();
   }
 
@@ -292,18 +295,17 @@ export class Shares implements ShareEffects, ShareLinks {
 
   #listTranscriptFiles(shared: SharedTask) {
     if (!hasShareGroup(shared.preset, 'live')) return [];
-    return shared.runs.flatMap((run) => this.#resolveTranscriptFile(run.id) ?? []);
+    return shared.runs.flatMap((run) => this.#listTranscriptPages(run.id));
   }
 
-  #resolveTranscriptFile(runId: string): LiveFile | null {
+  #listTranscriptPages(runId: string): LiveFile[] {
     const count = this.#transcripts.listEntries(runId).length;
-    if (count === 0) return null;
-    return {
-      id: resolveShareTranscriptFile(runId),
-      version: String(count),
+    return Array.from({ length: countShareTranscriptPages(count) }, (_, page) => ({
+      id: resolveShareTranscriptFile(runId, page),
+      version: String(Math.min(count - page * SHARE_TRANSCRIPT_PAGE, SHARE_TRANSCRIPT_PAGE)),
       type: 'text/plain',
-      read: async () => encodeTranscript(redactTranscript(this.#transcripts.listEntries(runId))),
-    };
+      read: async () => encodeTranscript(redactTranscriptPage(this.#transcripts.listEntries(runId), page)),
+    }));
   }
 
   async #listEvidenceFiles(shared: SharedTask) {

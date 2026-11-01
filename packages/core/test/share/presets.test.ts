@@ -89,7 +89,7 @@ describe('share presets', () => {
       title: task.title,
       request: 'Fix the scroll in tab groups',
       stage: task.stage,
-      stageReason: task.stageReason,
+      stageReason: '',
       phases: task.phases,
       projectId: null,
       repoId: null,
@@ -131,6 +131,25 @@ describe('share presets', () => {
       base: null,
       pullRequest: null,
     });
+  });
+
+  test('Status sends no link to a file, branch, repository or pull request, and no stage reason naming other work', () => {
+    const harness = createHarness();
+    const taskId = reachPullRequest(harness);
+    const links =
+      'See [scroll.ts](shinsa://file/src/scroll.ts#L4) on [feat/acme](shinsa://branch/feat/acme) in shinsa://repo/acme-internal and [#7](shinsa://pr/acme-internal#7).';
+    const task = {
+      ...harness.task(taskId),
+      summary: links,
+      stageReason: 'waiting for “Acme billing” to finish',
+    };
+    const status = resolveSharedTask(harness.state, task, context('status'));
+    expect(status.task.summary).toBe('See scroll.ts on feat/acme in  and #7.');
+    expect(JSON.stringify(status)).not.toContain('shinsa://');
+    expect(JSON.stringify(status)).not.toContain('Acme billing');
+    const full = resolveSharedTask(harness.state, task, context('full'));
+    expect(full.task.summary).toBe(links);
+    expect(full.task.stageReason).toBe(task.stageReason);
   });
 
   test('Full and Everything keep what today’s share sends', () => {

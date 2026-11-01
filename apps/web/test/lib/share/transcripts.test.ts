@@ -28,8 +28,8 @@ describe('the transcripts an Everything share streams', () => {
     };
     const { result } = renderHook(() => useSharedTranscript('run-1'));
     expect(result.current).toBeNull();
-    await act(() => syncSharedTranscripts({ 'run-1': 'blob:1' }, readText));
-    await act(() => syncSharedTranscripts({ 'run-1': 'blob:1' }, readText));
+    await act(() => syncSharedTranscripts({ 'run-1': ['blob:1'] }, readText));
+    await act(() => syncSharedTranscripts({ 'run-1': ['blob:1'] }, readText));
     expect(reads).toEqual(['blob:1']);
     expect(result.current).toEqual([ENTRY]);
     expect(selectSharedTranscript(null)).toBeNull();
@@ -41,22 +41,42 @@ describe('the transcripts an Everything share streams', () => {
       fail
         ? Promise.reject(new Error('gone'))
         : Promise.resolve(JSON.stringify(url === 'blob:2' ? [ENTRY] : []));
-    await syncSharedTranscripts({ 'run-1': 'blob:1' }, readText);
+    await syncSharedTranscripts({ 'run-1': ['blob:1'] }, readText);
     expect(selectSharedTranscript('run-1')).toBeNull();
     fail = false;
     let release: (text: string) => void = () => undefined;
     const slow = syncSharedTranscripts(
-      { 'run-1': 'blob:1' },
+      { 'run-1': ['blob:1'] },
       () => new Promise((resolve) => (release = resolve))
     );
-    await syncSharedTranscripts({ 'run-1': 'blob:2' }, readText);
+    await syncSharedTranscripts({ 'run-1': ['blob:2'] }, readText);
     release('[]');
     await slow;
     expect(selectSharedTranscript('run-1')).toEqual([ENTRY]);
   });
 
+  it('joins a run’s pages, reads a page it already has only once, and forgets pages a run no longer lists', async () => {
+    const reads: string[] = [];
+    const second = createAgentEntry('Done.', 'final', 2, 'e2');
+    const texts: Record<string, string> = {
+      'blob:a': JSON.stringify([ENTRY]),
+      'blob:b1': JSON.stringify([second]),
+      'blob:b2': JSON.stringify([second, second]),
+    };
+    const readText = (url: string) => {
+      reads.push(url);
+      return Promise.resolve(texts[url] ?? '[]');
+    };
+    await syncSharedTranscripts({ 'run-1': ['blob:a', 'blob:b1'] }, readText);
+    expect(selectSharedTranscript('run-1')).toEqual([ENTRY, second]);
+    await syncSharedTranscripts({ 'run-1': ['blob:a', 'blob:b2'] }, readText);
+    expect(selectSharedTranscript('run-1')).toEqual([ENTRY, second, second]);
+    await syncSharedTranscripts({ 'run-1': ['blob:a', 'blob:b1'] }, readText);
+    expect(reads).toEqual(['blob:a', 'blob:b1', 'blob:b2', 'blob:b1']);
+  });
+
   it('keeps nothing once reset', async () => {
-    await syncSharedTranscripts({ 'run-1': 'blob:1' }, () => Promise.resolve(JSON.stringify([ENTRY])));
+    await syncSharedTranscripts({ 'run-1': ['blob:1'] }, () => Promise.resolve(JSON.stringify([ENTRY])));
     resetSharedTranscripts();
     expect(selectSharedTranscript('run-1')).toBeNull();
   });

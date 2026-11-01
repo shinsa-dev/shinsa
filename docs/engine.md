@@ -2718,7 +2718,8 @@ projection and channel will serve teams.
 
   | Part | Status | Full | Everything |
   | --- | --- | --- | --- |
-  | Title, handle, status and its reason, priority, kind of task | kept | kept | kept |
+  | Title, handle, status, priority, kind of task | kept | kept | kept |
+  | The status's reason (it can name another task, the base branch or a watchdog) | never | kept | kept |
   | Owner's login, machine, project, repository, branches | never | kept | kept |
   | The request and each round's request, without attachments (pasted images, files) | kept | kept | kept |
   | Progress: the stage, the progress track, phase titles, the rounds' timeline | kept | kept | kept |
@@ -2739,6 +2740,7 @@ projection and channel will serve teams.
   | Messages to agents (a chat reply that stood in for a gate answer included), gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never | never | never |
   | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never | never | never |
   | Links to other tasks (`shinsa://task/…`) | their label as plain text | as Status | as Status |
+  | Links to a file, pull request, branch or repository (`shinsa://file/…`, `pr`, `branch`, `repo`) in any text | their label as plain text, a bare address dropped | kept | kept |
 
   A task without a repository has no Code. Check output, tool output and text an agent wrote (a summary, a finding, a
   testing step) are kept as written; Everything sends a shell's output as it ran, so open the link yourself to read
@@ -2768,10 +2770,11 @@ projection and channel will serve teams.
   (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), both versioned by the pull
   request and its head and read from GitHub once per head. Code opens each change in the editor as its owner sees it:
   an added or removed file comes whole from the diff, and a changed file's base is rebuilt from its head and its hunks
-  (`resolveBaseContent`). An Everything share also pushes each run's transcript as the file
-  `transcript-<run id>` (`resolveShareTranscriptFile`), redacted by core's `redactTranscript` and versioned by its entry
-  count, and pushes it again whenever the run adds output (`Transcripts.subscribe`), whole, so a burst of output is one
-  update; one over 50 MB drops its oldest entries until it fits. Anything else is left out of the view rather than shown broken. The page keeps each file
+  (`resolveBaseContent`). An Everything share also pushes each run's transcript in pages of 200 entries
+  (`SHARE_TRANSCRIPT_PAGE`), each the file `transcript-<run id>-<page>` (`resolveShareTranscriptFile`), redacted by
+  core's `redactTranscriptPage` and versioned by its entry count. A full page never changes, so it is sent once; when the
+  run adds output (`Transcripts.subscribe`) only its last page is sent again, and only a link shared as Everything is
+  pushed at all. The page joins a run's pages in order; a page over 50 MB drops its oldest entries until it fits. Anything else is left out of the view rather than shown broken. The page keeps each file
   as a `blob:` address while it is open.
 - **The channel only listens.** After the hello the machine reads nothing from a link: any message closes the
   channel (1008, "A share link only listens."). It carries no HTTP requests, no app socket and no commands, and it is
