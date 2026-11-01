@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, jest, spyOn, test } from 'bun:test';
 import {
-  createLaunchdRestarter,
+  createServiceRestarter,
   EngineRestarter,
   EXIT_RESTART,
   isEngineBusy,
@@ -254,13 +254,13 @@ describe('EngineRestarter', () => {
   });
 });
 
-describe('createLaunchdRestarter', () => {
+describe('createServiceRestarter', () => {
   test('restarts by stopping cleanly and exiting with the restart code, so launchd starts it again', async () => {
     jest.useFakeTimers();
     const stub = createStubEngine();
     const steps: string[] = [];
     const exited = Promise.withResolvers<void>();
-    const restarter = createLaunchdRestarter(stub.engine, {
+    const restarter = createServiceRestarter(stub.engine, {
       byService: true,
       stop: () => {
         steps.push('stop');
@@ -279,13 +279,13 @@ describe('createLaunchdRestarter', () => {
 
   test('refuses when launchd did not start the engine, and exits the process by default', async () => {
     const stub = createStubEngine();
-    const terminal = createLaunchdRestarter(stub.engine, { byService: false, stop: () => Promise.resolve() });
+    const terminal = createServiceRestarter(stub.engine, { byService: false, stop: () => Promise.resolve() });
     await expect(terminal.request('now')).rejects.toMatchObject({ code: 'restart_unsupported' });
     const exited = Promise.withResolvers<void>();
     const exit = spyOn(process, 'exit').mockImplementation((() => exited.resolve()) as () => never);
     try {
       jest.useFakeTimers();
-      const service = createLaunchdRestarter(stub.engine, { byService: true, stop: () => Promise.resolve() });
+      const service = createServiceRestarter(stub.engine, { byService: true, stop: () => Promise.resolve() });
       await service.request('now');
       jest.advanceTimersByTime(250);
       await exited.promise;
@@ -304,7 +304,7 @@ describe('createLaunchdRestarter', () => {
         () => Promise.reject(new Error('stuck')),
       ]) {
         const exited = Promise.withResolvers<number>();
-        const restarter = createLaunchdRestarter(stub.engine, {
+        const restarter = createServiceRestarter(stub.engine, {
           byService: true,
           stop,
           exit: (code) => exited.resolve(code),

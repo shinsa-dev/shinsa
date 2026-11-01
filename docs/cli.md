@@ -160,7 +160,7 @@ $ shinsa status
 
 ### shinsa start
 
-Start the engine in the background and wait until it answers. Asks launchd to start the engine the Shinsa app set up, and waits until it answers. Any other command that needs the engine starts it the same way.
+Start the engine in the background and wait until it answers. On a Mac, asks launchd to start the engine the Shinsa app set up. On Linux, sets the engine up as a systemd user service the first time (it starts at boot once lingering is on, and again after a crash) and starts it. Then waits until it answers. Any other command that needs the engine starts it the same way.
 
 ```
 shinsa start
@@ -169,7 +169,7 @@ $ shinsa start
 
 ### shinsa stop
 
-Stop the engine cleanly. Runs resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in. An engine still running after 40 seconds is killed, and launchd starts a fresh one.
+Stop the engine cleanly. Runs resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in. An engine still running after 40 seconds is killed; on a Mac, launchd then starts a fresh one.
 
 ```
 shinsa stop

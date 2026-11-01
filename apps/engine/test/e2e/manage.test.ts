@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MessageKind, resolveTaskRounds, type TaskShape } from '@shinsa/core';
@@ -72,9 +73,11 @@ async function shinsa(...args: string[]) {
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
-      uid: 0,
-      ownsJob: () => true,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      service: createLaunchdService({
+        uid: 0,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      }),
     },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,

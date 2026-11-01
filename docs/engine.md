@@ -5205,7 +5205,7 @@ between turns; a held run does not count as busy. Shutdown marks each held run a
 command id `run.interrupt:<run>:0:<continuations>`), so the next engine starts it as a free shutdown continuation. After
 `RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
 restart that fails releases the held runs; it refuses with `restart_unsupported`
-unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
+unless launchd or systemd started this process (`createServiceRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live

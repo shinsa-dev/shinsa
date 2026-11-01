@@ -3,6 +3,7 @@ import {
   BUNDLE,
   createServerInstance,
   describeVersion,
+  type EngineService,
   type ServerHealth,
   type ShinsaBundle,
   STOP_DEADLINE_MS,
@@ -16,18 +17,10 @@ import {
   type Tone,
 } from '../terminal/index.ts';
 import { createSurfaceClient } from './api.ts';
-import { resolveEngineTarget } from './app.ts';
-
-interface LaunchctlResult {
-  ok: boolean;
-  output: string;
-}
 
 export interface EngineControl {
   bundled: boolean;
-  uid: number;
-  launchctl: (args: string[]) => Promise<LaunchctlResult>;
-  ownsJob: (printed: string) => boolean;
+  service: EngineService;
   waitMs?: number;
 }
 
@@ -119,31 +112,17 @@ async function waitForEngine(io: EngineIo, accept: (health: ServerHealth) => boo
   return health;
 }
 
-async function runLaunchctl(io: EngineControl, args: string[]) {
-  const result = await io.launchctl(args);
-  if (!result.ok) throw new Error(`launchctl ${args[0]} failed: ${result.output.trim() || 'no output'}`);
+function assertManaged(io: EngineControl) {
+  if (io.bundled) return;
+  throw new DomainError(
+    'engine_unmanaged',
+    'This shinsa runs from source, so it does not start or stop the engine. `bun dev` runs the engine and Ctrl-C stops it.'
+  );
 }
 
 async function assertEngineJob(io: EngineControl) {
-  if (!io.bundled) {
-    throw new DomainError(
-      'engine_unmanaged',
-      'This shinsa is not the one in the Shinsa app, so it does not start or stop the engine. From source, `bun dev` runs the engine and Ctrl-C stops it.'
-    );
-  }
-  const printed = await io.launchctl(['print', resolveEngineTarget(io.uid)]);
-  if (!printed.ok) {
-    throw new DomainError(
-      'engine_not_installed',
-      'The engine is not set up yet. Open the Shinsa app once and it sets it up.'
-    );
-  }
-  if (!io.ownsJob(printed.output)) {
-    throw new DomainError(
-      'engine_not_this_app',
-      'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.'
-    );
-  }
+  assertManaged(io);
+  await io.service.assertInstalled();
 }
 
 export async function startEngine(io: EngineIo) {
@@ -152,12 +131,14 @@ export async function startEngine(io: EngineIo) {
     writeOutcome(io, 'success', 'dot', 'The engine is already running.', `${describeEngine(running)}.`);
     return;
   }
-  await assertEngineJob(io);
+  assertManaged(io);
+  const note = await io.service.prepare();
   const { result: health, took } = await withProgress(io, 'Starting the engine', async () => {
-    await runLaunchctl(io, ['kickstart', resolveEngineTarget(io.uid)]);
+    await io.service.start();
     return waitForEngine(io, () => true);
   });
   writeOutcome(io, 'success', 'check', `Started the engine in ${took}.`, `${describeEngine(health)}.`);
+  if (note) writeOutcome(io, 'info', 'dot', note, '');
 }
 
 export async function stopEngine(io: EngineIo) {
@@ -172,12 +153,12 @@ export async function stopEngine(io: EngineIo) {
     if (!answer) return 'stopped';
     return answer.pid === before.pid ? null : 'replaced';
   };
-  const target = resolveEngineTarget(io.uid);
+  const { manager } = io.service;
   const { result: stop, took } = await withProgress(io, 'Stopping the engine', async () => {
-    await runLaunchctl(io, ['kill', 'SIGTERM', target]);
+    await io.service.stop();
     const clean = await waitFor(io, readStop, ENGINE_STOP_WAIT_MS);
     if (clean) return clean;
-    await runLaunchctl(io, ['kill', 'SIGKILL', target]);
+    await io.service.kill();
     if (await waitFor(io, readStop)) return 'forced';
     throw new Error(
       `The engine is still running after ${describeWait(io, ENGINE_STOP_WAIT_MS)} and a forced stop. \`shinsa logs\` shows why.`
@@ -188,7 +169,7 @@ export async function stopEngine(io: EngineIo) {
       io,
       'warning',
       'dot',
-      `The engine did not stop cleanly in ${took}, so launchd started a fresh one.`,
+      `The engine did not stop cleanly in ${took}, so ${manager} started a fresh one.`,
       'Runs it cut off resume there. `shinsa logs` shows why it failed to stop.'
     );
     return;
@@ -199,7 +180,9 @@ export async function stopEngine(io: EngineIo) {
       'warning',
       'dot',
       `Forced the engine to stop in ${took}.`,
-      'It did not stop on its own, so launchd starts a fresh one. Runs it cut off resume there. `shinsa logs` shows what held it.'
+      io.service.revivesKilled
+        ? `It did not stop on its own, so ${manager} starts a fresh one. Runs it cut off resume there. \`shinsa logs\` shows what held it.`
+        : 'It did not stop on its own. Runs it cut off resume when it starts again. `shinsa logs` shows what held it.'
     );
     return;
   }
@@ -208,7 +191,7 @@ export async function stopEngine(io: EngineIo) {
     'success',
     'check',
     `Stopped the engine in ${took}.`,
-    'Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it.'
+    'Runs it cut off resume when it starts again: `shinsa start` or any command that needs it.'
   );
 }
 
@@ -225,7 +208,7 @@ export async function restartEngine(io: EngineIo, whenIdle: boolean) {
     }
   }
   const { result: health, took } = await withProgress(io, 'Restarting the engine', async () => {
-    if (!whenIdle) await runLaunchctl(io, ['kickstart', '-k', resolveEngineTarget(io.uid)]);
+    if (!whenIdle) await io.service.restart();
     return waitForEngine(io, (answer) => answer.pid !== before?.pid);
   });
   writeOutcome(io, 'success', 'check', `Restarted the engine in ${took}.`, `${describeEngine(health)}.`);

@@ -21,7 +21,7 @@ export {
   selectLockHolder,
 } from './lock.ts';
 export {
-  createLaunchdRestarter,
+  createServiceRestarter,
   EngineRestarter,
   EXIT_RESTART,
   isEngineBusy,
@@ -30,4 +30,18 @@ export {
   STOP_DEADLINE_MS,
   stopWithin,
 } from './restart.ts';
-export { isStartedByService, SERVICE_MARKER } from './service.ts';
+export {
+  type EngineService,
+  isStartedByService,
+  runServiceOrThrow,
+  SERVICE_MARKER,
+  type ServiceResult,
+  type ServiceRunner,
+} from './service.ts';
+export {
+  createSystemdService,
+  resolveUnit,
+  resolveUnitPath,
+  SYSTEMD_UNIT,
+  type SystemdOptions,
+} from './systemd.ts';

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
@@ -46,9 +47,11 @@ async function shinsa(port: string, ...args: string[]) {
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
-      uid: 0,
-      ownsJob: () => true,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      service: createLaunchdService({
+        uid: 0,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      }),
     },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,

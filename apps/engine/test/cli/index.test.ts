@@ -8,14 +8,15 @@ import { ENGINE_STOPPED } from '../../src/cli/engine.ts';
 import { describeHelp, describeHelpAll } from '../../src/cli/help.ts';
 import {
   type CliIo,
+  createPlatformService,
   createProcessIo,
   createWakeEngine,
-  kickEngine,
   runCli,
   stopForSignal,
   trimEngineLog,
   writeOutputTo,
 } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import {
   createServerInstance,
@@ -82,9 +83,11 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
-      uid: 501,
-      ownsJob: () => true,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      service: createLaunchdService({
+        uid: 501,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      }),
     },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
@@ -171,15 +174,17 @@ describe('the engine commands', () => {
     const { io, out, errors } = createIo(startHealth(state), {
       engine: {
         bundled: true,
-        uid: 501,
-        ownsJob: () => true,
         waitMs: 2000,
-        launchctl: (args) => {
-          calls.push(args);
-          if (args[1] === '-k') state.pid = 8;
-          if (args[0] === 'kill') state.pid = null;
-          return Promise.resolve({ ok: true, output: '' });
-        },
+        service: createLaunchdService({
+          uid: 501,
+          ownsJob: () => true,
+          launchctl: (args) => {
+            calls.push(args);
+            if (args[1] === '-k') state.pid = 8;
+            if (args[0] === 'kill') state.pid = null;
+            return Promise.resolve({ ok: true, output: '' });
+          },
+        }),
       },
     });
     expect(await runCli(['start'], io)).toBe(0);
@@ -206,9 +211,11 @@ describe('the engine commands', () => {
     const { io, errors } = createIo('1', {
       engine: {
         bundled: true,
-        uid: 501,
-        ownsJob: () => true,
-        launchctl: () => Promise.resolve({ ok: true, output: '' }),
+        service: createLaunchdService({
+          uid: 501,
+          ownsJob: () => true,
+          launchctl: () => Promise.resolve({ ok: true, output: '' }),
+        }),
       },
     });
     expect(await runCli(['restart', '--when-idle'], io)).toBe(1);
@@ -695,16 +702,13 @@ describe('waking the engine', () => {
     expect(await createWakeEngine('http://127.0.0.1:1', { bundled: true, kick: kicked, waitMs: 300 })()).toBe(
       false
     );
-    expect(await kickEngine()).toBe(false);
-    const calls: string[] = [];
-    const launchctl = (args: string[]) => {
-      calls.push(args[0] ?? '');
-      return Promise.resolve({ ok: true, output: 'program = /Applications/Shinsa.app/x' });
-    };
-    expect(await kickEngine(launchctl, () => false)).toBe(false);
-    expect(calls).toEqual(['print']);
-    expect(await kickEngine(launchctl, () => true)).toBe(true);
-    expect(calls).toEqual(['print', 'print', 'kickstart']);
+  });
+
+  test('the platform picks systemd on Linux and launchd elsewhere, which leaves a job it does not own alone', async () => {
+    expect(createPlatformService('linux', { HOME: '/home/dev' }).manager).toBe('systemd');
+    const launchd = createPlatformService('darwin');
+    expect(launchd.manager).toBe('launchd');
+    expect(await launchd.kick()).toBe(false);
   });
 
   test('the engine the app starts writes to its log file and finds the shinsa command on its PATH', async () => {

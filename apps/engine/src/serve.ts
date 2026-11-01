@@ -28,7 +28,7 @@ import { resolveServerUrl, startServer } from './http/index.ts';
 import {
   acquireDataDirLock,
   BUNDLE,
-  createLaunchdRestarter,
+  createServiceRestarter,
   resolveServerInstance,
   type ServerInstance,
 } from './instance/index.ts';
@@ -281,7 +281,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     remote: services.remote,
     slack: services.slack,
-    restarter: createLaunchdRestarter(engine, {
+    restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,
       drain: services.runs,
       stop: () => services.stopShinsa?.() ?? Promise.resolve(),
