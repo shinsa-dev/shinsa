@@ -284,6 +284,18 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
+- **Feedback.** A Feedback button beside Settings in the header (Desk), the rail (Shelf) and Shelf’s bar in a narrow window, and Send feedback on
+  Shinsa in ⌘K, open the feedback popover: the note field, with Draft issue inside it, and one row per entry, its title and who it is from;
+  clicking one opens it in a dialog to read in full, edit, dismiss or open. You write a note in your own words; your agent rewrites it as a public
+  GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and
+  you read it before it opens under your GitHub account. Every issue follows one detailed template (summary, where in
+  Shinsa, what happened, what should happen, steps, why it matters, a suggested change, acceptance criteria) and ends
+  with an Environment section Shinsa adds itself (version, system, runtime, agent model, and for an agent's report the
+  kind of task and its stage), so an automation reading the issues can act on them. A check in core refuses an issue that still holds an email, a folder path, a token
+  or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
+  Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
+  from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); an opened
+  issue's row shows who sent it and, once it is closed on GitHub, Closed. The button's count is what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
   steps you pass like gates: the folders that hold your repositories (found on this machine, with their
   repository counts), the projects for them, the default model, the merge method and plan approval, signing in
@@ -1107,6 +1119,16 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Feedback (2026-11-01)
+
+- **Why.** Feedback on Shinsa had no way in but a chat with the person who builds it, and agents, who meet its
+  rough edges first, had no way to say so. Every issue is public, so the first rule is that nothing private leaves.
+- **Two passes.** A quick call rewrites the note as a generic issue, told your private words; then a pure check in
+  core (`listFeedbackLeaks`) refuses what still names you, again at the moment you open it, after your edits.
+- **Your click.** Agents propose with `report_feedback`, like memory rules; nothing opens an issue but you, with no
+  setting to change that. Feedback is an entry, not a task: no worktree, no pipeline. Issue-scoped tasks,
+  automations over the issues and shared task views are later work.
 
 ## 11. Open questions
 

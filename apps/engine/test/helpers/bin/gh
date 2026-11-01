@@ -52,6 +52,17 @@ interface FakeState {
   uploads?: number;
   failUploads?: boolean;
   uploadReply?: string;
+  issues?: FakeIssue[];
+  failIssues?: string;
+  issuesListOutput?: string;
+}
+
+interface FakeIssue {
+  number: number;
+  repo: string;
+  title: string;
+  body: string;
+  closedAt?: string;
 }
 
 const path = Bun.env.FAKE_GH_STATE || '/dev/null';
@@ -397,6 +408,44 @@ if (group === 'api' && command === 'graphql') {
     process.exit(1);
   }
   console.log(JSON.stringify(details(pull)));
+  process.exit(0);
+}
+if (group === 'issue' && command === 'create') {
+  if (state.failIssues) {
+    save();
+    console.error(state.failIssues);
+    process.exit(1);
+  }
+  const issues = (state.issues ??= []);
+  const issue: FakeIssue = {
+    number: issues.length + 1,
+    repo: flag('--repo') ?? '',
+    title: args.find((arg) => arg.startsWith('--title='))?.slice('--title='.length) ?? '',
+    body: readBody() ?? '',
+  };
+  issues.push(issue);
+  save();
+  console.log(`Creating issue in ${issue.repo}\n\nhttps://github.com/${issue.repo}/issues/${issue.number}`);
+  process.exit(0);
+}
+if (group === 'issue' && command === 'list') {
+  if (state.failIssues) {
+    save();
+    console.error(state.failIssues);
+    process.exit(1);
+  }
+  if (state.issuesListOutput !== undefined) {
+    save();
+    console.log(state.issuesListOutput);
+    process.exit(0);
+  }
+  const listed = (state.issues ?? []).map((issue) => ({
+    number: issue.number,
+    state: issue.closedAt ? 'CLOSED' : 'OPEN',
+    closedAt: issue.closedAt ?? null,
+  }));
+  save();
+  console.log(JSON.stringify(listed));
   process.exit(0);
 }
 if (group === 'api' && command === 'user') {

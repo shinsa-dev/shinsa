@@ -365,6 +365,26 @@ describe('the other read endpoints', () => {
     });
   });
 
+  test('feedback lists every entry with its task’s handle and what is still private in its draft', async () => {
+    const { read, engine } = await start();
+    await engine.dispatch({ type: 'project.write', project: { name: 'Paywalls', color: 'blue', key: 'PW' } });
+    await engine.dispatch({ type: 'feedback.write', feedbackId: null, note: 'The plan tab hides changes.' });
+    await engine.dispatch({ type: 'feedback.write', feedbackId: null, note: 'Paywalls breaks the review.' });
+    const [drafted, waiting] = Object.keys(engine.state.feedback);
+    await engine.dispatch({
+      type: 'feedback.record_draft',
+      feedbackId: drafted ?? '',
+      title: 'Review breaks in Paywalls',
+      body: 'The review tab breaks.',
+    });
+    const body = (await read('/api/feedback')).body as { feedback: { id: string }[] };
+    expect(body.feedback.find((entry) => entry.id === drafted)).toMatchObject({
+      task: null,
+      leaks: [{ kind: 'private_word', text: 'Paywalls' }],
+    });
+    expect(body.feedback.find((entry) => entry.id === waiting)).toMatchObject({ task: null, leaks: [] });
+  });
+
   test('delegations list every delegated run, or one task’s, and a missing task is refused', async () => {
     const { read, engine, runId, fixId } = await start();
     expect((await read('/api/delegations')).body).toEqual({ delegations: [] });
