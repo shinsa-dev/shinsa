@@ -606,7 +606,12 @@ describe('keeping a teammate’s last list', () => {
 
   test('never lets an older or expired signed copy replace a newer kept one', async () => {
     const desk = await createSigner();
-    const body = { teamId: 'team1', instanceId: 'inst3', tasks: [createHeldTask('desk-new')], updatedAt: 200 };
+    const body = {
+      teamId: 'team1',
+      instanceId: 'inst3',
+      tasks: [createHeldTask('desk-new')],
+      updatedAt: 200,
+    };
     const fresh = await signTeamSnapshot(desk.privateKey, body);
     const older = await signTeamSnapshot(desk.privateKey, {
       ...body,
