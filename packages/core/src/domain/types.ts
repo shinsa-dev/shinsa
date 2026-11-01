@@ -518,10 +518,20 @@ export interface Task {
 
 export type DuplicateActor = 'you' | 'shinsa';
 
+export interface TeammateOriginal {
+  teamId: string;
+  machineId: string;
+  taskId: string;
+  handle: string | null;
+  title: string;
+  owner: string | null;
+}
+
 export interface TaskDuplicate {
   of: string;
   by: DuplicateActor;
   why: string | null;
+  teammate?: TeammateOriginal | null;
 }
 
 export interface IterationRequest {

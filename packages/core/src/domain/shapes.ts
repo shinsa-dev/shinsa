@@ -53,6 +53,18 @@ export interface TriageDecisions {
   shape: AutoChoice<TaskShape> | null;
   start: AutoChoice<string[]> | null;
   priority: AutoChoice<Task['priority']> | null;
+  duplicate?: TriageDuplicateCheck | null;
+}
+
+export interface UnreachedTeammate {
+  teamId: string;
+  machineId: string;
+  name: string;
+  owner: string | null;
+}
+
+export interface TriageDuplicateCheck {
+  unreached: UnreachedTeammate[];
 }
 
 export const TASK_SHAPES: readonly TaskShape[] = [

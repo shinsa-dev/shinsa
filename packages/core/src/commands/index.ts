@@ -27,6 +27,8 @@ import type {
   TaskPriority,
   TaskShape,
   TaskSize,
+  TeammateOriginal,
+  UnreachedTeammate,
   WeeklyReading,
 } from '../domain/index.ts';
 import type {
@@ -286,6 +288,8 @@ type SystemCommand =
       shape?: TaskShape;
       priority?: TaskPriority;
       duplicateOf?: string;
+      duplicateOfTeammate?: TeammateOriginal;
+      unreached?: UnreachedTeammate[];
       reasons?: TriageReasons;
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }

@@ -1,11 +1,13 @@
-import { capitalise } from '../chat/text.ts';
+import { capitalise, describeList } from '../chat/text.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
+import { resolveTeammateMachineLabel } from '../domain/duplicates.ts';
 import type {
   FixReason,
   GateDecision,
   ReviewEscalation,
   ReviewEscalationReason,
   TaskStage,
+  UnreachedTeammate,
 } from '../domain/index.ts';
 import type { PullRequestWatchChange, PushHookFailure, ShippingStepKind } from '../domain/pull-requests.ts';
 import type { EventOf } from '../events/index.ts';
@@ -180,4 +182,8 @@ export function describePullRequestRemarks(changes: PullRequestWatchChange[]) {
       : []
   );
   return lines.length > 0 ? lines.join('\n') : null;
+}
+
+export function describeUnreachedTeammates(unreached: readonly UnreachedTeammate[]) {
+  return `Could not check ${describeList(unreached.map(resolveTeammateMachineLabel))} for duplicates`;
 }

@@ -14,6 +14,7 @@ import {
   type PhaseReport,
   type Project,
   parseTaskHandle,
+  quoteDuplicateOriginal,
   type Repo,
   type Run,
   type RunUsage,
@@ -23,6 +24,7 @@ import {
   type Settings,
   SHAPE_PIPELINES,
   type Task,
+  type TaskDuplicate,
   type TaskShape,
   type TaskStage,
   type WatchSuggestion,
@@ -43,6 +45,7 @@ import {
   describeFixRound,
   describeStack,
   describeStage,
+  describeUnreachedTeammates,
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
@@ -238,6 +241,19 @@ function applyTriaged(state: ShinsaState, event: EventOf<'task.triaged'>) {
     kind: 'set_up',
     text: describeSetUp(state, event, resolveShapeOf(pipeline)),
   });
+  const unreached = event.decisions.duplicate?.unreached ?? [];
+  if (unreached.length === 0) return;
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'set_up',
+    text: describeUnreachedTeammates(unreached),
+  });
+}
+
+function resolveDuplicateOriginalText(state: ShinsaState, duplicate: TaskDuplicate) {
+  if (duplicate.teammate) return quoteDuplicateOriginal(duplicate.teammate);
+  const original = state.tasks[duplicate.of];
+  return original ? quoteDuplicateOriginal(original) : 'another task';
 }
 
 function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
@@ -290,13 +306,14 @@ function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>
 }
 
 function applyDuplicated(state: ShinsaState, event: EventOf<'task.duplicated'>) {
-  updateTask(state, event.taskId, event.at, { duplicate: { ...event.duplicate } });
-  const original = state.tasks[event.duplicate.of];
-  const handle = original?.handle ? `${original.handle} ` : '';
+  const teammate = event.duplicate.teammate;
+  updateTask(state, event.taskId, event.at, {
+    duplicate: { ...event.duplicate, ...(teammate ? { teammate: { ...teammate } } : {}) },
+  });
   record(state, event.taskId, event.at, {
     actor: event.duplicate.by,
     kind: 'stage',
-    text: `Closed as a duplicate of ${handle}“${original?.title ?? 'another task'}”`,
+    text: `Closed as a duplicate of ${resolveDuplicateOriginalText(state, event.duplicate)}`,
   });
 }
 
