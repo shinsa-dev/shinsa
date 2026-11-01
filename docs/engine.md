@@ -2689,7 +2689,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, the enrolled devices (public key, name,
   enrolled and last seen, the GitHub account that added it), `access`, the owner and members the last heartbeat
   answered, the one invite link (`link`: its secret, its invite token and when it was made) and the access
-  requests waiting for an answer (`requests`). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
+  requests waiting for an answer (`requests`), and the machine's ECDSA P-256 signing key pair (`signing`, made on
+  first use, `RemoteStore.resolveSigningKey`), which signs its team list views (Teams → Offline teammates). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
 - **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
   `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
 - **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
@@ -3093,12 +3094,15 @@ A team is people who watch each other's work. You put your own projects in a tea
 task in them, live and read-only, next to their own tasks, on the hosted dashboard and in the local app. It is a share
 link for a whole project, on the same projection and the same one-way channel, with membership in place of the link:
 nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
-online. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+online, and the last list of it their own machine kept while it is not (Offline teammates, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/teams.ts`, `migrations/0005_teams.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
   up to 20 members (`MAX_TEAM_MEMBERS`), who asked to join, and one reusable invite kept as its SHA-256. An account
-  owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key. Each machine's
+  owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key but each machine's
+  public signing key (`instances.signing_key`, `migrations/0006_signing_keys.sql`), which the heartbeat sends
+  (`HeartbeatRequest.signingKey`; one left out keeps the stored key, one that is not a P-256 public key is 400
+  `body_invalid`) and the team listing returns (`TeamMachine.signingKey`). Each machine's
   heartbeat answers its owner's teams (`HeartbeatResponse.teams`, `RemoteTeam`: owner, your role, members, the owner's
   requests, and every member's machines with whether each is online), which the machine keeps in `remote.json`.
 - **The team key.** Making a team (Settings → Teams → New team, `shinsa teams create`) asks app.shinsa.dev for the
@@ -3161,7 +3165,8 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
   recently finished (`TEAM_SETTLED_LIMIT`), each a `TeamTask` (`listTeamTasks`): `resolveSharedListing`, the task,
   its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
-  the machine's public key (`machineKey`, for a teammate given this machine). A task
+  the machine's public key (`machineKey`, for a teammate given this machine), `updatedAt`, the same list signed
+  (`snapshot`) and the copies it keeps of the team's offline machines (`held`, Offline teammates, below). A task
   view is exactly a share link's `ShareLiveView` and files at Standard (`Shares.resolveLive` with `TEAM_SHARE_PRESET`,
   whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
   transcript (`Teams.#pushTranscript`): the table in Sharing a task is what a teammate can and cannot see, the same for
@@ -3179,11 +3184,12 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   turned off."). Otherwise the machine pushes a new view on each change, as a share does.
 - **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
   holds, every machine of that team but itself (your other machines too, so the local app shows your team work
-  everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows no
-  tasks; a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
+  everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows the
+  last list it sent (Offline teammates, below); a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
   then every 5 minutes (at once when the key changes), since a teammate's machine learns a new member only at its next
   heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
-  answers the welcome with the team key. The cache is in memory, never in the log. It serves:
+  answers the welcome with the team key. The live lists are in memory and the last of each in
+  `data/team-snapshots.json`, never in the log. It serves:
   - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
     uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
     team and machine). It only reads; your own devices reach it over the sealed channel like any API route, and the
@@ -3208,7 +3214,37 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
   merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
   which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
-  copy of each task.
+  copy of each task: a live machine over a kept copy, and of two kept copies the newer (`isBetterMachine`).
+- **Offline teammates** (`TeamFeeds`, `remote/team-snapshots.ts`; `HostedTeamFeeds`). A teammate's tasks stay listed
+  while their machine is offline, since nothing can change on them until it is back: only that machine works on
+  them. The copies live with the teammates, never on app.shinsa.dev, which holds and reads no task state.
+  - **Where a copy lives.** Each engine writes the last list it got from each machine it watches to
+    `data/team-snapshots.json` (`TeamSnapshots`, written whole on each change, removed once empty, read leniently: a
+    broken file or entry is skipped with a warning), with the team, the machine, `updatedAt`, the tasks, the signed
+    `snapshot` when there is one, and a SHA-256 of the team key (`keyDigest`), never the key. A browser on
+    app.shinsa.dev keeps what its own channels got in memory only, until the page reloads.
+  - **What it shows.** A machine whose channel dropped keeps its tasks, with its `TeamFeedMachine.updatedAt` set to
+    when the owner's machine made the list. The rows on All tasks and Home carry an Offline badge whose hint reads
+    "Updated 2 hours ago" and show that time in place of the task's own (`OfflineBadge`, `listHeldTeamMachines`).
+    Opening one shows its title, handle and status from the copy and says the full task opens once the machine is
+    back (`routes/team-task.tsx`), since only the list is kept, never a task view. When the machine is back its live
+    list replaces the copy at once.
+  - **Passing copies on.** Every list view carries the copies its machine keeps of the team's other machines while
+    they are offline (`TeamListView.held`, `TeamFeeds.listHeld`, pushed again when one changes), so a teammate who
+    never saw a machine's tasks still gets them from any online teammate. Anyone in the team holds the team key and
+    could seal a made-up list, so a copy must be signed: each machine signs its list view with its own signing key
+    (`signTeamSnapshot`, ECDSA P-256 with SHA-256 over `shinsa-team-snapshot-v1` and the JSON of `{ teamId,
+    instanceId, tasks, updatedAt }`), and a copy passed on counts only when the owner machine's key from
+    app.shinsa.dev verifies it (`verifyTeamSnapshot`), it names that team and machine, that machine is not live, it
+    is not expired and it is newer than the one held. A list from an engine without a signing key, or a team
+    listing without one (an older app.shinsa.dev), is still kept and shown by whoever got it from the owner, but never
+    passed on.
+  - **When a copy goes.** At 30 days after the owner's machine made it (`TEAM_SNAPSHOT_TTL_MS`,
+    `isTeamSnapshotExpired`, the same rule in the engine and the browser); when the team is removed, you leave or are
+    removed, or the owner's machine is no longer in the team (the next heartbeat drops it from the watched machines);
+    when the team key changes (a copy kept under another key is not shown, and the next list replaces it); and when
+    the owner's machine refuses this one (the share revoked: no longer in its copy of the team, or the project taken
+    out). Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
   change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
@@ -5403,6 +5439,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  the log)
     ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
     │                  (mode 600; never in the log; Remote access, above)
+    ├── team-snapshots.json  The last list of each teammate machine this one watches, shown while it is offline
+    │                  (never in the log; Teams → Offline teammates)
     ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
