@@ -1,8 +1,9 @@
-import { type RemoteInstance, resolveMachineLoad, type Settings } from '@shinsa/core';
+import { type MachineResources, type RemoteInstance, resolveMachineLoad, type Settings } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
@@ -24,6 +25,7 @@ import {
   TASK_CAPACITY_TITLE,
 } from '@/lib/remote/machines.ts';
 import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
+import { describeMachineResources, listResourceGauges, NO_RESOURCE_READING } from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
@@ -89,6 +91,26 @@ function MachineCapacity({ machine }: { machine: MachineChoice }) {
   );
 }
 
+function ResourceGauges({ resources }: { resources: MachineResources }) {
+  return (
+    <div
+      role='img'
+      aria-label={describeMachineResources(resources)}
+      className='flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-fg-2 tabular-nums'
+    >
+      {listResourceGauges(resources).map((gauge) => (
+        <span key={gauge.id} className='flex items-center gap-1.5'>
+          <span>{gauge.label}</span>
+          {gauge.percent !== null && (
+            <UsageBar row={{ percent: gauge.percent, tone: gauge.tone }} className='w-12' />
+          )}
+          <span className='text-fg-3'>{gauge.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MachineList({
   rows,
   onRemove,
@@ -134,18 +156,26 @@ function MachineItem({
     (candidate) => candidate.id === row.instance.id && candidate.outdated
   );
   const detail = machine ? `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}` : row.access;
+  const resources = !outdated && machine ? (machine.resources ?? null) : null;
   return (
-    <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 flex-col'>
-        <div className='flex min-w-0 items-center gap-1.5 text-xs'>
-          <Truncate className='text-fg-4'>{row.label}</Truncate>
-          <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
-            {row.status}
-          </span>
+    <div className={cn(SETTING_ROW, 'items-start py-2')}>
+      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+        <div className='flex min-w-0 flex-col'>
+          <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
+            <Truncate className='font-medium text-fg-4'>{row.label}</Truncate>
+            <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
+              {row.status}
+            </span>
+          </div>
+          <Truncate className={cn('text-2xs leading-4', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
+            {outdated ? describeOutdatedMachine(row.instance.name) : detail}
+          </Truncate>
         </div>
-        <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
-          {outdated ? describeOutdatedMachine(row.instance.name) : detail}
-        </Truncate>
+        {resources ? (
+          <ResourceGauges resources={resources} />
+        ) : (
+          machine && !outdated && <p className='text-2xs text-fg-2'>{NO_RESOURCE_READING}</p>
+        )}
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}

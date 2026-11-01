@@ -67,6 +67,7 @@ export interface CheckOptions {
   timeoutMs: number;
   signal?: AbortSignal;
   env?: Record<string, string>;
+  onSpawn?: (pid: number) => void;
 }
 
 export type BaseComparison = (run: CheckRun) => Promise<FailureDiff | null>;

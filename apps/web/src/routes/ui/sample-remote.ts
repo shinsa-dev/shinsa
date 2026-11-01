@@ -1,5 +1,6 @@
 import {
   DEVELOPMENT_VERSION,
+  type MachineResources,
   NO_TEAM_FEED,
   type RemoteInstance,
   type RemoteSnapshot,
@@ -229,7 +230,10 @@ export function createSampleMachineServices(now: number): RemoteServices {
 
 const SAMPLE_ENGINE = resolveEngineInfo(DEVELOPMENT_VERSION);
 
-export function createStaticConnection(state: ShinsaState): ShinsaConnection {
+export function createStaticConnection(
+  state: ShinsaState,
+  resources: MachineResources | null = null
+): ShinsaConnection {
   const snapshot = { state: state as unknown as WireState, status: 'open' as const };
   const quiet = () => () => undefined;
   const none = () => null;
@@ -248,6 +252,8 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     subscribeTerminals: quiet,
     selectTerminals: none,
     replaceTerminals: () => undefined,
+    subscribeResources: quiet,
+    selectResources: () => resources,
     subscribeRemote: quiet,
     selectRemote: none,
     replaceRemote: () => undefined,
@@ -264,12 +270,14 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
   };
 }
 
-export function createSampleFleet(parts: { name: string; state: ShinsaState }[]) {
+export function createSampleFleet(
+  parts: { id?: string; name: string; state: ShinsaState; resources?: MachineResources }[]
+) {
   return new Fleet(
     parts.map((part, index) => ({
-      id: `mac-${index}`,
+      id: part.id ?? `mac-${index}`,
       name: part.name,
-      connection: createStaticConnection(part.state),
+      connection: createStaticConnection(part.state, part.resources ?? null),
       fetch: () => Promise.reject(new Error('This is a sample. Nothing is sent.')),
     }))
   );

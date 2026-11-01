@@ -34,6 +34,7 @@ import {
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
+import { createMachineResources } from '../../support/resources.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -563,6 +564,26 @@ describe('Connection terminals', () => {
   });
 });
 
+describe('Connection resources', () => {
+  it('keeps the latest resources the engine pushes, tells its listeners and forgets them on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeResources(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectResources()).toBeNull();
+    const first = createMachineResources({ cpuPercent: 10 });
+    const second = createMachineResources({ cpuPercent: 60 });
+    latest().receive({ type: 'resources', resources: first });
+    latest().receive({ type: 'resources', resources: second });
+    expect(subject.selectResources()).toEqual(second);
+    expect(listener).toHaveBeenCalledTimes(2);
+    subject.reset();
+    expect(subject.selectResources()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('Connection remote access', () => {
   it('keeps the remote access the server pushes, tells its listeners and forgets it on reset', () => {
     const { subject, latest } = setup();
@@ -825,7 +846,12 @@ describe('the shared connection', () => {
     const local = connection;
     const machine = { id: 'm2', name: 'Laptop', current: false };
     const machines = [
-      { id: 'm2', name: 'Laptop', current: false, state: { tasks: {}, projects: {}, settings: {} } },
+      {
+        id: 'm2',
+        name: 'Laptop',
+        current: false,
+        state: { tasks: {}, projects: {}, repos: {}, settings: {} },
+      },
     ];
     expect(renderHook(() => useMachines()).result.current).toEqual([]);
     expect(renderHook(() => useUnreachableMachines()).result.current).toEqual([]);

@@ -77,8 +77,11 @@ const LIMITS_SPENT = {
 describe('a Codex turn', () => {
   test('runs on a new thread, hands over through Shinsa’s tools and reports usage and context', async () => {
     const codex = new FakeCodex();
-    const started = createInput('plan');
+    const pids: number[] = [];
+    const started = createInput('plan', { onProcess: (pid) => pids.push(pid) });
     const result = await start(codex, started).done;
+    expect(pids).toHaveLength(1);
+    expect(pids[0]).toBeGreaterThan(0);
     expect(result).toMatchObject({
       outcome: 'completed',
       summary: 'Handed over.',

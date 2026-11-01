@@ -2856,7 +2856,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
-  tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  tasks and their task capacity, and, once its engine reports them (How busy each machine is, below), a line of meters
+  for CPU, memory and disk ("CPU 42%", "Memory 12 of 32 GB", "Disk 120 GB free", each with a bar toned as it fills,
+  `listResourceGauges` in `lib/remote/resources.ts`), or "No reading yet." until then. What one task uses is on the
+  task itself: its machine in the task's facts row opens a card like Branch's and Checks' (`FactPopover`), headed by
+  the machine's name with its CPU, memory and free disk (`describeMachineResources`; "The machine this task runs on"
+  before its first reading), then "What this task uses": its agent, services and checks (CPU and memory each, or Idle)
+  and its worktree's size (`listTaskUseLines`). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
@@ -2893,23 +2899,50 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   first" (`listUnreachableMachines`, from the account's machines without a key here, and any that refused it since). A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
-  disk; `resolveProjectMachine`); then, when any machine has a routing policy, the routing policies: each is a sentence in plain
-  English (`placementPolicies`, such as "Run Xcode simulator tests here."), and when you start the task the page sends
-  the request with every machine's policies and load to `POST /api/placement` on the first machine of the dashboard
-  (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
-  prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
-  none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
-  Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
-  focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
-  passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  disk; `resolveProjectMachine`); otherwise the router decides: when you start the task the page sends the request
+  with every machine's routing policies, projects (each project's name, description and repositories, and the
+  repositories outside a project, `listPlacementCandidates`), open tasks against capacity and CPU, memory and free
+  disk to `POST /api/placement` on the first machine of the dashboard (`apps/engine/src/remote/placement.ts`), whose
+  classifier, the model triage uses, reads them under a fixed system prompt (core's `PLACEMENT_SYSTEM`,
+  `serializePlacementPrompt`) and names a machine with a one-sentence reason, or none. The prompt decides in order:
+  a routing policy that speaks to the request (each a sentence in plain English, `placementPolicies`, such as "Run
+  Xcode simulator tests here."); then where the work lives, the machine holding the project or repository the request
+  is about, since a task cannot run where its repository is not; then room, passing over a machine at its task
+  capacity and preferring the most free CPU and memory and enough disk; `none` only when nothing sets one machine
+  apart (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says). It costs one
+  quick call per task started on Automatic with two machines or more. Automatic reads "Chooses by your policies,
+  projects and room when you start it", and the toast says where the task went ("Task started. Runs on Studio."),
+  without the reason, to stay one line; when every provider fails (no Claude account, a timeout) the route refuses
+  with `placement_unavailable`, and an answer naming no machine of yours with `placement_unreadable`, so a warning
+  toast says "Couldn’t ask the router. Placed by room." (`requestRoutedPlacement`). With
+  no answer the task goes to the focus project's machine; then the machine with the most room (`resolvePlacement`: a machine at its task capacity
+  passed over while another has room; among the rest, when every machine reports its resources, the most headroom first,
+  the smaller of its free CPU and free memory in steps of 5 % (`resolveResourceHeadroom`), so a busy machine is passed
+  over for a quiet one and two near-equal ones are not told apart by noise; then, or when any machine reports none (an older engine), open
+  tasks over its task capacity, ties to the one with fewer open tasks). Capacity holds over the router too: an answer
+  naming a machine at its task capacity while another has room is set aside for that same fallback
+  (`resolveRoutedPlacement`). The router reads each machine's CPU, memory and
+  free disk as `describeResourceSummary` words them, so a policy such as "Heavy builds go to the machine with the most
+  memory free." can be followed too. Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
   steers placement: a machine still runs a task you send it when full. Routing policies are each machine's own setting
   too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
+- **How busy each machine is** (`apps/engine/src/resources/`, core's `remote/resources.ts`). While a page has a socket
+  open, each engine samples its machine every 5 s and pushes `resources` (`docs/protocol.md` → The socket); with no
+  page, it samples nothing. One `ps` table gives each process's parent, group, memory and cumulative CPU time; CPU
+  is the change in that time between two samples (Linux's `%cpu` is a lifetime average), and the machine's CPU the
+  change in `os.cpus()` times, so the first reading comes about a second after a page connects. Memory used is total
+  minus available (`MemAvailable` on Linux, free, inactive and speculative pages from `vm_stat` on macOS,
+  since Node's free memory there leaves reclaimable pages out). A `ProcessLedger` counts processes toward their task:
+  each agent's process (the session reports it through `onProcess`), each check's (`runCommand`'s `onSpawn`) and
+  each service terminal's, with every process below it and every process in its group, so a child moved to
+  init still counts. Disk free (`df` on the data folder) and each open task's worktree size (`du`) are read every 10
+  minutes, being slow, beside the samples and never before them: the first reading has no worktree sizes yet, and
+  each lands in the next sample once `du` has read it. Settings → Machines shows them (Remote access, above). A machine that runs out of memory is not marked full:
+  task capacity stays the only limit, and resources only order the machines with room.
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.

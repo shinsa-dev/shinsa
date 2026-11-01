@@ -9,14 +9,26 @@ const QUESTION: PlacementQuestion = {
       id: 'studio',
       name: 'Studio',
       policies: ['Run Xcode simulator tests on this machine.'],
+      projects: [{ name: 'App', description: 'The iOS app.', repositories: ['app-ios'] }],
+      repositories: [],
       open: 1,
       capacity: null,
+      resources: null,
     },
-    { id: 'box', name: 'Build box', policies: [], open: 0, capacity: 4 },
+    {
+      id: 'box',
+      name: 'Build box',
+      policies: [],
+      projects: [],
+      repositories: ['scratch'],
+      open: 0,
+      capacity: 4,
+      resources: null,
+    },
   ],
 };
 
-describe('choosing a machine by its policies', () => {
+describe('choosing a machine by its policies, projects and room', () => {
   test('asks the classifier with the fixed system prompt, and keeps only an answer naming a machine', async () => {
     const asked: [string, string, unknown][] = [];
     const place = createPlacementAsker(<T>(system: string, prompt: string, schema?: unknown) => {

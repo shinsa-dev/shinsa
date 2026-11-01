@@ -18,6 +18,7 @@ import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
+import { ProcessLedger } from '../../src/resources/index.ts';
 import { EffectError, ShippingError } from '../../src/runtime/failures.ts';
 import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
@@ -967,6 +968,17 @@ describe('checks', () => {
       results: [{ id: 'c1', label: 'Check 1', command: 'test -f a.txt', outcome: 'pass' }],
     });
     expect(commandIds).toEqual([`${context.key}:checks.record`]);
+    const tracked = new ProcessLedger();
+    const counted = setup(withTask({ stage: 'checking', worktreePath: worktree }, repo), {
+      trackProcess: (taskId, kind, pid) => {
+        const release = tracked.track(taskId, kind, pid);
+        expect(tracked.listRoots()).toEqual([{ taskId: 'task-1', kind: 'checks', pid }]);
+        return release;
+      },
+    });
+    await counted.runner.apply(checksEffect(['true']), createContext());
+    expect(counted.dispatched).toHaveLength(1);
+    expect(tracked.listRoots()).toEqual([]);
     const idle = setup(withTask({ stage: 'building' }, repo));
     await idle.runner.apply(checksEffect(['true']), createContext());
     expect(idle.dispatched).toEqual([]);

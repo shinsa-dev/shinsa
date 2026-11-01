@@ -21,6 +21,7 @@ import {
   resolveTunnelRoute,
 } from '../remote/index.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
+import type { ResourceMonitor } from '../resources/index.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
@@ -49,6 +50,7 @@ export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
   terminals?: Terminals;
   refiner?: ServiceRefiner;
+  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>;
 }
 
 interface RemoteSocketData {
@@ -204,7 +206,8 @@ export function startServer(context: HttpContext) {
     terminals,
     context.remote,
     context.teamFeeds,
-    (context.instance ?? createServerInstance()).version
+    (context.instance ?? createServerInstance()).version,
+    context.resources
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
   const { remote } = context;

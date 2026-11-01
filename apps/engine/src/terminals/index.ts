@@ -440,6 +440,12 @@ export class Terminals {
     this.#changed();
   }
 
+  listServiceProcesses = () =>
+    [...this.#sessions.values()].flatMap((session) => {
+      const { serviceId, taskId } = session.info;
+      return serviceId && taskId && session.pid !== null ? [{ taskId, pid: session.pid }] : [];
+    });
+
   listTerminalPids() {
     return [...this.#sessions.values()].flatMap((session) =>
       session.info.serviceId || session.pid === null ? [] : [session.pid]

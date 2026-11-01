@@ -10,7 +10,7 @@ function machine(id: string, name: string, policies: string[]): MachineChoice {
     id,
     name,
     current: false,
-    state: { tasks: {}, projects: {}, settings: { placementPolicies: policies } },
+    state: { tasks: {}, projects: {}, repos: {}, settings: { placementPolicies: policies } },
   };
 }
 
