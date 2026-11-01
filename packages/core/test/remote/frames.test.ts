@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { decodeText, encodeText } from '../../src/remote/bytes.ts';
+import { type Bytes, decodeText, encodeText } from '../../src/remote/bytes.ts';
 import {
   CHANNEL_COMPRESSION,
   createFrameOpener,
   createFrameSealer,
   FrameError,
+  resolvePaddedLength,
 } from '../../src/remote/frames.ts';
 import { createAesKey } from './helpers.ts';
 
@@ -90,7 +91,7 @@ describe('compressed frames', () => {
     const key = await createAesKey();
     const seal = createFrameSealer(key);
     const unknown = await seal(Uint8Array.of(7, 1, 2));
-    const broken = await seal(Uint8Array.of(1, 255, 255, 255));
+    const broken = await seal(Uint8Array.of(1, 0, 0, 0, 3, 255, 255, 255));
     await expect(createFrameOpener(key, CHANNEL_COMPRESSION)(unknown)).rejects.toThrow('header');
     const open = createFrameOpener(key, CHANNEL_COMPRESSION);
     await expect(open(unknown)).rejects.toThrow('header');
@@ -98,6 +99,43 @@ describe('compressed frames', () => {
     const second = createFrameOpener(key, CHANNEL_COMPRESSION);
     await second(await createFrameSealer(key)(Uint8Array.of(0)));
     await expect(second(broken)).rejects.toThrow('failed to inflate');
+  });
+
+  test('pad a deflated frame so its length hides small differences in its content', async () => {
+    const key = await createAesKey();
+    const seal = createFrameSealer(key, CHANNEL_COMPRESSION);
+    const open = createFrameOpener(key, CHANNEL_COMPRESSION);
+    const guesses = ['secret=aaaa', 'secret=abcd', 'secret=zq9x'].map((guess) => `${large}${guess}`);
+    const frames: Bytes[] = [];
+    for (const guess of guesses) frames.push(await seal(encodeText(guess)));
+    expect(new Set(frames.map((frame) => frame.length)).size).toBe(1);
+    const texts: string[] = [];
+    for (const frame of frames) texts.push(decodeText(await open(frame)));
+    expect(texts).toEqual(guesses);
+  });
+
+  test('round a length up to a bucket that widens with the length', () => {
+    expect(resolvePaddedLength(0)).toBe(0);
+    expect(resolvePaddedLength(1)).toBe(1);
+    expect(resolvePaddedLength(9)).toBe(10);
+    expect(resolvePaddedLength(16 * 1024 + 1)).toBe(17 * 1024);
+    expect(resolvePaddedLength(4_000_000)).toBe(4_063_232);
+    for (const length of [100, 5000, 70_000, 3_000_000, 200_000_000]) {
+      const padded = resolvePaddedLength(length);
+      expect(padded).toBeGreaterThanOrEqual(length);
+      expect(padded / length).toBeLessThan(1.12);
+    }
+  });
+
+  test('refuse a deflated frame too short for its length or whose length runs past its body', async () => {
+    const key = await createAesKey();
+    const seal = createFrameSealer(key);
+    const short = await seal(Uint8Array.of(1, 0, 0));
+    const overrun = await seal(Uint8Array.of(1, 0, 0, 0, 9, 1, 2));
+    await expect(createFrameOpener(key, CHANNEL_COMPRESSION)(short)).rejects.toThrow('failed to inflate');
+    const open = createFrameOpener(key, CHANNEL_COMPRESSION);
+    await open(await createFrameSealer(key)(Uint8Array.of(0)));
+    await expect(open(overrun)).rejects.toThrow('failed to inflate');
   });
 
   test('refuse a frame that inflates past the limit', async () => {

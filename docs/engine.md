@@ -2739,8 +2739,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   accepted (it then finishes the handshake with `welcome`) or declined (`refused`). Both sides derive one AES-GCM key per
   direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
   fails to open closes the channel (1008). The hello offers `deflate-raw` and the welcome accepts it, so a frame of
-  16 KB or more (the first state above all, which compresses about five times) crosses the tunnel deflated; a page or
-  engine that does not know the field keeps plain frames (`docs/protocol.md` → Remote access, Frames). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
+  16 KB or more (the first state above all, which compresses about five times) crosses the tunnel deflated and padded
+  to a Padmé length, since a deflated length says something about its content; a page or engine that does not know the
+  field keeps plain frames (`docs/protocol.md` → Remote access, Frames, which weighs what compression leaks). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
   routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
   handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.

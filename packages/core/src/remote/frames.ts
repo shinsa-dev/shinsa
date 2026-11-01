@@ -18,6 +18,8 @@ const PLAIN_HEADER = 0;
 
 const DEFLATED_HEADER = 1;
 
+const DEFLATED_LENGTH_BYTES = 4;
+
 export class FrameError extends Error {
   constructor(message: string) {
     super(message);
@@ -80,20 +82,43 @@ async function inflate(deflated: Bytes, limit: number) {
   }
 }
 
+export function resolvePaddedLength(length: number) {
+  if (length < 2) return length;
+  const exponent = 31 - Math.clz32(length);
+  const step = 2 ** (exponent - (32 - Math.clz32(exponent)));
+  return Math.ceil(length / step) * step;
+}
+
+function padDeflated(deflated: Bytes): Bytes {
+  const unpadded = 1 + DEFLATED_LENGTH_BYTES + deflated.length;
+  const packed = new Uint8Array(resolvePaddedLength(unpadded));
+  packed[0] = DEFLATED_HEADER;
+  new DataView(packed.buffer).setUint32(1, deflated.length);
+  packed.set(deflated, 1 + DEFLATED_LENGTH_BYTES);
+  return packed as Bytes;
+}
+
+function resolveDeflatedBody(packed: Bytes): Bytes {
+  if (packed.length < 1 + DEFLATED_LENGTH_BYTES) throw new FrameError('A frame failed to inflate.');
+  const length = new DataView(packed.buffer, packed.byteOffset).getUint32(1);
+  const end = 1 + DEFLATED_LENGTH_BYTES + length;
+  if (end > packed.length) throw new FrameError('A frame failed to inflate.');
+  return packed.slice(1 + DEFLATED_LENGTH_BYTES, end);
+}
+
 async function packFrame(plain: Bytes, compression: ChannelCompression | null): Promise<Bytes> {
   if (!compression) return plain;
   if (plain.length >= COMPRESS_FROM_BYTES) {
-    const deflated = await deflate(plain);
-    if (deflated.length < plain.length) return concatBytes(Uint8Array.of(DEFLATED_HEADER) as Bytes, deflated);
+    const packed = padDeflated(await deflate(plain));
+    if (packed.length < plain.length) return packed;
   }
   return concatBytes(Uint8Array.of(PLAIN_HEADER) as Bytes, plain);
 }
 
 function unpackFrame(packed: Bytes, compression: ChannelCompression | null, limit: number): Promise<Bytes> {
   if (!compression) return Promise.resolve(packed);
-  const body = packed.slice(1);
-  if (packed[0] === PLAIN_HEADER) return Promise.resolve(body);
-  if (packed[0] === DEFLATED_HEADER) return inflate(body, limit);
+  if (packed[0] === PLAIN_HEADER) return Promise.resolve(packed.slice(1));
+  if (packed[0] === DEFLATED_HEADER) return inflate(resolveDeflatedBody(packed), limit);
   return Promise.reject(new FrameError('A frame has a header this side does not know.'));
 }
 

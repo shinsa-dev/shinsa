@@ -1448,12 +1448,26 @@ HMAC-SHA256 with the link's secret over the machine key, the device key and the 
 **Frames** (`frames.ts`): every message after the handshake is one binary frame, an 8-byte counter and the AES-GCM
 ciphertext, the counter as the nonce, so no nonce repeats. Sealing and opening run in call order; a frame that is
 short, out of order or fails to open throws `FrameError` and the channel closes. When the welcome named `deflate-raw`, every plaintext of the
-main channel starts with one header byte: 0 for plain, 1 for deflated (`CompressionStream('deflate-raw')`). The sealer
-deflates a plaintext of 16 KB or more and keeps it plain when deflating does not make it smaller; compression runs
-inside the in-order chain, so a small frame never overtakes a large one still compressing. The opener refuses an
-unknown header, deflate data it cannot read and a frame that inflates past its limit (64 MB in the engine, 256 MB in
-the page). Without the field on either side there is no header byte, as before. The share and team channels never
-compress.
+main channel starts with one header byte: 0 for plain, 1 for deflated (`CompressionStream('deflate-raw')`). A deflated
+plaintext is the header, the deflated length (4 bytes, big-endian), the deflate data and zeros up to its Padmé length
+(`resolvePaddedLength`: the length rounded up so only its top few bits vary, at most 12% more). The sealer deflates a
+plaintext of 16 KB or more and keeps it plain when the padded result is not smaller; compression runs inside the
+in-order chain, so a small frame never overtakes a large one still compressing. The opener refuses an unknown header,
+a length that runs past the frame, deflate data it cannot read and a frame that inflates past its limit (64 MB in the
+engine, 256 MB in the page). Without the field on either side there is no header byte, as before. The share and team
+channels never compress.
+
+Compressing before sealing is a trade: AES-GCM hides content but not length, and a deflated length depends on what
+the plaintext repeats (CRIME and BREACH), so whoever carries the frames (Cloudflare, or Shinsa Cloud if it were
+hostile) and can also put text of its choosing into the same frame (a GitHub comment an agent reads, a task title)
+could watch whether its guess at a nearby secret made the frame shorter. Three things narrow it: each frame deflates
+on its own, with no window shared across frames, so a guess and a secret must sit in the same message; only frames
+of 16 KB or more compress, which are the state and large responses, not the small replies and commands; and Padmé
+padding means a guess that saves a few bytes changes the length on the wire only at a bucket edge (128 KB wide for
+a 4 MB state), so each guess first costs a search for that edge, over frames the attacker must also cause, while
+every other change to the state moves the length too. It narrows the leak and does not close it: what is at stake is
+task content, since the channel's keys and connect tokens are never in a message. The gain is the first state through
+the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/engine.md` → Remote access).
 
 **Inside the channel** (`channel.ts`, `ChannelMessage`, JSON in each sealed frame):
 
