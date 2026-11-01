@@ -264,12 +264,13 @@ const TOOLS = createSampleStep({
   checks: [
     { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50.1', fix: null, command: null },
     {
-      id: 'gh_auth',
-      label: 'Signed in to GitHub',
+      id: 'gh',
+      label: 'GitHub CLI',
       ok: false,
       detail: 'Not signed in.',
       fix: 'Sign in to GitHub, so Shinsa can open and merge pull requests.',
       command: 'gh auth login',
+      signIn: true,
     },
     {
       id: 'codex',

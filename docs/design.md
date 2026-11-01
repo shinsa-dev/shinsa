@@ -1237,17 +1237,18 @@ Only these, and they win over anything below:
       `CheckOutcomeIcon` in the 14px icon slot and the tool's name in `text-xs` `fg-4`, never a fix sentence or the
       command under it. At the right a passed or optional check that needs nothing shows its version or state in
       `TOKEN_TEXT`; a failed one shows a 24px `CopyButton` of its command and, 4px after it, a `sm` Install (Sign in
-      for a login; the console icon), which asks the engine to run that check's own command
+      when the GitHub CLI is there but signed out; the console icon), which asks the engine to run that check's own command
       (`POST /api/onboarding/install`, never a command from the page) and opens its terminal inside the card under the
       row: a 224px pane with the item corner and a hairline, on the terminal's own background. When the command ends
       the terminal goes and the checks are read again by themselves; an install that failed leaves one `text-2xs`
       destructive line in its place ("The install ended with code 1. Install it again, or ask an agent for help.").
-      With two or more required tools missing, a row above the checks says how many ("3 tools are missing. Install
-      them all in one terminal, each after the one it needs.") with a `sm` primary Install all, whose terminal opens
+      With two or more required tools missing, a row above the checks says how many on one line ("3 tools are
+      missing") with a `sm` primary Install all, whose terminal opens
       under that row (`{ all: true }`); with one, that check's Install is the primary. Finish setup stays off, and
       secondary, while a required tool is missing: setup never ends with one missing, so the app can assume every tool
-      is there. Coming back to the window checks again by itself. An optional check that fails (codex and its
-      sign-in) is a skipped row, never a fail, and never holds setup back.
+      is there. Coming back to the window checks again by itself, and so
+      does the footer's icon-only button ("Check the tools again"), whose spinner takes the icon's place while it runs.
+      An optional check that fails (codex) is a skipped row, never a fail, and never holds setup back.
     - **Help** (`OnboardingHelp`): while a required check still fails, a line under the card ("Stuck on an install?
       An agent reads the failing checks and replies with the commands to run.") with a secondary Ask an agent for
       help (the question bubble). Asking starts a question task, and the line turns into a Settings card that holds a

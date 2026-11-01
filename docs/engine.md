@@ -4488,8 +4488,8 @@ the run and else from a fresh usage read, so auto-resume works for Codex as for 
 sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or "an API key" is signed in, exit 1
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
-Agent usage shows it under the Claude accounts with the sign-in command, and onboarding's tools check lists codex
-and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
+Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
+tools check lists only codex itself, as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
 names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
@@ -4759,7 +4759,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
-- **Simulated missing tools.** `SHINSA_SIMULATE_MISSING=git,brew,gh,gh_auth,claude,bun,codex,codex_auth` (any of
+- **Simulated missing tools.** `SHINSA_SIMULATE_MISSING=git,brew,gh,gh_auth,claude,bun,codex` (any of
   them, comma separated) makes setup's tool checks answer as a Mac without those tools would (`onboarding/simulate.ts`):
   `127` for a missing command, Apple's `xcrun` placeholder for Git, "not logged into any GitHub hosts" for `gh auth
   status`. Install and a command from the help task then only print what they would run, and an install marks its tool
@@ -4982,25 +4982,27 @@ limit).
 {
   ready: boolean; // every check passed or is optional
   checks: {
-    id: 'git' | 'brew' | 'gh' | 'gh_auth' | 'claude' | 'bun' | 'codex' | 'codex_auth';
-    label: string;      // "GitHub CLI", "Signed in to GitHub"
+    id: 'git' | 'brew' | 'gh' | 'claude' | 'bun' | 'codex';
+    label: string;      // "GitHub CLI"
     ok: boolean;
-    detail: string;     // the version, "Signed in as octo.", "Not installed.", or what went wrong
+    detail: string;     // the version, "Signed in as octo.", "Not installed.", "Not signed in.", or what went wrong
     fix: string | null; // one sentence on what fixes it
     command: string | null; // the command that fixes it, when one does (`brew install gh`, `gh auth login`)
-    optional?: true;    // codex, codex_auth, and bun when no repository uses it
+    optional?: true;    // codex, and bun when no repository uses it
+    signIn?: true;      // the fix is a sign-in (`gh auth login`), so the web says Sign in, not Install
   }[];
 }
 ```
 
-The checks (`onboarding/prerequisites.ts`) are git, the GitHub CLI and its login, Claude Code, Bun, and Codex and its
-login. Shinsa signs in its own Claude accounts (the Claude step, below), so whether Claude Code itself is signed in is
-not checked. Bun is required only when a repository in your folders uses it (a `bun.lock`, `bun.lockb` or
+The checks (`onboarding/prerequisites.ts`) are git, the GitHub CLI, Claude Code, Bun and Codex. The GitHub CLI's
+one row covers its login too: missing, its command is `brew install gh`; installed but signed out, it reads "Not
+signed in." with `gh auth login` and `signIn`; it passes only signed in, showing who. Logins with a page of their own
+are not checked here: Shinsa signs in its own Claude accounts and the Claude step shows Codex's login (below). Bun is required only when a repository in your folders uses it (a `bun.lock`, `bun.lockb` or
 `bunfig.toml` in a chosen folder or one level inside it, `isBunUsed`); otherwise it is optional with "Only for
 repositories that use Bun." Homebrew is listed only when a failing check's command is a `brew` one (the GitHub CLI's
 `brew install gh`), required when that check is. Each command is for macOS: `xcode-select --install`, Homebrew's
 install script, `brew install gh`, `gh auth login`, Claude Code's `curl -fsSL https://claude.ai/install.sh | bash`,
-Bun's `curl -fsSL https://bun.sh/install | bash`, `npm install -g @openai/codex` and `codex login`. Before every
+Bun's `curl -fsSL https://bun.sh/install | bash` and `npm install -g @openai/codex`. Before every
 check the engine adds `~/.bun/bin`, `~/.local/bin` and Homebrew's folders that exist to its own `PATH` again
 (`refreshInstallFolders` in `shell/login.ts`, the folders it adds at start when no login shell answers), so a tool
 you just installed is found without restarting Shinsa. On a Mac without Apple's command line tools `/usr/bin/git`
@@ -5012,12 +5014,13 @@ own page is taken: one with no `Origin` is refused with `browser_only`, so neith
 installs anything. With `id`, the terminal runs that check's own command, never one the page sends (`install.ts`,
 `openInstallTerminal`; an id with none is `check_unknown`), as `‹command›; exit`, named "Set up ‹label›". With
 `{ all: true }`, it runs every required missing tool's script in one terminal named "Set up the missing tools", in
-the order they need each other (Git, Homebrew, the GitHub CLI, its sign-in, Claude Code, Bun; `listMissingInstalls`),
+the order they need each other (Git, Homebrew, the GitHub CLI, Claude Code, Bun; `listMissingInstalls`),
 each as `{ ‹script›; }` joined with `&&`, so one that fails stops the rest; Git is left out when Homebrew is in the list,
 since Homebrew's installer brings Apple's command line tools, and it is `nothing_missing` when no required tool is.
-A script is a check's command except for two (`resolveInstallScript`): Git's waits until `xcode-select -p` answers,
-because `xcode-select --install` only opens macOS's installer window and returns, and Homebrew's puts `brew` on the
-terminal's `PATH` after it (`brew shellenv`), so the commands after it find it. With
+A script is a check's command except for three (`resolveInstallScript`): Git's waits until `xcode-select -p` answers,
+because `xcode-select --install` only opens macOS's installer window and returns; Homebrew's puts `brew` on the
+terminal's `PATH` after it (`brew shellenv`), so the commands after it find it; and the GitHub CLI's installs it when
+it is missing and then signs in when `gh auth status` fails, so one Install covers both. With
 `command`, it runs only when every line of it, a leading `$` or `%` prompt dropped, is in one `bash run` block of
 the current help task's result (`isReplyCommand`), else `command_unknown`, in a terminal named "Fix from the agent".
 Every way the terminal opens in your home folder under the project id `setup`, which no project has, so the

@@ -157,7 +157,7 @@ describe('Onboarding', () => {
     expect(await onboarding.openInstall({ id: 'gh' })).toEqual({
       terminal: expect.objectContaining({ id: 't1', cwd: config.userHome, name: 'Set up GitHub CLI' }),
     });
-    expect(opened).toEqual(['brew install gh; exit']);
+    expect(opened).toEqual([expect.stringMatching(/\|\| brew install gh; } && \{ gh auth status .*; exit$/)]);
     expect(onboarding.openInstall({ command: 'rm -rf ~' })).rejects.toThrow(
       'Shinsa runs only the commands the help task’s agent replied with.'
     );
@@ -167,7 +167,7 @@ describe('Onboarding', () => {
     expect(setup().onboarding.openInstall({ id: 'gh' })).rejects.toThrow(
       'Terminals are off, so run the command yourself.'
     );
-    expect(opened).toEqual(['brew install gh; exit']);
+    expect(opened).toEqual([expect.stringMatching(/\|\| brew install gh; } && \{ gh auth status .*; exit$/)]);
   });
 
   test('installs every missing tool in one terminal, and a simulated machine only pretends to', async () => {
@@ -183,11 +183,7 @@ describe('Onboarding', () => {
     };
     const { onboarding } = setup(undefined, terminals, ['gh', 'bun']);
     const before = await onboarding.resolvePrerequisites();
-    expect(before.checks.filter((check) => !check.ok).map((check) => check.id)).toEqual([
-      'gh',
-      'gh_auth',
-      'bun',
-    ]);
+    expect(before.checks.filter((check) => !check.ok).map((check) => check.id)).toEqual(['gh', 'bun']);
     await onboarding.openInstall({ all: true });
     expect(opened[0]).toContain('Simulated setup: nothing is installed.');
     expect(opened[0]).not.toContain('curl');

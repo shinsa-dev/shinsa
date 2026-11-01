@@ -50,12 +50,10 @@ describe('resolvePrerequisites', () => {
     expect(report.ready).toBe(true);
     expect(report.checks.map((check) => [check.id, check.detail])).toEqual([
       ['git', 'git version 2.50.0'],
-      ['gh', 'gh version 2.80.0 (2026-01-01)'],
-      ['gh_auth', 'Signed in as octo.'],
+      ['gh', 'Signed in as octo.'],
       ['claude', '2.1.287 (Claude Code)'],
       ['bun', '1.4.2'],
       ['codex', 'codex-cli 0.153.4'],
-      ['codex_auth', 'Logged in using ChatGPT'],
     ]);
     expect(report.checks.every((check) => check.fix === null && check.command === null)).toBe(true);
   });
@@ -78,11 +76,9 @@ describe('resolvePrerequisites', () => {
       ['git', false, 'It did not answer in time.', 'xcode-select --install'],
       ['brew', true, 'Homebrew', null],
       ['gh', false, 'Not installed.', 'brew install gh'],
-      ['gh_auth', false, 'The GitHub CLI is missing.', 'gh auth login'],
       ['claude', false, 'Not installed.', 'curl -fsSL https://claude.ai/install.sh | bash'],
       ['bun', false, 'Not installed.', 'curl -fsSL https://bun.sh/install | bash'],
       ['codex', false, 'Not installed.', 'npm install -g @openai/codex'],
-      ['codex_auth', false, 'Codex is missing.', 'codex login'],
     ]);
     expect(report.checks.find((check) => check.id === 'claude')?.fix).toBe(
       'Install Claude Code, which agents run on.'
@@ -127,20 +123,12 @@ describe('resolvePrerequisites', () => {
   test('Codex is optional, and so is Homebrew when only Codex would need it', async () => {
     const missing = await resolvePrerequisites(HOME, createRunner(withoutKeys(['codex --version'])));
     expect(missing.ready).toBe(true);
-    expect(missing.checks.filter((check) => check.optional).map((check) => check.id)).toEqual([
-      'codex',
-      'codex_auth',
-    ]);
-    const signedOut = await resolvePrerequisites(
-      HOME,
-      createRunner({ ...READY, 'codex login status': result(false, '', 'Not logged in') })
-    );
-    expect(signedOut.checks.find((check) => check.id === 'codex_auth')).toMatchObject({
-      ok: false,
-      detail: 'Not logged in',
-      fix: 'Only for agents you run on Codex.',
-      command: 'codex login',
-    });
+    expect(missing.checks.filter((check) => check.optional).map((check) => check.id)).toEqual(['codex']);
+  });
+
+  test('leaves the Codex sign-in to the Claude step, which shows it', async () => {
+    const report = await resolvePrerequisites(HOME, createRunner(READY));
+    expect(report.checks.map((check) => check.id)).not.toContain('codex_auth');
   });
 
   test('reads an older gh that prints plain text, and a failure with no output', async () => {
@@ -152,16 +140,22 @@ describe('resolvePrerequisites', () => {
         'bun --version': result(false, '', '', false, 3),
       })
     );
-    expect(report.checks.find((check) => check.id === 'gh_auth')?.detail).toBe('Signed in.');
+    expect(report.checks.find((check) => check.id === 'gh')?.detail).toBe('Signed in.');
     expect(report.checks.find((check) => check.id === 'bun')?.detail).toBe('It exited with code 3.');
     const signedOut = await resolvePrerequisites(
       HOME,
       createRunner({ ...READY, 'gh auth status': result(false, '', 'You are not logged in') })
     );
-    expect(signedOut.checks.find((check) => check.id === 'gh_auth')).toMatchObject({
+    expect(signedOut.checks.find((check) => check.id === 'gh')).toMatchObject({
+      label: 'GitHub CLI',
       ok: false,
-      detail: 'You are not logged in',
+      detail: 'Not signed in.',
+      fix: 'Sign in to GitHub, so Shinsa can open and merge pull requests.',
+      command: 'gh auth login',
+      signIn: true,
     });
+    expect(signedOut.checks.map((check) => check.id)).not.toContain('brew');
+    expect(signedOut.checks.map((check) => check.id)).not.toContain('gh_auth');
   });
 });
 
@@ -181,7 +175,9 @@ describe('the install scripts', () => {
     expect(resolveInstallScript('brew')).toEndWith(
       '&& eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"'
     );
-    expect(resolveInstallScript('gh')).toBe('brew install gh');
+    expect(resolveInstallScript('gh')).toBe(
+      '{ command -v gh >/dev/null 2>&1 || brew install gh; } && { gh auth status >/dev/null 2>&1 || gh auth login; }'
+    );
     expect(resolveInstallScript('toString')).toBeNull();
   });
 
@@ -191,14 +187,13 @@ describe('the install scripts', () => {
     expect(
       listMissingInstalls([
         check('bun', false),
-        check('gh_auth', false),
         check('gh', false),
         check('codex', false, true),
         check('brew', false),
         check('git', false),
         check('claude', true),
       ])
-    ).toEqual(['brew', 'gh', 'gh_auth', 'bun']);
+    ).toEqual(['brew', 'gh', 'bun']);
     expect(listMissingInstalls([check('git', false), check('gh', true)])).toEqual(['git']);
   });
 

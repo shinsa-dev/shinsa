@@ -552,11 +552,7 @@ describe('the setup page', () => {
       'POST /api/onboarding/install': { answer: { terminal } },
     });
     renderPage();
-    expect(
-      await screen.findByText(
-        '2 tools are missing. Install them all in one terminal, each after the one it needs.'
-      )
-    ).toBeTruthy();
+    expect(await screen.findByText('2 tools are missing')).toBeTruthy();
     const isPrimary = (button: HTMLElement) => button.className.includes('before:bg-primary');
     expect(isPrimary(screen.getByRole('button', { name: 'Install all' }))).toBe(true);
     expect(isPrimary(screen.getByRole('button', { name: /Finish setup/ }))).toBe(false);

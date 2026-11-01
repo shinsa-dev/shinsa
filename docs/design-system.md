@@ -7581,7 +7581,9 @@ A list of checks is a Settings card of rows (`SETTING_ROW` with `gap-2`):
 - Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated; a failed check
   with a fix shows its 24px copy button and `sm` Install there instead, 4px apart.
 - An optional check that fails is "skipped", never "failed", and never holds the flow back.
-- Checking again is an icon-only button in the footer ("Check the tools again"), busy while it runs.
+- Checking again is an icon-only button in the footer ("Check the tools again"); while it runs its spinner takes the
+  icon's place, never beside it (pass the glyph as `icon`, not as a child).
+- A login with a page of its own is not a row; a tool's own login folds into its row (Install, then Sign in).
 - Example: setup's Tools step.
 
 #### The now card: one frame for every process state

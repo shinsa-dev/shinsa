@@ -8,7 +8,7 @@ export type CommandRunner = (
   options?: { timeoutMs?: number }
 ) => Promise<CommandResult>;
 
-export type PrerequisiteId = 'git' | 'brew' | 'gh' | 'gh_auth' | 'claude' | 'bun' | 'codex' | 'codex_auth';
+export type PrerequisiteId = 'git' | 'brew' | 'gh' | 'claude' | 'bun' | 'codex';
 
 export interface Prerequisite {
   id: PrerequisiteId;
@@ -18,6 +18,7 @@ export interface Prerequisite {
   fix: string | null;
   command: string | null;
   optional?: boolean;
+  signIn?: true;
 }
 
 export interface PrerequisiteReport {
@@ -39,46 +40,45 @@ const MISSING_TOOLS = /xcrun: error|invalid active developer path/;
 
 const BREW_PATH = 'eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"';
 
-const INSTALL_ORDER: readonly PrerequisiteId[] = ['git', 'brew', 'gh', 'gh_auth', 'claude', 'bun'];
+const INSTALL_ORDER: readonly PrerequisiteId[] = ['git', 'brew', 'gh', 'claude', 'bun'];
 
 const FIXES: Record<PrerequisiteId, string> = {
   git: 'Install Apple’s command line tools, which include Git.',
   brew: 'Install Homebrew, which installs the GitHub CLI.',
   gh: 'Install the GitHub CLI with Homebrew.',
-  gh_auth: 'Sign in to GitHub, so Shinsa can open and merge pull requests.',
   claude: 'Install Claude Code, which agents run on.',
   bun: 'Your repositories use Bun. Install it so agents can run their checks.',
   codex: 'Only for agents you run on Codex.',
-  codex_auth: 'Only for agents you run on Codex.',
 };
 
 const OPTIONAL_BUN_FIX = 'Only for repositories that use Bun.';
+
+const GITHUB_SIGN_IN_FIX = 'Sign in to GitHub, so Shinsa can open and merge pull requests.';
+
+const GITHUB_SIGN_IN = 'gh auth login';
 
 const COMMANDS: Record<PrerequisiteId, string> = {
   git: 'xcode-select --install',
   brew: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
   gh: 'brew install gh',
-  gh_auth: 'gh auth login',
   claude: 'curl -fsSL https://claude.ai/install.sh | bash',
   bun: 'curl -fsSL https://bun.sh/install | bash',
   codex: 'npm install -g @openai/codex',
-  codex_auth: 'codex login',
 };
 
 const SCRIPTS: Partial<Record<PrerequisiteId, string>> = {
   git: "xcode-select --install; echo 'Finish the install in the window macOS opened.'; until xcode-select -p >/dev/null 2>&1; do sleep 5; done",
   brew: `${COMMANDS.brew} && ${BREW_PATH}`,
+  gh: `{ command -v gh >/dev/null 2>&1 || ${COMMANDS.gh}; } && { gh auth status >/dev/null 2>&1 || ${GITHUB_SIGN_IN}; }`,
 };
 
 const LABELS: Record<PrerequisiteId, string> = {
   git: 'Git',
   brew: 'Homebrew',
   gh: 'GitHub CLI',
-  gh_auth: 'Signed in to GitHub',
   claude: 'Claude Code',
   bun: 'Bun',
   codex: 'Codex',
-  codex_auth: 'Signed in to Codex',
 };
 
 export function resolveInstallCommand(id: string) {
@@ -147,9 +147,18 @@ function createCheck(
 }
 
 function readGithubLogin(result: CommandResult) {
-  if (!result.ok) return describeOutcome(result);
   const account = /Logged in to \S+ account (\S+)/.exec(`${result.stdout}\n${result.stderr}`)?.[1];
   return account ? `Signed in as ${account}.` : 'Signed in.';
+}
+
+function resolveGithubCheck(gh: CommandResult, auth: CommandResult): Prerequisite {
+  if (!gh.ok) return createCheck('gh', false, describeOutcome(gh), false);
+  if (auth.ok) return createCheck('gh', true, readGithubLogin(auth), false);
+  return {
+    ...createCheck('gh', false, 'Not signed in.', false, GITHUB_SIGN_IN_FIX),
+    command: GITHUB_SIGN_IN,
+    signIn: true,
+  };
 }
 
 function listBrewDependents(checks: Prerequisite[]) {
@@ -162,7 +171,7 @@ export async function resolvePrerequisites(
   needs: PrerequisiteNeeds = { bun: true }
 ): Promise<PrerequisiteReport> {
   const ask = (command: string[]) => run(command, cwd, { timeoutMs: CHECK_TIMEOUT_MS });
-  const [git, brew, gh, ghAuth, claude, bun, codex, codexAuth] = await Promise.all([
+  const [git, brew, gh, ghAuth, claude, bun, codex] = await Promise.all([
     ask(['git', '--version']),
     ask(['brew', '--version']),
     ask(['gh', '--version']),
@@ -170,25 +179,12 @@ export async function resolvePrerequisites(
     ask(['claude', '--version']),
     ask(['bun', '--version']),
     ask(['codex', '--version']),
-    ask(['codex', 'login', 'status']),
   ]);
   const tools = [
-    createCheck('gh', gh.ok, describeOutcome(gh), false),
-    createCheck(
-      'gh_auth',
-      gh.ok && ghAuth.ok,
-      gh.ok ? readGithubLogin(ghAuth) : 'The GitHub CLI is missing.',
-      false
-    ),
+    resolveGithubCheck(gh, ghAuth),
     createCheck('claude', claude.ok, describeOutcome(claude), false),
     createCheck('bun', bun.ok, describeOutcome(bun), !needs.bun, needs.bun ? FIXES.bun : OPTIONAL_BUN_FIX),
     createCheck('codex', codex.ok, describeOutcome(codex), true),
-    createCheck(
-      'codex_auth',
-      codex.ok && codexAuth.ok,
-      codex.ok ? describeOutcome(codexAuth) : 'Codex is missing.',
-      true
-    ),
   ];
   const brewFor = listBrewDependents(tools);
   const checks = [

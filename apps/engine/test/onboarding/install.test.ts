@@ -76,7 +76,7 @@ describe('openInstallTerminal', () => {
     expect(calls).toEqual([
       'create setup /Users/me',
       'rename t1 Set up GitHub CLI',
-      'run t1 brew install gh; exit',
+      'run t1 { command -v gh >/dev/null 2>&1 || brew install gh; } && { gh auth status >/dev/null 2>&1 || gh auth login; }; exit',
     ]);
   });
 

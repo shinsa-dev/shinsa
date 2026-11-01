@@ -30,9 +30,15 @@ describe('createSetupSimulation', () => {
     expect(scripts.resolve('gh')).toEndWith("echo 'zsh: command not found: brew'; false");
     expect(await run(['gh', '--version'], '/')).toMatchObject({ ok: false });
     scripts.resolve('brew');
-    scripts.resolve('gh');
+    expect(scripts.resolve('gh')).not.toContain('command not found');
     expect(await run(['gh', '--version'], '/')).toMatchObject({ ok: true });
     expect(await run(['git', '--version'], '/')).toMatchObject({ ok: true });
+  });
+
+  test('installing the GitHub CLI also signs it in', async () => {
+    const { run, scripts } = createSetupSimulation(['gh', 'gh_auth'], INSTALLED);
+    scripts.resolve('gh');
+    expect(await run(['gh', 'auth', 'status'], '/')).toMatchObject({ ok: true });
   });
 
   test('a command from the help task only prints, quoted so nothing in it runs', () => {

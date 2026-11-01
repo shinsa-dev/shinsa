@@ -36,6 +36,7 @@ export interface OnboardingCheck {
   fix: string | null;
   command: string | null;
   optional?: boolean;
+  signIn?: true;
 }
 
 export interface OnboardingOption {

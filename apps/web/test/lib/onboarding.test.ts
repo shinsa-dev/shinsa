@@ -132,7 +132,7 @@ describe('the steps', () => {
       ])
     ).toBe(2);
     expect(describeFixAction(missing)).toBe('Install');
-    expect(describeFixAction({ ...missing, id: 'gh_auth' })).toBe('Sign in');
+    expect(describeFixAction({ ...missing, signIn: true })).toBe('Sign in');
     expect(isStepInstalled(createStep({ checks: [missing] }))).toBe(false);
     expect(isStepInstalled(createStep({ checks: [{ ...missing, optional: true }] }))).toBe(true);
     expect(isStepInstalled(createStep({ checks: [] }))).toBe(true);

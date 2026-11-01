@@ -109,9 +109,7 @@ function InstallAllRow({
 }) {
   return (
     <div className={cn(SETTING_ROW, 'gap-2')}>
-      <span className='min-w-0 flex-1 text-fg-3 text-xs'>
-        {count} tools are missing. Install them all in one terminal, each after the one it needs.
-      </span>
+      <span className='min-w-0 flex-1 truncate text-fg-3 text-xs'>{count} tools are missing</span>
       <Button variant='primary' size='sm' icon='IconConsole' loading={installing} onClick={onInstall}>
         Install all
       </Button>

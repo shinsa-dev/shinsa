@@ -7,7 +7,6 @@ import type {
   ProviderLogin,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -285,12 +284,11 @@ function StepAction({
       <Button
         variant='secondary'
         size='icon'
+        icon='IconArrowRotateClockwise'
         aria-label='Check the tools again'
         loading={pending === REFRESH_KEY}
         onClick={actions.refresh}
-      >
-        <Icon name='IconArrowRotateClockwise' />
-      </Button>
+      />
     </Hint>
   );
 }

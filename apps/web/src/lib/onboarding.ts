@@ -179,7 +179,7 @@ export function listOnboardingPath(flow: OnboardingFlow) {
 }
 
 export function describeFixAction(check: OnboardingCheck) {
-  return check.id.endsWith('_auth') ? 'Sign in' : 'Install';
+  return check.signIn ? 'Sign in' : 'Install';
 }
 
 export function isStepInstalled(step: OnboardingStep) {
