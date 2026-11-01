@@ -18,7 +18,7 @@ function machine(id: string, name: string, policies?: string[], current = false)
     id,
     name,
     current,
-    state: { tasks: {}, projects: {}, settings: policies ? { placementPolicies: policies } : {} },
+    state: { tasks: {}, projects: {}, repos: {}, settings: policies ? { placementPolicies: policies } : {} },
   };
 }
 

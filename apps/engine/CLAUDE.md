@@ -275,6 +275,11 @@ src/
 │                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base, and
 │                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
+├── resources/           How busy this machine is (docs/engine.md → Remote access, How busy each machine is): index.ts
+│                        (ResourceMonitor: samples every 5 s while a socket listens, df and du every 10 minutes, the
+│                        memory reader per platform), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
+│                        /proc/meminfo, df, du, each task's use), ledger.ts (ProcessLedger: each task's agent, check
+│                        and service processes)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
 │                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,

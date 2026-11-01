@@ -101,11 +101,10 @@ export {
   resolveLocalOnlyRefusal,
 } from './local-only.ts';
 export {
-  hasPlacementPolicies,
   isPlacementPoliciesValid,
   listPlacementCandidates,
   type MachineLoad,
-  NO_POLICY_MACHINE,
+  NO_PLACEMENT_MACHINE,
   PLACEMENT_LIMITS,
   PLACEMENT_POLICY_LIMITS,
   PLACEMENT_SCHEMA,
@@ -113,12 +112,14 @@ export {
   type PlacementAnswer,
   type PlacementCandidate,
   type PlacementMachine,
+  type PlacementProject,
   type PlacementQuestion,
   parsePlacementAnswer,
   parsePlacementQuestion,
   resolveMachineLoad,
   resolvePlacement,
   resolveProjectMachine,
+  resolveRoutedPlacement,
   serializePlacementPrompt,
 } from './placement.ts';
 export {
@@ -161,6 +162,19 @@ export {
   serializePreviewUrl,
   verifyPreviewAccessToken,
 } from './previews.ts';
+export {
+  describeGigabytes,
+  describeResourceSummary,
+  HEADROOM_STEP,
+  type MachineResources,
+  parseResourceSummary,
+  type ResourceSummary,
+  type ResourceUse,
+  resolveMemoryPercent,
+  resolveResourceHeadroom,
+  resolveResourceSummary,
+  type TaskResources,
+} from './resources.ts';
 export {
   createShareHello,
   createShareWelcome,

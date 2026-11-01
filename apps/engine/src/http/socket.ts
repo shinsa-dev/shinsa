@@ -17,6 +17,7 @@ import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { TeamFeeds } from '../remote/team-feeds.ts';
+import type { ResourceMonitor } from '../resources/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { Classifier } from '../triage/message.ts';
@@ -94,11 +95,13 @@ export function createSocketHub(
   terminals?: Terminals,
   remote?: Remote,
   teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
-  version = DEVELOPMENT_VERSION
+  version = DEVELOPMENT_VERSION,
+  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>
 ) {
   const sockets = new Set<Socket>();
   const engineInfo = resolveEngineInfo(version);
   let desktopConnected = false;
+  let unsubscribeResources: (() => void) | null = null;
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
@@ -119,6 +122,19 @@ export function createSocketHub(
   const unsubscribeTerminals = terminals?.subscribe((snapshot) =>
     broadcast({ type: 'terminals', terminals: snapshot })
   );
+
+  function syncResources() {
+    if (!resources) return;
+    if (sockets.size > 0 && !unsubscribeResources) {
+      unsubscribeResources = resources.subscribe((snapshot) =>
+        broadcast({ type: 'resources', resources: snapshot })
+      );
+    }
+    if (sockets.size === 0 && unsubscribeResources) {
+      unsubscribeResources();
+      unsubscribeResources = null;
+    }
+  }
 
   const unsubscribeRemote = remote?.subscribe(() => broadcast({ type: 'remote', remote: remote.snapshot() }));
 
@@ -194,10 +210,14 @@ export function createSocketHub(
       if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
       send(socket, { type: 'surfaces', desktop: desktopConnected });
       send(socket, { type: 'engine', engine: engineInfo });
+      const sampled = resources?.snapshot();
+      if (sampled) send(socket, { type: 'resources', resources: sampled });
+      syncResources();
     },
     close(socket: Socket) {
       sockets.delete(socket);
       syncSurfaces();
+      syncResources();
       for (const unfollow of socket.data.transcripts.values()) unfollow();
       socket.data.transcripts.clear();
     },
@@ -218,6 +238,8 @@ export function createSocketHub(
       unsubscribeTerminals?.();
       unsubscribeRemote?.();
       unsubscribeTeams?.();
+      unsubscribeResources?.();
+      unsubscribeResources = null;
     },
   };
 }

@@ -165,7 +165,8 @@ src/
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
     │                    machine owns each id, each machine's own state for placement (listMachines), each machine's own remote access for its access requests (listMachineAccess), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
-    │                    remote services and their context, for Settings → Machines),
+    │                    remote services and their context, for Settings → Machines), resources.ts (how busy a machine and its
+    │                    open tasks are in words, and the meters of a machine in Settings → Machines),
     │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
@@ -316,7 +317,7 @@ src/
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, automations.ts (a watch's page: its facts,
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
-        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
+        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the router's answer from POST /api/placement, each machine's load),
         slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
         reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
         disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of
