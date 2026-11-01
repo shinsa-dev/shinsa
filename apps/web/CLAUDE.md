@@ -335,6 +335,13 @@ state, transcripts, accounts and terminals (`connection.reset()`), toasts, the h
 agent providers, disclosures, `localStorage` and the URL. A new module-level cache or store gets a reset function
 called there.
 
+**Settle React before the next event.** A `findBy*` or `waitFor` returns once the DOM has the element, but when a real
+request settled outside `act`, React runs that render's effects later, on its scheduler: a window `blur`/`focus`, a
+key or a click sent straight after can reach the page before `useWindowReturn`, an autofocus or a reset `pending`.
+Flush first with `await act(async () => {})` (`settle()` and `comeBackToWindow()` in `test/routes/onboarding.test.tsx`)
+and check focus with a plain `expect` after it, never a `waitFor` on `document.activeElement`, whose failed tries
+print the whole document.
+
 ## Rules
 
 - **The server is the source of truth.** Components read `ShinsaState` from `useConnection()` and act through
