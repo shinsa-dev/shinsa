@@ -86,7 +86,7 @@ describe('a machine in the dashboard', () => {
     });
     const device: EnrolledDevice = { instanceId: STUDIO.id, machineKey: mac.machineKey, keys, enrolledAt: 1 };
     const sockets: (() => WebSocket)[] = [];
-    const { member, close } = createFleetMember(STUDIO, device, {
+    const member = createFleetMember(STUDIO, device, {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },
@@ -102,7 +102,7 @@ describe('a machine in the dashboard', () => {
     expect(await answer.text()).toBe('from Studio');
     const socket = sockets[0]?.();
     await waitFor(() => expect(socket?.readyState).toBe(1));
-    close();
+    member.close();
     await waitFor(() => expect(socket?.readyState).toBe(3));
   });
 
@@ -110,7 +110,7 @@ describe('a machine in the dashboard', () => {
     const mac = await FakeMac.create({ enrolled: [] });
     const device = await createDevice(mac.machineKey);
     const refused: string[] = [];
-    const { member } = createFleetMember(STUDIO, device, {
+    const member = createFleetMember(STUDIO, device, {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },

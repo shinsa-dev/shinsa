@@ -8,6 +8,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
 import {
+  connection,
   type MachineAccess,
   type MachineChoice,
   useMachineAccess,
@@ -213,6 +214,7 @@ function useMachineRows() {
     await (row.instance.role === 'member'
       ? services.dashboard.leaveInstance(id)
       : services.dashboard.removeInstance(id));
+    connection.removeMachine(id);
     await services.devices.removeDevice(id);
     setVersion((value) => value + 1);
   };

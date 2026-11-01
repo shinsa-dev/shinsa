@@ -1,6 +1,6 @@
 import type { Bytes, ChannelHeaders } from '@shinsa/core';
 import { ChannelError, type ChannelOptions, openRemoteChannel, type RemoteChannel } from './channel.ts';
-import type { DashboardClient } from './dashboard.ts';
+import { type DashboardClient, DashboardError } from './dashboard.ts';
 import type { EnrolledDevice } from './devices.ts';
 
 const CONNECTING = 0;
@@ -59,6 +59,13 @@ export interface RemoteLinkOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
   openChannel?: (options: ChannelOptions) => Promise<RemoteChannel>;
   onRefused?: (error: ChannelError) => void;
+  onRemoved?: () => void;
+}
+
+const REMOVED_STATUSES = new Set([403, 404]);
+
+function isRemoved(error: unknown) {
+  return error instanceof DashboardError && REMOVED_STATUSES.has(error.status);
 }
 
 function listRequestHeaders(headers: Headers): ChannelHeaders {
@@ -113,6 +120,7 @@ export class RemoteLink {
       connecting.catch((error: unknown) => {
         if (this.#channel === connecting) this.#forget();
         if ((error as ChannelError).refused) this.#options.onRefused?.(error as ChannelError);
+        if (isRemoved(error)) this.#options.onRemoved?.();
       });
     }
     return this.#channel;

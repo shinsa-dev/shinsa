@@ -56,7 +56,8 @@ export async function listMachineRows(
 export interface FleetMemberOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
   onRefused: (instanceId: string, error: ChannelError) => void;
-  createConnection?: (openSocket: () => WebSocket) => FleetMember['connection'];
+  onRemoved?: (instanceId: string) => void;
+  createConnection?: (openSocket: () => WebSocket) => Connection;
   openChannel?: RemoteLinkOptions['openChannel'];
 }
 
@@ -70,19 +71,23 @@ export function createFleetMember(
     device,
     dashboard: options.dashboard,
     onRefused: (error) => options.onRefused(instance.id, error),
+    onRemoved: () => options.onRemoved?.(instance.id),
     ...(options.openChannel ? { openChannel: options.openChannel } : {}),
   });
   const openSocket = () => link.openSocket();
   const connection =
     options.createConnection?.(openSocket) ?? new Connection({ openSocket, retry: retryLater });
-  const member: FleetMember = {
+  return {
     id: instance.id,
     name: instance.name,
     current: device.onMachine === true,
     connection,
     fetch: (request) => link.fetch(request),
-  };
-  return { member, close: () => link.close() };
+    close: () => {
+      connection.stop();
+      link.close();
+    },
+  } satisfies FleetMember;
 }
 
 export const TASK_CAPACITY_TITLE = 'Task capacity';

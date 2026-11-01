@@ -2841,7 +2841,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
   its connection's retry opens a fresh channel with a new token. A machine that refuses this device's key is forgotten
-  here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
+  here and leaves the dashboard, listed as one this device cannot reach. Removing or leaving a machine in Settings →
+  Machines drops it from the dashboard as soon as Shinsa Cloud confirms (`ShinsaConnection.removeMachine`,
+  `Fleet.removeMachine`): its tasks leave Home, All tasks and the queue at once, its connection stops
+  (`Connection.stop`) and its channel closes, so nothing calls its connect endpoint again, and it is not listed as
+  unreachable. A machine removed elsewhere, by its owner or by you on another device, or one whose owner removed you,
+  leaves the same way and its key is forgotten here once its connect call answers 404 or 403 (`RemoteLink`'s
+  `onRemoved`). A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
   Every machine you are a member of joins it as your own do, once this browser is added there. The enroll page

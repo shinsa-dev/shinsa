@@ -34,6 +34,7 @@ export interface FleetMember {
   current?: boolean;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
+  close?: () => void;
 }
 
 const FLEET_RECORDS = [
@@ -215,15 +216,33 @@ export class Fleet implements ShinsaConnection {
     });
   }
 
+  #drop(entry: FleetEntry) {
+    for (const release of entry.release) release();
+    entry.member.close?.();
+    this.#entries = this.#entries.filter((candidate) => candidate !== entry);
+  }
+
+  #publishMembers() {
+    this.#state.publish();
+    this.#transcripts.publish();
+    this.#remote.publish();
+  }
+
   removeMember(id: string) {
     const entry = this.#entries.find((candidate) => candidate.member.id === id);
     if (!entry) return;
-    for (const release of entry.release) release();
-    this.#entries = this.#entries.filter((candidate) => candidate !== entry);
+    this.#drop(entry);
     this.#unreachable = [...this.#unreachable, { id: entry.member.id, name: entry.member.name }];
-    this.#state.publish();
-    this.#transcripts.publish();
+    this.#publishMembers();
   }
+
+  removeMachine = (id: string) => {
+    const entry = this.#entries.find((candidate) => candidate.member.id === id);
+    if (entry) this.#drop(entry);
+    this.#unreachable = this.#unreachable.filter((machine) => machine.id !== id);
+    this.#listedUnreachable = this.#listedUnreachable.filter((machine) => machine.id !== id);
+    this.#publishMembers();
+  };
 
   get #home() {
     return this.#entries.find(isReachable)?.member.connection ?? null;
@@ -423,7 +442,6 @@ export class Fleet implements ShinsaConnection {
   };
 
   close() {
-    for (const entry of this.#entries) for (const release of entry.release) release();
-    this.#entries = [];
+    for (const entry of this.#entries) this.#drop(entry);
   }
 }
