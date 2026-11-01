@@ -8,13 +8,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
-import { Field, FieldLabel } from '@shinsa/ui/components/field';
-import { Truncate } from '@shinsa/ui/components/truncate';
-import { cn } from '@shinsa/ui/lib/utils';
+import { Field, FieldDescription, FieldLabel } from '@shinsa/ui/components/field';
+import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
-import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
-import { INSET } from '@/components/layout/surface/card.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
@@ -24,6 +22,7 @@ import { listShareLimitItems, SHARE_LIMIT_TITLE, type ShareView } from '@/lib/sh
 import {
   closePreviewShareDialog,
   describePreviewEnd,
+  PREVIEW_LINK_TITLE,
   PREVIEW_NEEDS_REMOTE,
   PREVIEW_SHARE_DESCRIPTION,
   PREVIEW_SHARE_TITLE,
@@ -39,21 +38,29 @@ import { navigate } from '@/router.ts';
 
 function PreviewLink({ preview, url }: { preview: PreviewShare; url: string }) {
   return (
-    <div className='flex w-full min-w-0 flex-col gap-1.5'>
-      <div className={cn(INSET, 'flex min-w-0 items-center gap-2 py-1.5 ps-2.5 pe-1.5')}>
-        <Truncate className='selectable min-w-0 flex-1 font-mono text-2xs text-fg-4'>{url}</Truncate>
-        <CopyButton text={url} className='shrink-0' />
-      </div>
-      <p className='text-2xs text-fg-2'>
+    <Field className='w-full'>
+      <FieldLabel>{PREVIEW_LINK_TITLE}</FieldLabel>
+      <Input
+        readOnly
+        aria-label={PREVIEW_LINK_TITLE}
+        value={url}
+        className='selectable'
+      />
+      <FieldDescription>
         {preview.endsAt === null ? (
           describePreviewEnd(preview)
         ) : (
           <TimeAgo at={preview.endsAt} text={(now) => describePreviewEnd(preview, now)} />
         )}
         .
-      </p>
-    </div>
+      </FieldDescription>
+    </Field>
   );
+}
+
+function CopyLinkButton({ url }: { url: string }) {
+  const { copied, copy } = useCopyText(url);
+  return <Button onClick={copy}>{copied ? 'Copied' : 'Copy link'}</Button>;
 }
 
 function PreviewBody({ view, preview }: { view: ShareView; preview: PreviewShare | null }) {
@@ -97,7 +104,13 @@ function PreviewActions({
     setBusy(false);
   };
   const stop = (
-    <Button variant='secondary' onClick={actions.stop}>
+    <Button
+      variant='secondary'
+      onClick={() => {
+        actions.stop();
+        actions.close();
+      }}
+    >
       {UNSHARE_TITLE}
     </Button>
   );
@@ -108,7 +121,7 @@ function PreviewActions({
       return (
         <>
           {stop}
-          <Button onClick={actions.close}>Done</Button>
+          <CopyLinkButton url={view.url} />
         </>
       );
     case 'failed':

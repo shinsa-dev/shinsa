@@ -71,16 +71,21 @@ describe('Share preview', () => {
     );
   });
 
-  it('shows the link and when it ends, and stops sharing', async () => {
+  it('shows the link and when it ends, copies it, and closes when you stop sharing', async () => {
+    const writeText = mock(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     showDialog({ previews: [{ ...SHARING, url: URL }] });
-    expect(await screen.findByText(URL)).toBeTruthy();
+    const link = (await screen.findByRole('textbox', { name: 'Link' })) as HTMLInputElement;
+    expect(link.value).toBe(URL);
+    expect(link.readOnly).toBe(true);
     expect(screen.getByText(/Sharing ends when the task is done/)).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Share for' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(URL));
     fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'preview.unshare', taskId: 'fix', serviceId: 'web' }])
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 

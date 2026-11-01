@@ -382,12 +382,13 @@ async function createServicePreview(
 ): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
   const { engine, terminals } = studio;
   const task = Object.values(engine.state.tasks).find(
-    (entry) => entry.repoId && entry.projectId && !isTaskSettled(entry)
+    (entry) => entry.repoId && entry.projectId && entry.worktreePath && !isTaskSettled(entry)
   );
-  if (!task?.projectId) return null;
+  const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
+  if (!(task?.projectId && repo)) return null;
   const service = terminals.addService(task.projectId, {
     name: 'web',
-    cwd: ROOT,
+    cwd: repo.path,
     command: DEMO_COMMAND,
     env: {},
     previewUrl: 'http://localhost:{port}/',

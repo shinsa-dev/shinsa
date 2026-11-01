@@ -9,6 +9,8 @@ export const PREVIEW_SHARE_TITLE = 'Share preview';
 
 export const PREVIEW_SHARED_TITLE = 'Sharing preview';
 
+export const PREVIEW_LINK_TITLE = 'Link';
+
 export const PREVIEW_SHARE_DESCRIPTION =
   'Anyone with the link can open this service while it runs here, at an address of its own. It stops working when you stop sharing or the task is done.';
 
