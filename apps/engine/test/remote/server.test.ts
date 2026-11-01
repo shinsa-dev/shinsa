@@ -391,6 +391,7 @@ describe('the tunnel entry point', () => {
     const page = await tunnel('/__preview/p1/index.html', { method: 'POST', body: 'x' });
     expect(page.status).toBe(203);
     expect(await page.text()).toBe('page');
+    expect((await tunnel('/__preview/p1/', { headers: { upgrade: 'websocket' } })).status).toBe(400);
     const socket = new WebSocket(`ws://127.0.0.1:${port}/__preview/p1/`, {
       headers: { 'cf-connecting-ip': '203.0.113.9' },
       protocols: ['vite-hmr'],
@@ -409,7 +410,7 @@ describe('the tunnel entry point', () => {
     await until('the relay is closed', () => relayed.includes('closed'));
     expect(relayed).toEqual(['bytes:3', 'bye', 'closed']);
     expect(peer).not.toBeNull();
-    expect(asked).toEqual(['POST /__preview/p1/index.html', 'GET /__preview/p1/']);
+    expect(asked).toEqual(['POST /__preview/p1/index.html', 'GET /__preview/p1/', 'GET /__preview/p1/']);
   });
 
   test('has no preview route without the previews', async () => {
