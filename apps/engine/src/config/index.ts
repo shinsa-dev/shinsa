@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { APP_IDENTITY, REMOTE_APP_ORIGIN } from '@shinsa/core';
+import { APP_IDENTITY, PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
 import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
 import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
@@ -33,6 +33,7 @@ export interface ServerConfig {
   pushRetryMs: number;
   overloadRetryMs: number;
   remoteOrigin: string;
+  previewOrigin: string;
 }
 
 const DATABASE_FILE = 'shinsa.sqlite';
@@ -118,6 +119,7 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
     pushRetryMs: readNumber(env, 'SHINSA_PUSH_RETRY_MS', 30_000),
     overloadRetryMs: readNumber(env, 'SHINSA_OVERLOAD_RETRY_MS', 15_000),
     remoteOrigin: env.SHINSA_REMOTE_ORIGIN || REMOTE_APP_ORIGIN,
+    previewOrigin: env.SHINSA_PREVIEW_ORIGIN || PREVIEW_ORIGIN,
   };
 }
 

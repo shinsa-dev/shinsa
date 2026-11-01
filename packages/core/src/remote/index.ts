@@ -124,10 +124,14 @@ export {
 export {
   isPreviewId,
   isPreviewKey,
+  PREVIEW_GONE,
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
+  PREVIEW_KEY_HEADER,
   PREVIEW_KEY_PARAM,
+  PREVIEW_OFFLINE,
   PREVIEW_ORIGIN,
+  PREVIEW_STOPPED,
   PREVIEW_TUNNEL_PREFIX,
   type PreviewAddress,
   type PreviewLink,
@@ -138,6 +142,7 @@ export {
   resolvePreviewOrigin,
   resolvePreviewTunnelPath,
   serializePreviewLabel,
+  serializePreviewPage,
   serializePreviewUrl,
 } from './previews.ts';
 export {

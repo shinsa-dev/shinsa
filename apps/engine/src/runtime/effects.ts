@@ -55,6 +55,7 @@ import {
   writePullRequestBlock,
 } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
+import type { PreviewEffects } from '../remote/previews.ts';
 import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
@@ -86,6 +87,7 @@ export interface EffectRunnerOptions {
   workspaces?: Workspaces;
   services?: TaskServices;
   shares: ShareEffects;
+  previews: PreviewEffects;
   slack?: Slack;
 }
 
@@ -164,6 +166,7 @@ export class EffectRunner {
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
   readonly #shares: ShareEffects;
+  readonly #previews: PreviewEffects;
   readonly #slack: Slack | null;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
@@ -196,6 +199,7 @@ export class EffectRunner {
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
     this.#shares = options.shares;
+    this.#previews = options.previews;
     this.#slack = options.slack ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
@@ -249,17 +253,7 @@ export class EffectRunner {
       case 'share.link':
         return this.#shares.link(effect.taskId, context);
       case 'preview.link':
-        return this.#engine
-          .dispatch(
-            {
-              type: 'preview.fail',
-              taskId: effect.taskId,
-              serviceId: effect.serviceId,
-              detail: 'This version of Shinsa cannot share previews yet.',
-            },
-            { id: `${context.key}:preview.fail` }
-          )
-          .then(() => undefined);
+        return this.#previews.link(effect.taskId, effect.serviceId, context);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
@@ -332,6 +326,13 @@ export class EffectRunner {
       await this.#engine.dispatch(
         { type: 'share.fail', taskId: effect.taskId, detail: error },
         { id: `${key}:share.fail` }
+      );
+      return;
+    }
+    if (effect.kind === 'preview.link') {
+      await this.#engine.dispatch(
+        { type: 'preview.fail', taskId: effect.taskId, serviceId: effect.serviceId, detail: error },
+        { id: `${key}:preview.fail` }
       );
       return;
     }

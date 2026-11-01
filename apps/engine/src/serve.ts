@@ -45,6 +45,7 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
+import { Previews } from './remote/previews.ts';
 import { ShareClock } from './remote/share-clock.ts';
 import { Shares } from './remote/shares.ts';
 import {
@@ -179,6 +180,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     readOnly: config.inspect,
     ...options.terminals,
   });
+  const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
     services: terminals,
@@ -222,6 +224,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     terminals,
     remote,
     shares,
+    previews,
     slack,
     inbox,
     quick,
@@ -242,6 +245,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
       shares,
+      previews,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
@@ -288,6 +292,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     remote: services.remote,
     shares: services.shares,
+    previews: services.previews,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,
