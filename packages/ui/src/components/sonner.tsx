@@ -102,10 +102,12 @@ function Toaster(props: ToasterProps) {
         classNames: {
           toast: 'bk-toast corner-superellipse/1.125 cursor-default rounded-popup font-medium',
           // A toast is one line (docs/design.md → Where Shinsa differs, 42): clip what
-          // still runs long, such as a git error, instead of wrapping it.
+          // still runs long, such as a git error, instead of wrapping it. Clip the inline
+          // axis only: the title's box is trimmed to its caps (globals.css), so hiding
+          // the block axis too would cut off descenders.
           content: 'min-w-0',
-          title: 'truncate',
-          description: 'truncate',
+          title: 'overflow-x-clip text-ellipsis whitespace-nowrap',
+          description: 'overflow-x-clip text-ellipsis whitespace-nowrap',
           // Sonner ships its own button styling; override to our button language.
           actionButton:
             'bk-toast-button corner-superellipse/1.125 !h-6 !cursor-pointer !rounded-control-sm !bg-primary !px-2.5 !font-medium !text-primary-foreground !text-xs',

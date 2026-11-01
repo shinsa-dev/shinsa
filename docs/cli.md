@@ -1279,6 +1279,77 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<memory>` | text, required | The memory id, from `shinsa memory list`. |
 
+### feedback
+
+#### shinsa feedback list
+
+List feedback on Shinsa: the issues that wait for you to open them on shinsa-dev/shinsa, and the ones you opened.
+
+```
+shinsa feedback list [--json]
+```
+
+Every task agent's tool: `feedback_list` (reads).
+
+#### shinsa feedback write
+
+Write feedback on Shinsa, or rewrite one with --id. Your agent drafts it as a public GitHub issue without anything private, and it waits for you to open it.
+
+```
+shinsa feedback write [--id <text>] <note...> [--json]
+```
+
+Every task agent's tool: `feedback_write`. Sends `feedback.write`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--id` | text, optional | The feedback to rewrite. Leave out to write new feedback. |
+| `<note>` | text, required | What you want to tell Shinsa. |
+
+#### shinsa feedback edit
+
+Change the title and description of a drafted issue before you open it.
+
+```
+shinsa feedback edit <feedback> --title <text> --body <text> [--json]
+```
+
+Every task agent's tool: `feedback_edit`. Sends `feedback.update`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<feedback>` | text, required | The feedback id, from `shinsa feedback list`. |
+| `--title` | text, required | The issue’s title. |
+| `--body` | text, required | The issue’s description, in markdown. |
+
+#### shinsa feedback file
+
+Open a drafted issue on shinsa-dev/shinsa with your GitHub login. Shinsa checks it for anything private first.
+
+```
+shinsa feedback file <feedback> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `feedback.file`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<feedback>` | text, required | The feedback id, from `shinsa feedback list`. |
+
+#### shinsa feedback dismiss
+
+Dismiss feedback that waits for you, without opening an issue.
+
+```
+shinsa feedback dismiss <feedback> [--json]
+```
+
+Every task agent's tool: `feedback_dismiss`. Sends `feedback.dismiss`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<feedback>` | text, required | The feedback id, from `shinsa feedback list`. |
+
 ### settings
 
 #### shinsa settings get

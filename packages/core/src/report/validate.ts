@@ -6,6 +6,7 @@ import {
   EVIDENCE_KINDS,
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
+  FEEDBACK_LIMITS,
   isEvidenceKey,
   MEMORY_LIMITS,
   MEMORY_SCOPES,
@@ -1086,6 +1087,11 @@ export function validateMemoryProposal(
     text: reader.text(input.text, 'text', MEMORY_LIMITS.text),
     why: reader.text(input.why, 'why', MEMORY_LIMITS.why),
   });
+}
+
+export function validateFeedbackReport(input: Record<string, unknown>): Validation<{ note: string }> {
+  const reader = new Reader();
+  return reader.result({ note: reader.text(input.feedback, 'feedback', FEEDBACK_LIMITS.note) });
 }
 
 function readProposal(reader: Reader, value: unknown): ChangeProposalInput | null {

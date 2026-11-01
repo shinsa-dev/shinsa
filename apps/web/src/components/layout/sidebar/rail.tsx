@@ -3,6 +3,7 @@ import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
 import { CommandMenuButton } from '@/components/command/menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { FeedbackButton } from '@/components/feedback/button.tsx';
 import { FocusMenu } from '@/components/focus/menu.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
 import { NavItem } from '@/components/layout/nav-item.tsx';
@@ -73,6 +74,11 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
             active={route.name === 'settings'}
             onClick={() => go('/settings')}
           />
+          {route.name !== 'onboarding' && (
+            <ErrorBoundary size='inline' resetKey={resetKey}>
+              <FeedbackButton state={state} variant='rail' onNavigate={onNavigate} />
+            </ErrorBoundary>
+          )}
         </HoverHighlight>
       </div>
       {route.name !== 'onboarding' && (
