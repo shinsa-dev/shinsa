@@ -52,10 +52,10 @@ function connect(session: Response | null = null) {
   globalThis.WebSocket = function createFakeSocket(url: string) {
     return machine.options.createSocket(url);
   } as unknown as typeof WebSocket;
-  const blobs = new Map<string, string>();
+  const blobs = new Map<string, Blob>();
   spyOn(URL, 'createObjectURL').mockImplementation(((blob: Blob) => {
     const url = `blob:test-${blobs.size}`;
-    void blob.text().then((text) => blobs.set(url, text));
+    blobs.set(url, blob);
     return url;
   }) as never);
   spyOn(globalThis, 'fetch').mockImplementation(((input: string) => {
