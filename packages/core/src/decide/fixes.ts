@@ -171,10 +171,10 @@ function isFixedBeforeReview(task: Task, finding: ReviewFinding) {
 
 export function reactToFindings(decider: Decider, taskId: string, findings: ReviewFinding[]) {
   const task = decider.task(taskId);
-  const blocking = findings.filter(
+  const toFix = findings.filter(
     (finding) => isFixedBeforeReview(task, finding) && !isDismissed(task, finding)
   );
-  if (blocking.length === 0) {
+  if (toFix.length === 0) {
     openReviewGate(decider, taskId);
     return;
   }
@@ -191,6 +191,6 @@ export function reactToFindings(decider: Decider, taskId: string, findings: Revi
     taskId,
     'review',
     resolveReviewFixPrompt(findings),
-    resolveSignature(blocking.map((finding) => finding.file ?? ''))
+    resolveSignature(toFix.map((finding) => finding.file ?? ''))
   );
 }
