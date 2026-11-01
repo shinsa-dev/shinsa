@@ -1,16 +1,19 @@
-import type { Iteration, Task } from '@shinsa/core';
+import { type Iteration, lowerFirst, type Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
+import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
   type AnsweredIteration,
   describeOutcomes,
+  describeRequestLabel,
   describeRequestText,
+  describeSentLabel,
   listEarlierReplies,
 } from '@/lib/overview/exchanges.ts';
 import {
@@ -33,13 +36,16 @@ function SentFold({ task, iteration }: { task: Task; iteration: Iteration }) {
     false
   );
   const sent = describeRequestText(iteration);
+  const label = describeSentLabel(useReadOnlyOwner());
   if (!sent) return null;
   return (
     <div className='flex flex-col gap-1.5'>
-      <DisclosureHeader disclosure={disclosure} label='what you sent' className='gap-1.5 text-fg-2 text-xs'>
-        <span className='group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>
-          What you sent
-        </span>
+      <DisclosureHeader
+        disclosure={disclosure}
+        label={lowerFirst(label)}
+        className='gap-1.5 text-fg-2 text-xs'
+      >
+        <span className='group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>{label}</span>
         <DisclosureChevron />
       </DisclosureHeader>
       {disclosure.open && <SentQuote text={sent} />}
@@ -66,10 +72,11 @@ export function ReplyReport({
 
 export function WorkingRequest({ iteration }: { iteration: Iteration }) {
   const text = describeRequestText(iteration);
+  const label = describeRequestLabel(useReadOnlyOwner());
   if (!text) return null;
   return (
     <div className='flex flex-col gap-1'>
-      <span className='text-fg-2 text-xs'>Your request</span>
+      <span className='text-fg-2 text-xs'>{label}</span>
       <SentQuote text={text} className='line-clamp-4' />
     </div>
   );
@@ -109,11 +116,12 @@ function ExchangeRow({ task, iteration }: { task: Task; iteration: AnsweredItera
 
 export function RequestsPanel({ task, shownId }: { task: Task; shownId: string | null }) {
   const replies = listEarlierReplies(task, shownId);
+  const owner = useReadOnlyOwner();
   if (replies.length === 0) return null;
   return (
     <Panel
       persistId={resolveOverviewPanelId(task, 'requests')}
-      title={shownId ? 'Earlier requests' : 'Your requests'}
+      title={shownId ? 'Earlier requests' : `${describeRequestLabel(owner)}s`}
       icon='IconChecklist'
       count={replies.length}
     >

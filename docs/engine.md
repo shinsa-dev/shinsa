@@ -3074,7 +3074,8 @@ projection and channel will serve teams.
   header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
   app.shinsa.dev is its owner) and when the machine last read it. To anyone but the owner, what the owner did or wrote
   is labelled with their login instead of "You" (`resolveOwnerName`, read through `useReadOnlyOwner`): "Asked for this ·
-  @kai", "on @kai’s behalf", "@kai closed this as a duplicate.", "Asked @kai" and "@kai’s answer" in Chat, and "The
+  @kai", "on @kai’s behalf", "@kai closed this as a duplicate.", "@kai cancelled the task", "@kai’s request" and
+  "What @kai sent" on Overview, "Asked @kai" and "@kai’s answer" in Chat, and "The
   owner" when the share carries no login. Read-only takes away
   only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
   answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the

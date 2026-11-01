@@ -6,6 +6,7 @@ import {
   type Gate,
   listActiveRuns,
   listOpenGates,
+  lowerFirst,
   type Run,
   resolveTaskProgress,
   type ShinsaState,
@@ -18,6 +19,7 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
+import { describeOwnerPossessive } from '@/lib/share/page.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
 import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
@@ -42,15 +44,25 @@ const SETTLED_TITLE: Partial<Record<Task['stage'], string>> = {
   cancelled: 'Cancelled.',
 };
 
+export function describeResultTitle(step: DeliveringStep, owner: string | null = null) {
+  if (step !== 'answer' || owner === null) return RESULT_TITLE[step];
+  return `Answered ${describeOwnerPossessive(owner)} question`;
+}
+
 const CANCEL_REASON: Record<string, string> = {
   'pull request closed': 'the pull request was closed without merging',
-  'cancelled by you': 'you cancelled the task',
 };
 
-function describeCancelled(task: Task) {
+function describeCancelReason(reason: string, owner: string | null) {
+  if (reason === 'cancelled by you')
+    return `${owner === null ? 'you' : lowerFirst(owner)} cancelled the task`;
+  return CANCEL_REASON[reason] ?? reason;
+}
+
+function describeCancelled(task: Task, owner: string | null) {
   const step = selectCancelledStep(resolveSteps(resolveTaskProgress(task)));
   if (!step) return SETTLED_TITLE.cancelled ?? '';
-  const reason = CANCEL_REASON[task.stageReason] ?? task.stageReason;
+  const reason = describeCancelReason(task.stageReason, owner);
   return reason ? `Cancelled at ${step.label}: ${reason}.` : `Cancelled at ${step.label}.`;
 }
 
@@ -61,14 +73,15 @@ export function resolveNowTitle(
   waitsOn: Task[],
   current: DisplayPhase | null,
   run: Run | undefined,
-  bundle: string | null = null
+  bundle: string | null = null,
+  owner: string | null = null
 ) {
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
   if (bundle && !run) return bundle;
   if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
   if (!run && isWatchedTask(task)) return WATCHED_TITLE;
-  if (!run && task.stage === 'cancelled') return describeCancelled(task);
+  if (!run && task.stage === 'cancelled') return describeCancelled(task, owner);
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
   return describeConflict(task) ?? capitalise(task.stageReason);
 }

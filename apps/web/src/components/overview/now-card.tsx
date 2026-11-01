@@ -35,7 +35,7 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
-import { useReadOnly } from '@/components/task/read-only.tsx';
+import { useReadOnly, useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { InsetNote } from '@/components/text/inset-note.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -46,9 +46,9 @@ import { type AnsweredIteration, selectShownReply, selectWorkingRequest } from '
 import {
   describeAgentReviewFact,
   describeFollowUpNote,
+  describeResultTitle,
   isTaskWatchable,
   type NowTarget,
-  RESULT_TITLE,
   RETRY_NOTE,
   resolveNowKind,
   resolveNowTitle,
@@ -385,6 +385,7 @@ function WorkCard({
   const leaf = traceStalledLeaf(state, task);
   const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
   const request = selectWorkingRequest(task);
+  const owner = useReadOnlyOwner();
   return (
     <NowFrame
       eyebrow={
@@ -402,7 +403,14 @@ function WorkCard({
           }
         />
       }
-      title={resolveNowTitle(task, listWaitsOn(state, task), current, run, describeBundleWait(state, task))}
+      title={resolveNowTitle(
+        task,
+        listWaitsOn(state, task),
+        current,
+        run,
+        describeBundleWait(state, task),
+        owner
+      )}
       action={
         run &&
         isTaskWatchable(state, task) && (
@@ -493,6 +501,7 @@ export function ResultCard({
   onOpen: (target: NowTarget, runId?: string) => void;
   onReply?: GateReplier;
 }) {
+  const owner = useReadOnlyOwner();
   const result = task.result;
   if (!result) return null;
   const run = result.runId ? state.runs[result.runId] : undefined;
@@ -500,7 +509,7 @@ export function ResultCard({
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
-      title={RESULT_TITLE[result.step]}
+      title={describeResultTitle(result.step, owner)}
       action={gate && <CloseButton onReply={onReply} />}
       footer={
         <FooterNote note={describeFollowUpNote(result.step, run?.role ?? null)}>

@@ -145,8 +145,8 @@ src/
     │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
     │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
     │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides; useReadOnlyNote: the line
-    │                    the header shows above the title; useReadOnlyOwner: the owner's name for activity, fact hints and
-    │                    the hand-over card, null on your own page), and
+    │                    the header shows above the title; useReadOnlyOwner: the owner's name for activity, fact hints,
+    │                    the now card, the requests and the hand-over card, null on your own page), and
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
