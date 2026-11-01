@@ -1,4 +1,4 @@
-import { parseRemoteHookPath, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
+import { parseRemoteHookPath, REMOTE_PATHS, SLACK_RELAY_PATHS, type TeamAction } from '@shinsa/core';
 import { createStore, type Database } from './database.ts';
 import { respondHook } from './hooks.ts';
 import { applySecurityHeaders, CloudError, respondError, respondJson } from './http.ts';
@@ -45,6 +45,14 @@ import {
   respondSlackConnectCallback,
   respondSlackInstallCallback,
 } from './slack-link.ts';
+import {
+  PAGE_TEAM_ACTIONS,
+  respondTeamAction,
+  respondTeamCreate,
+  respondTeamJoin,
+  respondTeams,
+  TEAM_ACTIONS,
+} from './teams.ts';
 import type { CloudConfig, CloudWorld, Fetch } from './world.ts';
 
 type Handler = (
@@ -64,6 +72,10 @@ const SEGMENT = '([A-Za-z0-9_-]{1,64})';
 
 function exact(path: string) {
   return new RegExp(`^${path.replaceAll('/', '\\/')}$`);
+}
+
+function teamActions(prefix: string, actions: readonly TeamAction[]) {
+  return new RegExp(`^${prefix}/${SEGMENT}/(${actions.join('|')})$`);
 }
 
 const ROUTES: Route[] = [
@@ -166,6 +178,38 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(REMOTE_PATHS.machineMemberRemove),
     respond: (request, _url, _match, world) => respondMachineMemberRemove(request, world),
+  },
+  {
+    method: 'GET',
+    pattern: exact(REMOTE_PATHS.teams),
+    respond: (request, _url, _match, world) => respondTeams(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.teamJoin),
+    respond: (request, _url, _match, world) => respondTeamJoin(request, 'page', world),
+  },
+  {
+    method: 'POST',
+    pattern: teamActions(REMOTE_PATHS.teams, PAGE_TEAM_ACTIONS),
+    respond: (request, _url, match, world) =>
+      respondTeamAction(request, 'page', match[1] ?? '', match[2] as TeamAction, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineTeams),
+    respond: (request, _url, _match, world) => respondTeamCreate(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineTeamJoin),
+    respond: (request, _url, _match, world) => respondTeamJoin(request, 'machine', world),
+  },
+  {
+    method: 'POST',
+    pattern: teamActions(REMOTE_PATHS.machineTeams, TEAM_ACTIONS),
+    respond: (request, _url, match, world) =>
+      respondTeamAction(request, 'machine', match[1] ?? '', match[2] as TeamAction, world),
   },
   {
     method: 'POST',

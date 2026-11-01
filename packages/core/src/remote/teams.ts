@@ -29,7 +29,29 @@ export const TEAM_KEY_BYTES = 32;
 
 export const TEAM_NAME_LIMIT = 60;
 
+export const MAX_TEAM_MEMBERS = 20;
+
+export const MAX_OWNED_TEAMS = 10;
+
 export const TEAM_CHANNEL_PATH = '/team';
+
+export type TeamAction =
+  | 'invite'
+  | 'invite/remove'
+  | 'members/add'
+  | 'members/remove'
+  | 'requests/decline'
+  | 'leave'
+  | 'remove'
+  | 'connect';
+
+export interface TeamMachine {
+  id: string;
+  name: string;
+  userId: string;
+  online: boolean;
+  lastSeenAt: number | null;
+}
 
 export interface RemoteTeam {
   id: string;
@@ -37,7 +59,39 @@ export interface RemoteTeam {
   owner: RemoteUser;
   role: RemoteRole;
   members: RemoteMember[];
+  requests: RemoteMember[];
+  machines: TeamMachine[];
   createdAt: number;
+}
+
+export interface TeamCreateRequest {
+  name: string;
+}
+
+export interface TeamCreateResponse {
+  team: RemoteTeam;
+  invite: string;
+}
+
+export interface TeamInviteResponse {
+  invite: string;
+}
+
+export interface TeamJoinRequest {
+  invite: string;
+}
+
+export type TeamJoinStatus = 'requested' | 'member';
+
+export interface TeamJoinResponse {
+  teamId: string;
+  name: string;
+  owner: RemoteUser;
+  status: TeamJoinStatus;
+}
+
+export interface TeamConnectRequest {
+  instanceId: string;
 }
 
 export interface TeamJoinFragment {
@@ -104,6 +158,14 @@ export function resolveTeamPath(teamId: string) {
 
 export function resolveTeamConnectPath(teamId: string) {
   return `${resolveTeamPath(teamId)}/connect`;
+}
+
+export function resolveTeamLeavePath(teamId: string) {
+  return `${resolveTeamPath(teamId)}/leave`;
+}
+
+export function resolveMachineTeamPath(teamId: string, action: TeamAction) {
+  return `${REMOTE_PATHS.machineTeams}/${encodeURIComponent(teamId)}/${action}`;
 }
 
 export function resolveTeamChannelUrl(tunnelUrl: string, token: string) {

@@ -48,6 +48,13 @@ export interface MemberRow extends UserRow {
   added_at: number;
 }
 
+export interface TeamRow {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: number;
+}
+
 export interface PairSessionRow {
   claim_code: string;
   poll_secret_hash: string;
@@ -95,6 +102,12 @@ const SHARED_INSTANCE_COLUMNS = [
 ].join(', ');
 
 const USER_COLUMNS = 'users.id, users.login, users.name, users.avatar_url';
+
+const TEAM_COLUMN_NAMES = ['id', 'user_id', 'name', 'created_at'];
+
+const TEAM_COLUMNS = TEAM_COLUMN_NAMES.join(', ');
+
+const INVITE_TEAM_COLUMNS = TEAM_COLUMN_NAMES.map((column) => `teams.${column}`).join(', ');
 
 export interface SlackWorkspaceRow {
   team_id: string;
@@ -401,6 +414,147 @@ export function createStore(db: Database) {
         .prepare('DELETE FROM instance_members WHERE instance_id = ? AND user_id = ?')
         .bind(instanceId, userId)
         .run();
+    },
+
+    async createTeam(team: TeamRow) {
+      await db
+        .prepare('INSERT INTO teams (id, user_id, name, created_at) VALUES (?, ?, ?, ?)')
+        .bind(team.id, team.user_id, team.name, team.created_at)
+        .run();
+    },
+
+    async countOwnedTeams(userId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM teams WHERE user_id = ?')
+        .bind(userId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
+    selectTeam(id: string) {
+      return db.prepare(`SELECT ${TEAM_COLUMNS} FROM teams WHERE id = ?`).bind(id).first<TeamRow>();
+    },
+
+    async listUserTeams(userId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${TEAM_COLUMNS} FROM teams WHERE user_id = ? OR id IN (SELECT team_id FROM team_members WHERE user_id = ?) ORDER BY created_at, id`
+        )
+        .bind(userId, userId)
+        .all<TeamRow>();
+      return results;
+    },
+
+    async removeTeam(id: string) {
+      await db.prepare('DELETE FROM teams WHERE id = ?').bind(id).run();
+    },
+
+    async replaceTeamInvite(teamId: string, tokenHash: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO team_invites (team_id, token_hash, created_at) VALUES (?, ?, ?) ON CONFLICT (team_id) DO UPDATE SET token_hash = excluded.token_hash, created_at = excluded.created_at'
+        )
+        .bind(teamId, tokenHash, now)
+        .run();
+    },
+
+    async removeTeamInvite(teamId: string) {
+      await db.prepare('DELETE FROM team_invites WHERE team_id = ?').bind(teamId).run();
+    },
+
+    selectInviteTeam(tokenHash: string) {
+      return db
+        .prepare(
+          `SELECT ${INVITE_TEAM_COLUMNS} FROM team_invites JOIN teams ON teams.id = team_invites.team_id WHERE team_invites.token_hash = ?`
+        )
+        .bind(tokenHash)
+        .first<TeamRow>();
+    },
+
+    async recordTeamRequester(teamId: string, userId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO team_requesters (team_id, user_id, requested_at) VALUES (?, ?, ?) ON CONFLICT (team_id, user_id) DO UPDATE SET requested_at = excluded.requested_at'
+        )
+        .bind(teamId, userId, now)
+        .run();
+    },
+
+    async isTeamRequester(teamId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM team_requesters WHERE team_id = ? AND user_id = ?')
+        .bind(teamId, userId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async listTeamRequesters(teamId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${USER_COLUMNS}, team_requesters.requested_at AS added_at FROM team_requesters JOIN users ON users.id = team_requesters.user_id WHERE team_requesters.team_id = ? ORDER BY team_requesters.requested_at, users.login`
+        )
+        .bind(teamId)
+        .all<MemberRow>();
+      return results;
+    },
+
+    async removeTeamRequester(teamId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM team_requesters WHERE team_id = ? AND user_id = ?')
+        .bind(teamId, userId)
+        .run();
+    },
+
+    async createTeamMember(teamId: string, userId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO team_members (team_id, user_id, added_at) VALUES (?, ?, ?) ON CONFLICT (team_id, user_id) DO NOTHING'
+        )
+        .bind(teamId, userId, now)
+        .run();
+    },
+
+    async isTeamMember(teamId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM team_members WHERE team_id = ? AND user_id = ?')
+        .bind(teamId, userId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async countTeamMembers(teamId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM team_members WHERE team_id = ?')
+        .bind(teamId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
+    async listTeamMembers(teamId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${USER_COLUMNS}, team_members.added_at FROM team_members JOIN users ON users.id = team_members.user_id WHERE team_members.team_id = ? ORDER BY team_members.added_at, users.login`
+        )
+        .bind(teamId)
+        .all<MemberRow>();
+      return results;
+    },
+
+    async removeTeamMember(teamId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?')
+        .bind(teamId, userId)
+        .run();
+    },
+
+    async listTeamInstances(teamId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${INSTANCE_COLUMNS} FROM instances WHERE user_id IN (SELECT user_id FROM teams WHERE id = ? UNION SELECT user_id FROM team_members WHERE team_id = ?) ORDER BY created_at, id`
+        )
+        .bind(teamId, teamId)
+        .all<InstanceRow>();
+      return results;
     },
 
     async upsertSlackWorkspace(row: SlackWorkspaceRow) {

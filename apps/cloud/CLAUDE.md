@@ -22,6 +22,8 @@ src/
 ├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
 ├── members.ts     A machine's members: its invite, who asked through it, adding and removing members, Leave
+├── teams.ts       Teams: made by a machine for its owner, one reusable invite, requests, members, Leave, team
+│                  connect tokens to a teammate's /team channel, and the teams in the heartbeat
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
 ├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine

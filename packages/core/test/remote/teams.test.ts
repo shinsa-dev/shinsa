@@ -11,9 +11,11 @@ import {
   parseTeamHello,
   parseTeamJoinFragment,
   parseTeamJoinUrl,
+  resolveMachineTeamPath,
   resolveTeamChannelUrl,
   resolveTeamConnectPath,
   resolveTeamJoinUrl,
+  resolveTeamLeavePath,
   serializeTeamJoinFragment,
   type TeamView,
   verifyTeamHello,
@@ -52,6 +54,8 @@ describe('the team join link', () => {
 
   test('names the team routes and the tunnel channel', () => {
     expect(resolveTeamConnectPath('team 1')).toBe('/__remote/teams/team%201/connect');
+    expect(resolveTeamLeavePath('t1')).toBe('/__remote/teams/t1/leave');
+    expect(resolveMachineTeamPath('t1', 'members/add')).toBe('/__remote/machine/teams/t1/members/add');
     expect(resolveTeamChannelUrl('https://t-i.shinsa.dev', 'a.b')).toBe(
       'https://t-i.shinsa.dev/team?token=a.b'
     );
