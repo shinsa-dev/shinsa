@@ -23,33 +23,37 @@ afterEach(() => {
 
 describe('handing a task off', () => {
   it('offers it on an open task and on one already handed off, never on a finished task or an automation', () => {
-    expect(canHandOff(createTask({ stage: 'building' }))).toBe(true);
-    expect(canHandOff(createTask({ stage: 'done' }))).toBe(false);
-    expect(canHandOff(createTask({ stage: 'done', handoff: { ...HANDED, guest: KAI, claimedAt: 9 } }))).toBe(
-      true
-    );
-    expect(canHandOff(createTask({ stage: 'building', watchHome: true }))).toBe(false);
+    expect(canHandOff(createTask({ id: 't1', stage: 'building' }))).toBe(true);
+    expect(canHandOff(createTask({ id: 't1', stage: 'done' }))).toBe(false);
+    expect(
+      canHandOff(createTask({ id: 't1', stage: 'done', handoff: { ...HANDED, guest: KAI, claimedAt: 9 } }))
+    ).toBe(true);
+    expect(canHandOff(createTask({ id: 't1', stage: 'building', watchHome: true }))).toBe(false);
   });
 
   it('waits for the link, shows it, says why it failed and who took the task over', () => {
-    expect(resolveHandoffView(createTask({}))).toEqual({ kind: 'off' });
-    expect(resolveHandoffView(createTask({ handoff: HANDED }))).toEqual({ kind: 'linking' });
-    expect(resolveHandoffView(createTask({ handoff: { ...HANDED, url: 'https://x' } }))).toEqual({
+    expect(resolveHandoffView(createTask({ id: 't1' }))).toEqual({ kind: 'off' });
+    expect(resolveHandoffView(createTask({ id: 't1', handoff: HANDED }))).toEqual({ kind: 'linking' });
+    expect(resolveHandoffView(createTask({ id: 't1', handoff: { ...HANDED, url: 'https://x' } }))).toEqual({
       kind: 'ready',
       url: 'https://x',
     });
     expect(
-      resolveHandoffView(createTask({ handoff: { ...HANDED, failure: 'Remote access is off.' } }))
+      resolveHandoffView(createTask({ id: 't1', handoff: { ...HANDED, failure: 'Remote access is off.' } }))
     ).toEqual({
       kind: 'failed',
       message: 'Remote access is off.',
     });
-    expect(resolveHandoffView(createTask({ handoff: { ...HANDED, guest: KAI, claimedAt: 9 } }))).toEqual({
+    expect(
+      resolveHandoffView(createTask({ id: 't1', handoff: { ...HANDED, guest: KAI, claimedAt: 9 } }))
+    ).toEqual({
       kind: 'claimed',
       guest: KAI,
       at: 9,
     });
-    expect(resolveHandoffView(createTask({ handoff: { ...HANDED, guest: KAI } }))).toMatchObject({ at: 5 });
+    expect(resolveHandoffView(createTask({ id: 't1', handoff: { ...HANDED, guest: KAI } }))).toMatchObject({
+      at: 5,
+    });
     expect(describeHandoffClaim(KAI)).toBe('Kai Lane took this task over');
     expect(describeHandoffClaim({ ...KAI, name: null })).toBe('@kai took this task over');
   });
