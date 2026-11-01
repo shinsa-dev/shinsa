@@ -441,6 +441,8 @@ describe('on a task page', () => {
       clearComments: () => {},
       verdicts: {},
       setVerdict: () => {},
+      thenApprove: false,
+      chooseThenApprove: () => {},
     };
     return (
       <ReviewDraftContext.Provider value={draft}>

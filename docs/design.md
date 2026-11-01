@@ -651,7 +651,9 @@ Only these, and they win over anything below:
       dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
-      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
+      line comments to the agent"), Fix N findings and approve ("Sends the findings you kept, then approves once checks
+      and the agent review pass"; its two halves keep their size when pressed and the chevron keeps its hover fill while
+      its menu is open), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
       own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
@@ -1318,7 +1320,12 @@ Only these, and they win over anything below:
       findings start on Fix and Optional ones on Dismiss (`SEVERITY_VERDICT`, `lib/review/findings.ts`), so the default
       is the reviewer's ranking. The primary action follows the verdicts:
       "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip says so, 13),
-      Approve changes when all are dismissed. The activity lists the comments a decision
+      Approve changes when all are dismissed. While any is kept, and the task's engine has
+      `review.approve_after_fix`, the button is a split button (`review-actions.tsx`): the primary button and an
+      `icon-sm` chevron ("More ways to fix") joined with square inner corners, whose menu is a radio pair, Fix 2
+      findings and Fix 2 findings and approve. The pick swaps the button's label and tooltip ("Sends the findings you
+      kept, then approves once checks and the agent review pass") and is kept in the review draft, so ⌘K's fix command
+      follows it and offers the other one beside it. A reload starts on Fix 2 findings again. The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
       review titles the card "The agents could not settle the review", or "The fix changed nothing and
       the same findings came back" when a round left the code as it was, and says why
@@ -2983,6 +2990,12 @@ Only these, and they win over anything below:
     - **Fork into a new task** is a task action (the task menu, an All tasks row's menu, ⌘K) on every task but a cancelled
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
+    - **Who filed it** is one fact when you did not (`resolveFiledByFact` in `lib/tasks/facts.ts`, `FiledByFact`):
+      "Filed by SW-122 ‹title›" (`IconAgents`) when another task's agent filed it with `create_task`, "Split from
+      SW-122 ‹title›" (`IconSplit`) for a task `split_task` made, "Filed by “‹watchdog›”" (`IconRadar`), opening the
+      shipped task it watches, and "Filed by “‹automation›”" or, with no report, "Started by “‹automation›”"
+      (`IconCalendarClock`), opening the automation. Its tooltip says who filed it in a sentence. A task you filed
+      shows none, nor one whose filer is gone, and Forked from leaves out the task the fact already names.
 42. **A toast is one short line** (since 2026-10-31; `lib/connection/commands.ts`, `scripts/lint-toast.ts`). A toast
     says what just happened in a few words and never wraps at the toaster's 420px: "Request declined.", "Device
     revoked.", "Kai Lane joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or
