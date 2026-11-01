@@ -95,4 +95,10 @@ describe('useServiceActions', () => {
     act(() => handlers.share?.(shared));
     expect(result.current.opened).toEqual({ taskId: 'fix', serviceId: 'web' });
   });
+
+  it('offers Share preview only on an engine that says it shares previews', () => {
+    const { result } = renderHook(() => useServiceActions({ state: createShinsaState({}) }));
+    const view = resolveServiceView(createService({ id: 'web' }), null, NOW, 'fix');
+    expect(result.current.handlers.canShare?.(view)).toBe(false);
+  });
 });
