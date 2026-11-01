@@ -6,6 +6,7 @@ import {
   validateDelivery,
   validateEvidence,
   validateEvidenceRemoval,
+  validateFeedbackReport,
   validateFixHandOver,
   validateMemoryProposal,
   validatePhaseHandOver,
@@ -1062,6 +1063,19 @@ describe('validateMemoryProposal', () => {
         'text is 241 characters; the limit is 240.',
         'why is required.',
       ],
+    });
+  });
+});
+
+describe('validateFeedbackReport', () => {
+  test('reads the feedback, trimmed, within its limit', () => {
+    expect(validateFeedbackReport({ feedback: ' The plan tool refused a phase. ' })).toEqual({
+      ok: true,
+      value: { note: 'The plan tool refused a phase.' },
+    });
+    expect(validateFeedbackReport({ feedback: 'x'.repeat(4001) })).toEqual({
+      ok: false,
+      errors: ['feedback is 4001 characters; the limit is 4000.'],
     });
   });
 });

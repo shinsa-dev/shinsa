@@ -1,4 +1,5 @@
 import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
@@ -35,7 +36,7 @@ import {
   type Terminal,
 } from '../terminal/index.ts';
 import { createApiClient } from './api.ts';
-import { APP_BUNDLE_ID, isPathArgument, ownsEngineJob, resolveLinkPage } from './app.ts';
+import { APP_BUNDLE_ID, isInsideApp, isPathArgument, ownsEngineJob, resolveLinkPage } from './app.ts';
 import { type CommandIo, createTask, importSession, openApp, parseArgs, printStatus } from './commands.ts';
 import {
   type EngineControl,
@@ -86,16 +87,16 @@ async function runOrThrow(command: string[]) {
 
 export interface OpenAppOptions {
   write: (line: string) => void;
-  bundled?: boolean;
+  inApp?: boolean;
   platform?: string;
   env?: Record<string, string | undefined>;
 }
 
 export function createOpenApp(base: string, options: OpenAppOptions) {
   const platform = options.platform ?? process.platform;
-  const bundled = (options.bundled ?? Boolean(BUNDLE)) && platform === 'darwin';
+  const inApp = (options.inApp ?? (Boolean(BUNDLE) && isInsideApp())) && platform === 'darwin';
   return async (link: string) => {
-    if (bundled) {
+    if (inApp) {
       await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
       return;
     }
@@ -135,6 +136,10 @@ export function createPlatformService(
     uid: process.getuid?.() ?? 0,
     launchctl: createServiceRunner(['launchctl']),
     ownsJob: ownsEngineJob,
+    inApp: isInsideApp(),
+    program: process.execPath,
+    home: env.HOME || homedir(),
+    env,
   });
 }
 

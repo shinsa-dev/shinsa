@@ -34,6 +34,9 @@ import { serializeCheckOutput } from '../checks/evidence.ts';
 import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
+import type { FeedbackDrafter } from '../feedback/draft.ts';
+import { listFeedbackEnvironment, resolveFeedbackMachine } from '../feedback/environment.ts';
+import { FeedbackEffects } from '../feedback/index.ts';
 import {
   hasPrePushHook,
   PushError,
@@ -55,6 +58,8 @@ import {
   retargetPullRequest,
   writePullRequestBlock,
 } from '../github/index.ts';
+import { BUNDLE } from '../instance/bundle.ts';
+import { createServerInstance, type ServerInstance } from '../instance/install.ts';
 import { describeError, log } from '../log/index.ts';
 import type { ShareEffects } from '../remote/shares.ts';
 import {
@@ -79,6 +84,8 @@ import { resolveShippingError } from './failures.ts';
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
+  draftFeedback?: FeedbackDrafter;
+  instance?: Pick<ServerInstance, 'version' | 'commit'>;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
@@ -167,6 +174,7 @@ export class EffectRunner {
   readonly #services: TaskServices | null;
   readonly #shares: ShareEffects;
   readonly #slack: Slack | null;
+  readonly #feedback: FeedbackEffects;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
@@ -199,6 +207,18 @@ export class EffectRunner {
     this.#services = options.services ?? null;
     this.#shares = options.shares;
     this.#slack = options.slack ?? null;
+    this.#feedback = new FeedbackEffects(
+      engine,
+      config.dataDir,
+      options.draftFeedback ?? (() => Promise.resolve(null)),
+      (state, entry) =>
+        listFeedbackEnvironment(
+          state,
+          entry,
+          options.instance ?? createServerInstance(),
+          resolveFeedbackMachine(Boolean(BUNDLE))
+        )
+    );
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
     this.#bases = new BaseCheckouts(config.checkBasesDir);
@@ -256,6 +276,10 @@ export class EffectRunner {
         return this.#withSlack((slack) => slack.status(effect, context));
       case 'slack.post':
         return this.#withSlack((slack) => slack.post(effect));
+      case 'feedback.draft':
+        return this.#feedback.draft(effect.feedbackId, context);
+      case 'feedback.file':
+        return this.#feedback.file(effect.feedbackId, context);
     }
   }
 
@@ -318,6 +342,10 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
+    if (effect.kind === 'feedback.draft' || effect.kind === 'feedback.file') {
+      await this.#feedback.reportExhausted(effect.feedbackId, error, key);
+      return;
+    }
     if (effect.kind === 'share.link') {
       await this.#engine.dispatch(
         { type: 'share.fail', taskId: effect.taskId, detail: error },
@@ -334,6 +362,7 @@ export class EffectRunner {
   }
 
   async recover() {
+    await this.#feedback.recover();
     await this.syncAll();
   }
 
@@ -350,6 +379,8 @@ export class EffectRunner {
         (task.stage === 'shipping' || task.stage === 'awaiting_merge') && !task.pullRequestWatch?.stopped
     );
     for (const task of watched) await this.syncPullRequest(task.id);
+    const failure = await this.#feedback.syncIssues(this.#stopping.signal);
+    if (failure) log.warn('[Feedback] Could not read the state of opened issues', { error: failure });
   }
 
   syncPullRequest(taskId: string, force = false, signal = this.#stopping.signal) {

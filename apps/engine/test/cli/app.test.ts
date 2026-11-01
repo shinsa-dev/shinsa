@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Repo, UserCommand } from '@shinsa/core';
 import {
+  isInsideApp,
   isJobProgram,
   isPathArgument,
   ownsEngineJob,
@@ -145,6 +146,11 @@ describe('reading who this shinsa is on disk', () => {
     symlinkSync(join(dir, 'shinsa'), join(dir, 'link'));
     expect(resolveRealPath(join(dir, 'link'))).toBe(join(dir, 'shinsa'));
     expect(resolveRealPath(join(dir, 'missing'))).toBe(join(dir, 'missing'));
+  });
+
+  test('knows a program inside an app bundle from one installed on its own', () => {
+    expect(isInsideApp('/Applications/Shinsa.app/Contents/Resources/engine/bin/shinsa')).toBe(true);
+    expect(isInsideApp('/Users/dev/.local/share/shinsa/bin/shinsa')).toBe(false);
   });
 
   test('reads an app’s bundle id with plutil, and nothing when the plist or the tool is missing or fails', () => {

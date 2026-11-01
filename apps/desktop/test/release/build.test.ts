@@ -14,6 +14,7 @@ interface BuilderConfig {
   mac?: { icon?: string };
   dmg?: { background?: string };
   extraResources?: { from: string; to: string }[];
+  detectUpdateChannel?: boolean;
   publish?: Record<string, string | boolean>;
 }
 
@@ -70,6 +71,12 @@ describe('the Shinsa build', () => {
       ...shared.publish,
       updaterCacheDirName: 'shinsa-updater',
     });
+  });
+
+  it('writes latest-mac.yml for every version, which the release renames to its channel', () => {
+    expect(shared.detectUpdateChannel).toBe(false);
+    expect(build.detectUpdateChannel).toBeUndefined();
+    expect(shared.publish?.channel).toBeUndefined();
   });
 
   it('has a disk image background for each channel', () => {

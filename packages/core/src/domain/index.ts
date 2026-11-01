@@ -54,6 +54,21 @@ export {
   resolveEvidenceKey,
   selectEvidenceItem,
 } from './evidence.ts';
+export {
+  FEEDBACK_LIMITS,
+  FEEDBACK_REPOSITORY,
+  type Feedback,
+  type FeedbackIssue,
+  type FeedbackLeak,
+  type FeedbackLeakKind,
+  type FeedbackSource,
+  type FeedbackStatus,
+  isFeedbackFileable,
+  isFeedbackWaiting,
+  isPrivateWord,
+  listFeedbackLeaks,
+  resolveFeedbackText,
+} from './feedback.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {

@@ -18,7 +18,8 @@ src/
 │                    for the TASK_SESSION_ROLES; isHandOverTool, and PURPOSE_HAND_OVERS: the hand-over each purpose
 │                    of the task's agent may call), the delegation limits, isReadOnlyRole and isReadOnlyRun (the
 │                    agent is read-only while it plans) (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), memory (memory.ts:
-│                    MemoryEntry, MEMORY_LIMITS), pull request watch
+│                    MemoryEntry, MEMORY_LIMITS), feedback (feedback.ts: Feedback, FEEDBACK_LIMITS,
+│                    FEEDBACK_REPOSITORY, listFeedbackLeaks: the privacy check), pull request watch
 │                    types, time units (time.ts), task shapes (shapes.ts: SHAPE_PIPELINES (the presets),
 │                    validateComposition (the rules checker for the steps the agent composes while it plans), the shape
 │                    of a task, resolveShapeState (whether triage or the agent may still change the steps),
@@ -66,7 +67,7 @@ src/
 │                    runs.ts (attempts, links, lost sessions, metering per attempt with its weekly readings,
 │                    silence, compaction), gates.ts (opened,
 │                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
-│                    delegations.ts, schedules.ts, watchdogs.ts (watchdogs and a project's data sources), suggestions.ts, memory.ts (rules written, proposed, removed), reviews.ts (verdicts), accounts.ts (binding),
+│                    delegations.ts, schedules.ts, watchdogs.ts (watchdogs and a project's data sources), suggestions.ts, memory.ts (rules written, proposed, removed), feedback.ts (listFeedback, listPrivateWords: the words the privacy check refuses, from the state), reviews.ts (verdicts), accounts.ts (binding),
 │                    shapes.ts (reshapes, results, proposed changes), project.ts also folds the checks
 │                    (plan.proposed sets Task.checks from the plan's verification; checks.changed applies the
 │                    agent's changes and drops a changed check's result; checks.started sets runningChecks, which
@@ -156,6 +157,10 @@ src/
 │   │                messages.ts's keepSuggestion)
 │   ├── memory.ts    The rules agents remember: writing, keeping and removing one (human-only, refused on your behalf),
 │   │                an agent's proposal (agent.remember) and a removed project's rules
+│   ├── feedback.ts  Feedback on Shinsa: writing and editing a note, opening it as a public issue (feedback.file,
+│   │                human-only, refused while the privacy check finds a leak), dismissing it, an agent's report
+│   │                (agent.report_feedback: once per note, 3 per task, 10 waiting) and the draft, filing and
+│   │                failure the engine records
 │   ├── rounds.ts    A new round waiting, starting the next one when the current one rests (startQueuedRounds, after
 │   │                every command), its branch and pull request, switching how a round ships, changing or
 │   │                removing a round that waits (updateRound, removeRound, findWaitingRound), and what releases the

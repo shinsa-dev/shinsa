@@ -11,6 +11,7 @@ import {
   CompactSection,
   CompactSections,
 } from '@/components/layout/compact-section.tsx';
+import { NAV_ICON_NUDGE } from '@/components/layout/nav-button.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import {
   AddServicesView,
@@ -184,7 +185,11 @@ export function ServicesTriggerLabel({
 }) {
   const trigger = describeServicesTrigger(views);
   const icon = (
-    <Icon name={active ? SERVICES_ACTIVE_ICON : SERVICES_ICON} size={variant === 'rail' ? 'md' : 'sm'} />
+    <Icon
+      name={active ? SERVICES_ACTIVE_ICON : SERVICES_ICON}
+      size={variant === 'rail' ? 'md' : 'sm'}
+      className={variant === 'bar' ? NAV_ICON_NUDGE : undefined}
+    />
   );
   const label = (
     <span className={cn('tabular-nums', trigger.tone !== 'neutral' && TONE_TEXT[trigger.tone])}>
